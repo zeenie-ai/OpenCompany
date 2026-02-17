@@ -17,6 +17,7 @@ services:
 
   # Python FastAPI Backend
   backend:
+    image: machinaos-backend:latest
     build:
       context: ./server
       dockerfile: Dockerfile
@@ -53,6 +54,7 @@ services:
 
   # React Frontend (Production - Nginx)
   frontend:
+    image: machinaos-frontend:latest
     build:
       context: ./client
       dockerfile: Dockerfile
@@ -74,6 +76,7 @@ services:
 
   # WhatsApp RPC Service (npm package with pre-built binaries)
   whatsapp:
+    image: machinaos-whatsapp:latest
     build:
       context: ./docker
       dockerfile: Dockerfile.whatsapp

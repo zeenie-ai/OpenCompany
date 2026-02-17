@@ -72,11 +72,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: network=host
+
       - name: Create .env from template
         run: cp .env.template .env
 
-      - name: Build with Docker Compose
-        run: docker compose -f docker-compose.prod.yml build
+      - name: Build with cache (reuses docker-build cache)
+        run: |
+          docker buildx build --load --cache-from type=gha \
+            -t machinaos-frontend:latest -f client/Dockerfile --target production client
+          docker buildx build --load --cache-from type=gha \
+            -t machinaos-backend:latest -f server/Dockerfile server
+          docker buildx build --load --cache-from type=gha \
+            -t machinaos-whatsapp:latest -f docker/Dockerfile.whatsapp docker
 
       - name: Start services
         run: docker compose -f docker-compose.prod.yml up -d
