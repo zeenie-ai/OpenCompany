@@ -13,9 +13,34 @@ jobs:
   predeploy:
     uses: ./.github/workflows/predeploy.yml
 
+  # Build client once after predeploy passes, share with publish jobs
+  build-for-publish:
+    name: Build for Publishing
+    needs: predeploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup environment
+        uses: ./.github/actions/setup
+
+      - name: Install and build client
+        run: |
+          cd client
+          npm install
+          npm run build
+
+      - name: Upload built client
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-dist
+          path: client/dist
+          retention-days: 1
+
   publish-npm:
     name: Publish to npm
-    needs: predeploy
+    needs: build-for-publish
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -27,7 +52,13 @@ jobs:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Install dependencies
+      - name: Download built client
+        uses: actions/download-artifact@v4
+        with:
+          name: client-dist
+          path: client/dist
+
+      - name: Install dependencies (skip scripts)
         run: npm install --ignore-scripts
 
       - name: Sync versions from git tag
@@ -43,7 +74,7 @@ jobs:
 
   publish-github-packages:
     name: Publish to GitHub Packages
-    needs: predeploy
+    needs: build-for-publish
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -58,7 +89,13 @@ jobs:
           node-version: '22'
           registry-url: 'https://npm.pkg.github.com'
 
-      - name: Install dependencies
+      - name: Download built client
+        uses: actions/download-artifact@v4
+        with:
+          name: client-dist
+          path: client/dist
+
+      - name: Install dependencies (skip scripts)
         run: npm install --ignore-scripts
 
       - name: Sync versions from git tag
