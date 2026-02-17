@@ -2,19 +2,14 @@
 # Usage: iwr -useb https://raw.githubusercontent.com/trohitg/MachinaOS/main/install.ps1 | iex
 #
 # This script installs MachinaOS and its dependencies:
-# - Node.js 18+ (via winget/choco)
-# - Python 3.11+ (via winget/choco)
+# - Node.js 22+ (via winget/choco)
+# - Python 3.12+ (via winget/choco)
 # - uv (Python package manager)
-# - Go 1.21+ (for WhatsApp service)
 
 $ErrorActionPreference = "Stop"
 
-# Configuration
-$REPO_URL = "https://github.com/trohitg/MachinaOS.git"
-$INSTALL_DIR = if ($env:MACHINAOS_HOME) { $env:MACHINAOS_HOME } else { "$env:USERPROFILE\.machinaos" }
-$MIN_NODE_VERSION = 18
-$MIN_PYTHON_VERSION = "3.11"
-$MIN_GO_VERSION = "1.21"
+$MIN_NODE_VERSION = 22
+$MIN_PYTHON_VERSION = "3.12"
 
 # Colors
 function Write-Color {
@@ -51,6 +46,11 @@ function Get-PackageManager {
     return $null
 }
 
+# Refresh PATH from registry
+function Refresh-Path {
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+}
+
 # =============================================================================
 # Dependency Checks and Installation
 # =============================================================================
@@ -69,7 +69,7 @@ function Check-Node {
 }
 
 function Install-Node {
-    Info "Installing Node.js..."
+    Info "Installing Node.js $MIN_NODE_VERSION..."
     $pm = Get-PackageManager
 
     switch ($pm) {
@@ -84,8 +84,7 @@ function Install-Node {
         }
     }
 
-    # Refresh PATH
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    Refresh-Path
 
     if (-not (Check-Node)) {
         Error-Exit "Failed to install Node.js. Please install manually and restart PowerShell."
@@ -95,11 +94,15 @@ function Install-Node {
 function Check-Python {
     foreach ($cmd in @("python", "python3")) {
         if (Has-Command $cmd) {
-            $version = & $cmd --version 2>&1 | Select-String -Pattern "\d+\.\d+" | ForEach-Object { $_.Matches.Value }
-            if ($version -ge $MIN_PYTHON_VERSION) {
-                Success "Python $version ($cmd)"
-                $script:PYTHON_CMD = $cmd
-                return $true
+            $versionOutput = & $cmd --version 2>&1
+            if ($versionOutput -match "Python (\d+)\.(\d+)") {
+                $major = [int]$Matches[1]
+                $minor = [int]$Matches[2]
+                if ($major -ge 3 -and $minor -ge 12) {
+                    Success "Python $major.$minor ($cmd)"
+                    $script:PYTHON_CMD = $cmd
+                    return $true
+                }
             }
         }
     }
@@ -108,7 +111,7 @@ function Check-Python {
 }
 
 function Install-Python {
-    Info "Installing Python..."
+    Info "Installing Python $MIN_PYTHON_VERSION..."
     $pm = Get-PackageManager
 
     switch ($pm) {
@@ -123,8 +126,7 @@ function Install-Python {
         }
     }
 
-    # Refresh PATH
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    Refresh-Path
 
     if (-not (Check-Python)) {
         Error-Exit "Failed to install Python. Please install manually and restart PowerShell."
@@ -142,126 +144,22 @@ function Check-Uv {
 
 function Install-Uv {
     Info "Installing uv (Python package manager)..."
-    Invoke-RestMethod https://astral.sh/uv/install.ps1 | Invoke-Expression
 
-    # Add to PATH for current session
+    # Try pip first
+    if ($script:PYTHON_CMD) {
+        try {
+            & $script:PYTHON_CMD -m pip install uv 2>&1 | Out-Null
+            Refresh-Path
+            if (Check-Uv) { return }
+        } catch {}
+    }
+
+    # Fallback to official installer
+    Invoke-RestMethod https://astral.sh/uv/install.ps1 | Invoke-Expression
     $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
 
     if (-not (Check-Uv)) {
         Error-Exit "Failed to install uv"
-    }
-}
-
-function Check-Go {
-    if (Has-Command "go") {
-        $versionOutput = go version
-        if ($versionOutput -match "go(\d+\.\d+)") {
-            $version = $Matches[1]
-            if ($version -ge $MIN_GO_VERSION) {
-                Success "Go $version"
-                return $true
-            }
-            Warn "Go $version is too old (need $MIN_GO_VERSION+)"
-        }
-    }
-    return $false
-}
-
-function Install-Go {
-    Info "Installing Go..."
-    $pm = Get-PackageManager
-
-    switch ($pm) {
-        "winget" {
-            winget install GoLang.Go --accept-package-agreements --accept-source-agreements
-        }
-        "choco" {
-            choco install golang -y
-        }
-        default {
-            Error-Exit "Please install winget or chocolatey, or install Go manually from https://go.dev/dl/"
-        }
-    }
-
-    # Refresh PATH
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-
-    if (-not (Check-Go)) {
-        Error-Exit "Failed to install Go. Please install manually and restart PowerShell."
-    }
-}
-
-function Check-Git {
-    if (Has-Command "git") {
-        $version = (git --version) -replace "git version ", ""
-        Success "Git $version"
-        return $true
-    }
-    return $false
-}
-
-function Install-Git {
-    Info "Installing Git..."
-    $pm = Get-PackageManager
-
-    switch ($pm) {
-        "winget" {
-            winget install Git.Git --accept-package-agreements --accept-source-agreements
-        }
-        "choco" {
-            choco install git -y
-        }
-        default {
-            Error-Exit "Please install winget or chocolatey, or install Git manually from https://git-scm.com/"
-        }
-    }
-
-    # Refresh PATH
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-
-    if (-not (Check-Git)) {
-        Error-Exit "Failed to install Git. Please install manually and restart PowerShell."
-    }
-}
-
-# =============================================================================
-# MachinaOS Installation
-# =============================================================================
-
-function Install-MachinaOS {
-    Write-Host ""
-    Info "Installing MachinaOS to $INSTALL_DIR..."
-
-    # Create install directory
-    if (-not (Test-Path $INSTALL_DIR)) {
-        New-Item -ItemType Directory -Path $INSTALL_DIR -Force | Out-Null
-    }
-
-    # Clone or update repository
-    if (Test-Path "$INSTALL_DIR\.git") {
-        Info "Updating existing installation..."
-        Push-Location $INSTALL_DIR
-        git pull origin main
-    } else {
-        Info "Cloning repository..."
-        git clone $REPO_URL $INSTALL_DIR
-        Push-Location $INSTALL_DIR
-    }
-
-    # Run build
-    Info "Building MachinaOS..."
-    npm run build
-
-    Pop-Location
-
-    # Add to PATH suggestion
-    $binPath = "$INSTALL_DIR\bin"
-    if ($env:Path -notlike "*$binPath*") {
-        Warn "Add MachinaOS to your PATH:"
-        Write-Host ""
-        Write-Host "  # Run this command to add to PATH permanently:"
-        Write-Host "  [Environment]::SetEnvironmentVariable('Path', `$env:Path + ';$binPath', 'User')"
-        Write-Host ""
     }
 }
 
@@ -275,14 +173,16 @@ function Main {
     Write-Host ""
 
     # Check and install dependencies
-    if (-not (Check-Git)) { Install-Git }
     if (-not (Check-Node)) { Install-Node }
     if (-not (Check-Python)) { Install-Python }
     if (-not (Check-Uv)) { Install-Uv }
-    if (-not (Check-Go)) { Install-Go }
 
-    # Install MachinaOS
-    Install-MachinaOS
+    Write-Host ""
+    Info "Installing MachinaOS..."
+    Write-Host ""
+
+    # Install machinaos from npm
+    npm install -g machinaos
 
     Write-Host ""
     Write-Color "============================================" "Green"
@@ -290,17 +190,10 @@ function Main {
     Write-Color "============================================" "Green"
     Write-Host ""
     Write-Host "  Start MachinaOS:"
-    Write-Host "    cd $INSTALL_DIR"
-    Write-Host "    npm run start"
-    Write-Host ""
-    Write-Host "  Or use the CLI:"
-    Write-Host "    node $INSTALL_DIR\bin\cli.js start"
+    Write-Host "    machinaos start"
     Write-Host ""
     Write-Host "  Open in browser:"
     Write-Host "    http://localhost:3000"
-    Write-Host ""
-    Write-Host "  Documentation:"
-    Write-Host "    https://github.com/trohitg/MachinaOS"
     Write-Host ""
 }
 

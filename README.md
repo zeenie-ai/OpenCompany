@@ -24,7 +24,7 @@ Open http://localhost:3000
 <details>
 <summary><b>Other Install Options</b></summary>
 
-### One-Line Install (installs all dependencies automatically)
+### One-Line Install (auto-installs all dependencies)
 
 **Linux/macOS:**
 ```bash
@@ -79,7 +79,7 @@ npm run docker:up
 ### Platform Integrations
 
 - **WhatsApp** - Send/receive messages with QR pairing, filters, group support
-- **Android** - 17 service nodes for device control (battery, WiFi, Bluetooth, apps, camera, sensors)
+- **Android** - 16 service nodes for device control (battery, WiFi, Bluetooth, apps, camera, sensors)
 - **HTTP/Webhooks** - REST API integration with event-driven triggers
 - **Google Maps** - Geocoding, nearby places, directions
 
@@ -101,7 +101,7 @@ npm run docker:up
 | AI Skills | 10 | WhatsApp, Maps, HTTP, Scheduler, Android, Code, etc. |
 | AI Tools | 4 | Calculator, Time, Search, Android Toolkit |
 | WhatsApp | 3 | Send, Receive, Database |
-| Android | 17 | Device control and monitoring |
+| Android | 16 | Device control and monitoring |
 | Documents | 6 | RAG pipeline nodes |
 | Utilities | 5 | HTTP, Webhooks, Chat Trigger, Console |
 | Location | 3 | Google Maps integration |
@@ -161,8 +161,7 @@ MachinaOS/
 ├── client/           # React frontend (localhost:3000)
 ├── server/           # Python FastAPI backend (localhost:3010)
 │   ├── services/     # Workflow execution, AI, handlers
-│   ├── routers/      # API endpoints, WebSocket
-│   └── whatsapp-rpc/ # WhatsApp Go service
+│   └── routers/      # API endpoints, WebSocket
 ├── scripts/          # Cross-platform Node.js scripts
 └── bin/cli.js        # CLI entry point
 ```
@@ -171,7 +170,7 @@ MachinaOS/
 
 - **Frontend:** React 19, TypeScript, React Flow, Zustand
 - **Backend:** Python 3.12+, FastAPI, SQLite, LangChain/LangGraph
-- **Services:** WhatsApp (Go + whatsmeow), WebSocket relay
+- **Services:** WhatsApp (whatsapp-rpc npm package), WebSocket relay
 - **Package Manager:** uv (Python), npm (Node.js)
 
 ## Documentation
