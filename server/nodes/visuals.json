@@ -1,4 +1,9 @@
 {
+  "agentBuilder": {
+    "icon": "🛠️",
+    "color": "#ffb86c",
+    "skill": "agent-builder-skill"
+  },
   "aiAgent": {
     "icon": "🤖",
     "color": "#bd93f9"
