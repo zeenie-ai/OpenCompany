@@ -180,8 +180,9 @@ class TestDuckDuckGoSearch:
         fake_module = MagicMock()
         fake_module.DDGS = fake_ddgs_class
 
+        from tests.nodes._compat import _execute_duckduckgo_search as _flat_search
         with patch.dict("sys.modules", {"ddgs": fake_module}):
-            result = await tools_mod._execute_duckduckgo_search(
+            result = await _flat_search(
                 {"query": "python"},
                 {"provider": "duckduckgo", "max_results": 2},
             )
@@ -201,7 +202,7 @@ class TestDuckDuckGoSearch:
         assert result == {"error": "No search query provided"}
 
     async def test_missing_keys_in_ddgs_output_default_to_empty_string(self):
-        from services.handlers import tools as tools_mod
+        from tests.nodes._compat import _execute_duckduckgo_search as _flat_search
 
         fake_ddgs_instance = MagicMock()
         fake_ddgs_instance.text.return_value = [{"title": "only-title"}]
@@ -209,15 +210,12 @@ class TestDuckDuckGoSearch:
         fake_module.DDGS = MagicMock(return_value=fake_ddgs_instance)
 
         with patch.dict("sys.modules", {"ddgs": fake_module}):
-            result = await tools_mod._execute_duckduckgo_search(
-                {"query": "q"},
-                {"max_results": 5},
-            )
+            result = await _flat_search({"query": "q"}, {"max_results": 5})
 
         assert result["results"] == [{"title": "only-title", "snippet": "", "url": ""}]
 
     async def test_max_results_defaults_to_5_when_missing(self):
-        from services.handlers import tools as tools_mod
+        from tests.nodes._compat import _execute_duckduckgo_search as _flat_search
 
         fake_ddgs_instance = MagicMock()
         fake_ddgs_instance.text.return_value = []
@@ -225,7 +223,7 @@ class TestDuckDuckGoSearch:
         fake_module.DDGS = MagicMock(return_value=fake_ddgs_instance)
 
         with patch.dict("sys.modules", {"ddgs": fake_module}):
-            await tools_mod._execute_duckduckgo_search({"query": "q"}, {})
+            await _flat_search({"query": "q"}, {})
 
         fake_ddgs_instance.text.assert_called_once_with("q", max_results=5)
 
@@ -269,7 +267,8 @@ class TestTaskManager:
             "result": "x" * 500,  # will be truncated to 200 chars
         }
 
-        result = await tools_mod._execute_task_manager(
+        from nodes.tool.task_manager import _execute_task_manager
+        result = await _execute_task_manager(
             {"operation": "list_tasks"}, {"parameters": {}}
         )
 
@@ -294,7 +293,8 @@ class TestTaskManager:
         tools_mod._delegated_tasks["r1"] = running
         tools_mod._delegation_results["c1"] = {"status": "completed"}
 
-        result = await tools_mod._execute_task_manager(
+        from nodes.tool.task_manager import _execute_task_manager
+        result = await _execute_task_manager(
             {"operation": "list_tasks", "status_filter": "running"},
             {"parameters": {}},
         )
@@ -305,7 +305,8 @@ class TestTaskManager:
     async def test_get_task_without_id_errors(self, _reset_registry):
         tools_mod = _reset_registry
 
-        result = await tools_mod._execute_task_manager(
+        from nodes.tool.task_manager import _execute_task_manager
+        result = await _execute_task_manager(
             {"operation": "get_task"}, {"parameters": {}}
         )
         assert result["success"] is False
@@ -315,7 +316,8 @@ class TestTaskManager:
         tools_mod = _reset_registry
         tools_mod._delegation_results["gone"] = {"status": "completed"}
 
-        result = await tools_mod._execute_task_manager(
+        from nodes.tool.task_manager import _execute_task_manager
+        result = await _execute_task_manager(
             {"operation": "mark_done", "task_id": "gone"},
             {"parameters": {}},
         )
@@ -327,7 +329,8 @@ class TestTaskManager:
     async def test_mark_done_untracked_id_returns_removed_false(self, _reset_registry):
         tools_mod = _reset_registry
 
-        result = await tools_mod._execute_task_manager(
+        from nodes.tool.task_manager import _execute_task_manager
+        result = await _execute_task_manager(
             {"operation": "mark_done", "task_id": "never-seen"},
             {"parameters": {}},
         )
@@ -339,7 +342,8 @@ class TestTaskManager:
     async def test_unknown_operation_returns_failure_envelope(self, _reset_registry):
         tools_mod = _reset_registry
 
-        result = await tools_mod._execute_task_manager(
+        from nodes.tool.task_manager import _execute_task_manager
+        result = await _execute_task_manager(
             {"operation": "self_destruct"}, {"parameters": {}}
         )
         assert result["success"] is False

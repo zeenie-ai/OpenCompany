@@ -201,10 +201,12 @@ async def _dispatch_tool(tool_name: str, tool_args: Dict[str, Any],
         from nodes.android._base import execute_android_service_tool
         return await execute_android_service_tool(tool_args, config)
 
-    # taskManager: dispatcher shares state with the agent-delegation
+    # taskManager: dispatcher reads through to the agent-delegation
     # tracking dicts (_delegated_tasks / _delegation_results) defined
-    # below in this module, so the operation matrix stays here.
+    # below in this module. The operation matrix moved to the plugin
+    # (Wave 11.I, milestone O).
     if node_type == 'taskManager':
+        from nodes.tool.task_manager import _execute_task_manager
         return await _execute_task_manager(tool_args, config)
 
     # proxyConfig: 10-operation matrix lives on the plugin
@@ -242,34 +244,11 @@ async def _dispatch_tool(tool_name: str, tool_args: Dict[str, Any],
 
 
 # _execute_duckduckgo_search: Wave 11.C moved logic to
-# nodes/search/duckduckgo_search.py DuckDuckGoSearchNode.search(), but
-# some contract tests patch sys.modules['ddgs'] and call the flat
-# function directly. The shim below preserves the old (args, config) ->
-# dict signature so those tests stay plumbing-only.
-async def _execute_duckduckgo_search(
-    args: Dict[str, Any],
-    config: Dict[str, Any] = None,
-) -> Dict[str, Any]:
-    """Back-compat wrapper around the plugin search path."""
-    config = config or {}
-    query = str(args.get("query", "")).strip()
-    if not query:
-        return {"error": "No search query provided"}
-    max_results = int(config.get("max_results", args.get("max_results", 5)))
-    provider = config.get("provider", "duckduckgo")
-    from ddgs import DDGS
-    raw = list(DDGS().text(query, max_results=max_results))
-    results = [
-        {
-            "title": item.get("title", ""),
-            "snippet": item.get("body", ""),
-            "url": item.get("href", ""),
-        }
-        for item in raw
-    ]
-    return {"query": query, "provider": provider, "results": results}
-
-
+# nodes/search/duckduckgo_search.py DuckDuckGoSearchNode.search(). Wave
+# 11.I milestone O moved the flat (args, config) -> dict shim used by
+# contract tests to tests/nodes/_compat.py -- production code never
+# called it.
+#
 # Wave 11.D.9: _execute_whatsapp_{send,db} deleted. WhatsApp tool execution
 # now routes through the plugin fast-path (nodes/whatsapp/*.py).
 
@@ -779,160 +758,12 @@ async def _execute_check_delegated_tasks(args: Dict[str, Any],
     }
 
 
-async def _execute_task_manager(
-    tool_args: Dict[str, Any],
-    config: Dict[str, Any]
-) -> Dict[str, Any]:
-    """Execute task manager operations.
-
-    Dual-purpose: works as AI tool (LLM fills args) or workflow node (uses params).
-
-    Operations:
-    - list_tasks: List all active and completed delegated tasks
-    - get_task: Get status details for a specific task
-    - mark_done: Remove a task from active tracking
-
-    Args:
-        tool_args: Arguments from LLM tool call (operation, task_id, status_filter)
-        config: Tool configuration with node parameters
-
-    Returns:
-        Dict with operation results
-    """
-    # Merge tool_args with node parameters (tool_args takes precedence)
-    params = config.get('parameters', {})
-    operation = tool_args.get('operation') or params.get('operation', 'list_tasks')
-    task_id = tool_args.get('task_id') or params.get('task_id')
-    status_filter = tool_args.get('status_filter') or params.get('status_filter')
-    database = config.get('database')
-
-    logger.debug(f"[TaskManager] Operation: {operation}, task_id: {task_id}, filter: {status_filter}")
-
-    if operation == 'list_tasks':
-        # Collect all tasks from _delegated_tasks and _delegation_results
-        tasks = []
-
-        # Active tasks from asyncio.Task tracking
-        for tid, task in _delegated_tasks.items():
-            if task.done():
-                try:
-                    if task.cancelled():
-                        status = 'cancelled'
-                    elif task.exception():
-                        status = 'error'
-                    else:
-                        status = 'completed'
-                except Exception:
-                    status = 'completed'
-            else:
-                status = 'running'
-
-            tasks.append({
-                'task_id': tid,
-                'status': status,
-                'active': True
-            })
-
-        # Completed tasks from in-memory cache
-        for tid, result in _delegation_results.items():
-            if tid not in [t['task_id'] for t in tasks]:
-                tasks.append({
-                    'task_id': tid,
-                    'status': result.get('status', 'completed'),
-                    'agent_name': result.get('agent_name'),
-                    'result_summary': str(result.get('result', ''))[:200],
-                    'active': False
-                })
-
-        # Apply status filter
-        if status_filter:
-            tasks = [t for t in tasks if t.get('status') == status_filter]
-
-        return {
-            'success': True,
-            'operation': 'list_tasks',
-            'tasks': tasks,
-            'count': len(tasks),
-            'running': sum(1 for t in tasks if t.get('status') == 'running'),
-            'completed': sum(1 for t in tasks if t.get('status') == 'completed'),
-            'errors': sum(1 for t in tasks if t.get('status') == 'error')
-        }
-
-    elif operation == 'get_task':
-        if not task_id:
-            return {'success': False, 'error': 'task_id is required for get_task operation'}
-
-        # Use existing get_delegated_task_status for detailed lookup
-        result = await get_delegated_task_status(task_ids=[task_id], database=database)
-        tasks = result.get('tasks', [])
-
-        if not tasks:
-            return {
-                'success': False,
-                'error': f'Task {task_id} not found',
-                'task_id': task_id
-            }
-
-        task_info = tasks[0]
-        return {
-            'success': True,
-            'operation': 'get_task',
-            'task_id': task_id,
-            'status': task_info.get('status'),
-            'agent_name': task_info.get('agent_name'),
-            'result': task_info.get('result'),
-            'error': task_info.get('error')
-        }
-
-    elif operation == 'mark_done':
-        if not task_id:
-            return {'success': False, 'error': 'task_id is required for mark_done operation'}
-
-        # Remove from active tracking
-        removed = False
-        if task_id in _delegated_tasks:
-            del _delegated_tasks[task_id]
-            removed = True
-        if task_id in _delegation_results:
-            del _delegation_results[task_id]
-            removed = True
-
-        return {
-            'success': True,
-            'operation': 'mark_done',
-            'task_id': task_id,
-            'removed': removed,
-            'message': f'Task {task_id} marked as done and removed from tracking' if removed else f'Task {task_id} was not in active tracking'
-        }
-
-    return {'success': False, 'error': f'Unknown operation: {operation}'}
-
-
-async def handle_task_manager(
-    node_id: str,
-    node_type: str,
-    parameters: Dict[str, Any],
-    context: Dict[str, Any]
-) -> Dict[str, Any]:
-    """Handle taskManager as workflow node.
-
-    Wrapper for _execute_task_manager that conforms to the standard
-    workflow node handler signature.
-
-    Args:
-        node_id: The node ID
-        node_type: Should be 'taskManager'
-        parameters: Node parameters (operation, task_id, status_filter)
-        context: Execution context
-
-    Returns:
-        Task manager operation results
-    """
-    config = {
-        'parameters': parameters,
-        'database': context.get('database')
-    }
-    return await _execute_task_manager({}, config)
+# _execute_task_manager + handle_task_manager: Wave 11.I milestone O moved
+# the operation matrix to nodes/tool/task_manager.py. The plugin reads
+# through to the delegation registry (``_delegated_tasks`` /
+# ``_delegation_results`` / ``get_delegated_task_status``) which still
+# lives in this module -- delegation lifecycle is genuine cross-cutting
+# framework state. ``handle_task_manager`` had no callers and was deleted.
 
 
 # =============================================================================

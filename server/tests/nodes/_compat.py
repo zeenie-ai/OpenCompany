@@ -91,33 +91,33 @@ async def _execute_current_time(
 
 async def _execute_duckduckgo_search(
     args: Dict[str, Any],
-    node_params: Dict[str, Any] = None,
+    config: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
-    """Shim for deleted services.handlers.tools._execute_duckduckgo_search."""
-    try:
-        # Plugin layout under scaling branch: nodes/search/duckduckgo_search.py
-        from nodes.search.duckduckgo_search import (
-            DuckDuckGoSearchNode,
-            DuckDuckGoSearchParams,
-        )
-    except ImportError:
-        return {"error": "duckduckgo search plugin missing"}
+    """Flat (args, config) -> dict shim for the deleted
+    ``services.handlers.tools._execute_duckduckgo_search``.
 
-    q = str(args.get("query", "")).strip()
-    if not q:
+    Wave 11.I milestone O moved this here from production code -- it
+    only ever served contract tests that patch ``sys.modules['ddgs']``
+    and assert the flat output shape. Production callers go through
+    :class:`nodes.search.duckduckgo_search.DuckDuckGoSearchNode`.
+    """
+    config = config or {}
+    query = str(args.get("query", "")).strip()
+    if not query:
         return {"error": "No search query provided"}
-
-    params = DuckDuckGoSearchParams(
-        query=q,
-        max_results=int(args.get("max_results", args.get("maxResults", 5))),
-    )
-
-    node = DuckDuckGoSearchNode()
-    try:
-        out = await node.search(_DummyContext(), params)
-    except Exception as exc:
-        return {"error": str(exc)}
-    return out.model_dump() if hasattr(out, "model_dump") else dict(out)
+    max_results = int(config.get("max_results", args.get("max_results", 5)))
+    provider = config.get("provider", "duckduckgo")
+    from ddgs import DDGS
+    raw = list(DDGS().text(query, max_results=max_results))
+    results = [
+        {
+            "title": item.get("title", ""),
+            "snippet": item.get("body", ""),
+            "url": item.get("href", ""),
+        }
+        for item in raw
+    ]
+    return {"query": query, "provider": provider, "results": results}
 
 
 async def handle_write_todos(
