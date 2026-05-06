@@ -100,7 +100,7 @@ async def load_options(method: str, body: dict | None = None):
     parameter map (e.g. ``{"group_id": "..."}`` for
     whatsappGroupMembers).
     """
-    from services.node_option_loaders import dispatch_load_options
+    from services.ws_handler_registry import dispatch_load_options
 
     params = (body or {}).get("params", body or {}) if isinstance(body, dict) else {}
     options = await dispatch_load_options(method, params)
@@ -111,7 +111,7 @@ async def load_options(method: str, body: dict | None = None):
 async def list_load_options():
     """Registered loadOptionsMethod names. Editor probes this on boot
     to know which dynamic-option loaders are wired backend-side."""
-    from services.node_option_loaders import list_load_options_methods
+    from services.ws_handler_registry import list_load_options_methods
 
     return {"methods": list_load_options_methods()}
 

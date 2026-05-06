@@ -51,9 +51,9 @@ register_service_refresh(refresh_whatsapp_status)
 # carries no plugin-specific code.
 register_filter_builder("whatsappReceive", build_whatsapp_filter)
 
-# loadOptionsMethod loaders (Wave 11.I, milestone M.1) -- moved out
-# of services/node_option_loaders/ so the central LOAD_OPTIONS_REGISTRY
-# carries no plugin-specific code.
+# loadOptionsMethod loaders (Wave 11.I, milestone M.1) -- self-register
+# into services.ws_handler_registry's option-loader registry, sibling to
+# the WS-handler / router registries.
 register_option_loader("whatsappGroups", load_groups)
 register_option_loader("whatsappChannels", load_channels)
 register_option_loader("whatsappGroupMembers", load_group_members)

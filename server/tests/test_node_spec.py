@@ -1,9 +1,10 @@
 """Wave 6 NodeSpec contract tests.
 
 Locks in the public shape emitted by services/node_input_schemas.py,
-services/node_spec.py, services/node_option_loaders, and the
-/api/schemas/nodes/*/spec.json + /api/schemas/nodes/options/* endpoints.
-Mirrors the Wave 3 test posture for node_output_schemas.
+services/node_spec.py, services/ws_handler_registry (option-loader
+registry, post-Wave-11.I M.3), and the /api/schemas/nodes/*/spec.json +
+/api/schemas/nodes/options/* endpoints. Mirrors the Wave 3 test posture
+for node_output_schemas.
 """
 
 import pytest  # noqa: F401  (used by @pytest.mark.asyncio on Phase 4 tests)
@@ -386,33 +387,33 @@ class TestPhase4LoadOptions:
     """Wave 6 Phase 4: unified loadOptionsMethod dispatch registry."""
 
     def test_registry_has_whatsapp_methods(self):
-        from services.node_option_loaders import list_load_options_methods
+        from services.ws_handler_registry import list_load_options_methods
         methods = list_load_options_methods()
         for method in ["whatsappGroups", "whatsappChannels", "whatsappGroupMembers"]:
             assert method in methods
 
     def test_registry_has_google_methods(self):
-        from services.node_option_loaders import list_load_options_methods
+        from services.ws_handler_registry import list_load_options_methods
         methods = list_load_options_methods()
         for method in ["gmailLabels", "googleCalendarList", "googleDriveFolders", "googleTasklists"]:
             assert method in methods
 
     def test_list_methods_sorted(self):
-        from services.node_option_loaders import list_load_options_methods
+        from services.ws_handler_registry import list_load_options_methods
         methods = list_load_options_methods()
         assert methods == sorted(methods)
         assert len(methods) >= 7
 
     @pytest.mark.asyncio
     async def test_unknown_method_returns_empty(self):
-        from services.node_option_loaders import dispatch_load_options
+        from services.ws_handler_registry import dispatch_load_options
         result = await dispatch_load_options("nonExistentMethodXyz", {})
         assert result == []
 
     @pytest.mark.asyncio
     async def test_dispatch_passes_params(self):
         # Smoke test: unknown method tolerates arbitrary params, doesn't crash
-        from services.node_option_loaders import dispatch_load_options
+        from services.ws_handler_registry import dispatch_load_options
         result = await dispatch_load_options("unknown", {"group_id": "abc"})
         assert result == []
 
@@ -750,7 +751,7 @@ class TestNodeSpecContractInvariants:
         plugin's ``register_option_loader`` call. Catches typos and
         forgotten loader registrations."""
         from services.node_input_schemas import get_node_input_schema, NODE_INPUT_MODELS
-        from services.node_option_loaders import list_load_options_methods
+        from services.ws_handler_registry import list_load_options_methods
         methods = set(list_load_options_methods())
         for t in NODE_INPUT_MODELS:
             schema = get_node_input_schema(t)

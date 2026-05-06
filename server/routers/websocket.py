@@ -300,7 +300,7 @@ async def handle_load_options(
     Body: ``{"method": "...", "params": {...}}``
     Response: ``{"options": [{"value": ..., "label": ...}]}``
     """
-    from services.node_option_loaders import dispatch_load_options
+    from services.ws_handler_registry import dispatch_load_options
 
     options = await dispatch_load_options(data["method"], data.get("params", {}))
     return {"method": data["method"], "options": options}
@@ -312,7 +312,7 @@ async def handle_list_load_options_methods(
 ) -> Dict[str, Any]:
     """Return registered loadOptionsMethod names. Editor uses this to
     know which dynamic-option loaders are wired."""
-    from services.node_option_loaders import list_load_options_methods
+    from services.ws_handler_registry import list_load_options_methods
 
     return {"methods": list_load_options_methods()}
 

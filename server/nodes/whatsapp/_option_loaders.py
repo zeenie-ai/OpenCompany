@@ -2,9 +2,8 @@
 
 Wave 11.I, milestone M.1. Each function is registered with
 ``services.ws_handler_registry.register_option_loader`` from
-``__init__.py`` so the central dispatcher in
-``services/node_option_loaders/__init__.py`` picks them up without a
-plugin-specific import.
+``__init__.py`` so the central ``dispatch_load_options`` picks them
+up without a plugin-specific import.
 
 Adapter shape: turn the existing WS-handler responses
 (``handle_whatsapp_groups`` / ``handle_whatsapp_newsletters`` /

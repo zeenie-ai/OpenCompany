@@ -17,8 +17,8 @@ Three sibling concerns share this file because they're the same pattern
 3. **Option loaders** — ``register_option_loader(method_name, fn)`` for
    dynamic-options dropdowns wired through the
    ``loadOptionsMethod`` Pydantic field metadata. Read by
-   ``services.node_option_loaders.dispatch_load_options`` and the
-   matching WS handler in ``routers/websocket.py``.
+   :func:`dispatch_load_options` (here in this module) and the matching
+   WS handler in ``routers/websocket.py``.
 
 No hardcoded plugin names anywhere in the central router or main.py.
 Adding a new plugin's WS / HTTP / option-loader surface is one
@@ -120,3 +120,25 @@ def get_option_loader(method_name: str) -> LoadOptionsFn | None:
 def list_registered_option_methods() -> List[str]:
     """For diagnostics / startup logging."""
     return sorted(_OPTION_LOADER_REGISTRY.keys())
+
+
+async def dispatch_load_options(
+    method: str, params: Dict[str, Any] | None = None
+) -> List[Dict[str, Any]]:
+    """Look up and invoke a registered loader.
+
+    Returns an empty list when the method isn't registered (matches
+    n8n's tolerant fallback -- the dropdown stays empty rather than
+    erroring out).
+    """
+    loader = _OPTION_LOADER_REGISTRY.get(method)
+    if loader is None:
+        return []
+    return await loader(params or {})
+
+
+def list_load_options_methods() -> List[str]:
+    """Stable alphabetised list of registered method names. The editor
+    prefetches this once on boot so it knows which ``loadOptionsMethod``
+    values are wired."""
+    return list_registered_option_methods()
