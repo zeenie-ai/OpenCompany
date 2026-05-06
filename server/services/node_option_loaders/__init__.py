@@ -19,12 +19,6 @@ from typing import Any, Awaitable, Callable, Optional
 from services.ws_handler_registry import get_option_loader
 
 from .android_loaders import load_android_service_actions
-from .google_loaders import (
-    load_gmail_labels,
-    load_google_calendar_list,
-    load_google_drive_folders,
-    load_google_tasklists,
-)
 
 
 # Async loader signature: (params: dict) -> list of {value, label, ...}
@@ -34,10 +28,6 @@ LoadOptionsFn = Callable[[dict[str, Any]], Awaitable[list[dict[str, Any]]]]
 # Legacy table for not-yet-migrated plugins. Shrinks one entry per M.x
 # commit; deleted entirely at the end of M.3.
 LEGACY_LOAD_OPTIONS_REGISTRY: dict[str, LoadOptionsFn] = {
-    "gmailLabels": load_gmail_labels,
-    "googleCalendarList": load_google_calendar_list,
-    "googleDriveFolders": load_google_drive_folders,
-    "googleTasklists": load_google_tasklists,
     "getAndroidServiceActions": load_android_service_actions,
 }
 

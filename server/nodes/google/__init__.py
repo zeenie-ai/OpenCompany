@@ -26,14 +26,30 @@ this module by name.
 
 from services.event_waiter import register_filter_builder
 from services.status_broadcaster import register_service_refresh
-from services.ws_handler_registry import register_router, register_ws_handlers
+from services.ws_handler_registry import (
+    register_option_loader,
+    register_router,
+    register_ws_handlers,
+)
 
 from . import _router
 from ._filters import build_gmail_filter
 from ._handlers import WS_HANDLERS
+from ._option_loaders import (
+    load_calendar_list,
+    load_drive_folders,
+    load_gmail_labels,
+    load_tasklists,
+)
 from ._refresh import refresh_google_status
 
 register_ws_handlers(WS_HANDLERS)
 register_router(_router.router, name="google")
 register_service_refresh(refresh_google_status)
 register_filter_builder("gmailReceive", build_gmail_filter)
+
+# loadOptionsMethod loaders (Wave 11.I, milestone M.2).
+register_option_loader("gmailLabels", load_gmail_labels)
+register_option_loader("googleCalendarList", load_calendar_list)
+register_option_loader("googleDriveFolders", load_drive_folders)
+register_option_loader("googleTasklists", load_tasklists)
