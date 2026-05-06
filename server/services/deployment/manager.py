@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING
 
 from core.logging import get_logger
-from constants import WORKFLOW_TRIGGER_TYPES, POLLING_TRIGGER_TYPES
+from constants import POLLING_TRIGGER_TYPES, TOOLKIT_NODE_TYPES, WORKFLOW_TRIGGER_TYPES
 from services import event_waiter
 from .state import DeploymentState, TriggerInfo
 from .triggers import TriggerManager
@@ -649,10 +649,12 @@ class DeploymentManager:
                     continue
                 downstream_ids.add(source)
 
-        # Include sub-nodes connected to toolkit nodes (n8n Sub-Node pattern)
-        # Android service nodes connect to androidTool's input-main, not config handles
-        # These need to be included so the toolkit can discover its connected services
-        toolkit_node_ids = {n['id'] for n in nodes if n.get('type') == 'androidTool' and n['id'] in downstream_ids}
+        # Include sub-nodes connected to toolkit nodes (n8n Sub-Node pattern).
+        # Service nodes connect to a toolkit's input-main (not a config
+        # handle) and need to be included so the toolkit can discover
+        # them. ``TOOLKIT_NODE_TYPES`` is the canonical set; today only
+        # ``androidTool`` is in it.
+        toolkit_node_ids = {n['id'] for n in nodes if n.get('type') in TOOLKIT_NODE_TYPES and n['id'] in downstream_ids}
         for edge in edges:
             target = edge.get('target')
             source = edge.get('source')

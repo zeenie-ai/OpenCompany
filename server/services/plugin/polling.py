@@ -70,9 +70,9 @@ class PollingTriggerNode(TriggerNode, abstract=True):
       ``poll_interval`` param. Default (10, 3600).
     - :attr:`type_alias` -- a second registration key for plugins
       that want to be reachable by a legacy type name without
-      changing the plugin's primary ``type``. Today's only use case
-      is gmail (``type = "googleGmailReceive"`` but downstream
-      callers key by ``"gmailReceive"``).
+      changing the plugin's primary ``type``. Currently unused after
+      Wave 11.I milestone P retired the gmail alias; kept on the base
+      class as a documented escape hatch for future renames.
     """
 
     mode: ClassVar[str] = "polling"

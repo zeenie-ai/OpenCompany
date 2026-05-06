@@ -56,10 +56,14 @@ class GmailReceiveOutput(BaseModel):
 
 class GmailReceiveNode(PollingTriggerNode):
     type = "googleGmailReceive"
-    # Pre-existing alias used by deployment manager + POLLING_TRIGGER_TYPES;
-    # registers the deployment-mode poll factory under both names so the
-    # mismatch can be retired in a separate rename commit.
-    type_alias = "gmailReceive"
+    # Wave 11.I, milestone P: ``event_type`` ClassVar lets
+    # ``event_waiter._auto_populate_from_plugins`` backfill
+    # TRIGGER_REGISTRY without a hardcoded entry in event_waiter. The
+    # legacy ``type_alias = "gmailReceive"`` shim was retired -- the
+    # downstream callers (POLLING_TRIGGER_TYPES, deployment manager,
+    # frontend trigger list, _filters registration) all rename to the
+    # canonical class type in the same commit.
+    event_type = "gmail_email_received"
     display_name = "Gmail Receive"
     subtitle = "Inbound Email"
     group = ("google", "trigger")
@@ -201,5 +205,5 @@ class GmailReceiveNode(PollingTriggerNode):
     @Operation("wait")
     async def wait(self, ctx: NodeContext, params: GmailReceiveParams) -> GmailReceiveOutput:
         raise NotImplementedError(
-            "gmailReceive uses execute() override (Wave 11.D.5 inlined)."
+            "googleGmailReceive uses execute() override (Wave 11.D.5 inlined)."
         )

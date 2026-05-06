@@ -25,13 +25,13 @@ CONFIG_HANDLES = {"input-tools", "input-memory", "input-model", "input-skill", "
 # Trigger node types — event listeners that should never be scheduled
 # as blocking activities. Imported from constants to avoid drift (was
 # previously redefined here with a "keep in sync" comment — Wave 11.E.2).
-from constants import WORKFLOW_TRIGGER_TYPES as TRIGGER_NODE_TYPES
-
-# Android service types (connect to androidTool, not executed directly)
-ANDROID_SERVICE_TYPES = {
-    "batteryMonitor", "locationService", "deviceState",
-    "systemInfo", "appList", "appLauncher",
-}
+# Android service types follow the same pattern: imported from constants
+# so the canonical 16-entry list (Wave 11.I, milestone P -- the local
+# 6-entry copy that lived here was a stale subset).
+from constants import (
+    ANDROID_SERVICE_NODE_TYPES as ANDROID_SERVICE_TYPES,
+    WORKFLOW_TRIGGER_TYPES as TRIGGER_NODE_TYPES,
+)
 
 # Skill node types (connect to Zeenie's input-skill, not executed directly)
 SKILL_NODE_TYPES = {

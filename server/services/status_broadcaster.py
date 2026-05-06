@@ -345,10 +345,6 @@ class StatusBroadcaster:
             "data": self._status["whatsapp"]
         })
 
-    def get_whatsapp_status(self) -> Dict[str, Any]:
-        """Get WhatsApp connection status."""
-        return self._status["whatsapp"].copy()
-
     # =========================================================================
     # Telegram Status Updates
     # =========================================================================
@@ -376,10 +372,6 @@ class StatusBroadcaster:
             "type": "telegram_status",
             "data": self._status["telegram"]
         })
-
-    def get_telegram_status(self) -> Dict[str, Any]:
-        """Get Telegram bot connection status."""
-        return self._status["telegram"].copy()
 
     # =========================================================================
     # Node Status Updates

@@ -632,8 +632,8 @@ const DashboardContent: React.FC = () => {
     if (!currentWorkflow) return;
 
     // Check if there's at least one trigger node (workflow entry points)
-    // Trigger types: start, cronScheduler, webhookTrigger, whatsappReceive, telegramReceive, twitterReceive, gmailReceive, workflowTrigger, chatTrigger, taskTrigger
-    const triggerTypes = ['start', 'cronScheduler', 'webhookTrigger', 'whatsappReceive', 'telegramReceive', 'twitterReceive', 'gmailReceive', 'emailReceive', 'workflowTrigger', 'chatTrigger', 'taskTrigger'];
+    // Trigger types: start, cronScheduler, webhookTrigger, whatsappReceive, telegramReceive, twitterReceive, googleGmailReceive, workflowTrigger, chatTrigger, taskTrigger
+    const triggerTypes = ['start', 'cronScheduler', 'webhookTrigger', 'whatsappReceive', 'telegramReceive', 'twitterReceive', 'googleGmailReceive', 'emailReceive', 'workflowTrigger', 'chatTrigger', 'taskTrigger'];
     const hasTriggerNode = nodes.some(node => triggerTypes.includes(node.type || ''));
     if (!hasTriggerNode) {
       alert('No trigger node found in workflow.\n\nAdd a trigger node (Cron Scheduler, WhatsApp Receive, Webhook, Chat Trigger, etc.) to begin deployment.');

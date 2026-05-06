@@ -46,7 +46,7 @@ from ._refresh import refresh_google_status
 register_ws_handlers(WS_HANDLERS)
 register_router(_router.router, name="google")
 register_service_refresh(refresh_google_status)
-register_filter_builder("gmailReceive", build_gmail_filter)
+register_filter_builder("googleGmailReceive", build_gmail_filter)
 
 # loadOptionsMethod loaders (Wave 11.I, milestone M.2).
 register_option_loader("gmailLabels", load_gmail_labels)

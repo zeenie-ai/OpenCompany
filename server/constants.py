@@ -317,7 +317,7 @@ TRIGGER_TYPES: FrozenSet[str] = EVENT_TRIGGER_TYPES
 # unlike push-based triggers (WhatsApp, Webhook) that receive events externally.
 # In deployment mode, these get a dedicated polling loop instead of event_waiter.
 POLLING_TRIGGER_TYPES: FrozenSet[str] = frozenset([
-    'gmailReceive',
+    'googleGmailReceive',
     'twitterReceive',
     'emailReceive',
 ])
@@ -340,7 +340,7 @@ WORKFLOW_TRIGGER_TYPES: FrozenSet[str] = frozenset([
     'chatTrigger',
     'taskTrigger',
     'twitterReceive',
-    'gmailReceive',
+    'googleGmailReceive',
     'telegramReceive',
     'emailReceive',
 ])

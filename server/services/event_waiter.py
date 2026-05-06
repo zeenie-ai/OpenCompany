@@ -106,21 +106,14 @@ TRIGGER_REGISTRY: Dict[str, TriggerConfig] = {
         event_type='task_completed',
         display_name='Task Completed'
     ),
-    # Pre-existing type-name mismatch — the plugin class is
-    # ``googleGmailReceive`` but downstream callers (deployment
-    # manager, this registry) key by ``gmailReceive``. Auto-populate
-    # would key by the class type, so an alias entry stays here until
-    # the gmail plugin renames its type.
-    'gmailReceive': TriggerConfig(
-        node_type='gmailReceive',
-        event_type='gmail_email_received',
-        display_name='Gmail Email'
-    ),
     # Plugin-owned trigger entries (whatsappReceive, twitterReceive,
-    # telegramReceive, emailReceive) live in their plugin folders'
-    # ``_filters.py`` and are backfilled here from each plugin's
-    # ``event_type`` ClassVar via ``_auto_populate_from_plugins``
-    # (Wave 11.I, milestone K).
+    # telegramReceive, emailReceive, googleGmailReceive) live in their
+    # plugin folders' ``_filters.py`` and are backfilled here from each
+    # plugin's ``event_type`` ClassVar via
+    # ``_auto_populate_from_plugins`` (Wave 11.I, milestone K). Gmail's
+    # explicit alias entry was retired in milestone P after the
+    # downstream callers (POLLING_TRIGGER_TYPES, deployment manager,
+    # frontend trigger list) were renamed to the canonical class type.
     # Future triggers - just add to registry:
     # 'mqttTrigger': TriggerConfig('mqttTrigger', 'mqtt_message', 'MQTT Message'),
 }
@@ -305,7 +298,7 @@ def build_task_completed_filter(params: Dict) -> Callable[[Dict], bool]:
 # **framework-level** triggers (webhook + chat + delegated-task) --
 # they don't belong to any one plugin domain and intentionally stay
 # here. The plugin entries (whatsappReceive, twitterReceive,
-# gmailReceive, emailReceive) live in their plugin folders'
+# googleGmailReceive, emailReceive) live in their plugin folders'
 # ``_filters.py`` and self-register at import time.
 FILTER_BUILDERS: Dict[str, Callable[[Dict], Callable[[Dict], bool]]] = {
     'webhookTrigger': build_webhook_filter,
