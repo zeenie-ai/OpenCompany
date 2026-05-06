@@ -1,6 +1,6 @@
 """Plugin self-containment invariants (Wave 11.H plan, milestone H).
 
-Seven invariant classes lock the contract that every migrated plugin
+Nine invariant classes lock the contract that every migrated plugin
 owns its full surface (handlers, router, service code) under
 ``server/nodes/<plugin>/`` and that nothing outside that folder
 imports plugin internals by name.
@@ -17,7 +17,10 @@ Coverage map
    routers do not exist under ``server/routers/``. File-existence check.
 3. ``TestPluginInitSelfRegisters`` -- every plugin folder with a
    ``_handlers.py`` or ``_router.py`` self-registers from its
-   ``__init__.py``. Parametrized over the 9 migrated plugins.
+   ``__init__.py``. Split into two parametrized tests against the
+   explicit ``_PLUGINS_WITH_HANDLERS`` / ``_PLUGINS_WITH_ROUTERS``
+   constants (no skips), plus a cross-check against the filesystem
+   so the constants can't drift silently.
 4. ``TestRegistryLookupsExist`` -- registry public API sanity.
 5. ``TestStaleServiceFilesAbsent`` -- the 11 migrated old service
    paths must not be re-introduced. File-existence check.
@@ -25,6 +28,14 @@ Coverage map
    wire plugin routers explicitly; they flow in via the plugin loop.
 7. ``TestPluginHandlersDictsArePopulated`` -- when a plugin ships
    ``_handlers.py``, its registered surface is non-empty.
+8. ``TestPluginFolderHasNodeFile`` -- every migrated plugin folder
+   ships at least one public plugin file (a ``*.py`` not prefixed with
+   ``_``). Parametrized; never skips. Covers the simple plugins
+   (browser / code / email) that the conditional tests above skip.
+9. ``TestPluginPackageImportsCleanly`` -- importing each migrated
+   plugin package raises no exception. Parametrized; never skips.
+   Catches circular imports / missing-dependency regressions before
+   they hit a real startup.
 """
 
 from __future__ import annotations
@@ -55,6 +66,27 @@ _MIGRATED_PLUGINS = (
     "telegram",
     "twitter",
     "whatsapp",
+)
+
+# Plugins that ship a ``_handlers.py`` (credentials-modal WebSocket
+# commands beyond Save / Load / Delete). Each entry MUST register via
+# ``register_ws_handlers`` from its package ``__init__.py``.
+_PLUGINS_WITH_HANDLERS = (
+    "android",
+    "google",
+    "stripe",
+    "telegram",
+    "twitter",
+    "whatsapp",
+)
+
+# Plugins that ship a ``_router.py`` (FastAPI router for OAuth
+# callbacks etc.). Each entry MUST register via ``register_router``
+# from its package ``__init__.py``.
+_PLUGINS_WITH_ROUTERS = (
+    "android",
+    "google",
+    "twitter",
 )
 
 # Forbidden import substrings: any module path that would mean the
@@ -128,43 +160,82 @@ class TestNoPluginRouterOutsideNodes:
 
 
 class TestPluginInitSelfRegisters:
-    """Every migrated plugin folder that ships a ``_handlers.py`` or
-    ``_router.py`` must self-register from its ``__init__.py``.
+    """Every plugin folder that ships a ``_handlers.py`` or ``_router.py``
+    must self-register from its ``__init__.py``. The package-import
+    side effect is the single wiring point -- nothing elsewhere in the
+    tree should be doing the registration on the plugin's behalf.
 
-    The package import side-effect is the single wiring point -- nothing
-    elsewhere in the tree should be doing the registration on the
-    plugin's behalf.
+    Split into two parametrized tests against ``_PLUGINS_WITH_HANDLERS``
+    and ``_PLUGINS_WITH_ROUTERS`` so no plugin is skipped: the lists
+    explicitly enumerate which plugins ship which surfaces, and a new
+    plugin shipping a handler / router file MUST add itself to the
+    relevant list (otherwise the membership check below fails).
     """
 
-    @pytest.mark.parametrize("plugin", _MIGRATED_PLUGINS)
-    def test_plugin_self_registers(self, plugin):
+    @pytest.mark.parametrize("plugin", _PLUGINS_WITH_HANDLERS)
+    def test_plugin_with_handlers_self_registers(self, plugin: str):
         plugin_dir = _SERVER_ROOT / "nodes" / plugin
+        handlers_path = plugin_dir / "_handlers.py"
         init_path = plugin_dir / "__init__.py"
-        if not init_path.exists():
-            pytest.skip(f"nodes/{plugin}/ has no __init__.py")
 
-        has_handlers = (plugin_dir / "_handlers.py").exists()
-        has_router = (plugin_dir / "_router.py").exists()
-        if not (has_handlers or has_router):
-            pytest.skip(f"nodes/{plugin}/ ships neither _handlers.py nor _router.py")
+        assert handlers_path.exists(), (
+            f"nodes/{plugin}/_handlers.py missing -- remove {plugin!r} "
+            "from _PLUGINS_WITH_HANDLERS or restore the file."
+        )
+        assert init_path.exists(), f"nodes/{plugin}/__init__.py missing"
 
         init_src = init_path.read_text(encoding="utf-8")
+        assert "register_ws_handlers(" in init_src, (
+            f"nodes/{plugin}/_handlers.py exists but "
+            f"nodes/{plugin}/__init__.py does not call "
+            "register_ws_handlers(...). The plugin's WS surface would "
+            "never be wired up at startup."
+        )
 
-        if has_handlers:
-            assert "register_ws_handlers(" in init_src, (
-                f"nodes/{plugin}/_handlers.py exists but "
-                f"nodes/{plugin}/__init__.py does not call "
-                "register_ws_handlers(...). The plugin's WS surface "
-                "would never be wired up at startup."
-            )
+    @pytest.mark.parametrize("plugin", _PLUGINS_WITH_ROUTERS)
+    def test_plugin_with_router_self_registers(self, plugin: str):
+        plugin_dir = _SERVER_ROOT / "nodes" / plugin
+        router_path = plugin_dir / "_router.py"
+        init_path = plugin_dir / "__init__.py"
 
-        if has_router:
-            assert "register_router(" in init_src, (
-                f"nodes/{plugin}/_router.py exists but "
-                f"nodes/{plugin}/__init__.py does not call "
-                "register_router(...). The plugin's HTTP router would "
-                "never be mounted on the FastAPI app."
-            )
+        assert router_path.exists(), (
+            f"nodes/{plugin}/_router.py missing -- remove {plugin!r} "
+            "from _PLUGINS_WITH_ROUTERS or restore the file."
+        )
+        assert init_path.exists(), f"nodes/{plugin}/__init__.py missing"
+
+        init_src = init_path.read_text(encoding="utf-8")
+        assert "register_router(" in init_src, (
+            f"nodes/{plugin}/_router.py exists but "
+            f"nodes/{plugin}/__init__.py does not call "
+            "register_router(...). The plugin's HTTP router would "
+            "never be mounted on the FastAPI app."
+        )
+
+    def test_handler_router_lists_match_filesystem(self):
+        """Cross-check: every plugin folder with a ``_handlers.py`` or
+        ``_router.py`` must appear in the corresponding constant.
+        Catches a new plugin that ships a handler / router but forgot
+        to add itself to the parametrize list.
+        """
+        actual_handlers = {
+            p for p in _MIGRATED_PLUGINS
+            if (_SERVER_ROOT / "nodes" / p / "_handlers.py").exists()
+        }
+        actual_routers = {
+            p for p in _MIGRATED_PLUGINS
+            if (_SERVER_ROOT / "nodes" / p / "_router.py").exists()
+        }
+        assert set(_PLUGINS_WITH_HANDLERS) == actual_handlers, (
+            f"_PLUGINS_WITH_HANDLERS drifted from filesystem: "
+            f"declared={sorted(_PLUGINS_WITH_HANDLERS)}, "
+            f"actual={sorted(actual_handlers)}. Update the constant."
+        )
+        assert set(_PLUGINS_WITH_ROUTERS) == actual_routers, (
+            f"_PLUGINS_WITH_ROUTERS drifted from filesystem: "
+            f"declared={sorted(_PLUGINS_WITH_ROUTERS)}, "
+            f"actual={sorted(actual_routers)}. Update the constant."
+        )
 
 
 class TestRegistryLookupsExist:
@@ -285,11 +356,13 @@ class TestPluginHandlersDictsArePopulated:
     specific dict-construction style.
     """
 
-    @pytest.mark.parametrize("plugin", _MIGRATED_PLUGINS)
+    @pytest.mark.parametrize("plugin", _PLUGINS_WITH_HANDLERS)
     def test_plugin_handlers_dict_non_empty(self, plugin: str):
         handlers_path = _SERVER_ROOT / "nodes" / plugin / "_handlers.py"
-        if not handlers_path.exists():
-            pytest.skip(f"nodes/{plugin}/ has no _handlers.py")
+        assert handlers_path.exists(), (
+            f"nodes/{plugin}/_handlers.py missing -- remove {plugin!r} "
+            "from _PLUGINS_WITH_HANDLERS or restore the file."
+        )
 
         src = handlers_path.read_text(encoding="utf-8")
         # Must export WS_HANDLERS (the documented surface used by
@@ -313,3 +386,67 @@ class TestPluginHandlersDictsArePopulated:
                 "Move the handler bodies into _handlers.py (or wire via "
                 "make_lifecycle_handlers) before declaring the migration done."
             )
+
+
+# Files the node-discovery walker treats as plugin entry points: any
+# top-level ``*.py`` not prefixed with ``_`` (which marks
+# package-private siblings like ``_service.py`` / ``_credentials.py``)
+# and not the package ``__init__.py``.
+def _public_plugin_files(plugin_dir: Path) -> list[Path]:
+    return [
+        p for p in plugin_dir.glob("*.py")
+        if not p.name.startswith("_") and p.name != "__init__.py"
+    ]
+
+
+class TestPluginFolderHasNodeFile:
+    """Every migrated plugin folder must ship at least one public plugin
+    file (a ``*.py`` not prefixed with ``_``). Catches the partial-
+    extraction failure mode where the folder gets created with
+    ``_service.py`` / ``_handlers.py`` but the actual ``BaseNode``
+    subclass is forgotten.
+
+    Unlike ``TestPluginInitSelfRegisters`` / ``TestPluginHandlersDictsArePopulated``
+    this test never skips -- browser / code / email all ship plugin
+    files even though they don't ship ``_handlers.py`` or ``_router.py``.
+    """
+
+    @pytest.mark.parametrize("plugin", _MIGRATED_PLUGINS)
+    def test_plugin_folder_has_at_least_one_node_file(self, plugin: str):
+        plugin_dir = _SERVER_ROOT / "nodes" / plugin
+        assert plugin_dir.is_dir(), f"nodes/{plugin}/ is missing"
+        plugin_files = _public_plugin_files(plugin_dir)
+        assert plugin_files, (
+            f"nodes/{plugin}/ has no public plugin files. The folder "
+            "should contain at least one ``<name>.py`` declaring a "
+            "BaseNode subclass; underscore-prefixed siblings "
+            "(_service.py, _handlers.py, _credentials.py, ...) are "
+            "package-private and skipped by the node-discovery walker."
+        )
+
+
+class TestPluginPackageImportsCleanly:
+    """Every migrated plugin package must import without raising.
+
+    Catches:
+    - Circular imports introduced by mid-refactor ``from core.container``
+      at module load time (the same class of bug the plugin-router
+      cycle fix addressed in commit 9274072).
+    - Missing dependencies that only surface at startup.
+    - Syntax / decorator errors masked by lazy imports elsewhere.
+
+    Parametrized over all 9 migrated plugins; never skips.
+    """
+
+    @pytest.mark.parametrize("plugin", _MIGRATED_PLUGINS)
+    def test_plugin_package_imports(self, plugin: str):
+        import importlib
+
+        # If the package is already imported (likely, since the test
+        # session does plugin discovery during setup), reload to
+        # exercise the import path again -- catches regressions where
+        # the original import succeeded only because of import order.
+        module_name = f"nodes.{plugin}"
+        module = importlib.import_module(module_name)
+        importlib.reload(module)
+        assert module.__name__ == module_name
