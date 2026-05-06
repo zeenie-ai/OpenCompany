@@ -19,9 +19,11 @@ Two self-registrations happen on package import:
 """
 
 from services._supervisor import register_supervisor
+from services.status_broadcaster import register_service_refresh
 from services.ws_handler_registry import register_ws_handlers
 
 from ._handlers import WS_HANDLERS
+from ._refresh import refresh_whatsapp_status
 from ._runtime import WhatsAppRuntime, get_whatsapp_runtime
 
 # Supervisor: ensures shutdown_all_supervisors() reaches us.
@@ -32,6 +34,11 @@ register_supervisor(WhatsAppRuntime.get_instance())
 # groups / newsletters / chat_history / rate_limit_* / mark_read /
 # typing / presence / diagnostics / stop). Idempotent on re-import.
 register_ws_handlers(WS_HANDLERS)
+
+# Service-status refresh callback (Wave 11.I, milestone J) -- the
+# broadcaster fans out to this on lifespan startup instead of
+# hardcoding the call.
+register_service_refresh(refresh_whatsapp_status)
 
 __all__ = [
     "WhatsAppRuntime",
