@@ -386,14 +386,16 @@ class TestPhase4LoadOptions:
     """Wave 6 Phase 4: unified loadOptionsMethod dispatch registry."""
 
     def test_registry_has_whatsapp_methods(self):
-        from services.node_option_loaders import LOAD_OPTIONS_REGISTRY
+        from services.node_option_loaders import list_load_options_methods
+        methods = list_load_options_methods()
         for method in ["whatsappGroups", "whatsappChannels", "whatsappGroupMembers"]:
-            assert method in LOAD_OPTIONS_REGISTRY
+            assert method in methods
 
     def test_registry_has_google_methods(self):
-        from services.node_option_loaders import LOAD_OPTIONS_REGISTRY
+        from services.node_option_loaders import list_load_options_methods
+        methods = list_load_options_methods()
         for method in ["gmailLabels", "googleCalendarList", "googleDriveFolders", "googleTasklists"]:
-            assert method in LOAD_OPTIONS_REGISTRY
+            assert method in methods
 
     def test_list_methods_sorted(self):
         from services.node_option_loaders import list_load_options_methods
@@ -744,17 +746,19 @@ class TestNodeSpecContractInvariants:
 
     def test_load_options_methods_are_registered(self):
         """Every Pydantic Field(loadOptionsMethod=X) must point at a
-        method registered in LOAD_OPTIONS_REGISTRY. Catches typos and
+        registered loader -- either in the legacy table or in a
+        plugin's ``register_option_loader`` call. Catches typos and
         forgotten loader registrations."""
         from services.node_input_schemas import get_node_input_schema, NODE_INPUT_MODELS
-        from services.node_option_loaders import LOAD_OPTIONS_REGISTRY
+        from services.node_option_loaders import list_load_options_methods
+        methods = set(list_load_options_methods())
         for t in NODE_INPUT_MODELS:
             schema = get_node_input_schema(t)
             for prop_name, prop in schema.get("properties", {}).items():
                 method = prop.get("loadOptionsMethod")
                 if method is None:
                     continue
-                assert method in LOAD_OPTIONS_REGISTRY, (
+                assert method in methods, (
                     f"{t}.{prop_name} references unknown loadOptionsMethod {method!r}"
                 )
 

@@ -1,6 +1,6 @@
 """Plugin self-registration registries.
 
-Two sibling concerns share this file because they're the same pattern
+Three sibling concerns share this file because they're the same pattern
 (idempotent dict + collision check) for the same audience (plugin
 ``__init__.py`` modules wiring themselves into the framework):
 
@@ -14,9 +14,15 @@ Two sibling concerns share this file because they're the same pattern
    direct-API endpoints). Read by ``server.main`` after plugin discovery
    and ``app.include_router(...)``'d.
 
+3. **Option loaders** — ``register_option_loader(method_name, fn)`` for
+   dynamic-options dropdowns wired through the
+   ``loadOptionsMethod`` Pydantic field metadata. Read by
+   ``services.node_option_loaders.dispatch_load_options`` and the
+   matching WS handler in ``routers/websocket.py``.
+
 No hardcoded plugin names anywhere in the central router or main.py.
-Adding a new plugin's WS / HTTP surface is one registration call inside
-that plugin's package.
+Adding a new plugin's WS / HTTP / option-loader surface is one
+registration call inside that plugin's package.
 """
 
 from __future__ import annotations
@@ -31,9 +37,13 @@ from services.plugin.registry import IdempotentRegistry
 logger = logging.getLogger(__name__)
 
 WSHandler = Callable[[Dict[str, Any], WebSocket], Awaitable[Dict[str, Any]]]
+LoadOptionsFn = Callable[[Dict[str, Any]], Awaitable[List[Dict[str, Any]]]]
 
 _WS_REGISTRY: IdempotentRegistry[str, WSHandler] = IdempotentRegistry("ws_handler")
 _ROUTER_REGISTRY: IdempotentRegistry[str, APIRouter] = IdempotentRegistry("router")
+_OPTION_LOADER_REGISTRY: IdempotentRegistry[str, LoadOptionsFn] = IdempotentRegistry(
+    "option_loader"
+)
 
 
 # ---- WebSocket handlers --------------------------------------------------
@@ -85,3 +95,28 @@ def get_routers() -> List[APIRouter]:
 def list_registered_routers() -> List[str]:
     """For diagnostics / startup logging."""
     return sorted(_ROUTER_REGISTRY.keys())
+
+
+# ---- Option loaders ------------------------------------------------------
+
+def register_option_loader(method_name: str, fn: LoadOptionsFn) -> None:
+    """Publish a ``loadOptionsMethod`` async loader.
+
+    ``method_name`` is the string declared on Pydantic ``Field`` metadata
+    via ``json_schema_extra={"loadOptionsMethod": "..."}`` (e.g.
+    ``gmailLabels``, ``whatsappGroups``). Same idempotency contract as
+    the WS / router registries: the same callable for the same method
+    is a no-op; a different callable raises ``ValueError`` so plugin
+    namespace clashes fail at import time.
+    """
+    _OPTION_LOADER_REGISTRY.register(method_name, fn)
+
+
+def get_option_loader(method_name: str) -> LoadOptionsFn | None:
+    """Look up a registered loader. ``None`` when the method is unknown."""
+    return _OPTION_LOADER_REGISTRY.get(method_name)
+
+
+def list_registered_option_methods() -> List[str]:
+    """For diagnostics / startup logging."""
+    return sorted(_OPTION_LOADER_REGISTRY.keys())

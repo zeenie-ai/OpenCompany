@@ -21,10 +21,14 @@ Two self-registrations happen on package import:
 from services._supervisor import register_supervisor
 from services.event_waiter import register_filter_builder
 from services.status_broadcaster import register_service_refresh
-from services.ws_handler_registry import register_ws_handlers
+from services.ws_handler_registry import (
+    register_option_loader,
+    register_ws_handlers,
+)
 
 from ._filters import build_filter as build_whatsapp_filter
 from ._handlers import WS_HANDLERS
+from ._option_loaders import load_channels, load_group_members, load_groups
 from ._refresh import refresh_whatsapp_status
 from ._runtime import WhatsAppRuntime, get_whatsapp_runtime
 
@@ -46,6 +50,13 @@ register_service_refresh(refresh_whatsapp_status)
 # of services/event_waiter.py so the central FILTER_BUILDERS table
 # carries no plugin-specific code.
 register_filter_builder("whatsappReceive", build_whatsapp_filter)
+
+# loadOptionsMethod loaders (Wave 11.I, milestone M.1) -- moved out
+# of services/node_option_loaders/ so the central LOAD_OPTIONS_REGISTRY
+# carries no plugin-specific code.
+register_option_loader("whatsappGroups", load_groups)
+register_option_loader("whatsappChannels", load_channels)
+register_option_loader("whatsappGroupMembers", load_group_members)
 
 __all__ = [
     "WhatsAppRuntime",
