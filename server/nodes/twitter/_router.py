@@ -19,7 +19,6 @@ from typing import Optional
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 
-from core.container import container
 from core.logging import get_logger
 from nodes.twitter._oauth import TwitterOAuth, get_pending_state
 
@@ -28,7 +27,10 @@ router = APIRouter(prefix="/api/twitter", tags=["twitter"])
 
 
 def get_auth_service():
-    """Get auth service for API key storage."""
+    """Get auth service for API key storage. Imports lazily to avoid the
+    nodes/<plugin>/__init__ -> core.container -> nodes.android._dispatcher
+    -> nodes.android.__init__ -> _router import cycle."""
+    from core.container import container
     return container.auth_service()
 
 

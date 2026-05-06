@@ -4,12 +4,20 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from typing import Dict, Any
 
-from core.container import container
 from ._dispatcher import AndroidService
 from core.logging import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/android", tags=["android"])
+
+
+def get_android_service() -> AndroidService:
+    """FastAPI dependency: imports lazily to avoid the
+    nodes/android/__init__ -> core.container -> nodes.android._dispatcher
+    -> nodes.android.__init__ -> _router import cycle.
+    """
+    from core.container import container
+    return container.android_service()
 
 
 class AndroidServiceRequest(BaseModel):
@@ -24,7 +32,7 @@ class AndroidServiceRequest(BaseModel):
 @router.post("/execute")
 async def execute_android_service(
     request: AndroidServiceRequest,
-    android_service: AndroidService = Depends(lambda: container.android_service())
+    android_service: AndroidService = Depends(get_android_service)
 ):
     """Execute an Android system service action.
 
@@ -57,7 +65,7 @@ async def execute_android_service(
 async def check_device_status(
     android_host: str = "localhost",
     android_port: int = 8888,
-    android_service: AndroidService = Depends(lambda: container.android_service())
+    android_service: AndroidService = Depends(get_android_service)
 ):
     """Check if Android device API is reachable."""
     logger.info(
@@ -77,7 +85,7 @@ async def check_device_status(
 @router.get("/services/{service_id}/actions")
 async def get_service_actions(
     service_id: str,
-    android_service: AndroidService = Depends(lambda: container.android_service())
+    android_service: AndroidService = Depends(get_android_service)
 ):
     """Get available actions for a specific Android service.
 
@@ -105,7 +113,7 @@ async def get_service_actions(
 async def get_action_parameters(
     service_id: str,
     action: str,
-    android_service: AndroidService = Depends(lambda: container.android_service())
+    android_service: AndroidService = Depends(get_android_service)
 ):
     """Get default parameters for a specific service action.
 

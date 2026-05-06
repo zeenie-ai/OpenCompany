@@ -53,8 +53,12 @@ from core.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Load Google API config from JSON
-_config_path = Path(__file__).parent.parent / "config" / "google_apis.json"
+# Load Google API config from JSON.
+# Walk up two parents from server/nodes/google/_oauth.py -> server/, then
+# into config/google_apis.json. (Pre-D commit this file lived at
+# services/google_oauth.py and used .parent.parent; the migration into
+# nodes/google/ shifts the directory depth, so we use parents[2].)
+_config_path = Path(__file__).resolve().parents[2] / "config" / "google_apis.json"
 _google_config: Dict[str, Any] = {}
 
 def _load_config() -> Dict[str, Any]:

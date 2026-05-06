@@ -22,7 +22,6 @@ from typing import Optional
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from core.container import container
 from core.logging import get_logger
 from nodes.google._oauth import GoogleOAuth, get_pending_state
 
@@ -31,12 +30,16 @@ router = APIRouter(prefix="/api/google", tags=["google"])
 
 
 def get_auth_service():
-    """Get auth service for API key storage."""
+    """Get auth service for API key storage. Imports lazily to avoid the
+    nodes/<plugin>/__init__ -> core.container -> nodes.android._dispatcher
+    -> nodes.android.__init__ -> _router import cycle."""
+    from core.container import container
     return container.auth_service()
 
 
 def get_database():
     """Get database for customer connections (non-sensitive data only)."""
+    from core.container import container
     return container.database()
 
 
