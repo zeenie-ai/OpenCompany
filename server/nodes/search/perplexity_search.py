@@ -30,6 +30,15 @@ class PerplexityCredential(ApiKeyCredential):
     key_name = "Authorization"
     key_location = "bearer"
     docs_url = "https://docs.perplexity.ai/guides/getting-started"
+    # Cheapest valid request: minimal completion, max_tokens=1.
+    # Sonar is the always-available default model -- no entitlement gate.
+    probe_url = "https://api.perplexity.ai/chat/completions"
+    probe_method = "POST"
+    probe_json = {
+        "model": "sonar",
+        "messages": [{"role": "user", "content": "ping"}],
+        "max_tokens": 1,
+    }
 
 
 class PerplexityResult(BaseModel):

@@ -23,6 +23,9 @@ class SerperCredential(ApiKeyCredential):
     key_name = "X-API-KEY"
     key_location = "header"
     docs_url = "https://serper.dev/api-key"
+    probe_url = "https://google.serper.dev/search"
+    probe_method = "POST"
+    probe_json = {"q": "ping", "num": 1}
 
 
 class SerperSearchResult(BaseModel):

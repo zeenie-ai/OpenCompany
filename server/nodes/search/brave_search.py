@@ -36,6 +36,10 @@ class BraveSearchCredential(ApiKeyCredential):
     key_name = "X-Subscription-Token"
     key_location = "header"
     docs_url = "https://api.search.brave.com/app/keys"
+    # Lightweight probe — minimal query, count=1 just to confirm the
+    # token authenticates against the web-search endpoint.
+    probe_url = "https://api.search.brave.com/res/v1/web/search"
+    probe_params = {"q": "ping", "count": 1}
 
 
 class BraveSearchResult(BaseModel):

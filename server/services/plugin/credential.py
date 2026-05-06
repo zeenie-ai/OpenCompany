@@ -347,6 +347,15 @@ class ApiKeyCredential(Credential):
             category = "Search"
             key_name = "X-Subscription-Token"
             key_location = "header"
+            probe_url = "https://api.search.brave.com/res/v1/web/search"
+            probe_params = {"q": "ping", "count": 1}
+
+    Subclasses get a default :meth:`_probe` for free as long as they
+    declare a ``probe_url``. Auth attaches via :meth:`inject` (header /
+    query / bearer). Subclasses with bespoke validation (URL with
+    embedded token, SDK-based probe, custom 200-with-error envelope)
+    override :meth:`_probe` directly — see ``TelegramCredential``,
+    ``GoogleMapsCredential``, ``ApifyCredential``.
     """
 
     auth: ClassVar[Literal["api_key"]] = "api_key"
@@ -355,6 +364,20 @@ class ApiKeyCredential(Credential):
     key_location: ClassVar[Literal["header", "query", "bearer"]] = "header"
     # Extra fields stored alongside (e.g. "apify_account_id" for Apify)
     extra_fields: ClassVar[Sequence[str]] = ()
+
+    # ---- Declarative HTTP probe ------------------------------------
+    #
+    # The default :meth:`_probe` builds a request from these attributes,
+    # runs it through :meth:`inject` to attach the key, sends via httpx,
+    # and calls :meth:`_handle_probe_response` on a 2xx response.
+    # ``httpx.HTTPStatusError`` / ``TimeoutException`` / ``ConnectError``
+    # propagate to :meth:`Credential.validate`, where
+    # :func:`classify_credential_error` produces the user-facing message.
+    probe_url: ClassVar[str] = ""             # set to enable the default probe
+    probe_method: ClassVar[str] = "GET"
+    probe_params: ClassVar[Dict[str, Any]] = {}
+    probe_json: ClassVar[Optional[Dict[str, Any]]] = None
+    probe_timeout_seconds: ClassVar[float] = 10.0
 
     @classmethod
     async def resolve(cls, *, user_id: str = "owner") -> Dict[str, Any]:
@@ -390,3 +413,50 @@ class ApiKeyCredential(Credential):
             qs[name] = api_key
             request = {**request, "params": qs}
         return request
+
+    @classmethod
+    async def _probe(cls, api_key: str) -> ProbeResult:
+        """Default declarative HTTP probe.
+
+        Subclasses set ``probe_url`` (and optionally ``probe_method``,
+        ``probe_params``, ``probe_json``); auth attaches via
+        :meth:`inject`. Override :meth:`_handle_probe_response` to
+        extract provider-specific metadata or detect API-level failures
+        embedded in a 2xx response (e.g. Telegram's ``{ok: false}``
+        envelope, Maps' ``status: REQUEST_DENIED``).
+        """
+        if not cls.probe_url:
+            raise NotImplementedError(
+                f"Credential subclass {cls.__name__} must override _probe() "
+                f"or set the `probe_url` class attribute"
+            )
+
+        request = cls.inject(
+            {"api_key": api_key},
+            {"headers": {}, "params": dict(cls.probe_params)},
+        )
+
+        async with httpx.AsyncClient(timeout=cls.probe_timeout_seconds) as client:
+            response = await client.request(
+                cls.probe_method,
+                cls.probe_url,
+                headers=request.get("headers") or None,
+                params=request.get("params") or None,
+                json=cls.probe_json,
+            )
+        response.raise_for_status()
+        return cls._handle_probe_response(response)
+
+    @classmethod
+    def _handle_probe_response(cls, response: httpx.Response) -> ProbeResult:
+        """Translate a 2xx probe response to a :class:`ProbeResult`.
+
+        Default: success message only. Override to inspect the body —
+        for example to surface bot identity (Telegram ``getMe``) or to
+        catch wrapped failures that arrive as 200s (Telegram
+        ``{ok: false}``).
+        """
+        return ProbeResult(
+            valid=True,
+            message=f"{cls.display_name or cls.id} API key is valid",
+        )
