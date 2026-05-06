@@ -6,11 +6,13 @@ IMAP polling for new mail via Himalaya CLI. Thin delegation to
 
 from __future__ import annotations
 
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, Literal, Optional, Set
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from services.plugin import NodeContext, Operation, TaskQueue, TriggerNode
+from services.plugin import (
+    NodeContext, Operation, PollingTriggerNode, TaskQueue,
+)
 
 
 class EmailReceiveParams(BaseModel):
@@ -35,7 +37,7 @@ class EmailReceiveOutput(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
-class EmailReceiveNode(TriggerNode):
+class EmailReceiveNode(PollingTriggerNode):
     type = "emailReceive"
     display_name = "Email Receive"
     subtitle = "IMAP Polling"
@@ -51,10 +53,53 @@ class EmailReceiveNode(TriggerNode):
          "label": "Output", "role": "main"},
     )
     task_queue = TaskQueue.TRIGGERS_POLL
-    mode = "polling"
+    # Email keeps its 30s lower bound (legacy floor in
+    # config/email_providers.json). Gmail uses the default (10, 3600).
+    poll_interval_clamp = (30, 3600)
 
     Params = EmailReceiveParams
     Output = EmailReceiveOutput
+
+    # ---- PollingTriggerNode hooks (deployment-mode loop) -------------
+    #
+    # The Run-button path lives in ``execute()`` below and stays
+    # bespoke: it broadcasts ``waiting`` status, dispatches via
+    # event_waiter, and returns after the first new email. The
+    # deployment loop owned by ``PollingTriggerNode`` drains
+    # continuously via the deployment manager's queue and uses the
+    # four hooks below.
+
+    async def setup_service(self, params: Dict[str, Any]) -> Any:
+        from ._service import get_email_service
+
+        svc = get_email_service()
+        creds = await svc.resolve_credentials(params)
+        cfg = svc.resolve_poll_params(params)
+        return svc, creds, cfg["folder"], cfg.get("mark_as_read", False)
+
+    async def fetch_ids(self, service: Any, params: Dict[str, Any]) -> Set[str]:
+        svc, creds, folder, _mark = service
+        return await svc.poll_ids(creds, folder)
+
+    async def fetch_detail(
+        self, service: Any, msg_id: str, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        svc, creds, folder, _mark = service
+        return await svc.fetch_detail(creds, msg_id, folder)
+
+    async def post_emit(
+        self, service: Any, msg_id: str, params: Dict[str, Any]
+    ) -> None:
+        svc, creds, folder, mark = service
+        if not mark:
+            return
+        try:
+            d = svc.defaults
+            await svc.himalaya.flag_message(
+                creds, msg_id, d.get("flag"), d.get("flag_action"), folder,
+            )
+        except Exception:
+            pass
 
     async def execute(
         self,

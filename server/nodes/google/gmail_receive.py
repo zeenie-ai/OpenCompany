@@ -10,7 +10,9 @@ from typing import Any, Dict, Literal, Optional, Set
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.logging import get_logger
-from services.plugin import NodeContext, Operation, TaskQueue, TriggerNode
+from services.plugin import (
+    NodeContext, Operation, PollingTriggerNode, TaskQueue,
+)
 
 from ._credentials import GoogleCredential
 
@@ -52,8 +54,12 @@ class GmailReceiveOutput(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
-class GmailReceiveNode(TriggerNode):
+class GmailReceiveNode(PollingTriggerNode):
     type = "googleGmailReceive"
+    # Pre-existing alias used by deployment manager + POLLING_TRIGGER_TYPES;
+    # registers the deployment-mode poll factory under both names so the
+    # mismatch can be retired in a separate rename commit.
+    type_alias = "gmailReceive"
     display_name = "Gmail Receive"
     subtitle = "Inbound Email"
     group = ("google", "trigger")
@@ -65,11 +71,38 @@ class GmailReceiveNode(TriggerNode):
     )
     credentials = (GoogleCredential,)
     task_queue = TaskQueue.TRIGGERS_POLL
-    mode = "polling"
     default_poll_interval = 60
 
     Params = GmailReceiveParams
     Output = GmailReceiveOutput
+
+    # ---- PollingTriggerNode hooks (deployment-mode loop) -------------
+
+    @staticmethod
+    def _build_query(parameters: Dict[str, Any]) -> str:
+        query = parameters.get("filter_query", "is:unread")
+        label = parameters.get("label_filter", "INBOX")
+        return f"label:{label} {query}" if label and label != "all" else query
+
+    async def setup_service(self, params: Dict[str, Any]) -> Any:
+        return await build_google_service("gmail", "v1", params, {})
+
+    async def fetch_ids(self, service: Any, params: Dict[str, Any]) -> Set[str]:
+        return await poll_gmail_ids(service, self._build_query(params))
+
+    async def fetch_detail(
+        self, service: Any, msg_id: str, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        return await fetch_email_details(service, msg_id)
+
+    async def post_emit(
+        self, service: Any, msg_id: str, params: Dict[str, Any]
+    ) -> None:
+        if params.get("mark_as_read"):
+            try:
+                await mark_email_as_read(service, msg_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(f"[GmailReceive] Failed to mark as read: {exc}")
 
     async def execute(
         self,

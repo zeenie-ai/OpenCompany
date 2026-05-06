@@ -28,6 +28,7 @@ from __future__ import annotations
 from services.plugin.base import BaseNode, NodeUserError
 from services.plugin.action import ActionNode
 from services.plugin.trigger import TriggerNode
+from services.plugin.polling import PollingTriggerNode
 from services.plugin.tool import ToolNode
 from services.plugin.operation import Operation, OperationSpec
 from services.plugin.routing import Routing, RoutingRequest, RoutingOutput, execute_routing
@@ -52,6 +53,7 @@ __all__ = [
     "NodeUserError",
     "ActionNode",
     "TriggerNode",
+    "PollingTriggerNode",
     "ToolNode",
     "Operation",
     "OperationSpec",

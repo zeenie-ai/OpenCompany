@@ -418,17 +418,25 @@ class DeploymentManager:
         if not trigger_manager:
             raise RuntimeError(f"No trigger manager for workflow {workflow_id}")
 
-        # Polling triggers need active API polling instead of event_waiter
+        # Polling triggers need active API polling instead of event_waiter.
+        # Plugins register a factory via
+        # ``services.plugin.PollingTriggerNode.__init_subclass__`` →
+        # ``services.deployment.poll_registry.register_poll_coroutine_factory``.
         if node_type in POLLING_TRIGGER_TYPES:
-            poll_coroutine = self._create_poll_coroutine(node_type, node_id, params)
-            if poll_coroutine:
+            from services.deployment.poll_registry import (
+                get_poll_coroutine_factory,
+            )
+
+            factory = get_poll_coroutine_factory(node_type)
+            if factory is not None:
+                poll_coroutine = factory(node_id, params)
                 await trigger_manager.setup_polling_trigger(
                     node_id, node_type, params, poll_coroutine, on_event,
                     self._broadcaster, workflow_id=workflow_id
                 )
                 return TriggerInfo(node_id, node_type)
-            # Fall through to event_waiter if no polling implementation available
-            logger.warning("No polling implementation for trigger", node_type=node_type)
+            # Fall through to event_waiter if no polling factory registered
+            logger.warning("No polling factory registered for trigger", node_type=node_type)
 
         await trigger_manager.setup_event_trigger(
             node_id, node_type, params, on_event, self._broadcaster,
@@ -677,141 +685,12 @@ class DeploymentManager:
     # POLLING TRIGGER FACTORIES
     # =========================================================================
 
-    def _create_poll_coroutine(self, node_type: str, node_id: str,
-                                params: Dict[str, Any]) -> Optional[Callable]:
-        """Create a polling coroutine for polling-based triggers.
-
-        Returns an async function(queue, is_running_fn) or None if not supported.
-        """
-        if node_type == 'gmailReceive':
-            return self._create_gmail_poll_coroutine(node_id, params)
-        elif node_type == 'emailReceive':
-            return self._create_email_poll_coroutine(node_id, params)
-        elif node_type == 'twitterReceive':
-            logger.warning("Twitter polling trigger not yet implemented for deployment")
-            return None
-        return None
-
-    def _create_gmail_poll_coroutine(self, node_id: str,
-                                      params: Dict[str, Any]) -> Callable:
-        """Create Gmail API polling coroutine for deployment mode.
-
-        Polls Gmail API at configured intervals for new emails matching the filter.
-        Establishes a baseline of existing emails to avoid triggering on old messages.
-        """
-        async def poll(queue: asyncio.Queue, is_running_fn: Callable):
-            from nodes.google._base import build_google_service
-            from nodes.google._gmail import (
-                poll_gmail_ids as _poll_gmail_ids,
-                fetch_email_details as _fetch_email_details,
-                mark_email_as_read as _mark_email_as_read,
-            )
-
-            # Authenticate with Gmail API
-            service = await build_google_service("gmail", "v1", params, {})
-
-            poll_interval = max(10, min(3600, params.get('poll_interval', 60)))
-            filter_query = params.get('filter_query', 'is:unread')
-            label_filter = params.get('label_filter', 'INBOX')
-            mark_as_read = params.get('mark_as_read', False)
-
-            # Build Gmail query
-            query = filter_query
-            if label_filter and label_filter != 'all':
-                query = f"label:{label_filter} {query}"
-
-            logger.info("Gmail poller starting",
-                       node_id=node_id, query=query,
-                       poll_interval=poll_interval)
-
-            # Establish baseline (avoid triggering on existing emails)
-            seen_ids: set = set()
-            try:
-                baseline = await _poll_gmail_ids(service, query)
-                seen_ids.update(baseline)
-                logger.info("Gmail poller baseline established",
-                           node_id=node_id, count=len(seen_ids))
-            except Exception as e:
-                logger.warning("Gmail poller baseline failed",
-                              node_id=node_id, error=str(e))
-
-            # Poll loop
-            poll_count = 0
-            while is_running_fn():
-                await asyncio.sleep(poll_interval)
-                if not is_running_fn():
-                    break
-
-                poll_count += 1
-                try:
-                    current_ids = await _poll_gmail_ids(service, query)
-                    new_ids = current_ids - seen_ids
-                    logger.debug("Gmail poll cycle",
-                                node_id=node_id, cycle=poll_count,
-                                current=len(current_ids),
-                                seen=len(seen_ids),
-                                new=len(new_ids))
-
-                    for msg_id in new_ids:
-                        seen_ids.add(msg_id)
-                        email_data = await _fetch_email_details(service, msg_id)
-
-                        if mark_as_read:
-                            try:
-                                await _mark_email_as_read(service, msg_id)
-                            except Exception:
-                                pass
-
-                        await queue.put(email_data)
-                        logger.info("Gmail poller: new email queued",
-                                   node_id=node_id,
-                                   subject=email_data.get('subject', ''))
-
-                except asyncio.CancelledError:
-                    break
-                except Exception as e:
-                    logger.error("Gmail poll error",
-                                node_id=node_id, error=str(e))
-
-        return poll
-
-    def _create_email_poll_coroutine(self, node_id: str,
-                                      params: Dict[str, Any]) -> Callable:
-        """Create Himalaya email polling coroutine for deployment mode."""
-        async def poll(queue: asyncio.Queue, is_running_fn: Callable):
-            from nodes.email._service import get_email_service
-
-            svc = get_email_service()
-            creds = await svc.resolve_credentials(params)
-            cfg = svc.resolve_poll_params(params)
-
-            seen = await svc.poll_ids(creds, cfg["folder"])
-            logger.info("Email poller starting",
-                       node_id=node_id, folder=cfg["folder"], seen=len(seen))
-
-            while is_running_fn():
-                await asyncio.sleep(cfg["interval"])
-                if not is_running_fn():
-                    break
-                try:
-                    for msg_id in await svc.poll_ids(creds, cfg["folder"]) - seen:
-                        seen.add(msg_id)
-                        email_data = await svc.fetch_detail(creds, msg_id, cfg["folder"])
-                        if cfg["mark_as_read"]:
-                            try:
-                                d = svc.defaults
-                                await svc.himalaya.flag_message(
-                                    creds, msg_id, d.get("flag"), d.get("flag_action"), cfg["folder"])
-                            except Exception:
-                                pass
-                        await queue.put(email_data)
-                except asyncio.CancelledError:
-                    break
-                except Exception as e:
-                    logger.error("Email poll error",
-                                node_id=node_id, error=str(e))
-
-        return poll
+    # _create_poll_coroutine + _create_gmail_poll_coroutine +
+    # _create_email_poll_coroutine REMOVED in Wave 11.I, milestone L.
+    # Polling-coroutine factories now self-register from each plugin's
+    # PollingTriggerNode subclass (services.plugin.PollingTriggerNode)
+    # via services.deployment.poll_registry.register_poll_coroutine_factory.
+    # The dispatch path lives ~140 lines up in _setup_event_trigger.
 
     async def _load_settings(self):
         """Load deployment settings from database."""
