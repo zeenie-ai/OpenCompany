@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -183,13 +184,21 @@ def _logger_messages(*module_loggers) -> str:
 
 
 @pytest.mark.asyncio
-async def test_run_batch_emits_diagnostic_logs_when_workspace_not_git():
+async def test_run_batch_emits_diagnostic_logs_when_workspace_not_git(monkeypatch):
     """Abort path: `run_batch` enters, fails the resolver, returns
     structured failure. The `[CC-Agent run_batch] enter` and
     `[CC-Agent run_batch] aborting` log lines must fire so the operator
     sees WHY the batch never reached `register_batch`."""
-    from services.cli_agent.service import logger as svc_logger
-    svc_logger.reset_mock()
+    # Force the module-level logger to a Mock for THIS test, regardless of
+    # whether conftest's `core.logging.get_logger` stub was active at the
+    # moment the service module was first imported. In the full-suite
+    # ordering some sibling test imports `core.logging` after the stub is
+    # placed, leaving the cli_agent module with a real structlog
+    # BoundLogger that has no `reset_mock`. Locally patching makes the test
+    # robust to import-order pollution.
+    from services.cli_agent import service as svc_mod
+    svc_logger = MagicMock()
+    monkeypatch.setattr(svc_mod, "logger", svc_logger)
 
     svc = get_ai_cli_service()  # DI singleton — same accessor production uses
     import tempfile
@@ -226,12 +235,17 @@ async def test_run_batch_registers_mcp_batch_on_happy_path(monkeypatch):
     end-to-end and the spawned CLI WOULD see the MCP server registered
     for it."""
     from services.cli_agent import session as session_mod
-    from services.cli_agent.service import logger as svc_logger
-    from services.cli_agent.mcp_server import logger as mcp_logger
+    from services.cli_agent import service as svc_mod
+    from services.cli_agent import mcp_server as mcp_mod
     from services.cli_agent.protocol import SessionResult
 
-    svc_logger.reset_mock()
-    mcp_logger.reset_mock()
+    # See the abort-path test for the rationale — patch the module-level
+    # logger directly so the test does not depend on conftest's
+    # `core.logging.get_logger` stub being active at import time.
+    svc_logger = MagicMock()
+    mcp_logger = MagicMock()
+    monkeypatch.setattr(svc_mod, "logger", svc_logger)
+    monkeypatch.setattr(mcp_mod, "logger", mcp_logger)
 
     started = {"count": 0}
 
