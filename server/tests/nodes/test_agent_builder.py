@@ -134,7 +134,9 @@ class TestInspectCanvas:
         assert len(result.nodes) == 3
         assert len(result.edges) == 2
         assert result.you["node_id"] == "agent-1"  # caller resolved via input-tools edge
-        assert "1 tool(s) wired" in result.summary
+        # Both agentBuilder and httpRequest are wired to agent-1's input-tools.
+        assert "2 tool(s) wired" in result.summary
+        assert "httpRequest" in result.summary
 
     async def test_falls_back_to_self_when_no_caller_wired(self):
         node = ab.AgentBuilderNode()
