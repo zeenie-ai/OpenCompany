@@ -42,6 +42,10 @@ class EmailReceiveNode(TriggerNode):
     group = ("email", "trigger")
     description = "Polling trigger for new emails via IMAP"
     component_kind = "trigger"
+    # Wave 11.I, milestone K: ``event_type`` ClassVar lets
+    # ``event_waiter._auto_populate_from_plugins`` backfill
+    # TRIGGER_REGISTRY without a hardcoded entry in event_waiter.
+    event_type = "email_received"
     handles = (
         {"name": "output-main", "kind": "output", "position": "right",
          "label": "Output", "role": "main"},

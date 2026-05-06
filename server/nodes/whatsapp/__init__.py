@@ -19,9 +19,11 @@ Two self-registrations happen on package import:
 """
 
 from services._supervisor import register_supervisor
+from services.event_waiter import register_filter_builder
 from services.status_broadcaster import register_service_refresh
 from services.ws_handler_registry import register_ws_handlers
 
+from ._filters import build_filter as build_whatsapp_filter
 from ._handlers import WS_HANDLERS
 from ._refresh import refresh_whatsapp_status
 from ._runtime import WhatsAppRuntime, get_whatsapp_runtime
@@ -39,6 +41,11 @@ register_ws_handlers(WS_HANDLERS)
 # broadcaster fans out to this on lifespan startup instead of
 # hardcoding the call.
 register_service_refresh(refresh_whatsapp_status)
+
+# Trigger-event filter builder (Wave 11.I, milestone K) -- moved out
+# of services/event_waiter.py so the central FILTER_BUILDERS table
+# carries no plugin-specific code.
+register_filter_builder("whatsappReceive", build_whatsapp_filter)
 
 __all__ = [
     "WhatsAppRuntime",

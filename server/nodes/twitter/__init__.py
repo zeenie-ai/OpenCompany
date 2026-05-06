@@ -18,18 +18,21 @@ FastAPI app pick up the plugin's surface without ever importing this
 module by name.
 """
 
+from services.event_waiter import register_filter_builder
 from services.status_broadcaster import register_service_refresh
 from services.ws_handler_registry import register_router, register_ws_handlers
 
 from . import _router
+from ._filters import build_filter as build_twitter_filter
 from ._handlers import WS_HANDLERS
 from ._refresh import refresh_twitter_status
 
 # WebSocket handlers (3 message types) and the OAuth-callback HTTP
 # router self-register so ``routers/websocket.py`` and ``main.py``
 # stay free of per-plugin imports. Plus the service-status refresh
-# callback (Wave 11.I, milestone J) -- the broadcaster fans out to
-# this on lifespan startup instead of hardcoding the call.
+# callback (Wave 11.I, milestone J) and the trigger filter builder
+# (milestone K).
 register_ws_handlers(WS_HANDLERS)
 register_router(_router.router, name="twitter")
 register_service_refresh(refresh_twitter_status)
+register_filter_builder("twitterReceive", build_twitter_filter)

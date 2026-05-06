@@ -85,15 +85,11 @@ class TriggerConfig:
 # Registry of supported trigger types (event-based triggers only)
 # Note: cronScheduler is NOT an event-based trigger - it uses APScheduler directly
 TRIGGER_REGISTRY: Dict[str, TriggerConfig] = {
+    # Framework-level triggers — not owned by any plugin domain.
     'start': TriggerConfig(
         node_type='start',
         event_type='deploy_triggered',
         display_name='Deploy Start'
-    ),
-    'whatsappReceive': TriggerConfig(
-        node_type='whatsappReceive',
-        event_type='whatsapp_message_received',
-        display_name='WhatsApp Message'
     ),
     'webhookTrigger': TriggerConfig(
         node_type='webhookTrigger',
@@ -110,24 +106,21 @@ TRIGGER_REGISTRY: Dict[str, TriggerConfig] = {
         event_type='task_completed',
         display_name='Task Completed'
     ),
-    'twitterReceive': TriggerConfig(
-        node_type='twitterReceive',
-        event_type='twitter_event_received',
-        display_name='Twitter Event'
-    ),
+    # Pre-existing type-name mismatch — the plugin class is
+    # ``googleGmailReceive`` but downstream callers (deployment
+    # manager, this registry) key by ``gmailReceive``. Auto-populate
+    # would key by the class type, so an alias entry stays here until
+    # the gmail plugin renames its type.
     'gmailReceive': TriggerConfig(
         node_type='gmailReceive',
         event_type='gmail_email_received',
         display_name='Gmail Email'
     ),
-    # 'telegramReceive' moved to nodes/telegram/ — backfilled here from
-    # the plugin's ``event_type`` class attribute via
-    # ``_auto_populate_from_plugins`` on first access.
-    'emailReceive': TriggerConfig(
-        node_type='emailReceive',
-        event_type='email_received',
-        display_name='Email'
-    ),
+    # Plugin-owned trigger entries (whatsappReceive, twitterReceive,
+    # telegramReceive, emailReceive) live in their plugin folders'
+    # ``_filters.py`` and are backfilled here from each plugin's
+    # ``event_type`` ClassVar via ``_auto_populate_from_plugins``
+    # (Wave 11.I, milestone K).
     # Future triggers - just add to registry:
     # 'mqttTrigger': TriggerConfig('mqttTrigger', 'mqtt_message', 'MQTT Message'),
 }
@@ -212,126 +205,6 @@ def get_trigger_config(node_type: str) -> Optional[TriggerConfig]:
 # =============================================================================
 # FILTER BUILDERS - One per trigger type
 # =============================================================================
-
-def build_whatsapp_filter(params: Dict) -> Callable[[Dict], bool]:
-    """Build filter function for WhatsApp messages.
-
-    Based on Go RPC handleIncomingMessage() event fields (service.go):
-    - message_id: string - unique message ID
-    - sender: string - Sender JID (may be LID for groups)
-    - sender_phone: string - RESOLVED phone number (LID already resolved by Go RPC!)
-    - chat_id: string - Chat JID (same as sender for DMs, group JID for groups)
-    - timestamp: time - message timestamp
-    - is_from_me: boolean - true if sent by connected account
-    - is_group: boolean - true if message is in a group chat
-    - message_type: string - text, image, video, audio, document, sticker, location, contact, contacts
-    - text: string - text content (for text messages)
-    - is_forwarded: boolean - true if message is forwarded
-    - forwarding_score: int - forwarding count
-    - group_info: object - present for group messages:
-      - group_jid: string
-      - sender_jid: string
-      - sender_phone: string - RESOLVED phone number
-      - sender_name: string - push name if available
-
-    Note: The Go RPC already resolves LIDs to phone numbers before sending the event.
-    The sender_phone field contains the resolved phone number - no manual LID resolution needed!
-    """
-    # Snake_case throughout — matches plugin Params (no camelCase aliases).
-    msg_type = params.get('message_type_filter', 'all')
-    sender_filter = params.get('filter', 'all')
-    contact_phone = params.get('phone_number', '')
-    group_id = params.get('group_id', '')
-    sender_number = params.get('sender_number', '')
-    keywords = [k.strip().lower() for k in params.get('keywords', '').split(',') if k.strip()]
-    ignore_own = params.get('ignore_own_messages', True)
-    forwarded_filter = params.get('forwarded_filter', 'all')
-
-    logger.debug(f"[WhatsAppFilter] Built: type={msg_type}, filter={sender_filter}, group_id='{group_id}', forwarded={forwarded_filter}")
-
-    def matches(m: Dict) -> bool:
-        msg_chat_id = m.get('chat_id', '')
-        is_group = m.get('is_group', False)
-        group_info = m.get('group_info', {})
-
-        # Use sender_phone directly - Go RPC already resolves LIDs to phone numbers!
-        # For group messages, prefer group_info.sender_phone, fall back to root sender_phone
-        if is_group:
-            sender_phone = group_info.get('sender_phone', '') or m.get('sender_phone', '')
-        else:
-            sender_phone = m.get('sender_phone', '')
-
-        # Fallback: extract phone from sender JID if sender_phone not available
-        if not sender_phone:
-            sender = m.get('sender', '')
-            sender_phone = sender.split('@')[0] if '@' in sender else sender
-
-        # Message type filter (schema field: message_type)
-        if msg_type != 'all' and m.get('message_type') != msg_type:
-            return False
-
-        # Sender filter - for contact filter, use actual phone number
-        if sender_filter == 'self':
-            # Only accept messages in self-chat (notes to self)
-            # Must be from me AND in a chat with myself (not replies to others)
-            if not m.get('is_from_me'):
-                return False
-            # Check chat_id matches sender (self-chat)
-            chat_id = m.get('chat_id', '')
-            sender = m.get('sender', '')
-            if chat_id != sender:
-                return False
-
-        if sender_filter == 'any_contact':
-            # Only accept non-group messages (individual/contact messages)
-            if is_group:
-                return False
-
-        if sender_filter == 'contact':
-            if contact_phone not in sender_phone:
-                return False
-
-        if sender_filter == 'group':
-            # For group filter, check if message is from that group
-            if not is_group:
-                return False
-            if msg_chat_id != group_id:
-                return False
-            # Optional: filter by specific sender within group using resolved phone number
-            if sender_number:
-                if sender_number not in sender_phone:
-                    return False
-
-        if sender_filter == 'channel':
-            # Only accept messages from newsletter channels (chat_id ends with @newsletter)
-            if not msg_chat_id.endswith('@newsletter'):
-                return False
-            # If specific channel JID provided, match exactly
-            channel_jid = params.get('channel_jid', '')
-            if channel_jid and msg_chat_id != channel_jid:
-                return False
-
-        if sender_filter == 'keywords':
-            text = (m.get('text') or '').lower()
-            if not any(kw in text for kw in keywords):
-                return False
-
-        # Ignore own messages (schema field: is_from_me) - but not when filtering for 'self'
-        if ignore_own and sender_filter != 'self' and m.get('is_from_me'):
-            return False
-
-        # Forwarded message filter (schema field: is_forwarded)
-        is_forwarded = m.get('is_forwarded', False)
-        if forwarded_filter == 'only_forwarded' and not is_forwarded:
-            return False
-        if forwarded_filter == 'ignore_forwarded' and is_forwarded:
-            return False
-
-        logger.debug(f"[WhatsAppFilter] Matched message from {sender_phone}")
-        return True
-
-    return matches
-
 
 def build_webhook_filter(params: Dict) -> Callable[[Dict], bool]:
     """Build filter function for webhook requests.
@@ -425,94 +298,19 @@ def build_task_completed_filter(params: Dict) -> Callable[[Dict], bool]:
     return matches
 
 
-def build_twitter_filter(params: Dict) -> Callable[[Dict], bool]:
-    """Build filter function for Twitter events.
-
-    Filters by:
-    - trigger_type: 'mentions', 'search', 'user_timeline'
-    - search_query: Search query for 'search' trigger type
-    - user_id: User ID for 'user_timeline' trigger type
-
-    Args:
-        params: Node parameters
-
-    Returns:
-        Filter function that checks if event matches criteria
-    """
-    trigger_type = params.get('trigger_type', 'mentions')
-    search_query = params.get('search_query', '')
-    user_id = params.get('user_id', '')
-
-    def matches(data: Dict) -> bool:
-        event_type = data.get('trigger_type', '')
-        if trigger_type != 'all' and event_type != trigger_type:
-            return False
-        if trigger_type == 'search' and search_query:
-            # Check if search query matches
-            event_query = data.get('query', '')
-            if search_query.lower() not in event_query.lower():
-                return False
-        if trigger_type == 'user_timeline' and user_id:
-            if data.get('user_id') != user_id:
-                return False
-        return True
-
-    return matches
-
-
-def build_gmail_filter(params: Dict) -> Callable[[Dict], bool]:
-    """Build filter function for Gmail email events.
-
-    Filters by label to ensure the event matches the trigger's label filter.
-    The filter_query is applied at the Gmail API level during polling,
-    so this filter only checks labels for events dispatched via event_waiter.
-
-    Args:
-        params: Node parameters with 'label_filter' field
-
-    Returns:
-        Filter function that checks if event labels match
-    """
-    label_filter = params.get('label_filter', 'INBOX')
-
-    def matches(data: Dict) -> bool:
-        if label_filter and label_filter != 'all':
-            labels = data.get('labels', [])
-            if label_filter not in labels:
-                return False
-        return True
-
-    return matches
-
-
-def build_email_filter(params: Dict) -> Callable[[Dict], bool]:
-    """Build filter for email events (Himalaya IMAP polling)."""
-    folder_filter = params.get('folder', 'INBOX')
-    filter_query = params.get('filter_query', '')
-
-    def matches(data: Dict) -> bool:
-        if folder_filter and folder_filter != 'all':
-            if data.get('folder', '') != folder_filter:
-                return False
-        return True
-
-    return matches
-
-
 # Registry of filter builders per trigger type. Plugin packages
 # (nodes/<group>/) call :func:`register_filter_builder` from their
 # package ``__init__.py`` to publish per-trigger filters without this
-# module needing to import them. The hardcoded entries below are core
-# triggers that don't yet live in their own plugin folder; once they
-# do, this dict shrinks to ``{}`` and everything is registry-driven.
+# module needing to import them. The hardcoded entries below are
+# **framework-level** triggers (webhook + chat + delegated-task) --
+# they don't belong to any one plugin domain and intentionally stay
+# here. The plugin entries (whatsappReceive, twitterReceive,
+# gmailReceive, emailReceive) live in their plugin folders'
+# ``_filters.py`` and self-register at import time.
 FILTER_BUILDERS: Dict[str, Callable[[Dict], Callable[[Dict], bool]]] = {
-    'whatsappReceive': build_whatsapp_filter,
     'webhookTrigger': build_webhook_filter,
     'chatTrigger': build_chat_filter,
     'taskTrigger': build_task_completed_filter,
-    'twitterReceive': build_twitter_filter,
-    'gmailReceive': build_gmail_filter,
-    'emailReceive': build_email_filter,
 }
 
 from services.plugin.registry import IdempotentRegistry as _IdempotentRegistry  # noqa: E402
