@@ -1,0 +1,45 @@
+/* ============================================================================
+ * themes/base.css — neutral defaults shared by every theme.
+ *
+ * These are scoped to :root (no data-theme selector) so they apply as
+ * fallbacks when a theme block omits the variable. Per-theme blocks
+ * always win via specificity (`:root[data-theme="..."]` beats `:root`).
+ *
+ * Source: design_handoff_machinaos_themes/themes/base.css.
+ * ============================================================================ */
+
+:root {
+  /* Space scale (4 / 8 / 12 / 16 / 24 / 32 / 48 / 64) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* New-contract radii — exposed as Tailwind tokens via index.css.
+   * Co-exist with shadcn `--radius` (still used by existing primitives). */
+  --radius-pill: 999px;
+
+  /* Motion */
+  --dur-fast: 90ms;
+  --dur-default: 180ms;
+  --dur-slow: 320ms;
+  --ease-default: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --ease-emphasis: cubic-bezier(0.6, -0.05, 0.3, 1.4);
+  --motion-style: smooth;
+
+  /* Sound (read by JS in a future phase) */
+  --sound-pack: none;
+
+  /* Type case toggle — themes flip between `none` / `uppercase` / `capitalize`. */
+  --type-uppercase: none;
+  --type-tracking-display: 0;
+  --type-scale-base: 14px;
+
+  /* Cursor + scrollbar */
+  --cursor-default: auto;
+  --cursor-pointer: pointer;
+}

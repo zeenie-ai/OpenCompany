@@ -35,6 +35,8 @@ import CredentialsModal from './components/CredentialsModal';
 import OnboardingWizard from './components/onboarding/OnboardingWizard';
 import ErrorBoundary from './components/ui/ErrorBoundary';
 import ConsolePanel from './components/ui/ConsolePanel';
+import StatusBar from './components/ui/StatusBar';
+import CommandPaletteHost from './components/ui/CommandPaletteHost';
 import { useAppTheme } from './hooks/useAppTheme';
 import { useWorkflowManagement } from './hooks/useWorkflowManagement';
 import { useWorkflowsQuery, WORKFLOWS_QUERY_KEY } from './hooks/useWorkflowsQuery';
@@ -277,6 +279,7 @@ const DashboardContent: React.FC = () => {
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [credentialsOpen, setCredentialsOpen] = React.useState(false);
   const [onboardingReopenTrigger, setOnboardingReopenTrigger] = React.useState(0);
+  const [commandPaletteOpen, setCommandPaletteOpen] = React.useState(false);
 
   // Console panel visibility from store (database-backed)
   const consolePanelVisible = useAppStore((state) => state.consolePanelVisible);
@@ -1239,6 +1242,35 @@ const DashboardContent: React.FC = () => {
           onToggle={toggleConsolePanelVisible}
           nodes={nodes}
         />
+
+        {/* Status bar — fixed-bottom system console line; surfaces
+            connection state, workflow context, theme, clock. Always
+            present below ConsolePanel. */}
+        <StatusBar workflowName={currentWorkflow?.name} nodeCount={nodes.length} />
+
+        {/* Global command palette — ⌘K (Ctrl+K). Surface common shell
+            actions; the registered list is local to this component
+            because every handler is already in scope here. */}
+        <CommandPaletteHost
+          open={commandPaletteOpen}
+          onOpenChange={setCommandPaletteOpen}
+          handlers={{
+            save: handleSave,
+            newWorkflow: handleNew,
+            open: handleOpen,
+            run: handleDeploy,
+            stop: handleCancelDeployment,
+            isDeploying: isCurrentWorkflowActive,
+            exportFile: handleExportFile,
+            importJSON: handleImportJSON,
+            openSettings: () => setSettingsOpen(true),
+            openCredentials: () => setCredentialsOpen(true),
+            toggleSidebar,
+            toggleComponentPalette,
+            toggleConsolePanel: toggleConsolePanelVisible,
+          }}
+        />
+
 
         {/* Parameter Panels */}
         <ErrorBoundary>

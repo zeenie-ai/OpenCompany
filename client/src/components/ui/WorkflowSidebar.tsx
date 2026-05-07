@@ -40,13 +40,16 @@ const WorkflowCard: React.FC<WorkflowCardProps> = ({
   onSelect,
   onDelete,
 }) => (
+  // Card: bg-bg-app (page-level surface, sits below panel chrome) +
+  // border-default. Selected state lifts to bg-bg-active and gains a
+  // 3px accent left edge — matches handoff `.wf-card.selected`.
   <Card
     onClick={onSelect}
     className={cn(
-      'group relative mb-2 cursor-pointer p-3 transition-colors',
+      'group relative mb-2 cursor-pointer border-border-default bg-bg-app p-3 transition-colors',
       isSelected
-        ? 'border-accent border-l-[3px] bg-accent/10'
-        : 'hover:bg-muted'
+        ? 'border-accent border-l-[3px] bg-bg-active'
+        : 'hover:bg-bg-hover'
     )}
   >
     <div className="mb-1 flex items-center gap-2">
@@ -55,25 +58,29 @@ const WorkflowCard: React.FC<WorkflowCardProps> = ({
           'flex h-6 w-6 shrink-0 items-center justify-center rounded-sm border',
           isSelected
             ? 'border-accent bg-accent/20 text-accent'
-            : 'border-border bg-muted text-muted-foreground'
+            : 'border-border-default bg-bg-elevated text-fg-muted'
         )}
       >
         <Code2 className="h-3 w-3" />
       </div>
       <h4
         className={cn(
-          'm-0 flex-1 truncate text-sm font-medium',
-          isSelected ? 'text-accent' : 'text-foreground'
+          // Display typography on the workflow name — Cinzel under
+          // Renaissance, Major Mono Display under Cyber.
+          'm-0 flex-1 truncate font-display text-sm font-medium tracking-[var(--type-tracking-display)] [text-transform:var(--type-uppercase)]',
+          isSelected ? 'text-accent' : 'text-fg-default'
         )}
       >
         {workflow.name}
       </h4>
     </div>
 
+    {/* Metadata uses font-mono — picks up IM Fell English / JetBrains
+        Mono / system mono per theme. */}
     <div
       className={cn(
-        'flex items-center justify-between text-xs',
-        isSelected ? 'text-foreground' : 'text-muted-foreground'
+        'flex items-center justify-between font-mono text-xs',
+        isSelected ? 'text-fg-default' : 'text-fg-muted'
       )}
     >
       <span>{workflow.nodeCount} nodes</span>
@@ -106,16 +113,21 @@ const WorkflowSidebar: React.FC<WorkflowSidebarProps> = ({
   onDeleteWorkflow,
 }) => {
   return (
-    <div className="flex h-full w-[280px] flex-col overflow-hidden border-r border-border bg-card">
-      {/* Header */}
-      <div className="border-b border-border bg-muted px-4 py-5">
+    // Sidebar shell: bg-bg-panel matches the handoff `.sidebar` token.
+    <div className="flex h-full w-[280px] flex-col overflow-hidden border-r border-border-default bg-bg-panel">
+      {/* Header — bg-bg-app drops one elevation step below the panel
+          chrome, giving the heading area a subtle "page" backdrop
+          that's distinct from the card list. */}
+      <div className="border-b border-border-default bg-bg-app px-4 py-5">
         <div className="flex items-center gap-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-md bg-accent/20 text-accent">
             <FolderOpen className="h-4 w-4" />
           </div>
           <div>
-            <h3 className="m-0 text-base font-semibold text-foreground">Workflows</h3>
-            <p className="m-0 text-xs text-muted-foreground">{workflows.length} saved</p>
+            <h3 className="m-0 font-display text-base font-semibold tracking-[var(--type-tracking-display)] text-fg-default [text-transform:var(--type-uppercase)]">
+              Workflows
+            </h3>
+            <p className="m-0 font-mono text-xs text-fg-muted">{workflows.length} saved</p>
           </div>
         </div>
       </div>
@@ -123,11 +135,11 @@ const WorkflowSidebar: React.FC<WorkflowSidebarProps> = ({
       {/* List */}
       <div className="flex-1 overflow-y-auto p-3">
         {workflows.length === 0 ? (
-          <div className="px-4 py-12 text-center text-sm text-muted-foreground">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-lg border-2 border-dashed border-border bg-muted">
+          <div className="px-4 py-12 text-center text-sm text-fg-muted">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-lg border-2 border-dashed border-border-default bg-bg-elevated">
               <FilePlus className="h-7 w-7 stroke-1" />
             </div>
-            <p className="m-0 font-medium text-foreground">No workflows yet</p>
+            <p className="m-0 font-medium text-fg-default">No workflows yet</p>
             <p className="mt-2 text-xs leading-relaxed">
               Create your first workflow<br />to get started
             </p>

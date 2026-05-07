@@ -14,8 +14,6 @@ import {
   Pencil,
   Settings as SettingsIcon,
   KeyRound,
-  Sun,
-  Moon,
   LogOut,
   Save,
   Play,
@@ -43,14 +41,17 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { ActionButton } from '@/components/ui/action-button';
+import { ThemeSwitcher } from '@/components/ui/ThemeSwitcher';
 import { cn } from '@/lib/utils';
-import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useApiKeys, GlobalModelState } from '../../hooks/useApiKeys';
 import { useStoredProviderCount } from '../../hooks/useCatalogueQuery';
 import { AI_PROVIDER_META } from '../icons/AIProviderIcons';
 
-const Divider = () => <div className="mx-1 h-6 w-px bg-border" />;
+// New-contract token: --border-default ↔ Tailwind utility `bg-border-default`.
+// Same colour as `bg-border` under light/dark, retints automatically under
+// renaissance / cyber via the per-theme [data-theme="..."] block.
+const Divider = () => <div className="mx-1 h-6 w-px bg-border-default" />;
 
 interface TopToolbarProps {
   workflowName: string;
@@ -107,7 +108,6 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(workflowName);
-  const { isDarkMode, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
 
   // Global Model Selector state
@@ -155,7 +155,11 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
   };
 
   return (
-    <div className="flex h-12 items-center justify-between gap-3 border-b border-border bg-muted px-3">
+    // border-default + bg-bg-panel are the new-contract tokens. They
+    // resolve to the existing colours under light/dark (no visual
+    // change) but pick up the parchment / void surfaces under
+    // renaissance / cyber automatically.
+    <div className="flex h-12 items-center justify-between gap-3 border-b border-border-default bg-bg-panel px-3">
       {/* ---------- Left Section ---------- */}
       <div className="flex items-center gap-1.5">
         <Button
@@ -180,7 +184,13 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
               className="border-action-save-border bg-action-save-soft text-action-save hover:bg-action-save/25"
             >
               <FileText />
-              File
+              {/* font-display + tracking-display drive the per-theme display
+                  font + letter-spacing; uppercase is gated by --type-uppercase
+                  via the new-contract `tracking-display` token (light/dark
+                  use 0 + none, renaissance + cyber turn it on). */}
+              <span className="font-display tracking-[var(--type-tracking-display)] [text-transform:var(--type-uppercase)]">
+                File
+              </span>
               <ChevronDown />
             </Button>
           </DropdownMenuTrigger>
@@ -230,10 +240,17 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
           <button
             onClick={handleNameClick}
             title="Click to rename"
-            className="flex items-center gap-1.5 rounded-sm bg-transparent px-3 py-1.5 transition-colors hover:bg-card"
+            className="flex items-center gap-1.5 rounded-sm bg-transparent px-3 py-1.5 transition-colors hover:bg-bg-hover"
           >
-            <span className="text-sm font-medium text-node-agent">{workflowName}</span>
-            <Pencil className="h-3 w-3 text-muted-foreground" />
+            {/* font-display + tracking-display + [text-transform] are
+                theme-driven via the new-contract typography tokens. Under
+                light/dark the workflow name reads as our regular sans-serif;
+                under Renaissance it becomes Cinzel uppercase, under Cyber it
+                becomes Major Mono Display uppercase. */}
+            <span className="text-sm font-display font-medium tracking-[var(--type-tracking-display)] text-fg-default [text-transform:var(--type-uppercase)]">
+              {workflowName}
+            </span>
+            <Pencil className="h-3 w-3 text-fg-muted" />
           </button>
         )}
       </div>
@@ -354,15 +371,7 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
           <KeyRound />
         </Button>
 
-        <Button
-          variant="outline"
-          size="icon-sm"
-          onClick={toggleTheme}
-          title={isDarkMode ? 'Switch to Light mode' : 'Switch to Dark mode'}
-          className="border-action-secret-border bg-action-secret-soft text-action-secret hover:bg-action-secret/25"
-        >
-          {isDarkMode ? <Sun /> : <Moon />}
-        </Button>
+        <ThemeSwitcher />
 
         {user && (
           <Button
@@ -410,10 +419,12 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
           Save
         </ActionButton>
 
-        {/* Status Indicator */}
+        {/* Status Indicator — font-mono tracks the new-contract --font-mono
+            so renaissance gets IM Fell English and cyber gets JetBrains
+            Mono. Stays system mono under light/dark. */}
         <div
           className={cn(
-            'flex items-center gap-2 rounded-sm px-3 py-1 text-xs font-medium',
+            'flex items-center gap-2 rounded-sm px-3 py-1 text-xs font-mono',
             hasUnsavedChanges ? 'text-warning' : 'text-success'
           )}
         >

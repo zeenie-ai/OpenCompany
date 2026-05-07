@@ -301,6 +301,49 @@
 
   --font-sans: 'Geist Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+
+  /* ── New-contract tokens (design_handoff_machinaos_themes) ──────────
+   * Surface / foreground / semantic / typography / radius tokens
+   * exposed as Tailwind utilities. Defined per-theme in client/src/
+   * themes/{light,dark,renaissance,cyber}.css — themes redefine the
+   * `--bg-app`, `--fg-default`, etc. CSS variables under
+   * `:root[data-theme="..."]`; these `@theme inline` aliases give
+   * Tailwind classes that resolve against whichever theme is active.
+   *
+   * Note: full-colour values (not HSL triplets), so `bg-bg-app/50`
+   * alpha composition does NOT work — use `--bg-overlay` or the
+   * shadcn alias (`bg-background/50`) when you need alpha. */
+  --color-bg-app:      var(--bg-app);
+  --color-bg-panel:    var(--bg-panel);
+  --color-bg-canvas:   var(--bg-canvas);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-input:    var(--bg-input);
+  --color-bg-hover:    var(--bg-hover);
+  --color-bg-active:   var(--bg-active);
+  --color-bg-overlay:  var(--bg-overlay);
+
+  --color-fg-default:    var(--fg-default);
+  --color-fg-muted:      var(--fg-muted);
+  --color-fg-faint:      var(--fg-faint);
+  --color-fg-on-accent:  var(--fg-on-accent);
+  --color-fg-on-success: var(--fg-on-success);
+  --color-fg-on-danger:  var(--fg-on-danger);
+  --color-fg-on-warning: var(--fg-on-warning);
+
+  /* Border tokens — exposed as Tailwind colour utilities so call sites
+   * can write `border-default`, `border-strong`, `border-focus` /
+   * `bg-border-default` etc. */
+  --color-border-default: var(--border-default);
+  --color-border-strong:  var(--border-strong);
+  --color-border-focus:   var(--border-focus);
+
+  /* Typography family aliases — `font-display`, `font-body` (font-mono
+   * is already exposed above; we re-declare it here so it tracks the
+   * per-theme `--font-mono` instead of the static fallback). */
+  --font-display: var(--font-display);
+  --font-body:    var(--font-body);
+
+  --radius-pill: var(--radius-pill);
 }
 
 /* ============================================================================

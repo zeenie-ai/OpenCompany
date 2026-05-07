@@ -60,12 +60,17 @@ interface SectionProps {
 }
 
 const Section: React.FC<SectionProps> = ({ title, Icon, tone, children }) => (
-  <div className="mb-4 rounded-md border border-border bg-muted p-4">
-    <div className="mb-4 flex items-center gap-2 border-b border-border pb-3">
+  // bg-bg-elevated + border-default — settings sections are elevated
+  // cards stacked inside the modal body. font-display + tracking gives
+  // Renaissance/Cyber their typographic identity on section headers.
+  <div className="mb-4 rounded-md border border-border-default bg-bg-elevated p-4">
+    <div className="mb-4 flex items-center gap-2 border-b border-border-default pb-3">
       <div className={`flex h-8 w-8 items-center justify-center rounded-md ${TONE_CLASSES[tone]}`}>
         <Icon className="h-4 w-4" />
       </div>
-      <div className="text-base font-semibold text-foreground">{title}</div>
+      <div className="font-display text-base font-semibold tracking-[var(--type-tracking-display)] text-fg-default [text-transform:var(--type-uppercase)]">
+        {title}
+      </div>
     </div>
     {children}
   </div>
@@ -80,8 +85,8 @@ interface RowProps {
 const Row: React.FC<RowProps> = ({ label, description, children }) => (
   <div className="flex items-center justify-between py-2">
     <div className="flex-1">
-      <div className="text-sm font-medium text-foreground">{label}</div>
-      <div className="mt-0.5 text-xs text-muted-foreground">{description}</div>
+      <div className="text-sm font-medium text-fg-default">{label}</div>
+      <div className="mt-0.5 text-xs text-fg-muted">{description}</div>
     </div>
     {children}
   </div>
@@ -149,7 +154,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
   const headerActions = (
     <div className="flex items-center gap-4">
-      <div className="flex items-center gap-2 text-[15px] font-semibold text-foreground">
+      <div className="flex items-center gap-2 font-display text-[15px] font-semibold tracking-[var(--type-tracking-display)] text-fg-default [text-transform:var(--type-uppercase)]">
         <SettingsIcon className="h-4 w-4" />
         <span>Settings</span>
       </div>
@@ -266,7 +271,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     disabled={isSaving}
                     className="pr-6"
                   />
-                  <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground">
+                  <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-fg-muted">
                     s
                   </span>
                 </div>
@@ -292,13 +297,13 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
               />
             </Row>
 
-            <div className="my-1 border-b border-border" />
+            <div className="my-1 border-b border-border-default" />
 
             <div className="py-2">
               <div className="mb-2 flex items-center justify-between">
                 <div className="flex-1">
-                  <div className="text-sm font-medium text-foreground">Compaction Ratio</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
+                  <div className="text-sm font-medium text-fg-default">Compaction Ratio</div>
+                  <div className="mt-0.5 text-xs text-fg-muted">
                     Fraction of context window that triggers memory compaction
                   </div>
                 </div>
@@ -315,12 +320,12 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 disabled={isSaving}
                 className="my-3"
               />
-              <div className="flex justify-between text-[10px] text-muted-foreground">
+              <div className="flex justify-between text-[10px] text-fg-muted">
                 <span>10%</span>
                 <span>50%</span>
                 <span>90%</span>
               </div>
-              <div className="mt-1 text-xs leading-snug text-muted-foreground">
+              <div className="mt-1 text-xs leading-snug text-fg-muted">
                 Lower = compact sooner (saves tokens, loses detail). Higher = compact later (preserves context, uses more tokens).
               </div>
             </div>

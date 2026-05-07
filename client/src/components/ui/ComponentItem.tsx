@@ -22,6 +22,8 @@ const ComponentItem: React.FC<ComponentItemProps> = ({ definition: localDefiniti
   const iconRaw = spec?.icon ?? definition.icon;
 
   return (
+    // bg-bg-app + border-default match the handoff `.comp` card.
+    // Hover lifts via translate + outline + soft tint backdrop.
     <Card
       size="sm"
       draggable
@@ -32,12 +34,12 @@ const ComponentItem: React.FC<ComponentItemProps> = ({ definition: localDefiniti
       onDragEnd={() => setIsDragging(false)}
       className={cn(
         'group relative flex-row items-center gap-3 px-3 py-2 cursor-grab select-none',
-        'transition-all duration-150 ease-out',
-        'hover:-translate-y-0.5 hover:ring-2 hover:ring-foreground/15 hover:shadow-md',
+        'border-border-default bg-bg-app transition-all duration-150 ease-out',
+        'hover:-translate-y-0.5 hover:bg-bg-hover hover:ring-2 hover:ring-foreground/15 hover:shadow-md',
         isDragging && 'opacity-50',
       )}
     >
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted ring-1 ring-foreground/10">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-bg-elevated ring-1 ring-border-default/40">
         <NodeIcon
           icon={iconRaw}
           className="h-5 w-5 text-lg"
@@ -46,16 +48,16 @@ const ComponentItem: React.FC<ComponentItemProps> = ({ definition: localDefiniti
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium text-foreground">
+        <div className="truncate font-display text-sm font-medium text-fg-default">
           {definition.displayName}
         </div>
-        <div className="truncate text-xs leading-tight text-muted-foreground">
+        <div className="truncate text-xs leading-tight text-fg-muted">
           {definition.description}
         </div>
       </div>
 
       <GripVertical
-        className="h-4 w-4 shrink-0 text-muted-foreground opacity-30 transition-opacity group-hover:opacity-60"
+        className="h-4 w-4 shrink-0 text-fg-faint opacity-50 transition-opacity group-hover:opacity-80"
         aria-hidden
       />
     </Card>

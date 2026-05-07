@@ -23,16 +23,19 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   const open = !isCollapsed;
   return (
     <Collapsible open={open} onOpenChange={() => onToggle()}>
-      <div className="overflow-hidden rounded-lg border border-border bg-background">
-        <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between gap-2 border-none bg-muted px-4 py-3 text-base text-foreground transition-colors hover:bg-card">
+      {/* bg-bg-app + border-default for the outer card; bg-bg-elevated
+          on the trigger so the head sits above the body — matches the
+          handoff `.cat` / `.cat-head` two-tier surface. */}
+      <div className="overflow-hidden rounded-lg border border-border-default bg-bg-app">
+        <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between gap-2 border-none bg-bg-elevated px-4 py-3 text-base text-fg-default transition-colors hover:bg-bg-hover">
           {typeof title === 'string' ? (
-            <span className="font-medium">{title}</span>
+            <span className="font-display font-medium">{title}</span>
           ) : (
             <div className="flex flex-1 items-center">{title}</div>
           )}
           <ChevronDown
             className={cn(
-              'h-3 w-3 shrink-0 text-muted-foreground transition-transform',
+              'h-3 w-3 shrink-0 text-fg-muted transition-transform',
               isCollapsed && '-rotate-90'
             )}
           />

@@ -386,7 +386,7 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
       {/* Panel Header */}
       <div
         onClick={onToggle}
-        className="flex cursor-pointer items-center justify-between border-t border-border bg-card px-3 py-1.5 select-none"
+        className="flex cursor-pointer items-center justify-between border-t border-border-default bg-bg-elevated px-3 py-1.5 select-none"
       >
         <div className="flex items-center gap-2">
           <ChevronDown
@@ -395,7 +395,7 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
               !isOpen && 'rotate-180'
             )}
           />
-          <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+          <span className="flex items-center gap-1.5 font-display text-sm font-semibold tracking-[var(--type-tracking-display)] text-fg-default [text-transform:var(--type-uppercase)]">
             Chat / Console
             {(consoleLogs.length > 0 || (chatMessages && chatMessages.length > 0)) && (
               <Badge variant="secondary" className="text-xs">
@@ -411,7 +411,7 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
         ref={containerRef}
         style={{ height: isOpen ? `${panelHeight}px` : '0px' }}
         className={cn(
-          'flex flex-row overflow-hidden bg-background',
+          'flex flex-row overflow-hidden bg-bg-app',
           'max-h-[calc(100vh-90px)]',
           (isResizing || isHorizontalResizing) ? '[transition:none]' : 'transition-[height] duration-200 ease-in-out'
         )}
@@ -422,9 +422,9 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
           className="relative flex flex-col overflow-hidden"
         >
           {/* Header */}
-          <div className="flex min-h-[32px] items-center justify-between border-b border-border bg-card px-3 py-1.5">
+          <div className="flex min-h-[32px] items-center justify-between border-b border-border-default bg-bg-elevated px-3 py-1.5">
             <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+              <span className="flex items-center gap-1.5 font-display text-sm font-semibold tracking-[var(--type-tracking-display)] text-fg-default [text-transform:var(--type-uppercase)]">
                 Chat
                 {chatMessages && chatMessages.length > 0 && (
                   <Badge variant="success" className="text-xs">{chatMessages.length}</Badge>
@@ -486,7 +486,7 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
                         'max-w-[80%] px-3 py-2 break-words',
                         isUser
                           ? 'mr-0 ml-auto rounded-l-xl rounded-tr-xl rounded-br-sm bg-node-agent-soft'
-                          : 'mr-auto ml-0 rounded-r-xl rounded-tl-xl rounded-bl-sm bg-card'
+                          : 'mr-auto ml-0 rounded-r-xl rounded-tl-xl rounded-bl-sm border border-border-default bg-bg-elevated'
                       )}
                     >
                       {isUser ? (
@@ -512,7 +512,7 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
           </div>
 
           {/* Input */}
-          <div className="flex items-center gap-2 border-t border-border bg-card px-4 py-2.5">
+          <div className="flex items-center gap-2 border-t border-border-default bg-bg-elevated px-4 py-2.5">
             <Input
               ref={chatInputRef}
               type="text"
@@ -549,7 +549,7 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
         {/* ===================== Console / Terminal Section (right) ===================== */}
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Header with tabs + filters */}
-          <div className="flex min-h-[32px] items-center justify-between border-b border-border bg-card px-3 py-1.5">
+          <div className="flex min-h-[32px] items-center justify-between border-b border-border-default bg-bg-elevated px-3 py-1.5">
             {/* Tab buttons */}
             <div className="flex items-center gap-1">
               <button

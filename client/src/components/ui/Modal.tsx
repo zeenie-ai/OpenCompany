@@ -65,11 +65,18 @@ const Modal: React.FC<ModalProps> = ({
   return (
     <Dialog open={isOpen} onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogPortal>
-        <DialogOverlay className="bg-black/50 supports-backdrop-filter:backdrop-blur-xs" />
+        {/* bg-bg-overlay reads --bg-overlay (each theme owns its own
+            scrim alpha + tone — Renaissance uses ink-brown, Cyber uses
+            void-near-black, light/dark use plain blacks). */}
+        <DialogOverlay className="bg-bg-overlay supports-backdrop-filter:backdrop-blur-xs" />
         <DialogPrimitive.Content
           data-slot="dialog-content"
           className={cn(
-            'fixed top-1/2 left-1/2 z-50 flex -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-border bg-background shadow-2xl outline-none',
+            // bg-bg-app + border-border-default consume the new-contract
+            // tokens directly so modals inherit the surface hierarchy
+            // defined by the active theme (parchment under Renaissance,
+            // void under Cyber).
+            'fixed top-1/2 left-1/2 z-50 flex -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-border-default bg-bg-app shadow-2xl outline-none',
             'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 duration-100',
             className
           )}
@@ -81,15 +88,20 @@ const Modal: React.FC<ModalProps> = ({
           }}
         >
           {showHeader ? (
-            <div className="relative flex w-full items-center border-b border-border bg-card px-5 py-3">
-              <DialogTitle className="absolute left-5 flex items-center gap-2 text-base font-semibold text-foreground/80">
+            // Header: bg-bg-panel sits one elevation step above bg-bg-app
+            // (panel surface above page surface). font-display + tracking
+            // + text-transform are theme-driven so titles read as Cinzel
+            // uppercase under Renaissance and Major Mono Display under
+            // Cyber, while staying clean sans-serif under light/dark.
+            <div className="relative flex w-full items-center border-b border-border-default bg-bg-panel px-5 py-3">
+              <DialogTitle className="absolute left-5 flex items-center gap-2 font-display text-base font-semibold tracking-[var(--type-tracking-display)] text-fg-default [text-transform:var(--type-uppercase)]">
                 <Settings className="h-4 w-4 opacity-70" />
                 {title}
               </DialogTitle>
               <div className="flex flex-1 items-center justify-center">{headerActions}</div>
               <DialogClose
                 onClick={onClose}
-                className="absolute right-5 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className="absolute right-5 inline-flex h-8 w-8 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-bg-hover hover:text-fg-default"
                 aria-label="Close"
               >
                 <X className="h-[18px] w-[18px]" />

@@ -2,6 +2,16 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+// Theme CSS — load BEFORE index.css so the per-theme [data-theme="..."]
+// blocks register their tokens before Tailwind compiles `@theme inline`
+// against the cascade. Order within the theme list matches specificity:
+// base.css (neutral defaults) → light.css (default :root + [data-theme="light"])
+// → dark.css (.dark + [data-theme="dark"]) → renaissance + cyber overrides.
+import './themes/base.css'
+import './themes/light.css'
+import './themes/dark.css'
+import './themes/renaissance.css'
+import './themes/cyber.css'
 import './index.css'
 import App from './App'
 import { ThemeProvider } from './contexts/ThemeContext'

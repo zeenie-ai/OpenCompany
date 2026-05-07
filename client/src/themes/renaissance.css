@@ -1,0 +1,171 @@
+/* ============================================================================
+ * themes/renaissance.css — illuminated codex / Florentine workshop manuscript.
+ *
+ * Defines the full new-contract token block AND overrides the shadcn
+ * HSL-triplet tokens so existing Tailwind utilities (bg-card, text-muted-
+ * foreground, bg-action-save-soft, etc.) retint correctly without any
+ * component changes.
+ *
+ * Palette: vellum cream (#fbf3dc), ink brown (#5a3a14), gold leaf
+ * (#d4a030), crimson seal (#8a1410). HSL triplets are conversions of
+ * the same hex values.
+ *
+ * Decorative layers (vellum noise, fleur-de-lis, marginalia, gilded
+ * corner ornaments) are deferred to Phase 3 fan-out — they target
+ * `.app-frame`, `.canvas`, `.sidebar` etc. which don't exist as
+ * dedicated React component classes today.
+ *
+ * Source: design_handoff_machinaos_themes/themes/renaissance.css.
+ * ============================================================================ */
+
+:root[data-theme="renaissance"] {
+  /* ── New contract — full colour values ────────────────────────────── */
+
+  /* Surfaces */
+  --bg-app: #f3e8c8;
+  --bg-panel: #ead09a;
+  --bg-canvas: #e8d4a0;
+  --bg-elevated: #fbf3dc;
+  --bg-input: #fbf3dc;
+  --bg-hover: rgba(138, 94, 28, 0.10);
+  --bg-active: rgba(212, 160, 48, 0.20);
+  --bg-overlay: rgba(58, 32, 8, 0.55);
+
+  /* Borders */
+  --border-default: #8a5e1c;
+  --border-strong: #5a3a14;
+  --border-focus: #4a8230;
+  --ornament-frame: inset 0 0 0 2px #8a5e1c, inset 0 0 0 6px #d4a030, inset 0 0 0 8px #5a3a14;
+
+  /* Foreground */
+  --fg-default: #3a2008;
+  --fg-muted: #6a4a1c;
+  --fg-faint: #8a6a3c;
+  --fg-on-accent: #fbf3dc;
+  --fg-on-success: #fbf3dc;
+  --fg-on-danger: #fbf3dc;
+  --fg-on-warning: #3a2008;
+
+  /* Theme-specific accents (used by decorative layers; safe to read in
+   * components migrated to the new contract) */
+  --gold: #d4a030;
+  --gold-bright: #f0c850;
+  --crimson: #8a1410;
+
+  /* Type — Cinzel display + Cormorant body + IM Fell English mono */
+  --font-display: 'Cinzel', 'Trajan Pro', Georgia, serif;
+  --font-body: 'Cormorant Garamond', 'EB Garamond', Georgia, serif;
+  --font-mono: 'IM Fell English', 'Courier Prime', monospace;
+  --type-scale-base: 15px;
+  --type-tracking-display: 0.10em;
+  --type-uppercase: uppercase;
+
+  /* Geometry — slim radii (parchment + wax-pressed feel) */
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-pill: 12px;
+
+  /* Motion — slow, weighted */
+  --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-emphasis: cubic-bezier(0.7, -0.1, 0.3, 1.2);
+  --dur-fast: 140ms;
+  --dur-default: 280ms;
+  --dur-slow: 520ms;
+  --motion-style: organic;
+  --sound-pack: parchment;
+
+  /* Cursor + scrollbar */
+  --cursor-default: auto;
+  --cursor-pointer: pointer;
+  --scrollbar-track: #e8d09a;
+  --scrollbar-thumb: #8a5e1c;
+
+  /* ── Shadcn HSL-triplet bridge ─────────────────────────────────────
+   * Same colours as the new contract above, expressed as HSL triplets
+   * so Tailwind utilities like bg-card/50 (alpha composition) keep
+   * working. */
+
+  --background: 40 65% 87%;            /* #f3e8c8 */
+  --foreground: 28 76% 13%;            /* #3a2008 */
+  --card: 41 79% 92%;                  /* #fbf3dc */
+  --card-foreground: 28 76% 13%;
+  --popover: 41 79% 92%;
+  --popover-foreground: 28 76% 13%;
+
+  --primary: 32 53% 48%;               /* #b8893c gold accent */
+  --primary-foreground: 41 79% 92%;
+  --secondary: 38 65% 76%;             /* #ead09a panel */
+  --secondary-foreground: 28 76% 13%;
+  --muted: 38 65% 76%;
+  --muted-foreground: 33 60% 26%;      /* #6a4a1c */
+  --accent: 41 65% 51%;                /* #d4a030 gold leaf */
+  --accent-foreground: 28 76% 13%;
+
+  --destructive: 2 79% 30%;            /* #8a1410 crimson */
+  --destructive-foreground: 41 79% 92%;
+  --success: 78 63% 25%;               /* #4a6818 olive */
+  --warning: 35 71% 44%;               /* #c08020 amber */
+  --info: 211 56% 23%;                 /* #1a3a5a navy */
+
+  --border: 33 66% 33%;                /* #8a5e1c */
+  --input: 33 66% 33%;
+  --ring: 41 65% 51%;                  /* gold focus */
+
+  /* Action role tokens — re-derived from Renaissance semantic palette.
+   * Keep the soft / hover / border alpha pattern so ActionButton still
+   * works without any code change. */
+  --action-run: 78 63% 25%;            /* olive (success) */
+  --action-run-soft: 78 63% 25% / 0.18;
+  --action-run-hover: 78 63% 25% / 0.30;
+  --action-run-border: 78 63% 25% / 0.6;
+
+  --action-stop: 2 79% 30%;            /* crimson (destructive) */
+  --action-stop-soft: 2 79% 30% / 0.15;
+  --action-stop-hover: 2 79% 30% / 0.25;
+  --action-stop-border: 2 79% 30% / 0.6;
+
+  --action-save: 41 65% 51%;           /* gold leaf (primary action) */
+  --action-save-soft: 41 65% 51% / 0.20;
+  --action-save-hover: 41 65% 51% / 0.35;
+  --action-save-border: 32 53% 48% / 0.7;
+
+  --action-config: 35 71% 44%;         /* amber (warning) */
+  --action-config-soft: 35 71% 44% / 0.18;
+  --action-config-hover: 35 71% 44% / 0.30;
+  --action-config-border: 35 71% 44% / 0.6;
+
+  --action-secret: 211 56% 23%;        /* navy (info / secret) */
+  --action-secret-soft: 211 56% 23% / 0.15;
+  --action-secret-hover: 211 56% 23% / 0.25;
+  --action-secret-border: 211 56% 23% / 0.6;
+
+  --action-tools: 32 53% 48%;          /* gold accent */
+  --action-tools-soft: 32 53% 48% / 0.18;
+  --action-tools-hover: 32 53% 48% / 0.30;
+  --action-tools-border: 32 53% 48% / 0.6;
+
+  /* Tint utilities — slightly stronger on parchment so brand-coloured
+   * surfaces (provider icons, skill colours) stay legible. */
+  --tint-soft: 14%;
+  --tint-border: 35%;
+}
+
+/* ── Body parchment background ─────────────────────────────────────────
+ * The handoff layers radial gradients + an SVG noise texture on body.
+ * Safe to apply since `body` is theme-agnostic. */
+
+:root[data-theme="renaissance"] body {
+  background:
+    radial-gradient(ellipse at 15% 25%, rgba(138, 70, 20, 0.12), transparent 35%),
+    radial-gradient(ellipse at 85% 75%, rgba(180, 100, 30, 0.10), transparent 40%),
+    radial-gradient(circle at 70% 20%, rgba(90, 50, 18, 0.08), transparent 25%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence baseFrequency='0.85' numOctaves='3' seed='5'/><feColorMatrix values='0 0 0 0 0.36 0 0 0 0 0.23 0 0 0 0 0.05 0 0 0 0.10 0'/></filter><rect width='240' height='240' filter='url(%23n)'/></svg>"),
+    var(--bg-app);
+}
+
+/* ::selection — gold leaf highlight */
+:root[data-theme="renaissance"] ::selection {
+  background: rgba(212, 160, 48, 0.5);
+  color: #3a2008;
+}

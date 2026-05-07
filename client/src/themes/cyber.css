@@ -1,0 +1,164 @@
+/* ============================================================================
+ * themes/cyber.css — Neuromancer night market / pirated terminal popup.
+ *
+ * Defines the full new-contract token block AND overrides the shadcn
+ * HSL-triplet tokens so existing Tailwind utilities retint correctly.
+ *
+ * Palette: void (#050010), neon magenta (#f51eb6), neon cyan (#1dd9e5),
+ * neon green (#26d97a). HSL triplets are conversions of the same hex
+ * values.
+ *
+ * Decorative layers (scanlines, CRT flicker, grid backplane, neon glow)
+ * are deferred to Phase 3 fan-out.
+ *
+ * Source: design_handoff_machinaos_themes/themes/cyber.css.
+ * ============================================================================ */
+
+:root[data-theme="cyber"] {
+  /* ── New contract — full colour values ────────────────────────────── */
+
+  /* Surfaces */
+  --bg-app: #050010;
+  --bg-panel: #0a0420;
+  --bg-canvas: #03000a;
+  --bg-elevated: #15103a;
+  --bg-input: #0a0420;
+  --bg-hover: rgba(245, 30, 182, 0.14);
+  --bg-active: rgba(245, 30, 182, 0.20);
+  --bg-overlay: rgba(5, 0, 16, 0.85);
+
+  /* Borders */
+  --border-default: #2a1f50;
+  --border-strong: #f51eb6;
+  --border-focus: #1dd9e5;
+  --ornament-frame: none;
+
+  /* Foreground */
+  --fg-default: #f0e0ff;
+  --fg-muted: #a090c0;
+  --fg-faint: #6a5a8a;
+  --fg-on-accent: #050010;
+  --fg-on-success: #050010;
+  --fg-on-danger: #f5e0ea;
+  --fg-on-warning: #050010;
+
+  /* Theme-specific neon accents */
+  --neon-cyan: #1dd9e5;
+  --neon-magenta: #f51eb6;
+  --neon-yellow: #ffd028;
+  --neon-green: #26d97a;
+
+  /* Type — Major Mono Display + JetBrains Mono everywhere */
+  --font-display: 'Major Mono Display', 'Audiowide', monospace;
+  --font-body: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --font-mono: 'JetBrains Mono', monospace;
+  --type-scale-base: 13px;
+  --type-tracking-display: 0.18em;
+  --type-uppercase: uppercase;
+
+  /* Geometry — sharp corners everywhere */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-pill: 0;
+
+  /* Motion — fast, mechanical (steps easing for hard on/off) */
+  --ease-default: steps(4, end);
+  --ease-emphasis: steps(8, end);
+  --dur-fast: 60ms;
+  --dur-default: 120ms;
+  --dur-slow: 240ms;
+  --motion-style: glitch;
+  --sound-pack: terminal;
+
+  /* Cursor + scrollbar */
+  --cursor-default: auto;
+  --cursor-pointer: pointer;
+  --scrollbar-track: #0a0420;
+  --scrollbar-thumb: #f51eb6;
+
+  /* ── Shadcn HSL-triplet bridge ───────────────────────────────────── */
+
+  --background: 247 100% 4%;           /* #050010 */
+  --foreground: 267 100% 94%;          /* #f0e0ff */
+  --card: 247 57% 15%;                 /* #15103a */
+  --card-foreground: 267 100% 94%;
+  --popover: 253 80% 7%;               /* #0a0420 */
+  --popover-foreground: 267 100% 94%;
+
+  --primary: 316 92% 54%;              /* #f51eb6 neon magenta */
+  --primary-foreground: 247 100% 4%;
+  --secondary: 253 80% 7%;             /* panel */
+  --secondary-foreground: 267 100% 94%;
+  --muted: 253 80% 7%;
+  --muted-foreground: 260 25% 66%;     /* #a090c0 */
+  --accent: 184 79% 51%;               /* #1dd9e5 neon cyan */
+  --accent-foreground: 247 100% 4%;
+
+  --destructive: 347 100% 56%;         /* #ff2050 */
+  --destructive-foreground: 0 0% 100%;
+  --success: 147 71% 50%;              /* #26d97a neon green */
+  --warning: 46 100% 58%;              /* #ffd028 neon yellow */
+  --info: 184 79% 51%;                 /* neon cyan */
+
+  --border: 253 44% 22%;               /* #2a1f50 */
+  --input: 253 44% 22%;
+  --ring: 184 79% 51%;                 /* cyan focus */
+
+  /* Action role tokens — neon equivalents */
+  --action-run: 147 71% 50%;           /* neon green */
+  --action-run-soft: 147 71% 50% / 0.15;
+  --action-run-hover: 147 71% 50% / 0.30;
+  --action-run-border: 147 71% 50% / 0.7;
+
+  --action-stop: 347 100% 56%;         /* danger red */
+  --action-stop-soft: 347 100% 56% / 0.15;
+  --action-stop-hover: 347 100% 56% / 0.30;
+  --action-stop-border: 347 100% 56% / 0.7;
+
+  --action-save: 184 79% 51%;          /* neon cyan */
+  --action-save-soft: 184 79% 51% / 0.15;
+  --action-save-hover: 184 79% 51% / 0.30;
+  --action-save-border: 184 79% 51% / 0.7;
+
+  --action-config: 46 100% 58%;        /* neon yellow */
+  --action-config-soft: 46 100% 58% / 0.15;
+  --action-config-hover: 46 100% 58% / 0.30;
+  --action-config-border: 46 100% 58% / 0.7;
+
+  --action-secret: 316 92% 54%;        /* neon magenta */
+  --action-secret-soft: 316 92% 54% / 0.15;
+  --action-secret-hover: 316 92% 54% / 0.30;
+  --action-secret-border: 316 92% 54% / 0.7;
+
+  --action-tools: 316 92% 54%;         /* magenta */
+  --action-tools-soft: 316 92% 54% / 0.15;
+  --action-tools-hover: 316 92% 54% / 0.30;
+  --action-tools-border: 316 92% 54% / 0.7;
+
+  /* Stronger tint alpha — neon brand colours need more presence on void */
+  --tint-soft: 16%;
+  --tint-border: 50%;
+}
+
+/* ── Body void background ────────────────────────────────────────────── */
+
+:root[data-theme="cyber"] body {
+  background:
+    radial-gradient(ellipse at 20% 30%, rgba(245, 30, 182, 0.12), transparent 40%),
+    radial-gradient(ellipse at 80% 70%, rgba(29, 217, 229, 0.08), transparent 40%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400'><filter id='n'><feTurbulence baseFrequency='2' numOctaves='1' seed='3'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 0.4 0 0 0 0 1 0 0 0 0.04 0'/></filter><rect width='400' height='400' filter='url(%23n)'/></svg>"),
+    var(--bg-app);
+}
+
+/* ::selection — neon highlight */
+:root[data-theme="cyber"] ::selection {
+  background: #f51eb6;
+  color: #050010;
+}
+
+/* Cyber scrollbars — neon thumbs with glow */
+:root[data-theme="cyber"] ::-webkit-scrollbar-thumb {
+  background: #f51eb6;
+  box-shadow: 0 0 6px #f51eb6;
+}

@@ -4,7 +4,34 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>React Flow Project</title>
+    <!--
+      Theme typography. Each theme picks its display + body + mono via
+      the --font-display / --font-body / --font-mono tokens. Loading
+      these as `media="print" onload=...` defers the network cost so
+      the default light/dark theme (system fonts via @fontsource-
+      variable/geist bundled at build time) renders without blocking,
+      and Renaissance + Cyber fonts swap in once their stylesheets land.
+
+      Renaissance: Cinzel (display), Cormorant Garamond (body),
+                   IM Fell English (mono / italic accents).
+      Cyber:       Major Mono Display (display), VT323 (body fallback),
+                   JetBrains Mono (body + mono).
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=IM+Fell+English:ital@0;1&family=JetBrains+Mono:wght@400;500;600;700&family=Major+Mono+Display&family=VT323&display=swap"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=IM+Fell+English:ital@0;1&family=JetBrains+Mono:wght@400;500;600;700&family=Major+Mono+Display&family=VT323&display=swap"
+      />
+    </noscript>
+    <title>MachinaOS</title>
   </head>
   <body>
     <div id="root"></div>

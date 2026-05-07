@@ -107,19 +107,22 @@ const ComponentPalette: React.FC<ComponentPaletteProps> = ({
   );
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden bg-muted/30">
-      {/* Header Section */}
-      <div className="border-b border-border bg-card p-4">
+    // Palette shell: bg-bg-panel mirrors the sidebar (`.palette` token).
+    <div className="flex h-full w-full flex-col overflow-hidden border-l border-border-default bg-bg-panel">
+      {/* Header Section — bg-bg-app drops one elevation step. */}
+      <div className="border-b border-border-default bg-bg-app p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-foreground">Components</h2>
-          <Badge variant="secondary" className="text-xs font-medium">
+          <h2 className="font-display text-base font-semibold tracking-[var(--type-tracking-display)] text-fg-default [text-transform:var(--type-uppercase)]">
+            Components
+          </h2>
+          <Badge variant="secondary" className="font-mono text-xs font-medium">
             {totalComponents}
           </Badge>
         </div>
 
         {/* Search Input */}
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-faint" />
           <Input
             type="text"
             placeholder="Search..."
@@ -135,7 +138,7 @@ const ComponentPalette: React.FC<ComponentPaletteProps> = ({
         {groupsLoading ? (
           <PaletteSkeleton />
         ) : Object.keys(categorizedComponents).length === 0 ? (
-          <div className="flex flex-col items-center px-6 py-12 text-center text-muted-foreground">
+          <div className="flex flex-col items-center px-6 py-12 text-center text-fg-muted">
             <Search className="mb-3 h-12 w-12 opacity-50" />
             <p className="text-sm">
               No components found matching "{searchQuery}"
@@ -167,7 +170,7 @@ const ComponentPalette: React.FC<ComponentPaletteProps> = ({
                               fallback={<span>📦</span>}
                             />
                           </span>
-                          <span className="text-sm font-semibold text-foreground">
+                          <span className="font-display text-sm font-semibold tracking-[var(--type-tracking-display)] text-fg-default [text-transform:var(--type-uppercase)]">
                             {config.label}
                           </span>
                         </div>
