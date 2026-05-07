@@ -3,7 +3,7 @@
  * Composes: Card header + ApiKeyInput. Config-driven, zero per-provider JSX.
  */
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { CheckCircle } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,28 +19,14 @@ const ApiKeyPanel: React.FC<{ config: ProviderConfig; visible: boolean }> = ({ c
   const panel = useCredentialPanel(config, visible);
   const field = config.fields?.[0];
 
-  const [inputValue, setInputValue] = useState('');
-  // Direct local flag — same pattern as main repo's validKeys[id].
-  // Completely independent from useCredentialPanel's stored state.
-  const [validated, setValidated] = useState(panel.stored);
-
-  // Sync the input from the form. The form value may be a stored
-  // credential OR the backend-served catalogue default (e.g.
-  // local-LLM canonical Base URL); either way we render it.
-  // ``validated`` stays tied to ``panel.stored`` (real server state)
-  // so a pre-filled default doesn't flip the connected badge on.
-  useEffect(() => {
-    if (field) {
-      const v = panel.form.getFieldValue(field.key);
-      if (v) setInputValue(v);
-      setValidated(panel.stored);
-    }
-  }, [panel.stored, field, panel.form]);
-
-  // Reset input when switching providers
-  useEffect(() => {
-    setInputValue('');
-  }, [config.id]);
+  // Single source of truth: panel.values (server-cached query data,
+  // includes backend-served catalogue defaults like local-LLM Base URL).
+  // Reactive — when the query resolves the input re-renders. No
+  // separate useState/useEffect mirror.
+  const inputValue = field ? (panel.values[field.key] ?? '') : '';
+  // ``validated`` mirrors panel.stored (real server state). Pre-filled
+  // catalogue defaults do NOT flip it to true.
+  const validated = panel.stored;
 
   return (
     <div className="flex flex-col gap-5 p-5">
@@ -73,18 +59,8 @@ const ApiKeyPanel: React.FC<{ config: ProviderConfig; visible: boolean }> = ({ c
           {field && (
             <ApiKeyInput
               value={inputValue}
-              onChange={(v) => {
-                setInputValue(v);
-                panel.form.setFieldValue(field.key, v);
-                setValidated(false);
-              }}
-              onSave={() =>
-                panel.actions
-                  .validate(config.id, inputValue.trim())
-                  .then((r) => {
-                    if (r?.isValid) setValidated(true);
-                  })
-              }
+              onChange={(v) => panel.form.setFieldValue(field.key, v)}
+              onSave={() => panel.actions.validate(config.id, inputValue.trim())}
               onDelete={
                 validated
                   ? async () => {
@@ -95,8 +71,6 @@ const ApiKeyPanel: React.FC<{ config: ProviderConfig; visible: boolean }> = ({ c
                       if (field.key !== 'apiKey') {
                         await panel.actions.remove(field.key);
                       }
-                      setInputValue('');
-                      setValidated(false);
                     }
                   : undefined
               }
