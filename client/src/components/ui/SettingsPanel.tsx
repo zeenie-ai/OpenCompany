@@ -359,13 +359,13 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
             </Row>
           </Section>
 
-          {/* Audio — per-theme WebAudio sound packs. Off by default;
+          {/* Audio — per-theme WebAudio sound packs. On by default;
               honours browser autoplay policy (engine resumes on first
-              user gesture). */}
+              user gesture via Sounds.unlock()). */}
           <Section title="Audio" Icon={Volume2} tone="tool">
             <Row
               label="Sound Effects"
-              description="Play per-theme click / hover / save / error sounds. Each theme ships a different pack (parchment, terminal, marble, ink, clockwork, ...). Disabled by default."
+              description="Play per-theme click / hover / save / error sounds. Each theme ships a different pack (parchment, terminal, marble, ink, clockwork, ...). Enabled by default — toggle off if you prefer silence."
             >
               <Switch
                 checked={soundEnabled}

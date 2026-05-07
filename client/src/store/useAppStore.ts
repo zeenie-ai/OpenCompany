@@ -51,7 +51,10 @@ interface AppStore {
   proMode: boolean;  // false = noob mode (only AI categories), true = pro mode (all categories)
   /** WebAudio sound effects toggle (per-theme pack picked from
    *  --sound-pack CSS token by `useSoundSync()`). Persisted to
-   *  localStorage as `machinaos-sound`; default off (opt-in). */
+   *  localStorage as `machinaos-sound`; default ON (user disables in
+   *  Settings -> Audio). The AudioContext starts suspended per
+   *  browser autoplay policy — `Sounds.unlock()` resumes it on the
+   *  user's first interaction (no separate audio permission needed). */
   soundEnabled: boolean;
   renamingNodeId: string | null;
 
@@ -173,7 +176,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   componentPaletteVisible: loadBooleanFromStorage(STORAGE_KEYS.componentPaletteVisible, true),
   consolePanelVisible: loadBooleanFromStorage(STORAGE_KEYS.consolePanelVisible, false),
   proMode: loadBooleanFromStorage(STORAGE_KEYS.proMode, false),  // Default to noob mode
-  soundEnabled: loadBooleanFromStorage(STORAGE_KEYS.soundEnabled, false),  // Opt-in default
+  soundEnabled: loadBooleanFromStorage(STORAGE_KEYS.soundEnabled, true),  // On by default; user can disable in Settings -> Audio. Browsers gesture-gate WebAudio (no separate permission), so the AC unlocks on first interaction via Sounds.unlock().
   renamingNodeId: null,
 
   // Workflow management
