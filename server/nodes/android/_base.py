@@ -90,9 +90,13 @@ class AndroidServiceOutput(BaseModel):
 
 
 class AndroidServiceBase(ActionNode, abstract=True):
-    """Subclass and set type/display_name/icon/description."""
+    """Subclass and set type/display_name/icon/description.
 
-    color = "#50fa7b"
+    Visual metadata (icon + color) lives in ``server/nodes/visuals.json``
+    keyed by individual plugin type. The ``_visuals.py`` resolver picks
+    each entry up at NodeSpec emit time; no class-level ClassVars needed.
+    """
+
     group = ("android", "service")
     component_kind = "square"
     handles = (

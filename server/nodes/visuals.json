@@ -13,7 +13,8 @@
     "color": "#bd93f9"
   },
   "airplaneModeControl": {
-    "icon": "✈️"
+    "icon": "✈️",
+    "color": "#50fa7b"
   },
   "android_agent": {
     "icon": "📱",
@@ -30,15 +31,18 @@
   },
   "appLauncher": {
     "icon": "🚀",
-    "skill": "app-launcher-skill"
+    "skill": "app-launcher-skill",
+    "color": "#50fa7b"
   },
   "appList": {
     "icon": "📋",
-    "skill": "app-list-skill"
+    "skill": "app-list-skill",
+    "color": "#50fa7b"
   },
   "audioAutomation": {
     "icon": "🔊",
-    "skill": "audio-skill"
+    "skill": "audio-skill",
+    "color": "#50fa7b"
   },
   "autonomous_agent": {
     "icon": "🎯",
@@ -46,11 +50,13 @@
   },
   "batteryMonitor": {
     "icon": "🔋",
-    "skill": "battery-skill"
+    "skill": "battery-skill",
+    "color": "#50fa7b"
   },
   "bluetoothAutomation": {
     "icon": "🔵",
-    "skill": "bluetooth-skill"
+    "skill": "bluetooth-skill",
+    "color": "#50fa7b"
   },
   "braveSearch": {
     "icon": "asset:brave",
@@ -68,7 +74,8 @@
   },
   "cameraControl": {
     "icon": "📷",
-    "skill": "camera-skill"
+    "skill": "camera-skill",
+    "color": "#50fa7b"
   },
   "cerebrasChatModel": {
     "icon": "lobehub:cerebras",
@@ -133,7 +140,8 @@
     "color": "#8be9fd"
   },
   "deviceStateAutomation": {
-    "icon": "⚙️"
+    "icon": "⚙️",
+    "color": "#50fa7b"
   },
   "documentParser": {
     "icon": "📄",
@@ -162,7 +170,8 @@
   },
   "environmentalSensors": {
     "icon": "🌡️",
-    "skill": "environmental-skill"
+    "skill": "environmental-skill",
+    "color": "#50fa7b"
   },
   "fileDownloader": {
     "icon": "⬇️",
@@ -254,7 +263,8 @@
   },
   "javascriptExecutor": {
     "icon": "asset:javascript",
-    "skill": "javascript-skill"
+    "skill": "javascript-skill",
+    "color": "#ffb86c"
   },
   "kimiChatModel": {
     "icon": "lobehub:kimi",
@@ -266,14 +276,16 @@
   },
   "location": {
     "icon": "📍",
-    "skill": "location-skill"
+    "skill": "location-skill",
+    "color": "#50fa7b"
   },
   "masterSkill": {
     "icon": "🎯",
     "color": "#f1fa8c"
   },
   "mediaControl": {
-    "icon": "🎵"
+    "icon": "🎵",
+    "color": "#50fa7b"
   },
   "mistralChatModel": {
     "icon": "lobehub:mistral",
@@ -281,10 +293,12 @@
   },
   "motionDetection": {
     "icon": "📳",
-    "skill": "motion-skill"
+    "skill": "motion-skill",
+    "color": "#50fa7b"
   },
   "networkMonitor": {
-    "icon": "📡"
+    "icon": "📡",
+    "color": "#50fa7b"
   },
   "ollamaChatModel": {
     "icon": "lobehub:ollama",
@@ -335,7 +349,8 @@
   },
   "pythonExecutor": {
     "icon": "asset:python",
-    "skill": "python-skill"
+    "skill": "python-skill",
+    "color": "#ffb86c"
   },
   "rlm_agent": {
     "icon": "🧠",
@@ -343,7 +358,8 @@
   },
   "screenControlAutomation": {
     "icon": "💡",
-    "skill": "screen-control-skill"
+    "skill": "screen-control-skill",
+    "color": "#50fa7b"
   },
   "serperSearch": {
     "icon": "asset:google",
@@ -376,7 +392,8 @@
     "color": "#bd93f9"
   },
   "systemInfo": {
-    "icon": "📱"
+    "icon": "📱",
+    "color": "#50fa7b"
   },
   "taskManager": {
     "icon": "📋",
@@ -444,7 +461,8 @@
     "skill": "twitter-user-skill"
   },
   "typescriptExecutor": {
-    "icon": "asset:typescript"
+    "icon": "asset:typescript",
+    "color": "#ffb86c"
   },
   "vectorStore": {
     "icon": "🗄️",
@@ -478,7 +496,8 @@
   },
   "wifiAutomation": {
     "icon": "📶",
-    "skill": "wifi-skill"
+    "skill": "wifi-skill",
+    "color": "#50fa7b"
   },
   "writeTodos": {
     "icon": "📝",

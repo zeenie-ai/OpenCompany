@@ -29,9 +29,13 @@ class CodeExecutorOutput(BaseModel):
 
 
 class CodeExecutorBase(ActionNode, abstract=True):
-    """Subclass and set type / display_name / icon / handler import."""
+    """Subclass and set type / display_name / handler import.
 
-    color = "#ffb86c"
+    Visual metadata (icon + color) lives in ``server/nodes/visuals.json``
+    keyed by individual plugin type. The ``_visuals.py`` resolver picks
+    each entry up at NodeSpec emit time; no class-level ClassVars needed.
+    """
+
     group = ("code", "tool")
     component_kind = "square"
     handles = (
