@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
+from services.plugin import ActionNode, NodeContext, NodeUserError, Operation, TaskQueue
 
 from ._credentials import GoogleMapsCredential
 
@@ -59,4 +59,4 @@ class GmapsNearbyPlacesNode(ActionNode):
         )
         if response.get("success"):
             return response.get("result") or response
-        raise RuntimeError(response.get("error") or "Nearby places failed")
+        raise NodeUserError(response.get("error") or "Nearby places failed")

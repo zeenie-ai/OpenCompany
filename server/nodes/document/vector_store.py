@@ -13,7 +13,7 @@ from typing import Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
+from services.plugin import ActionNode, NodeContext, NodeUserError, Operation, TaskQueue
 
 
 class VectorStoreParams(BaseModel):
@@ -70,7 +70,7 @@ async def _chroma_op(operation: str, params: Dict[str, Any], collection: str) ->
     try:
         import chromadb
     except ImportError:
-        raise RuntimeError("ChromaDB unavailable. pip install chromadb")
+        raise NodeUserError("ChromaDB unavailable. pip install chromadb")
 
     persist_dir = params.get('persist_dir', './data/vectors')
     client = chromadb.PersistentClient(path=persist_dir)
@@ -126,7 +126,7 @@ async def _qdrant_op(operation: str, params: Dict[str, Any], collection: str) ->
         from qdrant_client import QdrantClient
         from qdrant_client.models import Distance, PointStruct, VectorParams
     except ImportError:
-        raise RuntimeError("Qdrant client unavailable. pip install qdrant-client")
+        raise NodeUserError("Qdrant client unavailable. pip install qdrant-client")
 
     url = params.get('qdrant_url', 'http://localhost:6333')
     client = QdrantClient(url=url)
@@ -188,7 +188,7 @@ async def _pinecone_op(operation: str, params: Dict[str, Any], collection: str) 
 
     api_key = params.get('pinecone_api_key', '')
     if not api_key:
-        raise RuntimeError("Pinecone API key required")
+        raise NodeUserError("Pinecone API key required")
 
     pc = Pinecone(api_key=api_key)
     index = pc.Index(collection)
@@ -271,7 +271,7 @@ class VectorStoreNode(ActionNode):
         elif backend == 'pinecone':
             result = await _pinecone_op(operation, p, collection)
         else:
-            raise RuntimeError(f"Unknown backend: {backend_raw}")
+            raise NodeUserError(f"Unknown backend: {backend_raw}")
 
         result['backend'] = backend
         result['collection_name'] = collection

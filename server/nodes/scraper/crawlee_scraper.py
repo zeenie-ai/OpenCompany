@@ -15,7 +15,7 @@ from urllib.parse import urljoin
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.logging import get_logger
-from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
+from services.plugin import ActionNode, NodeContext, NodeUserError, Operation, TaskQueue
 
 logger = get_logger(__name__)
 
@@ -296,7 +296,7 @@ class CrawleeScraperNode(ActionNode):
     async def scrape(self, ctx: NodeContext, params: CrawleeScraperParams) -> CrawleeScraperOutput:
         url = (params.url or "").strip()
         if not url:
-            raise RuntimeError("URL is required")
+            raise NodeUserError("URL is required")
 
         crawler_type = params.crawler_type
         mode = params.mode
@@ -326,16 +326,16 @@ class CrawleeScraperNode(ActionNode):
                     max_concurrency, timeout_secs,
                 )
             else:
-                raise RuntimeError(f"Unknown crawler type: {crawler_type}")
+                raise NodeUserError(f"Unknown crawler type: {crawler_type}")
         except ImportError as e:
             msg = str(e).lower()
             if 'playwright' in msg:
-                raise RuntimeError(
+                raise NodeUserError(
                     "Playwright not installed. Run: "
                     "pip install 'crawlee[playwright]' && playwright install chromium",
                 )
             if 'crawlee' in msg:
-                raise RuntimeError(
+                raise NodeUserError(
                     "Crawlee not installed. Run: pip install 'crawlee[beautifulsoup]'",
                 )
             raise

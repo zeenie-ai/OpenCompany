@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.logging import get_logger
-from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
+from services.plugin import ActionNode, NodeContext, NodeUserError, Operation, TaskQueue
 
 from ._credentials import ApifyCredential
 
@@ -256,7 +256,7 @@ class ApifyActorNode(ActionNode):
     async def run(self, ctx: NodeContext, params: ApifyActorParams) -> ApifyActorOutput:
         client = await _get_apify_client()
         if not client:
-            raise RuntimeError(
+            raise NodeUserError(
                 "Apify API token not configured. Please add your token in Credentials.",
             )
 
@@ -264,7 +264,7 @@ class ApifyActorNode(ActionNode):
         if actor_id == "custom":
             actor_id = params.custom_actor_id
         if not actor_id:
-            raise RuntimeError("Actor ID is required")
+            raise NodeUserError("Actor ID is required")
 
         actor_input = _build_actor_input(params.model_dump())
         timeout_secs = params.timeout
@@ -282,18 +282,18 @@ class ApifyActorNode(ActionNode):
         )
 
         if run_info is None:
-            raise RuntimeError("Actor run failed - no result returned")
+            raise NodeUserError("Actor run failed - no result returned")
 
         status = run_info.get("status", "UNKNOWN")
         run_id = run_info.get("id", "")
         dataset_id = run_info.get("defaultDatasetId", "")
 
         if status == "FAILED":
-            raise RuntimeError(run_info.get("errorMessage", "Actor run failed"))
+            raise NodeUserError(run_info.get("errorMessage", "Actor run failed"))
         if status == "TIMED-OUT":
-            raise RuntimeError("Actor timed out. Try increasing the timeout.")
+            raise NodeUserError("Actor timed out. Try increasing the timeout.")
         if status == "ABORTED":
-            raise RuntimeError("Actor run was aborted")
+            raise NodeUserError("Actor run was aborted")
 
         items: List[Dict[str, Any]] = []
         if dataset_id:

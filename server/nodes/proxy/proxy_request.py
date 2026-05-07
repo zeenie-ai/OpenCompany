@@ -6,7 +6,7 @@ from typing import Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
+from services.plugin import ActionNode, NodeContext, NodeUserError, Operation, TaskQueue
 
 
 class ProxyRequestParams(BaseModel):
@@ -78,7 +78,7 @@ class ProxyRequestNode(ActionNode):
         log = get_logger(__name__)
         svc = get_proxy_service()
         if not svc or not svc.is_enabled():
-            raise RuntimeError(
+            raise NodeUserError(
                 "Proxy service not initialized. Use proxy_config tool to add a "
                 "provider first.",
             )
@@ -86,7 +86,7 @@ class ProxyRequestNode(ActionNode):
         raw = params.model_dump()
         proxy_url = await svc.get_proxy_url(params.url, raw)
         if not proxy_url:
-            raise RuntimeError("No proxy provider available")
+            raise NodeUserError("No proxy provider available")
 
         max_retries = params.max_retries
         failover = raw.get("proxy_failover", True)
@@ -132,7 +132,7 @@ class ProxyRequestNode(ActionNode):
                     response_data = response.text
 
                 if response.status_code >= 400:
-                    raise RuntimeError(f"HTTP {response.status_code}: {response_data!r}")
+                    raise NodeUserError(f"HTTP {response.status_code}: {response_data!r}")
                 return {
                     "status": response.status_code,
                     "data": response_data,

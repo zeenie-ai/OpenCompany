@@ -15,7 +15,7 @@ from bs4 import BeautifulSoup
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.logging import get_logger
-from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
+from services.plugin import ActionNode, NodeContext, NodeUserError, Operation, TaskQueue
 
 logger = get_logger(__name__)
 
@@ -130,7 +130,7 @@ class HttpScraperNode(ActionNode):
     async def scrape(self, ctx: NodeContext, params: HttpScraperParams) -> HttpScraperOutput:
         url = params.url
         if not url:
-            raise RuntimeError("URL is required")
+            raise NodeUserError("URL is required")
 
         iteration_mode = params.iteration_mode
         link_selector = params.link_selector or 'a[href$=".pdf"]'
@@ -140,7 +140,7 @@ class HttpScraperNode(ActionNode):
         urls_to_fetch = []
         if iteration_mode == 'date':
             if not params.start_date or not params.end_date:
-                raise RuntimeError("start_date/end_date required for date mode")
+                raise NodeUserError("start_date/end_date required for date mode")
             placeholder = params.date_placeholder or '{date}'
             start = datetime.strptime(params.start_date, "%Y-%m-%d")
             end = datetime.strptime(params.end_date, "%Y-%m-%d")

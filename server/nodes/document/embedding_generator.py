@@ -7,7 +7,7 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
+from services.plugin import ActionNode, NodeContext, NodeUserError, Operation, TaskQueue
 
 
 class EmbeddingGeneratorParams(BaseModel):
@@ -83,7 +83,7 @@ class EmbeddingGeneratorNode(ActionNode):
             try:
                 from langchain_huggingface import HuggingFaceEmbeddings
             except ImportError:
-                raise RuntimeError(
+                raise NodeUserError(
                     "HuggingFace embeddings unavailable. "
                     "pip install langchain-huggingface sentence-transformers",
                 )
@@ -95,7 +95,7 @@ class EmbeddingGeneratorNode(ActionNode):
             from langchain_ollama import OllamaEmbeddings
             embedder = OllamaEmbeddings(model=model)
         else:
-            raise RuntimeError(f"Unknown provider: {provider}")
+            raise NodeUserError(f"Unknown provider: {provider}")
 
         embeddings = await asyncio.to_thread(embedder.embed_documents, texts)
         dimensions = len(embeddings[0]) if embeddings else 0

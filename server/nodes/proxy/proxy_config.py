@@ -15,7 +15,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.logging import get_logger
-from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
+from services.plugin import ActionNode, NodeContext, NodeUserError, Operation, TaskQueue
 
 logger = get_logger(__name__)
 
@@ -384,5 +384,5 @@ class ProxyConfigNode(ActionNode):
     async def dispatch(self, ctx: NodeContext, params: ProxyConfigParams) -> Any:
         result = await execute_proxy_config(params.model_dump())
         if not result.get("success"):
-            raise RuntimeError(result.get("error") or "Proxy config failed")
+            raise NodeUserError(result.get("error") or "Proxy config failed")
         return result
