@@ -44,8 +44,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import httpx
 import lmstudio
 import ollama
-from core.container import container
 from core.logging import get_logger
+from services.plugin.deps import get_auth_service
 from services.status_broadcaster import get_status_broadcaster
 
 logger = get_logger(__name__)
@@ -254,7 +254,7 @@ async def validate_local_llm(data: Dict[str, Any]) -> Dict[str, Any]:
     if not base_url:
         return {"success": False, "valid": False, "error": "Base URL required"}
 
-    auth_service = container.auth_service()
+    auth_service = get_auth_service()
 
     # Persist the URL first so the runtime path (services/ai.py) can
     # read it via the existing {provider}_proxy lookup even before the

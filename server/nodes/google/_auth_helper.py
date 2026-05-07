@@ -37,7 +37,7 @@ async def get_google_credentials(
     Returns:
         google.oauth2.credentials.Credentials ready for API use
     """
-    from core.container import container
+    from services.plugin.deps import get_auth_service, get_database
 
     account_mode = parameters.get('account_mode', 'owner')
     customer_id = "owner"
@@ -47,7 +47,7 @@ async def get_google_credentials(
         if not customer_id:
             raise ValueError("customer_id required for customer mode")
 
-        db = container.database()
+        db = get_database()
         connection = await db.get_google_connection(customer_id)
         if not connection:
             raise ValueError(f"No Google connection for customer: {customer_id}")
@@ -61,7 +61,7 @@ async def get_google_credentials(
         await db.update_google_last_used(customer_id)
 
     else:
-        auth_service = container.auth_service()
+        auth_service = get_auth_service()
         tokens = await auth_service.get_oauth_tokens("google", customer_id="owner")
 
         if not tokens or not tokens.get("access_token"):
@@ -75,7 +75,7 @@ async def get_google_credentials(
             "google", customer_id="owner"
         )
 
-    auth_service = container.auth_service()
+    auth_service = get_auth_service()
     client_id = await auth_service.get_api_key("google_client_id") or ""
     client_secret = await auth_service.get_api_key("google_client_secret") or ""
 

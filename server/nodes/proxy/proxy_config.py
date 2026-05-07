@@ -162,7 +162,7 @@ async def _list_routing_rules(proxy_svc) -> Dict[str, Any]:
 
 
 async def _add_provider(p: Dict[str, Any], proxy_svc) -> Dict[str, Any]:
-    from core.container import container
+    from services.plugin.deps import get_database
 
     name = p.get("name", "")
     if not name:
@@ -176,7 +176,7 @@ async def _add_provider(p: Dict[str, Any], proxy_svc) -> Dict[str, Any]:
     except json.JSONDecodeError:
         return {"success": False, "error": f"Invalid url_template JSON: {url_template_raw}"}
 
-    db = container.database()
+    db = get_database()
     await db.save_proxy_provider({
         "name": name,
         "enabled": p.get("enabled", True),
@@ -192,12 +192,12 @@ async def _add_provider(p: Dict[str, Any], proxy_svc) -> Dict[str, Any]:
 
 
 async def _update_provider(p: Dict[str, Any], proxy_svc) -> Dict[str, Any]:
-    from core.container import container
+    from services.plugin.deps import get_database
 
     name = p.get("name", "")
     if not name:
         return {"success": False, "error": "Provider name is required"}
-    db = container.database()
+    db = get_database()
     existing = await db.get_proxy_provider(name)
     if not existing:
         return {"success": False, "error": f"Provider '{name}' not found"}
@@ -225,12 +225,12 @@ async def _update_provider(p: Dict[str, Any], proxy_svc) -> Dict[str, Any]:
 
 
 async def _remove_provider(p: Dict[str, Any], proxy_svc) -> Dict[str, Any]:
-    from core.container import container
+    from services.plugin.deps import get_database
 
     name = p.get("name", "")
     if not name:
         return {"success": False, "error": "Provider name is required"}
-    db = container.database()
+    db = get_database()
     await db.delete_proxy_provider(name)
     if proxy_svc:
         await proxy_svc.reload_providers()
@@ -238,7 +238,7 @@ async def _remove_provider(p: Dict[str, Any], proxy_svc) -> Dict[str, Any]:
 
 
 async def _set_credentials(p: Dict[str, Any], proxy_svc) -> Dict[str, Any]:
-    from core.container import container
+    from services.plugin.deps import get_auth_service
 
     name = p.get("name", "")
     if not name:
@@ -247,7 +247,7 @@ async def _set_credentials(p: Dict[str, Any], proxy_svc) -> Dict[str, Any]:
     if not username or not password:
         return {"success": False, "error": "Username and password are required"}
 
-    auth_svc = container.auth_service()
+    auth_svc = get_auth_service()
     await auth_svc.store_api_key(f"proxy_{name}_username", username, [])
     await auth_svc.store_api_key(f"proxy_{name}_password", password, [])
     if proxy_svc:
@@ -291,7 +291,7 @@ async def _test_provider(p: Dict[str, Any], proxy_svc) -> Dict[str, Any]:
 
 
 async def _add_routing_rule(p: Dict[str, Any], proxy_svc) -> Dict[str, Any]:
-    from core.container import container
+    from services.plugin.deps import get_database
 
     domain_pattern = p.get("domain_pattern", "")
     if not domain_pattern:
@@ -305,7 +305,7 @@ async def _add_routing_rule(p: Dict[str, Any], proxy_svc) -> Dict[str, Any]:
     except json.JSONDecodeError:
         preferred = []
 
-    db = container.database()
+    db = get_database()
     await db.save_proxy_routing_rule({
         "domain_pattern": domain_pattern,
         "preferred_providers": json.dumps(preferred),
@@ -318,12 +318,12 @@ async def _add_routing_rule(p: Dict[str, Any], proxy_svc) -> Dict[str, Any]:
 
 
 async def _remove_routing_rule(p: Dict[str, Any], proxy_svc) -> Dict[str, Any]:
-    from core.container import container
+    from services.plugin.deps import get_database
 
     rule_id = p.get("rule_id")
     if not rule_id:
         return {"success": False, "error": "rule_id is required"}
-    db = container.database()
+    db = get_database()
     await db.delete_proxy_routing_rule(int(rule_id))
     if proxy_svc:
         await proxy_svc.reload_providers()

@@ -32,9 +32,9 @@ async def refresh_twitter_status(broadcaster: "StatusBroadcaster") -> None:
     """
     with tracer.start_as_current_span("broadcaster.refresh_twitter") as span:
         try:
-            from core.container import container
+            from services.plugin.deps import get_auth_service
 
-            auth_service = container.auth_service()
+            auth_service = get_auth_service()
             tokens = await auth_service.get_oauth_tokens(
                 "twitter", customer_id="owner"
             )

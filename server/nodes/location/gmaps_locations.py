@@ -72,9 +72,9 @@ class GmapsLocationsNode(ActionNode):
 
     @Operation("geocode", cost={"service": "google_maps", "action": "geocode", "count": 1})
     async def geocode(self, ctx: NodeContext, params: GmapsLocationsParams) -> Any:
-        from core.container import container
+        from services.plugin.deps import get_maps_service
 
-        maps_service = container.maps_service()
+        maps_service = get_maps_service()
         response = await maps_service.geocode_location(
             ctx.node_id, params.model_dump(), ctx.raw,
         )

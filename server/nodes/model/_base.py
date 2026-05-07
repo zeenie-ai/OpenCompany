@@ -97,9 +97,9 @@ class ChatModelBase(ActionNode, abstract=True):
 
     @Operation("chat", cost={"service": "chat_model", "action": "chat", "count": 1})
     async def chat(self, ctx: NodeContext, params: ChatModelParams) -> Any:
-        from core.container import container
+        from services.plugin.deps import get_ai_service
 
-        ai_service = container.ai_service()
+        ai_service = get_ai_service()
         # ``execute_chat`` raises ``NodeUserError`` directly for typed
         # openai SDK failures (context overflow, bad key, server down) —
         # BaseNode.execute() then logs at WARN with no traceback.

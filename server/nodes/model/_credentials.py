@@ -49,9 +49,9 @@ class _LLMApiKey(ApiKeyCredential):
         :class:`ProbeResult` on success; raises ``httpx``/``openai``
         exceptions for the base ``Credential.validate`` to classify.
         """
-        from core.container import container
+        from services.plugin.deps import get_ai_service
 
-        ai_service = container.ai_service()
+        ai_service = get_ai_service()
         models = await ai_service.fetch_models(cls.id, api_key)
         return ProbeResult(
             valid=True,
@@ -148,9 +148,9 @@ class _LocalLLM(_LLMApiKey):
 
     @classmethod
     async def resolve(cls, *, user_id: str = "owner") -> Dict[str, Any]:
-        from core.container import container
+        from services.plugin.deps import get_auth_service
 
-        api_key = await container.auth_service().get_api_key(cls.id)
+        api_key = await get_auth_service().get_api_key(cls.id)
         return {"api_key": api_key or "ollama"}
 
     @classmethod

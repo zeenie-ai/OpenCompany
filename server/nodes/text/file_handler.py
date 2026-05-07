@@ -63,9 +63,9 @@ class FileHandlerNode(ActionNode):
 
     @Operation("wrap")
     async def wrap(self, ctx: NodeContext, params: FileHandlerParams) -> Any:
-        from core.container import container
+        from services.plugin.deps import get_text_service
 
-        text_service = container.text_service()
+        text_service = get_text_service()
         # Pass schema-canonical snake_case through to the service. The
         # service's *output* dict still carries camelCase keys
         # (`fileName` / `fileType`) by historical wire contract -- the

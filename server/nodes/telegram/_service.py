@@ -373,8 +373,8 @@ class TelegramService(ServiceSingleton):
                     f"(ID: {msg.from_user.id})"
                 )
                 try:
-                    from core.container import container
-                    auth = container.auth_service()
+                    from services.plugin.deps import get_auth_service
+                    auth = get_auth_service()
                     await auth.store_api_key(
                         "telegram_owner_chat_id",
                         str(msg.from_user.id),

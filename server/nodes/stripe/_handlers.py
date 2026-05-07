@@ -78,8 +78,8 @@ _MARKER_TOKEN = "cli-managed"
 
 
 async def _mark_logged_in() -> None:
-    from core.container import container
-    await container.auth_service().store_oauth_tokens(
+    from services.plugin.deps import get_auth_service
+    await get_auth_service().store_oauth_tokens(
         provider="stripe",
         access_token=_MARKER_TOKEN,
         refresh_token=_MARKER_TOKEN,
@@ -87,8 +87,8 @@ async def _mark_logged_in() -> None:
 
 
 async def _mark_logged_out() -> None:
-    from core.container import container
-    await container.auth_service().remove_oauth_tokens("stripe")
+    from services.plugin.deps import get_auth_service
+    await get_auth_service().remove_oauth_tokens("stripe")
 
 
 async def _broadcast_credential_event(event_type: str) -> None:

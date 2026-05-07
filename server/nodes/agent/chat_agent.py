@@ -103,12 +103,12 @@ class ChatAgentNode(ActionNode):
     @Operation("execute", cost={"service": "chat_agent", "action": "run", "count": 1})
     async def execute_op(self, ctx: NodeContext, params: ChatAgentParams) -> Any:
         """Inlined from handlers/ai.handle_chat_agent (Wave 11.D.6)."""
-        from core.container import container
+        from services.plugin.deps import get_ai_service, get_database
 
         from ._inline import prepare_agent_call
 
-        ai_service = container.ai_service()
-        database = container.database()
+        ai_service = get_ai_service()
+        database = get_database()
         kwargs = await prepare_agent_call(
             node_id=ctx.node_id, node_type=self.type,
             parameters=params.model_dump(),

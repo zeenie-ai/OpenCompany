@@ -110,9 +110,9 @@ class AndroidServiceBase(ActionNode, abstract=True):
 
     @Operation("invoke", cost={"service": "android", "action": "service_call", "count": 1})
     async def invoke(self, ctx: NodeContext, params: AndroidServiceParams) -> Any:
-        from core.container import container
+        from services.plugin.deps import get_android_service
 
-        android_service = container.android_service()
+        android_service = get_android_service()
         payload = params.model_dump()
 
         # Derive service_id from the registered node type (battery etc.) —

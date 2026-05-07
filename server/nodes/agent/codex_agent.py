@@ -102,9 +102,9 @@ class CodexAgentNode(ActionNode):
     async def execute_op(
         self, ctx: NodeContext, params: CodexAgentParams,
     ) -> Any:
-        from core.container import container
         from services.cli_agent.service import get_ai_cli_service
         from services.cli_agent.types import session_result_to_model
+        from services.plugin.deps import get_database
         from services.status_broadcaster import get_status_broadcaster
 
         start_time = time.time()
@@ -144,7 +144,7 @@ class CodexAgentNode(ActionNode):
                 if changed:
                     tasks[i] = t.model_copy(update=changed)
 
-        database = container.database()
+        database = get_database()
         _, skill_data, _, _, _ = await collect_agent_connections(
             node_id, ctx.raw, database,
         )

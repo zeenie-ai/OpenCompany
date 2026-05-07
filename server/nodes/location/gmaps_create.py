@@ -61,9 +61,9 @@ class GmapsCreateNode(ActionNode):
 
     @Operation("create")
     async def create(self, ctx: NodeContext, params: GmapsCreateParams) -> Any:
-        from core.container import container
+        from services.plugin.deps import get_maps_service
 
-        maps_service = container.maps_service()
+        maps_service = get_maps_service()
         response = await maps_service.create_map(
             ctx.node_id, params.model_dump(), ctx.raw,
         )

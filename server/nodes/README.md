@@ -296,8 +296,11 @@ Full reference: [docs-internal/plugin_system.md → "Self-contained plugin folde
 - **Don't edit `server/nodes/__init__.py`** — it's a pure auto-discovery
   walker. Adding a new folder doesn't need edits either; `pkgutil` finds
   subpackages automatically.
-- **Don't instantiate services directly.** Use
-  `from core.container import container; svc = container.X()`.
+- **Don't instantiate services directly.** Use the canonical lazy
+  helpers in `services.plugin.deps`:
+  `from services.plugin.deps import get_auth_service, get_database, get_cache, get_ai_service, get_text_service, get_maps_service, get_android_service`.
+  These resolve the singleton from the DI container at call time
+  (test monkeypatching depends on call-time lookup — never memoise).
 - **Don't call `auth_service.get_api_key(...)` from plugins.** Declare
   a `Credential` subclass; the `Connection` facade / service layer
   resolves tokens.

@@ -57,8 +57,8 @@ class EmailService(ServiceSingleton):
         Stored custom keys (email_imap_host, email_smtp_port, etc.) are used when
         the provider is 'custom' or when a preset field is empty.
         """
-        from core.container import container
-        auth = container.auth_service()
+        from services.plugin.deps import get_auth_service
+        auth = get_auth_service()
 
         provider = params.get("provider") or await auth.get_api_key("email_provider") or self.defaults.get("provider")
         preset = self._provider_preset(provider)

@@ -23,7 +23,7 @@ async def track_proxy_usage(
     workflow_id: Optional[str] = None,
     session_id: str = "default",
 ) -> Dict[str, float]:
-    from core.container import container
+    from services.plugin.deps import get_database
     from services.pricing import get_pricing_service
 
     pricing = get_pricing_service()
@@ -34,7 +34,7 @@ async def track_proxy_usage(
     gb = bytes_transferred / (1024 ** 3)
     total_cost = round(gb * cost_per_gb, 8)
 
-    db = container.database()
+    db = get_database()
     await db.save_api_usage_metric({
         "session_id": session_id,
         "node_id": node_id,

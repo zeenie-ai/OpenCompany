@@ -120,8 +120,8 @@ class StripeListenSource(DaemonEventSource):
 
     async def _persist_secret(self, secret: str) -> None:
         try:
-            from core.container import container
-            await container.auth_service().store_api_key(_SECRET_FIELD, secret, models=[])
+            from services.plugin.deps import get_auth_service
+            await get_auth_service().store_api_key(_SECRET_FIELD, secret, models=[])
             logger.info(
                 "[Stripe] webhook signing secret persisted (key=%s, len=%d)",
                 _SECRET_FIELD, len(secret),

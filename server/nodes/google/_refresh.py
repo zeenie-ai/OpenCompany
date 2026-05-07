@@ -29,9 +29,9 @@ async def refresh_google_status(broadcaster: "StatusBroadcaster") -> None:
     """
     with tracer.start_as_current_span("broadcaster.refresh_google") as span:
         try:
-            from core.container import container
+            from services.plugin.deps import get_auth_service
 
-            auth_service = container.auth_service()
+            auth_service = get_auth_service()
             tokens = await auth_service.get_oauth_tokens(
                 "google", customer_id="owner"
             )

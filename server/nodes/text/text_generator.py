@@ -44,9 +44,9 @@ class TextGeneratorNode(ActionNode):
 
     @Operation("generate")
     async def generate(self, ctx: NodeContext, params: TextGeneratorParams) -> Any:
-        from core.container import container
+        from services.plugin.deps import get_text_service
 
-        text_service = container.text_service()
+        text_service = get_text_service()
         response = await text_service.execute_text_generator(
             ctx.node_id, params.model_dump(),
         )

@@ -27,7 +27,7 @@ class StripeCredential(Credential):
     async def resolve(cls, *, user_id: str = "owner") -> Dict[str, Any]:
         """Return only the captured webhook signing secret. There is
         no api_key — auth lives in the Stripe CLI's config file."""
-        from core.container import container
+        from services.plugin.deps import get_auth_service
 
-        secret = await container.auth_service().get_api_key("stripe_webhook_secret")
+        secret = await get_auth_service().get_api_key("stripe_webhook_secret")
         return {"stripe_webhook_secret": secret} if secret else {}

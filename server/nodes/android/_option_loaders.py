@@ -32,9 +32,9 @@ async def load_service_actions(params: Dict[str, Any]) -> List[Dict[str, Any]]:
         return []
 
     try:
-        from core.container import container
+        from services.plugin.deps import get_android_service
 
-        android_svc = container.android_service()
+        android_svc = get_android_service()
         actions = await android_svc.list_actions(service_id)  # type: ignore[attr-defined]
         return [
             {"value": a, "label": a.replace("_", " ").title()}

@@ -6,18 +6,10 @@ from typing import Dict, Any
 
 from ._dispatcher import AndroidService
 from core.logging import get_logger
+from services.plugin.deps import get_android_service
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/android", tags=["android"])
-
-
-def get_android_service() -> AndroidService:
-    """FastAPI dependency: imports lazily to avoid the
-    nodes/android/__init__ -> core.container -> nodes.android._dispatcher
-    -> nodes.android.__init__ -> _router import cycle.
-    """
-    from core.container import container
-    return container.android_service()
 
 
 class AndroidServiceRequest(BaseModel):

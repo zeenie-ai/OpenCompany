@@ -28,11 +28,12 @@ Usage::
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from core.cache import CacheService
     from core.database import Database
+    from services.ai import AIService
     from services.auth import AuthService
 
 
@@ -65,4 +66,40 @@ def get_cache() -> "CacheService":
     return container.cache()
 
 
-__all__ = ["get_auth_service", "get_database", "get_cache"]
+def get_ai_service() -> "AIService":
+    """Resolve the singleton :class:`services.ai.AIService`."""
+    from core.container import container
+
+    return container.ai_service()
+
+
+def get_text_service() -> Any:
+    """Resolve the singleton ``TextService`` (text generation)."""
+    from core.container import container
+
+    return container.text_service()
+
+
+def get_maps_service() -> Any:
+    """Resolve the singleton :class:`nodes.location._service.MapsService`."""
+    from core.container import container
+
+    return container.maps_service()
+
+
+def get_android_service() -> Any:
+    """Resolve the singleton :class:`nodes.android._dispatcher.AndroidService`."""
+    from core.container import container
+
+    return container.android_service()
+
+
+__all__ = [
+    "get_auth_service",
+    "get_database",
+    "get_cache",
+    "get_ai_service",
+    "get_text_service",
+    "get_maps_service",
+    "get_android_service",
+]

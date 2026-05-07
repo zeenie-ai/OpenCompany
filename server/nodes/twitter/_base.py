@@ -28,12 +28,12 @@ async def track_twitter_usage(
     node_id: str, action: str, resource_count: int, context: Dict[str, Any],
 ) -> Dict[str, float]:
     """Record a Twitter API call in ``api_usage_metrics``."""
-    from core.container import container
+    from services.plugin.deps import get_database
 
     pricing = get_pricing_service()
     cost_data = pricing.calculate_api_cost('twitter', action, resource_count)
 
-    db = container.database()
+    db = get_database()
     await db.save_api_usage_metric({
         'session_id': context.get('session_id', 'default'),
         'node_id': node_id,
@@ -49,10 +49,10 @@ async def track_twitter_usage(
 
 async def get_twitter_client():
     """Build an XDK Client from the stored OAuth2 access token."""
-    from core.container import container
+    from services.plugin.deps import get_auth_service
     from xdk import Client
 
-    auth_service = container.auth_service()
+    auth_service = get_auth_service()
     tokens = await auth_service.get_oauth_tokens("twitter", customer_id="owner")
     if not tokens or not tokens.get("access_token"):
         raise RuntimeError("Twitter not connected. Please authenticate via Credentials.")
@@ -61,11 +61,11 @@ async def get_twitter_client():
 
 async def refresh_and_get_client():
     """Refresh the OAuth2 token and return a new client."""
-    from core.container import container
     from nodes.twitter._oauth import TwitterOAuth
+    from services.plugin.deps import get_auth_service
     from xdk import Client
 
-    auth_service = container.auth_service()
+    auth_service = get_auth_service()
     tokens = await auth_service.get_oauth_tokens("twitter", customer_id="owner")
     refresh_token = tokens.get("refresh_token", "") if tokens else ""
     if not refresh_token:

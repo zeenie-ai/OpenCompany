@@ -59,12 +59,12 @@ async def track_google_usage(
     ``google_tasks`` / ``google_contacts``. Google APIs are free at our
     tier — this is analytics bookkeeping, cost is $0.
     """
-    from core.container import container
+    from services.plugin.deps import get_database
 
     pricing = get_pricing_service()
     cost_data = pricing.calculate_api_cost(service, action, resource_count)
 
-    db = container.database()
+    db = get_database()
     await db.save_api_usage_metric({
         'session_id': context.get('session_id', 'default'),
         'node_id': node_id,

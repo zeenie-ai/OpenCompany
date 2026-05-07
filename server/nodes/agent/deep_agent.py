@@ -39,11 +39,11 @@ class DeepAgentNode(ActionNode):
 
     @Operation("execute", cost={"service": "deep_agent", "action": "run", "count": 1})
     async def execute_op(self, ctx: NodeContext, params: SpecializedAgentParams) -> Any:
-        from core.container import container
+        from services.plugin.deps import get_ai_service, get_database
         from services.status_broadcaster import get_status_broadcaster
 
-        ai_service = container.ai_service()
-        database = container.database()
+        ai_service = get_ai_service()
+        database = get_database()
         node_id = ctx.node_id
         workflow_id = ctx.workflow_id
         payload = params.model_dump()

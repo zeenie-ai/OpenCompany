@@ -25,9 +25,9 @@ async def _google_oauth_factory(
     *, redirect_uri: Optional[str] = None, **_kwargs,
 ) -> GoogleOAuth:
     """Build a :class:`GoogleOAuth` from stored client credentials."""
-    from core.container import container
+    from services.plugin.deps import get_auth_service
 
-    auth_service = container.auth_service()
+    auth_service = get_auth_service()
     client_id = await auth_service.get_api_key("google_client_id") or ""
     client_secret = await auth_service.get_api_key("google_client_secret") or ""
     return GoogleOAuth(

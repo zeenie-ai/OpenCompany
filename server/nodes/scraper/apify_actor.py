@@ -23,8 +23,8 @@ logger = get_logger(__name__)
 async def _get_apify_client():
     """Return an authenticated Apify client, or None if no token saved."""
     from apify_client import ApifyClientAsync  # lazy — optional dep
-    from core.container import container
-    auth_service = container.auth_service()
+    from services.plugin.deps import get_auth_service
+    auth_service = get_auth_service()
     api_token = await auth_service.get_api_key("apify", "default")
     if not api_token:
         return None

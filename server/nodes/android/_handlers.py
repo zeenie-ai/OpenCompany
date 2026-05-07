@@ -31,18 +31,18 @@ logger = get_logger(__name__)
 
 async def handle_get_android_devices(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Get list of connected Android devices."""
-    from core.container import container
+    from services.plugin.deps import get_android_service
 
-    android_service = container.android_service()
+    android_service = get_android_service()
     devices = await android_service.list_devices()
     return {"devices": devices, "timestamp": time.time()}
 
 
 async def handle_execute_android_action(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Execute an Android service action."""
-    from core.container import container
+    from services.plugin.deps import get_android_service
 
-    android_service = container.android_service()
+    android_service = get_android_service()
     broadcaster = get_status_broadcaster()
     service_id, action = data["service_id"], data["action"]
     node_id = data.get("node_id", f"android_{service_id}_{action}")

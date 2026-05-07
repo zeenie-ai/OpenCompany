@@ -110,12 +110,12 @@ class SpecializedAgentBase(ActionNode, abstract=True):
         pre-dispatch flow. Team-lead teammate injection happens inside
         ``prepare_agent_call`` based on ``self.type``.
         """
-        from core.container import container
+        from services.plugin.deps import get_ai_service, get_database
 
         from ._inline import prepare_agent_call
 
-        ai_service = container.ai_service()
-        database = container.database()
+        ai_service = get_ai_service()
+        database = get_database()
         kwargs = await prepare_agent_call(
             node_id=ctx.node_id, node_type=self.type,
             parameters=params.model_dump(),

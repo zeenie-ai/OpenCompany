@@ -47,13 +47,13 @@ async def _track_maps_usage(
     Returns:
         Cost breakdown dict with operation, unit_cost, resource_count, total_cost
     """
-    from core.container import container
+    from services.plugin.deps import get_database
 
     pricing = get_pricing_service()
     cost_data = pricing.calculate_api_cost('google_maps', action, resource_count)
 
     # Save to database
-    db = container.database()
+    db = get_database()
     await db.save_api_usage_metric({
         'session_id': session_id,
         'node_id': node_id,

@@ -183,8 +183,8 @@ class TelegramSendNode(ActionNode):
             chat_id = service.owner_chat_id
             if not chat_id:
                 try:
-                    from core.container import container
-                    saved = await container.auth_service().get_api_key("telegram_owner_chat_id")
+                    from services.plugin.deps import get_auth_service
+                    saved = await get_auth_service().get_api_key("telegram_owner_chat_id")
                     if saved:
                         owner_id = int(saved)
                         await service.set_owner(owner_id)

@@ -62,9 +62,9 @@ async def _auto_reconnect_body(broadcaster: "StatusBroadcaster", span) -> None:
             return
 
         # Look for a stored pairing session.
-        from core.container import container
+        from services.plugin.deps import get_database
 
-        database = container.database()
+        database = get_database()
         session = await database.get_android_relay_session()
         if not session:
             span.set_attribute("path", "no_session")

@@ -207,8 +207,8 @@ class RelayWebSocketClient:
     async def _clear_stored_session(self):
         """Clear stored pairing session from database."""
         try:
-            from core.container import container
-            database = container.database()
+            from services.plugin.deps import get_database
+            database = get_database()
 
             await database.clear_android_relay_session()
             logger.debug("[Relay] Cleared stored pairing session")
@@ -368,8 +368,8 @@ class RelayWebSocketClient:
     async def _save_pairing_session(self):
         """Save pairing session to database for auto-reconnect."""
         try:
-            from core.container import container
-            database = container.database()
+            from services.plugin.deps import get_database
+            database = get_database()
 
             await database.save_android_relay_session(
                 relay_url=self.base_url,

@@ -30,19 +30,19 @@ to call something that isn't there yet.
 
 from __future__ import annotations
 
-import logging
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from core.logging import get_logger
 from services import workflow_ops
 from services.node_registry import registered_node_classes
 from services.plugin import NodeContext, Operation, TaskQueue, ToolNode
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # ----------------------------------------------------------------------------
@@ -79,6 +79,11 @@ async def _broadcast(workflow_id: Optional[str], caller_id: str, ops: List[Dict[
         await broadcaster.send_custom_event(
             "workflow_ops_apply",
             {"workflow_id": workflow_id, "caller_node_id": caller_id, "operations": ops},
+        )
+        logger.info(
+            "[agentBuilder] broadcast workflow_ops_apply: workflow_id=%s "
+            "caller=%s ops=%s",
+            workflow_id, caller_id, [op.get("type") for op in ops],
         )
     except Exception as exc:
         logger.warning(f"[agentBuilder] broadcast failed: {exc}", exc_info=True)
@@ -151,8 +156,36 @@ def _resolve_caller(ctx: NodeContext) -> str:
         ):
             target = edge.get("target")
             if target:
+                logger.info(
+                    "[agentBuilder] caller resolved via input-tools edge: "
+                    "self=%s -> agent=%s", self_id, target,
+                )
                 return target
+    logger.info(
+        "[agentBuilder] no input-tools edge found from %s; "
+        "falling back to self as caller (canvas: %d nodes, %d edges)",
+        self_id, len(ctx.nodes or []), len(ctx.edges or []),
+    )
     return self_id
+
+
+def _log_op_entry(op: str, ctx: NodeContext, **fields: Any) -> None:
+    """Single INFO line per operation invocation. Captures workflow_id,
+    self_id, canvas size, and ctx.raw keys so a missing-canvas-data bug
+    is visible immediately (e.g. ``nodes=0 edges=0 raw_keys=[...]``
+    tells you exactly which plumbing layer dropped the canvas state).
+    """
+    nodes = ctx.nodes or []
+    edges = ctx.edges or []
+    extra = " ".join(f"{k}={v!r}" for k, v in fields.items() if v not in (None, ""))
+    logger.info(
+        "[agentBuilder.%s] workflow_id=%s self=%s nodes=%d edges=%d "
+        "raw_keys=%s%s",
+        op, ctx.workflow_id, ctx.node_id,
+        len(nodes), len(edges),
+        sorted((ctx.raw or {}).keys()),
+        f" {extra}" if extra else "",
+    )
 
 
 # ----------------------------------------------------------------------------
@@ -282,6 +315,7 @@ class AgentBuilderNode(ToolNode):
     async def inspect_canvas(
         self, ctx: NodeContext, params: AgentBuilderParams,
     ) -> AgentBuilderOutput:
+        _log_op_entry("inspect_canvas", ctx)
         nodes = list(ctx.nodes or [])
         edges = list(ctx.edges or [])
         caller_id = _resolve_caller(ctx)
@@ -348,6 +382,7 @@ class AgentBuilderNode(ToolNode):
     async def add_tool(
         self, ctx: NodeContext, params: AgentBuilderParams,
     ) -> AgentBuilderOutput:
+        _log_op_entry("add_tool", ctx, node_type=params.node_type)
         node_type = (params.node_type or "").strip()
         if not node_type:
             return AgentBuilderOutput(
@@ -393,6 +428,7 @@ class AgentBuilderNode(ToolNode):
     async def add_skill(
         self, ctx: NodeContext, params: AgentBuilderParams,
     ) -> AgentBuilderOutput:
+        _log_op_entry("add_skill", ctx, skill_folder=params.skill_folder)
         skill = (params.skill_folder or "").strip()
         if not skill:
             return AgentBuilderOutput(
@@ -470,6 +506,7 @@ class AgentBuilderNode(ToolNode):
     async def add_subagent(
         self, ctx: NodeContext, params: AgentBuilderParams,
     ) -> AgentBuilderOutput:
+        _log_op_entry("add_subagent", ctx, agent_type=params.agent_type)
         agent_type = (params.agent_type or "").strip()
         if not agent_type:
             return AgentBuilderOutput(
@@ -542,6 +579,11 @@ class AgentBuilderNode(ToolNode):
     async def create_workflow(
         self, ctx: NodeContext, params: AgentBuilderParams,
     ) -> AgentBuilderOutput:
+        _log_op_entry(
+            "create_workflow", ctx,
+            workflow_name=params.workflow_name,
+            workflow_description=params.workflow_description,
+        )
         name = (params.workflow_name or "").strip()
         if not name:
             return AgentBuilderOutput(
@@ -568,8 +610,8 @@ class AgentBuilderNode(ToolNode):
             "nodeParameters": {},
         }
 
-        from core.container import container
-        database = container.database()
+        from services.plugin.deps import get_database
+        database = get_database()
         ok = await database.save_workflow(
             workflow_id, name, workflow_data, description=description or None,
         )

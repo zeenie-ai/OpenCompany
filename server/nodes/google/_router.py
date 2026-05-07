@@ -107,9 +107,9 @@ async def generate_customer_auth_url(
 @router.get("/customer/{customer_id}/status")
 async def get_customer_google_status(customer_id: str):
     """Get Google connection status for a customer."""
-    from core.container import container
+    from services.plugin.deps import get_auth_service
 
-    auth_service = container.auth_service()
+    auth_service = get_auth_service()
     tokens = await auth_service.get_oauth_tokens("google", customer_id=customer_id)
     if not tokens:
         return {"connected": False, "customer_id": customer_id}
@@ -124,8 +124,8 @@ async def get_customer_google_status(customer_id: str):
 @router.post("/customer/{customer_id}/disconnect")
 async def disconnect_customer_google(customer_id: str):
     """Disconnect a customer's Google account."""
-    from core.container import container
+    from services.plugin.deps import get_auth_service
 
-    auth_service = container.auth_service()
+    auth_service = get_auth_service()
     await auth_service.remove_oauth_tokens("google", customer_id=customer_id)
     return {"success": True, "customer_id": customer_id}

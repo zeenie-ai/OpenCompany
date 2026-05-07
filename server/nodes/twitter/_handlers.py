@@ -28,9 +28,9 @@ async def _twitter_oauth_factory(
     *, redirect_uri: Optional[str] = None, **_kwargs,
 ) -> TwitterOAuth:
     """Build a :class:`TwitterOAuth` from stored client credentials."""
-    from core.container import container
+    from services.plugin.deps import get_auth_service
 
-    auth_service = container.auth_service()
+    auth_service = get_auth_service()
     client_id = await auth_service.get_api_key("twitter_client_id") or ""
     client_secret = await auth_service.get_api_key("twitter_client_secret")
     return TwitterOAuth(
@@ -51,9 +51,9 @@ async def _drop_legacy_api_key_entries() -> None:
     as API keys. The OAuth tokens table is the canonical home now;
     these orphans are cleaned on every logout for safety.
     """
-    from core.container import container
+    from services.plugin.deps import get_auth_service
 
-    auth_service = container.auth_service()
+    auth_service = get_auth_service()
     for key in ("twitter_access_token", "twitter_refresh_token", "twitter_user_info"):
         try:
             await auth_service.remove_api_key(key)
