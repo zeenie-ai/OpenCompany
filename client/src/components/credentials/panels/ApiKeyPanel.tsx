@@ -24,14 +24,16 @@ const ApiKeyPanel: React.FC<{ config: ProviderConfig; visible: boolean }> = ({ c
   // Completely independent from useCredentialPanel's stored state.
   const [validated, setValidated] = useState(panel.stored);
 
-  // Sync from the form when stored credentials load
+  // Sync the input from the form. The form value may be a stored
+  // credential OR the backend-served catalogue default (e.g.
+  // local-LLM canonical Base URL); either way we render it.
+  // ``validated`` stays tied to ``panel.stored`` (real server state)
+  // so a pre-filled default doesn't flip the connected badge on.
   useEffect(() => {
-    if (panel.stored && field) {
+    if (field) {
       const v = panel.form.getFieldValue(field.key);
-      if (v) {
-        setInputValue(v);
-        setValidated(true);
-      }
+      if (v) setInputValue(v);
+      setValidated(panel.stored);
     }
   }, [panel.stored, field, panel.form]);
 

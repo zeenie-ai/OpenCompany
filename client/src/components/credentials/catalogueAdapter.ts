@@ -141,6 +141,7 @@ function buildFields(defs: ServerFieldDef[] | undefined): FieldDef[] | undefined
     label: d.label ?? d.key,
     secret: d.secret ?? d.type === 'password',
     placeholder: d.placeholder,
+    default: d.default,
     required: d.required,
   }));
 }

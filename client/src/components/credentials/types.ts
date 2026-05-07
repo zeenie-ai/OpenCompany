@@ -22,6 +22,8 @@ export interface FieldDef {
   label: string;
   secret?: boolean;
   placeholder?: string;
+  /** Pre-fill value when nothing stored. See ServerFieldDef.default. */
+  default?: string;
   required?: boolean;
 }
 

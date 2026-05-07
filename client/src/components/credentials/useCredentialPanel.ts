@@ -45,40 +45,48 @@ export function useCredentialPanel(config: ProviderConfig, visible: boolean) {
   }, [config.id]);
 
   const {
-    validateApiKey, saveApiKey, getStoredApiKey, hasStoredKey, removeApiKey,
+    validateApiKey, saveApiKey, removeApiKey,
     getProviderDefaults, saveProviderDefaults,
     getProviderUsageSummary, getAPIUsageSummary, getStoredModels, getModelConstraints,
     isConnected,
   } = useApiKeys();
   const { sendRequest } = useWebSocket();
 
-  // Server-cached credential values. Fields load in parallel via
-  // Promise.all so a 3-field provider takes one WS round-trip instead
-  // of six sequential ones.
-  const credentialValuesQuery = useQuery<CredentialFormValues, Error>({
+  // Server-cached credential values. Single RPC per field consolidates
+  // the previous hasStoredKey + getStoredApiKey pair (both went to
+  // ``get_stored_api_key`` anyway). The handler returns
+  // ``{hasKey, apiKey?}``; ``apiKey`` may carry the catalogue's
+  // ``default`` (e.g. local-LLM canonical Base URL) even when
+  // ``hasKey: false``, so the form renders a sensible value on a fresh
+  // install. ``hadStored`` tracks the real server state separately so
+  // the validated/connected badge stays honest — pre-filled defaults
+  // do NOT flip it to true.
+  const credentialValuesQuery = useQuery<{ values: CredentialFormValues; hadStored: boolean }, Error>({
     queryKey: queryKeys.credentialValues.byProvider(config.id).queryKey,
     queryFn: async () => {
-      if (!config.fields) return EMPTY_VALUES;
-      const entries = await Promise.all(
+      if (!config.fields) return { values: EMPTY_VALUES, hadStored: false };
+      const results = await Promise.all(
         config.fields.map(async (field) => {
           const storeKey = field.key === 'apiKey' ? config.id : field.key;
-          const has = await hasStoredKey(storeKey);
-          if (!has) return null;
-          const val = await getStoredApiKey(storeKey);
-          return val ? ([field.key, val] as const) : null;
+          const r = await sendRequest<{ hasKey: boolean; apiKey?: string }>(
+            'get_stored_api_key', { provider: storeKey },
+          );
+          return { key: field.key, hasKey: r.hasKey, apiKey: r.apiKey };
         }),
       );
       const next: CredentialFormValues = {};
-      for (const entry of entries) {
-        if (entry) next[entry[0]] = entry[1];
+      let hadStored = false;
+      for (const r of results) {
+        if (r.apiKey) next[r.key] = r.apiKey;
+        if (r.hasKey) hadStored = true;
       }
-      return next;
+      return { values: next, hadStored };
     },
     enabled: visible && isConnected && !!config.fields,
     staleTime: STALE_TIME.FOREVER,
   });
 
-  const values = credentialValuesQuery.data ?? EMPTY_VALUES;
+  const values = credentialValuesQuery.data?.values ?? EMPTY_VALUES;
 
   // Imperative form-like API kept for compat with existing panel code.
   // Writes go through setQueryData on the provider's query so the cache
@@ -118,8 +126,12 @@ export function useCredentialPanel(config: ProviderConfig, visible: boolean) {
   );
 
   // Sync stored from query on first load — if the backend already has
-  // a key, mark stored=true so the badge renders without a validate click.
-  const queriedStored = Object.keys(values).length > 0;
+  // mark stored=true based on the real server state (`hadStored`),
+  // NOT on whether the form happens to be populated. Pre-filled
+  // catalogue defaults (e.g. local-LLM Base URL) populate the form
+  // without being saved, so deriving from `Object.keys(values).length`
+  // would prematurely show the connected badge.
+  const queriedStored = credentialValuesQuery.data?.hadStored ?? false;
   if (queriedStored && !stored) setStored(true);
 
   // Generic action executor — replaces 19 duplicate handler functions.

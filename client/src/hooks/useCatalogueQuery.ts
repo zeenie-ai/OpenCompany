@@ -45,6 +45,12 @@ export interface ServerFieldDef {
   type?: 'string' | 'password';
   secret?: boolean;
   placeholder?: string;
+  /** Initial value pre-populated when the user has nothing stored yet
+      (e.g. canonical local-LLM Base URL — http://localhost:1234/v1).
+      Distinct from `placeholder`: placeholder is a UI ghost-text hint;
+      default actually fills the field so the user can click Fetch
+      without typing. */
+  default?: string;
   required?: boolean;
 }
 

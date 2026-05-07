@@ -1261,6 +1261,33 @@ async def handle_validate_api_key(data: Dict[str, Any], websocket: WebSocket) ->
     return await cred_cls.validate(normalized)
 
 
+def _lookup_credential_default(storage_key: str) -> Optional[str]:
+    """Look up a field's catalogue ``default`` for the given storage key.
+
+    Storage keys are either the provider id (``"openai"`` for cloud
+    providers whose field key is ``apiKey``) or the field key itself
+    (``"lmstudio_proxy"`` etc. for local-LLM providers). Both shapes
+    map back to a credential_providers.json field; this helper finds
+    the one and returns its ``default`` value if declared. Used by
+    ``handle_get_stored_api_key`` to surface canonical defaults
+    (e.g. local-LLM Base URL ``http://localhost:1234/v1``) to the
+    frontend without requiring per-panel pre-fill logic.
+    """
+    from services.credential_registry import get_credential_registry
+    registry = get_credential_registry()
+    for provider in registry.get_all_providers():
+        provider_id = provider.get("id") or provider.get("name", "").lower()
+        for field in (provider.get("fields") or []):
+            field_key = field.get("key")
+            if not field_key:
+                continue
+            field_storage_key = provider_id if field_key == "apiKey" else field_key
+            if field_storage_key == storage_key:
+                default = field.get("default")
+                return default if default else None
+    return None
+
+
 @ws_handler("provider")
 async def handle_get_stored_api_key(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Get stored API key for a provider.
@@ -1269,11 +1296,21 @@ async def handle_get_stored_api_key(data: Dict[str, Any], websocket: WebSocket) 
     ``update_api_key_status`` broadcast shape — every WS payload the
     frontend receives for API key state uses the same convention, so no
     per-field adapter is needed on the TypeScript side.
+
+    When nothing is stored AND the catalogue declares a ``default``
+    for this field (e.g. local-LLM canonical Base URL), the default
+    value is returned in ``apiKey`` with ``hasKey: false``. The
+    frontend renders the value but tracks ``stored`` separately via
+    ``hasKey`` so the validated/connected badge stays honest. Lets
+    users click Fetch on a fresh install without retyping the URL.
     """
     auth_service = container.auth_service()
     provider = data["provider"].lower()
     api_key = await auth_service.get_api_key(provider, data.get("session_id", "default"))
     if not api_key:
+        default = _lookup_credential_default(provider)
+        if default is not None:
+            return {"provider": provider, "hasKey": False, "apiKey": default}
         return {"provider": provider, "hasKey": False}
     models = await auth_service.get_stored_models(provider, data.get("session_id", "default"))
     return {"provider": provider, "hasKey": True, "apiKey": api_key, "models": models, "timestamp": time.time()}
