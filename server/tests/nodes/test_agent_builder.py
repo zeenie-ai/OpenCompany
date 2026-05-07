@@ -91,15 +91,25 @@ class TestRegistration:
         params = ab.AgentBuilderParams()
         assert params.operation == "inspect_canvas"
 
-    def test_usable_as_tool(self):
-        assert ab.AgentBuilderNode.usable_as_tool is True
+    def test_is_tool_node(self):
+        """agentBuilder is a tool-only plugin; subclasses ToolNode (not
+        ActionNode + usable_as_tool=True). The ToolNode base IS the
+        contract for nodes that exist solely to be invoked by an LLM
+        through an agent's input-tools handle."""
+        from services.plugin import ToolNode
+        assert issubclass(ab.AgentBuilderNode, ToolNode)
 
-    def test_handle_topology_is_standard_tool_output(self):
+    def test_handle_topology_matches_canonical_tool_shape(self):
+        """Canonical tool node: input-main left + output-tool top role=tools.
+        The output-tool shape is what wires into an agent's input-tools handle."""
         handles = list(ab.AgentBuilderNode.handles)
-        assert len(handles) == 1
-        assert handles[0]["name"] == "output-main"
-        assert handles[0]["kind"] == "output"
-        assert handles[0]["position"] == "right"
+        assert len(handles) == 2
+        names = {h["name"] for h in handles}
+        assert names == {"input-main", "output-tool"}
+        out = next(h for h in handles if h["name"] == "output-tool")
+        assert out["kind"] == "output"
+        assert out["position"] == "top"
+        assert out["role"] == "tools"
 
     def test_no_provided_tools_dict(self):
         """Sanity check: the tribal PROVIDED_TOOLS attr from the original

@@ -39,7 +39,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from services import workflow_ops
 from services.node_registry import registered_node_classes
-from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
+from services.plugin import NodeContext, Operation, TaskQueue, ToolNode
 
 
 logger = logging.getLogger(__name__)
@@ -251,7 +251,7 @@ class AgentBuilderOutput(BaseModel):
 # ----------------------------------------------------------------------------
 
 
-class AgentBuilderNode(ActionNode):
+class AgentBuilderNode(ToolNode):
     type = _AGENT_BUILDER_TYPE
     display_name = "Agent Builder"
     subtitle = "Runtime canvas-mutation tool"
@@ -264,12 +264,14 @@ class AgentBuilderNode(ActionNode):
     )
     component_kind = "tool"
     handles = (
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Tool", "role": "main"},
+        {"name": "input-main", "kind": "input", "position": "left",
+         "label": "Input", "role": "main"},
+        {"name": "output-tool", "kind": "output", "position": "top",
+         "label": "Tool", "role": "tools"},
     )
+    ui_hints = {"isToolPanel": True, "hideRunButton": True}
     annotations = {"destructive": False, "readonly": False, "open_world": True}
     task_queue = TaskQueue.DEFAULT
-    usable_as_tool = True
 
     Params = AgentBuilderParams
     Output = AgentBuilderOutput
