@@ -5,6 +5,7 @@ import { NodeData, NodeStyle } from '../types/NodeTypes';
 import { useAppStore } from '../store/useAppStore';
 import { useAppTheme } from '../hooks/useAppTheme';
 import { PlayCircle } from 'lucide-react';
+import { resolveNodeDescription } from '../lib/nodeSpec';
 import EditableNodeLabel from './ui/EditableNodeLabel';
 
 const StartNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectable, selected }) => {
@@ -14,6 +15,11 @@ const StartNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectabl
   const theme = useAppTheme();
 
   const defaultLabel = 'Start';
+
+  // Definition-driven color (Wave 26.A): backend NodeSpec is SSOT for
+  // node color. Falls back to dracula cyan if the spec hasn't loaded.
+  const definition = resolveNodeDescription(type || '');
+  const nodeColor = definition?.defaults?.color || theme.dracula.cyan;
 
   const handleLabelChange = useCallback(
     (newLabel: string) => updateNodeData(id, { label: newLabel }),
@@ -30,15 +36,15 @@ const StartNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectabl
     setSelectedNode({ id, type, data, position: { x: 0, y: 0 } });
   };
 
-  const nodeColor = theme.dracula.cyan; // Cyan color for start node (neutral "begin" color)
-
   return (
-    // `node` + `selected` co-classes activate per-theme node decorations.
-    // Visual styling (background, border, radius, shadow) lives in
-    // base.css `.node { ... }` defaults + per-theme `.node` overrides
-    // and reads `var(--node-color)` for the per-definition accent.
+    // `sq-node` + `selected` co-classes activate per-theme square-node
+    // decorations (Renaissance wax seal, Steampunk rivets, Edo hanko
+    // seal, Surveillance REC LED, Cyber neon underglow). Visual styling
+    // (background, border, radius, shadow) lives in base.css
+    // `.sq-node-box { ... }` defaults + per-theme overrides and reads
+    // `var(--node-color)` for the per-definition accent.
     <div
-      className={`node ${selected ? 'selected' : ''}`}
+      className={`sq-node ${selected ? 'selected' : ''}`}
       style={{
         '--node-color': nodeColor,
         position: 'relative',
@@ -52,6 +58,7 @@ const StartNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectabl
     >
       {/* Main Square Node — layout only; visuals live in CSS. */}
       <div
+        className="sq-node-box"
         style={{
           position: 'relative',
           width: '60px',
@@ -62,56 +69,45 @@ const StartNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectabl
           color: theme.colors.text,
           fontSize: '28px',
           fontWeight: '600',
-          transition: 'all 0.2s ease',
         }}
       >
-        {/* Play Icon */}
+        {/* Play Icon (color reads from definition-driven nodeColor) */}
         <PlayCircle className="h-7 w-7" style={{ color: nodeColor }} />
 
-        {/* Parameters Button */}
+        {/* Parameters Button — CSS owns bg/border via .sq-node-gear */}
         <button
           onClick={handleParametersClick}
+          className="sq-node-gear"
           style={{
             position: 'absolute',
             top: '-8px',
             right: '-8px',
             width: '16px',
             height: '16px',
-            borderRadius: '3px',
-            backgroundColor: theme.isDarkMode ? theme.colors.backgroundAlt : '#ffffff',
-            border: `1px solid ${theme.isDarkMode ? theme.colors.border : `${nodeColor}40`}`,
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             fontSize: '8px',
-            color: theme.colors.textSecondary,
             fontWeight: '400',
-            transition: 'all 0.2s ease',
             zIndex: 30,
-            boxShadow: theme.isDarkMode
-              ? `0 1px 3px ${theme.colors.shadow}`
-              : `0 1px 4px ${nodeColor}20`
           }}
           title="Edit Parameters"
         >
-          {'\u2699\uFE0F'}
+          {'⚙️'}
         </button>
 
-        {/* Status Indicator - always green for start */}
+        {/* Status Indicator — Start is always "ready" (success bucket).
+            CSS owns bg color via per-status rule on .sq-node-pip. */}
         <div
+          className="sq-node-pip"
+          data-status="success"
           style={{
             position: 'absolute',
             top: '-4px',
             left: '-4px',
             width: '10px',
             height: '10px',
-            borderRadius: '50%',
-            backgroundColor: nodeColor,
-            border: `2px solid ${theme.isDarkMode ? theme.colors.background : '#ffffff'}`,
-            boxShadow: theme.isDarkMode
-              ? `0 1px 2px ${theme.colors.shadow}`
-              : '0 1px 3px rgba(0,0,0,0.15)',
             zIndex: 30,
           }}
           title="Workflow start point"
@@ -130,12 +126,13 @@ const StartNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectabl
           }}
         />
 
-        {/* Output Handle */}
+        {/* Output Handle — CSS owns bg/border via .sq-node-handle.out */}
         <Handle
           id="output-main"
           type="source"
           position={Position.Right}
           isConnectable={isConnectable}
+          className="sq-node-handle out"
           style={{
             position: 'absolute',
             right: '-6px',
@@ -143,10 +140,7 @@ const StartNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectabl
             transform: 'translateY(-50%)',
             width: '8px',
             height: '8px',
-            backgroundColor: nodeColor,
-            border: `2px solid ${theme.isDarkMode ? theme.colors.background : '#ffffff'}`,
-            borderRadius: '50%',
-            zIndex: 20
+            zIndex: 20,
           }}
           title="Workflow Output"
         />

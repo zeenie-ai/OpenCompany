@@ -100,6 +100,7 @@ const AIAgentNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
     // Cyber neon underglow + corner LED blink, etc.).
     <div
       className={`node node-agent ${selected ? 'selected' : ''}`}
+      data-executing={isExecuting ? '' : undefined}
       style={{
         '--node-color': accentColor,
         position: 'relative',
@@ -135,11 +136,11 @@ const AIAgentNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
             type="target"
             position={Position.Left}
             isConnectable={isConnectable}
+            className="node-handle in"
             style={{
               position: 'absolute', left: '-6px', top: '30%', transform: 'translateY(-50%)',
               width: theme.nodeSize.handle, height: theme.nodeSize.handle,
-              backgroundColor: theme.colors.background,
-              border: `2px solid ${theme.colors.textSecondary}`, borderRadius: '50%',
+              borderRadius: '50%',
             }}
             title="Input"
           />
@@ -149,14 +150,14 @@ const AIAgentNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
       {/* Parameters gear */}
       <button
         onClick={handleParametersClick}
+        className="node-gear"
         style={{
           position: 'absolute', top: theme.spacing.xs, right: theme.spacing.xs,
           width: theme.nodeSize.paramButton, height: theme.nodeSize.paramButton,
-          borderRadius: theme.borderRadius.sm, backgroundColor: theme.colors.backgroundAlt,
-          border: `1px solid ${theme.colors.border}`, cursor: 'pointer',
+          cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: theme.fontSize.xs, color: theme.colors.textSecondary,
-          fontWeight: theme.fontWeight.normal, transition: theme.transitions.fast, zIndex: 20,
+          fontSize: theme.fontSize.xs,
+          fontWeight: theme.fontWeight.normal, zIndex: 20,
         }}
         title="Edit Parameters"
       >⚙️</button>
@@ -168,13 +169,15 @@ const AIAgentNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
       </div>
 
       {/* Title */}
-      <div style={{
+      <div className="node-label" style={{
         fontSize: theme.fontSize.base, fontWeight: theme.fontWeight.semibold,
         color: theme.colors.text, lineHeight: '1.2', marginBottom: theme.spacing.xs,
       }}>{title}</div>
 
-      {/* Subtitle */}
-      <div style={{
+      {/* Subtitle. Phase color is JS-driven (PHASE_CONFIG[phase].color) so
+          we keep the inline color while still exposing `node-sub` so themes
+          can style the resting subtitle. */}
+      <div className="node-sub" style={{
         fontSize: theme.fontSize.xs, fontWeight: theme.fontWeight.normal,
         color: isExecuting && phaseConfig ? phaseConfig.color : theme.colors.focus,
         lineHeight: '1.2', marginBottom: theme.spacing.lg, transition: 'color 0.3s ease',
@@ -194,11 +197,11 @@ const AIAgentNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
             type="target"
             position={REACT_POSITION[h.position]}
             isConnectable={isConnectable}
+            className="node-handle in"
             style={{
               position: 'absolute', left: '-6px', top: h.offset || '50%',
               width: theme.nodeSize.handle, height: theme.nodeSize.handle,
-              backgroundColor: theme.colors.background,
-              border: `2px solid ${theme.colors.textSecondary}`, borderRadius: '0',
+              borderRadius: '0',
               transform: 'translateY(-50%) rotate(45deg)',
             }}
             title={h.label || h.name}
@@ -223,11 +226,11 @@ const AIAgentNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
           type="target"
           position={Position.Bottom}
           isConnectable={isConnectable}
+          className="node-handle in"
           style={{
             position: 'absolute', bottom: '-6px', left: h.offset || '50%',
             width: theme.nodeSize.handle, height: theme.nodeSize.handle,
-            backgroundColor: theme.colors.background,
-            border: `2px solid ${theme.colors.textSecondary}`, borderRadius: '0',
+            borderRadius: '0',
             transform: 'translateX(-50%) rotate(45deg)',
           }}
           title={h.label || h.name}
@@ -241,11 +244,10 @@ const AIAgentNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
           type="source"
           position={Position.Top}
           isConnectable={isConnectable}
+          className="node-handle out"
           style={{
             position: 'absolute', top: '-6px', left: '50%', transform: 'translateX(-50%)',
             width: theme.nodeSize.handle, height: theme.nodeSize.handle,
-            backgroundColor: accentColor,
-            border: `2px solid ${theme.isDarkMode ? theme.colors.background : '#ffffff'}`,
             borderRadius: '50%', zIndex: 20,
           }}
           title={topOutput.label || topOutput.name}
@@ -270,12 +272,11 @@ const AIAgentNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
             type="source"
             position={Position.Right}
             isConnectable={isConnectable}
+            className="node-handle out"
             style={{
               position: 'absolute', right: '-6px', top: h.offset || '50%',
               transform: 'translateY(-50%)',
               width: theme.nodeSize.handle, height: theme.nodeSize.handle,
-              backgroundColor: accentColor,
-              border: `2px solid ${theme.isDarkMode ? theme.colors.background : '#ffffff'}`,
               borderRadius: '50%', zIndex: 20,
             }}
             title={h.label || h.name}
@@ -292,11 +293,11 @@ const AIAgentNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
           type="source"
           position={Position.Right}
           isConnectable={isConnectable}
+          className="node-handle out"
           style={{
             position: 'absolute', right: '-6px', top: '50%', transform: 'translateY(-50%)',
             width: theme.nodeSize.handle, height: theme.nodeSize.handle,
-            backgroundColor: theme.colors.background,
-            border: `2px solid ${theme.colors.textSecondary}`, borderRadius: '50%',
+            borderRadius: '50%',
           }}
           title="Main Output"
         />

@@ -98,7 +98,11 @@ const EditableNodeLabel: React.FC<EditableNodeLabelProps> = ({
         onBlur={handleSave}
         onClick={(e) => e.stopPropagation()}
         className={cn(
-          'mt-2 h-auto max-w-[120px] border-accent px-1 py-0.5 text-center text-xs font-medium',
+          // Both `sq-node-label` and `node-label` co-classes always emit so
+          // per-theme CSS rules fire for whichever parent topology this
+          // label sits inside (`.sq-node` for square, `.node` for
+          // rectangular). Wave 26.B.
+          'sq-node-label node-label mt-2 h-auto max-w-[120px] border-accent px-1 py-0.5 text-center text-xs font-medium',
           className
         )}
       />
@@ -110,7 +114,11 @@ const EditableNodeLabel: React.FC<EditableNodeLabelProps> = ({
       onDoubleClick={onActivate}
       title="Double-click to rename"
       className={cn(
-        'mt-2 max-w-[120px] cursor-text text-center text-xs leading-tight font-medium text-foreground',
+        // Both `sq-node-label` and `node-label` co-classes always emit so
+        // per-theme CSS rules fire for whichever parent topology this
+        // label sits inside (`.sq-node` for square, `.node` for
+        // rectangular). Wave 26.B.
+        'sq-node-label node-label mt-2 max-w-[120px] cursor-text text-center text-xs leading-tight font-medium text-foreground',
         className
       )}
     >

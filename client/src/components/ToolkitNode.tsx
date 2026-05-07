@@ -69,21 +69,25 @@ const ToolkitNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
   const iconSpec = useNodeSpec(type);
   const iconRef = (iconSpec?.icon as string | undefined) ?? (definition?.icon as string | undefined);
 
-  // Get status indicator color
-  const getStatusIndicatorColor = () => {
-    if (isExecuting) return theme.dracula.cyan;
-    if (executionStatus === 'success') return theme.dracula.green;
-    if (executionStatus === 'error') return theme.dracula.red;
-    return theme.dracula.green; // Toolkit is always ready
-  };
+  // Pip status bucket — CSS owns the visual color via per-status rules.
+  // Toolkit's idle state always reads as "success" (it's always ready).
+  const pipStatus = (() => {
+    if (isExecuting) return 'executing';
+    if (executionStatus === 'success') return 'success';
+    if (executionStatus === 'error') return 'error';
+    return 'success';
+  })();
 
   return (
-    // Visual styling (background, border, radius, shadow, executing pulse)
-    // lives in base.css `.node` defaults + per-theme overrides; reads
-    // `var(--node-color)` for the per-definition accent. The
-    // `react-flow__node.executing .node` rule binds the pulse.
+    // `sq-node` + `selected` co-classes activate per-theme square-node
+    // decorations (Renaissance wax seal, Steampunk rivets, Edo hanko
+    // seal, Surveillance REC LED, Cyber neon underglow). Visuals
+    // (background, border, radius, shadow, executing pulse) live in
+    // base.css `.sq-node-box` defaults + per-theme overrides; reads
+    // `var(--node-color)` for the per-definition accent.
     <div
-      className={`node ${selected ? 'selected' : ''}`}
+      className={`sq-node ${selected ? 'selected' : ''}`}
+      data-executing={isExecuting ? '' : undefined}
       style={{
         '--node-color': nodeColor,
         position: 'relative',
@@ -98,6 +102,7 @@ const ToolkitNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
       {/* Main Node - rectangular for toolkit, square for skills.
           Layout only; visuals live in CSS. */}
       <div
+        className="sq-node-box"
         style={{
           position: 'relative',
           width: isToolkitNode ? theme.nodeSize.toolkitWidth : theme.nodeSize.square,
@@ -108,62 +113,46 @@ const ToolkitNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
           color: theme.colors.text,
           fontSize: theme.nodeSize.squareIcon,
           fontWeight: '600',
-          transition: 'all 0.2s ease',
         }}
       >
         {/* Service Icon */}
         <NodeIcon icon={iconRef} className="h-7 w-7 text-3xl" />
 
-        {/* Parameters Button */}
+        {/* Parameters Button — CSS owns bg/border via .sq-node-gear */}
         <button
           onClick={handleParametersClick}
+          className="sq-node-gear"
           style={{
             position: 'absolute',
             top: '-8px',
             right: '-8px',
             width: theme.nodeSize.paramButton,
             height: theme.nodeSize.paramButton,
-            borderRadius: theme.borderRadius.sm,
-            backgroundColor: theme.isDarkMode ? theme.colors.backgroundAlt : '#ffffff',
-            border: `1px solid ${theme.isDarkMode ? theme.colors.border : '#d1d5db'}`,
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             fontSize: theme.fontSize.xs,
-            color: theme.colors.textSecondary,
             fontWeight: '400',
             transition: theme.transitions.fast,
             zIndex: 30,
-            boxShadow: theme.isDarkMode
-              ? `0 1px 3px ${theme.colors.shadow}`
-              : '0 1px 4px rgba(0,0,0,0.1)'
           }}
           title="Edit Toolkit Parameters"
         >
           ⚙️
         </button>
 
-        {/* Status Indicator */}
+        {/* Status Indicator — CSS owns bg/animation via per-status rules. */}
         <div
+          className="sq-node-pip"
+          data-status={pipStatus}
           style={{
             position: 'absolute',
             top: '-4px',
             left: '-4px',
             width: theme.nodeSize.statusIndicator,
             height: theme.nodeSize.statusIndicator,
-            borderRadius: '50%',
-            backgroundColor: getStatusIndicatorColor(),
-            border: `2px solid ${theme.isDarkMode ? theme.colors.background : '#ffffff'}`,
-            boxShadow: isExecuting
-              ? theme.isDarkMode
-                ? `0 0 6px ${theme.dracula.cyan}80`
-                : '0 0 4px rgba(37, 99, 235, 0.5)'
-              : theme.isDarkMode
-                ? `0 1px 2px ${theme.colors.shadow}`
-                : '0 1px 3px rgba(0,0,0,0.15)',
             zIndex: 30,
-            animation: isExecuting ? 'pulse 1s ease-in-out infinite' : 'none',
           }}
           title={isExecuting ? 'Executing...' : 'Toolkit ready'}
         />
@@ -174,6 +163,7 @@ const ToolkitNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
           type="source"
           position={Position.Top}
           isConnectable={isConnectable}
+          className="sq-node-handle out"
           style={{
             position: 'absolute',
             top: '-6px',
@@ -181,10 +171,7 @@ const ToolkitNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
             transform: 'translateX(-50%)',
             width: theme.nodeSize.handle,
             height: theme.nodeSize.handle,
-            backgroundColor: nodeColor,
-            border: `2px solid ${theme.isDarkMode ? theme.colors.background : '#ffffff'}`,
-            borderRadius: '50%',
-            zIndex: 20
+            zIndex: 20,
           }}
           title={isToolkitNode ? "Connect to AI Agent's tool input" : "Connect to agent's skill input"}
         />
@@ -196,6 +183,7 @@ const ToolkitNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
             type="target"
             position={Position.Bottom}
             isConnectable={isConnectable}
+            className="sq-node-handle in"
             style={{
               position: 'absolute',
               bottom: '-6px',
@@ -203,16 +191,13 @@ const ToolkitNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
               transform: 'translateX(-50%)',
               width: theme.nodeSize.handle,
               height: theme.nodeSize.handle,
-              backgroundColor: theme.isDarkMode ? theme.colors.background : '#ffffff',
-              border: `2px solid ${theme.isDarkMode ? theme.colors.textSecondary : '#6b7280'}`,
-              borderRadius: '50%',
-              zIndex: 20
+              zIndex: 20,
             }}
             title="Connect Android service nodes"
           />
         )}
 
-        {/* Output Data Indicator */}
+        {/* Output Data Indicator (bespoke; keeps inline style) */}
         {executionStatus === 'success' && nodeStatus?.data && (
           <div
             style={{

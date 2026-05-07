@@ -367,9 +367,13 @@
   clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
   transition: none;
 }
-:root[data-theme="cyber"] .node-trigger { border-color: var(--neon-green); color: var(--neon-green); box-shadow: 0 0 0 1px var(--bg-app), 0 0 16px rgba(38, 217, 122, 0.5), inset 0 0 12px rgba(38, 217, 122, 0.1); }
+/* Wave 26.B topology: TriggerNode is now `.sq-node.node-trigger` (square),
+   AIAgentNode remains `.node.node-agent` (rectangular). The `.node-trigger`
+   rule fires on legacy rectangular trigger usage AND on the new
+   `.sq-node.node-trigger .sq-node-box` for the migrated TriggerNode. */
+:root[data-theme="cyber"] .node-trigger,
+:root[data-theme="cyber"] .sq-node.node-trigger .sq-node-box { border-color: var(--neon-green); color: var(--neon-green); box-shadow: 0 0 0 1px var(--bg-app), 0 0 16px rgba(38, 217, 122, 0.5), inset 0 0 12px rgba(38, 217, 122, 0.1); }
 :root[data-theme="cyber"] .node-agent   { border-color: var(--neon-magenta); color: var(--neon-magenta); box-shadow: 0 0 0 1px var(--bg-app), 0 0 16px rgba(245, 30, 182, 0.6), inset 0 0 12px rgba(245, 30, 182, 0.15); }
-:root[data-theme="cyber"] .node-output  { border-color: var(--neon-yellow); color: var(--neon-yellow); box-shadow: 0 0 0 1px var(--bg-app), 0 0 16px rgba(255, 208, 40, 0.4), inset 0 0 12px rgba(255, 208, 40, 0.1); }
 
 /* corner LED */
 :root[data-theme="cyber"] .node::before {

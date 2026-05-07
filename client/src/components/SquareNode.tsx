@@ -159,46 +159,39 @@ const SquareNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectab
     setSelectedNode({ id, type, data, position: { x: 0, y: 0 } });
   };
 
-  // Get status indicator color based on execution state
-  const getStatusIndicatorColor = () => {
-    // For executing or waiting state, show blue/cyan
-    if (executionStatus === 'executing' || executionStatus === 'waiting') {
-      return theme.dracula.cyan;
+  // Bucket execution + connection state into one of five status tokens
+  // consumed by `.sq-node-pip[data-status="..."]` in base.css. Per-theme
+  // CSS overrides these without fighting inline `backgroundColor`.
+  // Buckets: 'idle' | 'executing' | 'waiting' | 'success' | 'error'.
+  // Matches TriggerNode/StartNode/ToolkitNode contract (Wave 26.B).
+  const pipStatus: 'idle' | 'executing' | 'waiting' | 'success' | 'error' = (() => {
+    if (executionStatus === 'executing' || executionStatus === 'waiting' || isGlowing) {
+      return 'executing';
     }
-    if (executionStatus === 'success') {
-      return theme.dracula.green;
-    }
-    if (executionStatus === 'error') {
-      return theme.dracula.red;
-    }
+    if (executionStatus === 'success') return 'success';
+    if (executionStatus === 'error') return 'error';
 
-    // Idle state - use Android or configuration status
+    // Idle bucket — derive from connection / configuration signals.
     if (isAndroidNode) {
-      return isAndroidConnected ? theme.dracula.green : theme.dracula.red;
+      return isAndroidConnected ? 'success' : 'error';
     }
-
-    // WhatsApp nodes - use WebSocket connection status
     if (isWhatsAppNode) {
-      if (whatsappStatus.connected) return theme.dracula.green;
-      if (whatsappStatus.pairing) return theme.dracula.orange;
-      return theme.dracula.red;
+      if (whatsappStatus.connected) return 'success';
+      if (whatsappStatus.pairing) return 'waiting';
+      return 'error';
     }
-
-    // Google Maps nodes - use WebSocket API key validation status
     if (isGoogleMapsNode && googleMapsKeyStatus) {
-      return googleMapsKeyStatus.valid ? theme.dracula.green : theme.dracula.red;
+      return googleMapsKeyStatus.valid ? 'success' : 'error';
     }
-
-    // AI Model nodes - "is stored" from catalogue (hasApiKey via
-    // useProviderStored above), "is validated" from apiKeyStatuses.
     if (isAIModelNode) {
-      if (aiKeyStatus?.valid && hasApiKey) return theme.dracula.green;
-      if (hasApiKey) return theme.dracula.orange;
-      return theme.dracula.red;
+      if (aiKeyStatus?.valid && hasApiKey) return 'success';
+      if (hasApiKey) return 'waiting';
+      return 'error';
     }
-
-    return isConfigured ? theme.dracula.green : hasApiKey ? theme.dracula.orange : theme.dracula.red;
-  };
+    if (isConfigured) return 'success';
+    if (hasApiKey) return 'waiting';
+    return 'idle';
+  })();
 
   const getStatusTitle = () => {
     switch (executionStatus) {
@@ -320,7 +313,9 @@ const SquareNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectab
         {/* Service Icon */}
         <NodeIcon icon={iconRef} className="h-7 w-7 text-3xl" />
 
-        {/* Parameters Button */}
+        {/* Parameters Button — visual styles (background, border, hover)
+            owned by `.sq-node-gear` in base.css + per-theme overrides.
+            Inline keeps positioning + sizing only. */}
         <button
           onClick={handleParametersClick}
           style={{
@@ -329,13 +324,7 @@ const SquareNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectab
             right: '-8px',
             width: theme.nodeSize.paramButton,
             height: theme.nodeSize.paramButton,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
             fontSize: theme.fontSize.xs,
-            fontWeight: '400',
-            transition: theme.transitions.fast,
             zIndex: 30,
           }}
           title="Edit Service Parameters"
@@ -344,18 +333,21 @@ const SquareNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectab
           ⚙️
         </button>
 
-        {/* Configuration/Execution Status Indicator */}
+        {/* Configuration/Execution Status Indicator.
+            Background color is owned by `.sq-node-pip[data-status="..."]`
+            in base.css (and per-theme overrides). We pass only the
+            execution/connection bucket here — no inline color. */}
         <div
           className="sq-node-pip"
+          data-status={pipStatus}
           style={{
-            '--node-color': getStatusIndicatorColor(),
             position: 'absolute',
             top: '-4px',
             left: '-4px',
             width: theme.nodeSize.statusIndicator,
             height: theme.nodeSize.statusIndicator,
             zIndex: 30,
-          } as NodeStyle}
+          }}
           title={getStatusTitle()}
         />
 
@@ -410,7 +402,10 @@ const SquareNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectab
             `nodeColor` carries the spec's brand color (Android green for
             Android services, dracula accents elsewhere). The tooltip
             reads from the spec's top-position output handle when one is
-            declared there; otherwise falls back to a generic label. */}
+            declared there; otherwise falls back to a generic label.
+            Visual styles (background, border, radius) owned by
+            `.sq-node-handle.out` in base.css + per-theme overrides — we
+            pass `--node-color` for the CSS var only. */}
         {isToolCapable && (() => {
           const spec = getCachedNodeSpec(type || '');
           const topOut = spec?.handles?.find(h => h.kind === 'output' && h.position === 'top');
@@ -421,18 +416,17 @@ const SquareNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectab
               type="source"
               position={Position.Top}
               isConnectable={isConnectable}
+              className="sq-node-handle out"
               style={{
+                '--node-color': nodeColor,
                 position: 'absolute',
                 top: '-6px',
                 left: '50%',
                 transform: 'translateX(-50%)',
                 width: theme.nodeSize.handle,
                 height: theme.nodeSize.handle,
-                backgroundColor: nodeColor,
-                border: `2px solid ${theme.isDarkMode ? theme.colors.background : '#ffffff'}`,
-                borderRadius: '50%',
                 zIndex: 20,
-              }}
+              } as NodeStyle}
               title={tooltip}
             />
           );

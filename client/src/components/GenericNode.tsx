@@ -98,19 +98,10 @@ const GenericNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
   const nodeInputs = getNodeInputs();
   const nodeOutputs = getNodeOutputs();
 
-  // Helper functions for color management
+  // Node accent color — feeds the `--node-color` CSS custom property
+  // on the wrapper. Handle borders/backgrounds are now owned by
+  // `.node-handle` in base.css + per-theme overrides (Wave 26.C).
   const getNodeColor = () => definition.defaults.color || '#9E9E9E';
-  const getBorderColor = () => {
-    const color = getNodeColor();
-    if (color.startsWith('#')) {
-      const hex = color.substring(1);
-      const r = Math.max(0, parseInt(hex.substring(0, 2), 16) - 40);
-      const g = Math.max(0, parseInt(hex.substring(2, 4), 16) - 40);
-      const b = Math.max(0, parseInt(hex.substring(4, 6), 16) - 40);
-      return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-    }
-    return color;
-  };
 
   return (
     // `node` + `selected` co-classes activate per-theme generic-node
@@ -153,12 +144,14 @@ const GenericNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
           <span style={{ fontSize: '24px', opacity: 0.8 }}>||</span>
         </div>
       )}
-      {/* Input Handles - Multiple handles based on node definition */}
+      {/* Input Handles - Multiple handles based on node definition.
+          Visual styling (background, border) owned by `.node-handle.in`
+          in base.css + per-theme overrides. Inline keeps layout only. */}
       {nodeInputs.map((input, index) => {
         const totalInputs = nodeInputs.length;
-        const topPosition = totalInputs === 1 ? '50%' : 
+        const topPosition = totalInputs === 1 ? '50%' :
           `${20 + (60 * index) / Math.max(totalInputs - 1, 1)}%`;
-        
+
         return (
           <Handle
             key={`input-${input.name}-${index}`}
@@ -166,6 +159,7 @@ const GenericNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
             type="target"
             position={Position.Left}
             isConnectable={isConnectable}
+            className="node-handle in"
             style={{
               position: 'absolute',
               left: '-6px',
@@ -173,20 +167,20 @@ const GenericNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
               transform: 'translateY(-50%)',
               width: '12px',
               height: '12px',
-              backgroundColor: 'rgba(255,255,255,0.9)',
-              border: `2px solid ${getBorderColor()}`,
               borderRadius: '50%'
             }}
             title={`${input.displayName}: ${input.description}`}
           />
         );
       })}
-      
 
-      {/* Parameters Button */}
+
+      {/* Parameters Button — visual styles (background, border, hover)
+          owned by `.node-gear` in base.css + per-theme overrides.
+          Inline keeps positioning + label color only. */}
       <button
         onClick={handleParametersClick}
-        className="absolute top-2 right-2 z-20 flex h-5 w-5 cursor-pointer items-center justify-center rounded-full border-0 bg-white/95 text-[10px] font-semibold shadow-sm transition-all duration-200 hover:scale-115 hover:bg-white hover:shadow-md"
+        className="node-gear absolute top-2 right-2 z-20 flex h-5 w-5 cursor-pointer items-center justify-center rounded-full text-[10px] font-semibold transition-all duration-200 hover:scale-115"
         style={{ color: getNodeColor() }}
         title="Edit Parameters"
       >
@@ -217,12 +211,13 @@ const GenericNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
       </div>
 
       
-      {/* Output Handles - Multiple handles based on node definition */}
+      {/* Output Handles - Multiple handles based on node definition.
+          Visual styling owned by `.node-handle.out` in base.css. */}
       {nodeOutputs.map((output, index) => {
         const totalOutputs = nodeOutputs.length;
-        const topPosition = totalOutputs === 1 ? '50%' : 
+        const topPosition = totalOutputs === 1 ? '50%' :
           `${20 + (60 * index) / Math.max(totalOutputs - 1, 1)}%`;
-        
+
         return (
           <Handle
             key={`output-${output.name}-${index}`}
@@ -230,6 +225,7 @@ const GenericNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
             type="source"
             position={Position.Right}
             isConnectable={isConnectable}
+            className="node-handle out"
             style={{
               position: 'absolute',
               right: '-6px',
@@ -237,8 +233,6 @@ const GenericNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
               transform: 'translateY(-50%)',
               width: '12px',
               height: '12px',
-              backgroundColor: 'rgba(255,255,255,0.9)',
-              border: `2px solid ${getBorderColor()}`,
               borderRadius: '50%'
             }}
             title={`${output.displayName}: ${output.description}`}

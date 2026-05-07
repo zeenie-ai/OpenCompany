@@ -67,29 +67,21 @@ const TriggerNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
     setSelectedNode({ id, type, data, position: { x: 0, y: 0 } });
   };
 
-  // Get status indicator color based on execution state
-  const getStatusIndicatorColor = () => {
-    // Combined executing/waiting state - show purple with glow
-    if (isExecuting) {
-      return theme.dracula.purple;
-    }
-    if (executionStatus === 'success') {
-      return theme.dracula.green;
-    }
-    if (executionStatus === 'error') {
-      return theme.dracula.red;
-    }
-
-    // WhatsApp trigger - use connection status when idle
+  // Compute pip status bucket for `data-status` attribute. CSS owns the
+  // visual color via per-status rules in base.css and per-theme overrides.
+  // For WhatsApp triggers in idle state, fold connection state into the
+  // bucket: connected -> success, pairing -> waiting, otherwise -> error.
+  const pipStatus = (() => {
+    if (executionStatus === 'executing' || executionStatus === 'waiting') return 'executing';
+    if (executionStatus === 'success') return 'success';
+    if (executionStatus === 'error') return 'error';
     if (isWhatsAppTrigger) {
-      if (whatsappStatus.connected) return theme.dracula.green;
-      if (whatsappStatus.pairing) return theme.dracula.orange;
-      return theme.dracula.red;
+      if (whatsappStatus.connected) return 'success';
+      if (whatsappStatus.pairing) return 'waiting';
+      return 'error';
     }
-
-    // Idle state - show configured status
-    return isConfigured ? theme.dracula.green : theme.dracula.orange;
-  };
+    return isConfigured ? 'success' : 'idle';
+  })();
 
   const getStatusTitle = () => {
     switch (executionStatus) {
@@ -122,10 +114,14 @@ const TriggerNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
   const nodeColor = definition?.defaults?.color || '#f59e0b';
 
   return (
-    // `node` + `node-trigger` + `selected` co-classes activate per-theme
-    // trigger-node decorations.
+    // `sq-node` + `node-trigger` + `selected` co-classes activate per-theme
+    // square-node decorations (Renaissance wax seal, Steampunk rivets, Edo
+    // hanko seal, Surveillance REC LED, Cyber neon underglow). The
+    // `node-trigger` co-class lets per-type theme rules narrow further.
+    // `data-executing` binds the CSS pulse animation owned by base.css.
     <div
-      className={`node node-trigger ${selected ? 'selected' : ''}`}
+      className={`sq-node node-trigger ${selected ? 'selected' : ''}`}
+      data-executing={isExecuting ? '' : undefined}
       style={{
         '--node-color': nodeColor,
         position: 'relative',
@@ -138,10 +134,11 @@ const TriggerNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
       } as NodeStyle}
     >
       {/* Main Trigger Node — visual styling lives in base.css + per-theme
-          CSS targeting `.node.node-trigger`. Inner box keeps only layout
+          CSS targeting `.sq-node-box`. Inner box keeps only layout
           (size, flex), and per-theme decorations like Cyber neon glow,
           Renaissance wax seal, and Steampunk rivets reach the pixels. */}
       <div
+        className="sq-node-box"
         style={{
           position: 'relative',
           width: theme.nodeSize.square,
@@ -152,7 +149,6 @@ const TriggerNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
           color: theme.colors.text,
           fontSize: theme.nodeSize.squareIcon,
           fontWeight: '600',
-          transition: 'all 0.2s ease',
           opacity: isDisabled ? 0.5 : 1,
         }}
       >
@@ -182,62 +178,48 @@ const TriggerNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
         {/* Parameters Button */}
         <button
           onClick={handleParametersClick}
+          className="sq-node-gear"
           style={{
             position: 'absolute',
             top: '-8px',
             right: '-8px',
             width: theme.nodeSize.paramButton,
             height: theme.nodeSize.paramButton,
-            borderRadius: theme.borderRadius.sm,
-            backgroundColor: theme.isDarkMode ? theme.colors.backgroundAlt : '#ffffff',
-            border: `1px solid ${theme.isDarkMode ? theme.colors.border : '#d1d5db'}`,
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             fontSize: theme.fontSize.xs,
-            color: theme.colors.textSecondary,
             fontWeight: '400',
             transition: theme.transitions.fast,
             zIndex: 30,
-            boxShadow: theme.isDarkMode
-              ? `0 1px 3px ${theme.colors.shadow}`
-              : '0 1px 4px rgba(0,0,0,0.1)'
           }}
           title="Configure Trigger"
         >
           ⚙️
         </button>
 
-        {/* Execution Status Indicator */}
-        {/* Status Indicator - glows for both waiting and executing states */}
+        {/* Status Indicator — CSS owns the bg color via per-status rule
+            on `.sq-node-pip[data-status="…"]`. Pulse on executing/waiting
+            also lives in CSS. */}
         <div
+          className="sq-node-pip"
+          data-status={pipStatus}
           style={{
             position: 'absolute',
             top: '-4px',
             left: '-4px',
             width: theme.nodeSize.statusIndicator,
             height: theme.nodeSize.statusIndicator,
-            borderRadius: '50%',
-            backgroundColor: getStatusIndicatorColor(),
-            border: `2px solid ${theme.isDarkMode ? theme.colors.background : '#ffffff'}`,
-            boxShadow: isExecuting
-              ? theme.isDarkMode
-                ? `0 0 6px ${theme.dracula.purple}80`
-                : '0 0 4px rgba(37, 99, 235, 0.5)'
-              : theme.isDarkMode
-                ? `0 1px 2px ${theme.colors.shadow}`
-                : '0 1px 3px rgba(0,0,0,0.15)',
             zIndex: 30,
-            // Subtle pulse animation for both modes
-            animation: isExecuting ? 'pulse 1s ease-in-out infinite' : 'none',
           }}
           title={getStatusTitle()}
         />
 
         {/* NO INPUT HANDLE - Trigger nodes don't have inputs */}
 
-        {/* Trigger Badge - Lightning bolt indicator on bottom-left */}
+        {/* Trigger Badge - Lightning bolt indicator on bottom-left
+            (bespoke UI element, not in design schema; keeps inline style) */}
         <div
           style={{
             position: 'absolute',
@@ -262,12 +244,13 @@ const TriggerNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
           <span style={{ lineHeight: 1, color: theme.isDarkMode ? theme.colors.background : '#1a1d21' }}>⚡</span>
         </div>
 
-        {/* Output Handle (right side) */}
+        {/* Output Handle (right side) — CSS owns bg/border via .sq-node-handle.out */}
         <Handle
           id="output-main"
           type="source"
           position={Position.Right}
           isConnectable={isConnectable}
+          className="sq-node-handle out"
           style={{
             position: 'absolute',
             right: '-6px',
@@ -275,15 +258,12 @@ const TriggerNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
             transform: 'translateY(-50%)',
             width: theme.nodeSize.handle,
             height: theme.nodeSize.handle,
-            backgroundColor: isConfigured ? nodeColor : theme.colors.textSecondary,
-            border: `2px solid ${theme.isDarkMode ? theme.colors.background : '#ffffff'}`,
-            borderRadius: '50%',
-            zIndex: 20
+            zIndex: 20,
           }}
           title="Trigger Output"
         />
 
-        {/* Output Data Indicator */}
+        {/* Output Data Indicator (bespoke; keeps inline style) */}
         {executionStatus === 'success' && nodeStatus?.data && (
           <div
             style={{

@@ -203,3 +203,86 @@
   background-image: var(--canvas-grid, none);
   cursor: var(--cursor-default, auto);
 }
+
+/* ============================================================================
+ * Default canvas-node inner-element visuals (Wave 26).
+ *
+ * Status pips, gear buttons, handles, and labels — defaults that fire
+ * across all themes that don't override. Status pips are driven by
+ * `data-status` set inline by the React component; CSS picks the colour
+ * from shadcn semantic tokens. Per-theme CSS in client/src/themes/<theme>.css
+ * overrides these for material-specific identity.
+ * ============================================================================ */
+
+/* Status pip — square-node and rectangular-node variants */
+.sq-node-pip,
+.node-pip {
+  background: hsl(var(--muted-foreground));
+}
+
+.sq-node-pip[data-status="idle"],
+.node-pip[data-status="idle"] {
+  background: hsl(var(--muted-foreground));
+}
+
+.sq-node-pip[data-status="executing"],
+.sq-node-pip[data-status="waiting"],
+.node-pip[data-status="executing"],
+.node-pip[data-status="waiting"] {
+  background: var(--node-color, hsl(var(--info)));
+  box-shadow: 0 0 6px color-mix(in srgb, var(--node-color, hsl(var(--info))) 60%, transparent);
+}
+
+.sq-node-pip[data-status="success"],
+.node-pip[data-status="success"] {
+  background: hsl(var(--success));
+}
+
+.sq-node-pip[data-status="error"],
+.node-pip[data-status="error"] {
+  background: hsl(var(--destructive));
+}
+
+/* Gear button defaults */
+.sq-node-gear,
+.node-gear {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.sq-node-gear:hover,
+.node-gear:hover {
+  background: hsl(var(--accent));
+  border-color: hsl(var(--accent-foreground) / 0.2);
+}
+
+/* Handle defaults */
+.sq-node-handle,
+.node-handle {
+  background: hsl(var(--background));
+  border: 2px solid hsl(var(--muted-foreground));
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.sq-node-handle.out,
+.node-handle.out {
+  background: var(--node-color, hsl(var(--primary)));
+  border-color: var(--node-color, hsl(var(--primary)));
+}
+
+.sq-node-handle.in,
+.node-handle.in {
+  background: hsl(var(--background));
+  border-color: hsl(var(--muted-foreground));
+}
+
+/* Label defaults — picks up display typography from theme */
+.sq-node-label,
+.node-label {
+  font-family: var(--font-display, var(--font-body));
+  letter-spacing: var(--type-tracking-display, 0);
+  text-transform: var(--type-uppercase, none);
+  color: hsl(var(--foreground));
+}

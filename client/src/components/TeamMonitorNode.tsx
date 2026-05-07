@@ -230,36 +230,35 @@ const TeamMonitorNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConn
         )}
       </div>
 
-      {/* Input Handle */}
+      {/* Input Handle — visual styling owned by `.node-handle.in`
+          in base.css + per-theme overrides. Inline keeps layout only. */}
       <Handle
         id="input-team"
         type="target"
         position={Position.Left}
         isConnectable={isConnectable}
+        className="node-handle in"
         style={{
           left: -6,
           top: '50%',
           width: 10,
           height: 10,
-          backgroundColor: theme.isDarkMode ? theme.colors.background : '#ffffff',
-          border: `2px solid ${nodeColor}`,
           borderRadius: '50%',
         }}
       />
 
-      {/* Output Handle */}
+      {/* Output Handle — visual styling owned by `.node-handle.out`. */}
       <Handle
         id="output-main"
         type="source"
         position={Position.Right}
         isConnectable={isConnectable}
+        className="node-handle out"
         style={{
           right: -6,
           top: '50%',
           width: 10,
           height: 10,
-          backgroundColor: nodeColor,
-          border: `2px solid ${theme.isDarkMode ? theme.colors.background : '#ffffff'}`,
           borderRadius: '50%',
         }}
       />

@@ -217,6 +217,7 @@ Result by theme (display font / tracking / case):
 ## What's done vs deferred
 
 ### Done
+- **Canvas-node class topology alignment** (W26) — TriggerNode, StartNode, ToolkitNode migrated from `.node` (rectangular spec-card) topology to `.sq-node` / `.sq-node-box` (square-icon node) topology so per-theme decorations (Steampunk brass rivets, Edo hanko seal, Surveillance REC LED, Renaissance gold emblem) reach them. Status pips, gear buttons, and React Flow handles on every node component now carry `.sq-node-pip` / `.sq-node-gear` / `.sq-node-handle.in/.out` (square nodes) or `.node-pip` / `.node-gear` / `.node-handle.in/.out` (rectangular nodes — AIAgentNode, GenericNode, TeamMonitorNode). Pip background is data-driven via `data-status="idle | executing | waiting | success | error"` — base.css picks the colour from shadcn semantic tokens; per-theme files override. Inline JS-computed `backgroundColor` / `border` / `animation` on these elements stripped — CSS owns visuals. Cyber's `.node-trigger` rule extended to dual-target both rectangular and square topologies (`.sq-node.node-trigger .sq-node-box`). Orphan `.node-output` rule removed. EditableNodeLabel now emits both `sq-node-label` and `node-label` classNames so per-theme typography rules fire. StartNode reads `nodeColor` from `definition?.defaults?.color` instead of hardcoded `theme.dracula.cyan`.
 - **Audio fix** (W20) — `--sound-pack: chime` typo in `light.css` + `dark.css` was silently falling through to `'none'` (`chime` not in the engine's pack registry), making sound silent for the most-used themes. Renamed `light` → `parchment`, `dark` → `terminal`. Added `Sounds.unlock()` exported from [lib/sound.ts](../client/src/lib/sound.ts) plus a one-shot `pointerdown / keydown / touchstart` capture-phase listener in `useSoundSync()` ([hooks/useSound.ts](../client/src/hooks/useSound.ts)) so the AudioContext resumes on the user's first gesture (Chrome / Safari autoplay policy compliance).
 - **Canvas-node visual contract** (W21) — every node component (`AIAgentNode`, `SquareNode`, `GenericNode`, `TriggerNode`, `StartNode`, `ToolkitNode`, `TeamMonitorNode`) stripped its inline `background` / `border` / `borderRadius` / `boxShadow` / `animation` props. Each now exposes the per-definition accent hex via `style={{ '--node-color': accentColor }}` on its outer wrapper. Visual styling lives in [base.css](../client/src/themes/base.css) defaults + per-theme overrides; `var(--node-color)` carries the plugin's `visuals.json` accent through CSS without fighting specificity. New `NodeStyle` helper type in [client/src/types/NodeTypes.ts](../client/src/types/NodeTypes.ts) (`React.CSSProperties & Record<\`--${string}\`, string | number>`) makes the inline custom-prop typecheck-clean.
 - **Per-theme icons** (W23) — [client/src/assets/icons/themedGlyphs.ts](../client/src/assets/icons/themedGlyphs.ts) ports all 290 SVG glyphs from `design_handoff_machinaos_themes/app/icons.js` (29 keys × 10 themes). [NodeIcon.tsx](../client/src/assets/icons/NodeIcon.tsx) consults `THEMED_GLYPHS[activeTheme][key]` first; falls through to `lucide-react` / `lobehub:` / `asset:` dispatch on miss. Renaissance gets heraldic shields, Cyber wireframe + glow, Plague woodcut hatching, etc. Light + dark themes have no entries — they fall through to existing dispatch.
@@ -317,6 +318,29 @@ export type NodeStyle = React.CSSProperties & Record<`--${string}`, string | num
 The `selected` co-class (driven by React Flow's `selected` prop) and the `data-executing` attribute (driven by SquareNode's `isGlowing` minimum-glow timer) toggle execution / selection visuals via CSS. The wider `.react-flow__node.executing .node` selector is bound by `client/src/styles/canvasAnimations.ts` for the standard pulse animation.
 
 **Anti-pattern:** never set `background` / `border` / `borderRadius` / `boxShadow` inline on canvas-node components. Inline styles win specificity and block per-theme decorations from rendering.
+
+### Class topology (W26)
+
+Two visually distinct node families, each with its own class hooks. Pick the right one when adding a new canvas-node component:
+
+| Family | Outer class | Inner box | Pip | Gear | Handle | Label | Used by |
+|---|---|---|---|---|---|---|---|
+| Square-icon | `.sq-node` | `.sq-node-box` | `.sq-node-pip` | `.sq-node-gear` | `.sq-node-handle.in` / `.sq-node-handle.out` | `.sq-node-label` | SquareNode, TriggerNode, StartNode, ToolkitNode |
+| Rectangular | `.node` (+ optional `.node-agent` / `.node-trigger` co-class for type-specific theming) | (none — single-div card) | `.node-pip` | `.node-gear` | `.node-handle.in` / `.node-handle.out` | `.node-label` | AIAgentNode, GenericNode, TeamMonitorNode |
+
+Both families share the same status-pip data contract:
+
+```tsx
+<div className="sq-node-pip" data-status={pipStatus} />  // or className="node-pip"
+```
+
+`pipStatus` is a string from the bucket `'idle' | 'executing' | 'waiting' | 'success' | 'error'`. base.css colors the pip per-status using `hsl(var(--success))` / `hsl(var(--destructive))` / `var(--node-color)` etc. Per-theme files override for material-specific identity.
+
+Execution-state animation: `data-executing={isExecuting ? '' : undefined}` on the outer wrapper. base.css binds `.sq-node[data-executing] .sq-node-box` and `.react-flow__node.executing .node` to the `node-pulse` keyframe.
+
+Selection state: `selected` co-class on the outer wrapper, driven by React Flow's `selected` prop.
+
+Type-specific co-classes (Cyber-only today): `.node-agent` colors AIAgentNode neon magenta; `.sq-node.node-trigger .sq-node-box` colors TriggerNode neon green. Other themes ignore these co-classes — single colour by node type is fine when not differentiating.
 
 ## Sound system
 
