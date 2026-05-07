@@ -1,7 +1,7 @@
 import React, { memo, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { nodePropsEqual } from './nodeMemoEquality';
 import { Handle, Position, NodeProps } from 'reactflow';
-import { NodeData } from '../types/NodeTypes';
+import { NodeData, NodeStyle } from '../types/NodeTypes';
 import { useAppStore } from '../store/useAppStore';
 import { useAppTheme } from '../hooks/useAppTheme';
 import EditableNodeLabel from './ui/EditableNodeLabel';
@@ -266,7 +266,9 @@ const SquareNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectab
     // Renaissance, neon underglow on Cyber, etc.).
     <div
       className={`sq-node ${selected ? 'selected' : ''}`}
+      data-executing={isExecuting ? '' : undefined}
       style={{
+        '--node-color': nodeColor,
         position: 'relative',
         display: 'flex',
         flexDirection: 'column',
@@ -274,24 +276,16 @@ const SquareNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectab
         fontFamily: 'system-ui, -apple-system, sans-serif',
         fontSize: '11px',
         cursor: 'pointer',
-      }}
+      } as NodeStyle}
     >
       {/* Main Square Node */}
       <div
         className="sq-node-box"
         style={{
+          '--node-color': nodeColor,
           position: 'relative',
           width: theme.nodeSize.square,
           height: theme.nodeSize.square,
-          borderRadius: theme.borderRadius.lg,
-          background: theme.isDarkMode
-            ? `linear-gradient(135deg, ${nodeColor}25 0%, ${theme.colors.background} 100%)`
-            : `linear-gradient(145deg, #ffffff 0%, ${nodeColor}08 100%)`,
-          border: `2px solid ${isExecuting
-            ? (theme.isDarkMode ? theme.dracula.cyan : '#2563eb')
-            : selected
-              ? theme.colors.focus
-              : theme.isDarkMode ? nodeColor + '80' : `${nodeColor}40`}`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -299,18 +293,8 @@ const SquareNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectab
           fontSize: theme.nodeSize.squareIcon,
           fontWeight: '600',
           transition: 'all 0.2s ease',
-          boxShadow: isExecuting
-            ? theme.isDarkMode
-              ? `0 4px 12px ${theme.dracula.cyan}66, 0 0 0 3px ${theme.dracula.cyan}4D`
-              : `0 0 0 3px rgba(37, 99, 235, 0.5), 0 4px 16px rgba(37, 99, 235, 0.35)`
-            : selected
-              ? `0 4px 12px ${theme.colors.focusRing}, 0 0 0 1px ${theme.colors.focusRing}`
-              : theme.isDarkMode
-                ? `0 2px 8px ${nodeColor}40`
-                : `0 2px 8px ${nodeColor}20, 0 4px 12px rgba(0,0,0,0.06)`,
-          animation: isExecuting ? 'pulse 1.5s ease-in-out infinite' : 'none',
           opacity: isDisabled ? 0.5 : 1,
-        }}
+        } as NodeStyle}
       >
         {/* Disabled Overlay */}
         {isDisabled && (
@@ -345,21 +329,14 @@ const SquareNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectab
             right: '-8px',
             width: theme.nodeSize.paramButton,
             height: theme.nodeSize.paramButton,
-            borderRadius: theme.borderRadius.sm,
-            backgroundColor: theme.isDarkMode ? theme.colors.backgroundAlt : '#ffffff',
-            border: `1px solid ${theme.isDarkMode ? theme.colors.border : '#d1d5db'}`,
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             fontSize: theme.fontSize.xs,
-            color: theme.colors.textSecondary,
             fontWeight: '400',
             transition: theme.transitions.fast,
             zIndex: 30,
-            boxShadow: theme.isDarkMode
-              ? `0 1px 3px ${theme.colors.shadow}`
-              : '0 1px 4px rgba(0,0,0,0.1)'
           }}
           title="Edit Service Parameters"
           className="sq-node-gear"
@@ -371,24 +348,14 @@ const SquareNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectab
         <div
           className="sq-node-pip"
           style={{
+            '--node-color': getStatusIndicatorColor(),
             position: 'absolute',
             top: '-4px',
             left: '-4px',
             width: theme.nodeSize.statusIndicator,
             height: theme.nodeSize.statusIndicator,
-            borderRadius: '50%',
-            backgroundColor: getStatusIndicatorColor(),
-            border: `2px solid ${theme.isDarkMode ? theme.colors.background : '#ffffff'}`,
-            boxShadow: isExecuting
-              ? theme.isDarkMode
-                ? `0 0 6px ${theme.dracula.cyan}80`
-                : '0 0 4px rgba(37, 99, 235, 0.5)'
-              : theme.isDarkMode
-                ? `0 1px 2px ${theme.colors.shadow}`
-                : '0 1px 3px rgba(0,0,0,0.15)',
             zIndex: 30,
-            animation: isExecuting ? 'pulse 1s ease-in-out infinite' : 'none',
-          }}
+          } as NodeStyle}
           title={getStatusTitle()}
         />
 
@@ -409,9 +376,6 @@ const SquareNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectab
               transform: 'translateY(-50%)',
               width: theme.nodeSize.handle,
               height: theme.nodeSize.handle,
-              backgroundColor: theme.isDarkMode ? theme.colors.background : '#ffffff',
-              border: `2px solid ${theme.isDarkMode ? theme.colors.textSecondary : '#6b7280'}`,
-              borderRadius: '50%',
               zIndex: 20
             }}
             title="Service Input"
@@ -428,17 +392,15 @@ const SquareNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectab
             isConnectable={isConnectable}
             className="sq-node-handle out"
             style={{
+              '--node-color': isConfigured ? nodeColor : theme.colors.textSecondary,
               position: 'absolute',
               right: '-6px',
               top: '50%',
               transform: 'translateY(-50%)',
               width: theme.nodeSize.handle,
               height: theme.nodeSize.handle,
-              backgroundColor: isConfigured ? nodeColor : theme.colors.textSecondary,
-              border: `2px solid ${theme.isDarkMode ? theme.colors.background : '#ffffff'}`,
-              borderRadius: '50%',
               zIndex: 20
-            }}
+            } as NodeStyle}
             title="Service Output"
           />
         )}

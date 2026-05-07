@@ -9,7 +9,7 @@
 import React, { memo, useState, useEffect, useCallback } from 'react';
 import { nodePropsEqual } from './nodeMemoEquality';
 import { Handle, Position, NodeProps } from 'reactflow';
-import { NodeData } from '../types/NodeTypes';
+import { NodeData, NodeStyle } from '../types/NodeTypes';
 import { useAppStore } from '../store/useAppStore';
 import { resolveNodeDescription, useNodeSpec } from '../lib/nodeSpec';
 import { NodeIcon } from '../assets/icons';
@@ -127,6 +127,7 @@ const TriggerNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
     <div
       className={`node node-trigger ${selected ? 'selected' : ''}`}
       style={{
+        '--node-color': nodeColor,
         position: 'relative',
         display: 'flex',
         flexDirection: 'column',
@@ -134,26 +135,17 @@ const TriggerNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
         fontFamily: 'system-ui, -apple-system, sans-serif',
         fontSize: '11px',
         cursor: 'pointer',
-      }}
+      } as NodeStyle}
     >
-      {/* Main Trigger Node */}
-      {/* Show glow animation for both executing and waiting states */}
+      {/* Main Trigger Node — visual styling lives in base.css + per-theme
+          CSS targeting `.node.node-trigger`. Inner box keeps only layout
+          (size, flex), and per-theme decorations like Cyber neon glow,
+          Renaissance wax seal, and Steampunk rivets reach the pixels. */}
       <div
         style={{
           position: 'relative',
           width: theme.nodeSize.square,
           height: theme.nodeSize.square,
-          borderRadius: theme.borderRadius.lg,
-          background: theme.isDarkMode
-            ? `linear-gradient(135deg, ${nodeColor}25 0%, ${theme.colors.background} 100%)`
-            : `linear-gradient(145deg, #ffffff 0%, ${nodeColor}08 100%)`,
-          border: `2px solid ${
-            isExecuting
-              ? (theme.isDarkMode ? theme.dracula.purple : '#2563eb')
-              : selected
-                ? theme.colors.focus
-                : theme.isDarkMode ? nodeColor + '80' : `${nodeColor}40`
-          }`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -161,17 +153,6 @@ const TriggerNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
           fontSize: theme.nodeSize.squareIcon,
           fontWeight: '600',
           transition: 'all 0.2s ease',
-          boxShadow: isExecuting
-            ? theme.isDarkMode
-              ? `0 4px 12px ${theme.dracula.purple}66, 0 0 0 3px ${theme.dracula.purple}4D`
-              : `0 0 0 3px rgba(37, 99, 235, 0.5), 0 4px 16px rgba(37, 99, 235, 0.35)`
-            : selected
-              ? `0 4px 12px ${theme.colors.focusRing}, 0 0 0 1px ${theme.colors.focusRing}`
-              : theme.isDarkMode
-                ? `0 2px 8px ${nodeColor}40`
-                : `0 2px 8px ${nodeColor}20, 0 4px 12px rgba(0,0,0,0.06)`,
-          // Subtle animation for both modes
-          animation: isExecuting ? 'pulse 1.5s ease-in-out infinite' : 'none',
           opacity: isDisabled ? 0.5 : 1,
         }}
       >

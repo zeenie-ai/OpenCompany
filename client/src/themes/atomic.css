@@ -117,6 +117,11 @@
 
   --tint-soft: 14%;
   --tint-border: 35%;
+
+  /* Canvas backplane — mid-century starburst on 160x160 tile */
+  --canvas-grid:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><g stroke='%232a3a4a' stroke-width='0.6' fill='none' opacity='0.18'><path d='M40 80 L120 80 M80 40 L80 120 M50 50 L110 110 M110 50 L50 110'/></g></svg>");
+  --canvas-grid-opacity: 1;
 }
 
 /* Body — clean cardstock; starburst lives on canvas in W2 wrapper */
@@ -166,7 +171,7 @@
 }
 :root[data-theme="atomic"] .sq-node.selected .sq-node-box {
   background: hsl(var(--accent)); color: var(--bg-elevated);
-  box-shadow: 4px 4px 0 var(--slate), 0 0 0 4px hsl(var(--warning-soft));
+  box-shadow: 4px 4px 0 var(--slate), 0 0 0 4px hsl(var(--warning) / 0.25);
 }
 :root[data-theme="atomic"] .sq-node-pip { border: 1.5px solid var(--slate); }
 :root[data-theme="atomic"] .sq-node-gear { background: var(--turquoise); color: var(--bg-elevated); border: 1px solid var(--slate); }

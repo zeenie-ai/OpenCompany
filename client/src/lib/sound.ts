@@ -288,6 +288,24 @@ export const Sounds = {
   pack(): SoundPackName {
     return activePackName;
   },
+  /**
+   * Idempotent gesture-time unlock. Constructs the AudioContext (if not
+   * already constructed) and resumes it if the browser autoplay policy
+   * left it `suspended`. Safe to call repeatedly — `resume()` on a
+   * running context is a no-op.
+   *
+   * Modern Chrome / Safari require the resume() call to occur inside
+   * the same task as a user gesture (pointerdown / keydown / touchstart).
+   * `Sounds.play()` defensively calls resume() too, but state-change-
+   * driven plays (e.g. modal open from an effect) can land microseconds
+   * after the gesture frame and lose the very first sound. Calling
+   * `unlock()` from a once-listener on the gesture path closes that gap.
+   */
+  unlock(): void {
+    const ac = ensureCtx();
+    if (!ac) return;
+    if (ac.state === 'suspended') void ac.resume();
+  },
   play(event: SoundEvent): void {
     const throttle = THROTTLE_MS[event];
     if (throttle !== undefined) {

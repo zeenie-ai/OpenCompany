@@ -1,7 +1,7 @@
 import React, { memo, useState, useEffect, useCallback, useMemo } from 'react';
 import { nodePropsEqual } from './nodeMemoEquality';
 import { Handle, Position, NodeProps, useEdges, useNodes } from 'reactflow';
-import { NodeData } from '../types/NodeTypes';
+import { NodeData, NodeStyle } from '../types/NodeTypes';
 import { useAppStore } from '../store/useAppStore';
 import { resolveNodeDescription } from '../lib/nodeSpec';
 import { useAppTheme } from '../hooks/useAppTheme';
@@ -123,21 +123,19 @@ const TeamMonitorNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConn
   };
 
   return (
+    // Visual styling (background, border, radius) lives in base.css `.node`
+    // defaults + per-theme overrides; reads `var(--node-color)` for accent.
     <div
       className={`node ${selected ? 'selected' : ''}`}
       onClick={handleClick}
       style={{
+        '--node-color': nodeColor,
         width: 200,
         minHeight: 120,
-        borderRadius: 8,
-        background: theme.isDarkMode
-          ? `linear-gradient(135deg, ${nodeColor}15 0%, ${theme.colors.background} 100%)`
-          : `linear-gradient(145deg, #ffffff 0%, ${nodeColor}08 100%)`,
-        border: `2px solid ${selected ? theme.colors.focus : nodeColor + '60'}`,
         fontFamily: 'system-ui, -apple-system, sans-serif',
         fontSize: 10,
         overflow: 'hidden',
-      }}
+      } as NodeStyle}
     >
       {/* Header */}
       <div style={{

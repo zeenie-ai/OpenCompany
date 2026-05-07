@@ -118,6 +118,11 @@
 
   --tint-soft: 16%;
   --tint-border: 40%;
+
+  /* Canvas backplane — engine-room brass bolts on 80x80 tile */
+  --canvas-grid:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><g fill='%23b88838' opacity='0.10'><circle cx='40' cy='40' r='1.5'/><circle cx='10' cy='10' r='1'/><circle cx='70' cy='70' r='1'/></g></svg>");
+  --canvas-grid-opacity: 1;
 }
 
 /* Body — riveted leather grain */

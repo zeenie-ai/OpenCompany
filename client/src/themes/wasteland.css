@@ -117,6 +117,11 @@
 
   --tint-soft: 18%;
   --tint-border: 45%;
+
+  /* Canvas backplane — cracked-earth fissures on 200x200 tile */
+  --canvas-grid:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><g stroke='%23e88a28' stroke-width='0.4' fill='none' opacity='0.10'><path d='M40 10 Q60 60 30 100 Q10 140 50 180 M120 0 Q140 80 100 140 M180 30 Q160 80 190 130'/></g></svg>");
+  --canvas-grid-opacity: 1;
 }
 
 /* Body — dust + grit texture */
@@ -176,7 +181,7 @@
   background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><filter id='s'><feTurbulence baseFrequency='2' numOctaves='1'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.18 0'/></filter><rect width='100' height='100' filter='url(%23s)'/></svg>");
   pointer-events: none;
 }
-:root[data-theme="wasteland"] .sq-node.selected .sq-node-box { border-color: hsl(var(--accent)); box-shadow: 0 0 0 2px hsl(var(--info-soft)), 2px 2px 0 var(--rust); }
+:root[data-theme="wasteland"] .sq-node.selected .sq-node-box { border-color: hsl(var(--accent)); box-shadow: 0 0 0 2px hsl(var(--info) / 0.25), 2px 2px 0 var(--rust); }
 :root[data-theme="wasteland"] .sq-node-gear { background: var(--rust); color: hsl(var(--accent)); border: 1px solid hsl(var(--accent)); border-radius: 0; }
 :root[data-theme="wasteland"] .sq-node-handle.out { background: hsl(var(--accent)); }
 :root[data-theme="wasteland"] .sq-node-label { font-family: var(--font-display); letter-spacing: 0.10em; }

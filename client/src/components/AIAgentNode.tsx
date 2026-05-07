@@ -1,7 +1,7 @@
 import React, { memo, useState, useEffect, useMemo } from 'react';
 import { nodePropsEqual } from './nodeMemoEquality';
 import { Handle, Position, NodeProps } from 'reactflow';
-import { NodeData } from '../types/NodeTypes';
+import { NodeData, NodeStyle } from '../types/NodeTypes';
 import { useAppStore } from '../store/useAppStore';
 import AIAgentExecutionService from '../services/execution/aiAgentExecutionService';
 import { useAppTheme } from '../hooks/useAppTheme';
@@ -91,28 +91,6 @@ const AIAgentNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
     setSelectedNode({ id, type, data, position: { x: 0, y: 0 } });
   };
 
-  const getBorderColor = () => {
-    if (isExecuting) {
-      if (theme.isDarkMode && phaseConfig) return phaseConfig.color;
-      return accentColor;
-    }
-    if (selected) return theme.colors.focus;
-    return theme.colors.border;
-  };
-
-  const getBoxShadow = () => {
-    if (isExecuting) {
-      if (theme.isDarkMode && phaseConfig) {
-        return `0 0 20px ${phaseConfig.color}80, 0 0 40px ${phaseConfig.color}40`;
-      }
-      return `0 0 0 3px ${accentColor}80, 0 4px 16px ${accentColor}60`;
-    }
-    if (selected) {
-      return `0 4px 12px ${theme.colors.focusRing}, 0 0 0 1px ${theme.colors.focusRing}`;
-    }
-    return `0 2px 4px ${theme.colors.shadow}`;
-  };
-
   const hasRightOutputs = rightOutputs.length > 0;
   const hasLeftLabels = hasMainInput || leftInputs.length > 0;
 
@@ -123,32 +101,26 @@ const AIAgentNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
     <div
       className={`node node-agent ${selected ? 'selected' : ''}`}
       style={{
+        '--node-color': accentColor,
         position: 'relative',
         padding: theme.spacing.lg,
         paddingLeft: hasLeftLabels ? '72px' : theme.spacing.lg,
         paddingRight: hasRightOutputs ? '72px' : theme.spacing.lg,
         minWidth: `${width}px`,
         minHeight: `${height}px`,
-        borderRadius: theme.borderRadius.lg,
-        background: theme.isDarkMode
-          ? `linear-gradient(135deg, ${accentColor}20 0%, ${theme.colors.backgroundAlt} 100%)`
-          : `linear-gradient(145deg, #ffffff 0%, ${accentColor}08 100%)`,
-        border: `2px solid ${getBorderColor()}`,
         color: theme.colors.text,
         fontSize: theme.fontSize.sm,
         fontWeight: theme.fontWeight.medium,
         textAlign: 'center',
         cursor: 'pointer',
         transition: 'all 0.3s ease',
-        boxShadow: getBoxShadow(),
         overflow: 'visible',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         gap: theme.spacing.sm,
-        animation: isExecuting ? 'pulse 1.5s ease-in-out infinite' : 'none',
-      }}
+      } as NodeStyle}
     >
       {/* Main input (left, top area) — shown when the spec declares a main input */}
       {hasMainInput && (

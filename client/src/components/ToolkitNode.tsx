@@ -13,7 +13,7 @@
 import React, { memo, useCallback } from 'react';
 import { nodePropsEqual } from './nodeMemoEquality';
 import { Handle, Position, NodeProps } from 'reactflow';
-import { NodeData } from '../types/NodeTypes';
+import { NodeData, NodeStyle } from '../types/NodeTypes';
 import { useAppStore } from '../store/useAppStore';
 import { resolveNodeDescription } from '../lib/nodeSpec';
 import { NodeIcon } from '../assets/icons';
@@ -78,9 +78,14 @@ const ToolkitNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
   };
 
   return (
+    // Visual styling (background, border, radius, shadow, executing pulse)
+    // lives in base.css `.node` defaults + per-theme overrides; reads
+    // `var(--node-color)` for the per-definition accent. The
+    // `react-flow__node.executing .node` rule binds the pulse.
     <div
       className={`node ${selected ? 'selected' : ''}`}
       style={{
+        '--node-color': nodeColor,
         position: 'relative',
         display: 'flex',
         flexDirection: 'column',
@@ -88,23 +93,15 @@ const ToolkitNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
         fontFamily: 'system-ui, -apple-system, sans-serif',
         fontSize: '11px',
         cursor: 'pointer',
-      }}
+      } as NodeStyle}
     >
-      {/* Main Node - rectangular for toolkit, square for skills */}
+      {/* Main Node - rectangular for toolkit, square for skills.
+          Layout only; visuals live in CSS. */}
       <div
         style={{
           position: 'relative',
           width: isToolkitNode ? theme.nodeSize.toolkitWidth : theme.nodeSize.square,
           height: isToolkitNode ? theme.nodeSize.toolkitHeight : theme.nodeSize.square,
-          borderRadius: theme.borderRadius.lg,
-          background: theme.isDarkMode
-            ? `linear-gradient(135deg, ${nodeColor}25 0%, ${theme.colors.background} 100%)`
-            : `linear-gradient(145deg, #ffffff 0%, ${nodeColor}08 100%)`,
-          border: `2px solid ${isExecuting
-            ? (theme.isDarkMode ? theme.dracula.cyan : '#2563eb')
-            : selected
-              ? theme.colors.focus
-              : theme.isDarkMode ? nodeColor + '80' : `${nodeColor}40`}`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -112,16 +109,6 @@ const ToolkitNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
           fontSize: theme.nodeSize.squareIcon,
           fontWeight: '600',
           transition: 'all 0.2s ease',
-          boxShadow: isExecuting
-            ? theme.isDarkMode
-              ? `0 4px 12px ${theme.dracula.cyan}66, 0 0 0 3px ${theme.dracula.cyan}4D`
-              : `0 0 0 3px rgba(37, 99, 235, 0.5), 0 4px 16px rgba(37, 99, 235, 0.35)`
-            : selected
-              ? `0 4px 12px ${theme.colors.focusRing}, 0 0 0 1px ${theme.colors.focusRing}`
-              : theme.isDarkMode
-                ? `0 2px 8px ${nodeColor}40`
-                : `0 2px 8px ${nodeColor}20, 0 4px 12px rgba(0,0,0,0.06)`,
-          animation: isExecuting ? 'pulse 1.5s ease-in-out infinite' : 'none',
         }}
       >
         {/* Service Icon */}

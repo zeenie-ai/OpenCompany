@@ -119,6 +119,11 @@
 
   --tint-soft: 16%;
   --tint-border: 40%;
+
+  /* Canvas backplane — broadsheet red X marks on 240x240 tile */
+  --canvas-grid:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><g stroke='%23783c28' stroke-width='1.6' fill='none' opacity='0.10' stroke-linecap='square'><path d='M40 40 L60 60 M60 40 L40 60'/><path d='M180 80 L200 100 M200 80 L180 100'/><path d='M80 180 L100 200 M100 180 L80 200'/></g></svg>");
+  --canvas-grid-opacity: 1;
 }
 
 /* Body — weathered parchment */
@@ -170,7 +175,7 @@
   content: ''; position: absolute; top: -3px; left: 50%; width: 6px; height: 6px;
   background: var(--crow); transform: translateX(-50%);
 }
-:root[data-theme="plague"] .sq-node.selected .sq-node-box { border-color: hsl(var(--accent)); background: hsl(var(--danger-soft)); }
+:root[data-theme="plague"] .sq-node.selected .sq-node-box { border-color: hsl(var(--accent)); background: hsl(var(--destructive) / 0.2); }
 :root[data-theme="plague"] .sq-node-gear { background: hsl(var(--accent)); color: var(--linen); border: none; border-radius: 0; }
 :root[data-theme="plague"] .sq-node-handle { border-radius: 0; }
 :root[data-theme="plague"] .sq-node-handle.out { background: hsl(var(--accent)); }

@@ -129,6 +129,11 @@
 
   --tint-soft: 14%;
   --tint-border: 35%;
+
+  /* Canvas backplane — temple-floor key meander (80x80 tile, faint ink) */
+  --canvas-grid:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><g fill='none' stroke='%234a3818' stroke-width='0.4' opacity='0.18'><path d='M0 40 H10 V20 H30 V60 H50 V20 H70 V40 H80'/></g></svg>");
+  --canvas-grid-opacity: 1;
 }
 
 /* ── Body marble texture ──────────────────────────────────────────────── */
@@ -197,7 +202,7 @@
   color: hsl(var(--accent));
 }
 :root[data-theme="greek"] .sq-node.selected .sq-node-box {
-  border-color: hsl(var(--accent)); box-shadow: 0 0 0 3px hsl(var(--info-soft)), 0 3px 0 var(--border-strong), inset 0 0 0 1px var(--gold);
+  border-color: hsl(var(--accent)); box-shadow: 0 0 0 3px hsl(var(--info) / 0.25), 0 3px 0 var(--border-strong), inset 0 0 0 1px var(--gold);
 }
 :root[data-theme="greek"] .sq-node-pip { border-radius: 0; box-shadow: 0 0 0 1px var(--border-strong); }
 :root[data-theme="greek"] .sq-node-gear { background: var(--gold); color: var(--border-strong); border: 1px solid var(--border-strong); border-radius: 0; }

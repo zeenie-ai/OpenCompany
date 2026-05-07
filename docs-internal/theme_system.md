@@ -217,7 +217,12 @@ Result by theme (display font / tracking / case):
 ## What's done vs deferred
 
 ### Done
-- **Token contract**: all 10 themes ported in [client/src/themes/](../client/src/themes) (5 utopian + 5 dystopian). 13 CSS files, 3,749 LOC total.
+- **Audio fix** (W20) — `--sound-pack: chime` typo in `light.css` + `dark.css` was silently falling through to `'none'` (`chime` not in the engine's pack registry), making sound silent for the most-used themes. Renamed `light` → `parchment`, `dark` → `terminal`. Added `Sounds.unlock()` exported from [lib/sound.ts](../client/src/lib/sound.ts) plus a one-shot `pointerdown / keydown / touchstart` capture-phase listener in `useSoundSync()` ([hooks/useSound.ts](../client/src/hooks/useSound.ts)) so the AudioContext resumes on the user's first gesture (Chrome / Safari autoplay policy compliance).
+- **Canvas-node visual contract** (W21) — every node component (`AIAgentNode`, `SquareNode`, `GenericNode`, `TriggerNode`, `StartNode`, `ToolkitNode`, `TeamMonitorNode`) stripped its inline `background` / `border` / `borderRadius` / `boxShadow` / `animation` props. Each now exposes the per-definition accent hex via `style={{ '--node-color': accentColor }}` on its outer wrapper. Visual styling lives in [base.css](../client/src/themes/base.css) defaults + per-theme overrides; `var(--node-color)` carries the plugin's `visuals.json` accent through CSS without fighting specificity. New `NodeStyle` helper type in [client/src/types/NodeTypes.ts](../client/src/types/NodeTypes.ts) (`React.CSSProperties & Record<\`--${string}\`, string | number>`) makes the inline custom-prop typecheck-clean.
+- **Per-theme icons** (W23) — [client/src/assets/icons/themedGlyphs.ts](../client/src/assets/icons/themedGlyphs.ts) ports all 290 SVG glyphs from `design_handoff_machinaos_themes/app/icons.js` (29 keys × 10 themes). [NodeIcon.tsx](../client/src/assets/icons/NodeIcon.tsx) consults `THEMED_GLYPHS[activeTheme][key]` first; falls through to `lucide-react` / `lobehub:` / `asset:` dispatch on miss. Renaissance gets heraldic shields, Cyber wireframe + glow, Plague woodcut hatching, etc. Light + dark themes have no entries — they fall through to existing dispatch.
+- **Canvas grid + cursors** (W24) — `--canvas-grid` and `--cursor-default` slots declared in [base.css](../client/src/themes/base.css) and bound to `.canvas-host`. Per-theme grids: Cyber 24px magenta+cyan grid, Surveillance CCTV crosshair + REC overlay, Renaissance fleur-de-lis cartography, Greek key meander, Steampunk brass bolt grid, Atomic mid-century starburst, Wasteland cracked-earth fissures, Rot flagstone, Plague broadsheet red-X. Custom cursors: Cyber crosshair reticle, Surveillance snooper reticle, Renaissance gold-leaf quill.
+- **Decorative HTML primitives** (W25) — [client/src/components/SvgFilterDefs.tsx](../client/src/components/SvgFilterDefs.tsx) mounts a hidden inline `<svg><defs>` at app root exposing `#ink-blot` (Renaissance edge warble), `#noise` (Wasteland turbulence), `#crt` (Cyber chromatic aberration) so per-theme `filter: url(#...)` rules resolve. [client/src/components/ui/DropCap.tsx](../client/src/components/ui/DropCap.tsx) wraps content with `v-display drop-cap` className so the Renaissance `::first-letter` ornament rule fires.
+- **Token contract**: all 10 themes ported in [client/src/themes/](../client/src/themes) (5 utopian + 5 dystopian). 13 CSS files, ~3,750 LOC total.
 - **ThemeProvider** ([client/src/contexts/ThemeContext.tsx](../client/src/contexts/ThemeContext.tsx)) — 10-way `ThemeName`, `DARK_FAMILY` ⊃ `{dark, cyber, wasteland, rot, surveillance, steampunk}`, legacy `darkMode` localStorage migration on first load
 - **ThemeSwitcher** — DropdownMenu grouped into System / Utopian / Dystopian sections, all 10 themes
 - **Tailwind v4 `@theme inline`** exposing new-contract utilities (`bg-bg-app`, `text-fg-default`, `border-border-default`, `font-display`, `font-body`, `rounded-pill`)
@@ -235,10 +240,8 @@ Result by theme (display font / tracking / case):
 - **Canvas overlay packs** — [client/src/hooks/useAppTheme.ts](../client/src/hooks/useAppTheme.ts) extended from 2-way (`{light, dark}`) to 10-way: a `THEME_OVERRIDES` map applies a small overlay (primary, focus, focusRing, action colours, edge palette) on top of `lightColors` / `darkColors`. Existing call sites continue to read `theme.colors.X` and `theme.isDarkMode` unchanged; canvas selection rings, action buttons, and edge strokes pick up the active theme's accents under any of the 10 themes.
 
 ### Deferred (future PRs)
-- **Per-theme icon sets** — the upstream [`app/icons.js`](../design_handoff_machinaos_themes/app/icons.js) ships 28-key glyph sets per theme (heraldic shields under Renaissance, wireframe + glow under Cyber, woodcut hatching under Plague, etc.). The current shell uses `lucide-react` icons under all themes via `currentColor`, which retints correctly via the bridge but doesn't carry per-theme glyph language. Migration recipe: build `client/src/icons/` with an `<Icon name>` component that reads the active theme via `useTheme()` and resolves to one of 10 SVG-string sets. Lucide stays as a fallback for missing keys.
-- **Drop-cap `::first-letter`** — Renaissance `.v-display.drop-cap` selector ports verbatim but needs an HTML wrapper component before the rule resolves. Add a `<DisplayHeading dropCap>` primitive when next touching the chrome.
-- **Edge SVG filters** — Renaissance `.edge path { filter: url(#ink-blot) }` needs an inline `<svg><defs>` injected into the React tree.
-- **Cursor SVG reticles** — Cyber crosshair, Renaissance quill, Surveillance reticle: `cursor: url(...)` rules in per-theme CSS, low ROI.
+- **`--*-soft` token family** — `--info-soft`, `--warning-soft`, `--danger-soft`, `--success-soft` are referenced across multiple theme rules (greek, atomic, wasteland, plague, action-deploy, chat-msg-user, wf-card.selected, cmdk-item.active, action-run) but never declared. W22 patched the four `.sq-node.selected .sq-node-box` references to inline alpha composition (`hsl(var(--info) / 0.25)` etc.); the broader pattern is tech debt. Centralise the family as alpha-composed pairs alongside their base tokens (e.g. `--info-soft: <hsl-triplet> / 0.18`) in [client/src/index.css](../client/src/index.css).
+- **Edo / Steampunk / Atomic canvas-host pseudo-element decorations** — these themes' richer canvas overlays (Edo radial-gradient ink-wash mountain, Steampunk corner radial accents, Atomic dot constellation) are pseudo-element decorations rather than tileable `--canvas-grid` patterns; W24 ported the tileable layer only. Wire via `.canvas::before/::after` rules in a future pass if needed.
 - **Parameter panel internals** — `MiddleSection`, `MasterSkillEditor`, `ParameterRenderer` consume shadcn tokens through the bridge so they retint correctly, but their interior section headers don't yet carry the display-typography triplet. Apply the recipe (`font-display tracking-[var(--type-tracking-display)] text-fg-default [text-transform:var(--type-uppercase)]`) when next touched.
 - **Credentials modal sub-panels** — `OAuthPanel`, `EmailPanel`, `ApiKeyPanel`, `QrPairingPanel` headers same pattern.
 
@@ -288,6 +291,32 @@ The `.selected` co-class is bound to React Flow's `selected` prop on every canva
 | surveillance | solid | CCTV crosshair + REC label + phosphor scanlines | REC LED blink (`.sq-node-box::before`) | `surv-blink` |
 
 `var(--accent)` etc. handoff reads were wrapped to `hsl(var(--accent))` for shadcn-bridged tokens; theme-specific spot colours (`--gold`, `--crimson`, `--neon-magenta`, `--rec-red`) port verbatim as hex.
+
+## Canvas-node visual contract (W21)
+
+Every canvas-node React component renders against pure CSS for visual styling. The component is responsible for:
+
+1. **Setting `--node-color` inline** on its outer wrapper:
+   ```tsx
+   <div
+     className={`node node-agent ${selected ? 'selected' : ''}`}
+     style={{ '--node-color': accentColor, /* layout only */ } as NodeStyle}
+   >
+   ```
+   `accentColor` comes from the plugin's `visuals.json` accent hex via `useNodeSpec(type)`.
+
+2. **Keeping ONLY layout inline** — `position`, `padding`, `display`, `flex*`, `gap`, `width`, `height`, `transition`, `cursor`, `fontFamily`, `fontSize`. React Flow `<Handle>` positioning (`position: absolute; left/top/right/bottom`) MUST stay inline.
+
+3. **Letting CSS own everything visual** — `background`, `border`, `borderRadius`, `boxShadow`, `animation` live in [base.css](../client/src/themes/base.css) defaults + per-theme overrides. Both consume `var(--node-color)` for accent surfaces.
+
+`NodeStyle` ([types/NodeTypes.ts](../client/src/types/NodeTypes.ts)) is the helper type for inline custom-prop typecheck-cleanliness:
+```ts
+export type NodeStyle = React.CSSProperties & Record<`--${string}`, string | number>;
+```
+
+The `selected` co-class (driven by React Flow's `selected` prop) and the `data-executing` attribute (driven by SquareNode's `isGlowing` minimum-glow timer) toggle execution / selection visuals via CSS. The wider `.react-flow__node.executing .node` selector is bound by `client/src/styles/canvasAnimations.ts` for the standard pulse animation.
+
+**Anti-pattern:** never set `background` / `border` / `borderRadius` / `boxShadow` inline on canvas-node components. Inline styles win specificity and block per-theme decorations from rendering.
 
 ## Sound system
 
@@ -431,6 +460,12 @@ cd client && npx eslint <files>
 | [client/src/components/ui/CommandPaletteHost.tsx](../client/src/components/ui/CommandPaletteHost.tsx) | Registered command set |
 | [client/src/components/ui/action-button.tsx](../client/src/components/ui/action-button.tsx) | CVA action role primitive (fires `play('click')`) |
 | [client/src/components/ui/Modal.tsx](../client/src/components/ui/Modal.tsx) | Shared modal layout (fires `play('modalOpen'/'modalClose')`) |
+| [client/src/assets/icons/themedGlyphs.ts](../client/src/assets/icons/themedGlyphs.ts) | Per-theme SVG glyph map (29 keys × 10 themes) — Wave 23 |
+| [client/src/assets/icons/NodeIcon.tsx](../client/src/assets/icons/NodeIcon.tsx) | Theme-aware icon resolver (consults THEMED_GLYPHS first) |
+| [client/src/components/SvgFilterDefs.tsx](../client/src/components/SvgFilterDefs.tsx) | Inline `<svg><defs>` carrying `#ink-blot` / `#noise` / `#crt` filter IDs — Wave 25 |
+| [client/src/components/ui/DropCap.tsx](../client/src/components/ui/DropCap.tsx) | `v-display drop-cap` wrapper for Renaissance ornament rule — Wave 25 |
+| [client/src/types/NodeTypes.ts](../client/src/types/NodeTypes.ts) | `NodeStyle` helper type for inline `--*` custom props — Wave 21 |
 | [client/index.html](../client/index.html) | Google Fonts loading (all 10 themes' typefaces) |
 | [design_handoff_machinaos_themes/](../design_handoff_machinaos_themes/) | Reference HTML mocks + token spec |
-| [design_handoff_machinaos_themes/MIGRATION_PLAYBOOK.md](../design_handoff_machinaos_themes/MIGRATION_PLAYBOOK.md) | Upstream recipe for the 4 deferred items (canvas, headers, decorative wrapper, sound) — all now landed |
+| [design_handoff_machinaos_themes/app/icons.js](../design_handoff_machinaos_themes/app/icons.js) | Upstream icon source (ported by Wave 23) |
+| [design_handoff_machinaos_themes/MIGRATION_PLAYBOOK.md](../design_handoff_machinaos_themes/MIGRATION_PLAYBOOK.md) | Upstream recipe — all originally-deferred items now landed (W14–W25) |

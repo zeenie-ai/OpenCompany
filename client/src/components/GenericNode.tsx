@@ -4,25 +4,24 @@ import { Handle, Position, NodeProps } from 'reactflow';
 import { resolveNodeDescription } from '../lib/nodeSpec';
 import { NodeIcon } from '../assets/icons';
 import { useNodeSpec } from '../lib/nodeSpec';
-import { NodeData } from '../types/NodeTypes';
+import { NodeData, NodeStyle } from '../types/NodeTypes';
 import { INodeInputDefinition, INodeOutputDefinition, NodeConnectionType } from '../types/INodeProperties';
 import { useAppStore } from '../store/useAppStore';
-import { useAppTheme } from '../hooks/useAppTheme';
 import { useNodeStatus } from '../contexts/WebSocketContext';
 import EditableNodeLabel from './ui/EditableNodeLabel';
 
 const GenericNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectable, selected }) => {
-  const theme = useAppTheme();
   const setSelectedNode = useAppStore((s) => s.setSelectedNode);
   const setRenamingNodeId = useAppStore((s) => s.setRenamingNodeId);
   const updateNodeData = useAppStore((s) => s.updateNodeData);
   const isDisabled = data?.disabled === true;
 
-  // Per-id slice subscription so an unrelated node's status update
-  // does not re-render this generic node.
-  const nodeStatus = useNodeStatus(id);
-  const executionStatus = nodeStatus?.status || 'idle';
-  const isExecuting = executionStatus === 'executing' || executionStatus === 'waiting';
+  // Per-id slice subscription so an unrelated node's status update does
+  // not re-render this generic node. Wave 21: visual execution state
+  // moved to per-theme CSS via the `.executing` class on the wrapper —
+  // we keep the subscription so future state-driven CSS toggles can
+  // read it without refactoring.
+  useNodeStatus(id);
 
   // Wave 6 Phase 3e: backend NodeSpec -> legacy fallback
   const definition = type ? resolveNodeDescription(type) : null;
@@ -119,17 +118,11 @@ const GenericNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
     <div
       className={`node ${selected ? 'selected' : ''}`}
       style={{
+        '--node-color': getNodeColor(),
         position: 'relative',
         padding: '12px 32px 12px 16px',
         minWidth: '160px',
         minHeight: '60px',
-        borderRadius: '12px',
-        background: `linear-gradient(135deg, ${getNodeColor()} 0%, ${getBorderColor()} 100%)`,
-        border: `2px solid ${isExecuting
-          ? (theme.isDarkMode ? theme.dracula.cyan : '#2563eb')
-          : selected
-            ? '#3b82f6'
-            : getBorderColor()}`,
         color: 'white',
         fontFamily: 'system-ui, -apple-system, sans-serif',
         fontSize: '14px',
@@ -137,19 +130,9 @@ const GenericNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
         textAlign: 'center',
         cursor: 'pointer',
         transition: 'all 0.2s ease',
-        boxShadow: isExecuting
-          ? theme.isDarkMode
-            ? `0 4px 12px ${theme.dracula.cyan}66, 0 0 0 3px ${theme.dracula.cyan}4D`
-            : `0 0 0 3px rgba(37, 99, 235, 0.5), 0 4px 16px rgba(37, 99, 235, 0.35)`
-          : selected
-            ? `0 8px 25px ${getNodeColor()}40, 0 0 0 2px ${theme.colors.focus}`
-            : theme.isDarkMode
-              ? `0 4px 12px ${getNodeColor()}40`
-              : `0 2px 8px ${getNodeColor()}25, 0 4px 16px rgba(0, 0, 0, 0.08)`,
         overflow: 'visible',
         opacity: isDisabled ? 0.5 : 1,
-        animation: isExecuting ? 'pulse 1.5s ease-in-out infinite' : 'none',
-      }}
+      } as NodeStyle}
     >
       {/* Disabled Overlay */}
       {isDisabled && (

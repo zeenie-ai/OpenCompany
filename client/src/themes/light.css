@@ -68,7 +68,7 @@
   --ease-default: cubic-bezier(0.2, 0.7, 0.3, 1);
   --ease-emphasis: cubic-bezier(0.6, -0.05, 0.3, 1.4);
   --motion-style: smooth;
-  --sound-pack: chime;
+  --sound-pack: parchment;
 
   /* Cursor + scrollbar */
   --cursor-default: auto;

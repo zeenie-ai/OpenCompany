@@ -130,6 +130,25 @@ export function useSoundSync(): void {
       document.removeEventListener('touchstart', handleHover, true);
     };
   }, []);
+
+  // One-shot AudioContext unlock on the first user gesture. Modern
+  // browsers (Chrome / Safari) keep the AudioContext suspended until a
+  // resume() call originates from a gesture handler — without this, the
+  // first play() can land microseconds after the gesture frame and the
+  // sound is silently dropped. `Sounds.unlock()` is idempotent so the
+  // `{ once: true }` listeners cover the lifetime fine.
+  useEffect(() => {
+    const handler = () => { Sounds.unlock(); };
+    const opts: AddEventListenerOptions = { once: true, capture: true, passive: true };
+    window.addEventListener('pointerdown', handler, opts);
+    window.addEventListener('keydown', handler, opts);
+    window.addEventListener('touchstart', handler, opts);
+    return () => {
+      window.removeEventListener('pointerdown', handler, true);
+      window.removeEventListener('keydown', handler, true);
+      window.removeEventListener('touchstart', handler, true);
+    };
+  }, []);
 }
 
 /** Play handle. Returns the same `Sounds.play` reference each render. */

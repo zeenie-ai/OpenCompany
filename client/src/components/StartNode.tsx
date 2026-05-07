@@ -1,7 +1,7 @@
 import React, { memo, useCallback } from 'react';
 import { nodePropsEqual } from './nodeMemoEquality';
 import { Handle, Position, NodeProps } from 'reactflow';
-import { NodeData } from '../types/NodeTypes';
+import { NodeData, NodeStyle } from '../types/NodeTypes';
 import { useAppStore } from '../store/useAppStore';
 import { useAppTheme } from '../hooks/useAppTheme';
 import { PlayCircle } from 'lucide-react';
@@ -34,9 +34,13 @@ const StartNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectabl
 
   return (
     // `node` + `selected` co-classes activate per-theme node decorations.
+    // Visual styling (background, border, radius, shadow) lives in
+    // base.css `.node { ... }` defaults + per-theme `.node` overrides
+    // and reads `var(--node-color)` for the per-definition accent.
     <div
       className={`node ${selected ? 'selected' : ''}`}
       style={{
+        '--node-color': nodeColor,
         position: 'relative',
         display: 'flex',
         flexDirection: 'column',
@@ -44,21 +48,14 @@ const StartNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectabl
         fontFamily: 'system-ui, -apple-system, sans-serif',
         fontSize: '11px',
         cursor: 'pointer',
-      }}
+      } as NodeStyle}
     >
-      {/* Main Square Node */}
+      {/* Main Square Node — layout only; visuals live in CSS. */}
       <div
         style={{
           position: 'relative',
           width: '60px',
           height: '60px',
-          borderRadius: '8px',
-          background: theme.isDarkMode
-            ? `linear-gradient(135deg, ${nodeColor}20 0%, ${theme.colors.background} 100%)`
-            : `linear-gradient(145deg, #ffffff 0%, ${nodeColor}10 100%)`,
-          border: `2px solid ${selected
-            ? theme.colors.focus
-            : theme.isDarkMode ? `${nodeColor}60` : `${nodeColor}50`}`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -66,11 +63,6 @@ const StartNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectabl
           fontSize: '28px',
           fontWeight: '600',
           transition: 'all 0.2s ease',
-          boxShadow: selected
-            ? `0 4px 12px ${theme.colors.focusRing}, 0 0 0 1px ${theme.colors.focusRing}`
-            : theme.isDarkMode
-              ? `0 2px 8px ${nodeColor}30`
-              : `0 2px 8px ${nodeColor}25, 0 4px 12px rgba(0,0,0,0.06)`,
         }}
       >
         {/* Play Icon */}

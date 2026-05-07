@@ -54,8 +54,17 @@
   --motion-style: scanline;
   --sound-pack: telex;
 
-  --cursor-default: auto;
+  /* Cursor — CCTV snooper reticle (REC-red crosshair with center dot) */
+  --cursor-default: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><g stroke='%23e82626' stroke-width='1' fill='none'><circle cx='12' cy='12' r='8'/><path d='M12 1 L12 6 M12 18 L12 23 M1 12 L6 12 M18 12 L23 12'/><circle cx='12' cy='12' r='1.5' fill='%23e82626'/></g></svg>") 12 12, crosshair;
   --cursor-pointer: pointer;
+
+  /* Canvas backplane — CCTV crosshair + corner brackets + 40px grain grid */
+  --canvas-grid:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1920' height='1080'><g stroke='%23e82626' stroke-width='1' fill='none' opacity='0.18'><path d='M40 40 H120 M40 40 V120 M1880 40 H1800 M1880 40 V120 M40 1040 H120 M40 1040 V960 M1880 1040 H1800 M1880 1040 V960'/><circle cx='960' cy='540' r='40' opacity='0.2'/><path d='M960 480 V600 M900 540 H1020' opacity='0.25'/></g></svg>"),
+    repeating-linear-gradient(0deg, transparent 0 3px, rgba(106,204,106,0.04) 3px 4px),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40'><g stroke='%23888c90' stroke-width='0.4' fill='none' opacity='0.12'><path d='M0 20 H40 M20 0 V40'/></g></svg>");
+  --canvas-grid-opacity: 1;
+
   --scrollbar-track: #1a1c1e;
   --scrollbar-thumb: #5a5e62;
 

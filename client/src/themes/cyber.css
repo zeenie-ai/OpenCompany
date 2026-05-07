@@ -71,9 +71,16 @@
   --motion-style: glitch;
   --sound-pack: terminal;
 
-  /* Cursor + scrollbar */
-  --cursor-default: auto;
-  --cursor-pointer: pointer;
+  /* Cursor — crosshair targeting reticle (upstream design handoff) */
+  --cursor-default: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><g stroke='%23f51eb6' stroke-width='1.2' fill='none'><path d='M12 2 L12 8 M12 16 L12 22 M2 12 L8 12 M16 12 L22 12'/><circle cx='12' cy='12' r='3'/><circle cx='12' cy='12' r='1' fill='%231dd9e5'/></g></svg>") 12 12, crosshair;
+  --cursor-pointer: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><g stroke='%23f51eb6' stroke-width='1.5' fill='none'><rect x='3' y='3' width='18' height='18'/><rect x='8' y='8' width='8' height='8' fill='%231dd9e5'/></g></svg>") 12 12, pointer;
+
+  /* Canvas backplane — magnetic-tape grid (24px cells, neon magenta + cyan) */
+  --canvas-grid:
+    repeating-linear-gradient(0deg, transparent 0 23px, rgba(245, 30, 182, 0.10) 23px 24px),
+    repeating-linear-gradient(90deg, transparent 0 23px, rgba(29, 217, 229, 0.10) 23px 24px);
+  --canvas-grid-opacity: 1;
+
   --scrollbar-track: #0a0420;
   --scrollbar-thumb: #f51eb6;
 

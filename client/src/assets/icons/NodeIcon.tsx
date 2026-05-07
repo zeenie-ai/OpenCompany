@@ -27,6 +27,8 @@ import * as React from 'react';
 
 import { cn } from '@/lib/utils';
 import { resolveIcon, resolveLibraryIcon, isImageIcon } from '.';
+import { useTheme } from '../../contexts/ThemeContext';
+import { THEMED_GLYPHS, ICON_KEYS, type IconKey } from './themedGlyphs';
 
 export interface NodeIconProps {
   /** Backend-declared icon string. May be undefined while the spec
@@ -44,7 +46,37 @@ export const NodeIcon: React.FC<NodeIconProps> = ({
   className,
   fallback = null,
 }) => {
+  const { theme } = useTheme();
   let inner: React.ReactNode;
+
+  // 1. Per-theme glyph override. Activates only when the icon prop is one
+  //    of the conceptual `IconKey`s (`agent`, `trigger`, `tool`, …) AND
+  //    the active theme declares an entry for it. Anything else (URLs,
+  //    `asset:foo`, `lobehub:Brand`, `lucide:Bot`, emoji) skips this
+  //    branch and falls through to the existing dispatch chain below.
+  //    The SVG strings come from `themedGlyphs.ts` — author-trusted
+  //    markup committed to the repo, never user input — so injecting
+  //    via `dangerouslySetInnerHTML` is safe here. Do not extend this
+  //    branch with values built from runtime input.
+  if (icon && ICON_KEYS.has(icon as IconKey)) {
+    const themedSvg = THEMED_GLYPHS[theme]?.[icon as IconKey];
+    if (themedSvg) {
+      // SAFE: `themedSvg` is an author-trusted constant from
+      // `themedGlyphs.ts` — committed-to-repo markup, never user input.
+      // The repo's ESLint config does not enable `react/no-danger`, so
+      // no eslint-disable is needed; this comment documents the trust
+      // boundary so future reviewers don't second-guess it.
+      return (
+        <span
+          className={cn('inline-flex items-center justify-center', className)}
+          dangerouslySetInnerHTML={{ __html: themedSvg }}
+        />
+      );
+    }
+    // No entry for this theme/key — fall through to the default chain so
+    // the consumer's existing icon (lucide / asset / emoji) still renders.
+  }
+
   const LibIcon = resolveLibraryIcon(icon);
   if (LibIcon) {
     // LibIcon is a runtime-resolved component reference; using it as a JSX

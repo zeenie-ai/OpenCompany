@@ -42,6 +42,11 @@
   /* Cursor + scrollbar */
   --cursor-default: auto;
   --cursor-pointer: pointer;
+
+  /* Canvas-host background pattern slot — themes override with a CSS
+   * gradient or SVG data-url. Default: no pattern. */
+  --canvas-grid: none;
+  --canvas-grid-opacity: 0.4;
 }
 
 /* ============================================================================
@@ -77,8 +82,124 @@
   /* Renaissance */
   :root[data-theme="renaissance"] .canvas .ornament,
   /* Generic Tailwind animate-pulse used by node execution pip */
-  .animate-pulse {
+  .animate-pulse,
+  /* Wave 21 default node pulse */
+  .react-flow__node.executing .node {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* ============================================================================
+ * Default canvas-node visuals (Wave 21).
+ *
+ * Each node component sets `--node-color` inline from its plugin's
+ * accent hex (visuals.json). These rules consume that custom property
+ * to draw a sensible default border / gradient / shadow so light, dark,
+ * and any theme that doesn't define its own `.node` rule still renders
+ * correctly. Per-theme CSS in client/src/themes/<theme>.css overrides
+ * these with material-specific decorations (vellum, neon, marble, etc.).
+ * ============================================================================ */
+
+.node {
+  position: relative;
+  border-radius: 12px;
+  border: 2px solid color-mix(in srgb, var(--node-color, hsl(var(--border))) 60%, transparent);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--node-color, hsl(var(--card))) 14%, hsl(var(--card))) 0%,
+      hsl(var(--card)) 100%
+    );
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--node-color, #000) 18%, transparent);
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.node:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--node-color, #000) 28%, transparent);
+}
+
+.node.selected {
+  border-color: var(--node-color, hsl(var(--ring)));
+  box-shadow:
+    0 0 0 1px var(--node-color, hsl(var(--ring))),
+    0 4px 14px color-mix(in srgb, var(--node-color, #000) 32%, transparent);
+}
+
+/* Pulse during execution — react-flow toggles `.executing` on the wrapper
+   via canvasAnimations.ts (`.react-flow__node.executing`). */
+.react-flow__node.executing .node {
+  animation: node-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes node-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--node-color, hsl(var(--ring))) 60%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--node-color, hsl(var(--ring))) 0%, transparent);
+  }
+}
+
+/* Square-node default visuals — outer wrapper is layout-only, the inner
+   `.sq-node-box` carries the bordered icon-square. Per-theme CSS
+   already in `client/src/themes/*.css` overrides these for material
+   identity. */
+.sq-node {
+  position: relative;
+}
+
+.sq-node-box {
+  border-radius: 10px;
+  border: 2px solid color-mix(in srgb, var(--node-color, hsl(var(--border))) 60%, transparent);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--node-color, hsl(var(--card))) 18%, hsl(var(--card))) 0%,
+      hsl(var(--card)) 100%
+    );
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--node-color, #000) 18%, transparent);
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.sq-node-box:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--node-color, #000) 28%, transparent);
+}
+
+.sq-node.selected .sq-node-box {
+  border-color: var(--node-color, hsl(var(--ring)));
+  box-shadow:
+    0 0 0 1px var(--node-color, hsl(var(--ring))),
+    0 4px 14px color-mix(in srgb, var(--node-color, #000) 32%, transparent);
+}
+
+.react-flow__node.executing .sq-node-box,
+.sq-node[data-executing] .sq-node-box {
+  animation: node-pulse 1.5s ease-in-out infinite;
+}
+
+/* ============================================================================
+ * Canvas-host background pattern + cursor (Wave 24).
+ *
+ * Themes provide per-theme decorative backgrounds via the `--canvas-grid`
+ * custom property (CSS gradient or SVG data-url) and per-theme cursors
+ * via `--cursor-default`. Both fall back to neutral defaults from `:root`.
+ *
+ * The pattern is layered on top of React Flow's own background — themes
+ * keep their canvas surface colour via shadcn `--background` tokens and
+ * this rule adds the decorative grid on top.
+ * ============================================================================ */
+
+.canvas-host {
+  background-image: var(--canvas-grid, none);
+  cursor: var(--cursor-default, auto);
 }

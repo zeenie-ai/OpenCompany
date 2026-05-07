@@ -118,6 +118,11 @@
 
   --tint-soft: 16%;
   --tint-border: 40%;
+
+  /* Canvas backplane — flagstone crypt floor on 80x80 tile */
+  --canvas-grid:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><g stroke='%234a6a4a' stroke-width='0.4' fill='none' opacity='0.25'><path d='M0 30 H80 M30 0 V80 M0 60 H80 M60 0 V80'/></g></svg>");
+  --canvas-grid-opacity: 1;
 }
 
 /* Body — moss + damp stone */
