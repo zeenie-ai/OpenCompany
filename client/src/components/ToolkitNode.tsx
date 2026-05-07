@@ -79,6 +79,7 @@ const ToolkitNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
 
   return (
     <div
+      className={`node ${selected ? 'selected' : ''}`}
       style={{
         position: 'relative',
         display: 'flex',

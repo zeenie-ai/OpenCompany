@@ -162,3 +162,660 @@
   background: #f51eb6;
   box-shadow: 0 0 6px #f51eb6;
 }
+
+/* ── Per-component decorations (Wave 16 port from handoff) ─── */
+
+/* CRT flicker on whole frame */
+@keyframes cyber-flicker {
+  0%, 92%, 100% { opacity: 1; }
+  93% { opacity: 0.88; }
+  94% { opacity: 1; }
+  96% { opacity: 0.94; }
+  97% { opacity: 1; }
+}
+
+/* Rolling scanline */
+@keyframes cyber-roll {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+/* Blinking elements (LED, status pip, cmdk arrow) */
+@keyframes cyber-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0.4; }
+}
+
+/* Glitch on hover */
+@keyframes cyber-glitch {
+  0%, 100% { transform: translateX(0); text-shadow: 0 0 4px var(--neon-magenta), 0 0 12px var(--neon-magenta), 1px 0 0 var(--neon-cyan); }
+  20% { transform: translateX(-2px); text-shadow: 2px 0 var(--neon-cyan), -2px 0 var(--neon-magenta); }
+  40% { transform: translateX(2px); text-shadow: -2px 0 var(--neon-cyan), 2px 0 var(--neon-magenta); }
+  60% { transform: translateX(-1px); }
+  80% { transform: translateX(1px); }
+}
+
+/* ─── SCANLINES OVERLAY across the whole app ─── */
+:root[data-theme="cyber"] .app-frame {
+  box-shadow:
+    inset 0 0 0 1px var(--neon-magenta),
+    inset 0 0 0 4px var(--bg-app),
+    inset 0 0 0 5px var(--neon-cyan),
+    0 0 80px rgba(245, 30, 182, 0.4);
+  position: relative;
+  animation: cyber-flicker 5s linear infinite;
+}
+:root[data-theme="cyber"] .app-frame::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(0deg, transparent 0 2px, rgba(0,0,0,0.25) 2px 3px);
+  pointer-events: none;
+  z-index: 1000;
+  mix-blend-mode: multiply;
+}
+:root[data-theme="cyber"] .app-frame::before {
+  content: ''; position: absolute; left: 0; right: 0; height: 80px;
+  background: linear-gradient(180deg, transparent, rgba(245, 30, 182, 0.15), transparent);
+  pointer-events: none; z-index: 1001;
+  animation: cyber-roll 8s linear infinite;
+}
+
+/* ─── PANELS with circuit-board border lights ─── */
+:root[data-theme="cyber"] .toolbar,
+:root[data-theme="cyber"] .sidebar,
+:root[data-theme="cyber"] .palette,
+:root[data-theme="cyber"] .chat {
+  background:
+    linear-gradient(180deg, rgba(245, 30, 182, 0.04), transparent 60px),
+    var(--bg-panel);
+  position: relative;
+}
+:root[data-theme="cyber"] .toolbar { border-bottom: 1px solid var(--neon-magenta); box-shadow: 0 1px 12px rgba(245, 30, 182, 0.5); }
+:root[data-theme="cyber"] .sidebar { border-right: 1px solid var(--neon-magenta); box-shadow: 1px 0 12px rgba(245, 30, 182, 0.3); }
+:root[data-theme="cyber"] .palette { border-left: 1px solid var(--neon-cyan); box-shadow: -1px 0 12px rgba(29, 217, 229, 0.3); }
+:root[data-theme="cyber"] .chat    { border-top: 1px solid var(--neon-cyan); box-shadow: 0 -1px 12px rgba(29, 217, 229, 0.3); }
+
+/* ─── CANVAS — magnetic-tape grid with horizon ─── */
+:root[data-theme="cyber"] .canvas {
+  background:
+    radial-gradient(ellipse at 50% 100%, rgba(245, 30, 182, 0.25), transparent 60%),
+    linear-gradient(180deg, transparent 0%, transparent 50%, rgba(29, 217, 229, 0.04) 50%, rgba(29, 217, 229, 0.08) 100%),
+    linear-gradient(rgba(245, 30, 182, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(29, 217, 229, 0.08) 1px, transparent 1px),
+    var(--bg-canvas);
+  background-size: auto, auto, 24px 24px, 24px 24px, auto;
+  position: relative;
+}
+
+/* Perspective grid floor */
+:root[data-theme="cyber"] .canvas::before {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 50%;
+  background:
+    linear-gradient(180deg, transparent, rgba(245, 30, 182, 0.10) 80%),
+    repeating-linear-gradient(180deg, transparent 0 20px, rgba(29, 217, 229, 0.4) 20px 21px);
+  transform: perspective(300px) rotateX(60deg);
+  transform-origin: bottom;
+  pointer-events: none;
+  opacity: 0.4;
+}
+
+/* Floating "SIGNAL LOST" status text */
+:root[data-theme="cyber"] .canvas::after {
+  content: '◆ SIGNAL ◆ NIGHT_MARKET.7 ◆ 03:47:22';
+  position: absolute; top: 12px; right: 16px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--neon-cyan);
+  letter-spacing: 0.2em;
+  text-shadow: 0 0 4px var(--neon-cyan);
+  pointer-events: none;
+  animation: cyber-blink 1.6s steps(2) infinite;
+}
+
+/* ─── BUTTONS — neon outline ─── */
+:root[data-theme="cyber"] .btn {
+  background: transparent;
+  border: 1px solid var(--neon-cyan);
+  color: var(--neon-cyan);
+  font-family: var(--font-body);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 11px; font-weight: 600;
+  padding: 7px 14px;
+  text-shadow: 0 0 4px currentColor;
+  box-shadow: 0 0 8px rgba(29, 217, 229, 0.3), inset 0 0 8px rgba(29, 217, 229, 0.1);
+  position: relative;
+  transition: none;
+}
+:root[data-theme="cyber"] .btn::before {
+  content: '> '; opacity: 0; transition: opacity var(--dur-fast);
+}
+:root[data-theme="cyber"] .btn:hover {
+  color: var(--neon-magenta);
+  border-color: var(--neon-magenta);
+  background: rgba(245, 30, 182, 0.10);
+  box-shadow: 0 0 16px var(--neon-magenta), inset 0 0 12px rgba(245, 30, 182, 0.2);
+}
+:root[data-theme="cyber"] .btn:hover::before { opacity: 1; }
+
+/* ─── INPUTS — terminal entry ─── */
+:root[data-theme="cyber"] .input {
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--border-default);
+  color: var(--neon-cyan);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  caret-color: var(--neon-magenta);
+  text-shadow: 0 0 3px var(--neon-cyan);
+  padding: 7px 10px 7px 22px;
+}
+:root[data-theme="cyber"] .input:focus {
+  outline: none;
+  border-color: var(--neon-magenta);
+  box-shadow: 0 0 0 1px var(--neon-magenta), 0 0 16px rgba(245, 30, 182, 0.5);
+}
+:root[data-theme="cyber"] .input::placeholder { color: var(--fg-faint); }
+
+/* prompt prefix */
+:root[data-theme="cyber"] .input { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 2 L6 6 L2 10' fill='none' stroke='%23f51eb6' stroke-width='1.5'/></svg>"); background-repeat: no-repeat; background-position: 7px center; background-size: 10px; }
+
+/* ─── ROWS — scan-bracket on hover ─── */
+:root[data-theme="cyber"] .row {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg-muted);
+  padding: 6px 10px;
+  position: relative;
+  border-left: 2px solid transparent;
+  transition: color var(--dur-fast) steps(2), border-color var(--dur-fast), background var(--dur-fast);
+}
+:root[data-theme="cyber"] .row:hover {
+  color: var(--neon-magenta);
+  background: var(--bg-hover);
+  border-left-color: var(--neon-magenta);
+  text-shadow: 0 0 4px var(--neon-magenta);
+}
+:root[data-theme="cyber"] .row:hover::after {
+  content: ' ◀'; color: var(--neon-magenta);
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  animation: cyber-blink 0.6s steps(2) infinite;
+}
+
+/* ─── NODES — chrome terminals with neon underglow ─── */
+:root[data-theme="cyber"] .node {
+  background: linear-gradient(180deg, var(--bg-elevated), var(--bg-panel));
+  border: 1px solid var(--neon-cyan);
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--neon-cyan);
+  padding: 10px 14px;
+  text-shadow: 0 0 4px currentColor;
+  box-shadow:
+    0 0 0 1px var(--bg-app),
+    0 0 16px rgba(29, 217, 229, 0.4),
+    inset 0 0 12px rgba(29, 217, 229, 0.1);
+  position: relative;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+  transition: none;
+}
+:root[data-theme="cyber"] .node-trigger { border-color: var(--neon-green); color: var(--neon-green); box-shadow: 0 0 0 1px var(--bg-app), 0 0 16px rgba(38, 217, 122, 0.5), inset 0 0 12px rgba(38, 217, 122, 0.1); }
+:root[data-theme="cyber"] .node-agent   { border-color: var(--neon-magenta); color: var(--neon-magenta); box-shadow: 0 0 0 1px var(--bg-app), 0 0 16px rgba(245, 30, 182, 0.6), inset 0 0 12px rgba(245, 30, 182, 0.15); }
+:root[data-theme="cyber"] .node-output  { border-color: var(--neon-yellow); color: var(--neon-yellow); box-shadow: 0 0 0 1px var(--bg-app), 0 0 16px rgba(255, 208, 40, 0.4), inset 0 0 12px rgba(255, 208, 40, 0.1); }
+
+/* corner LED */
+:root[data-theme="cyber"] .node::before {
+  content: ''; position: absolute; top: 4px; left: 4px;
+  width: 4px; height: 4px;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
+  animation: cyber-blink 1.4s steps(2) infinite;
+}
+:root[data-theme="cyber"] .node:hover {
+  box-shadow:
+    0 0 0 1px var(--bg-app),
+    0 0 24px currentColor,
+    inset 0 0 16px rgba(255, 255, 255, 0.1);
+}
+
+/* edges glow */
+:root[data-theme="cyber"] .edge path {
+  stroke: var(--neon-magenta) !important;
+  filter: drop-shadow(0 0 4px var(--neon-magenta));
+}
+
+/* ─── SQUARE NODES — terminal modules ─── */
+:root[data-theme="cyber"] .sq-node-box {
+  background: linear-gradient(180deg, rgba(245,30,182,0.10), rgba(0,0,0,0.6));
+  border: 1px solid var(--neon-magenta);
+  border-radius: 0;
+  box-shadow:
+    inset 0 0 0 1px rgba(0,0,0,0.6),
+    0 0 12px rgba(245,30,182,0.4);
+  color: var(--neon-magenta);
+  text-shadow: 0 0 4px currentColor;
+}
+:root[data-theme="cyber"] .sq-node.selected .sq-node-box {
+  border-color: var(--neon-cyan);
+  color: var(--neon-cyan);
+  box-shadow:
+    inset 0 0 0 1px rgba(0,0,0,0.6),
+    0 0 0 1px var(--neon-cyan),
+    0 0 20px var(--neon-cyan);
+  animation: cyber-blink 1.6s steps(2) infinite;
+}
+:root[data-theme="cyber"] .sq-node-pip {
+  border-radius: 0;
+  width: 8px; height: 8px;
+  box-shadow: 0 0 6px currentColor;
+}
+:root[data-theme="cyber"] .sq-node-gear {
+  background: var(--bg-app);
+  border: 1px solid var(--neon-cyan);
+  color: var(--neon-cyan);
+  border-radius: 0;
+  text-shadow: 0 0 3px currentColor;
+}
+:root[data-theme="cyber"] .sq-node-handle {
+  border-radius: 0;
+  background: var(--neon-magenta);
+  border-color: var(--neon-magenta);
+  box-shadow: 0 0 4px var(--neon-magenta);
+}
+:root[data-theme="cyber"] .sq-node-handle.out { background: var(--neon-cyan); border-color: var(--neon-cyan); box-shadow: 0 0 4px var(--neon-cyan); }
+:root[data-theme="cyber"] .sq-node-label {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 3px currentColor;
+  font-size: 10px;
+}
+
+/* ─── CATEGORIES — system blocks ─── */
+:root[data-theme="cyber"] .cat {
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--border-default);
+  border-radius: 0;
+}
+:root[data-theme="cyber"] .cat-head {
+  border-bottom: 1px solid var(--neon-magenta);
+  background: rgba(245,30,182,0.06);
+}
+:root[data-theme="cyber"] .cat-tile {
+  background: rgba(0,0,0,0.5);
+  border: 1px solid var(--cat-color, var(--neon-magenta));
+  color: var(--cat-color, var(--neon-magenta));
+  border-radius: 0;
+  box-shadow: 0 0 6px currentColor;
+}
+:root[data-theme="cyber"] .cat-name {
+  font-family: var(--font-display);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--neon-magenta);
+  text-shadow: 0 0 4px currentColor;
+}
+:root[data-theme="cyber"] .cat-count {
+  background: var(--bg-app);
+  border: 1px solid var(--neon-cyan);
+  color: var(--neon-cyan);
+  border-radius: 0;
+  text-shadow: 0 0 3px currentColor;
+}
+:root[data-theme="cyber"] .cat-chev {
+  color: var(--neon-magenta);
+  text-shadow: 0 0 4px currentColor;
+}
+
+/* ─── COMP ITEMS ─── */
+:root[data-theme="cyber"] .comp {
+  background: rgba(0,0,0,0.5);
+  border: 1px solid var(--border-default);
+  border-radius: 0;
+  position: relative;
+}
+:root[data-theme="cyber"] .comp::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+  background: var(--cat-color, var(--neon-magenta));
+  opacity: 0.6;
+}
+:root[data-theme="cyber"] .comp:hover {
+  border-color: var(--cat-color, var(--neon-magenta));
+  background: rgba(245,30,182,0.08);
+  box-shadow: 0 0 12px rgba(245,30,182,0.3);
+}
+:root[data-theme="cyber"] .comp-ico {
+  background: rgba(0,0,0,0.6);
+  border: 1px solid var(--cat-color, var(--neon-magenta));
+  color: var(--cat-color, var(--neon-magenta));
+  border-radius: 0;
+  box-shadow: 0 0 6px currentColor;
+}
+:root[data-theme="cyber"] .comp-name {
+  font-family: var(--font-display);
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 3px currentColor;
+}
+:root[data-theme="cyber"] .comp-desc {
+  font-family: var(--font-mono);
+  color: var(--fg-muted);
+}
+:root[data-theme="cyber"] .comp-grip { color: var(--neon-magenta); }
+
+/* ─── MENU POP ─── */
+:root[data-theme="cyber"] .menu-pop {
+  background: rgba(10,4,32,0.98);
+  border: 1px solid var(--neon-magenta);
+  border-radius: 0;
+  box-shadow:
+    inset 0 0 0 1px var(--bg-app),
+    inset 0 0 0 2px var(--neon-cyan),
+    0 0 30px rgba(245,30,182,0.4);
+}
+:root[data-theme="cyber"] .menu-pop-item {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 3px currentColor;
+}
+:root[data-theme="cyber"] .menu-pop-item::before { content: '> '; opacity: 0.5; }
+:root[data-theme="cyber"] .menu-pop-item:hover {
+  background: var(--bg-active);
+  color: var(--neon-magenta);
+}
+
+/* ─── SETTINGS SECTIONS ─── */
+:root[data-theme="cyber"] .settings-section {
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--neon-magenta);
+  border-radius: 0;
+  position: relative;
+}
+:root[data-theme="cyber"] .settings-section::before {
+  content: ''; position: absolute; left: 0; top: 0; right: 0; height: 2px;
+  background: var(--neon-magenta);
+  box-shadow: 0 0 8px var(--neon-magenta);
+}
+:root[data-theme="cyber"] .settings-section h3 {
+  color: var(--neon-cyan);
+  font-family: var(--font-display);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  text-shadow: 0 0 4px currentColor;
+  border-bottom: 1px solid var(--border-default);
+  padding-bottom: 8px;
+}
+:root[data-theme="cyber"] .settings-section h3::before { content: '◆ '; color: var(--neon-magenta); }
+:root[data-theme="cyber"] .settings-summary {
+  background: rgba(0,0,0,0.6);
+  border: 1px solid var(--neon-cyan);
+  font-family: var(--font-mono);
+  color: var(--neon-cyan);
+  text-shadow: 0 0 3px currentColor;
+  border-radius: 0;
+}
+
+/* ─── CRED CARDS ─── */
+:root[data-theme="cyber"] .cred-card {
+  background: rgba(0,0,0,0.5);
+  border: 1px solid var(--cred-color, var(--neon-magenta));
+  border-radius: 0;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--cred-color, var(--neon-magenta)) 25%, transparent);
+}
+:root[data-theme="cyber"] .cred-card-head {
+  background: rgba(245,30,182,0.08);
+  border-bottom: 1px solid var(--cred-color, var(--neon-magenta));
+}
+:root[data-theme="cyber"] .cred-card .name {
+  font-family: var(--font-display);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--cred-color, var(--neon-magenta));
+  text-shadow: 0 0 4px currentColor;
+}
+:root[data-theme="cyber"] .cred-tag {
+  font-family: var(--font-mono);
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  border-radius: 0;
+  text-shadow: 0 0 3px currentColor;
+  font-size: 9px;
+}
+
+/* Credential rows — connection traces */
+:root[data-theme="cyber"] .cred-row {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-default);
+  border-radius: 0;
+  position: relative;
+}
+:root[data-theme="cyber"] .cred-row::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+  background: var(--neon-magenta);
+  box-shadow: 0 0 6px var(--neon-magenta);
+}
+:root[data-theme="cyber"] .cred-row .name {
+  font-family: var(--font-display);
+  letter-spacing: 0.16em;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 3px currentColor;
+  font-size: 11px;
+}
+:root[data-theme="cyber"] .cred-row .badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border-radius: 0;
+  text-shadow: 0 0 3px currentColor;
+}
+
+/* ─── PARAMETER PANEL COLS ─── */
+:root[data-theme="cyber"] .param-col {
+  background: rgba(0,0,0,0.4);
+  border-right: 1px solid var(--neon-magenta);
+}
+:root[data-theme="cyber"] .param-col-head {
+  background: rgba(245,30,182,0.10);
+  border-bottom: 1px solid var(--neon-magenta);
+  font-family: var(--font-display);
+  color: var(--neon-cyan);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  text-shadow: 0 0 3px currentColor;
+}
+:root[data-theme="cyber"] .json-block {
+  background: rgba(0,0,0,0.7);
+  border: 1px solid var(--border-default);
+  font-family: var(--font-mono);
+  color: var(--neon-green);
+  text-shadow: 0 0 3px currentColor;
+  border-radius: 0;
+}
+:root[data-theme="cyber"] .json-key { color: var(--neon-cyan); text-shadow: 0 0 3px currentColor; }
+:root[data-theme="cyber"] .json-str { color: var(--neon-green); }
+:root[data-theme="cyber"] .json-num { color: var(--neon-yellow); text-shadow: 0 0 3px currentColor; }
+
+/* ─── CHAT TABS ─── */
+:root[data-theme="cyber"] .chat-tab {
+  font-family: var(--font-display);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 10px;
+  border-radius: 0;
+  color: var(--fg-muted);
+}
+:root[data-theme="cyber"] .chat-tab.active {
+  background: var(--neon-magenta);
+  color: var(--bg-app);
+  text-shadow: none;
+  box-shadow: 0 0 8px var(--neon-magenta);
+}
+
+/* ─── CHAT MESSAGES — DM transmission ─── */
+:root[data-theme="cyber"] .chat-msg {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  border-radius: 0;
+  position: relative;
+}
+:root[data-theme="cyber"] .chat-msg-user {
+  background: rgba(245, 30, 182, 0.15);
+  color: var(--neon-magenta);
+  border: 1px solid var(--neon-magenta);
+  text-shadow: 0 0 3px currentColor;
+  box-shadow: 0 0 8px rgba(245, 30, 182, 0.3);
+}
+:root[data-theme="cyber"] .chat-msg-user::before { content: '> USER:: '; opacity: 0.6; }
+:root[data-theme="cyber"] .chat-msg-bot {
+  background: rgba(29, 217, 229, 0.08);
+  color: var(--neon-cyan);
+  border: 1px solid var(--neon-cyan);
+  text-shadow: 0 0 3px currentColor;
+}
+:root[data-theme="cyber"] .chat-msg-bot::before { content: '< NODE:: '; opacity: 0.6; }
+
+/* ─── THEME SWITCHER ─── */
+:root[data-theme="cyber"] .theme-switcher {
+  background: rgba(10, 4, 32, 0.95);
+  border: 1px solid var(--neon-magenta);
+  box-shadow: 0 0 16px rgba(245, 30, 182, 0.5);
+}
+:root[data-theme="cyber"] .theme-switcher button {
+  font-family: var(--font-display);
+  text-shadow: 0 0 4px currentColor;
+}
+
+/* ─── EMPTY STATE ─── */
+:root[data-theme="cyber"] .empty-state .glyph {
+  font-family: var(--font-display);
+  font-size: 64px;
+  color: var(--neon-magenta);
+  text-shadow: 0 0 16px var(--neon-magenta);
+}
+
+/* ─── STATUS BAR — system console ─── */
+:root[data-theme="cyber"] .statusbar {
+  background: rgba(5, 0, 16, 0.95);
+  border-top: 1px solid var(--neon-magenta);
+  box-shadow: 0 -1px 12px rgba(245, 30, 182, 0.3);
+  font-family: var(--font-mono);
+  color: var(--neon-cyan);
+  text-shadow: 0 0 3px currentColor;
+  letter-spacing: 0.08em;
+}
+:root[data-theme="cyber"] .statusbar .pip {
+  background: var(--neon-green);
+  box-shadow: 0 0 8px var(--neon-green);
+  animation: cyber-blink 1.4s steps(2) infinite;
+  border-radius: 0;
+}
+
+/* ─── MODAL — terminal popup ─── */
+:root[data-theme="cyber"] .modal {
+  background:
+    linear-gradient(180deg, rgba(245, 30, 182, 0.06), transparent 60px),
+    var(--bg-panel);
+  border: 1px solid var(--neon-magenta);
+  border-radius: 0;
+  box-shadow:
+    inset 0 0 0 1px var(--bg-app),
+    inset 0 0 0 2px var(--neon-cyan),
+    0 0 60px rgba(245, 30, 182, 0.5),
+    0 30px 80px rgba(0, 0, 0, 0.8);
+  position: relative;
+}
+:root[data-theme="cyber"] .modal::before {
+  content: ''; position: absolute; inset: 0;
+  background: repeating-linear-gradient(0deg, transparent 0 2px, rgba(0,0,0,0.2) 2px 3px);
+  pointer-events: none; mix-blend-mode: multiply;
+}
+:root[data-theme="cyber"] .modal-head {
+  border-bottom: 1px solid var(--neon-magenta);
+  background: linear-gradient(180deg, rgba(245, 30, 182, 0.12), transparent);
+  padding: 14px 18px;
+}
+:root[data-theme="cyber"] .modal-title {
+  color: var(--neon-magenta);
+  text-shadow: 0 0 4px currentColor;
+  font-family: var(--font-display);
+}
+:root[data-theme="cyber"] .modal-title::before { content: '◆ '; }
+:root[data-theme="cyber"] .modal-foot {
+  border-top: 1px solid var(--border-default);
+}
+:root[data-theme="cyber"] .field label {
+  color: var(--neon-cyan);
+  text-shadow: 0 0 3px currentColor;
+}
+:root[data-theme="cyber"] .field label::before { content: '> '; opacity: 0.6; }
+
+/* ─── COMMAND PALETTE — root terminal ─── */
+:root[data-theme="cyber"] .cmdk {
+  background: rgba(10, 4, 32, 0.98);
+  border: 1px solid var(--neon-magenta);
+  border-radius: 0;
+  box-shadow:
+    inset 0 0 0 2px var(--bg-app),
+    inset 0 0 0 3px var(--neon-cyan),
+    0 0 60px rgba(245, 30, 182, 0.6);
+}
+:root[data-theme="cyber"] .cmdk input {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  background: transparent;
+  color: var(--neon-magenta);
+  border-bottom: 1px solid var(--neon-magenta);
+  padding-left: 30px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 2 L6 6 L2 10' fill='none' stroke='%23f51eb6' stroke-width='1.5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: 14px center;
+  background-size: 12px;
+  text-shadow: 0 0 4px currentColor;
+  caret-color: var(--neon-magenta);
+}
+:root[data-theme="cyber"] .cmdk input::placeholder { color: var(--fg-faint); }
+:root[data-theme="cyber"] .cmdk-item {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  border-radius: 0;
+  color: var(--fg-muted);
+  border-left: 2px solid transparent;
+  padding-left: 8px;
+}
+:root[data-theme="cyber"] .cmdk-item.active {
+  background: var(--bg-active);
+  color: var(--neon-magenta);
+  border-left-color: var(--neon-magenta);
+  text-shadow: 0 0 4px currentColor;
+}
+:root[data-theme="cyber"] .cmdk-item.active::after {
+  content: ' ◀'; margin-left: auto;
+  color: var(--neon-magenta);
+  animation: cyber-blink 0.6s steps(2) infinite;
+}
+:root[data-theme="cyber"] .cmdk-item kbd {
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--neon-cyan);
+  color: var(--neon-cyan);
+  font-family: var(--font-mono);
+  border-radius: 0;
+  text-shadow: 0 0 3px currentColor;
+}
+
+/* Headings — neon glow + glitch on hover */
+:root[data-theme="cyber"] .v-display {
+  font-family: var(--font-display);
+  letter-spacing: var(--type-tracking-display);
+  text-transform: uppercase;
+  color: var(--neon-magenta);
+  text-shadow:
+    0 0 4px var(--neon-magenta),
+    0 0 12px var(--neon-magenta),
+    1px 0 0 var(--neon-cyan);
+}
+:root[data-theme="cyber"] .v-display:hover { animation: cyber-glitch 0.4s steps(8); }

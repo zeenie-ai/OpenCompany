@@ -137,3 +137,101 @@
 :root[data-theme="surveillance"] ::-webkit-scrollbar-thumb {
   background: #5a5e62;
 }
+
+/* ── Per-component decorations (Wave 16 port from handoff) ─── */
+
+:root[data-theme="surveillance"] .toolbar,
+:root[data-theme="surveillance"] .sidebar,
+:root[data-theme="surveillance"] .palette,
+:root[data-theme="surveillance"] .chat { background: var(--bg-panel); }
+:root[data-theme="surveillance"] .toolbar { border-bottom: 1px solid var(--border-strong); }
+:root[data-theme="surveillance"] .sidebar { border-right: 1px solid var(--border-strong); }
+:root[data-theme="surveillance"] .palette { border-left: 1px solid var(--border-strong); }
+:root[data-theme="surveillance"] .chat    { border-top: 1px solid var(--border-strong); }
+
+/* CANVAS — CCTV grid + crosshair */
+:root[data-theme="surveillance"] .canvas {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1920' height='1080'><g stroke='%23e82626' stroke-width='1' fill='none' opacity='0.18'><path d='M40 40 H120 M40 40 V120 M1880 40 H1800 M1880 40 V120 M40 1040 H120 M40 1040 V960 M1880 1040 H1800 M1880 1040 V960'/><circle cx='960' cy='540' r='40' opacity='0.2'/><path d='M960 480 V600 M900 540 H1020' opacity='0.25'/></g><text x='80' y='80' fill='%23e82626' font-family='monospace' font-size='14' opacity='0.5'>● REC</text><text x='80' y='1020' fill='%23e82626' font-family='monospace' font-size='12' opacity='0.4'>CAM-04 / 19:42:08</text></svg>"),
+    repeating-linear-gradient(0deg, transparent 0, transparent 3px, rgba(106,204,106,0.04) 3px, rgba(106,204,106,0.04) 4px),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40'><g stroke='%23888c90' stroke-width='0.4' fill='none' opacity='0.12'><path d='M0 20 H40 M20 0 V40'/></g></svg>"),
+    var(--bg-canvas);
+}
+
+/* TYPOGRAPHY */
+:root[data-theme="surveillance"] body { font-family: var(--font-body); color: var(--fg-default); font-size: 13px; }
+:root[data-theme="surveillance"] h1, :root[data-theme="surveillance"] h2, :root[data-theme="surveillance"] h3,
+:root[data-theme="surveillance"] .v-display {
+  font-family: var(--font-display); letter-spacing: 0.10em; text-transform: uppercase; color: var(--fg-default);
+}
+
+/* SQUARE NODE — case file dossier */
+:root[data-theme="surveillance"] .sq-node-box {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong); border-radius: 0;
+  box-shadow: none;
+  color: var(--fg-default);
+  position: relative;
+}
+:root[data-theme="surveillance"] .sq-node-box::before {
+  content: ''; position: absolute; top: 4px; right: 4px; width: 6px; height: 6px;
+  background: hsl(var(--primary)); border-radius: 50%; box-shadow: 0 0 4px hsl(var(--primary));
+  animation: surv-blink 1.4s steps(2) infinite;
+}
+@keyframes surv-blink { 50% { opacity: 0.2; } }
+:root[data-theme="surveillance"] .sq-node.selected .sq-node-box {
+  border: 1px solid hsl(var(--primary)); box-shadow: 0 0 0 1px hsl(var(--primary)), 0 0 8px rgba(232,38,38,0.4);
+}
+:root[data-theme="surveillance"] .sq-node-pip { border-radius: 0; }
+:root[data-theme="surveillance"] .sq-node-gear { background: hsl(var(--primary)); color: white; border-radius: 0; border: none; }
+:root[data-theme="surveillance"] .sq-node-handle { border-radius: 0; background: var(--phosphor); }
+:root[data-theme="surveillance"] .sq-node-handle.out { background: hsl(var(--primary)); }
+:root[data-theme="surveillance"] .sq-node-label { font-family: var(--font-display); letter-spacing: 0.10em; font-size: 10px; text-transform: uppercase; }
+
+/* ACTIONS — terminal command */
+:root[data-theme="surveillance"] .action-btn {
+  font-family: var(--font-display); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+  border-radius: 0; border-width: 1px;
+}
+:root[data-theme="surveillance"] .action-run    { background: transparent; color: var(--phosphor); border-color: var(--phosphor); }
+:root[data-theme="surveillance"] .action-deploy { background: hsl(var(--primary)); color: white; border-color: hsl(var(--primary)); }
+:root[data-theme="surveillance"] .action-save   { background: transparent; color: var(--amber); border-color: var(--amber); }
+:root[data-theme="surveillance"] .action-stop   { background: hsl(var(--primary)); color: white; border-color: hsl(var(--primary)); }
+
+/* CARDS */
+:root[data-theme="surveillance"] .wf-card,
+:root[data-theme="surveillance"] .cat,
+:root[data-theme="surveillance"] .comp,
+:root[data-theme="surveillance"] .settings-section,
+:root[data-theme="surveillance"] .cred-card {
+  background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: 0;
+}
+:root[data-theme="surveillance"] .wf-card.selected { border: 1px solid hsl(var(--primary)); background: hsl(var(--danger-soft)); }
+:root[data-theme="surveillance"] .cat-tile { background: hsl(var(--primary)); color: white; border-radius: 0; }
+:root[data-theme="surveillance"] .cat-name { font-family: var(--font-display); }
+:root[data-theme="surveillance"] .comp-ico { background: var(--bg-panel); color: var(--phosphor); border: 1px solid var(--border-strong); border-radius: 0; }
+
+/* CHAT */
+:root[data-theme="surveillance"] .chat-msg { border-radius: 0; }
+:root[data-theme="surveillance"] .chat-msg-user { background: var(--bg-panel); border: 1px solid hsl(var(--primary)); }
+:root[data-theme="surveillance"] .chat-msg-bot { background: var(--bg-elevated); border-left: 3px solid var(--phosphor); border-top: 1px solid var(--border-default); border-right: 1px solid var(--border-default); border-bottom: 1px solid var(--border-default); }
+
+/* STATUS BAR */
+:root[data-theme="surveillance"] .statusbar {
+  background: hsl(var(--primary)); color: white; border-top: none;
+  font-family: var(--font-mono); letter-spacing: 0.10em; text-transform: uppercase;
+}
+:root[data-theme="surveillance"] .statusbar .pip { background: white; box-shadow: 0 0 4px white; border-radius: 0; }
+
+/* MODAL */
+:root[data-theme="surveillance"] .modal {
+  background: var(--bg-elevated); border: 1px solid hsl(var(--primary)); border-radius: 0;
+  box-shadow: 0 0 0 4px rgba(232,38,38,0.08), 0 30px 80px rgba(0,0,0,0.8);
+}
+:root[data-theme="surveillance"] .modal-head { border-bottom: 1px solid hsl(var(--primary)); background: var(--bg-panel); }
+:root[data-theme="surveillance"] .modal-title { font-family: var(--font-display); color: hsl(var(--primary)); letter-spacing: 0.14em; }
+
+/* CMDK */
+:root[data-theme="surveillance"] .cmdk { background: var(--bg-elevated); border: 1px solid hsl(var(--primary)); border-radius: 0; }
+:root[data-theme="surveillance"] .cmdk-item.active { background: hsl(var(--primary)); color: white; }
+:root[data-theme="surveillance"] .cmdk-item.active::before { content: '> '; }

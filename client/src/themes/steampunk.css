@@ -131,3 +131,116 @@
   background: rgba(216, 168, 72, 0.5);
   color: #2a1f12;
 }
+
+/* ── Per-component decorations (Wave 16 port from handoff) ─────────────── */
+
+:root[data-theme="steampunk"] .toolbar,
+:root[data-theme="steampunk"] .sidebar,
+:root[data-theme="steampunk"] .palette,
+:root[data-theme="steampunk"] .chat {
+  background:
+    linear-gradient(180deg, rgba(216,168,72,0.04), transparent 30%, rgba(0,0,0,0.2)),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='l'><feTurbulence baseFrequency='0.7' numOctaves='2'/><feColorMatrix values='0 0 0 0 0.20 0 0 0 0 0.13 0 0 0 0 0.06 0 0 0 0.5 0'/></filter><rect width='200' height='200' filter='url(%23l)'/></svg>"),
+    var(--bg-panel);
+}
+/* Riveted edges */
+:root[data-theme="steampunk"] .toolbar {
+  border-bottom: 4px ridge var(--border-strong);
+  box-shadow: inset 0 -3px 0 var(--copper);
+}
+:root[data-theme="steampunk"] .sidebar { border-right: 3px solid var(--border-strong); }
+:root[data-theme="steampunk"] .palette { border-left: 3px solid var(--border-strong); }
+:root[data-theme="steampunk"] .chat    { border-top: 3px solid var(--border-strong); }
+
+/* Canvas — engine-room floor with bolt pattern */
+:root[data-theme="steampunk"] .canvas {
+  background:
+    radial-gradient(circle at 20% 20%, var(--copper) 0%, transparent 1.5%),
+    radial-gradient(circle at 80% 30%, var(--copper) 0%, transparent 1.5%),
+    radial-gradient(circle at 30% 80%, var(--copper) 0%, transparent 1.5%),
+    radial-gradient(circle at 90% 90%, var(--copper) 0%, transparent 1.5%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><g fill='%23b88838' opacity='0.10'><circle cx='40' cy='40' r='1.5'/><circle cx='10' cy='10' r='1'/><circle cx='70' cy='70' r='1'/></g></svg>"),
+    var(--bg-canvas);
+}
+
+/* Typography */
+:root[data-theme="steampunk"] body { font-family: var(--font-body); color: var(--fg-default); }
+:root[data-theme="steampunk"] h1, :root[data-theme="steampunk"] h2, :root[data-theme="steampunk"] h3,
+:root[data-theme="steampunk"] .v-display {
+  font-family: var(--font-display); letter-spacing: 0.16em; text-transform: uppercase; color: hsl(var(--accent));
+}
+
+/* Square node — riveted brass plate */
+:root[data-theme="steampunk"] .sq-node-box {
+  background: linear-gradient(180deg, hsl(var(--accent)), var(--copper));
+  border: 2px solid var(--leather); border-radius: 4px;
+  box-shadow:
+    inset 0 0 0 1px hsl(var(--accent)),
+    inset 1px 1px 2px rgba(255,220,160,0.4),
+    inset -2px -2px 4px rgba(0,0,0,0.4),
+    0 4px 0 var(--leather);
+  color: var(--leather);
+  position: relative;
+}
+:root[data-theme="steampunk"] .sq-node-box::before,
+:root[data-theme="steampunk"] .sq-node-box::after {
+  content: ''; position: absolute; width: 4px; height: 4px; border-radius: 50%;
+  background: radial-gradient(circle, var(--copper), var(--leather));
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.4);
+}
+:root[data-theme="steampunk"] .sq-node-box::before { top: 3px; left: 3px; }
+:root[data-theme="steampunk"] .sq-node-box::after { bottom: 3px; right: 3px; }
+:root[data-theme="steampunk"] .sq-node.selected .sq-node-box {
+  box-shadow: inset 0 0 0 2px hsl(var(--accent)), 0 0 12px hsl(var(--accent)), 0 4px 0 var(--leather);
+}
+:root[data-theme="steampunk"] .sq-node-gear { background: var(--copper); color: hsl(var(--accent)); border: 1px solid var(--leather); }
+:root[data-theme="steampunk"] .sq-node-label { font-family: var(--font-display); letter-spacing: 0.10em; color: hsl(var(--accent)); }
+
+/* Actions — engraved brass plates */
+:root[data-theme="steampunk"] .action-btn {
+  font-family: var(--font-display); letter-spacing: 0.12em; text-transform: uppercase;
+  border-radius: 2px; border-width: 2px;
+  background: linear-gradient(180deg, rgba(216,168,72,0.20), rgba(216,168,72,0.05));
+}
+:root[data-theme="steampunk"] .action-run { background: linear-gradient(180deg, rgba(106,138,58,0.4), rgba(106,138,58,0.1)); color: #c8e08a; border-color: hsl(var(--success)); }
+:root[data-theme="steampunk"] .action-deploy { color: hsl(var(--accent)); border-color: hsl(var(--accent)); }
+:root[data-theme="steampunk"] .action-save { color: hsl(var(--accent)); border-color: hsl(var(--accent)); }
+
+/* Panels */
+:root[data-theme="steampunk"] .wf-card,
+:root[data-theme="steampunk"] .cat,
+:root[data-theme="steampunk"] .comp,
+:root[data-theme="steampunk"] .settings-section,
+:root[data-theme="steampunk"] .cred-card {
+  background: var(--bg-elevated); border: 1px solid var(--copper); border-radius: 2px;
+  box-shadow: inset 0 1px 0 rgba(255,220,160,0.10);
+}
+:root[data-theme="steampunk"] .cat-tile { background: hsl(var(--accent)); color: var(--leather); border: 1px solid var(--leather); border-radius: 2px; }
+:root[data-theme="steampunk"] .cat-name { font-family: var(--font-display); color: hsl(var(--accent)); }
+
+/* Chat */
+:root[data-theme="steampunk"] .chat-msg-user { background: rgba(216,168,72,0.16); border: 1px solid hsl(var(--accent)); color: hsl(var(--accent)); }
+:root[data-theme="steampunk"] .chat-msg-bot { background: var(--bg-elevated); border: 1px solid var(--copper); }
+
+/* Status bar — gauge readout */
+:root[data-theme="steampunk"] .statusbar {
+  background: linear-gradient(180deg, var(--bg-panel), var(--leather));
+  border-top: 3px ridge var(--border-strong);
+  font-family: var(--font-mono); color: hsl(var(--accent)); letter-spacing: 0.10em;
+}
+:root[data-theme="steampunk"] .statusbar .pip { background: hsl(var(--success)); box-shadow: 0 0 4px hsl(var(--success)); }
+
+/* Modal */
+:root[data-theme="steampunk"] .modal {
+  background: linear-gradient(180deg, var(--bg-elevated), var(--bg-panel));
+  border: 4px ridge var(--border-strong); border-radius: 4px;
+  box-shadow: 0 0 0 2px var(--leather), 0 30px 80px rgba(0,0,0,0.6);
+}
+:root[data-theme="steampunk"] .modal-head { border-bottom: 3px ridge var(--copper); }
+:root[data-theme="steampunk"] .modal-title { font-family: var(--font-display); color: hsl(var(--accent)); letter-spacing: 0.14em; }
+
+/* CMDK */
+:root[data-theme="steampunk"] .cmdk {
+  background: var(--bg-elevated); border: 4px ridge var(--border-strong); border-radius: 4px;
+}
+:root[data-theme="steampunk"] .cmdk-item.active { background: var(--bg-active); color: hsl(var(--accent)); border-left: 3px solid var(--copper); }

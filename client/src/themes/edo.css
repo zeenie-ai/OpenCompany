@@ -132,3 +132,93 @@
   background: rgba(180, 30, 30, 0.30);
   color: #1a1410;
 }
+
+/* ── Per-component decorations (Wave 16 port from handoff) ─────────────── */
+
+:root[data-theme="edo"] .toolbar,
+:root[data-theme="edo"] .sidebar,
+:root[data-theme="edo"] .palette,
+:root[data-theme="edo"] .chat {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><filter id='w'><feTurbulence baseFrequency='0.95' numOctaves='1'/><feColorMatrix values='0 0 0 0 0.65 0 0 0 0 0.55 0 0 0 0 0.35 0 0 0 0.05 0'/></filter><rect width='300' height='300' filter='url(%23w)'/></svg>"),
+    var(--bg-panel);
+}
+:root[data-theme="edo"] .toolbar { border-bottom: 1px solid var(--sumi); }
+:root[data-theme="edo"] .sidebar { border-right: 1px solid var(--sumi); }
+:root[data-theme="edo"] .palette { border-left: 1px solid var(--sumi); }
+:root[data-theme="edo"] .chat    { border-top: 1px solid var(--sumi); }
+
+/* Canvas — empty rice paper with one ink-wash mountain */
+:root[data-theme="edo"] .canvas {
+  background:
+    radial-gradient(ellipse 600px 200px at 80% 90%, rgba(26,20,16,0.10), transparent 60%),
+    var(--bg-canvas);
+}
+
+/* Typography — light, generous, asymmetric */
+:root[data-theme="edo"] body { font-family: var(--font-body); color: var(--fg-default); }
+:root[data-theme="edo"] h1, :root[data-theme="edo"] h2, :root[data-theme="edo"] h3,
+:root[data-theme="edo"] .v-display { font-family: var(--font-display); font-weight: 400; letter-spacing: 0.04em; }
+
+/* Square node — hanko seal + ink calligraphy */
+:root[data-theme="edo"] .sq-node-box {
+  background: var(--bg-elevated);
+  border: 1px solid var(--sumi); border-radius: 0;
+  box-shadow: none;
+  color: var(--sumi);
+  position: relative;
+}
+:root[data-theme="edo"] .sq-node.selected .sq-node-box {
+  border: 2px solid hsl(var(--accent));
+  background: var(--bg-elevated);
+}
+:root[data-theme="edo"] .sq-node.selected .sq-node-box::before {
+  content: ''; position: absolute; top: 4px; right: 4px; width: 14px; height: 14px;
+  background: hsl(var(--accent)); transform: rotate(8deg);
+}
+:root[data-theme="edo"] .sq-node-pip { border-radius: 0; }
+:root[data-theme="edo"] .sq-node-gear { background: hsl(var(--accent)); color: white; border-radius: 0; border: none; }
+:root[data-theme="edo"] .sq-node-handle { border-radius: 0; }
+:root[data-theme="edo"] .sq-node-label { font-family: var(--font-display); font-weight: 500; font-size: 11px; letter-spacing: 0.04em; }
+
+/* Actions — minimal */
+:root[data-theme="edo"] .action-btn {
+  border-radius: 0; font-family: var(--font-display); font-size: 12px; letter-spacing: 0.06em; font-weight: 500;
+  border-width: 1px;
+}
+:root[data-theme="edo"] .action-run    { background: transparent; color: var(--bamboo); border-color: var(--bamboo); }
+:root[data-theme="edo"] .action-deploy { background: transparent; color: hsl(var(--accent)); border-color: hsl(var(--accent)); }
+:root[data-theme="edo"] .action-save   { background: hsl(var(--accent)); color: var(--fg-on-accent); border-color: hsl(var(--accent)); }
+
+/* Cards / panels — minimal lines */
+:root[data-theme="edo"] .wf-card,
+:root[data-theme="edo"] .cat,
+:root[data-theme="edo"] .comp,
+:root[data-theme="edo"] .settings-section,
+:root[data-theme="edo"] .cred-card {
+  border-radius: 0; background: var(--bg-elevated); border: 1px solid var(--border-default);
+}
+:root[data-theme="edo"] .wf-card.selected { border-left: 3px solid hsl(var(--accent)); }
+:root[data-theme="edo"] .cat-tile { background: transparent; border: 1px solid var(--sumi); color: var(--sumi); border-radius: 0; }
+:root[data-theme="edo"] .comp-ico { background: transparent; border: 1px solid var(--border-default); color: var(--sumi); border-radius: 0; }
+
+/* Chat */
+:root[data-theme="edo"] .chat-msg { border-radius: 0; }
+:root[data-theme="edo"] .chat-msg-user { background: transparent; border: 1px solid hsl(var(--accent)); }
+:root[data-theme="edo"] .chat-msg-bot { background: var(--bg-elevated); border-left: 3px solid var(--sumi); border-top: none; border-right: none; border-bottom: none; }
+
+/* Status bar */
+:root[data-theme="edo"] .statusbar {
+  background: var(--bg-panel); border-top: 1px solid var(--sumi);
+  font-family: var(--font-mono); color: var(--fg-muted);
+}
+:root[data-theme="edo"] .statusbar .pip { background: var(--bamboo); border-radius: 0; }
+
+/* Modal */
+:root[data-theme="edo"] .modal { background: var(--bg-elevated); border: 1px solid var(--sumi); border-radius: 0; }
+:root[data-theme="edo"] .modal-head { border-bottom: 1px solid var(--sumi); }
+:root[data-theme="edo"] .modal-title { font-family: var(--font-display); color: hsl(var(--accent)); }
+
+/* CMDK */
+:root[data-theme="edo"] .cmdk { background: var(--bg-elevated); border: 1px solid var(--sumi); border-radius: 0; }
+:root[data-theme="edo"] .cmdk-item.active { background: var(--bg-active); border-left: 3px solid hsl(var(--accent)); }

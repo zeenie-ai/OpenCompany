@@ -25,9 +25,10 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
     <Collapsible open={open} onOpenChange={() => onToggle()}>
       {/* bg-bg-app + border-default for the outer card; bg-bg-elevated
           on the trigger so the head sits above the body — matches the
-          handoff `.cat` / `.cat-head` two-tier surface. */}
-      <div className="overflow-hidden rounded-lg border border-border-default bg-bg-app">
-        <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between gap-2 border-none bg-bg-elevated px-4 py-3 text-base text-fg-default transition-colors hover:bg-bg-hover">
+          handoff `.cat` / `.cat-head` two-tier surface. `cat` /
+          `cat-head` co-classes activate per-theme decorations. */}
+      <div className={cn('cat overflow-hidden rounded-lg border border-border-default bg-bg-app', isCollapsed && 'collapsed')}>
+        <CollapsibleTrigger className="cat-head flex w-full cursor-pointer items-center justify-between gap-2 border-none bg-bg-elevated px-4 py-3 text-base text-fg-default transition-colors hover:bg-bg-hover">
           {typeof title === 'string' ? (
             <span className="font-display font-medium">{title}</span>
           ) : (
@@ -41,7 +42,7 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
           />
         </CollapsibleTrigger>
 
-        <CollapsibleContent className={cn('transition-[padding]', open && 'p-3')}>
+        <CollapsibleContent className={cn('cat-body transition-[padding]', open && 'p-3')}>
           {children}
         </CollapsibleContent>
       </div>

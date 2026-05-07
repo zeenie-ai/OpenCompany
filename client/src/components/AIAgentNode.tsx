@@ -117,7 +117,11 @@ const AIAgentNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
   const hasLeftLabels = hasMainInput || leftInputs.length > 0;
 
   return (
+    // `node` + `node-agent` + `selected` co-classes are the design-handoff
+    // structural hooks for per-theme decorations (Renaissance wax seal,
+    // Cyber neon underglow + corner LED blink, etc.).
     <div
+      className={`node node-agent ${selected ? 'selected' : ''}`}
       style={{
         position: 'relative',
         padding: theme.spacing.lg,

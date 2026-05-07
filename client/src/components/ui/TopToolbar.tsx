@@ -159,7 +159,11 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
     // resolve to the existing colours under light/dark (no visual
     // change) but pick up the parchment / void surfaces under
     // renaissance / cyber automatically.
-    <div className="flex h-12 items-center justify-between gap-3 border-b border-border-default bg-bg-panel px-3">
+    // `toolbar` is the design-handoff structural class — per-theme CSS
+    // attaches panel textures (vellum on Renaissance, scanlines on Cyber,
+    // marble veins on Greek, riveted leather on Steampunk, etc.) +
+    // border treatments via `:root[data-theme="..."] .toolbar`.
+    <div className="toolbar flex h-12 items-center justify-between gap-3 border-b border-border-default bg-bg-panel px-3">
       {/* ---------- Left Section ---------- */}
       <div className="flex items-center gap-1.5">
         <Button

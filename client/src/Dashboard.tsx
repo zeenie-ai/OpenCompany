@@ -37,7 +37,7 @@ import ErrorBoundary from './components/ui/ErrorBoundary';
 import ConsolePanel from './components/ui/ConsolePanel';
 import StatusBar from './components/ui/StatusBar';
 import CommandPaletteHost from './components/ui/CommandPaletteHost';
-import { useSoundSync } from './hooks/useSound';
+import { useSoundSync, withSound } from './hooks/useSound';
 import { useAppTheme } from './hooks/useAppTheme';
 import { useWorkflowManagement } from './hooks/useWorkflowManagement';
 import { useWorkflowsQuery, WORKFLOWS_QUERY_KEY } from './hooks/useWorkflowsQuery';
@@ -1071,7 +1071,8 @@ const DashboardContent: React.FC = () => {
         switch (event.key.toLowerCase()) {
           case 's':
             event.preventDefault();
-            handleSave();
+            // Match the toolbar Save button — fire the per-theme save sound.
+            withSound('save', handleSave)();
             break;
           case 'c':
             event.preventDefault();
@@ -1122,12 +1123,16 @@ const DashboardContent: React.FC = () => {
         <TopToolbar
           workflowName={currentWorkflow?.name || 'Untitled Workflow'}
           onWorkflowNameChange={handleWorkflowNameChange}
-          onSave={handleSave}
+          // `withSound('save'|'run', ...)` fires the per-theme audio
+          // cue BEFORE the async dispatch so feedback is instant
+          // regardless of save/deploy latency. No-op when sound is
+          // disabled or the active pack is `none`.
+          onSave={withSound('save', handleSave)}
           onNew={handleNew}
           onOpen={handleOpen}
-          onRun={handleRun}
+          onRun={withSound('run', handleRun)}
           isRunning={isExecuting}
-          onDeploy={handleDeploy}
+          onDeploy={withSound('run', handleDeploy)}
           onCancelDeployment={handleCancelDeployment}
           isDeploying={isCurrentWorkflowActive}
           hasUnsavedChanges={hasUnsavedChanges}
@@ -1178,12 +1183,15 @@ const DashboardContent: React.FC = () => {
             display: 'flex',
             position: 'relative',
           }}>
-            {/* `canvas-host` activates per-theme canvas decorations
-                (cyber grid backplane, atomic starburst, rot candlelight
-                pools, surveillance crosshair brackets). Decorative
-                pseudo-elements declare pointer-events: none. */}
+            {/* `canvas-host` + `canvas` activate per-theme canvas
+                decorations (cyber grid backplane, atomic starburst, rot
+                candlelight pools, surveillance crosshair brackets,
+                renaissance fleur-de-lis + marginalia, greek temple key
+                pattern). The `canvas` co-class is the handoff selector
+                used by every per-theme CSS file. Decorative pseudo-
+                elements declare pointer-events: none. */}
             <div
-              className="canvas-host"
+              className="canvas-host canvas"
               style={{
                 flex: 1,
                 backgroundColor: theme.colors.backgroundAlt,
@@ -1276,10 +1284,10 @@ const DashboardContent: React.FC = () => {
           open={commandPaletteOpen}
           onOpenChange={setCommandPaletteOpen}
           handlers={{
-            save: handleSave,
+            save: withSound('save', handleSave),
             newWorkflow: handleNew,
             open: handleOpen,
-            run: handleDeploy,
+            run: withSound('run', handleDeploy),
             stop: handleCancelDeployment,
             isDeploying: isCurrentWorkflowActive,
             exportFile: handleExportFile,

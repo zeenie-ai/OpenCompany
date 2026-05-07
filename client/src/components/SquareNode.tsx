@@ -259,7 +259,13 @@ const SquareNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectab
   const nodeColor = definition?.defaults?.color || '#1A73E8';
 
   return (
+    // `sq-node` + `selected` co-classes are the design-handoff structural
+    // hooks for per-theme square-node decorations (rivets on Steampunk
+    // sq-node-box::before/::after, hanko seal on Edo, REC LED + surv-blink
+    // on Surveillance, tombstone shape on Rot, gold-foil emblem on
+    // Renaissance, neon underglow on Cyber, etc.).
     <div
+      className={`sq-node ${selected ? 'selected' : ''}`}
       style={{
         position: 'relative',
         display: 'flex',
@@ -272,6 +278,7 @@ const SquareNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectab
     >
       {/* Main Square Node */}
       <div
+        className="sq-node-box"
         style={{
           position: 'relative',
           width: theme.nodeSize.square,
@@ -355,12 +362,14 @@ const SquareNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectab
               : '0 1px 4px rgba(0,0,0,0.1)'
           }}
           title="Edit Service Parameters"
+          className="sq-node-gear"
         >
           ⚙️
         </button>
 
         {/* Configuration/Execution Status Indicator */}
         <div
+          className="sq-node-pip"
           style={{
             position: 'absolute',
             top: '-4px',
@@ -392,6 +401,7 @@ const SquareNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectab
             type="target"
             position={Position.Left}
             isConnectable={isConnectable}
+            className="sq-node-handle in"
             style={{
               position: 'absolute',
               left: '-6px',
@@ -416,6 +426,7 @@ const SquareNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectab
             type="source"
             position={Position.Right}
             isConnectable={isConnectable}
+            className="sq-node-handle out"
             style={{
               position: 'absolute',
               right: '-6px',

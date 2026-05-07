@@ -107,8 +107,9 @@ const ComponentPalette: React.FC<ComponentPaletteProps> = ({
   );
 
   return (
-    // Palette shell: bg-bg-panel mirrors the sidebar (`.palette` token).
-    <div className="flex h-full w-full flex-col overflow-hidden border-l border-border-default bg-bg-panel">
+    // Palette shell: `palette` co-class activates per-theme decorations
+    // (panel textures, neon side-glow on Cyber, marble grain on Greek).
+    <div className="palette flex h-full w-full flex-col overflow-hidden border-l border-border-default bg-bg-panel">
       {/* Header Section — bg-bg-app drops one elevation step. */}
       <div className="border-b border-border-default bg-bg-app p-4">
         <div className="mb-3 flex items-center justify-between">

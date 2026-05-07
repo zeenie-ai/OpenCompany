@@ -124,6 +124,7 @@ const TeamMonitorNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConn
 
   return (
     <div
+      className={`node ${selected ? 'selected' : ''}`}
       onClick={handleClick}
       style={{
         width: 200,

@@ -122,7 +122,10 @@ const TriggerNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
   const nodeColor = definition?.defaults?.color || '#f59e0b';
 
   return (
+    // `node` + `node-trigger` + `selected` co-classes activate per-theme
+    // trigger-node decorations.
     <div
+      className={`node node-trigger ${selected ? 'selected' : ''}`}
       style={{
         position: 'relative',
         display: 'flex',

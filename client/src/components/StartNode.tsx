@@ -33,7 +33,9 @@ const StartNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectabl
   const nodeColor = theme.dracula.cyan; // Cyan color for start node (neutral "begin" color)
 
   return (
+    // `node` + `selected` co-classes activate per-theme node decorations.
     <div
+      className={`node ${selected ? 'selected' : ''}`}
       style={{
         position: 'relative',
         display: 'flex',

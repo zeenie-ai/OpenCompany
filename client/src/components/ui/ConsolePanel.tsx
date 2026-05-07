@@ -362,8 +362,11 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
   // ------------------------------ Render ------------------------------
 
   return (
+    // `chat` co-class is the design-handoff structural hook for per-theme
+    // panel decorations (parchment vellum on Renaissance, neon cyan
+    // top-glow on Cyber, washi noise on Edo, etc.).
     <div
-      className="relative"
+      className="chat relative"
       onWheel={e => {
         // Prevent scroll from propagating to the canvas/page when the cursor
         // is over the panel header, resize handle, or non-scrollable areas.
@@ -483,10 +486,15 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
                     <div
                       key={`${msg.timestamp}-${index}`}
                       className={cn(
-                        'max-w-[80%] px-3 py-2 break-words',
+                        // `chat-msg` + `chat-msg-user` / `chat-msg-bot`
+                        // co-classes activate per-theme bubble decorations
+                        // (Renaissance: gold-foil user / vellum bot with
+                        // ✦ marker; Cyber: > USER:: / < NODE:: prefixes
+                        // with neon glow; etc.).
+                        'chat-msg max-w-[80%] px-3 py-2 break-words',
                         isUser
-                          ? 'mr-0 ml-auto rounded-l-xl rounded-tr-xl rounded-br-sm bg-node-agent-soft'
-                          : 'mr-auto ml-0 rounded-r-xl rounded-tl-xl rounded-bl-sm border border-border-default bg-bg-elevated'
+                          ? 'chat-msg-user mr-0 ml-auto rounded-l-xl rounded-tr-xl rounded-br-sm bg-node-agent-soft'
+                          : 'chat-msg-bot mr-auto ml-0 rounded-r-xl rounded-tl-xl rounded-bl-sm border border-border-default bg-bg-elevated'
                       )}
                     >
                       {isUser ? (

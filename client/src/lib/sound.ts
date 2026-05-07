@@ -79,6 +79,23 @@ let enabled = false;
 let activePackName: SoundPackName = 'none';
 let activePack: EventTable = {};
 
+/**
+ * Per-event last-fire timestamps for throttling. Currently only `type`
+ * is throttled — rapid typing into a long input shouldn't queue dozens
+ * of OscillatorNodes per second. Other events (click, hover, success,
+ * etc.) are user-paced and don't need throttling.
+ *
+ * Uses `performance.now()` for monotonic timing. The 30 ms window
+ * matches the upstream `app/sound.js` reference engine's documented
+ * hover debounce; we apply the same to `type` since each oscillator
+ * costs ~25 ms decay on the parchment / marble packs.
+ */
+const lastFireMs: Partial<Record<SoundEvent, number>> = {};
+const THROTTLE_MS: Partial<Record<SoundEvent, number>> = {
+  type: 30,
+  hover: 30,
+};
+
 function play(cfg: OscConfig | undefined): void {
   if (!cfg || !enabled) return;
   const ac = ensureCtx();
@@ -272,6 +289,13 @@ export const Sounds = {
     return activePackName;
   },
   play(event: SoundEvent): void {
+    const throttle = THROTTLE_MS[event];
+    if (throttle !== undefined) {
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      const last = lastFireMs[event] ?? 0;
+      if (now - last < throttle) return;
+      lastFireMs[event] = now;
+    }
     play(activePack[event]);
   },
 };

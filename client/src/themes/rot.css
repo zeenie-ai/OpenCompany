@@ -132,3 +132,93 @@
   background: rgba(120, 200, 120, 0.4);
   color: #14181a;
 }
+
+/* ── Per-component decorations (Wave 16 port from handoff) ─── */
+
+:root[data-theme="rot"] .toolbar,
+:root[data-theme="rot"] .sidebar,
+:root[data-theme="rot"] .palette,
+:root[data-theme="rot"] .chat {
+  background:
+    linear-gradient(180deg, rgba(120,200,120,0.02), transparent),
+    var(--bg-panel);
+}
+:root[data-theme="rot"] .toolbar { border-bottom: 1px solid var(--border-strong); }
+:root[data-theme="rot"] .sidebar { border-right: 1px solid var(--border-strong); }
+:root[data-theme="rot"] .palette { border-left: 1px solid var(--border-strong); }
+:root[data-theme="rot"] .chat    { border-top: 1px solid var(--border-strong); }
+
+/* CANVAS — flagstone crypt floor, candlelight pools */
+:root[data-theme="rot"] .canvas {
+  background:
+    radial-gradient(circle 200px at 25% 30%, rgba(232,168,56,0.06), transparent 70%),
+    radial-gradient(circle 180px at 78% 65%, rgba(232,168,56,0.05), transparent 70%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><g stroke='%234a6a4a' stroke-width='0.4' fill='none' opacity='0.25'><path d='M0 30 H80 M30 0 V80 M0 60 H80 M60 0 V80'/></g></svg>"),
+    var(--bg-canvas);
+}
+
+/* TYPOGRAPHY — gothic */
+:root[data-theme="rot"] body { font-family: var(--font-body); color: var(--fg-default); font-size: 14px; line-height: 1.55; }
+:root[data-theme="rot"] h1, :root[data-theme="rot"] h2, :root[data-theme="rot"] h3,
+:root[data-theme="rot"] .v-display {
+  font-family: var(--font-display); letter-spacing: 0.04em; color: var(--bone); font-weight: 400;
+}
+
+/* SQUARE NODE — bone-pale tombstone */
+:root[data-theme="rot"] .sq-node-box {
+  background: linear-gradient(180deg, var(--bone), #a8a088);
+  border: 1px solid #2a2418; border-radius: 4px 4px 2px 2px;
+  box-shadow: inset 0 -2px 0 rgba(0,0,0,0.2), 0 4px 8px rgba(0,0,0,0.5);
+  color: var(--crypt);
+}
+:root[data-theme="rot"] .sq-node.selected .sq-node-box {
+  border-color: hsl(var(--accent)); box-shadow: 0 0 16px rgba(120,200,120,0.4), 0 4px 8px rgba(0,0,0,0.5);
+}
+:root[data-theme="rot"] .sq-node-gear { background: var(--crypt); color: var(--bone); border: none; }
+:root[data-theme="rot"] .sq-node-label { font-family: var(--font-display); color: var(--crypt); font-weight: 400; }
+:root[data-theme="rot"] .sq-node-handle.out { background: hsl(var(--accent)); box-shadow: 0 0 6px hsl(var(--accent)); }
+
+/* ACTIONS — guttering candleflame */
+:root[data-theme="rot"] .action-btn {
+  font-family: var(--font-display); font-size: 13px; letter-spacing: 0.04em; font-weight: 400;
+  border-radius: 2px; border-width: 1px;
+}
+:root[data-theme="rot"] .action-run { background: hsl(var(--success-soft)); color: hsl(var(--accent)); border-color: hsl(var(--success)); }
+:root[data-theme="rot"] .action-deploy { background: hsl(var(--info-soft)); color: hsl(var(--info)); border-color: hsl(var(--info)); }
+:root[data-theme="rot"] .action-save { background: hsl(var(--warning-soft)); color: var(--candle); border-color: var(--candle); }
+
+/* CARDS */
+:root[data-theme="rot"] .wf-card,
+:root[data-theme="rot"] .cat,
+:root[data-theme="rot"] .comp,
+:root[data-theme="rot"] .settings-section,
+:root[data-theme="rot"] .cred-card {
+  background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: 2px;
+}
+:root[data-theme="rot"] .wf-card.selected { border-color: hsl(var(--accent)); background: hsl(var(--success-soft)); }
+:root[data-theme="rot"] .cat-tile { background: var(--crypt); color: var(--bone); border: 1px solid var(--border-strong); }
+:root[data-theme="rot"] .cat-name { font-family: var(--font-display); color: var(--bone); font-weight: 400; }
+:root[data-theme="rot"] .comp-ico { background: var(--bg-panel); color: hsl(var(--accent)); border: 1px solid var(--border-strong); }
+
+/* CHAT */
+:root[data-theme="rot"] .chat-msg-user { background: hsl(var(--success-soft)); border: 1px solid hsl(var(--accent)); }
+:root[data-theme="rot"] .chat-msg-bot { background: var(--bg-elevated); border-left: 2px solid var(--candle); }
+
+/* STATUS BAR */
+:root[data-theme="rot"] .statusbar {
+  background: var(--bg-panel); border-top: 1px solid var(--border-strong);
+  font-family: var(--font-mono); color: var(--fg-muted);
+}
+:root[data-theme="rot"] .statusbar .pip { background: hsl(var(--accent)); box-shadow: 0 0 6px hsl(var(--accent)); }
+
+/* MODAL */
+:root[data-theme="rot"] .modal {
+  background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 4px;
+  box-shadow: 0 0 0 1px rgba(120,200,120,0.10), 0 30px 80px rgba(0,0,0,0.8);
+}
+:root[data-theme="rot"] .modal-head { border-bottom: 1px solid var(--border-default); }
+:root[data-theme="rot"] .modal-title { font-family: var(--font-display); color: var(--bone); font-weight: 400; }
+
+/* CMDK */
+:root[data-theme="rot"] .cmdk { background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 4px; }
+:root[data-theme="rot"] .cmdk-item.active { background: var(--bg-active); color: hsl(var(--accent)); }

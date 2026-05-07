@@ -114,7 +114,10 @@ const GenericNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
   };
 
   return (
+    // `node` + `selected` co-classes activate per-theme generic-node
+    // decorations (wax seal on Renaissance, neon LED on Cyber, etc.).
     <div
+      className={`node ${selected ? 'selected' : ''}`}
       style={{
         position: 'relative',
         padding: '12px 32px 12px 16px',

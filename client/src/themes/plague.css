@@ -132,3 +132,92 @@
   background: rgba(120, 60, 40, 0.45);
   color: #efeacf;
 }
+
+/* ── Per-component decorations (Wave 16 port from handoff) ─── */
+
+:root[data-theme="plague"] .toolbar,
+:root[data-theme="plague"] .sidebar,
+:root[data-theme="plague"] .palette,
+:root[data-theme="plague"] .chat { background: var(--bg-panel); }
+:root[data-theme="plague"] .toolbar { border-bottom: 3px solid var(--crow); }
+:root[data-theme="plague"] .sidebar { border-right: 3px solid var(--crow); }
+:root[data-theme="plague"] .palette { border-left: 3px solid var(--crow); }
+:root[data-theme="plague"] .chat    { border-top: 3px solid var(--crow); }
+
+/* CANVAS — broadsheet with red X marks */
+:root[data-theme="plague"] .canvas {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><g stroke='%23783c28' stroke-width='1.6' fill='none' opacity='0.10' stroke-linecap='square'><path d='M40 40 L60 60 M60 40 L40 60'/><path d='M180 80 L200 100 M200 80 L180 100'/><path d='M80 180 L100 200 M100 180 L80 200'/></g></svg>"),
+    var(--bg-canvas);
+}
+
+/* TYPOGRAPHY — proclamation */
+:root[data-theme="plague"] body { font-family: var(--font-body); color: var(--fg-default); }
+:root[data-theme="plague"] h1, :root[data-theme="plague"] h2, :root[data-theme="plague"] h3,
+:root[data-theme="plague"] .v-display {
+  font-family: var(--font-display); letter-spacing: 0.04em; text-transform: uppercase; color: hsl(var(--accent));
+}
+
+/* SQUARE NODE — quarantine notice nailed up */
+:root[data-theme="plague"] .sq-node-box {
+  background: var(--linen);
+  border: 2px solid var(--crow); border-radius: 0;
+  box-shadow: 3px 3px 0 var(--crow);
+  color: var(--crow);
+  position: relative;
+}
+:root[data-theme="plague"] .sq-node-box::after {
+  content: ''; position: absolute; top: -3px; left: 50%; width: 6px; height: 6px;
+  background: var(--crow); transform: translateX(-50%);
+}
+:root[data-theme="plague"] .sq-node.selected .sq-node-box { border-color: hsl(var(--accent)); background: hsl(var(--danger-soft)); }
+:root[data-theme="plague"] .sq-node-gear { background: hsl(var(--accent)); color: var(--linen); border: none; border-radius: 0; }
+:root[data-theme="plague"] .sq-node-handle { border-radius: 0; }
+:root[data-theme="plague"] .sq-node-handle.out { background: hsl(var(--accent)); }
+:root[data-theme="plague"] .sq-node-label { font-family: var(--font-display); letter-spacing: 0.06em; color: hsl(var(--accent)); font-weight: 400; }
+
+/* ACTIONS — official stamps */
+:root[data-theme="plague"] .action-btn {
+  font-family: var(--font-display); font-size: 12px; letter-spacing: 0.10em; text-transform: uppercase;
+  border-radius: 0; border-width: 2px; font-weight: 400;
+}
+:root[data-theme="plague"] .action-run { background: hsl(var(--success-soft)); color: hsl(var(--success)); border-color: hsl(var(--success)); }
+:root[data-theme="plague"] .action-deploy { background: hsl(var(--danger-soft)); color: hsl(var(--accent)); border-color: hsl(var(--accent)); }
+:root[data-theme="plague"] .action-save { background: hsl(var(--warning-soft)); color: var(--bile); border-color: var(--bile); }
+
+/* CARDS */
+:root[data-theme="plague"] .wf-card,
+:root[data-theme="plague"] .cat,
+:root[data-theme="plague"] .comp,
+:root[data-theme="plague"] .settings-section,
+:root[data-theme="plague"] .cred-card {
+  background: var(--linen); border: 1px solid var(--crow); border-radius: 0; box-shadow: 2px 2px 0 var(--border-default);
+}
+:root[data-theme="plague"] .wf-card.selected { background: hsl(var(--danger-soft)); border: 2px solid hsl(var(--accent)); }
+:root[data-theme="plague"] .cat-tile { background: var(--crow); color: var(--linen); border-radius: 0; }
+:root[data-theme="plague"] .cat-name { font-family: var(--font-display); }
+:root[data-theme="plague"] .comp-ico { background: var(--bg-panel); color: hsl(var(--accent)); border: 1px solid var(--crow); border-radius: 0; }
+
+/* CHAT */
+:root[data-theme="plague"] .chat-msg-user { background: hsl(var(--danger-soft)); border: 1px solid hsl(var(--accent)); border-radius: 0; }
+:root[data-theme="plague"] .chat-msg-bot { background: var(--linen); border: 1px solid var(--crow); border-radius: 0; }
+
+/* STATUS BAR */
+:root[data-theme="plague"] .statusbar {
+  background: var(--crow); color: var(--linen); border-top: 3px solid hsl(var(--accent));
+  font-family: var(--font-mono); letter-spacing: 0.08em;
+}
+:root[data-theme="plague"] .statusbar .pip { background: var(--bile); border-radius: 0; }
+
+/* MODAL */
+:root[data-theme="plague"] .modal {
+  background: var(--linen); border: 4px double var(--crow); border-radius: 0;
+  box-shadow: 8px 8px 0 hsl(var(--accent));
+}
+:root[data-theme="plague"] .modal-head { border-bottom: 3px double var(--crow); }
+:root[data-theme="plague"] .modal-title { font-family: var(--font-display); color: hsl(var(--accent)); }
+
+/* CMDK */
+:root[data-theme="plague"] .cmdk { background: var(--linen); border: 4px double var(--crow); border-radius: 0; }
+:root[data-theme="plague"] .cmdk-item.active { background: hsl(var(--danger-soft)); color: hsl(var(--accent)); }
+:root[data-theme="plague"] .cmdk-item.active::before { content: '† '; color: hsl(var(--accent)); }

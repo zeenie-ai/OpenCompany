@@ -128,3 +128,96 @@
   background: rgba(232, 90, 38, 0.4);
   color: #2a3a4a;
 }
+
+/* ── Per-component decorations (Wave 16 port from handoff) ─────────────── */
+
+:root[data-theme="atomic"] .toolbar, :root[data-theme="atomic"] .sidebar,
+:root[data-theme="atomic"] .palette, :root[data-theme="atomic"] .chat { background: var(--bg-panel); }
+:root[data-theme="atomic"] .toolbar { border-bottom: 4px solid var(--slate); }
+:root[data-theme="atomic"] .sidebar { border-right: 4px solid var(--slate); }
+:root[data-theme="atomic"] .palette { border-left: 4px solid var(--slate); }
+:root[data-theme="atomic"] .chat    { border-top: 4px solid var(--slate); }
+
+/* Canvas — atomic starburst pattern */
+:root[data-theme="atomic"] .canvas {
+  background:
+    radial-gradient(circle at 12% 15%, hsl(var(--accent)) 0%, transparent 0.8%),
+    radial-gradient(circle at 88% 12%, var(--turquoise) 0%, transparent 0.6%),
+    radial-gradient(circle at 18% 88%, var(--mustard) 0%, transparent 0.7%),
+    radial-gradient(circle at 82% 90%, hsl(var(--accent)) 0%, transparent 0.5%),
+    radial-gradient(circle at 50% 50%, var(--turquoise) 0%, transparent 0.4%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><g stroke='%232a3a4a' stroke-width='0.6' fill='none' opacity='0.18'><path d='M40 80 L120 80 M80 40 L80 120 M50 50 L110 110 M110 50 L50 110'/></g></svg>"),
+    var(--bg-canvas);
+}
+
+/* Typography */
+:root[data-theme="atomic"] body { font-family: var(--font-body); color: var(--fg-default); }
+:root[data-theme="atomic"] h1, :root[data-theme="atomic"] h2, :root[data-theme="atomic"] h3,
+:root[data-theme="atomic"] .v-display {
+  font-family: var(--font-display); letter-spacing: 0.06em; text-transform: uppercase; color: var(--slate);
+}
+
+/* Square node — boomerang card */
+:root[data-theme="atomic"] .sq-node-box {
+  background: var(--bg-elevated);
+  border: 3px solid var(--slate); border-radius: 14px 2px 14px 2px;
+  box-shadow: 4px 4px 0 var(--slate);
+  color: hsl(var(--accent));
+}
+:root[data-theme="atomic"] .sq-node.selected .sq-node-box {
+  background: hsl(var(--accent)); color: var(--bg-elevated);
+  box-shadow: 4px 4px 0 var(--slate), 0 0 0 4px hsl(var(--warning-soft));
+}
+:root[data-theme="atomic"] .sq-node-pip { border: 1.5px solid var(--slate); }
+:root[data-theme="atomic"] .sq-node-gear { background: var(--turquoise); color: var(--bg-elevated); border: 1px solid var(--slate); }
+:root[data-theme="atomic"] .sq-node-handle { border: 2px solid var(--slate); background: var(--mustard); }
+:root[data-theme="atomic"] .sq-node-handle.out { background: hsl(var(--accent)); }
+:root[data-theme="atomic"] .sq-node-label { font-family: var(--font-display); letter-spacing: 0.08em; font-size: 11px; }
+
+/* Actions — chunky stamps */
+:root[data-theme="atomic"] .action-btn {
+  font-family: var(--font-display); letter-spacing: 0.08em; text-transform: uppercase;
+  border-radius: 0; border-width: 3px; box-shadow: 3px 3px 0 var(--slate);
+}
+:root[data-theme="atomic"] .action-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--slate); }
+:root[data-theme="atomic"] .action-run { background: hsl(var(--success)); color: var(--bg-elevated); border-color: var(--slate); }
+:root[data-theme="atomic"] .action-deploy { background: var(--turquoise); color: var(--bg-elevated); border-color: var(--slate); }
+:root[data-theme="atomic"] .action-save { background: hsl(var(--accent)); color: var(--bg-elevated); border-color: var(--slate); }
+
+/* Cards — boomerang corners */
+:root[data-theme="atomic"] .wf-card,
+:root[data-theme="atomic"] .cat,
+:root[data-theme="atomic"] .comp,
+:root[data-theme="atomic"] .settings-section,
+:root[data-theme="atomic"] .cred-card {
+  background: var(--bg-elevated); border: 2px solid var(--slate); border-radius: 12px 2px 12px 2px;
+  box-shadow: 3px 3px 0 var(--slate);
+}
+:root[data-theme="atomic"] .wf-card.selected { background: hsl(var(--warning-soft)); border-color: hsl(var(--accent)); }
+:root[data-theme="atomic"] .cat-tile { background: var(--mustard); border: 1.5px solid var(--slate); border-radius: 8px 0 8px 0; color: var(--slate); }
+:root[data-theme="atomic"] .comp-ico { background: var(--turquoise); color: var(--bg-elevated); border-radius: 6px 0 6px 0; border: 1.5px solid var(--slate); }
+:root[data-theme="atomic"] .cat-name, :root[data-theme="atomic"] .comp-name { font-family: var(--font-display); font-size: 12px; }
+
+/* Chat */
+:root[data-theme="atomic"] .chat-msg { border-radius: 14px 4px 14px 4px; border-width: 2px; }
+:root[data-theme="atomic"] .chat-msg-user { background: var(--mustard); color: var(--slate); border-color: var(--slate); }
+:root[data-theme="atomic"] .chat-msg-bot { background: var(--turquoise); color: var(--bg-elevated); border-color: var(--slate); }
+
+/* Status bar */
+:root[data-theme="atomic"] .statusbar {
+  background: var(--slate); color: var(--bg-elevated); border-top: 4px solid hsl(var(--accent));
+  font-family: var(--font-mono); letter-spacing: 0.06em;
+}
+:root[data-theme="atomic"] .statusbar .pip { background: hsl(var(--success)); }
+
+/* Modal */
+:root[data-theme="atomic"] .modal {
+  background: var(--bg-elevated); border: 4px solid var(--slate); border-radius: 24px 4px 24px 4px;
+  box-shadow: 8px 8px 0 var(--slate);
+}
+:root[data-theme="atomic"] .modal-head { border-bottom: 3px solid var(--slate); background: hsl(var(--accent)); color: var(--bg-elevated); }
+:root[data-theme="atomic"] .modal-title { font-family: var(--font-display); color: var(--bg-elevated); letter-spacing: 0.10em; }
+
+/* CMDK */
+:root[data-theme="atomic"] .cmdk { background: var(--bg-elevated); border: 4px solid var(--slate); border-radius: 24px 4px 24px 4px; box-shadow: 8px 8px 0 var(--slate); }
+:root[data-theme="atomic"] .cmdk-item.active { background: hsl(var(--accent)); color: var(--bg-elevated); }

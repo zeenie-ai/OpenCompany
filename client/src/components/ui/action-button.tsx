@@ -21,9 +21,13 @@ import { Sounds } from '@/lib/sound';
 
 export const actionButtonVariants = cva(
   // Base: 32px tall pill with icon-text gap, semibold, focus ring, smooth hover.
-  // Disabled state uses shadcn-idiomatic `disabled:opacity-50` so we don't
-  // do per-token opacity arithmetic at the call site.
-  'inline-flex h-8 items-center gap-1.5 rounded-md border px-3.5 text-[13px] font-semibold transition-all outline-none select-none disabled:cursor-not-allowed disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-ring/40',
+  // `action-btn` + `btn` co-classes are the design-handoff structural
+  // hooks for per-theme decorations (gold-foil on Renaissance, neon
+  // outline on Cyber, hard 4px shadow on Atomic) and the global hover
+  // sound delegate. Disabled state uses shadcn-idiomatic
+  // `disabled:opacity-50` so we don't do per-token opacity arithmetic
+  // at the call site.
+  'action-btn btn inline-flex h-8 items-center gap-1.5 rounded-md border px-3.5 text-[13px] font-semibold transition-all outline-none select-none disabled:cursor-not-allowed disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-ring/40',
   {
     variants: {
       intent: {

@@ -43,3 +43,42 @@
   --cursor-default: auto;
   --cursor-pointer: pointer;
 }
+
+/* ============================================================================
+ * Reduced-motion override — respects the user's OS-level
+ * `prefers-reduced-motion: reduce` setting (DevTools rendering panel
+ * also surfaces this).
+ *
+ * Targets every theme's per-component animation: cyber-flicker /
+ * cyber-roll / cyber-blink / cyber-glitch (Cyber), surv-blink
+ * (Surveillance), ren-flicker (Renaissance), plus any `transition`
+ * on canvas-host pseudo-elements that synthesise motion.
+ *
+ * Sounds are not motion — left enabled regardless. Settings → Audio
+ * → Sound effects is the user-facing audio toggle.
+ * ============================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  /* Cyber */
+  :root[data-theme="cyber"] .app-frame,
+  :root[data-theme="cyber"] .app-frame::before,
+  :root[data-theme="cyber"] .app-frame::after,
+  :root[data-theme="cyber"] .canvas::after,
+  :root[data-theme="cyber"] .canvas-host::after,
+  :root[data-theme="cyber"] .node::before,
+  :root[data-theme="cyber"] .sq-node.selected .sq-node-box,
+  :root[data-theme="cyber"] .row:hover::after,
+  :root[data-theme="cyber"] .statusbar .pip,
+  :root[data-theme="cyber"] .cmdk-item.active::after,
+  :root[data-theme="cyber"] .v-display:hover,
+  /* Surveillance */
+  :root[data-theme="surveillance"] .sq-node-box::before,
+  :root[data-theme="surveillance"] .statusbar .pip,
+  /* Renaissance */
+  :root[data-theme="renaissance"] .canvas .ornament,
+  /* Generic Tailwind animate-pulse used by node execution pip */
+  .animate-pulse {
+    animation: none !important;
+    transition: none !important;
+  }
+}

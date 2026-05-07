@@ -165,3 +165,104 @@
   background: rgba(40, 75, 130, 0.4);
   color: #2a2415;
 }
+
+/* ── Per-component decorations (Wave 16 port from handoff) ─────────────── */
+
+:root[data-theme="greek"] .toolbar { border-bottom: 3px solid var(--border-strong); position: relative; }
+:root[data-theme="greek"] .toolbar::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -8px; height: 5px;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='5' viewBox='0 0 40 5'><path d='M0 0 H40 V5 H0 Z M2 1 H6 V3 H4 V2 H8 V4 H2 Z M12 1 H16 V3 H14 V2 H18 V4 H12 Z M22 1 H26 V3 H24 V2 H28 V4 H22 Z M32 1 H36 V3 H34 V2 H38 V4 H32 Z' fill='%234a3818'/></svg>") repeat-x;
+  pointer-events: none;
+}
+:root[data-theme="greek"] .sidebar { border-right: 3px solid var(--border-strong); }
+:root[data-theme="greek"] .palette { border-left: 3px solid var(--border-strong); }
+:root[data-theme="greek"] .chat    { border-top: 3px solid var(--border-strong); }
+
+/* Typography */
+:root[data-theme="greek"] body { font-family: var(--font-body); color: var(--fg-default); font-size: 14px; line-height: 1.5; }
+:root[data-theme="greek"] h1, :root[data-theme="greek"] h2, :root[data-theme="greek"] h3,
+:root[data-theme="greek"] .v-display {
+  font-family: var(--font-display);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--fg-default);
+}
+
+/* Square node — temple stelae */
+:root[data-theme="greek"] .sq-node-box {
+  background: linear-gradient(180deg, var(--bg-elevated), var(--marble-vein));
+  border: 2px solid var(--border-strong);
+  border-radius: 0;
+  box-shadow: 0 3px 0 var(--border-strong), inset 0 0 0 1px var(--gold);
+  color: hsl(var(--accent));
+}
+:root[data-theme="greek"] .sq-node.selected .sq-node-box {
+  border-color: hsl(var(--accent)); box-shadow: 0 0 0 3px hsl(var(--info-soft)), 0 3px 0 var(--border-strong), inset 0 0 0 1px var(--gold);
+}
+:root[data-theme="greek"] .sq-node-pip { border-radius: 0; box-shadow: 0 0 0 1px var(--border-strong); }
+:root[data-theme="greek"] .sq-node-gear { background: var(--gold); color: var(--border-strong); border: 1px solid var(--border-strong); border-radius: 0; }
+:root[data-theme="greek"] .sq-node-handle { border-radius: 0; }
+:root[data-theme="greek"] .sq-node-handle.out { background: var(--oxblood); }
+:root[data-theme="greek"] .sq-node-label {
+  font-family: var(--font-display); letter-spacing: 0.14em; font-size: 10px; color: var(--fg-default);
+  text-transform: uppercase;
+}
+
+/* Toolbar actions — stamped */
+:root[data-theme="greek"] .action-btn {
+  border-radius: 0; font-family: var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; font-size: 11px;
+  border-width: 2px;
+}
+:root[data-theme="greek"] .action-run    { background: hsl(var(--success-soft)); color: hsl(var(--success)); border-color: hsl(var(--success)); }
+:root[data-theme="greek"] .action-deploy { background: hsl(var(--info-soft));    color: hsl(var(--accent));  border-color: hsl(var(--accent)); }
+:root[data-theme="greek"] .action-save   { background: hsl(var(--warning-soft)); color: var(--oxblood); border-color: var(--gold); }
+
+/* Panels */
+:root[data-theme="greek"] .palette h2,
+:root[data-theme="greek"] .sidebar-head h3 {
+  font-family: var(--font-display); letter-spacing: 0.20em; color: var(--fg-default);
+  border-bottom: 2px solid var(--border-strong); padding-bottom: 6px;
+}
+
+/* Workflow cards */
+:root[data-theme="greek"] .wf-card { background: var(--bg-elevated); border: 2px solid var(--border-default); border-radius: 0; }
+:root[data-theme="greek"] .wf-card.selected { border-color: hsl(var(--accent)); background: hsl(var(--info-soft)); }
+:root[data-theme="greek"] .wf-card-name { font-family: var(--font-display); letter-spacing: 0.10em; }
+
+/* Palette categories */
+:root[data-theme="greek"] .cat { background: var(--bg-elevated); border: 2px solid var(--border-default); border-radius: 0; }
+:root[data-theme="greek"] .cat-tile { background: var(--gold); border: 1px solid var(--border-strong); border-radius: 0; color: var(--border-strong); }
+:root[data-theme="greek"] .cat-name { font-family: var(--font-display); letter-spacing: 0.16em; color: hsl(var(--accent)); }
+:root[data-theme="greek"] .cat-count { background: var(--bg-active); border: 1px solid var(--border-default); border-radius: 0; }
+
+/* Comp items */
+:root[data-theme="greek"] .comp { background: var(--bg-panel); border: 1px solid var(--border-default); border-radius: 0; }
+:root[data-theme="greek"] .comp:hover { border-color: hsl(var(--accent)); }
+:root[data-theme="greek"] .comp-ico { background: var(--bg-elevated); border: 1px solid var(--border-default); color: hsl(var(--accent)); border-radius: 0; }
+:root[data-theme="greek"] .comp-name { font-family: var(--font-display); font-size: 12px; letter-spacing: 0.10em; }
+
+/* Chat */
+:root[data-theme="greek"] .chat-msg { border-radius: 0; }
+:root[data-theme="greek"] .chat-msg-user { background: hsl(var(--info-soft)); border: 2px solid hsl(var(--accent)); }
+:root[data-theme="greek"] .chat-msg-bot { background: var(--bg-elevated); border: 2px solid var(--border-default); }
+
+/* Status bar */
+:root[data-theme="greek"] .statusbar {
+  background: var(--bg-panel); border-top: 2px solid var(--border-strong);
+  font-family: var(--font-mono); color: var(--fg-muted); letter-spacing: 0.06em;
+}
+:root[data-theme="greek"] .statusbar .pip { background: hsl(var(--success)); border-radius: 0; }
+
+/* Modal — temple inscription */
+:root[data-theme="greek"] .modal {
+  background: var(--bg-elevated); border: 4px double var(--border-strong); border-radius: 0;
+  box-shadow: 0 30px 80px rgba(60, 50, 30, 0.4);
+}
+:root[data-theme="greek"] .modal-head { border-bottom: 3px solid var(--border-strong); }
+:root[data-theme="greek"] .modal-title { font-family: var(--font-display); letter-spacing: 0.18em; color: hsl(var(--accent)); }
+
+/* Command palette */
+:root[data-theme="greek"] .cmdk { background: var(--bg-elevated); border: 4px double var(--border-strong); border-radius: 0; }
+:root[data-theme="greek"] .cmdk input { font-family: var(--font-display); letter-spacing: 0.12em; }
+:root[data-theme="greek"] .cmdk-item.active { background: hsl(var(--info-soft)); color: hsl(var(--accent)); }
+:root[data-theme="greek"] .cmdk-item.active::before { content: '◆ '; color: var(--gold); }

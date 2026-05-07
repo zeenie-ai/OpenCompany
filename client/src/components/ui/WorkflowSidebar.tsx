@@ -45,10 +45,12 @@ const WorkflowCard: React.FC<WorkflowCardProps> = ({
   // 3px accent left edge — matches handoff `.wf-card.selected`.
   <Card
     onClick={onSelect}
+    // `wf-card` + `row` co-classes are the handoff structural hooks for
+    // per-theme card decorations + the global hover-sound delegate.
     className={cn(
-      'group relative mb-2 cursor-pointer border-border-default bg-bg-app p-3 transition-colors',
+      'wf-card row group relative mb-2 cursor-pointer border-border-default bg-bg-app p-3 transition-colors',
       isSelected
-        ? 'border-accent border-l-[3px] bg-bg-active'
+        ? 'selected border-accent border-l-[3px] bg-bg-active'
         : 'hover:bg-bg-hover'
     )}
   >
@@ -114,7 +116,9 @@ const WorkflowSidebar: React.FC<WorkflowSidebarProps> = ({
 }) => {
   return (
     // Sidebar shell: bg-bg-panel matches the handoff `.sidebar` token.
-    <div className="flex h-full w-[280px] flex-col overflow-hidden border-r border-border-default bg-bg-panel">
+    // `sidebar` co-class activates per-theme decorations (panel textures,
+    // border treatments) declared under `:root[data-theme="..."] .sidebar`.
+    <div className="sidebar flex h-full w-[280px] flex-col overflow-hidden border-r border-border-default bg-bg-panel">
       {/* Header — bg-bg-app drops one elevation step below the panel
           chrome, giving the heading area a subtle "page" backdrop
           that's distinct from the card list. */}

@@ -169,3 +169,487 @@
   background: rgba(212, 160, 48, 0.5);
   color: #3a2008;
 }
+
+/* ── Per-component decorations (Wave 16 port from handoff) ─── */
+
+/* Floating illuminated initial as ambient ornament */
+@keyframes ren-flicker {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.8; }
+}
+
+/* ─── ILLUMINATED FRAME with gilded corners ─── */
+:root[data-theme="renaissance"] .app-frame {
+  box-shadow: var(--ornament-frame), 0 0 60px rgba(90, 50, 18, 0.3) inset;
+  position: relative;
+}
+:root[data-theme="renaissance"] .app-frame::before,
+:root[data-theme="renaissance"] .app-frame::after {
+  content: ''; position: absolute; width: 36px; height: 36px;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'><path d='M2 2 L34 2 L34 6 L6 6 L6 34 L2 34 Z' fill='%23d4a030' stroke='%235a3a14' stroke-width='1'/><circle cx='6' cy='6' r='3' fill='%238a1410' stroke='%235a3a14' stroke-width='0.8'/><path d='M10 2 L14 2 M18 2 L22 2 M26 2 L30 2 M2 10 L2 14 M2 18 L2 22 M2 26 L2 30' stroke='%235a3a14' stroke-width='0.6'/></svg>") no-repeat;
+  pointer-events: none; z-index: 100;
+}
+:root[data-theme="renaissance"] .app-frame::before { top: 0; left: 0; }
+:root[data-theme="renaissance"] .app-frame::after { top: 0; right: 0; transform: scaleX(-1); }
+
+/* ─── PANELS get a vellum lining ─── */
+:root[data-theme="renaissance"] .toolbar,
+:root[data-theme="renaissance"] .sidebar,
+:root[data-theme="renaissance"] .palette,
+:root[data-theme="renaissance"] .chat {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence baseFrequency='0.9' numOctaves='2'/><feColorMatrix values='0 0 0 0 0.36 0 0 0 0 0.23 0 0 0 0 0.05 0 0 0 0.06 0'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>"),
+    var(--bg-panel);
+}
+:root[data-theme="renaissance"] .toolbar { border-bottom: 2px double var(--border-strong); }
+:root[data-theme="renaissance"] .sidebar { border-right: 2px double var(--border-strong); }
+:root[data-theme="renaissance"] .palette { border-left: 2px double var(--border-strong); }
+:root[data-theme="renaissance"] .chat    { border-top: 2px double var(--border-strong); }
+
+/* ─── CANVAS — workshop floor with fleur-de-lis pattern + vignette ─── */
+:root[data-theme="renaissance"] .canvas {
+  background:
+    radial-gradient(ellipse at center, transparent 30%, rgba(90, 50, 18, 0.25) 100%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'><g fill='none' stroke='%238a5e1c' stroke-width='0.4' opacity='0.35'><path d='M40 22 Q35 32, 30 32 Q26 32, 28 28 Q32 26, 40 28 Q48 26, 52 28 Q54 32, 50 32 Q45 32, 40 22 Z'/><path d='M40 28 L40 40 M36 36 L44 36'/><circle cx='40' cy='42' r='2'/></g></svg>"),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence baseFrequency='0.95' numOctaves='2'/><feColorMatrix values='0 0 0 0 0.36 0 0 0 0 0.23 0 0 0 0 0.05 0 0 0 0.08 0'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>"),
+    var(--bg-canvas);
+}
+
+/* Marginalia — handwritten marginal note in canvas */
+:root[data-theme="renaissance"] .canvas::before {
+  content: '" Ars longa, vita brevis "';
+  position: absolute; bottom: 12px; right: 16px;
+  font-family: var(--font-mono);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--border-default);
+  opacity: 0.7;
+  transform: rotate(-2deg);
+  pointer-events: none;
+  z-index: 0;
+}
+:root[data-theme="renaissance"] .canvas::after {
+  content: ''; position: absolute; top: 12px; left: 16px;
+  width: 64px; height: 64px;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><g fill='none' stroke='%238a5e1c' stroke-width='1' opacity='0.5'><circle cx='32' cy='32' r='28'/><circle cx='32' cy='32' r='22'/><path d='M32 4 L32 60 M4 32 L60 32 M11 11 L53 53 M53 11 L11 53'/><circle cx='32' cy='32' r='3' fill='%23d4a030'/></g></svg>") no-repeat center / contain;
+  pointer-events: none;
+  z-index: 0;
+}
+/* Make sure nodes/edges sit above marginalia */
+:root[data-theme="renaissance"] .canvas .node,
+:root[data-theme="renaissance"] .canvas .edge { z-index: 2; }
+
+/* Floating illuminated initial as ambient ornament */
+:root[data-theme="renaissance"] .canvas .ornament {
+  position: absolute;
+  font-family: var(--font-display);
+  color: var(--gold);
+  text-shadow: 2px 2px 0 var(--border-strong);
+  font-size: 120px;
+  font-weight: 700;
+  opacity: 0.12;
+  pointer-events: none;
+  animation: ren-flicker 6s ease-in-out infinite;
+}
+
+/* ─── BUTTONS as pressed gold foil ─── */
+:root[data-theme="renaissance"] .btn {
+  background: linear-gradient(180deg, #fbf3dc 0%, #e8c478 100%);
+  border: 1px solid var(--border-default);
+  color: var(--fg-default);
+  font-family: var(--font-display);
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  font-size: 11px; font-weight: 600;
+  padding: 7px 14px;
+  box-shadow: 0 1px 0 #fbf3dc inset, 0 -1px 0 rgba(90, 50, 18, 0.2) inset, 0 2px 0 var(--border-strong);
+  transition: transform var(--dur-fast), box-shadow var(--dur-fast);
+}
+:root[data-theme="renaissance"] .btn:hover {
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold));
+  box-shadow: 0 1px 0 #fff inset, 0 3px 0 var(--border-strong);
+}
+:root[data-theme="renaissance"] .btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #fff inset, 0 0 0 var(--border-strong);
+}
+
+/* ─── INPUTS — ruled-line paper ─── */
+:root[data-theme="renaissance"] .input {
+  background:
+    repeating-linear-gradient(transparent, transparent 21px, rgba(138, 94, 28, 0.18) 21px, rgba(138, 94, 28, 0.18) 22px),
+    var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--fg-default);
+  padding: 6px 10px;
+}
+:root[data-theme="renaissance"] .input:focus {
+  outline: none; background: #fff;
+  box-shadow: 0 0 0 1px var(--gold), 0 0 0 2px var(--border-strong);
+}
+
+/* ─── ROWS — ink-spread on hover ─── */
+:root[data-theme="renaissance"] .row {
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: var(--fg-default);
+  padding: 6px 10px;
+  position: relative;
+  background-image: linear-gradient(90deg, var(--bg-hover), var(--bg-hover));
+  background-size: 0% 100%;
+  background-repeat: no-repeat;
+  transition: background-size var(--dur-default) var(--ease-default), color var(--dur-fast);
+}
+:root[data-theme="renaissance"] .row:hover {
+  background-size: 100% 100%;
+  color: var(--crimson);
+}
+:root[data-theme="renaissance"] .row:hover::before {
+  content: '✦'; position: absolute; left: -2px; top: 50%; transform: translateY(-50%);
+  color: var(--gold); font-size: 10px;
+}
+
+/* ─── NODES as illuminated cards with red wax ─── */
+:root[data-theme="renaissance"] .node {
+  background: var(--bg-elevated);
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-default);
+  padding: 10px 14px;
+  box-shadow:
+    0 0 0 1px var(--gold) inset,
+    0 0 0 3px var(--bg-elevated) inset,
+    0 0 0 4px var(--border-strong) inset,
+    0 4px 0 var(--border-strong),
+    0 6px 12px rgba(58, 32, 8, 0.25);
+  position: relative;
+  transition: transform var(--dur-default) var(--ease-emphasis);
+}
+:root[data-theme="renaissance"] .node:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 0 0 1px var(--gold-bright) inset,
+    0 0 0 3px var(--bg-elevated) inset,
+    0 0 0 4px var(--border-strong) inset,
+    0 6px 0 var(--border-strong),
+    0 10px 20px rgba(58, 32, 8, 0.35);
+}
+/* Wax seal corner */
+:root[data-theme="renaissance"] .node::after {
+  content: ''; position: absolute; top: -6px; right: -6px;
+  width: 16px; height: 16px;
+  background: radial-gradient(circle at 35% 30%, #c4202a, #5a0a08);
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
+
+/* ─── SQUARE NODES — guild emblems ─── */
+:root[data-theme="renaissance"] .sq-node-box {
+  background: linear-gradient(180deg, var(--bg-elevated), #d4b078);
+  border: 2px solid var(--border-strong);
+  border-radius: 4px;
+  box-shadow: 0 3px 0 var(--border-strong), inset 0 0 0 1px var(--gold);
+  color: var(--crimson);
+}
+:root[data-theme="renaissance"] .sq-node.selected .sq-node-box {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(212, 160, 48, 0.5), 0 3px 0 var(--border-strong), inset 0 0 0 1px var(--gold);
+}
+:root[data-theme="renaissance"] .sq-node-pip {
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 0 4px currentColor;
+}
+:root[data-theme="renaissance"] .sq-node-gear {
+  background: var(--gold);
+  color: var(--border-strong);
+  border: 1px solid var(--border-strong);
+  font-size: 10px;
+}
+:root[data-theme="renaissance"] .sq-node-handle.out { background: var(--crimson); }
+:root[data-theme="renaissance"] .sq-node-label {
+  color: var(--fg-default);
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+/* ─── CATEGORY (palette) — illuminated section ─── */
+:root[data-theme="renaissance"] .cat {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 2px;
+}
+:root[data-theme="renaissance"] .cat-head {
+  border-bottom: 1px solid var(--border-default);
+  background: linear-gradient(180deg, transparent, rgba(212, 160, 48, 0.08));
+}
+:root[data-theme="renaissance"] .cat-tile {
+  background: var(--gold);
+  border: 1px solid var(--border-strong);
+  color: var(--border-strong);
+}
+:root[data-theme="renaissance"] .cat-name {
+  font-family: var(--font-display);
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--crimson);
+}
+:root[data-theme="renaissance"] .cat-count {
+  background: var(--bg-active);
+  color: var(--fg-muted);
+  border: 1px solid var(--border-default);
+}
+
+/* ─── COMP ITEMS — entry cards ─── */
+:root[data-theme="renaissance"] .comp {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-default);
+  border-radius: 2px;
+}
+:root[data-theme="renaissance"] .comp:hover {
+  background: var(--bg-hover);
+  border-color: var(--gold);
+}
+:root[data-theme="renaissance"] .comp-ico {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  color: var(--crimson);
+}
+:root[data-theme="renaissance"] .comp-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+:root[data-theme="renaissance"] .comp-desc {
+  font-style: italic;
+  color: var(--fg-muted);
+}
+
+/* ─── MENU POP — parchment dropdown ─── */
+:root[data-theme="renaissance"] .menu-pop {
+  background: var(--bg-elevated);
+  border: 2px solid var(--border-strong);
+  box-shadow: inset 0 0 0 1px var(--gold), 0 8px 24px rgba(58,32,8,0.4);
+}
+:root[data-theme="renaissance"] .menu-pop-item {
+  font-family: var(--font-body);
+  font-size: 13px;
+}
+:root[data-theme="renaissance"] .menu-pop-item:hover {
+  background: var(--bg-hover);
+  color: var(--crimson);
+}
+
+/* ─── SETTINGS SECTIONS ─── */
+:root[data-theme="renaissance"] .settings-section {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+}
+:root[data-theme="renaissance"] .settings-section h3 {
+  color: var(--crimson);
+  font-family: var(--font-display);
+  border-bottom: 1px solid var(--gold);
+  padding-bottom: 8px;
+  letter-spacing: 0.06em;
+}
+:root[data-theme="renaissance"] .settings-summary {
+  background: var(--bg-panel);
+  border: 1px dashed var(--border-default);
+  font-family: var(--font-mono);
+  font-style: italic;
+}
+
+/* ─── CRED CARDS ─── */
+:root[data-theme="renaissance"] .cred-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 2px;
+}
+:root[data-theme="renaissance"] .cred-card-head {
+  background: linear-gradient(180deg, transparent, rgba(212, 160, 48, 0.10));
+  border-bottom: 1px solid var(--border-default);
+}
+:root[data-theme="renaissance"] .cred-card .name {
+  font-family: var(--font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+:root[data-theme="renaissance"] .cred-tag {
+  font-family: var(--font-display);
+  letter-spacing: 0.08em;
+  font-size: 9px;
+}
+:root[data-theme="renaissance"] .cred-card-desc { font-style: italic; }
+
+/* Credential rows — sealed entries */
+:root[data-theme="renaissance"] .cred-row {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  position: relative;
+}
+:root[data-theme="renaissance"] .cred-row::before {
+  content: '✦'; color: var(--gold); margin-right: 4px;
+}
+:root[data-theme="renaissance"] .cred-row .name {
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.10em;
+}
+:root[data-theme="renaissance"] .cred-row .badge {
+  font-family: var(--font-display);
+  letter-spacing: 0.10em;
+  font-size: 9px;
+  padding: 3px 8px;
+}
+
+/* ─── PARAMETER PANEL COLS ─── */
+:root[data-theme="renaissance"] .param-col {
+  background: var(--bg-elevated);
+  border-right: 2px double var(--border-strong);
+}
+:root[data-theme="renaissance"] .param-col-head {
+  background: linear-gradient(180deg, transparent, rgba(212, 160, 48, 0.10));
+  border-bottom: 1px solid var(--gold);
+  font-family: var(--font-display);
+  color: var(--crimson);
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+}
+:root[data-theme="renaissance"] .json-block {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-default);
+  font-family: var(--font-mono);
+  color: var(--fg-default);
+}
+:root[data-theme="renaissance"] .json-key { color: var(--crimson); font-style: italic; }
+:root[data-theme="renaissance"] .json-str { color: hsl(var(--success)); }
+:root[data-theme="renaissance"] .json-num { color: var(--gold-bright); }
+
+/* ─── CHAT TABS ─── */
+:root[data-theme="renaissance"] .chat-tab {
+  font-family: var(--font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 10px;
+}
+:root[data-theme="renaissance"] .chat-tab.active {
+  background: var(--gold);
+  color: var(--border-strong);
+}
+
+/* ─── CHAT MESSAGES — letter-style ─── */
+:root[data-theme="renaissance"] .chat-msg {
+  font-family: var(--font-body);
+  font-size: 14px;
+  border-radius: var(--radius-sm);
+}
+:root[data-theme="renaissance"] .chat-msg-user {
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold));
+  color: var(--fg-default);
+  border: 1px solid var(--border-strong);
+}
+:root[data-theme="renaissance"] .chat-msg-bot {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  position: relative;
+}
+:root[data-theme="renaissance"] .chat-msg-bot::before {
+  content: '✦'; color: var(--gold); margin-right: 6px;
+}
+
+/* ─── THEME SWITCHER chrome ─── */
+:root[data-theme="renaissance"] .theme-switcher {
+  background: linear-gradient(180deg, var(--bg-elevated), #e8c478);
+  border: 1.5px solid var(--border-strong);
+  box-shadow: 0 0 0 1px var(--gold) inset, 0 6px 16px rgba(58, 32, 8, 0.4);
+}
+
+/* ─── EMPTY STATE drop cap ─── */
+:root[data-theme="renaissance"] .empty-state .glyph {
+  font-family: var(--font-display);
+  font-size: 96px;
+  color: var(--gold);
+  text-shadow: 3px 3px 0 var(--border-strong);
+  font-weight: 700;
+}
+
+/* ─── STATUS BAR — illuminated footer rule ─── */
+:root[data-theme="renaissance"] .statusbar {
+  background: linear-gradient(180deg, var(--bg-panel), #d4b078);
+  border-top: 2px double var(--border-strong);
+  font-family: var(--font-mono);
+  color: var(--fg-muted);
+  font-style: italic;
+}
+:root[data-theme="renaissance"] .statusbar .pip {
+  background: hsl(var(--success));
+  box-shadow: 0 0 6px hsl(var(--success)), 0 0 0 1px var(--border-strong);
+}
+
+/* ─── MODAL — illuminated codex page ─── */
+:root[data-theme="renaissance"] .modal {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence baseFrequency='0.85' numOctaves='2'/><feColorMatrix values='0 0 0 0 0.36 0 0 0 0 0.23 0 0 0 0 0.05 0 0 0 0.06 0'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>"),
+    var(--bg-elevated);
+  border: 2px solid var(--border-strong);
+  box-shadow:
+    inset 0 0 0 1px var(--gold),
+    inset 0 0 0 5px var(--bg-elevated),
+    inset 0 0 0 6px var(--gold),
+    0 30px 80px rgba(58, 32, 8, 0.6);
+  padding: 8px;
+}
+:root[data-theme="renaissance"] .modal-head {
+  border-bottom: 2px double var(--border-strong);
+  padding: 16px 20px 14px;
+}
+:root[data-theme="renaissance"] .modal-title {
+  color: var(--fg-default);
+  font-family: var(--font-display);
+}
+:root[data-theme="renaissance"] .modal-foot {
+  border-top: 2px double var(--border-strong);
+}
+:root[data-theme="renaissance"] .field label {
+  color: #8a5e1c;
+}
+
+/* ─── COMMAND PALETTE — open scroll ─── */
+:root[data-theme="renaissance"] .cmdk {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence baseFrequency='0.85' numOctaves='2'/><feColorMatrix values='0 0 0 0 0.36 0 0 0 0 0.23 0 0 0 0 0.05 0 0 0 0.06 0'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>"),
+    var(--bg-elevated);
+  border: 2px solid var(--border-strong);
+  box-shadow: inset 0 0 0 1px var(--gold), 0 30px 60px rgba(58, 32, 8, 0.5);
+}
+:root[data-theme="renaissance"] .cmdk input {
+  font-family: var(--font-display);
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  border-bottom: 2px double var(--border-strong);
+  background: transparent;
+  color: var(--fg-default);
+}
+:root[data-theme="renaissance"] .cmdk-item {
+  font-family: var(--font-body);
+  font-size: 14px;
+}
+:root[data-theme="renaissance"] .cmdk-item.active {
+  background: linear-gradient(90deg, transparent, var(--bg-hover), transparent);
+  color: var(--crimson);
+}
+:root[data-theme="renaissance"] .cmdk-item.active::before {
+  content: '✦'; color: var(--gold); margin-right: 6px;
+}
+:root[data-theme="renaissance"] .cmdk-item kbd {
+  background: var(--bg-active);
+  border: 1px solid var(--border-default);
+  font-family: var(--font-mono);
+}

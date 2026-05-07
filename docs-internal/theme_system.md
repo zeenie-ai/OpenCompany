@@ -217,22 +217,77 @@ Result by theme (display font / tracking / case):
 ## What's done vs deferred
 
 ### Done
-- **Token contract**: all 10 themes ported in [client/src/themes/](../client/src/themes) (5 utopian + 5 dystopian)
+- **Token contract**: all 10 themes ported in [client/src/themes/](../client/src/themes) (5 utopian + 5 dystopian). 13 CSS files, 3,749 LOC total.
 - **ThemeProvider** ([client/src/contexts/ThemeContext.tsx](../client/src/contexts/ThemeContext.tsx)) — 10-way `ThemeName`, `DARK_FAMILY` ⊃ `{dark, cyber, wasteland, rot, surveillance, steampunk}`, legacy `darkMode` localStorage migration on first load
 - **ThemeSwitcher** — DropdownMenu grouped into System / Utopian / Dystopian sections, all 10 themes
 - **Tailwind v4 `@theme inline`** exposing new-contract utilities (`bg-bg-app`, `text-fg-default`, `border-border-default`, `font-display`, `font-body`, `rounded-pill`)
-- **Decorative wrappers** — Dashboard root carries `app-frame`, the React Flow host carries `canvas-host`, every Modal carries `modal-frame`. Per-theme CSS targets these classes for outer ornaments (gilded corners, scanlines, riveted borders, REC dot, etc.)
+- **Decorative wrappers** — Dashboard root carries `app-frame`, the React Flow host carries `canvas-host` (aliased as `canvas` so handoff selectors resolve), every Modal carries `modal-frame`. Per-theme CSS targets these classes for outer ornaments (gilded corners, scanlines, riveted borders, REC dot, etc.)
+- **Per-component structural classNames** (W15) — every chrome / interactive / canvas component carries the handoff selector co-class so per-theme decorative rules resolve without component-level branching. See [Per-component decorations](#per-component-decorations) for the full list.
+- **Per-theme decorative CSS** (W16) — every per-component rule from `design_handoff_machinaos_themes/themes/*.css` is now ported into `client/src/themes/<theme>.css`. Each theme owns its panel textures, canvas decorations, node pseudo-element overlays, and keyframes. CSS bundle: 145 KB → 244 KB (+99 KB).
+- **Selection state** (W17, shipped as part of W15) — every canvas node component carries the `selected` co-class when React Flow's `selected` prop is true, activating per-theme selection effects (cyber-blink on Cyber sq-nodes, hanko seal on Edo sq-nodes, etc.).
+- **Sound event wiring** (W18) — 9 events (`click`, `hover`, `type`, `success`, `error`, `run`, `save`, `modalOpen`, `modalClose`) fire automatically across the React tree. See [Sound system → Event wiring](#event-wiring-w18).
+- **Reduced-motion accessibility** (W19) — `@media (prefers-reduced-motion: reduce)` block in [client/src/themes/base.css](../client/src/themes/base.css) disables every keyframe across all themes. See [Reduced motion](#reduced-motion).
+- **Sound throttling** (W19) — `type` and `hover` events throttled to a 30 ms last-fire window inside the engine to prevent OscillatorNode flooding. See [Throttling](#throttling).
 - **Migrated chrome**: TopToolbar, WorkflowSidebar, ComponentPalette + ComponentItem + CollapsibleSection, ConsolePanel chrome, SettingsPanel, Modal, ParameterPanel modal title, AIResultModal title, OutputDisplayPanel title, InputSection title
 - **New shell components**: StatusBar (fixed-bottom system line with WS connection / workflow / theme / clock), CommandPalette (`⌘K`), CommandPaletteHost (canonical command list with Workflow / Run / Open / View / Theme groups)
 - **Google Fonts** — deferred-load `<link>` covers all 10 themes' typefaces (Cinzel, Cormorant Garamond, IM Fell English / SC, JetBrains Mono, Major Mono Display, VT323, Shippori Mincho, Sawarabi Mincho, Special Elite, Bevan, Lato, Pirata One, EB Garamond, UnifrakturCook, Anonymous Pro, IBM Plex Mono, Courier Prime, Space Mono)
-- **Sound contract** — [client/src/lib/sound.ts](../client/src/lib/sound.ts) ports the upstream WebAudio engine with all 10 packs (`parchment`, `marble`, `ink`, `clockwork`, `vibraphone`, `terminal`, `scrap`, `crypt`, `bell`, `telex`). [client/src/hooks/useSound.ts](../client/src/hooks/useSound.ts) reads `--sound-pack` from `:root` on theme change and mirrors the `soundEnabled` Zustand slice into `Sounds.setEnabled()`. ActionButton fires `play('click')` from its onClick wrapper, Modal fires `play('modalOpen' | 'modalClose')` on the `isOpen` transition. Settings panel ships the toggle (Audio section). Persists to `localStorage['machinaos-sound']`; default off (opt-in).
+- **Sound contract** — [client/src/lib/sound.ts](../client/src/lib/sound.ts) ports the upstream WebAudio engine with all 10 packs (`parchment`, `marble`, `ink`, `clockwork`, `vibraphone`, `terminal`, `scrap`, `crypt`, `bell`, `telex`). [client/src/hooks/useSound.ts](../client/src/hooks/useSound.ts) reads `--sound-pack` from `:root` on theme change and mirrors the `soundEnabled` Zustand slice into `Sounds.setEnabled()`. Settings panel ships the toggle (Audio section). Persists to `localStorage['machinaos-sound']`; default off (opt-in).
 - **Canvas overlay packs** — [client/src/hooks/useAppTheme.ts](../client/src/hooks/useAppTheme.ts) extended from 2-way (`{light, dark}`) to 10-way: a `THEME_OVERRIDES` map applies a small overlay (primary, focus, focusRing, action colours, edge palette) on top of `lightColors` / `darkColors`. Existing call sites continue to read `theme.colors.X` and `theme.isDarkMode` unchanged; canvas selection rings, action buttons, and edge strokes pick up the active theme's accents under any of the 10 themes.
 
 ### Deferred (future PRs)
 - **Per-theme icon sets** — the upstream [`app/icons.js`](../design_handoff_machinaos_themes/app/icons.js) ships 28-key glyph sets per theme (heraldic shields under Renaissance, wireframe + glow under Cyber, woodcut hatching under Plague, etc.). The current shell uses `lucide-react` icons under all themes via `currentColor`, which retints correctly via the bridge but doesn't carry per-theme glyph language. Migration recipe: build `client/src/icons/` with an `<Icon name>` component that reads the active theme via `useTheme()` and resolves to one of 10 SVG-string sets. Lucide stays as a fallback for missing keys.
-- **Per-component decorative class hooks** — the `.app-frame` / `.canvas-host` / `.modal-frame` wrappers are wired. A handful of finer-grained hooks remain (`.sq-node`, `.cat`, `.cmdk`, `.menu-pop`) — adding each to the matching React component is a one-line edit per surface and a no-op under themes that don't define decorations for it.
+- **Drop-cap `::first-letter`** — Renaissance `.v-display.drop-cap` selector ports verbatim but needs an HTML wrapper component before the rule resolves. Add a `<DisplayHeading dropCap>` primitive when next touching the chrome.
+- **Edge SVG filters** — Renaissance `.edge path { filter: url(#ink-blot) }` needs an inline `<svg><defs>` injected into the React tree.
+- **Cursor SVG reticles** — Cyber crosshair, Renaissance quill, Surveillance reticle: `cursor: url(...)` rules in per-theme CSS, low ROI.
 - **Parameter panel internals** — `MiddleSection`, `MasterSkillEditor`, `ParameterRenderer` consume shadcn tokens through the bridge so they retint correctly, but their interior section headers don't yet carry the display-typography triplet. Apply the recipe (`font-display tracking-[var(--type-tracking-display)] text-fg-default [text-transform:var(--type-uppercase)]`) when next touched.
 - **Credentials modal sub-panels** — `OAuthPanel`, `EmailPanel`, `ApiKeyPanel`, `QrPairingPanel` headers same pattern.
+
+## Per-component decorations
+
+Wave 15 added structural classNames across the React tree so the handoff CSS selectors resolve without component-level branching. Wave 16 ported the matching decorative rules from `design_handoff_machinaos_themes/themes/*.css` into `client/src/themes/<theme>.css`.
+
+### Class registry
+
+| Surface | className(s) | Component |
+|---|---|---|
+| Top toolbar | `.toolbar` | TopToolbar |
+| Sidebar | `.sidebar` | WorkflowSidebar |
+| Component palette | `.palette` | ComponentPalette |
+| Console / chat panel | `.chat`, `.chat-msg`, `.chat-msg-user`, `.chat-msg-bot` | ConsolePanel |
+| Status bar | `.statusbar`, `.pip` (connection dot) | StatusBar |
+| Modal | `.modal`, `.modal-frame`, `.modal-head` | Modal |
+| Collapsible section | `.cat`, `.cat-head`, `.cat-body` | CollapsibleSection |
+| Workflow card | `.wf-card` | WorkflowCard |
+| Palette tile | `.comp` | ComponentItem |
+| Interactive list rows | `.row` | WorkflowSidebar / ComponentItem |
+| shadcn Button | `.btn` (CVA base) | button.tsx |
+| ActionButton | `.action-btn .btn` (CVA base) | action-button.tsx |
+| Form field | `.input` | input.tsx, textarea.tsx |
+| Dropdown menu | `.menu-pop` (Content), `.menu-pop-item` (Item) | dropdown-menu.tsx |
+| Canvas host | `.canvas-host`, `.canvas` (alias) | Dashboard |
+| Generic canvas node | `.node`, `.selected` | AIAgentNode, GenericNode, TriggerNode, StartNode, ToolkitNode, TeamMonitorNode |
+| Agent node variant | `.node-agent` | AIAgentNode |
+| Trigger node variant | `.node-trigger` | TriggerNode |
+| Square canvas node | `.sq-node`, `.sq-node-box`, `.sq-node-pip`, `.sq-node-gear`, `.sq-node-handle.in`, `.sq-node-handle.out`, `.selected` | SquareNode |
+
+The `.selected` co-class is bound to React Flow's `selected` prop on every canvas node component, activating per-theme selection effects (Cyber `cyber-blink`, Edo hanko seal, Renaissance wax-seal stamp, etc.).
+
+### Decorative content per theme
+
+| Theme | Panel textures | Canvas decoration | Node pseudo overlay | Keyframes |
+|---|---|---|---|---|
+| renaissance | parchment + vellum noise | fleur-de-lis vignette + marginalia | wax seal (`.node::after`) | `ren-flicker` |
+| greek | marble veins | meander pattern | stelae shape | — |
+| edo | washi texture | ink-wash mountain (radial gradient) | hanko seal (`.sq-node.selected::before`) | — |
+| steampunk | leather grain | brass bolt grid | brass rivets (`.sq-node-box::before/::after`) | — |
+| atomic | flat solid | starburst + grid lines | boomerang corners | — |
+| cyber | neon glow grain | perspective grid + scanlines + status text | corner LED blink | `cyber-flicker`, `cyber-roll`, `cyber-blink`, `cyber-glitch` |
+| wasteland | dust + grain | cracked earth (SVG) | scrap noise (`.sq-node-box::before`) | — |
+| rot | gradient | flagstone + candlelight pools | bone gradient | — |
+| plague | parchment | red X pattern (SVG) | nailed nail (`.sq-node-box::after`) | — |
+| surveillance | solid | CCTV crosshair + REC label + phosphor scanlines | REC LED blink (`.sq-node-box::before`) | `surv-blink` |
+
+`var(--accent)` etc. handoff reads were wrapped to `hsl(var(--accent))` for shadcn-bridged tokens; theme-specific spot colours (`--gold`, `--crimson`, `--neon-magenta`, `--rec-red`) port verbatim as hex.
 
 ## Sound system
 
@@ -252,13 +307,56 @@ Each theme declares `--sound-pack: "<pack>"` in its `:root[data-theme="..."]` bl
 | surveillance | `telex` | Typewriter clack + Geiger tick |
 | light / dark | (system fallback `parchment`/`terminal` if requested) | — |
 
-Wiring:
-1. Mount `useSoundSync()` once at the Dashboard root — done in [client/src/Dashboard.tsx](../client/src/Dashboard.tsx).
-2. Every `<ActionButton>` fires `play('click')` on click via the CVA primitive — call sites don't need to wrap.
-3. `<Modal>` fires `play('modalOpen' | 'modalClose')` on `isOpen` edges.
-4. Settings panel ships an Audio section with a Switch bound to `useAppStore.soundEnabled`.
+### Event wiring (W18)
+
+9 events fire automatically across the React tree — call sites do not need to wrap:
+
+| Event | Surface | File |
+|---|---|---|
+| `click` | shadcn Button onClick | [button.tsx](../client/src/components/ui/button.tsx) |
+| `click` | ActionButton (CVA primitive) | [action-button.tsx](../client/src/components/ui/action-button.tsx) |
+| `click` | DropdownMenuItem onSelect | [dropdown-menu.tsx](../client/src/components/ui/dropdown-menu.tsx) |
+| `click` | SelectItem onClick | [select.tsx](../client/src/components/ui/select.tsx) |
+| `hover` | Global capture-phase `mouseover` delegate matching `.btn, .action-btn, .row, .menu-pop-item, .wf-card, .comp, .cmdk-item, [data-sound-hover]` | [hooks/useSound.ts](../client/src/hooks/useSound.ts) |
+| `type` | Input onChange | [input.tsx](../client/src/components/ui/input.tsx) |
+| `type` | Textarea onChange | [textarea.tsx](../client/src/components/ui/textarea.tsx) |
+| `success` | Monkey-patched `toast.success` (sonner) — idempotent under React Strict Mode | [hooks/useSound.ts](../client/src/hooks/useSound.ts) (`patchToast()`) |
+| `error` | Monkey-patched `toast.error` (sonner) | [hooks/useSound.ts](../client/src/hooks/useSound.ts) |
+| `run` | `withSound('run', handleDeploy)` / `withSound('run', handleRun)` at TopToolbar `onDeploy` / `onRun` + CommandPaletteHost handlers | [Dashboard.tsx](../client/src/Dashboard.tsx) |
+| `save` | `withSound('save', handleSave)` at TopToolbar `onSave` + CommandPaletteHost + Ctrl/Cmd+S keyboard shortcut | [Dashboard.tsx](../client/src/Dashboard.tsx) |
+| `modalOpen` / `modalClose` | useEffect on `isOpen` edges in Modal | [Modal.tsx](../client/src/components/ui/Modal.tsx) |
+
+The hover delegate uses `mouseover` on capture phase + a `relatedTarget` filter so a hover only fires once per crossing-into-element (`mouseenter` doesn't bubble). `touchstart` is registered alongside on the same selector list for hybrid devices.
+
+`patchToast()` wraps sonner's `toast.success` / `toast.error` once at module load; the guard flag prevents Strict-Mode double-wrap. `withSound(event, handler)` is the convenience HOC exported from [useSound.ts](../client/src/hooks/useSound.ts) for `run` / `save` semantics — fires the sound, then defers to the original handler.
+
+Wiring summary:
+1. Mount `useSoundSync()` once at the Dashboard root — done in [Dashboard.tsx](../client/src/Dashboard.tsx).
+2. Settings panel ships an Audio section with a Switch bound to `useAppStore.soundEnabled`.
 
 Adding a new sound event: extend `SoundEvent` in `lib/sound.ts`, add an entry per pack, fire `play('<event>')` from the handler.
+
+## Reduced motion
+
+[client/src/themes/base.css](../client/src/themes/base.css) ships a `@media (prefers-reduced-motion: reduce)` block that disables every keyframe across all themes when the user's OS-level "Reduce Motion" preference is on. Disabled animations:
+
+- `cyber-flicker`, `cyber-roll`, `cyber-blink`, `cyber-glitch` (Cyber)
+- `surv-blink` (Surveillance)
+- `ren-flicker` (Renaissance)
+- generic `.animate-pulse` (used by node execution pip)
+
+Plus any `transition` on canvas-host pseudo-elements that synthesise motion. Sounds are not motion — they remain enabled regardless. The user-facing audio toggle lives in Settings → Audio → Sound effects.
+
+Verify in Chrome DevTools → Rendering → "Emulate CSS media feature prefers-reduced-motion: reduce", or in OS settings (macOS: System Settings → Accessibility → Display → Reduce motion; Windows: Settings → Accessibility → Visual effects → Animation effects).
+
+## Throttling
+
+Two events flood under rapid input and are throttled inside the engine to prevent OscillatorNode flooding:
+
+- `type` — 30 ms last-fire window (protects against keystroke bursts)
+- `hover` — 30 ms last-fire window (protects against `mouseover` firing dozens of times during a fast cursor sweep)
+
+Implementation lives in [client/src/lib/sound.ts](../client/src/lib/sound.ts): `Sounds.play()` consults a `THROTTLE_MS` map per event name and a `lastFireMs` map keyed by event before each `OscillatorNode` schedule. Other events (`click`, `success`, `error`, `run`, `save`, `modalOpen`, `modalClose`) fire on every call.
 
 ## Canvas overlay packs (`useAppTheme`)
 

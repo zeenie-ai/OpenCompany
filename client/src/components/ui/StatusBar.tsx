@@ -62,7 +62,10 @@ export const StatusBar: React.FC<StatusBarProps> = ({ workflowName, nodeCount })
     // under Cyber, system mono under light/dark.
     <div
       className={cn(
-        'flex h-6 items-center gap-3 border-t border-border-default bg-bg-panel px-3.5',
+        // `statusbar` is the handoff structural hook for per-theme
+        // decorations (gauge readouts on Steampunk, REC blink on
+        // Surveillance, illuminated footer on Renaissance).
+        'statusbar flex h-6 items-center gap-3 border-t border-border-default bg-bg-panel px-3.5',
         'font-mono text-[11px] tracking-[0.04em] text-fg-muted',
         '[text-transform:var(--type-uppercase)]',
       )}
@@ -70,9 +73,11 @@ export const StatusBar: React.FC<StatusBarProps> = ({ workflowName, nodeCount })
       aria-label="Status bar"
     >
       <span className={cn('flex items-center gap-1.5 font-medium', wsTone)}>
+        {/* `pip` is the handoff hook for the per-theme blinking dot
+            (Surveillance fires `surv-blink`, Cyber fires `cyber-blink`). */}
         <span
           className={cn(
-            'inline-block h-1.5 w-1.5 rounded-full',
+            'pip inline-block h-1.5 w-1.5 rounded-full',
             isReady ? 'bg-success animate-pulse' : isConnected ? 'bg-warning' : 'bg-destructive',
           )}
         />

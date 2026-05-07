@@ -90,11 +90,12 @@ const Modal: React.FC<ModalProps> = ({
             // defined by the active theme (parchment under Renaissance,
             // void under Cyber).
             //
-            // `modal-frame` is the decorative-layer hook — per-theme
-            // CSS targets this class for nailed-up borders (Plague),
-            // gilded corners (Renaissance), neon scanlines (Cyber),
-            // double-rule frames (Greek), etc.
-            'modal-frame',
+            // `modal` + `modal-frame` are the design-handoff structural
+            // hooks — per-theme CSS targets these classes for nailed-up
+            // borders (Plague), gilded corners (Renaissance), neon
+            // scanlines (Cyber), double-rule frames (Greek), parchment
+            // textures (Renaissance) on the modal content.
+            'modal modal-frame',
             'fixed top-1/2 left-1/2 z-50 flex -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-border-default bg-bg-app shadow-2xl outline-none',
             'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 duration-100',
             className
@@ -112,7 +113,7 @@ const Modal: React.FC<ModalProps> = ({
             // + text-transform are theme-driven so titles read as Cinzel
             // uppercase under Renaissance and Major Mono Display under
             // Cyber, while staying clean sans-serif under light/dark.
-            <div className="relative flex w-full items-center border-b border-border-default bg-bg-panel px-5 py-3">
+            <div className="modal-head relative flex w-full items-center border-b border-border-default bg-bg-panel px-5 py-3">
               <DialogTitle className="absolute left-5 flex items-center gap-2 font-display text-base font-semibold tracking-[var(--type-tracking-display)] text-fg-default [text-transform:var(--type-uppercase)]">
                 <Settings className="h-4 w-4 opacity-70" />
                 {title}
