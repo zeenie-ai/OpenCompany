@@ -286,3 +286,34 @@
   text-transform: var(--type-uppercase, none);
   color: hsl(var(--foreground));
 }
+
+/* ============================================================================
+ * Status-state box glow (Wave 29).
+ *
+ * The W26 status-pip rules (.sq-node-pip[data-status="..."]) color the
+ * small status indicator. This block adds a complementary glow to the
+ * NODE BOX itself for `success` and `error` states, so post-execution
+ * outcomes are visible at canvas zoom levels where the pip is too
+ * small to read. Per-theme files override these via higher-specificity
+ * `:root[data-theme="..."] .sq-node[data-status="..."] .sq-node-box`
+ * selectors when they want a material-specific outcome glow.
+ * ============================================================================ */
+
+.sq-node[data-status="success"] .sq-node-box,
+.react-flow__node[data-status="success"] .node {
+  box-shadow:
+    0 0 0 1px hsl(var(--success)),
+    0 0 14px color-mix(in srgb, hsl(var(--success)) 60%, transparent);
+}
+
+.sq-node[data-status="error"] .sq-node-box,
+.react-flow__node[data-status="error"] .node {
+  box-shadow:
+    0 0 0 1px hsl(var(--destructive)),
+    0 0 14px color-mix(in srgb, hsl(var(--destructive)) 60%, transparent);
+}
+
+/* TODO(wave-30): mirror data-status from the pip to the outer .sq-node /
+ * .react-flow__node wrapper in each canvas-node component so the box
+ * glow rules above fire. The wave-29 selectors are pre-positioned;
+ * components currently set data-status on the pip only (W26). */

@@ -200,6 +200,17 @@
 :root[data-theme="surveillance"] .sq-node.selected .sq-node-box {
   border: 1px solid hsl(var(--primary)); box-shadow: 0 0 0 1px hsl(var(--primary)), 0 0 8px rgba(232,38,38,0.4);
 }
+
+/* Wave 29: Surveillance executing nodes blink the REC red glow, matching
+ * the corner LED's surv-blink rhythm. Mirrors the analog-camera "live"
+ * indicator language. Higher specificity than base.css's generic rule. */
+:root[data-theme="surveillance"] .sq-node[data-executing] .sq-node-box,
+:root[data-theme="surveillance"] .react-flow__node.executing .sq-node-box,
+:root[data-theme="surveillance"] .react-flow__node.executing .node {
+  animation: surv-blink 1.0s steps(2) infinite;
+  border: 1px solid hsl(var(--destructive));
+  box-shadow: 0 0 0 1px hsl(var(--destructive)), 0 0 14px rgba(232, 38, 38, 0.65);
+}
 :root[data-theme="surveillance"] .sq-node-pip { border-radius: 0; }
 :root[data-theme="surveillance"] .sq-node-gear { background: hsl(var(--primary)); color: white; border-radius: 0; border: none; }
 :root[data-theme="surveillance"] .sq-node-handle { border-radius: 0; background: var(--phosphor); }

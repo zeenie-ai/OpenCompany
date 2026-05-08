@@ -3,15 +3,22 @@
  * Dashboard. Split into named groups so a new status visual or keyframe
  * can be added without touching Dashboard.tsx.
  *
- *   KEYFRAMES                -- @keyframes definitions (color-agnostic;
- *                               consume scoped --node-glow* CSS vars)
+ *   KEYFRAMES                -- @keyframes definitions for edges
  *   edgeStatusStyles(...)    -- .react-flow__edge.{selected,executing,...}
- *   nodeStatusStyles(...)    -- .react-flow__node.{executing,...}
+ *   nodeStatusStyles(...)    -- .react-flow__node.{...} (status-class colors only)
  *   buildCanvasStyles(...)   -- composes the three for Dashboard
  *
  * Per-node inline animations (border pulse, etc.) live in their own
  * components and read theme tokens directly; this module is for
  * canvas-wide rules that need to match React Flow's wrapper classes.
+ *
+ * Node execution glow is owned by `client/src/themes/base.css` — see
+ * the `node-pulse` keyframe + `.react-flow__node.executing .node` /
+ * `.sq-node[data-executing] .sq-node-box` rules there. This file used
+ * to inject a competing `nodeGlow` keyframe targeting the React Flow
+ * wrapper; that was dead code (only the inner `.node` child animated)
+ * and has been removed in favour of base.css as the single source of
+ * truth.
  *
  * The light vs dark distinction is encoded entirely in `colors` (the
  * theme object provides different values per mode), so this file knows
@@ -33,11 +40,6 @@ const KEYFRAMES = `
   @keyframes dashFlow {
     0% { stroke-dashoffset: 24; }
     100% { stroke-dashoffset: 0; }
-  }
-
-  @keyframes nodeGlow {
-    0%, 100% { filter: drop-shadow(0 0 8px var(--node-glow)) drop-shadow(0 0 16px var(--node-glow-soft)); }
-    50%      { filter: drop-shadow(0 0 14px var(--node-glow)) drop-shadow(0 0 24px var(--node-glow)); }
   }
 `;
 
@@ -89,18 +91,17 @@ function edgeStatusStyles(colors: CanvasStatusColors): string {
 `;
 }
 
-function nodeStatusStyles(colors: CanvasStatusColors): string {
-  // --node-glow / --node-glow-soft are scoped vars consumed by the
-  // nodeGlow keyframe, so the keyframe stays color-agnostic and theme
-  // swaps don't require regenerating the keyframe text.
-  const glow = colors.edgeExecuting;
-  return `
-  .react-flow__node.executing {
-    --node-glow: ${glow};
-    --node-glow-soft: ${glow}80;
-    animation: nodeGlow 1.2s ease-in-out infinite;
-  }
-`;
+function nodeStatusStyles(_colors: CanvasStatusColors): string {
+  // Node execution animation is owned by base.css (`node-pulse`
+  // keyframe + `.react-flow__node.executing .node` /
+  // `.sq-node[data-executing] .sq-node-box` rules). This function is
+  // retained as a hook for future canvas-wide status-class rules on
+  // the React Flow wrapper that don't fit per-component CSS.
+  //
+  // `_colors` is intentionally unused at the moment; the parameter is
+  // kept on the signature so callers (buildCanvasStyles) and the
+  // CanvasStatusColors contract stay stable for downstream consumers.
+  return '';
 }
 
 export function buildCanvasStyles(colors: CanvasStatusColors): string {

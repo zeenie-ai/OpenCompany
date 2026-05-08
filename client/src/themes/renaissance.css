@@ -369,6 +369,21 @@
   border-color: var(--gold);
   box-shadow: 0 0 0 3px rgba(212, 160, 48, 0.5), 0 3px 0 var(--border-strong), inset 0 0 0 1px var(--gold);
 }
+
+/* Wave 29: Renaissance executing nodes flicker like candlelight using
+ * ren-flicker (opacity pulse) — NOT the digital node-pulse. The gold
+ * border stays steady; only the ambient glow shimmers. Higher specificity
+ * than base.css's generic rule, so this wins. */
+:root[data-theme="renaissance"] .sq-node[data-executing] .sq-node-box,
+:root[data-theme="renaissance"] .react-flow__node.executing .sq-node-box,
+:root[data-theme="renaissance"] .react-flow__node.executing .node {
+  animation: ren-flicker 2.4s ease-in-out infinite;
+  border-color: var(--gold);
+  box-shadow:
+    0 0 0 2px rgba(212, 160, 48, 0.6),
+    0 0 20px rgba(212, 160, 48, 0.4),
+    inset 0 0 0 1px var(--gold);
+}
 :root[data-theme="renaissance"] .sq-node-pip {
   border: 1px solid var(--border-strong);
   box-shadow: 0 0 4px currentColor;

@@ -421,6 +421,22 @@
     0 0 20px var(--neon-cyan);
   animation: cyber-blink 1.6s steps(2) infinite;
 }
+
+/* Wave 29: Cyber executing nodes pulse with the cyber-blink keyframe
+ * (steps animation = digital strobe), not the smooth node-pulse default.
+ * Targets BOTH React Flow's wrapper class and our data-attribute so
+ * either drives the animation. Higher specificity than base.css's
+ * generic .react-flow__node.executing .sq-node-box rule, so this wins. */
+:root[data-theme="cyber"] .sq-node[data-executing] .sq-node-box,
+:root[data-theme="cyber"] .react-flow__node.executing .sq-node-box,
+:root[data-theme="cyber"] .react-flow__node.executing .node {
+  animation: cyber-blink 1.6s steps(2) infinite;
+  border-color: var(--neon-cyan);
+  box-shadow:
+    0 0 0 1px var(--neon-cyan),
+    0 0 24px var(--neon-cyan),
+    inset 0 0 18px rgba(29, 217, 229, 0.3);
+}
 :root[data-theme="cyber"] .sq-node-pip {
   border-radius: 0;
   width: 8px; height: 8px;

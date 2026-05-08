@@ -171,6 +171,8 @@
 :root[data-theme="edo"] .sq-node.selected .sq-node-box {
   border: 2px solid hsl(var(--accent));
   background: var(--bg-elevated);
+  /* Wave 29: outer halo so selection reads at any zoom level. */
+  box-shadow: 0 0 0 2px hsl(var(--accent) / 0.5), 0 4px 14px hsl(var(--accent) / 0.3);
 }
 :root[data-theme="edo"] .sq-node.selected .sq-node-box::before {
   content: ''; position: absolute; top: 4px; right: 4px; width: 14px; height: 14px;

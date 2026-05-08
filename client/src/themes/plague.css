@@ -175,7 +175,12 @@
   content: ''; position: absolute; top: -3px; left: 50%; width: 6px; height: 6px;
   background: var(--crow); transform: translateX(-50%);
 }
-:root[data-theme="plague"] .sq-node.selected .sq-node-box { border-color: hsl(var(--accent)); background: hsl(var(--destructive) / 0.2); }
+/* Wave 29: outer halo so selection reads at any zoom level. */
+:root[data-theme="plague"] .sq-node.selected .sq-node-box {
+  border-color: hsl(var(--accent));
+  background: hsl(var(--destructive) / 0.2);
+  box-shadow: 0 0 0 2px hsl(var(--accent)), 0 0 14px hsl(var(--destructive) / 0.4);
+}
 :root[data-theme="plague"] .sq-node-gear { background: hsl(var(--accent)); color: var(--linen); border: none; border-radius: 0; }
 :root[data-theme="plague"] .sq-node-handle { border-radius: 0; }
 :root[data-theme="plague"] .sq-node-handle.out { background: hsl(var(--accent)); }
