@@ -863,8 +863,19 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             const previous =
               store.allStatuses[progressWorkflowId]?.[targetNodeId] ||
               ({} as NodeStatus);
+            // Defensive: an agent_progress event implies the agent IS
+            // mid-loop. Set status='executing' even if no prior
+            // node_status broadcast arrived first (race or edge case
+            // where the agent finishes in a single step). Without this,
+            // AIAgentNode's `isExecuting && iteration != null` gate
+            // hides the badge entirely.
+            const carriedStatus =
+              previous.status === 'success' || previous.status === 'error'
+                ? previous.status
+                : 'executing';
             store.setStatus(progressWorkflowId, targetNodeId, {
               ...previous,
+              status: carriedStatus,
               workflow_id: progressWorkflowId,
               data: {
                 ...(previous.data || {}),
