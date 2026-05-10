@@ -33,7 +33,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Button } from '@/components/ui/button';
 import { ActionButton } from '@/components/ui/action-button';
 import { Checkbox } from '@/components/ui/checkbox';
 
@@ -245,7 +244,7 @@ const ToolSchemaEditor: React.FC<ToolSchemaEditorProps> = ({ nodeId }) => {
               !isExpanded && '-rotate-90'
             )}
           />
-          <span className="font-semibold text-foreground">Connected Services</span>
+          <span className="font-display tracking-[var(--type-tracking-display)] [text-transform:var(--type-uppercase)] text-sm font-semibold text-fg-default">Connected Services</span>
         </div>
         <span className="text-sm text-muted-foreground">
           {connectedServices.length} service(s)
@@ -286,9 +285,9 @@ const ToolSchemaEditor: React.FC<ToolSchemaEditorProps> = ({ nodeId }) => {
             )}
 
             <div className="mb-2 flex items-center justify-between">
-              <label className="text-sm text-muted-foreground">Schema Fields</label>
+              <label className="font-display tracking-[var(--type-tracking-display)] [text-transform:var(--type-uppercase)] text-sm text-fg-muted">Schema Fields</label>
               <ActionButton
-                intent="config"
+                intent="tools"
                 className="h-7"
                 onClick={() =>
                   append({
@@ -311,9 +310,9 @@ const ToolSchemaEditor: React.FC<ToolSchemaEditorProps> = ({ nodeId }) => {
 
             {hasChanges && (
               <div className="mt-3 flex justify-end gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={handleReset}>
+                <ActionButton intent="config" type="button" onClick={handleReset}>
                   Reset
-                </Button>
+                </ActionButton>
                 <ActionButton
                   intent="save"
                   type="submit"

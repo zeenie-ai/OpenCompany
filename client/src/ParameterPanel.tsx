@@ -5,12 +5,10 @@ import { useParameterPanel } from './hooks/useParameterPanel';
 import { useAppStore } from './store/useAppStore';
 import { useWebSocket } from './contexts/WebSocketContext';
 import { ExecutionService, ExecutionResult } from './services/executionService';
-import { useAppTheme } from './hooks/useAppTheme';
 import { ActionButton } from './components/ui/action-button';
 import { NodeIcon } from './assets/icons';
 
 const ParameterPanel: React.FC = () => {
-  const theme = useAppTheme();
   const {
     selectedNode,
     nodeDefinition,
@@ -142,7 +140,7 @@ const ParameterPanel: React.FC = () => {
           className="h-5 w-5 text-xl"
         />
         <span>{nodeDefinition.displayName}</span>
-        {hasUnsavedChanges && <span style={{ color: theme.accent.orange }}>*</span>}
+        {hasUnsavedChanges && <span className="text-warning">*</span>}
       </div>
       <div className="flex items-center gap-2">
         {canExecute && !hideRunButton && (

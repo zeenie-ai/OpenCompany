@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-import { Button } from '@/components/ui/button';
+import { ActionButton } from '@/components/ui/action-button';
 import { Alert as DSAlert, AlertDescription } from '@/components/ui/alert';
 import {
   Tooltip,
@@ -46,7 +46,6 @@ import {
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useAppTheme } from '../../hooks/useAppTheme';
 import { useWebSocket } from '../../contexts/WebSocketContext';
 import { NodeIcon } from '../../assets/icons';
 import { cn } from '@/lib/utils';
@@ -117,7 +116,6 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
   onSkillFolderChange,
   nodeId
 }) => {
-  const theme = useAppTheme();
   const { sendRequest } = useWebSocket();
   const [selectedSkillName, setSelectedSkillName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -507,58 +505,30 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
   const isEditingUserSkill = selectedSkillInfo?.isUserSkill && pendingSkillData;
 
   return (
-    <div style={{
-      display: 'flex',
-      flex: 1,
-      minHeight: 0,
-      gap: theme.spacing.md,
-      overflow: 'hidden'
-    }}>
+    <div className="flex flex-1 min-h-0 gap-3 overflow-hidden">
       {/* Left Panel - Skills List */}
-      <div style={{
-        flex: '0 0 260px',
-        display: 'flex',
-        flexDirection: 'column',
-        backgroundColor: theme.colors.background,
-        borderRadius: theme.borderRadius.md,
-        border: `1px solid ${theme.colors.border}`,
-        overflow: 'hidden'
-      }}>
+      <div className="flex flex-[0_0_260px] flex-col overflow-hidden rounded-md border border-border-default bg-bg-elevated">
         {/* Header with count and create button */}
-        <div style={{
-          padding: theme.spacing.sm,
-          borderBottom: `1px solid ${theme.colors.border}`,
-          backgroundColor: theme.colors.backgroundAlt,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between'
-        }}>
-          <span style={{ fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.semibold, color: theme.colors.text }}>
+        <div className="flex items-center justify-between border-b border-border-default bg-bg-panel p-2">
+          <span className="font-display tracking-[var(--type-tracking-display)] [text-transform:var(--type-uppercase)] text-sm font-semibold text-fg-default">
             Skills
           </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.xs }}>
-            <DSBadge
-              style={{ backgroundColor: theme.dracula.purple, color: '#fff' }}
-              className="h-5 min-w-5 justify-center rounded-full px-1.5"
-            >
+          <div className="flex items-center gap-1">
+            <DSBadge className="h-5 min-w-5 justify-center rounded-full bg-action-tools px-1.5 text-white">
               {enabledCount}
             </DSBadge>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    size="icon-sm"
-                    variant="outline"
+                  <ActionButton
+                    intent="tools"
                     onClick={handleCreateSkill}
                     disabled={isCreatingNew}
-                    style={{
-                      backgroundColor: `${theme.dracula.green}20`,
-                      borderColor: theme.dracula.green,
-                      color: theme.dracula.green,
-                    }}
+                    className="h-7 px-2"
+                    aria-label="Create new skill"
                   >
                     <Plus className="h-3.5 w-3.5" />
-                  </Button>
+                  </ActionButton>
                 </TooltipTrigger>
                 <TooltipContent>Create new skill</TooltipContent>
               </Tooltip>
@@ -616,7 +586,7 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
         </div>
 
         {/* Skills List */}
-        <div style={{ flex: 1, overflowY: 'auto' }}>
+        <div className="flex-1 overflow-y-auto">
           {folderLoading ? (
             <div className="mt-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -667,11 +637,11 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
                       />
                       <NodeIcon icon={skill.icon} className="h-4 w-4 text-base" />
                       <span
-                        className="flex-1 overflow-hidden text-sm whitespace-nowrap text-ellipsis"
-                        style={{
-                          fontWeight: isSelected ? theme.fontWeight.semibold : theme.fontWeight.medium,
-                          color: isEnabled ? theme.colors.text : theme.colors.textSecondary,
-                        }}
+                        className={cn(
+                          'flex-1 overflow-hidden text-sm whitespace-nowrap text-ellipsis',
+                          isSelected ? 'font-semibold' : 'font-medium',
+                          isEnabled ? 'text-fg-default' : 'text-fg-muted',
+                        )}
                       >
                         {skill.displayName}
                       </span>
@@ -679,23 +649,14 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <div
-                                className="h-2 w-2 shrink-0 rounded-full"
-                                style={{ backgroundColor: theme.dracula.orange }}
-                              />
+                              <div className="h-2 w-2 shrink-0 rounded-full bg-warning" />
                             </TooltipTrigger>
                             <TooltipContent>Customized</TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
                       )}
                       {skill.isUserSkill && (
-                        <DSBadge
-                          className="h-4 px-1 text-[10px]"
-                          style={{
-                            backgroundColor: `${theme.dracula.cyan}20`,
-                            color: theme.dracula.cyan,
-                          }}
-                        >
+                        <DSBadge className="h-4 bg-info/20 px-1 text-[10px] text-info">
                           Custom
                         </DSBadge>
                       )}
@@ -709,27 +670,12 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
       </div>
 
       {/* Right Panel - Skill Editor */}
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        backgroundColor: theme.colors.background,
-        borderRadius: theme.borderRadius.md,
-        border: `1px solid ${theme.colors.border}`,
-        overflow: 'hidden'
-      }}>
+      <div className="flex flex-1 flex-col overflow-hidden rounded-md border border-border-default bg-bg-elevated">
         {/* Creating new skill */}
         {isCreatingNew && pendingSkillData ? (
           <>
             {/* New Skill Header */}
-            <div style={{
-              padding: theme.spacing.md,
-              borderBottom: `1px solid ${theme.colors.border}`,
-              backgroundColor: theme.colors.backgroundAlt,
-              display: 'flex',
-              alignItems: 'center',
-              gap: theme.spacing.md
-            }}>
+            <div className="flex items-center gap-3 border-b border-border-default bg-bg-panel p-3">
               <div
                 className="flex h-10 w-10 items-center justify-center rounded-md border-2 border-dashed bg-tint-soft"
                 // currentColor is the new skill's brand color;
@@ -742,104 +688,89 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
                   ? <NodeIcon icon={pendingSkillData.icon} className="h-5 w-5 text-xl" />
                   : <Plus className="h-5 w-5" />}
               </div>
-              <div style={{ flex: 1 }}>
-                <div style={{
-                  fontSize: theme.fontSize.sm,
-                  fontWeight: theme.fontWeight.semibold,
-                  color: theme.dracula.green
-                }}>
+              <div className="flex-1">
+                <div className="font-display tracking-[var(--type-tracking-display)] [text-transform:var(--type-uppercase)] text-sm font-semibold text-success">
                   Create New Skill
                 </div>
-                <div style={{ fontSize: theme.fontSize.xs, color: theme.colors.textSecondary, marginTop: 2 }}>
+                <div className="mt-0.5 text-xs text-fg-muted">
                   Fill in the details below and save
                 </div>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleCancelCreate}
-                style={{
-                  backgroundColor: `${theme.dracula.red}15`,
-                  borderColor: `${theme.dracula.red}40`,
-                  color: theme.dracula.red,
-                }}
-              >
+              <ActionButton intent="stop" onClick={handleCancelCreate} className="h-8">
                 <X className="h-3.5 w-3.5" />
                 Cancel
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
+              </ActionButton>
+              <ActionButton
+                intent="save"
                 onClick={handleSaveSkill}
                 disabled={savingSkill}
-                style={{
-                  backgroundColor: `${theme.dracula.green}15`,
-                  borderColor: `${theme.dracula.green}40`,
-                  color: theme.dracula.green,
-                }}
+                className="h-8"
               >
                 {savingSkill ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                 Save
-              </Button>
+              </ActionButton>
             </div>
 
             {/* New Skill Form */}
-            <div ref={editorWrapperRef} style={{ flex: 1, padding: theme.spacing.md, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: theme.spacing.md }}>
+            <div
+              ref={editorWrapperRef}
+              className="flex flex-1 flex-col gap-3 overflow-auto p-3"
+            >
               {/* Display Name */}
               <div>
-                <label style={{ display: 'block', fontSize: theme.fontSize.xs, color: theme.colors.textSecondary, marginBottom: 4 }}>
+                <label className="mb-1 block text-xs text-fg-muted">
                   Display Name *
                 </label>
                 <Input
                   value={pendingSkillData.display_name}
                   onChange={(e) => handlePendingDataChange('display_name', e.target.value)}
                   placeholder="My Custom Skill"
-                  style={{ backgroundColor: theme.colors.backgroundAlt, borderColor: theme.colors.border }}
+                  className="bg-bg-input border-border-default"
                 />
               </div>
 
               {/* Description */}
               <div>
-                <label style={{ display: 'block', fontSize: theme.fontSize.xs, color: theme.colors.textSecondary, marginBottom: 4 }}>
+                <label className="mb-1 block text-xs text-fg-muted">
                   Description
                 </label>
                 <Input
                   value={pendingSkillData.description}
                   onChange={(e) => handlePendingDataChange('description', e.target.value)}
                   placeholder="Brief description of what this skill does"
-                  style={{ backgroundColor: theme.colors.backgroundAlt, borderColor: theme.colors.border }}
+                  className="bg-bg-input border-border-default"
                 />
               </div>
 
               {/* Icon and Color */}
-              <div style={{ display: 'flex', gap: theme.spacing.md }}>
-                <div style={{ width: 100 }}>
-                  <label style={{ display: 'block', fontSize: theme.fontSize.xs, color: theme.colors.textSecondary, marginBottom: 4 }}>
+              <div className="flex gap-3">
+                <div className="w-[100px]">
+                  <label className="mb-1 block text-xs text-fg-muted">
                     Icon (emoji)
                   </label>
                   <Input
                     value={pendingSkillData.icon}
                     onChange={(e) => handlePendingDataChange('icon', e.target.value)}
                     placeholder=""
-                    style={{ backgroundColor: theme.colors.backgroundAlt, borderColor: theme.colors.border, textAlign: 'center' }}
+                    className="bg-bg-input border-border-default text-center"
                   />
                 </div>
-                <div style={{ width: 80 }}>
-                  <label style={{ display: 'block', fontSize: theme.fontSize.xs, color: theme.colors.textSecondary, marginBottom: 4 }}>
+                <div className="w-20">
+                  <label className="mb-1 block text-xs text-fg-muted">
                     Color
                   </label>
                   <Input
                     type="color"
                     value={pendingSkillData.color}
                     onChange={(e) => handlePendingDataChange('color', e.target.value)}
-                    style={{ backgroundColor: theme.colors.backgroundAlt, borderColor: theme.colors.border, height: 32, padding: 2 }}
+                    className="h-8 bg-bg-input border-border-default p-0.5"
                   />
                 </div>
               </div>
 
               {/* Instructions */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 200 }}>
-                <label style={{ display: 'block', fontSize: theme.fontSize.xs, color: theme.colors.textSecondary, marginBottom: 4 }}>
+              <div className="flex flex-1 flex-col min-h-[200px]">
+                <label className="mb-1 block text-xs text-fg-muted">
                   Instructions *
                 </label>
                 <Textarea
@@ -847,13 +778,7 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
                   onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handlePendingDataChange('instructions', e.target.value)}
                   placeholder="# Skill Instructions..."
                   spellCheck={false}
-                  className="flex-1 min-h-0 resize-none font-mono text-[13px] leading-[1.5]"
-                  style={{
-                    backgroundColor: theme.colors.backgroundAlt,
-                    color: theme.colors.text,
-                    borderColor: theme.colors.border,
-                    borderRadius: theme.borderRadius.md,
-                  }}
+                  className="flex-1 min-h-0 resize-none rounded-md border-border-default bg-bg-input font-mono text-[13px] leading-[1.5] text-fg-default"
                 />
               </div>
             </div>
@@ -861,46 +786,20 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
         ) : selectedSkillInfo ? (
           <>
             {/* Skill Header */}
-            <div style={{
-              padding: theme.spacing.md,
-              borderBottom: `1px solid ${theme.colors.border}`,
-              backgroundColor: theme.colors.backgroundAlt,
-              display: 'flex',
-              alignItems: 'center',
-              gap: theme.spacing.md
-            }}>
+            <div className="flex items-center gap-3 border-b border-border-default bg-bg-panel p-3">
               <NodeIcon icon={selectedSkillInfo.icon} className="h-6 w-6 text-2xl" />
-              <div style={{ flex: 1 }}>
+              <div className="flex-1">
                 {isEditingUserSkill ? (
                   <Input
                     value={pendingSkillData?.display_name || ''}
                     onChange={(e) => handlePendingDataChange('display_name', e.target.value)}
-                    style={{
-                      fontSize: theme.fontSize.sm,
-                      fontWeight: theme.fontWeight.semibold,
-                      backgroundColor: theme.colors.background,
-                      borderColor: theme.colors.border,
-                      marginBottom: 4
-                    }}
+                    className="mb-1 bg-bg-elevated border-border-default text-sm font-semibold"
                   />
                 ) : (
-                  <div style={{
-                    fontSize: theme.fontSize.sm,
-                    fontWeight: theme.fontWeight.semibold,
-                    color: theme.colors.text,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: theme.spacing.sm
-                  }}>
+                  <div className="font-display tracking-[var(--type-tracking-display)] [text-transform:var(--type-uppercase)] flex items-center gap-2 text-sm font-semibold text-fg-default">
                     {selectedSkillInfo.displayName}
                     {selectedSkillConfig?.isCustomized && (
-                      <DSBadge
-                        className="h-4 text-xs"
-                        style={{
-                          backgroundColor: `${theme.dracula.orange}20`,
-                          color: theme.dracula.orange,
-                        }}
-                      >
+                      <DSBadge className="h-4 bg-warning/20 text-xs text-warning">
                         Customized
                       </DSBadge>
                     )}
@@ -911,14 +810,10 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
                     value={pendingSkillData?.description || ''}
                     onChange={(e) => handlePendingDataChange('description', e.target.value)}
                     placeholder="Description"
-                    style={{
-                      fontSize: theme.fontSize.xs,
-                      backgroundColor: theme.colors.background,
-                      borderColor: theme.colors.border,
-                    }}
+                    className="bg-bg-elevated border-border-default text-xs"
                   />
                 ) : (
-                  <div style={{ fontSize: theme.fontSize.xs, color: theme.colors.textSecondary, marginTop: 2 }}>
+                  <div className="mt-0.5 text-xs text-fg-muted">
                     {selectedSkillInfo.description}
                   </div>
                 )}
@@ -928,35 +823,22 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
               {isEditingUserSkill && (
                 <>
                   {hasUnsavedChanges && (
-                    <Button
-                      size="sm"
-                      variant="outline"
+                    <ActionButton
+                      intent="save"
                       onClick={handleSaveSkill}
                       disabled={savingSkill}
-                      style={{
-                        backgroundColor: `${theme.dracula.green}15`,
-                        borderColor: `${theme.dracula.green}40`,
-                        color: theme.dracula.green,
-                      }}
+                      className="h-8"
                     >
                       {savingSkill ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                       Save
-                    </Button>
+                    </ActionButton>
                   )}
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        style={{
-                          backgroundColor: `${theme.dracula.red}15`,
-                          borderColor: `${theme.dracula.red}40`,
-                          color: theme.dracula.red,
-                        }}
-                      >
+                      <ActionButton intent="stop" className="h-8">
                         <Trash2 className="h-3.5 w-3.5" />
                         Delete
-                      </Button>
+                      </ActionButton>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
@@ -982,25 +864,23 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
 
               {/* Reset Button for built-in skills */}
               {!isEditingUserSkill && selectedSkillConfig?.isCustomized && (
-                <Button
-                  size="sm"
-                  variant="outline"
+                <ActionButton
+                  intent="config"
                   onClick={() => handleResetToDefault(selectedSkillName!)}
                   disabled={isLoading}
-                  style={{
-                    backgroundColor: `${theme.dracula.orange}15`,
-                    borderColor: `${theme.dracula.orange}40`,
-                    color: theme.dracula.orange,
-                  }}
+                  className="h-8"
                 >
                   {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
                   Reset
-                </Button>
+                </ActionButton>
               )}
             </div>
 
             {/* Skill Instructions Editor */}
-            <div ref={editorWrapperRef} style={{ flex: 1, padding: theme.spacing.md, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <div
+              ref={editorWrapperRef}
+              className="flex flex-1 flex-col overflow-hidden p-3"
+            >
               {isLoading ? (
                 <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -1022,13 +902,7 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
                   }}
                   placeholder="Loading skill instructions..."
                   spellCheck={false}
-                  className="flex-1 min-h-0 resize-none font-mono text-[13px] leading-[1.5]"
-                  style={{
-                    backgroundColor: theme.colors.backgroundAlt,
-                    color: theme.colors.text,
-                    borderColor: theme.colors.border,
-                    borderRadius: theme.borderRadius.md,
-                  }}
+                  className="flex-1 min-h-0 resize-none rounded-md border-border-default bg-bg-input font-mono text-[13px] leading-[1.5] text-fg-default"
                 />
               )}
 

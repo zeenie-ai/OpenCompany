@@ -3,7 +3,6 @@ import { Loader2, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { useMutation, useQueries, useQuery } from '@tanstack/react-query';
 
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -30,7 +29,6 @@ import { ActionButton } from '@/components/ui/action-button';
 import ParameterRenderer from '../ParameterRenderer';
 import ToolSchemaEditor from './ToolSchemaEditor';
 import MasterSkillEditor from './MasterSkillEditor';
-import { useAppTheme } from '../../hooks/useAppTheme';
 import { useAppStore } from '../../store/useAppStore';
 import { useWebSocket, CompactionStats } from '../../contexts/WebSocketContext';
 import { useUserSettingsQuery } from '../../hooks/useUserSettingsQuery';
@@ -92,7 +90,6 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
   isLoadingParameters = false,
   executionResults = []
 }) => {
-  const theme = useAppTheme();
   const currentWorkflow = useAppStore((s) => s.currentWorkflow);
   const { clearMemory, resetSkill, sendRequest, getNodeParameters, compactionStats: contextCompactionStats, updateCompactionStats } = useWebSocket();
 
@@ -515,38 +512,21 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
   const consoleOutput = isCodeExecutorNode ? getConsoleOutput() : '';
 
   return (
-    <div style={{
-      flex: 1,
-      display: 'flex',
-      flexDirection: 'column',
-      height: '100%',
-      overflow: 'hidden',
-      position: 'relative'
-    }}>
+    <div className="relative flex h-full flex-1 flex-col overflow-hidden">
       {/* Description - hide for code editor nodes (Python, Skill) and masterSkill */}
       {!needsCodeEditorLayout && !isMasterSkillNode && (
-        <div style={{
-          padding: `${theme.spacing.lg} ${theme.spacing.xl} ${theme.spacing.sm}`,
-          borderBottom: `1px solid ${theme.colors.border}`,
-          backgroundColor: theme.colors.backgroundAlt,
-          flexShrink: 0
-        }}>
-          <p style={{
-            margin: 0,
-            fontSize: theme.fontSize.base,
-            color: theme.colors.textSecondary,
-            lineHeight: '1.5',
-          }}>
+        <div className="shrink-0 border-b border-border-default bg-bg-panel px-6 pt-4 pb-2">
+          <p className="m-0 text-base leading-[1.5] text-fg-muted">
             {nodeDefinition.description}
           </p>
         </div>
       )}
 
       {/* Main Content Area - Flexible */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* Master Skill Editor - Full panel for masterSkill nodes */}
         {isMasterSkillNode ? (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: theme.spacing.lg, overflow: 'hidden' }}>
+          <div className="flex flex-1 flex-col overflow-hidden p-4">
             <MasterSkillEditor
               skillsConfig={parameters.skills_config || {}}
               onConfigChange={(config) => onParameterChange('skills_config', config)}
@@ -558,45 +538,34 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
         ) : (
         <>
         {/* Parameters */}
-        <div style={{
-          padding: theme.spacing.xl,
-          flex: needsCodeEditorLayout ? '3' : 1,
-          overflowY: needsCodeEditorLayout ? 'hidden' : 'auto',
-          overflowX: 'hidden',
-          width: '100%',
-          boxSizing: 'border-box',
-          minHeight: 0,
-          display: needsCodeEditorLayout ? 'flex' : 'block',
-          flexDirection: 'column'
-        }}>
+        <div
+          className={cn(
+            'box-border min-h-0 w-full overflow-x-hidden p-6',
+            needsCodeEditorLayout
+              ? 'flex flex-[3] flex-col overflow-y-hidden'
+              : 'block flex-1 overflow-y-auto',
+          )}
+        >
           {/* Parameters Container */}
-          <div style={{
-            backgroundColor: theme.colors.background,
-            border: `1px solid ${theme.colors.border}`,
-            borderRadius: theme.borderRadius.md,
-            padding: theme.spacing.lg,
-            boxShadow: `0 1px 3px ${theme.colors.shadowLight}`,
-            height: needsCodeEditorLayout ? '100%' : 'auto',
-            display: needsCodeEditorLayout ? 'flex' : 'block',
-            flexDirection: 'column',
-            boxSizing: 'border-box'
-          }}>
+          <div
+            className={cn(
+              'box-border rounded-md border border-border-default bg-bg-elevated p-4 shadow-sm',
+              needsCodeEditorLayout ? 'flex h-full flex-col' : 'block h-auto',
+            )}
+          >
             {/* All Parameters - standard n8n style */}
             {visibleParams.map((param: INodeProperties, index: number) => {
               // Check if this parameter is a code editor - give it more flex space
               const isCodeParam = (param as any).typeOptions?.editor === 'code';
+              const isLast = index === visibleParams.length - 1;
               return (
               <div
                 key={param.name}
-                style={{
-                  paddingBottom: index < visibleParams.length - 1 ? theme.spacing.md : 0,
-                  marginBottom: index < visibleParams.length - 1 ? theme.spacing.md : 0,
-                  borderBottom: index < visibleParams.length - 1 ? `1px solid ${theme.colors.border}` : 'none',
-                  flex: needsCodeEditorLayout && isCodeParam ? 1 : 'none',
-                  display: needsCodeEditorLayout ? 'flex' : 'block',
-                  flexDirection: 'column',
-                  minHeight: needsCodeEditorLayout && isCodeParam ? '300px' : 0
-                }}
+                className={cn(
+                  needsCodeEditorLayout ? 'flex flex-col' : 'block',
+                  !isLast && 'mb-3 border-b border-border-default pb-3',
+                  needsCodeEditorLayout && isCodeParam ? 'min-h-[300px] flex-1' : 'min-h-0 flex-none',
+                )}
               >
                 <ParameterRenderer
                   parameter={param}
@@ -623,21 +592,21 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
 
             {/* Clear Memory Button - Only for memory nodes */}
             {isMemoryNode && (
-              <div className="mt-3 flex justify-end border-t border-border pt-3">
-                <Button
-                  variant="destructive"
-                  size="sm"
+              <div className="mt-3 flex justify-end border-t border-border-default pt-3">
+                <ActionButton
+                  intent="stop"
                   onClick={() => setShowClearMemoryDialog(true)}
+                  className="h-8"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   Clear Memory
-                </Button>
+                </ActionButton>
               </div>
             )}
 
             {/* Reset Skill Button - Only for built-in skill nodes */}
             {isSkillNode && (
-              <div className="mt-3 flex justify-end border-t border-border pt-3">
+              <div className="mt-3 flex justify-end border-t border-border-default pt-3">
                 <ActionButton
                   intent="config"
                   onClick={() => setShowResetSkillDialog(true)}
@@ -715,18 +684,18 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
 
           {/* Token Usage Section - Only for agent nodes with memory connected */}
           {isAgentWithSkills && connectedMemorySessionId && (
-            <Accordion type="single" collapsible defaultValue="tokens" style={{ marginTop: 16 }}>
+            <Accordion type="single" collapsible defaultValue="tokens" className="mt-4">
               <AccordionItem value="tokens">
                 <AccordionTrigger>
                   {(() => {
                     const ctxLen = compactionStats?.context_length || 0;
                     const displayMax = ctxLen > 0 ? ctxLen : compactionStats?.threshold || 0;
                     return (
-                      <span className="flex flex-1 items-center gap-2">
+                      <span className="font-display tracking-[var(--type-tracking-display)] [text-transform:var(--type-uppercase)] text-fg-default flex flex-1 items-center gap-2">
                         <Zap className="h-4 w-4" />
                         Token Usage
                         {compactionStats && displayMax > 0 && (
-                          <span className="ml-auto text-xs text-muted-foreground">
+                          <span className="ml-auto text-xs text-fg-muted normal-case tracking-normal">
                             {Math.round(compactionStats.total / 1000)}K / {Math.round(displayMax / 1000)}K{ctxLen > 0 ? ' context' : ''}
                           </span>
                         )}
@@ -774,8 +743,9 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
                                   step={10000}
                                   className="h-7 w-28 text-xs"
                                 />
-                                <Button
-                                  size="icon-sm"
+                                <ActionButton
+                                  intent="save"
+                                  className="h-7 w-7 px-0"
                                   disabled={savingThreshold || !connectedMemorySessionId}
                                   onClick={() => {
                                     if (!connectedMemorySessionId) return;
@@ -786,7 +756,7 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
                                   }}
                                 >
                                   {savingThreshold ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                                </Button>
+                                </ActionButton>
                               </div>
                             </div>
                           ) : (
@@ -834,12 +804,12 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
             >
               <AccordionItem value="skills">
                 <AccordionTrigger>
-                  <span className="flex flex-1 items-center gap-2">
+                  <span className="font-display tracking-[var(--type-tracking-display)] [text-transform:var(--type-uppercase)] text-fg-default flex flex-1 items-center gap-2">
                     <Sparkles className="h-4 w-4" />
                     Connected Skills
                     <Badge
                       variant={expandedConnectedSkills.length > 0 ? 'default' : 'outline'}
-                      className="ml-auto"
+                      className="ml-auto normal-case tracking-normal"
                     >
                       {expandedConnectedSkills.length}
                     </Badge>
@@ -899,20 +869,22 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
             <Accordion type="single" collapsible defaultValue="console" className="flex min-h-0 flex-1 flex-col">
               <AccordionItem value="console" className="flex min-h-0 flex-1 flex-col">
                 <AccordionTrigger>
-                  <span className="flex flex-1 items-center gap-2">
+                  <span className="font-display tracking-[var(--type-tracking-display)] [text-transform:var(--type-uppercase)] text-fg-default flex flex-1 items-center gap-2">
                     <TerminalSquare className="h-4 w-4" />
                     Console
                     {consoleOutput && (
-                      <Badge variant="success" className="ml-auto">Output</Badge>
+                      <Badge variant="success" className="ml-auto normal-case tracking-normal">Output</Badge>
                     )}
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="flex min-h-0 flex-1 flex-col">
-                  <div className="min-h-0 flex-1 overflow-y-auto rounded-md bg-[#1a1a2e] p-2 font-mono text-sm leading-relaxed">
+                  <div className="min-h-0 flex-1 overflow-y-auto rounded-md bg-bg-app p-2 font-mono text-sm leading-relaxed">
                     {consoleOutput ? (
                       <pre
-                        className="m-0 whitespace-pre-wrap break-words"
-                        style={{ color: consoleOutput.startsWith('Error') ? theme.dracula.red : theme.dracula.green }}
+                        className={cn(
+                          'm-0 whitespace-pre-wrap break-words',
+                          consoleOutput.startsWith('Error') ? 'text-destructive' : 'text-success',
+                        )}
                       >
                         {consoleOutput}
                       </pre>

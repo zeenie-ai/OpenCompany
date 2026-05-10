@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useAppTheme } from '../hooks/useAppTheme';
 import { useAppStore } from '../store/useAppStore';
 import { INodeOutputDefinition, NodeConnectionType } from '../types/INodeProperties';
 import { useDragVariable } from '../hooks/useDragVariable';
@@ -121,7 +120,6 @@ const ANDROID_NODE_TYPES = [
 ];
 
 const OutputPanel: React.FC<OutputPanelProps> = ({ nodeId }) => {
-  const theme = useAppTheme();
   const currentWorkflow = useAppStore((s) => s.currentWorkflow);
   const [expandedNode, setExpandedNode] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -289,24 +287,11 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ nodeId }) => {
 
   if (connectedNodes.length === 0) {
     return (
-      <div style={{
-        width: '300px',
-        height: '100%',
-        padding: theme.spacing.md,
-        backgroundColor: theme.colors.backgroundAlt,
-        borderRight: `1px solid ${theme.colors.border}`,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center'
-      }}>
-        <p style={{
-          margin: 0,
-          fontSize: theme.fontSize.sm,
-          color: theme.colors.textSecondary,
-          fontStyle: 'italic',
-          textAlign: 'center'
-        }}>
+      <div
+        className="flex h-full flex-col items-center justify-center border-r border-border-default bg-bg-panel p-3"
+        style={{ width: '300px' }}
+      >
+        <p className="m-0 text-center text-sm italic text-fg-muted">
           No connected nodes.
           <br />
           Connect nodes to see their outputs here.
@@ -316,140 +301,78 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ nodeId }) => {
   }
 
   return (
-    <div style={{
-      width: '300px',
-      height: '100%',
-      backgroundColor: theme.colors.backgroundAlt,
-      borderRight: `1px solid ${theme.colors.border}`,
-      display: 'flex',
-      flexDirection: 'column'
-    }}>
+    <div
+      className="flex h-full flex-col border-r border-border-default bg-bg-panel"
+      style={{ width: '300px' }}
+    >
       {/* Header */}
-      <div style={{
-        padding: theme.spacing.md,
-        backgroundColor: theme.colors.backgroundPanel,
-        borderBottom: `1px solid ${theme.colors.border}`,
-        fontSize: theme.fontSize.sm,
-        fontWeight: theme.fontWeight.semibold,
-        color: theme.colors.textSecondary,
-        textTransform: 'uppercase',
-        letterSpacing: '0.1em'
-      }}>
-        🔗 Connected Outputs
+      <div className="border-b border-border-default bg-bg-panel p-3 font-display text-sm font-semibold tracking-[var(--type-tracking-display)] text-fg-default [text-transform:var(--type-uppercase)]">
+        Connected Outputs
       </div>
 
       {/* Scrollable content */}
-      <div style={{ 
-        flex: 1, 
-        overflowY: 'auto', 
-        padding: theme.spacing.sm 
-      }}>
+      <div className="flex-1 overflow-y-auto p-2">
         {connectedNodes.map((node) => (
-          <div key={node.nodeId} style={{
-            marginBottom: theme.spacing.xs,
-            border: `1px solid ${theme.colors.border}`,
-            borderRadius: theme.borderRadius.sm,
-            backgroundColor: theme.colors.background,
-            overflow: 'hidden'
-          }}>
+          <div
+            key={node.nodeId}
+            className="mb-1 overflow-hidden rounded-sm border border-border-default bg-bg-elevated"
+          >
             <div
               onClick={() => setExpandedNode(expandedNode === node.nodeId ? null : node.nodeId)}
-              style={{
-                padding: theme.spacing.sm,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                backgroundColor: theme.colors.backgroundAlt,
-                transition: theme.transitions.fast
-              }}
+              className="flex cursor-pointer items-center justify-between bg-bg-panel p-2 transition-colors"
             >
-              <span style={{
-                fontSize: theme.fontSize.sm,
-                fontWeight: theme.fontWeight.medium,
-                color: theme.colors.text
-              }}>
+              <span className="text-sm font-medium text-fg-default">
                 {node.nodeName}
               </span>
-              <span style={{
-                fontSize: theme.fontSize.xs,
-                color: theme.colors.textSecondary,
-                transform: expandedNode === node.nodeId ? 'rotate(180deg)' : 'rotate(0deg)',
-                transition: 'transform 0.2s ease'
-              }}>
+              <span
+                className="text-xs text-fg-muted"
+                style={{
+                  transform: expandedNode === node.nodeId ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.2s ease'
+                }}
+              >
                 ▼
               </span>
             </div>
 
             {expandedNode === node.nodeId && (
-              <div style={{
-                padding: theme.spacing.sm,
-                borderTop: `1px solid ${theme.colors.border}`
-              }}>
+              <div className="border-t border-border-default p-2">
                 {node.outputs.length === 0 ? (
-                  <p style={{
-                    margin: 0,
-                    fontSize: theme.fontSize.xs,
-                    color: theme.colors.textSecondary,
-                    fontStyle: 'italic',
-                    padding: theme.spacing.xs
-                  }}>
+                  <p className="m-0 p-1 text-xs italic text-fg-muted">
                     No output parameters available
                   </p>
                 ) : (
-                  node.outputs.map((output) => (
-                    <div
-                      key={output.name}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, node.nodeId, output.name)}
-                      onDragEnd={handleDragEnd}
-                      style={{
-                        padding: theme.spacing.xs,
-                        marginBottom: theme.spacing.xs,
-                        backgroundColor: isDragging && draggedParam?.nodeId === node.nodeId && draggedParam?.output === output.name
-                          ? theme.colors.focusRing
-                          : theme.colors.backgroundAlt,
-                        border: `1px solid ${theme.colors.border}`,
-                        borderRadius: theme.borderRadius.sm,
-                        cursor: 'grab',
-                        transition: theme.transitions.fast
-                      }}
-                    >
-                      <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between'
-                      }}>
-                        <div>
-                          <div style={{
-                            fontSize: theme.fontSize.sm,
-                            fontWeight: theme.fontWeight.medium,
-                            color: theme.colors.text,
-                            marginBottom: '2px'
-                          }}>
-                            {output.displayName}
+                  node.outputs.map((output) => {
+                    const isActiveDrag =
+                      isDragging &&
+                      draggedParam?.nodeId === node.nodeId &&
+                      draggedParam?.output === output.name;
+                    return (
+                      <div
+                        key={output.name}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, node.nodeId, output.name)}
+                        onDragEnd={handleDragEnd}
+                        className={`mb-1 cursor-grab rounded-sm border border-border-default p-1 transition-colors ${
+                          isActiveDrag ? 'bg-accent' : 'bg-bg-panel'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="mb-0.5 text-sm font-medium text-fg-default">
+                              {output.displayName}
+                            </div>
+                            <div className="text-xs text-fg-muted">
+                              {output.type} • {output.description}
+                            </div>
                           </div>
-                          <div style={{
-                            fontSize: theme.fontSize.xs,
-                            color: theme.colors.textSecondary
-                          }}>
-                            {output.type} • {output.description}
+                          <div className="rounded-sm border border-border-default bg-bg-elevated px-1 py-0.5 font-mono text-xs text-fg-muted">
+                            {output.name}
                           </div>
-                        </div>
-                        <div style={{
-                          fontSize: theme.fontSize.xs,
-                          color: theme.colors.textSecondary,
-                          fontFamily: 'monospace',
-                          padding: `2px ${theme.spacing.xs}`,
-                          backgroundColor: theme.colors.background,
-                          borderRadius: theme.borderRadius.sm,
-                          border: `1px solid ${theme.colors.border}`
-                        }}>
-                          {output.name}
                         </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             )}
@@ -458,15 +381,8 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ nodeId }) => {
       </div>
 
       {/* Footer */}
-      <div style={{
-        padding: theme.spacing.sm,
-        backgroundColor: theme.colors.backgroundPanel,
-        borderTop: `1px solid ${theme.colors.border}`,
-        fontSize: theme.fontSize.xs,
-        color: theme.colors.textSecondary,
-        textAlign: 'center'
-      }}>
-        💡 Drag outputs to parameter fields
+      <div className="border-t border-border-default bg-bg-panel p-2 text-center text-xs text-fg-muted">
+        Drag outputs to parameter fields
       </div>
     </div>
   );
