@@ -123,7 +123,21 @@ export function useSoundSync(): void {
       if (related && matched.contains(related)) return;
       Sounds.play('hover');
     };
-    document.addEventListener('mouseover', handleMouseOver, true);
+    // Wave 33: PASSIVE listener so the handler can never block scroll /
+    // input dispatch. The handler doesn't call preventDefault, so passive
+    // is safe. Bare `true` (capture-only) registers an ACTIVE listener,
+    // which means the browser must wait for the handler to finish before
+    // dispatching the next input event — on tab return, when a burst of
+    // queued mouseover events fires while the mouse is over the canvas,
+    // the active handler's closest() DOM-walks blocked first-click input
+    // dispatch by 5-15ms. Passive removes that block.
+    //
+    // removeEventListener's options bag only consults `capture` for
+    // matching (W3C spec — passive isn't part of the listener identity),
+    // so the cleanup pair below uses the same shape but TypeScript's
+    // EventListenerOptions doesn't include `passive` — pass `true` for
+    // capture-only removal which matches both add registrations.
+    document.addEventListener('mouseover', handleMouseOver, { capture: true, passive: true });
     document.addEventListener('touchstart', handleHover, { capture: true, passive: true });
     return () => {
       document.removeEventListener('mouseover', handleMouseOver, true);

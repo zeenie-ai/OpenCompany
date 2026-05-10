@@ -292,6 +292,41 @@ const DashboardContent: React.FC = () => {
   // in lockstep with the active theme + user preference.
   useSoundSync();
 
+  // Wave 33: pause CSS animations while the tab is in the background.
+  //
+  // Without this, browsers continue advancing CSS animation timing on
+  // hidden tabs (RAF is throttled to ~1Hz but `animation` keyframes
+  // accumulate paused frames in the compositor's queue). When the user
+  // returns, all 50+ executing nodes' three-layer box-shadow `node-pulse`
+  // animations resume simultaneously and the GPU compositor stalls for
+  // 100-200ms blending the paused frames + Cyber theme's full-viewport
+  // `cyber-flicker` / `cyber-roll` decorations. During the stall, input
+  // events queue but don't dispatch — first click on tab return appears
+  // unresponsive until the composite pass finishes (then the second
+  // click works, hence the "wakes up on interaction" pattern).
+  //
+  // Setting `animation-play-state: paused` on every element via a CSS
+  // rule keyed off `<html data-page-hidden>` flushes the queue. The
+  // requestAnimationFrame on resume defers the unpause until after the
+  // first input is ready to dispatch (one frame's delay, imperceptible).
+  useEffect(() => {
+    const handleVisibility = () => {
+      const root = document.documentElement;
+      if (document.hidden) {
+        root.setAttribute('data-page-hidden', '');
+      } else {
+        // Defer unpause to the next frame so the browser has a chance
+        // to clear the input queue before animations resume their
+        // composite work.
+        requestAnimationFrame(() => {
+          root.removeAttribute('data-page-hidden');
+        });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
   // Context menu state for node right-click
   const [contextMenu, setContextMenu] = React.useState<{
     nodeId: string;

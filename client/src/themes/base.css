@@ -71,6 +71,33 @@
  * → Sound effects is the user-facing audio toggle.
  * ============================================================================ */
 
+/* ============================================================================
+ * Wave 33: pause every CSS animation when the tab is hidden.
+ *
+ * Browsers continue advancing CSS keyframe timing on background tabs (RAF
+ * is throttled to ~1Hz but `animation` keyframes still accumulate paused
+ * frames in the compositor queue). When the tab becomes visible, all
+ * paused frames flush at once — with W30's three-layer box-shadow
+ * `node-pulse` (peak `0 0 56px 16px color-mix(...)` × 3 layers) running
+ * on every executing node, plus Cyber theme's full-viewport
+ * `cyber-flicker` (5s opacity) + `cyber-roll` (8s viewport-height
+ * translateY), the GPU compositor stalls for 100-200ms. During the stall
+ * input events queue but don't dispatch — first click on tab return
+ * appears unresponsive.
+ *
+ * The Dashboard mounts a small `visibilitychange` listener that toggles
+ * this attribute on `<html>`. Setting `animation-play-state: paused`
+ * flushes the keyframe queue so resume has nothing to catch up on. The
+ * dashboard defers the unpause via `requestAnimationFrame` so input
+ * dispatch happens before composite.
+ * ============================================================================ */
+
+html[data-page-hidden] *,
+html[data-page-hidden] *::before,
+html[data-page-hidden] *::after {
+  animation-play-state: paused !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   /* Cyber */
   :root[data-theme="cyber"] .app-frame,

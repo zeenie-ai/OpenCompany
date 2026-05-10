@@ -1379,13 +1379,53 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           }
         }, 30000);
 
-        // Init burst — every probe / history fetch below is independent
-        // (no handler reads results from a sibling), so we run them in
-        // parallel via Promise.allSettled. Time-to-isReady drops from
-        // ~8 × roundtrip (serial) to one wide round-trip. Each helper
-        // owns its own request_id, message handler, timeout, and state
-        // write — failure in one does not abort the others.
+        // Drain any sends that were queued while the socket was reconnecting.
+        // Runs BEFORE setIsReady(true) so isReady-gated callers don't race
+        // an empty pendingRequestsRef. Mirrors socket.io-client's offline
+        // buffer + Apollo RetryLink semantics.
+        drainPendingSends(ws);
 
+        // Wave 32: flip `isReady` IMMEDIATELY on socket open + queue drain.
+        // The page-state restore (terminal / chat / console history) fires
+        // in the BACKGROUND below — its results trickle into state writes
+        // when each request settles, but UI interaction is no longer blocked
+        // behind a serial 5-up-to-25-second `Promise.allSettled` await.
+        //
+        // Why this matters: tab-blur + WS reconnect previously left the user
+        // staring at an unresponsive workflow until init-burst finished.
+        // First click "did nothing" because catalogue / nodeSpec / credentials
+        // queries gate on `isReady` and stayed disabled. The cache (warmed
+        // from localStorage via PersistQueryClientProvider for `nodeSpec` /
+        // `nodeGroups` / `pluginCatalogue` / `skillContent`) carries the
+        // visible state until refreshes land.
+        //
+        // Wave 32 also dropped the legacy hardcoded `probeApiKey` loop over
+        // `['openai', 'anthropic', 'gemini', 'google_maps', 'android_remote']`.
+        // Those probes were redundant — credential state has TWO authoritative
+        // sources already:
+        //   1. The backend's `initial_status` broadcast (handled at line ~638)
+        //      pushes the full `api_keys` map on every reconnect.
+        //   2. The catalogue (TanStack Query `useCatalogueQuery`) carries the
+        //      `provider.stored` flag for every provider; refetched via the
+        //      debounced `invalidateCatalogue(queryClient)` helper that 8+
+        //      credential CloudEvent handlers already fire (`api_key_status`,
+        //      `credential_catalogue_updated`, `whatsapp_status`,
+        //      `twitter_oauth_complete`, `google_oauth_complete`,
+        //      `google_status`, `telegram_status`, `initial_status`).
+        // No frontend should hardcode a provider list — adding a new
+        // provider should be a backend-only edit.
+        setIsReady(true);
+
+        // Single-shot catalogue invalidate so any credential mutations that
+        // landed on the server while the socket was disconnected propagate
+        // to the in-memory cache immediately. Debounced (300ms trailing) so
+        // it coalesces with other broadcast-driven invalidations.
+        invalidateCatalogue(queryClient);
+
+        // Page-state restore (background). Fire-and-forget — these writes
+        // hydrate panels that PersistQueryClient doesn't cache (terminal /
+        // chat / console history come straight from the server's per-request
+        // log read, not from a query cache).
         const sendBurstRequest = <T = any>(payload: object, idPrefix: string): Promise<T> =>
           new Promise<T>((resolve, reject) => {
             const requestId = `${idPrefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -1407,26 +1447,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             ws.send(JSON.stringify({ ...payload, request_id: requestId }));
           });
 
-        const probeApiKey = async (provider: string) => {
-          try {
-            const response = await sendBurstRequest<any>(
-              { type: 'get_stored_api_key', provider },
-              `init_${provider}`,
-            );
-            if (response.hasKey) {
-              // Only seed the validation cache; "is stored" lives on
-              // the catalogue's `provider.stored` flag (single source).
-              setApiKeyStatuses(prev => ({
-                ...prev,
-                [provider]: { valid: true },
-              }));
-            }
-          } catch {
-            // Ignore errors during initial check
-          }
-        };
-
-        const loadTerminalLogs = async () => {
+        void (async () => {
           try {
             const terminalResponse = await sendBurstRequest<any>(
               { type: 'get_terminal_logs' },
@@ -1439,20 +1460,16 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 message: log.message || '',
                 source: log.source,
                 details: log.details,
-              })).reverse();  // Server stores oldest first, we want newest first
+              })).reverse();
               setTerminalLogs(logs);
             }
           } catch {
             // Ignore errors loading terminal logs
           }
-        };
+        })();
 
-        const loadChatHistory = async () => {
+        void (async () => {
           try {
-            // Scope to the currently-open workflow if any. session_id is
-            // re-used as the workflow identifier on the chat side so the
-            // panel only shows messages tied to this workflow. Falls
-            // back to "default" when no workflow is selected.
             const workflowId = useAppStore.getState().currentWorkflow?.id || 'default';
             const chatResponse = await sendBurstRequest<any>(
               { type: 'get_chat_messages', session_id: workflowId },
@@ -1469,12 +1486,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           } catch {
             // Ignore errors loading chat messages
           }
-        };
+        })();
 
-        const loadConsoleLogs = async () => {
+        void (async () => {
           try {
-            // Scope to the currently-open workflow so the panel only
-            // shows console output from this workflow's runs.
             const consoleWorkflowId = useAppStore.getState().currentWorkflow?.id;
             const consoleResponse = await sendBurstRequest<any>(
               { type: 'get_console_logs', limit: 100, workflow_id: consoleWorkflowId },
@@ -1498,27 +1513,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           } catch {
             // Ignore errors loading console logs
           }
-        };
-
-        const providers = ['openai', 'anthropic', 'gemini', 'google_maps', 'android_remote'];
-        await Promise.allSettled([
-          ...providers.map(probeApiKey),
-          loadTerminalLogs(),
-          loadChatHistory(),
-          loadConsoleLogs(),
-        ]);
-
-        // Drain any sends that were queued while the socket was reconnecting.
-        // Must run BEFORE setIsReady(true) so isReady-gated callers don't race
-        // an empty pendingRequestsRef. Mirrors socket.io-client's offline buffer
-        // and Apollo RetryLink semantics.
-        drainPendingSends(ws);
-
-        // Init burst complete — flip `isReady` so queries that gate on
-        // it (catalogue, node specs, node parameters, user settings,
-        // credential panels) fire once against a stable socket instead
-        // of racing the serial init awaits above.
-        setIsReady(true);
+        })();
       };
 
       ws.onmessage = handleMessage;
