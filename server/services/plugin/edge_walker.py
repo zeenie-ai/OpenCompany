@@ -169,10 +169,12 @@ async def _build_memory_entry(
         "long_term_enabled": memory_params.get("long_term_enabled", False),
         "retrieval_count": int(memory_params.get("retrieval_count", 3)),
     }
-    logger.debug(
-        f"{log_prefix} Connected memory node: session={session_id} "
-        f"(auto={not configured_session or configured_session == 'default'}), "
-        f"content_length={len(entry['memory_content'])}"
+    logger.info(
+        "%s Connected memory node: node=%s session=%s (auto=%s) "
+        "content_length=%d",
+        log_prefix, memory_node_id, session_id,
+        not configured_session or configured_session == "default",
+        len(entry["memory_content"]),
     )
     return entry
 

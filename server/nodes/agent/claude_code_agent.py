@@ -38,6 +38,22 @@ from services.cli_agent import ClaudeTaskSpec  # noqa: E402
 from services.cli_agent.types import SessionResultModel  # noqa: E402
 
 
+def _compose_system_prompt(
+    base: Optional[str], memory_context: Optional[str],
+) -> Optional[str]:
+    """Stitch a memory-context block onto a base ``system_prompt``.
+
+    The base (per-task or per-node) sets behaviour ("you are X with Y
+    persona"); memory context gives prior conversation. Memory comes
+    AFTER the base so behaviour-defining instructions land first.
+    """
+    if not memory_context:
+        return base
+    if not base:
+        return memory_context
+    return f"{base}\n\n{memory_context}"
+
+
 class ClaudeCodeAgentParams(BaseModel):
     """Multi-task batch parameters for Claude Code.
 
@@ -155,14 +171,48 @@ class ClaudeCodeAgentNode(ActionNode):
         # read from `input_data` exactly the way `nodes/agent/_inline.py`
         # does for the standard agent path.
         database = get_database()
-        _, skill_data, tool_data, input_data, _ = await collect_agent_connections(
-            node_id, ctx.raw, database, log_prefix="[Claude Code]",
+        memory_data, skill_data, tool_data, input_data, _ = (
+            await collect_agent_connections(
+                node_id, ctx.raw, database, log_prefix="[Claude Code]",
+            )
         )
         connected_skills = [
             s.get("skill_name") or s.get("label")
             for s in skill_data
             if s.get("skill_name") or s.get("label")
         ]
+
+        # Memory bridge: inject simpleMemory.memory_content (markdown)
+        # as a system-prompt context block. Universal P2 pattern —
+        # Cline/Continue/Aider/Cursor/Hermes/Anthropic-SDK all persist
+        # conversation in caller state and re-pass it each turn.
+        # `claude -p --session-id` doesn't auto-load and `--resume` is
+        # broken in headless mode (open bug
+        # `anthropics/claude-code#43696`), so we paste prior turns as
+        # `--append-system-prompt`. The same markdown surface aiAgent /
+        # chatAgent / deep_agent / rlm_agent already use.
+        memory_context: Optional[str] = None
+        if memory_data:
+            raw = (memory_data.get("memory_content") or "").strip()
+            has_real_content = bool(raw) and "*No messages yet.*" not in raw
+            logger.info(
+                "[Claude Code memory] memory_content_length=%d real_content=%s",
+                len(raw), has_real_content,
+            )
+            if has_real_content:
+                memory_context = (
+                    "## Prior conversation context\n\n"
+                    "The following is the prior conversation between you "
+                    "and the user in this session. Continue naturally "
+                    "from this context without re-introducing yourself "
+                    "or restating prior steps.\n\n"
+                    + raw
+                )
+                logger.info(
+                    "[Claude Code memory] injecting %d chars of markdown "
+                    "context as --append-system-prompt",
+                    len(memory_context),
+                )
 
         tasks = list(params.tasks)
         if not tasks:
@@ -183,23 +233,37 @@ class ClaudeCodeAgentNode(ActionNode):
                     "field, populate the Tasks array, or connect a node "
                     "to the Input handle."
                 )
-            tasks = [
-                ClaudeTaskSpec(
-                    prompt=prompt,
-                    model=params.model,
-                    system_prompt=params.system_prompt,
+            spec_kwargs: dict = {
+                "prompt": prompt,
+                "model": params.model,
+                "system_prompt": _compose_system_prompt(
+                    params.system_prompt, memory_context,
                 ),
-            ]
+            }
+            tasks = [ClaudeTaskSpec(**spec_kwargs)]
         else:
-            # Apply node-level defaults to tasks that don't override
+            # Apply node-level defaults to tasks that don't override.
             for i, t in enumerate(tasks):
                 changed: dict = {}
                 if not t.model and params.model:
                     changed["model"] = params.model
-                if not t.system_prompt and params.system_prompt:
-                    changed["system_prompt"] = params.system_prompt
+                # System prompt: per-task overrides node-level; memory
+                # context (if any) appends to whichever wins.
+                base_sp = t.system_prompt or params.system_prompt
+                composed = _compose_system_prompt(base_sp, memory_context)
+                if composed != t.system_prompt:
+                    changed["system_prompt"] = composed
                 if changed:
                     tasks[i] = t.model_copy(update=changed)
+
+        # Memory continuity requires serial execution; parallel
+        # `--resume` against one session JSONL would corrupt it.
+        if memory_data and len(tasks) > 1:
+            raise NodeUserError(
+                "Memory-bound batches must run one task at a time. "
+                "Reduce Tasks to a single entry, or disconnect the "
+                "memory node."
+            )
 
         # Workspace dir — workflow.py injects this into context
         workspace_dir = ctx.raw.get("workspace_dir") or params.working_directory
@@ -225,6 +289,7 @@ class ClaudeCodeAgentNode(ActionNode):
             repo_root=repo_root,
             connected_skill_names=connected_skills,
             connected_tools=tool_data,
+            connected_memory=memory_data,
             allowed_credentials=params.allowed_credentials,
             max_parallel=params.max_parallel,
         )

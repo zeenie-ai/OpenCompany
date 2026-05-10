@@ -77,6 +77,7 @@ class AICliService:
         repo_root: Optional[Path] = None,
         connected_skill_names: Optional[List[str]] = None,
         connected_tools: Optional[List[Dict[str, Any]]] = None,
+        connected_memory: Optional[Dict[str, Any]] = None,
         allowed_credentials: Optional[List[str]] = None,
         max_parallel: int = DEFAULT_MAX_PARALLEL,
         mcp_port: Optional[int] = None,
@@ -92,12 +93,15 @@ class AICliService:
         provider = create_cli_provider(provider_name)
         task_list: List[BaseAICliTaskSpec] = list(tasks)
         tool_names = [t.get("node_type") for t in (connected_tools or [])]
+        memory_node = (
+            connected_memory.get("node_id") if connected_memory else None
+        )
         logger.info(
             "[CC-Agent run_batch] enter provider=%s node=%s wf=%s tasks=%d "
-            "skills=%s tools=%s creds=%s workspace=%s",
+            "skills=%s tools=%s creds=%s memory=%s workspace=%s",
             provider_name, node_id, workflow_id, len(task_list),
             connected_skill_names or [], tool_names,
-            allowed_credentials or [], workspace_dir,
+            allowed_credentials or [], memory_node, workspace_dir,
         )
 
         # Verify the working directory is under a git repo.
@@ -212,6 +216,20 @@ class AICliService:
                 self._active_sessions.pop(key, None)
             unregister_batch(token)
 
+        # Memory bridge: persist claude's session_id + append the
+        # rendered exchange to simpleMemory's JSONL transcript so the
+        # next run can `--resume <UUID>` and the UI shows the
+        # conversation. Fire-and-forget — failure here doesn't fail
+        # the batch.
+        if connected_memory:
+            try:
+                await self._persist_memory(connected_memory, results)
+            except Exception as exc:  # pragma: no cover — best-effort
+                logger.warning(
+                    "[CC-Agent run_batch] memory persistence failed: %s",
+                    exc,
+                )
+
         elapsed_ms = int((time.monotonic() - start) * 1000)
         n_succeeded = sum(1 for r in results if r.success)
         n_failed = len(results) - n_succeeded
@@ -288,6 +306,77 @@ class AICliService:
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
+
+    @staticmethod
+    async def _persist_memory(
+        connected_memory: Dict[str, Any],
+        results: List[SessionResult],
+    ) -> None:
+        """Append each successful run's user prompt + assistant response
+        to ``simpleMemory.memory_content`` (markdown). Mirrors aiAgent /
+        chatAgent / deep_agent / rlm_agent's persistence pattern exactly
+        — same helpers (``append_to_memory_markdown``,
+        ``trim_markdown_window``), same field. One DB write.
+        """
+        successful = [r for r in results if r.success]
+        logger.info(
+            "[CC-Agent _persist_memory] memory_node=%s results=%d "
+            "successful=%d",
+            connected_memory.get("node_id"),
+            len(results),
+            len(successful),
+        )
+        if not successful:
+            logger.warning(
+                "[CC-Agent _persist_memory] no successful runs; skipping "
+                "save (memory_node=%s). Per-result: %s",
+                connected_memory.get("node_id"),
+                [
+                    {"success": r.success, "error": (r.error or "")[:80]}
+                    for r in results
+                ],
+            )
+            return
+
+        from services.memory import (
+            append_to_memory_markdown,
+            trim_markdown_window,
+        )
+        from services.plugin.deps import get_database
+
+        db = get_database()
+        memory_node_id = connected_memory["node_id"]
+        params = await db.get_node_parameters(memory_node_id) or {}
+
+        content = params.get("memory_content") or (
+            "# Conversation History\n\n*No messages yet.*\n"
+        )
+        for r in successful:
+            content = append_to_memory_markdown(content, "human", r.prompt)
+            content = append_to_memory_markdown(
+                content, "ai", r.response or "",
+            )
+
+        window = int(connected_memory.get("window_size") or 100)
+        content, removed_texts = trim_markdown_window(content, window)
+        params["memory_content"] = content
+
+        await db.save_node_parameters(memory_node_id, params)
+        logger.info(
+            "[CC-Agent _persist_memory] saved memory_node=%s "
+            "appended_turns=%d archived_blocks=%d content_length=%d",
+            memory_node_id, len(successful),
+            len(removed_texts), len(content),
+        )
+
+        if connected_memory.get("long_term_enabled") and removed_texts:
+            from services.memory.vector_store import get_memory_vector_store
+
+            store = get_memory_vector_store(
+                connected_memory.get("session_id") or "default",
+            )
+            if store is not None:
+                await asyncio.to_thread(store.add_texts, removed_texts)
 
     @staticmethod
     async def _resolve_repo_root(

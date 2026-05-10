@@ -2095,17 +2095,25 @@ async def handle_clear_memory(data: Dict[str, Any], websocket: WebSocket) -> Dic
 
     Business logic lives in :func:`services.memory.clear_agent_session_state`
     — this handler only decodes the request and shapes the response.
+
+    When ``memory_node_id`` is provided (claude_code_agent JSONL bridge
+    surface), the simpleMemory node's ``memory_content`` is reset and
+    ``memory_jsonl`` + ``last_session_id`` are wiped server-side. Legacy
+    callers that omit it still get ``default_content`` for the
+    frontend's existing markdown reset path.
     """
     from services.memory import clear_agent_session_state
 
     session_id = data.get("session_id", "default")
     workflow_id = data.get("workflow_id")
     clear_long_term = data.get("clear_long_term", False)
+    memory_node_id = data.get("memory_node_id")
 
-    cleared = clear_agent_session_state(
+    cleared = await clear_agent_session_state(
         session_id=session_id,
         workflow_id=workflow_id,
         clear_long_term=clear_long_term,
+        memory_node_id=memory_node_id,
     )
 
     return {
@@ -2113,6 +2121,7 @@ async def handle_clear_memory(data: Dict[str, Any], websocket: WebSocket) -> Dic
         "default_content": "# Conversation History\n\n*No messages yet.*\n",
         "cleared_vector_store": cleared["cleared_vector_store"],
         "cleared_todo_keys": cleared["cleared_todo_keys"],
+        "cleared_memory_node": cleared["cleared_memory_node"],
         "session_id": session_id,
     }
 

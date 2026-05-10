@@ -465,8 +465,9 @@ class AICliSession(BaseProcessSupervisor):
             elif etype == "result":
                 self._logger.info(
                     "[CC-Agent stream] result is_error=%s subtype=%s "
-                    "duration_ms=%s num_turns=%s cost=%s",
+                    "session_id=%s duration_ms=%s num_turns=%s cost=%s",
                     event.get("is_error", False), event.get("subtype"),
+                    event.get("session_id"),
                     event.get("duration_ms"), event.get("num_turns"),
                     event.get("total_cost_usd"),
                 )
