@@ -278,6 +278,39 @@ class StatusBroadcaster:
             "data": event.model_dump(mode="json"),
         })
 
+    async def broadcast_agent_progress(
+        self,
+        node_id: str,
+        *,
+        workflow_id: Optional[str],
+        iteration: int,
+        max_iterations: int,
+        phase: Optional[str] = None,
+    ) -> None:
+        """Emit a CloudEvents-typed agent-progress event.
+
+        Wire key ``agent_progress`` is a parallel channel to
+        ``node_status``: same per-node scope, but the inner payload is a
+        full CloudEvents envelope instead of a raw dict. The FE routes
+        envelope.data into ``nodeStatusStore`` so the existing
+        ``useNodeStatus`` consumers see ``iteration`` /
+        ``max_iterations`` without a separate store.
+        """
+        from services.events import WorkflowEvent
+
+        event = WorkflowEvent.agent_progress(
+            node_id,
+            workflow_id=workflow_id,
+            iteration=iteration,
+            max_iterations=max_iterations,
+            phase=phase,
+        )
+
+        await self.broadcast({
+            "type": "agent_progress",
+            "data": event.model_dump(mode="json"),
+        })
+
     # =========================================================================
     # Android Status Updates
     # =========================================================================

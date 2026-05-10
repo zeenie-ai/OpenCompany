@@ -1970,6 +1970,18 @@ class AIService:
                     stream_mode="values",
                 ):
                     final_state = snapshot
+                    # Per-step iteration broadcast (CloudEvents envelope
+                    # via broadcast_agent_progress -> wire key
+                    # `agent_progress`). The FE updates nodeStatusStore
+                    # so the AI agent body shows live "iteration / max".
+                    if broadcaster:
+                        iter_count = snapshot.get("iteration", 0) if isinstance(snapshot, dict) else 0
+                        await broadcaster.broadcast_agent_progress(
+                            node_id,
+                            workflow_id=workflow_id,
+                            iteration=iter_count,
+                            max_iterations=recursion_limit,
+                        )
             except GraphRecursionError:
                 # Append a terminal AIMessage so downstream extraction (and
                 # the post-loop _track_token_usage / compact_context call)
@@ -2411,6 +2423,16 @@ class AIService:
                         stream_mode="values",
                     ):
                         final_state = snapshot
+                        # Per-step iteration broadcast — see execute_agent
+                        # for the rationale.
+                        if broadcaster:
+                            iter_count = snapshot.get("iteration", 0) if isinstance(snapshot, dict) else 0
+                            await broadcaster.broadcast_agent_progress(
+                                node_id,
+                                workflow_id=workflow_id,
+                                iteration=iter_count,
+                                max_iterations=recursion_limit,
+                            )
                 except GraphRecursionError:
                     msgs = list((final_state or {}).get("messages") or [])
                     msgs.append(AIMessage(content=(

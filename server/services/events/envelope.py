@@ -181,6 +181,45 @@ class WorkflowEvent(BaseModel):
         )
 
     @classmethod
+    def agent_progress(
+        cls,
+        node_id: str,
+        *,
+        workflow_id: Optional[str],
+        iteration: int,
+        max_iterations: int,
+        phase: Optional[str] = None,
+        data: Optional[Mapping[str, Any]] = None,
+    ) -> "WorkflowEvent":
+        """Live LangGraph supervised-loop progress for one agent node.
+
+        Emitted from inside the ``astream`` loop in
+        ``services/ai.py:execute_agent`` and ``execute_chat_agent`` after
+        each super-step. ``iteration`` advances on every ``agent_node``
+        invocation; ``max_iterations`` mirrors the LangGraph
+        ``recursion_limit`` (sourced from
+        ``llm_defaults.json:agent.recursion_limit``).
+
+        ``subject`` carries the executing node id so the FE routes the
+        update straight to ``nodeStatusStore`` for that node. The
+        ``workflow_id`` extension attribute scopes per-workflow displays
+        the same way ``node_status`` broadcasts do.
+        """
+        return cls(
+            source="machinaos://services/agent",
+            type="agent.progress",
+            subject=node_id,
+            workflow_id=workflow_id,
+            data={
+                "node_id": node_id,
+                "iteration": iteration,
+                "max_iterations": max_iterations,
+                **({"phase": phase} if phase else {}),
+                **(dict(data) if data else {}),
+            },
+        )
+
+    @classmethod
     def task_completed(
         cls,
         task_id: str,

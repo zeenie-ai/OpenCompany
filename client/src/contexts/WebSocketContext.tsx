@@ -841,6 +841,42 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           }
           break;
 
+        case 'agent_progress': {
+          // CloudEvents v1.0 envelope from broadcaster.broadcast_agent_progress.
+          // Inner payload: { node_id, iteration, max_iterations, phase? }.
+          // Routes into nodeStatusStore (same per-workflow / per-node slot
+          // the existing useNodeStatus consumers read) so the AI-agent body
+          // can render "iteration / max_iterations" live without a parallel
+          // store. Wire-key parity with `credential_catalogue_updated`.
+          const envelope = data as WorkflowEvent<{
+            node_id?: string;
+            iteration?: number;
+            max_iterations?: number;
+            phase?: string;
+          }> | undefined;
+          const inner = envelope?.data;
+          const targetNodeId = inner?.node_id || envelope?.subject;
+          const progressWorkflowId =
+            envelope?.workflow_id || message.workflow_id || 'unknown';
+          if (targetNodeId && inner) {
+            const store = useNodeStatusStore.getState();
+            const previous =
+              store.allStatuses[progressWorkflowId]?.[targetNodeId] ||
+              ({} as NodeStatus);
+            store.setStatus(progressWorkflowId, targetNodeId, {
+              ...previous,
+              workflow_id: progressWorkflowId,
+              data: {
+                ...(previous.data || {}),
+                iteration: inner.iteration,
+                max_iterations: inner.max_iterations,
+                ...(inner.phase ? { phase: inner.phase } : {}),
+              },
+            });
+          }
+          break;
+        }
+
         case 'node_status_cleared':
           // Handle broadcast from server when node status is cleared
           if (node_id || message.node_id) {
