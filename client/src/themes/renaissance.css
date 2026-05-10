@@ -51,6 +51,12 @@
   --gold: #d4a030;
   --gold-bright: #f0c850;
   --crimson: #8a1410;
+  /* Wave 30.2: ultramarine ("lapis lazuli") — historically the most
+   * prestigious Renaissance pigment, used in illuminated manuscripts +
+   * Marian iconography. Hue 230° sits ~180° opposite the warm vellum
+   * canvas (#e8d4a0, hue 45°) so it reads luminously against cream. */
+  --lapis: #2548c8;
+  --lapis-bright: #4a72e8;
 
   /* Type — Cinzel display + Cormorant body + IM Fell English mono */
   --font-display: 'Cinzel', 'Trajan Pro', Georgia, serif;
@@ -75,9 +81,13 @@
   --motion-style: organic;
   --sound-pack: parchment;
 
-  /* Wave 30: gold candlelight pulse — high-contrast against vellum +
-   * matches the ren-flicker keyframe's warm-glow language. */
-  --node-pulse-color: var(--gold);
+  /* Wave 30.2: ultramarine pulse — maximum hue contrast (180° opposite)
+   * against warm vellum. Earlier gold + crimson attempts were either
+   * too similar to the cream background (gold) or too dark to read as
+   * luminous glow (crimson). Lapis ultramarine sits cool against warm
+   * vellum and reads as a Marian-blue halo, the canonical "this thing
+   * is sacred / important" signal in Renaissance iconography. */
+  --node-pulse-color: var(--lapis-bright);
 
   /* Cursor — quill pen with gold-leaf nib (upstream design handoff) */
   --cursor-default: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'><path d='M3 25 L10 17 L13 20 L6 27 Z' fill='%235a3a14'/><path d='M10 17 L20 5 L24 9 L13 20 Z' fill='%23d4a030' stroke='%235a3a14' stroke-width='1'/><path d='M14 9 L18 13 M12 11 L16 15 M10 13 L14 17' stroke='%235a3a14' stroke-width='0.5' fill='none'/></svg>") 3 25, auto;
@@ -378,15 +388,34 @@
  * ren-flicker (opacity pulse) — NOT the digital node-pulse. The gold
  * border stays steady; only the ambient glow shimmers. Higher specificity
  * than base.css's generic rule, so this wins. */
+/* Wave 30.2: dedicated executing-pulse keyframe that animates
+ * BOX-SHADOW only (the original `ren-flicker` opacity-fade
+ * washed the whole node). Pulses ultramarine (lapis lazuli)
+ * intensity at high opacity for visibility against vellum.
+ * Lapis is 180° opposite the warm cream canvas, so even at the
+ * far halo (40% opacity) it reads as a luminous Marian halo
+ * rather than blending into the background. Smooth ease-in-out
+ * preserves the candleflame-flicker quality. */
+@keyframes ren-pulse-exec {
+  0%, 100% {
+    box-shadow:
+      0 0 0 3px rgba(74, 114, 232, 0.85),
+      0 0 36px 8px rgba(74, 114, 232, 0.65),
+      0 0 72px 18px rgba(37, 72, 200, 0.40);
+  }
+  50% {
+    box-shadow:
+      0 0 0 4px rgba(74, 114, 232, 1),
+      0 0 52px 12px rgba(74, 114, 232, 0.85),
+      0 0 96px 28px rgba(37, 72, 200, 0.55);
+  }
+}
+
 :root[data-theme="renaissance"] .sq-node[data-executing] .sq-node-box,
 :root[data-theme="renaissance"] .react-flow__node.executing .sq-node-box,
 :root[data-theme="renaissance"] .react-flow__node.executing .node {
-  animation: ren-flicker 2.4s ease-in-out infinite;
-  border-color: var(--gold);
-  box-shadow:
-    0 0 0 2px rgba(212, 160, 48, 0.6),
-    0 0 20px rgba(212, 160, 48, 0.4),
-    inset 0 0 0 1px var(--gold);
+  animation: ren-pulse-exec 2.0s ease-in-out infinite;
+  border-color: var(--lapis-bright);
 }
 :root[data-theme="renaissance"] .sq-node-pip {
   border: 1px solid var(--border-strong);

@@ -208,12 +208,31 @@
 /* Wave 29: Surveillance executing nodes blink the REC red glow, matching
  * the corner LED's surv-blink rhythm. Mirrors the analog-camera "live"
  * indicator language. Higher specificity than base.css's generic rule. */
+/* Wave 30.1: dedicated executing-pulse keyframe that animates
+ * BOX-SHADOW only. The original `surv-blink` keyframe (LED corner
+ * dot) animates opacity to 0.2, which when applied to whole nodes
+ * faded the entire node body. This pulses the REC-red glow
+ * intensity while the node stays solid. */
+@keyframes surv-pulse-exec {
+  0%, 49% {
+    box-shadow:
+      0 0 0 2px hsl(var(--destructive)),
+      0 0 28px 4px rgba(232, 38, 38, 0.7),
+      0 0 56px 14px rgba(232, 38, 38, 0.3);
+  }
+  50%, 100% {
+    box-shadow:
+      0 0 0 2px hsl(var(--destructive)),
+      0 0 12px 2px rgba(232, 38, 38, 0.45),
+      0 0 24px 6px rgba(232, 38, 38, 0.12);
+  }
+}
+
 :root[data-theme="surveillance"] .sq-node[data-executing] .sq-node-box,
 :root[data-theme="surveillance"] .react-flow__node.executing .sq-node-box,
 :root[data-theme="surveillance"] .react-flow__node.executing .node {
-  animation: surv-blink 1.0s steps(2) infinite;
+  animation: surv-pulse-exec 1.0s steps(2) infinite;
   border: 1px solid hsl(var(--destructive));
-  box-shadow: 0 0 0 1px hsl(var(--destructive)), 0 0 14px rgba(232, 38, 38, 0.65);
 }
 :root[data-theme="surveillance"] .sq-node-pip { border-radius: 0; }
 :root[data-theme="surveillance"] .sq-node-gear { background: hsl(var(--primary)); color: white; border-radius: 0; border: none; }

@@ -148,21 +148,28 @@
   animation: node-pulse 1.4s ease-in-out infinite;
 }
 
-/* Two-layer pulse: a soft far-halo (drop shadow) for visibility at
- * canvas zoom + a hard ring that breathes outward. Range is 0→14px
- * ring + 8→22px halo so the executing signal reads from at least
- * 50% canvas zoom. References the pre-W21 inline glow pattern. */
+/* Three-layer pulse for high-visibility executing-node glow:
+ *   1. inner solid ring        — definitive "this node is live" signal
+ *   2. mid soft halo           — bleeds outside the node bounds
+ *   3. outer atmospheric halo  — readable at distant canvas zoom
+ *
+ * Total reach at peak: ~52px outside the node box (12px ring +
+ * 40px outer halo). Peak intensity tuned so the glow doesn't
+ * appear blown-out or wash the surrounding canvas — the outer
+ * halo is 25% opacity, the ring is 45%. */
 @keyframes node-pulse {
   0%,
   100% {
     box-shadow:
-      0 0 0 0 color-mix(in srgb, var(--node-pulse-color) 75%, transparent),
-      0 0 8px 0 color-mix(in srgb, var(--node-pulse-color) 50%, transparent);
+      0 0 0 0 color-mix(in srgb, var(--node-pulse-color) 80%, transparent),
+      0 0 14px 2px color-mix(in srgb, var(--node-pulse-color) 50%, transparent),
+      0 0 28px 4px color-mix(in srgb, var(--node-pulse-color) 25%, transparent);
   }
   50% {
     box-shadow:
-      0 0 0 6px color-mix(in srgb, var(--node-pulse-color) 35%, transparent),
-      0 0 22px 6px color-mix(in srgb, var(--node-pulse-color) 60%, transparent);
+      0 0 0 12px color-mix(in srgb, var(--node-pulse-color) 45%, transparent),
+      0 0 32px 8px color-mix(in srgb, var(--node-pulse-color) 65%, transparent),
+      0 0 56px 16px color-mix(in srgb, var(--node-pulse-color) 30%, transparent);
   }
 }
 
