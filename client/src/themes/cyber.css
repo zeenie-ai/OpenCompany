@@ -376,11 +376,15 @@
   clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
   transition: none;
 }
-/* Wave 26.B topology: TriggerNode is now `.sq-node.node-trigger` (square),
-   AIAgentNode remains `.node.node-agent` (rectangular). The `.node-trigger`
-   rule fires on legacy rectangular trigger usage AND on the new
-   `.sq-node.node-trigger .sq-node-box` for the migrated TriggerNode. */
-:root[data-theme="cyber"] .node-trigger,
+/* Wave 30.3: TriggerNode is `.sq-node.node-trigger` (square topology
+   after W26.A) — the visible square is `.sq-node-box`, not the outer
+   `.sq-node` wrapper which spans icon + label. The earlier W26.B bare
+   `.node-trigger` selector also fired on the outer wrapper, painting
+   a 1px ring + 16px green halo around the whole thing (icon AND label
+   area), reading as a phantom extra border. Now scoped to
+   `.sq-node.node-trigger .sq-node-box` only — the green neon strictly
+   outlines the icon-square. AIAgentNode remains rectangular
+   (`.node.node-agent`), unaffected. */
 :root[data-theme="cyber"] .sq-node.node-trigger .sq-node-box { border-color: var(--neon-green); color: var(--neon-green); box-shadow: 0 0 0 1px var(--bg-app), 0 0 16px rgba(38, 217, 122, 0.5), inset 0 0 12px rgba(38, 217, 122, 0.1); }
 :root[data-theme="cyber"] .node-agent   { border-color: var(--neon-magenta); color: var(--neon-magenta); box-shadow: 0 0 0 1px var(--bg-app), 0 0 16px rgba(245, 30, 182, 0.6), inset 0 0 12px rgba(245, 30, 182, 0.15); }
 
