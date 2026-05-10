@@ -776,6 +776,16 @@
 }
 
 /* ─── MODAL — terminal popup ─── */
+/* Wave 31.1: do NOT redeclare `position` here. The Modal component
+ * already sets `position: fixed` via Tailwind (Modal.tsx line 99), and
+ * Cyber's previous `position: relative` overrode it (selector
+ * specificity — :root[data-theme="cyber"] .modal beats a single-class
+ * .fixed utility), pulling the modal out of fixed positioning into
+ * normal document flow. The result was the parameter panel rendering
+ * off-screen / not visible under Cyber. The `.modal::before` scanline
+ * pseudo-element below uses `position: absolute; inset: 0` which
+ * anchors to the modal's fixed position fine — no positioning context
+ * needs to be declared here. */
 :root[data-theme="cyber"] .modal {
   background:
     linear-gradient(180deg, rgba(245, 30, 182, 0.06), transparent 60px),
@@ -787,7 +797,6 @@
     inset 0 0 0 2px var(--neon-cyan),
     0 0 60px rgba(245, 30, 182, 0.5),
     0 30px 80px rgba(0, 0, 0, 0.8);
-  position: relative;
 }
 :root[data-theme="cyber"] .modal::before {
   content: ''; position: absolute; inset: 0;
