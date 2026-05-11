@@ -1,0 +1,194 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 620" width="100%" preserveAspectRatio="xMidYMid meet" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">
+  <defs>
+    <marker id="arrow-flow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/>
+    </marker>
+    <style>
+      .bg { fill: #fafafa; }
+      .step-card-accent { fill: #ffffff; stroke-width: 3; rx: 12; }
+      .accent-1 { stroke: #8b5cf6; }
+      .accent-2 { stroke: #06b6d4; }
+      .accent-3 { stroke: #10b981; }
+      .accent-4 { stroke: #f59e0b; }
+      .step-num { fill: #ffffff; font-size: 14px; font-weight: 700; }
+      .step-num-bg-1 { fill: #8b5cf6; }
+      .step-num-bg-2 { fill: #06b6d4; }
+      .step-num-bg-3 { fill: #10b981; }
+      .step-num-bg-4 { fill: #f59e0b; }
+      .step-title { fill: #111827; font-size: 17px; font-weight: 700; }
+      .step-desc { fill: #4b5563; font-size: 13px; }
+      .header { fill: #111827; font-size: 22px; font-weight: 700; }
+      .subheader { fill: #6b7280; font-size: 14px; }
+      .footer-strip { fill: #1f2937; rx: 10; }
+      .footer-text { fill: #f9fafb; font-size: 15px; font-weight: 600; }
+      .footer-sub { fill: #d1d5db; font-size: 12px; }
+      .flow-arrow { stroke: #9ca3af; stroke-width: 2.5; fill: none; stroke-linecap: round; }
+      .node-mini { fill: #f3f4f6; stroke: #d1d5db; stroke-width: 1.5; rx: 6; }
+      .node-mini-text { fill: #374151; font-size: 11px; font-weight: 600; }
+      .node-trigger-mini { fill: #fef3c7; stroke: #f59e0b; }
+      .node-agent-mini { fill: #ede9fe; stroke: #8b5cf6; stroke-width: 2; }
+      .node-output-mini { fill: #e0f2fe; stroke: #0284c7; }
+      .integration-pill { fill: #f9fafb; stroke: #e5e7eb; stroke-width: 1.5; rx: 14; }
+      .integration-text { fill: #374151; font-size: 12px; font-weight: 500; }
+      .badge { fill: #ede9fe; stroke: #8b5cf6; stroke-width: 1.5; rx: 6; }
+      .badge-text { fill: #6d28d9; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; }
+      .dashed-conn { stroke: #06b6d4; stroke-width: 1.5; stroke-dasharray: 3,2; fill: none; }
+    </style>
+  </defs>
+
+  <rect width="1100" height="620" class="bg"/>
+
+  <!-- Header -->
+  <text x="550" y="40" text-anchor="middle" class="header">How MachinaOS Works</text>
+  <text x="550" y="62" text-anchor="middle" class="subheader">Build AI workflows visually. Connect them to your apps. Run everything on your own computer.</text>
+
+  <!-- ============ STEP 1: YOU PICK NODES ============ -->
+  <rect x="40" y="100" width="240" height="200" class="step-card-accent accent-1"/>
+  <circle cx="68" cy="128" r="14" class="step-num-bg-1"/>
+  <text x="68" y="133" text-anchor="middle" class="step-num">1</text>
+  <text x="92" y="133" class="step-title">Pick from 100+ nodes</text>
+
+  <rect x="60" y="155" width="200" height="22" class="node-mini"/>
+  <text x="70" y="170" class="node-mini-text">🤖  AI Agent</text>
+
+  <rect x="60" y="183" width="200" height="22" class="node-mini"/>
+  <text x="70" y="198" class="node-mini-text">💬  Chat Trigger</text>
+
+  <rect x="60" y="211" width="200" height="22" class="node-mini"/>
+  <text x="70" y="226" class="node-mini-text">📱  Telegram</text>
+
+  <rect x="60" y="239" width="200" height="22" class="node-mini"/>
+  <text x="70" y="254" class="node-mini-text">📧  Gmail</text>
+
+  <rect x="60" y="267" width="200" height="22" class="node-mini"/>
+  <text x="70" y="282" class="node-mini-text">+ many more...</text>
+
+  <!-- Arrow 1 → 2 -->
+  <path d="M 290 200 L 360 200" class="flow-arrow" marker-end="url(#arrow-flow)"/>
+
+  <!-- ============ STEP 2: DRAG & CONNECT ============ -->
+  <rect x="370" y="100" width="360" height="200" class="step-card-accent accent-2"/>
+  <circle cx="398" cy="128" r="14" class="step-num-bg-2"/>
+  <text x="398" y="133" text-anchor="middle" class="step-num">2</text>
+  <text x="422" y="133" class="step-title">Drag and connect them</text>
+
+  <!-- Mini canvas — matches the actual default-workflow shape: trigger → agent → reply -->
+  <rect x="390" y="160" width="92" height="42" class="node-mini node-trigger-mini" rx="8"/>
+  <text x="436" y="178" text-anchor="middle" class="node-mini-text">💬 Chat</text>
+  <text x="436" y="194" text-anchor="middle" class="node-mini-text" style="font-size: 9px; fill: #6b7280;">trigger</text>
+
+  <rect x="515" y="160" width="100" height="42" class="node-mini node-agent-mini" rx="8"/>
+  <text x="565" y="178" text-anchor="middle" class="node-mini-text">🤖 AI Agent</text>
+  <text x="565" y="194" text-anchor="middle" class="node-mini-text" style="font-size: 9px; fill: #6b7280;">thinks + acts</text>
+
+  <rect x="648" y="160" width="72" height="42" class="node-mini node-output-mini" rx="8"/>
+  <text x="684" y="178" text-anchor="middle" class="node-mini-text">📤 Reply</text>
+  <text x="684" y="194" text-anchor="middle" class="node-mini-text" style="font-size: 9px; fill: #6b7280;">output</text>
+
+  <path d="M 482 181 L 515 181" class="flow-arrow" marker-end="url(#arrow-flow)"/>
+  <path d="M 615 181 L 648 181" class="flow-arrow" marker-end="url(#arrow-flow)"/>
+
+  <!-- Memory + Skills + Tool attached underneath the agent (matches default workflow shape) -->
+  <rect x="430" y="220" width="80" height="22" class="node-mini" rx="6" style="fill: #f0fdfa; stroke: #06b6d4;"/>
+  <text x="470" y="235" text-anchor="middle" class="node-mini-text" style="fill: #0e7490;">🧠 Memory</text>
+
+  <rect x="520" y="220" width="80" height="22" class="node-mini" rx="6" style="fill: #f0fdfa; stroke: #06b6d4;"/>
+  <text x="560" y="235" text-anchor="middle" class="node-mini-text" style="fill: #0e7490;">📚 Skill</text>
+
+  <rect x="610" y="220" width="80" height="22" class="node-mini" rx="6" style="fill: #f0fdfa; stroke: #06b6d4;"/>
+  <text x="650" y="235" text-anchor="middle" class="node-mini-text" style="fill: #0e7490;">🔧 Tool</text>
+
+  <path d="M 545 202 L 470 220" class="dashed-conn"/>
+  <path d="M 565 202 L 560 220" class="dashed-conn"/>
+  <path d="M 590 202 L 650 220" class="dashed-conn"/>
+
+  <text x="550" y="265" text-anchor="middle" class="step-desc">Memory remembers · Skills teach · Tools extend</text>
+  <text x="550" y="285" text-anchor="middle" class="step-desc" style="font-style: italic; fill: #6b7280;">This is the shape of every default workflow.</text>
+
+  <!-- Arrow 2 → 3 -->
+  <path d="M 740 200 L 810 200" class="flow-arrow" marker-end="url(#arrow-flow)"/>
+
+  <!-- ============ STEP 3: AI RUNS IT ============ -->
+  <rect x="820" y="100" width="240" height="200" class="step-card-accent accent-3"/>
+  <circle cx="848" cy="128" r="14" class="step-num-bg-3"/>
+  <text x="848" y="133" text-anchor="middle" class="step-num">3</text>
+  <text x="872" y="133" class="step-title">AI runs it for you</text>
+
+  <text x="940" y="170" text-anchor="middle" class="step-desc">Click Play, or...</text>
+
+  <rect x="850" y="185" width="180" height="30" class="badge"/>
+  <text x="940" y="204" text-anchor="middle" class="badge-text">DEPLOY ON A SCHEDULE</text>
+
+  <rect x="850" y="223" width="180" height="30" class="badge"/>
+  <text x="940" y="242" text-anchor="middle" class="badge-text">TRIGGER ON AN EVENT</text>
+
+  <rect x="850" y="261" width="180" height="30" class="badge"/>
+  <text x="940" y="280" text-anchor="middle" class="badge-text">RESPOND IN REAL TIME</text>
+
+  <!-- ============ STEP 4: CONNECTED APPS ============ -->
+  <rect x="40" y="340" width="1020" height="180" class="step-card-accent accent-4"/>
+  <circle cx="68" cy="368" r="14" class="step-num-bg-4"/>
+  <text x="68" y="373" text-anchor="middle" class="step-num">4</text>
+  <text x="92" y="373" class="step-title">Connect to the apps you already use</text>
+
+  <!-- Row 1 of pills -->
+  <rect x="60" y="395" width="90" height="28" class="integration-pill"/>
+  <text x="105" y="414" text-anchor="middle" class="integration-text">📧 Gmail</text>
+
+  <rect x="160" y="395" width="100" height="28" class="integration-pill"/>
+  <text x="210" y="414" text-anchor="middle" class="integration-text">📅 Calendar</text>
+
+  <rect x="270" y="395" width="80" height="28" class="integration-pill"/>
+  <text x="310" y="414" text-anchor="middle" class="integration-text">📁 Drive</text>
+
+  <rect x="360" y="395" width="90" height="28" class="integration-pill"/>
+  <text x="405" y="414" text-anchor="middle" class="integration-text">📊 Sheets</text>
+
+  <rect x="460" y="395" width="110" height="28" class="integration-pill"/>
+  <text x="515" y="414" text-anchor="middle" class="integration-text">📱 WhatsApp</text>
+
+  <rect x="580" y="395" width="100" height="28" class="integration-pill"/>
+  <text x="630" y="414" text-anchor="middle" class="integration-text">💬 Telegram</text>
+
+  <rect x="690" y="395" width="100" height="28" class="integration-pill"/>
+  <text x="740" y="414" text-anchor="middle" class="integration-text">𝕏 Twitter</text>
+
+  <rect x="800" y="395" width="110" height="28" class="integration-pill"/>
+  <text x="855" y="414" text-anchor="middle" class="integration-text">📞 Your Phone</text>
+
+  <rect x="920" y="395" width="120" height="28" class="integration-pill"/>
+  <text x="980" y="414" text-anchor="middle" class="integration-text">💳 Stripe</text>
+
+  <!-- Row 2 of pills -->
+  <rect x="60" y="430" width="120" height="28" class="integration-pill"/>
+  <text x="120" y="449" text-anchor="middle" class="integration-text">🌐 Web Browser</text>
+
+  <rect x="190" y="430" width="120" height="28" class="integration-pill"/>
+  <text x="250" y="449" text-anchor="middle" class="integration-text">🔍 Web Search</text>
+
+  <rect x="320" y="430" width="130" height="28" class="integration-pill"/>
+  <text x="385" y="449" text-anchor="middle" class="integration-text">🕷 Web Scraping</text>
+
+  <rect x="460" y="430" width="110" height="28" class="integration-pill"/>
+  <text x="515" y="449" text-anchor="middle" class="integration-text">📄 PDF / Docs</text>
+
+  <rect x="580" y="430" width="100" height="28" class="integration-pill"/>
+  <text x="630" y="449" text-anchor="middle" class="integration-text">💻 Python</text>
+
+  <rect x="690" y="430" width="120" height="28" class="integration-pill"/>
+  <text x="750" y="449" text-anchor="middle" class="integration-text">⚡ JavaScript</text>
+
+  <rect x="820" y="430" width="80" height="28" class="integration-pill"/>
+  <text x="860" y="449" text-anchor="middle" class="integration-text">📨 Email</text>
+
+  <rect x="910" y="430" width="130" height="28" class="integration-pill"/>
+  <text x="975" y="449" text-anchor="middle" class="integration-text">⏰ Cron / Timers</text>
+
+  <text x="550" y="490" text-anchor="middle" class="step-desc">+ residential proxies, Apify scrapers, Maps, document RAG, and more</text>
+
+  <!-- ============ FOOTER STRIP ============ -->
+  <rect x="40" y="540" width="1020" height="60" class="footer-strip"/>
+  <text x="550" y="568" text-anchor="middle" class="footer-text">🏠  Everything runs on your computer</text>
+  <text x="550" y="588" text-anchor="middle" class="footer-sub">Your API keys, your data, your conversations — never sent to MachinaOS servers. Free local AI via Ollama and LM Studio.</text>
+
+</svg>

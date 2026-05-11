@@ -5,9 +5,21 @@
 <a href="https://discord.gg/c9pCJ7d8Ce" target="_blank"><img src="https://img.shields.io/discord/1455977012308086895?logo=discord&logoColor=white&label=Discord" alt="Discord"></a>
 <a href="https://deepwiki.com/trohitg/MachinaOS" target="_blank"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
 
-Self-hostable workflow runtime for AI agents. Plugin-first Python backend, schema-driven React Flow frontend, Temporal-backed distributed execution, and a native-SDK LLM layer that runs against cloud providers or local servers (Ollama, LM Studio).
+Your own AI assistant that does real work. Drag, drop, and connect AI agents to your email, calendar, messages, phone, and 50+ other services. Runs on your own machine — your data stays with you.
 
-Think n8n's visual builder with the agent ergonomics of an SDK — workflows are JSON, nodes are typed Python plugins, and the executor is durable.
+No code required. No subscription. No usage limits. Bring your own API keys (or run models locally with Ollama / LM Studio for free).
+
+## How It Works
+
+[![How MachinaOS Works](docs/diagrams/how-it-works.svg)](https://raw.githubusercontent.com/trohitg/MachinaOS/main/docs/diagrams/how-it-works.svg)
+
+Pick nodes from the palette, drag them onto a canvas, connect them with lines, give your AI agent some memory and skills, and hit Play. Or **deploy** the workflow so it runs forever in the background — waiting for emails, responding to messages, checking in on a schedule, doing the work you'd rather not.
+
+## Three Workflows You Get on Day One
+
+[![Default workflows that ship with MachinaOS](docs/diagrams/default-workflows.svg)](https://raw.githubusercontent.com/trohitg/MachinaOS/main/docs/diagrams/default-workflows.svg)
+
+The first time you open MachinaOS, three example workflows load automatically. Open them on the canvas to see exactly how the pieces fit together, then edit any node and save your own version.
 
 ## See It In Action ↓
 
@@ -26,12 +38,127 @@ npm install -g machinaos
 machina start
 ```
 
-Open http://localhost:3000. Backend on `:3010`, Temporal UI on `:8080`.
+Open http://localhost:3000 and click **Credentials** to connect your first AI provider.
+
+## What You Can Build
+
+### Personal AI assistants that remember
+Build a chat assistant that knows your calendar, reads your inbox, and follows up on tasks. Conversations are saved as readable markdown so you can edit what your agent remembers. Long-term memory uses vector search so years of conversation stay accessible.
+
+### Agent teams that delegate
+Hire an **AI Employee** as a team lead. Connect specialized agents — a Coding Agent, a Web Agent, a Productivity Agent — and the team lead automatically figures out who to delegate which subtask to. Each agent has its own memory, tools, and skills.
+
+### Task automations that run themselves
+Schedule recurring jobs ("every weekday at 9 AM, summarize my unread emails"), respond to incoming events ("when a customer texts on WhatsApp, draft a reply"), or build complex multi-step pipelines that run in the background. Workflows run reliably even if your computer restarts.
+
+### Email, calendar, and document workflows
+- Send and search Gmail, schedule and update Calendar events
+- Upload to Drive, edit Sheets, manage Tasks and Contacts
+- Read inbox via IMAP from Gmail, Outlook, Yahoo, iCloud, ProtonMail, Fastmail, or any custom server
+- Parse PDFs and documents into searchable knowledge bases
+
+### Messaging across every platform
+Send and receive on **WhatsApp** (with newsletter channels, groups, contacts), **Telegram** (with bot owner detection), **Twitter/X** (post, reply, search, look up users), and a unified social node that abstracts over Discord, Slack, Signal, SMS, Matrix, Teams, and more.
+
+### Phone control from a workflow
+Pair your Android phone via QR code and control it from any agent: read battery + network status, launch apps, toggle WiFi / Bluetooth / airplane mode, take photos, read environmental sensors, manage media playback. 16 device services available.
+
+### Web automation & research
+- **Interactive browser** with accessibility-tree navigation (click, type, screenshot) — your agent can use websites the way you do
+- **Web scraping** with Crawlee (static + JavaScript-rendered pages) and Apify actors (Instagram, TikTok, LinkedIn, Facebook, YouTube, Google Search)
+- **Search APIs**: DuckDuckGo (free), Brave, Serper (Google), Perplexity (AI answers with citations)
+- **Residential proxies** with geo-targeting and automatic provider rotation
+
+### Code execution that's actually safe
+Run Python, JavaScript, and TypeScript code from any workflow. Each workflow gets its own isolated workspace folder — no chance of an agent touching files outside its sandbox. The **Process Manager** node owns long-running tasks like dev servers, builds, and watchers, with live output streaming to a Terminal tab in the UI.
+
+### Pay bills, take payments
+**Stripe** integration with action node (charge customers, manage subscriptions) and webhook receiver (react to payment events in real time). Same pattern works for any service with a CLI.
+
+### Build your own knowledge base
+RAG pipeline out of the box: parse PDFs and HTML, chunk into searchable pieces, embed locally or via OpenAI, store in ChromaDB / Qdrant / Pinecone, and query from any agent.
+
+## AI Capabilities
+
+### 11 LLM providers — bring your own keys or run locally
+
+| Provider     | Notes                                                                    |
+|--------------|--------------------------------------------------------------------------|
+| OpenAI       | GPT-5 family, GPT-4.1, o-series reasoning models, GPT-4o                 |
+| Anthropic    | Claude Opus 4.x, Sonnet 4.x, Haiku 4.5 — with extended thinking          |
+| Google       | Gemini 3 Pro/Flash, 2.5 Pro/Flash — with reasoning budgets               |
+| DeepSeek     | DeepSeek V3, DeepSeek Reasoner                                           |
+| Kimi         | Kimi K2.5, Kimi K2 Thinking                                              |
+| Mistral      | Mistral Large/Small, Codestral                                           |
+| Groq         | Llama 3/4, Qwen3, GPT-OSS (ultra-fast inference)                         |
+| Cerebras     | Llama 3.1, Qwen-3-235b (custom AI hardware)                              |
+| OpenRouter   | 200+ models via one unified API                                          |
+| **Ollama**   | Run any local model on your machine — free, private, offline             |
+| **LM Studio**| Run any local model with a desktop app — free, private, offline          |
+
+Local providers (Ollama, LM Studio) are first-class — context length, vision support, and tool-use capability are detected automatically from your running server. No paid API needed.
+
+### 17 specialized agent types
+
+Pick the right agent for the job:
+
+| Agent              | Specialized for                                                          |
+|--------------------|--------------------------------------------------------------------------|
+| **AI Employee** / **Orchestrator** | Team leads that coordinate other agents             |
+| Android Agent      | Phone control                                                            |
+| Web Agent          | Browser automation, scraping, search                                     |
+| Coding Agent       | Writing and running code (Python / JS / TS)                              |
+| Productivity Agent | Gmail, Calendar, Drive, Sheets, Tasks, Contacts                          |
+| Social Agent       | WhatsApp, Telegram, Twitter messaging                                    |
+| Task Agent         | Scheduling, reminders, cron jobs                                         |
+| Travel Agent       | Maps, location lookup, planning                                          |
+| Payments Agent     | Stripe + financial workflows                                             |
+| Consumer Agent     | Customer support, order management                                       |
+| Deep Agent         | LangChain DeepAgents with filesystem tools + sub-agent delegation        |
+| Claude Code Agent  | Anthropic's Claude Code CLI for advanced coding sessions                 |
+| Codex Agent        | OpenAI Codex CLI integration                                             |
+| RLM Agent          | Recursive Language Model — write code that calls itself recursively      |
+| Autonomous Agent   | Code-mode loops that reduce token usage 80-98%                           |
+| Tool Agent         | General-purpose tool orchestration                                       |
+
+Team leads automatically expose every connected agent as a `delegate_to_*` tool — the AI decides who to hand work off to based on the task.
+
+### Skills you can edit yourself
+
+Skills are short markdown files that teach an agent how to do something well — when to use which tool, what arguments to pass, common mistakes to avoid. Edit them in the UI; the changes apply immediately. Built-in skills cover Android control, Google Workspace, social messaging, web research, coding, terminal use (Bash, PowerShell, WSL, Nushell), and more.
+
+### Memory that scales with your context window
+
+Agents track token usage and automatically compact long conversations when you hit half your model's context limit. Compaction summarizes in five sections — Task Overview, Current State, Important Discoveries, Next Steps, Context to Preserve — so the agent picks up exactly where it left off. For Anthropic and OpenAI, native API compaction is used; everywhere else, the agent summarizes itself.
+
+### Cost tracking, built in
+
+Every LLM call and API request is tracked with USD cost. See per-provider spend in the Credentials panel. Configure your own pricing in `pricing.json` if you switch providers mid-flight.
+
+## The Canvas
+
+- **10 visual themes** — light, dark, Renaissance, Greek, Edo, Steampunk, Atomic, Cyber, Wasteland, Rot, Plague, Surveillance — each with its own icon set, sound pack, and decorative ornaments. Pick the vibe that matches your workflow.
+- **Drag-to-map outputs** from one node's output directly onto another's input fields.
+- **Live execution animations** — nodes glow while running, show iteration count for AI agents, and surface errors inline.
+- **Multi-tab Console** — chat with trigger nodes, watch console logs, and view terminal output side by side.
+- **Component palette** with search, categories, and a Normal/Dev mode toggle that hides advanced nodes when you don't need them.
+- **5-step onboarding wizard** for first-time users, replayable any time from Settings.
+
+## Quick Setup Tour
+
+1. **Install** with `npm install -g machinaos` (or run from source)
+2. **Start** with `machina start` — opens at http://localhost:3000
+3. **Connect a provider** — click the **Credentials** button, paste an API key or click through OAuth
+4. **Drag a node** from the left palette onto the canvas
+5. **Connect** outputs to inputs by dragging between handles
+6. **Run** by clicking the play button on any node, or **Deploy** the whole workflow to run on its own forever
+
+If anything goes wrong, the [Discord](https://discord.gg/c9pCJ7d8Ce) community is the fastest way to get help.
+
+## Run From Source
 
 <details>
-<summary><b>Run from source</b></summary>
-
-Source builds require [pnpm](https://pnpm.io/):
+<summary><b>For contributors</b></summary>
 
 ```bash
 npm install -g pnpm
@@ -41,88 +168,24 @@ pnpm install
 pnpm run dev
 ```
 
-The `dev` task starts the Python backend, Vite client, WhatsApp RPC, and Temporal in parallel. See [SETUP.md](docs-internal/SETUP.md) and [SCRIPTS.md](docs-internal/SCRIPTS.md).
+The `dev` task starts the Python backend, Vite client, WhatsApp service, and Temporal in parallel. See [SETUP.md](docs-internal/SETUP.md) and [SCRIPTS.md](docs-internal/SCRIPTS.md) for details, and [CONTRIBUTING.md](CONTRIBUTING.md) for the codebase map and contribution recipes.
 
 </details>
 
-## Architecture
+## For Developers
 
-```
-+--------------------------+      WebSocket       +--------------------------+
-|  React 19 + Vite client  | <==================> |   FastAPI backend        |
-|  React Flow canvas       |   (typed RPC +       |   Plugin registry        |
-|  TanStack Query cache    |   CloudEvents v1.0   |   Native LLM SDK layer   |
-|  Zustand slice stores    |   broadcasts)        |   Temporal executor      |
-+--------------------------+                       +-------------+------------+
-                                                                 |
-                                              +------------------+------------------+
-                                              v                                     v
-                                      +---------------+                     +---------------+
-                                      | Temporal      |                     | Encrypted     |
-                                      | (durable      |                     | credentials   |
-                                      |  activities)  |                     |  store        |
-                                      +---------------+                     +---------------+
-```
+Want to add a node, LLM provider, skill, or integration? One Python file = one node. The backend owns all the schemas; the frontend renders from them automatically. No frontend code required for most extensions.
 
-- **Plugin-first backend.** One Python file per node. The plugin class declares metadata, typed input/output schemas, and an execute method; the framework auto-registers it on import. The backend spec is the single source of truth — the frontend renders entirely from server-served schemas.
-- **Three execution modes** with automatic fallback: Temporal (distributed, durable) → Redis-backed parallel scheduling → sequential.
-- **Event-driven deployment.** Each trigger event spawns an independent execution run with isolated context. Multiple runs of the same workflow can execute concurrently.
-- **Dual-path LLM execution.** Chat completions go through a native-SDK layer to keep cold-start fast; agent runs use LangChain + LangGraph for tool calling and state graphs.
-- **WebSocket-first RPC** with reliable reconnect, replay queue, request correlation, and CloudEvents v1.0 envelopes for typed broadcasts.
-
-Full diagrams and deep-dives: **[CONTRIBUTING.md](CONTRIBUTING.md)** and [docs-internal/](docs-internal/).
-
-## What's In The Box
-
-### Node plugins
-Categories: AI agents, chat models, social (WhatsApp / Telegram / Twitter / Discord / Slack / Signal / SMS / Webchat / Email / Matrix / Teams), Google Workspace (Gmail / Calendar / Drive / Sheets / Tasks / Contacts), Android (16 service nodes via ADB + relay), browser automation, web scraping (Crawlee, Apify, HTTP), document RAG (parsers, chunkers, embeddings, vector stores), filesystem + shell (Nushell), code executors (Python / JS / TS), process manager, scheduling (cron + timer), webhooks, location (Google Maps), payments (Stripe), residential proxies.
-
-### LLM providers (11 chat-model backends)
-| Provider     | Path        | Models                                                                |
-|--------------|-------------|------------------------------------------------------------------------|
-| OpenAI       | Native + LC | GPT-5.x, GPT-4.1, o-series (reasoning effort), GPT-4o                  |
-| Anthropic    | Native + LC | Claude Opus 4.x, Sonnet 4.x, Haiku 4.5 (budget thinking)               |
-| Google       | Native + LC | Gemini 3-pro/flash, 2.5-pro/flash/flash-lite (thinking budget)         |
-| DeepSeek     | Native + LC | deepseek-chat, deepseek-reasoner                                       |
-| Kimi         | Native + LC | kimi-k2.5, kimi-k2-thinking                                            |
-| Mistral      | Native + LC | mistral-large, mistral-small, codestral                                |
-| Groq         | LC          | Llama 3.x/4, Qwen3-32b, GPT-OSS                                        |
-| Cerebras     | LC          | Llama 3.1, GPT-OSS, Qwen-3-235b                                        |
-| OpenRouter   | Native + LC | 200+ models via unified API                                            |
-| **Ollama**   | Native      | Local models — context length and capabilities probed via official SDK |
-| **LM Studio**| Native      | Local models — context length and capabilities probed via official SDK |
-
-### Specialized agents
-17 agent types covering Android control, web automation, coding, task management, social messaging, travel planning, productivity (Google Workspace), payments, consumer interactions, autonomous loops, and recursive language models. Team-lead agents (AI Employee, Orchestrator) accept other agents as teammates and auto-expose them as delegation tools.
-
-### Skills system
-Markdown-driven, editable in-UI. Skills carry their own instructions, allowed tools, and metadata; defaults live on disk as `SKILL.md` files and get seeded into the database on first load. Folder layout maps to agent specialization (assistant, android, coding, productivity, social, terminal, web, etc.).
-
-### Code execution
-Sandboxed Python with curated stdlib imports, plus JavaScript and TypeScript executors. The process-manager node owns long-running children (dev servers, watchers, build tools) and streams their output to the Terminal tab.
-
-### Filesystem isolation
-Per-workflow workspace directory. Filesystem and shell nodes operate in a sandboxed virtual mode — path validation rejects traversal attempts uniformly across Windows and POSIX. Default shell is **Nushell** (same grammar everywhere), with fallback to the host's native shell when Nushell isn't installed.
-
-## Configuration
-
-Credentials live in a separate encrypted SQLite database with field-level encryption (Fernet + PBKDF2-SHA256, 600k iterations per OWASP 2024). OAuth tokens and API keys use separate storage paths by design, and refresh tokens never live in process memory.
-
-OAuth redirect URIs are derived at runtime from the request context — no port hardcoding, works identically in dev and behind a reverse proxy. Credential backends are pluggable: local encrypted SQLite, OS-native keyring, or AWS Secrets Manager.
-
-Click **Credentials** in the toolbar UI to connect providers.
-
-## Documentation
-
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** — repository map, architecture diagrams, contribution recipes
-- **[server/nodes/README.md](server/nodes/README.md)** — 5-minute plugin recipe + folder map + shared helpers
-- **[docs-internal/](docs-internal/)** — full architecture index: execution engine, Temporal, native LLM SDK, event waiter, credentials encryption, status broadcaster, RLM, Deep Agent, Claude Code agent, performance, build pipeline
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — codebase map, architecture diagrams, contribution recipes
+- **[server/nodes/README.md](server/nodes/README.md)** — 5-minute plugin recipe + folder map
+- **[docs-internal/](docs-internal/)** — deep-dive architecture docs (execution engine, Temporal, LLM layer, credentials, event system, performance, build pipeline)
+- **[CLAUDE.md](CLAUDE.md)** — comprehensive project memory (great for AI-assisted contributions)
 - **Hosted docs:** https://docs.zeenie.xyz/
 - **DeepWiki:** https://deepwiki.com/trohitg/MachinaOS
 
 ## Community
 
-[Discord](https://discord.gg/c9pCJ7d8Ce) — help, feedback, and design discussions.
+[Discord](https://discord.gg/c9pCJ7d8Ce) — help, feature requests, and design discussions.
 
 ## License
 
