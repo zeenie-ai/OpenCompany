@@ -9,6 +9,40 @@ Your own AI assistant that does real work. Drag, drop, and connect AI agents to 
 
 No code required. No subscription. No usage limits. Bring your own API keys (or run models locally with Ollama / LM Studio for free).
 
+## Quick Start
+
+**Prerequisites:** Node.js 22+, Python 3.12+
+
+```bash
+npm install -g machinaos
+machina start
+```
+
+Open http://localhost:3000 and click **Credentials** to connect your first AI provider.
+
+<details>
+<summary><b>Run from source (for contributors)</b></summary>
+
+```bash
+npm install -g pnpm
+git clone https://github.com/trohitg/MachinaOS.git
+cd MachinaOS
+pnpm install
+pnpm run dev
+```
+
+The `dev` task starts the Python backend, Vite client, WhatsApp service, and Temporal in parallel. See [SETUP.md](docs-internal/SETUP.md) and [SCRIPTS.md](docs-internal/SCRIPTS.md) for details, and [CONTRIBUTING.md](CONTRIBUTING.md) for the codebase map and contribution recipes.
+
+</details>
+
+## See It In Action ↓
+
+https://github.com/user-attachments/assets/5ee81bb3-12cf-4755-8532-7470c6f1d841
+
+## Full Capabilities ↓
+
+https://github.com/user-attachments/assets/5798fe61-8d26-4d3a-90aa-189bf4eec79f
+
 ## How It Works
 
 [![How MachinaOS Works](docs/diagrams/how-it-works.svg)](https://raw.githubusercontent.com/trohitg/MachinaOS/main/docs/diagrams/how-it-works.svg)
@@ -20,25 +54,6 @@ Pick nodes from the palette, drag them onto a canvas, connect them with lines, g
 [![Default workflows that ship with MachinaOS](docs/diagrams/default-workflows.svg)](https://raw.githubusercontent.com/trohitg/MachinaOS/main/docs/diagrams/default-workflows.svg)
 
 The first time you open MachinaOS, three example workflows load automatically. Open them on the canvas to see exactly how the pieces fit together, then edit any node and save your own version.
-
-## See It In Action ↓
-
-https://github.com/user-attachments/assets/5ee81bb3-12cf-4755-8532-7470c6f1d841
-
-## Full Capabilities ↓
-
-https://github.com/user-attachments/assets/5798fe61-8d26-4d3a-90aa-189bf4eec79f
-
-## Quick Start
-
-**Prerequisites:** Node.js 22+, Python 3.12+
-
-```bash
-npm install -g machinaos
-machina start
-```
-
-Open http://localhost:3000 and click **Credentials** to connect your first AI provider.
 
 ## What You Can Build
 
@@ -154,23 +169,6 @@ Every LLM call and API request is tracked with USD cost. See per-provider spend 
 6. **Run** by clicking the play button on any node, or **Deploy** the whole workflow to run on its own forever
 
 If anything goes wrong, the [Discord](https://discord.gg/c9pCJ7d8Ce) community is the fastest way to get help.
-
-## Run From Source
-
-<details>
-<summary><b>For contributors</b></summary>
-
-```bash
-npm install -g pnpm
-git clone https://github.com/trohitg/MachinaOS.git
-cd MachinaOS
-pnpm install
-pnpm run dev
-```
-
-The `dev` task starts the Python backend, Vite client, WhatsApp service, and Temporal in parallel. See [SETUP.md](docs-internal/SETUP.md) and [SCRIPTS.md](docs-internal/SCRIPTS.md) for details, and [CONTRIBUTING.md](CONTRIBUTING.md) for the codebase map and contribution recipes.
-
-</details>
 
 ## For Developers
 
