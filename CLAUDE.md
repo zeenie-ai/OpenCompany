@@ -48,7 +48,9 @@ This is a React Flow-based workflow automation platform implementing n8n-inspire
 | **[Credentials Encryption](./docs-internal/credentials_encryption.md)** | Fernet + PBKDF2 encryption pipeline, separate credentials.db, two credential systems (OAuth vs API keys), multi-backend abstraction |
 | **[Status Broadcaster](./docs-internal/status_broadcaster.md)** | WebSocket-first communication: StatusBroadcaster singleton, 89 handlers, broadcast message types, Android two-state model |
 | **[RLM Service](./docs-internal/rlm_service.md)** | Recursive Language Model agent with REPL-based execution (llm_query, rlm_query, FINAL) |
-| **[Claude Code Agent](./docs-internal/claude_code_agent_architecture.md)** | Claude Code SDK integration as a specialized agent node |
+| **[Claude Code Agent](./docs-internal/claude_code_agent_architecture.md)** | Claude Code integration internals (LangGraph reference; companion to `cli_agent_framework.md`) |
+| **[CLI Agent Framework](./docs-internal/cli_agent_framework.md)** | Multi-provider CLI runtime (Claude Code / Codex / Gemini): `AICliService.run_batch`, per-task worktree isolation, FastMCP bridge, **memory bridge** (native `--resume` via stable `cwd=repo_root` + UUID5/`last_session_id` round-trip + auto-clear on stale UUID + `node_parameters_updated` broadcast). |
+| **[CLI Agent Canonical Patterns RFC](./docs-internal/cli_agent_canonical_patterns_rfc.md)** | Audit of MachinaOs's `services/cli_agent` against the official Claude Code spec — six invariants (skills-as-files, MCP-only transport, `list_changed`, deferral, visible-tool filtering, native-session-continuity-via-stable-cwd) with current implementation status. |
 | **[Deep Agent](./docs-internal/deep_agent.md)** | LangChain DeepAgents integration with filesystem tools, sub-agent delegation, auto-summarization, and planning |
 | **[Autonomous Agent Creation](./docs-internal/autonomous_agent_creation.md)** | Creating autonomous agents with Code Mode patterns and agentic loops |
 | **[Polyglot Server](../polyglot-server/ARCHITECTURE.md)** | Plugin registry microservice with MCP gateway (optional integration) |
@@ -3407,11 +3409,16 @@ I don't have access to real-time weather data...
 - **Uses LangChain's InMemoryVectorStore**: Per-session vector stores with HuggingFaceEmbeddings (BAAI/bge-small-en-v1.5)
 
 ### Key Files
-- **Node Definition**: `server/nodes/skill/simple_memory.py` - simpleMemory plugin (NodeSpec + execute)
-- **Memory Helpers**: `server/services/ai.py` - `_parse_memory_markdown()`, `_append_to_memory_markdown()`, `_trim_markdown_window()`
-- **Vector Store**: `server/services/ai.py` - `_get_memory_vector_store()` with InMemoryVectorStore
-- **AI Integration**: `server/services/ai.py` - execute_agent with memory_data parameter
-- **Handler**: `server/services/handlers/ai.py` - Collects memory parameters from connected node
+- **Node Definition**: `server/nodes/skill/simple_memory.py` - simpleMemory plugin (NodeSpec + execute). Carries an internal `last_session_id` field (hidden in UI) used by the claude_code_agent bridge for native session resume.
+- **Memory Package**: `server/services/memory/` — promoted from the old `services/memory.py` so each concern owns its own module:
+  - `services/memory/markdown.py` — `parse_memory_markdown`, `append_to_memory_markdown`, `trim_markdown_window` (the canonical helpers every agent uses; **previously inlined into `services/ai.py`**, now imported from here)
+  - `services/memory/jsonl.py` — standalone JSONL `parse_jsonl` / `append_message` / `trim_window` (Anthropic Messages API shape, kept for future SDK migration; not used by any agent bridge today)
+  - `services/memory/vector_store.py` — `get_memory_vector_store` + per-session `InMemoryVectorStore` cache
+  - `services/memory/state.py` — `clear_agent_session_state(session_id, workflow_id, clear_long_term, memory_node_id)`; when `memory_node_id` is supplied it resets `memory_content` to the default placeholder AND wipes `last_session_id` server-side (single DB write)
+  - `services/memory/__init__.py` — re-exports the full surface so existing `from services.memory import …` callers keep working
+- **AI Integration (aiAgent / chatAgent / deep_agent / rlm_agent)**: `server/services/ai.py` — `execute_agent` / `execute_chat_agent` consume `memory_data`, call the markdown helpers via the package re-exports
+- **CLI bridge (`claude_code_agent`)**: `server/services/cli_agent/service.py:_persist_memory` — appends turns to `memory_content` via the same markdown helpers AND saves `simpleMemory.last_session_id` from the most recent successful run's `r.session_id`. Always broadcasts `node_parameters_updated` so the simpleMemory parameter panel refetches live (no page reload needed).
+- **Edge walker**: `server/services/plugin/edge_walker.py:_build_memory_entry` — surfaces `memory_content` + `window_size` + `long_term_enabled` + `retrieval_count` + `last_session_id` to every consuming agent
 
 ### Node Properties
 | Property | Type | Default | Description |
@@ -3446,6 +3453,29 @@ I don't have access to real-time weather data...
 - **Per-Session Vector Stores**: `_memory_vector_stores` dict keyed by session_id
 - **Window + Archive**: Short-term (recent messages) + long-term (semantic retrieval) memory pattern
 - **Auto-Save**: AI Agent automatically saves updated markdown content to node parameters
+
+### claude_code_agent bridge — native session resume (NOT markdown injection)
+
+When `simpleMemory` is connected to `claude_code_agent`, memory continuity is handled via **claude's own native session JSONL on disk** rather than re-injecting markdown as a system prompt. Claude stores per-session transcripts under `<CLAUDE_CONFIG_DIR>/projects/<project_key>/<session_id>.jsonl` where `project_key = re.sub(r"[^a-zA-Z0-9.-]", "-", str(cwd))` (verified against the on-disk `data/claude-machina/projects/` listing — Python reproduces three directory names byte-for-byte).
+
+**The three coupled mechanisms** (see [docs-internal/cli_agent_framework.md → Memory bridge](./docs-internal/cli_agent_framework.md#memory-bridge--simplememory--claude_code_agent) for full plumbing):
+
+1. **Stable cwd.** `AICliSession` accepts `memory_bound=True`. When set, `cwd()` returns `repo_root` instead of the per-task `wt_t_<random>` worktree; `_pre_spawn` skips `git worktree add`; `cleanup` skips `git worktree remove`. The same cwd every run keeps claude's `project_key` constant so `--resume <UUID>` finds the prior JSONL.
+2. **UUID5 first-run / `--resume` thereafter.** `claude_code_agent` derives `uuid5(NAMESPACE_OID, f"{memory_node_id}:{simpleMemory.session_id}")` for the first run and passes it as `--session-id <UUID5>`. Subsequent runs read `simpleMemory.last_session_id` (saved by `_persist_memory` from the previous run's `r.session_id`) and pass `--resume <UUID>` instead. Mutually exclusive in `providers/anthropic_claude.py:headless_argv` argv emission.
+3. **Auto-clear stale `last_session_id`.** When claude reports `No conversation found with session ID: <UUID>` (the JSONL was wiped, or the user's saved UUID predates the cwd-stability fix), `_persist_memory` substring-matches the error and fires `_clear_stale_session_id` which wipes `simpleMemory.last_session_id` (but preserves `memory_content`). Next run falls through to the first-run branch and self-heals.
+
+**`memory_content` is the UI mirror, not the resume channel.** Claude reads its own JSONL via `--resume`. The markdown in `memory_content` is appended every successful run (same `append_to_memory_markdown` + `trim_markdown_window` helpers aiAgent uses) for the human reader. User edits to `memory_content` do not influence claude's next response.
+
+**Parallel-batch guard.** When memory is wired AND `len(tasks) > 1`, `claude_code_agent` raises `NodeUserError` at handler entry — concurrent `--resume <UUID>` spawns against one JSONL would race.
+
+**Live UI refresh.** `_persist_memory` broadcasts `node_parameters_updated` after `save_node_parameters` so the simpleMemory parameter panel auto-refetches the moment a turn completes — without this the DB has the latest conversation but the UI shows the stale snapshot loaded at workflow open. Mirrors the pattern in `routers/websocket.py:handle_save_node_parameters`.
+
+**Logs to grep on a live run:**
+- `[Claude Code memory] memory_node=<id> last_session_id=<UUID|None> -> --resume <UUID>` (subsequent run) or `--session-id <UUID5> (first run)`
+- `[AICliSession_*] memory-bound: skipping worktree, using cwd=<repo_root>`
+- `[CC-Agent stream] result is_error=False ... session_id=<UUID>`
+- `[CC-Agent _persist_memory] saved memory_node=<id> last_session_id=<UUID> appended_turns=1 ... content_length=<N>`
+- On stale-UUID error: `[CC-Agent _persist_memory] cleared stale last_session_id=<UUID> from memory_node=<id>; next run will spawn a fresh claude session and persist its new UUID.`
 
 ## Memory Compaction, Token Tracking, and Cost Calculation
 

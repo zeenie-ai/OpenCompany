@@ -313,6 +313,153 @@ Lifespan: `main.py` enters `mcp_app.router.lifespan_context()` so `StreamableHTT
 
 `cost_usd` is the provider's reported value when available (Claude). For Codex (no native USD), `service.py:_derive_cost` falls back to `services.pricing.PricingService.calculate_cost()` from `canonical_usage` — single source of truth for LLM cost across MachinaOs. `summary.total_cost_usd` is `null` if any task didn't surface cost.
 
+## Memory bridge — `simpleMemory` → `claude_code_agent`
+
+Connecting a `simpleMemory` node to a `claude_code_agent` makes the
+spawned `claude -p` resume its prior session natively across runs.
+**No system-prompt injection, no JSONL synthesis, no API fallback.**
+Claude maintains its own session JSONL on disk under
+`<CLAUDE_CONFIG_DIR>/projects/<project_key>/<session_id>.jsonl`; we
+just feed it the right argv and keep the cwd stable so the project
+key doesn't drift.
+
+### Why native resume needs a stable cwd
+
+Claude derives `project_key` from cwd via `re.sub(r"[^a-zA-Z0-9.-]", "-", str(cwd))`
+— every `:`, `\`, `/`, `_` becomes `-`. Verified against the on-disk
+`data/claude-machina/projects/` listing — Python reproduces three
+encoded directory names byte-for-byte. The pre-bridge per-task
+worktree (`<workspace>/<node_id>/wt_t_<random_8hex>`) changed cwd on
+every spawn → fresh project_key every run → `--resume <UUID>` looked
+under a brand-new directory with zero prior JSONL ("No conversation
+found with session ID").
+
+The fix: when memory is wired, spawn under `cwd=repo_root` and skip
+the worktree entirely. Same cwd every run → same project_key → claude
+finds its own JSONL.
+
+### Argv contract
+
+| Run state | Argv | Why |
+|---|---|---|
+| First run (no `last_session_id` in DB) | `--session-id <UUID5(memory_node_id, simpleMemory.session_id)>` | Deterministic UUID lets us address the same session predictably; survives session_id forks via the user-visible `simpleMemory.session_id` slot. |
+| Subsequent run (`last_session_id` saved) | `--resume <last_session_id>` | Native claude session resume. Same `cwd=repo_root` → same project_key → claude finds the JSONL it wrote on the previous turn. |
+| After "No conversation found" error | argv same as above on the spawn that errored; `_persist_memory` auto-clears `last_session_id` so the NEXT run falls into the first-run branch with `--session-id <UUID5>`. | Self-heal from a stale or wiped JSONL. |
+
+Argv emission lives in
+`providers/anthropic_claude.py:headless_argv` — picks up
+`task.session_id` vs `task.resume_session_id` (mutually exclusive
+fields on `ClaudeTaskSpec`).
+
+### Plumbing
+
+```
+ClaudeCodeAgentNode.execute_op
+  └─ collect_agent_connections() → memory_data {node_id, session_id,
+                                                memory_content, window_size,
+                                                long_term_enabled,
+                                                last_session_id}
+  └─ derive resume_session_id (= memory_data.last_session_id) OR
+            first_run_session_uuid (= uuid5(NAMESPACE_OID,
+                                            f"{memory_node_id}:{session_id}"))
+  └─ ClaudeTaskSpec(..., session_id=..., resume_session_id=...)
+  └─ run_batch(..., connected_memory=memory_data, broadcaster=...)
+       └─ AICliService.run_batch:
+            ├─ AICliSession(..., memory_bound=True)   # ← drives cwd switch
+            │    └─ cwd() returns self._repo_root
+            │    └─ _pre_spawn skips `git worktree add`
+            │    └─ cleanup skips `git worktree remove`
+            └─ asyncio.gather → SessionResults
+            └─ _persist_memory(connected_memory, results, broadcaster):
+                 ├─ saves params["last_session_id"] = most_recent.session_id
+                 ├─ appends user/assistant turns to params["memory_content"]
+                 │  via append_to_memory_markdown + trim_markdown_window
+                 │  (the same helpers aiAgent / chatAgent / deep_agent / rlm_agent
+                 │  use — reuse, don't duplicate)
+                 ├─ database.save_node_parameters(memory_node_id, params)
+                 └─ broadcaster.broadcast({"type": "node_parameters_updated",
+                                           "node_id": memory_node_id, ...})
+                    # ← the UI's parameter panel auto-refreshes the moment
+                    # the run completes. Without this the DB has the
+                    # latest conversation but the UI keeps showing the
+                    # stale snapshot it loaded at workflow open.
+```
+
+### Self-healing on stale UUID
+
+`AICliService._clear_stale_session_id(connected_memory)` substring-
+matches `"No conversation found with session ID"` in any result's
+`error`. When matched it wipes `simpleMemory.last_session_id` from
+the DB but preserves `memory_content` (the user-visible markdown
+transcript). Next run derives a fresh `--session-id <UUID5>` and
+proceeds with a clean session.
+
+Triggered automatically inside `_persist_memory` when zero results
+succeed. Without this the same stale UUID would re-fire every run
+and the user would be stuck.
+
+### Parallel-batch guard
+
+Memory continuity requires serial execution — N concurrent
+`--resume <UUID>` spawns against one session JSONL would race. When
+`memory_data` is wired AND `len(tasks) > 1`, `claude_code_agent`
+raises `NodeUserError("Memory-bound batches must run one task at a
+time. Reduce Tasks to a single entry, or disconnect the memory
+node.")` at handler entry — never spawns.
+
+### Markdown mirror
+
+`memory_content` (the markdown surface the simpleMemory UI shows) is
+**a display mirror, not the canonical record**. Claude's own JSONL
+is canonical. `_persist_memory` appends each successful run's prompt
++ response to `memory_content` via `append_to_memory_markdown` so the
+UI shows the conversation grow live. User edits to `memory_content`
+do NOT influence claude's next response — claude reads its own JSONL
+via `--resume`.
+
+To reset both: click the simpleMemory's clear button or invoke the
+`clear_memory` WS handler with `memory_node_id` — backend wipes
+`memory_content` to the default placeholder AND clears
+`last_session_id` in one DB write. Claude's on-disk JSONL is left
+alone (orphan, harmless). The next run with the same memory wired
+will spawn a fresh session at a NEW deterministic UUID5 (because
+the user's `simpleMemory.session_id` is part of the UUID5 inputs;
+unchanged after clear, but `last_session_id` being None routes us
+through the first-run branch).
+
+### Logs to watch
+
+```
+[Claude Code memory] memory_node=<id> last_session_id=<UUID|None>
+   -> --resume <UUID>   |   --session-id <UUID5> (first run)
+
+[CC-Agent run_batch] enter ... memory=<memory_node_id> ...
+
+[AICliSession_*] memory-bound: skipping worktree, using cwd=<repo_root>
+
+[CC-Agent stream] result is_error=False subtype=success
+   session_id=<UUID> duration_ms=...
+
+[CC-Agent _persist_memory] memory_node=<id> results=1 successful=1
+   session_ids=['<UUID>']
+[CC-Agent _persist_memory] saved memory_node=<id> last_session_id=<UUID>
+   appended_turns=1 archived_blocks=0 content_length=<N>
+```
+
+On a stale-resume failure path the trace ends with:
+
+```
+[CC-Agent stderr] No conversation found with session ID: <UUID>
+[CC-Agent stream] result is_error=True subtype=error_during_execution
+   session_id=<new-UUID-claude-assigned-to-the-failed-attempt>
+[CC-Agent _persist_memory] no successful runs; skipping save ...
+[CC-Agent _persist_memory] cleared stale last_session_id=<UUID>
+   from memory_node=<id>; next run will spawn a fresh claude session
+   and persist its new UUID.
+```
+
+— and the next run succeeds with `--session-id <UUID5>`.
+
 ## Status broadcast events
 
 | Phase | When | Payload |
