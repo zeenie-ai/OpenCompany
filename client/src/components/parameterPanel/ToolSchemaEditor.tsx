@@ -122,9 +122,11 @@ function formValuesToConfig(values: ToolSchemaFormValues): ToolSchemaConfig {
 // Editor
 // ---------------------------------------------------------------------------
 
-const ToolSchemaEditor: React.FC<ToolSchemaEditorProps> = ({ nodeId }) => {
-  const { getToolSchema, saveToolSchema, deleteToolSchema, isLoading } = useToolSchema();
-  const { isConnected } = useWebSocket();
+// Outer component is the gate: it only calls the hooks needed to decide
+// whether the editor should render at all. The full hook surface (form,
+// effects, field array) lives in <ToolSchemaEditorBody/> so React's
+// rules-of-hooks invariants hold whether the gate is open or closed.
+const ToolSchemaEditor: React.FC<ToolSchemaEditorProps> = ({ nodeId, toolName, toolDescription }) => {
   const currentWorkflow = useAppStore((s) => s.currentWorkflow);
 
   const currentNode = useMemo(() => {
@@ -138,6 +140,14 @@ const ToolSchemaEditor: React.FC<ToolSchemaEditorProps> = ({ nodeId }) => {
   const currentNodeDef = currentNode?.type ? resolveNodeDescription(currentNode.type) : undefined;
   const isAndroidTool = (currentNodeDef?.uiHints as any)?.isAndroidToolkit === true;
   if (!isAndroidTool) return null;
+
+  return <ToolSchemaEditorBody nodeId={nodeId} toolName={toolName} toolDescription={toolDescription} />;
+};
+
+const ToolSchemaEditorBody: React.FC<ToolSchemaEditorProps> = ({ nodeId }) => {
+  const { getToolSchema, saveToolSchema, deleteToolSchema, isLoading } = useToolSchema();
+  const { isConnected } = useWebSocket();
+  const currentWorkflow = useAppStore((s) => s.currentWorkflow);
 
   const connectedServices = useMemo(() => {
     if (!currentWorkflow?.edges || !currentWorkflow?.nodes) return [];
