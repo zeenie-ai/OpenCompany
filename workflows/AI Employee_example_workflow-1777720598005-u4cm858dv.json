@@ -1,5 +1,5 @@
 {
-  "id": "workflow-1777720598005-u4cm858dv",
+  "id": "example_workflow-1777720598005-u4cm858dv",
   "name": "AI Employee",
   "nodes": [
     {
@@ -12,8 +12,8 @@
       "data": {
         "label": "Perplexity Search"
       },
-      "width": 93,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
         "x": 1020,
@@ -31,8 +31,8 @@
       "data": {
         "label": "DuckDuckGo Search"
       },
-      "width": 110,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
         "x": 1120,
@@ -50,8 +50,8 @@
       "data": {
         "label": "Write Todos"
       },
-      "width": 65,
-      "height": 83,
+      "width": 104,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": 900,
@@ -69,8 +69,8 @@
       "data": {
         "label": "Simple Memory"
       },
-      "width": 87,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
         "x": 340,
@@ -88,8 +88,8 @@
       "data": {
         "label": "Chat Trigger"
       },
-      "width": 67,
-      "height": 83,
+      "width": 110,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": -200,
@@ -107,8 +107,8 @@
       "data": {
         "label": "Console"
       },
-      "width": 60,
-      "height": 83,
+      "width": 69,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": 920,
@@ -126,8 +126,8 @@
       "data": {
         "label": "Process Manager"
       },
-      "width": 93,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
         "x": 780,
@@ -145,8 +145,8 @@
       "data": {
         "label": "HTTP Request"
       },
-      "width": 76,
-      "height": 83,
+      "width": 113,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": 1320,
@@ -164,8 +164,8 @@
       "data": {
         "label": "File Modify"
       },
-      "width": 61,
-      "height": 83,
+      "width": 96,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": 2100,
@@ -183,8 +183,8 @@
       "data": {
         "label": "File Read"
       },
-      "width": 60,
-      "height": 83,
+      "width": 77,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": 2000,
@@ -202,8 +202,8 @@
       "data": {
         "label": "FS Search"
       },
-      "width": 60,
-      "height": 83,
+      "width": 81,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": 2200,
@@ -222,7 +222,7 @@
         "label": "Shell"
       },
       "width": 60,
-      "height": 83,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": 1900,
@@ -240,8 +240,8 @@
       "data": {
         "label": "Nearby Places"
       },
-      "width": 76,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
         "x": 2720,
@@ -259,8 +259,8 @@
       "data": {
         "label": "Geocoding"
       },
-      "width": 60,
-      "height": 83,
+      "width": 87,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": 2640,
@@ -278,8 +278,8 @@
       "data": {
         "label": "Python Executor"
       },
-      "width": 89,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
         "x": 1800,
@@ -297,8 +297,8 @@
       "data": {
         "label": "Telegram Receive"
       },
-      "width": 94,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
         "x": -220,
@@ -316,8 +316,8 @@
       "data": {
         "label": "Telegram Send"
       },
-      "width": 80,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
         "x": 920,
@@ -335,8 +335,8 @@
       "data": {
         "label": "Twitter Search"
       },
-      "width": 77,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
         "x": -240,
@@ -354,8 +354,8 @@
       "data": {
         "label": "Twitter User"
       },
-      "width": 65,
-      "height": 83,
+      "width": 114,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": -340,
@@ -373,8 +373,8 @@
       "data": {
         "label": "WhatsApp DB"
       },
-      "width": 76,
-      "height": 83,
+      "width": 108,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": -460,
@@ -392,8 +392,8 @@
       "data": {
         "label": "Master Skill"
       },
-      "width": 63,
-      "height": 83,
+      "width": 109,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": 460,
@@ -411,8 +411,8 @@
       "data": {
         "label": "Browser"
       },
-      "width": 60,
-      "height": 83,
+      "width": 74,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": 1240,
@@ -449,8 +449,8 @@
       "data": {
         "label": "Simple Memory 1"
       },
-      "width": 95,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
         "x": -920,
@@ -468,8 +468,8 @@
       "data": {
         "label": "Master Skill 1"
       },
-      "width": 71,
-      "height": 83,
+      "width": 119,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": -800,
@@ -582,8 +582,8 @@
       "data": {
         "label": "Simple Memory 2"
       },
-      "width": 97,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
         "x": -220,
@@ -601,8 +601,8 @@
       "data": {
         "label": "Simple Memory 3"
       },
-      "width": 97,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
         "x": 600,
@@ -620,8 +620,8 @@
       "data": {
         "label": "Simple Memory 4"
       },
-      "width": 97,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
         "x": 1300,
@@ -639,8 +639,8 @@
       "data": {
         "label": "Master Skill 2"
       },
-      "width": 73,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
         "x": -100,
@@ -658,8 +658,8 @@
       "data": {
         "label": "Master Skill 3"
       },
-      "width": 73,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
         "x": 680,
@@ -677,8 +677,8 @@
       "data": {
         "label": "Master Skill 4"
       },
-      "width": 73,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
         "x": 1460,
@@ -696,8 +696,8 @@
       "data": {
         "label": "Process Manager 1"
       },
-      "width": 101,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
         "x": -600,
@@ -709,20 +709,20 @@
       "id": "processManager-1777530148160",
       "type": "processManager",
       "position": {
-        "x": 140,
+        "x": 160,
         "y": 200
       },
       "data": {
         "label": "Process Manager 2"
       },
-      "width": 103,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
-        "x": 140,
+        "x": 160,
         "y": 200
       },
-      "dragging": false
+      "dragging": true
     },
     {
       "id": "processManager-1777530148527",
@@ -734,8 +734,8 @@
       "data": {
         "label": "Process Manager 3"
       },
-      "width": 103,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
         "x": 900,
@@ -753,8 +753,8 @@
       "data": {
         "label": "Process Manager 4"
       },
-      "width": 103,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
         "x": 1680,
@@ -772,8 +772,8 @@
       "data": {
         "label": "Process Manager 6"
       },
-      "width": 103,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
         "x": 2520,
@@ -792,7 +792,7 @@
         "label": "Gmail"
       },
       "width": 60,
-      "height": 83,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": 280,
@@ -810,8 +810,8 @@
       "data": {
         "label": "Write Todos 1"
       },
-      "width": 73,
-      "height": 83,
+      "width": 114,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": -700,
@@ -829,8 +829,8 @@
       "data": {
         "label": "Write Todos 2"
       },
-      "width": 75,
-      "height": 83,
+      "width": 115,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": 40,
@@ -848,8 +848,8 @@
       "data": {
         "label": "Write Todos 3"
       },
-      "width": 75,
-      "height": 83,
+      "width": 115,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": 800,
@@ -867,8 +867,8 @@
       "data": {
         "label": "Write Todos 4"
       },
-      "width": 75,
-      "height": 83,
+      "width": 116,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": 1580,
@@ -886,8 +886,8 @@
       "data": {
         "label": "Write Todos 6"
       },
-      "width": 75,
-      "height": 83,
+      "width": 116,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": 2420,
@@ -906,7 +906,7 @@
         "label": "Sheets"
       },
       "width": 60,
-      "height": 83,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": 560,
@@ -925,7 +925,7 @@
         "label": "Drive"
       },
       "width": 60,
-      "height": 83,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": 460,
@@ -937,20 +937,20 @@
       "id": "googleCalendar-1777530478526",
       "type": "googleCalendar",
       "position": {
-        "x": 380,
+        "x": 360,
         "y": 200
       },
       "data": {
         "label": "Calendar"
       },
-      "width": 60,
-      "height": 83,
+      "width": 80,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
-        "x": 380,
+        "x": 360,
         "y": 200
       },
-      "dragging": false
+      "dragging": true
     },
     {
       "id": "simpleMemory-1777530694871",
@@ -962,8 +962,8 @@
       "data": {
         "label": "Simple Memory 6"
       },
-      "width": 97,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
         "x": 2080,
@@ -981,8 +981,8 @@
       "data": {
         "label": "Master Skill 6"
       },
-      "width": 73,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
         "x": 2300,
@@ -1000,8 +1000,8 @@
       "data": {
         "label": "Console 1"
       },
-      "width": 60,
-      "height": 83,
+      "width": 78,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": -400,
@@ -1013,20 +1013,20 @@
       "id": "console-1777530845082",
       "type": "console",
       "position": {
-        "x": 300,
+        "x": 320,
         "y": -40
       },
       "data": {
         "label": "Console 2"
       },
-      "width": 60,
-      "height": 83,
+      "width": 80,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
-        "x": 300,
+        "x": 320,
         "y": -40
       },
-      "dragging": false
+      "dragging": true
     },
     {
       "id": "console-1777530845438",
@@ -1038,8 +1038,8 @@
       "data": {
         "label": "Console 3"
       },
-      "width": 60,
-      "height": 83,
+      "width": 80,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": 1120,
@@ -1057,8 +1057,8 @@
       "data": {
         "label": "Console 4"
       },
-      "width": 60,
-      "height": 83,
+      "width": 80,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": 1820,
@@ -1076,8 +1076,8 @@
       "data": {
         "label": "Console 6"
       },
-      "width": 60,
-      "height": 83,
+      "width": 80,
+      "height": 82,
       "selected": false,
       "positionAbsolute": {
         "x": 2640,
@@ -1095,8 +1095,8 @@
       "data": {
         "label": "Task Completed"
       },
-      "width": 86,
-      "height": 83,
+      "width": 120,
+      "height": 95,
       "selected": false,
       "positionAbsolute": {
         "x": -180,
@@ -1905,8 +1905,8 @@
       "selected": false
     }
   ],
-  "createdAt": "2026-05-02T05:46:42.533Z",
-  "lastModified": "2026-05-02T06:06:18.000Z",
+  "createdAt": "2026-05-07T13:29:45.507Z",
+  "lastModified": "2026-05-11T13:31:15.638Z",
   "version": "0.0.72",
   "nodeParameters": {
     "perplexitySearch-1777529080041": {

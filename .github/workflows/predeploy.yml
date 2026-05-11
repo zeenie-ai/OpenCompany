@@ -31,6 +31,30 @@ jobs:
         # `typecheck:tsc` script remains available as a fallback if tsgo regresses.
         run: pnpm --filter react-flow-client run typecheck
 
+      - name: Frontend tests (vitest)
+        # 148 tests covering hooks, contexts, components. Uses jsdom +
+        # @testing-library/react. Must stay green for canvas state, auth
+        # bootstrap, and credentials flows to ship.
+        run: pnpm --filter react-flow-client run test
+
+      - name: Backend tests (server pytest)
+        # 922 tests covering plugin contracts, credential broadcasts, native
+        # LLM SDK wiring, parameter resolution, workflow ops, MCP tokens.
+        # `--extra dev` adds pytest, pytest-asyncio, pytest-mock, respx on
+        # top of the venv that `pnpm run build` already created via `uv sync`.
+        working-directory: server
+        run: |
+          uv sync --extra dev
+          uv run pytest tests/ -v
+
+      - name: Machina CLI tests (pytest)
+        # 105 tests covering build/start/stop pipelines, daemon, ports, docs,
+        # release config. Run from repo root — tests resolve workspace paths
+        # via `pnpm list --json` (see machina/tests/conftest.py).
+        run: |
+          uv pip install --system pytest pytest-asyncio
+          python -m pytest machina/tests/ -v
+
   # Test build and start from source (cross-platform)
   test-build-start:
     runs-on: ${{ matrix.os }}

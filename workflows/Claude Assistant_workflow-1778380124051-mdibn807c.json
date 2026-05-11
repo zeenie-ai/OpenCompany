@@ -1,0 +1,709 @@
+{
+  "id": "workflow-1778380124051-mdibn807c",
+  "name": "Claude Assistant",
+  "nodes": [
+    {
+      "id": "chatTrigger-1776209118671",
+      "type": "chatTrigger",
+      "position": {
+        "x": 920,
+        "y": 480
+      },
+      "data": {
+        "label": "Chat Trigger"
+      },
+      "width": 110,
+      "height": 82,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 920,
+        "y": 480
+      },
+      "dragging": true
+    },
+    {
+      "id": "console-1776209125037",
+      "type": "console",
+      "position": {
+        "x": 1760,
+        "y": 520
+      },
+      "data": {
+        "label": "Console"
+      },
+      "width": 69,
+      "height": 82,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1760,
+        "y": 520
+      },
+      "dragging": false
+    },
+    {
+      "id": "simpleMemory-1776209197835",
+      "type": "simpleMemory",
+      "position": {
+        "x": 1160,
+        "y": 720
+      },
+      "data": {
+        "label": "Simple Memory"
+      },
+      "width": 120,
+      "height": 95,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1160,
+        "y": 720
+      },
+      "dragging": false
+    },
+    {
+      "id": "writeTodos-1776209200927",
+      "type": "writeTodos",
+      "position": {
+        "x": 1480,
+        "y": 720
+      },
+      "data": {
+        "label": "Write Todos"
+      },
+      "width": 104,
+      "height": 82,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1480,
+        "y": 720
+      },
+      "dragging": true
+    },
+    {
+      "id": "telegramReceive-1777443980609",
+      "type": "telegramReceive",
+      "position": {
+        "x": 920,
+        "y": 340
+      },
+      "data": {
+        "label": "Telegram Receive"
+      },
+      "width": 120,
+      "height": 95,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 920,
+        "y": 340
+      },
+      "dragging": false
+    },
+    {
+      "id": "telegramSend-1777443981868",
+      "type": "telegramSend",
+      "position": {
+        "x": 1720,
+        "y": 380
+      },
+      "data": {
+        "label": "Telegram Send"
+      },
+      "width": 120,
+      "height": 95,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1720,
+        "y": 380
+      },
+      "dragging": false
+    },
+    {
+      "id": "masterSkill-1778380286486-616",
+      "type": "masterSkill",
+      "position": {
+        "x": 1280,
+        "y": 720
+      },
+      "data": {
+        "label": "Master Skill"
+      },
+      "width": 109,
+      "height": 82,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1280,
+        "y": 720
+      },
+      "dragging": true
+    },
+    {
+      "id": "claude_code_agent-1778411902299",
+      "type": "claude_code_agent",
+      "position": {
+        "x": 1300,
+        "y": 380
+      },
+      "data": {
+        "label": "Claude Code"
+      },
+      "width": 300,
+      "height": 200,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1300,
+        "y": 380
+      },
+      "dragging": false
+    },
+    {
+      "id": "duckduckgoSearch-1778506339533",
+      "type": "duckduckgoSearch",
+      "position": {
+        "x": 1680,
+        "y": 720
+      },
+      "data": {
+        "label": "DuckDuckGo Search"
+      },
+      "width": 120,
+      "height": 95,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1680,
+        "y": 720
+      },
+      "dragging": false
+    },
+    {
+      "id": "processManager-1778506349726",
+      "type": "processManager",
+      "position": {
+        "x": 1580,
+        "y": 720
+      },
+      "data": {
+        "label": "Process Manager"
+      },
+      "width": 120,
+      "height": 95,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1580,
+        "y": 720
+      },
+      "dragging": false
+    },
+    {
+      "id": "browser-1778506353729",
+      "type": "browser",
+      "position": {
+        "x": 1820,
+        "y": 720
+      },
+      "data": {
+        "label": "Browser"
+      },
+      "width": 74,
+      "height": 82,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1820,
+        "y": 720
+      },
+      "dragging": false
+    },
+    {
+      "id": "fileModify-1778506360537",
+      "type": "fileModify",
+      "position": {
+        "x": 1920,
+        "y": 720
+      },
+      "data": {
+        "label": "File Modify"
+      },
+      "width": 96,
+      "height": 82,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1920,
+        "y": 720
+      },
+      "dragging": false
+    },
+    {
+      "id": "fileRead-1778506361175",
+      "type": "fileRead",
+      "position": {
+        "x": 2040,
+        "y": 720
+      },
+      "data": {
+        "label": "File Read"
+      },
+      "width": 77,
+      "height": 82,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 2040,
+        "y": 720
+      },
+      "dragging": false
+    },
+    {
+      "id": "fsSearch-1778506361835",
+      "type": "fsSearch",
+      "position": {
+        "x": 2140,
+        "y": 720
+      },
+      "data": {
+        "label": "FS Search"
+      },
+      "width": 81,
+      "height": 82,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 2140,
+        "y": 720
+      },
+      "dragging": false
+    },
+    {
+      "id": "shell-1778506362485",
+      "type": "shell",
+      "position": {
+        "x": 2240,
+        "y": 720
+      },
+      "data": {
+        "label": "Shell"
+      },
+      "width": 60,
+      "height": 82,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 2240,
+        "y": 720
+      },
+      "dragging": true
+    }
+  ],
+  "edges": [
+    {
+      "type": "smoothstep",
+      "animated": true,
+      "style": {
+        "stroke": "#8be9fd",
+        "strokeWidth": 3
+      },
+      "source": "telegramReceive-1777443980609",
+      "sourceHandle": "output-main",
+      "target": "claude_code_agent-1778411902299",
+      "targetHandle": "input-main",
+      "id": "reactflow__edge-telegramReceive-1777443980609output-main-claude_code_agent-1778411902299input-main",
+      "selected": false
+    },
+    {
+      "type": "smoothstep",
+      "animated": true,
+      "style": {
+        "stroke": "#8be9fd",
+        "strokeWidth": 3
+      },
+      "source": "chatTrigger-1776209118671",
+      "sourceHandle": "output-main",
+      "target": "claude_code_agent-1778411902299",
+      "targetHandle": "input-main",
+      "id": "reactflow__edge-chatTrigger-1776209118671output-main-claude_code_agent-1778411902299input-main",
+      "selected": false
+    },
+    {
+      "type": "smoothstep",
+      "animated": true,
+      "style": {
+        "stroke": "#8be9fd",
+        "strokeWidth": 3
+      },
+      "source": "claude_code_agent-1778411902299",
+      "sourceHandle": "output-main",
+      "target": "telegramSend-1777443981868",
+      "targetHandle": "input-main",
+      "id": "reactflow__edge-claude_code_agent-1778411902299output-main-telegramSend-1777443981868input-main",
+      "selected": false
+    },
+    {
+      "type": "smoothstep",
+      "animated": true,
+      "style": {
+        "stroke": "#8be9fd",
+        "strokeWidth": 3
+      },
+      "source": "claude_code_agent-1778411902299",
+      "sourceHandle": "output-main",
+      "target": "console-1776209125037",
+      "targetHandle": "input-main",
+      "id": "reactflow__edge-claude_code_agent-1778411902299output-main-console-1776209125037input-main",
+      "selected": false
+    },
+    {
+      "type": "smoothstep",
+      "animated": true,
+      "style": {
+        "stroke": "#8be9fd",
+        "strokeWidth": 3
+      },
+      "source": "simpleMemory-1776209197835",
+      "sourceHandle": "output-tool",
+      "target": "claude_code_agent-1778411902299",
+      "targetHandle": "input-memory",
+      "id": "reactflow__edge-simpleMemory-1776209197835output-tool-claude_code_agent-1778411902299input-memory",
+      "selected": false
+    },
+    {
+      "type": "smoothstep",
+      "animated": true,
+      "style": {
+        "stroke": "#8be9fd",
+        "strokeWidth": 3
+      },
+      "source": "masterSkill-1778380286486-616",
+      "sourceHandle": "output-tool",
+      "target": "claude_code_agent-1778411902299",
+      "targetHandle": "input-skill",
+      "id": "reactflow__edge-masterSkill-1778380286486-616output-tool-claude_code_agent-1778411902299input-skill",
+      "selected": false
+    },
+    {
+      "type": "smoothstep",
+      "animated": true,
+      "style": {
+        "stroke": "#8be9fd",
+        "strokeWidth": 3
+      },
+      "source": "writeTodos-1776209200927",
+      "sourceHandle": "output-tool",
+      "target": "claude_code_agent-1778411902299",
+      "targetHandle": "input-tools",
+      "id": "reactflow__edge-writeTodos-1776209200927output-tool-claude_code_agent-1778411902299input-tools",
+      "selected": false
+    },
+    {
+      "type": "smoothstep",
+      "animated": true,
+      "style": {
+        "stroke": "#8be9fd",
+        "strokeWidth": 3
+      },
+      "source": "browser-1778506353729",
+      "sourceHandle": "output-tool",
+      "target": "claude_code_agent-1778411902299",
+      "targetHandle": "input-tools",
+      "id": "reactflow__edge-browser-1778506353729output-tool-claude_code_agent-1778411902299input-tools",
+      "selected": false
+    },
+    {
+      "type": "smoothstep",
+      "animated": true,
+      "style": {
+        "stroke": "#8be9fd",
+        "strokeWidth": 3
+      },
+      "source": "processManager-1778506349726",
+      "sourceHandle": "output-tool",
+      "target": "claude_code_agent-1778411902299",
+      "targetHandle": "input-tools",
+      "id": "reactflow__edge-processManager-1778506349726output-tool-claude_code_agent-1778411902299input-tools",
+      "selected": false
+    },
+    {
+      "type": "smoothstep",
+      "animated": true,
+      "style": {
+        "stroke": "#8be9fd",
+        "strokeWidth": 3
+      },
+      "source": "duckduckgoSearch-1778506339533",
+      "sourceHandle": "output-tool",
+      "target": "claude_code_agent-1778411902299",
+      "targetHandle": "input-tools",
+      "id": "reactflow__edge-duckduckgoSearch-1778506339533output-tool-claude_code_agent-1778411902299input-tools",
+      "selected": false
+    },
+    {
+      "type": "smoothstep",
+      "animated": true,
+      "style": {
+        "stroke": "#8be9fd",
+        "strokeWidth": 3
+      },
+      "source": "fileModify-1778506360537",
+      "sourceHandle": "output-tool",
+      "target": "claude_code_agent-1778411902299",
+      "targetHandle": "input-tools",
+      "id": "reactflow__edge-fileModify-1778506360537output-tool-claude_code_agent-1778411902299input-tools",
+      "selected": false
+    },
+    {
+      "type": "smoothstep",
+      "animated": true,
+      "style": {
+        "stroke": "#8be9fd",
+        "strokeWidth": 3
+      },
+      "source": "fileRead-1778506361175",
+      "sourceHandle": "output-tool",
+      "target": "claude_code_agent-1778411902299",
+      "targetHandle": "input-tools",
+      "id": "reactflow__edge-fileRead-1778506361175output-tool-claude_code_agent-1778411902299input-tools",
+      "selected": false
+    },
+    {
+      "type": "smoothstep",
+      "animated": true,
+      "style": {
+        "stroke": "#8be9fd",
+        "strokeWidth": 3
+      },
+      "source": "fsSearch-1778506361835",
+      "sourceHandle": "output-tool",
+      "target": "claude_code_agent-1778411902299",
+      "targetHandle": "input-tools",
+      "id": "reactflow__edge-fsSearch-1778506361835output-tool-claude_code_agent-1778411902299input-tools",
+      "selected": false
+    },
+    {
+      "type": "smoothstep",
+      "animated": true,
+      "style": {
+        "stroke": "#8be9fd",
+        "strokeWidth": 3
+      },
+      "source": "shell-1778506362485",
+      "sourceHandle": "output-tool",
+      "target": "claude_code_agent-1778411902299",
+      "targetHandle": "input-tools",
+      "id": "reactflow__edge-shell-1778506362485output-tool-claude_code_agent-1778411902299input-tools",
+      "selected": false
+    }
+  ],
+  "createdAt": "2026-05-09T20:58:45.194Z",
+  "lastModified": "2026-05-11T13:33:48.934Z",
+  "version": "0.0.72",
+  "nodeParameters": {
+    "console-1776209125037": {
+      "label": "Console",
+      "log_mode": "field",
+      "field_path": "{{aiagent.response}}",
+      "expression": "",
+      "format": "json",
+      "fieldPath": ""
+    },
+    "simpleMemory-1776209197835": {
+      "session_id": "",
+      "window_size": 100,
+      "memory_content": "# Conversation History\n\n*No messages yet.*\n",
+      "long_term_enabled": false,
+      "retrieval_count": 3,
+      "last_session_id": null,
+      "sessionId": "",
+      "windowSize": 100,
+      "longTermEnabled": false,
+      "retrievalCount": 3
+    },
+    "telegramReceive-1777443980609": {
+      "content_type_filter": "text",
+      "sender_filter": "self",
+      "chat_id": "",
+      "from_user": "",
+      "keywords": "",
+      "ignore_bots": true,
+      "label": "Telegram Receive"
+    },
+    "telegramSend-1777443981868": {
+      "recipient_type": "self",
+      "chat_id": "",
+      "message_type": "text",
+      "text": "{{aiagent.response}}",
+      "media_url": "",
+      "caption": "",
+      "latitude": null,
+      "longitude": null,
+      "phone_number": "",
+      "first_name": "",
+      "last_name": "",
+      "parse_mode": "Auto",
+      "silent": false,
+      "reply_to_message_id": 0,
+      "label": "Telegram Send"
+    },
+    "masterSkill-1778380286486-616": {
+      "skills_config": {
+        "perplexity-search-skill": {
+          "enabled": true,
+          "instructions": "",
+          "isCustomized": false
+        },
+        "write-todos-skill": {
+          "enabled": true,
+          "instructions": "",
+          "isCustomized": false
+        },
+        "duckduckgo-search-skill": {
+          "enabled": true,
+          "instructions": "",
+          "isCustomized": false
+        },
+        "browser-skill": {
+          "enabled": true,
+          "instructions": "",
+          "isCustomized": false
+        },
+        "fs-search-skill": {
+          "enabled": true,
+          "instructions": "",
+          "isCustomized": false
+        },
+        "shell-skill": {
+          "enabled": true,
+          "instructions": "",
+          "isCustomized": false
+        },
+        "file-read-skill": {
+          "enabled": true,
+          "instructions": "",
+          "isCustomized": false
+        },
+        "file-modify-skill": {
+          "enabled": true,
+          "instructions": "",
+          "isCustomized": false
+        },
+        "process-manager-skill": {
+          "enabled": true,
+          "instructions": "",
+          "isCustomized": false
+        },
+        "python-skill": {
+          "enabled": false,
+          "instructions": "",
+          "isCustomized": false
+        },
+        "twitter-user-skill": {
+          "enabled": true,
+          "instructions": "",
+          "isCustomized": false
+        },
+        "twitter-search-skill": {
+          "enabled": true,
+          "instructions": "",
+          "isCustomized": false
+        },
+        "whatsapp-db-skill": {
+          "enabled": true,
+          "instructions": "",
+          "isCustomized": false
+        },
+        "memory-skill": {
+          "enabled": true,
+          "instructions": "# Memory Management Skill\n\nThis skill enables you to manage conversation memory using the SimpleMemory node's markdown-based storage system.\n\n## Memory Architecture\n\n### Short-Term Memory (Markdown)\n- Visible and editable in the SimpleMemory node's UI\n- Stored as markdown with timestamped entries\n- Window-based: keeps last N message pairs (configurable)\n- Format: `### **Human** (timestamp)` and `### **Assistant** (timestamp)`\n\n### Long-Term Memory (Vector DB)\n- Automatically archives messages that exceed the window\n- Semantic search for relevant past conversations\n- Enabled via `longTermEnabled` in SimpleMemory node\n\n## Capabilities\n\n1. **View History**: See recent conversation in markdown format\n2. **Save Notes**: Add explicit notes/memories to the conversation\n3. **Search Memory**: Find relevant past conversations semantically\n4. **Clear Memory**: Reset conversation history\n\n## When to Use\n\n**Save information when:**\n- User says \"remember this\" or \"don't forget\"\n- Important context is shared for future use\n- User wants to note something specific\n\n**Recall information when:**\n- User asks \"do you remember...\"\n- Context from earlier is needed\n- User references previous discussions\n\n**View history when:**\n- User wants to see conversation log\n- Debugging or reviewing past exchanges\n\n## Tool Reference\n\n### memory-save\nAdd a note or memory entry to the conversation history.\n\nParameters:\n- `content` (required): Information to remember\n- `role` (optional): \"note\" (default) or \"context\"\n\nExample:\n```json\n{\n  \"content\": \"User's favorite color is blue\",\n  \"role\": \"note\"\n}\n```\n\n### memory-get\nGet recent conversation history or search for specific content.\n\nParameters:\n- `count` (optional): Number of recent messages (default: 10)\n- `search` (optional): Search term to find specific memories\n\nExample - Recent history:\n```json\n{\n  \"count\": 5\n}\n```\n\nExample - Search:\n```json\n{\n  \"search\": \"favorite color\"\n}\n```\n\n### memory-clear\nClear conversation history.\n\nParameters:\n- `confirm` (required): Must be true to clear\n\nExample:\n```json\n{\n  \"confirm\": true\n}\n```\n\n### memory-view\nView the current conversation history in markdown format.\n\nParameters: None\n\nReturns the full markdown content of the conversation history.\n\n### memory-search\nSemantic search in long-term memory (if enabled).\n\nParameters:\n- `query` (required): Search query\n- `count` (optional): Number of results (default: 3)\n\nExample:\n```json\n{\n  \"query\": \"what did we discuss about the project\",\n  \"count\": 5\n}\n```\n\n## Markdown Format\n\nThe conversation history uses this format:\n\n```markdown\n# Conversation History\n\n### **Human** (2025-01-30 10:15:32)\nHello, how are you?\n\n### **Assistant** (2025-01-30 10:15:35)\nI'm doing well! How can I help you today?\n\n### **Note** (2025-01-30 10:16:00)\nUser prefers formal language.\n```\n\n## Integration with SimpleMemory Node\n\nWhen connected to a Zeenie:\n1. Conversation is automatically logged to markdown\n2. Window size limits short-term memory\n3. Overflow archives to vector DB (if long-term enabled)\n4. You can view/edit the markdown in the node's parameter panel\n\n## Best Practices\n\n1. Use memory-save for explicit user requests to remember\n2. Use memory-search for semantic recall of past discussions\n3. Don't save sensitive information without user consent\n4. The markdown is editable - users can manually curate their history\n",
+          "isCustomized": false
+        },
+        "humanify-skill": {
+          "enabled": true,
+          "instructions": "# Humanify Output Skill\n\nFormat your responses for human readability. Output clean, pretty text that's easy to scan and understand - not raw markdown syntax or code-heavy formatting.\n\n## Core Principles\n\n1. **Plain Language First**: Write naturally, as if speaking to someone\n2. **Visual Clarity**: Use spacing, indentation, and structure for scannability\n3. **No Raw Syntax**: Avoid showing markdown symbols, JSON, or code unless specifically requested\n4. **Progressive Detail**: Lead with key information, details follow\n\n## Formatting Guidelines\n\n### Instead of Markdown Headers\n```\nBad:  ## Section Title\nGood: SECTION TITLE\n      -------------\n```\n\n### Instead of Bullet Lists with Symbols\n```\nBad:  - Item one\n      - Item two\n\nGood: Item one\n      Item two\n\n  or: * Item one\n      * Item two\n```\n\n### Instead of Code Blocks for Data\n```\nBad:  ```json\n      {\"name\": \"John\", \"age\": 30}\n      ```\n\nGood: Name: John\n      Age: 30\n```\n\n### Instead of Tables with Pipes\n```\nBad:  | Name | Value |\n      |------|-------|\n      | Foo  | 123   |\n\nGood: Name     Value\n      ----     -----\n      Foo      123\n```\n\n### Instead of Raw URLs\n```\nBad:  Check https://example.com/very/long/path/to/resource\n\nGood: Check the resource page (link available)\n  or: Resource: example.com\n```\n\n## Response Patterns\n\n### For Status Updates\n```\nStatus: Complete\nTime: 2.3 seconds\nResult: Successfully processed 15 items\n\nDetails:\n  Processed: 15\n  Skipped: 2\n  Errors: 0\n```\n\n### For Lists of Items\n```\nFound 3 matching files:\n\n  1. config.json\n     Location: /app/settings\n     Modified: Today\n\n  2. config.backup.json\n     Location: /app/backups\n     Modified: Yesterday\n\n  3. config.old.json\n     Location: /archive\n     Modified: Last week\n```\n\n### For Explanations\n```\nThe function calculates the total by:\n\n  First, it gathers all input values\n  Then, it filters out any invalid entries\n  Finally, it sums the remaining numbers\n\nNote: Empty inputs are treated as zero.\n```\n\n### For Errors or Warnings\n```\nCould not complete the request.\n\nReason: The file was not found at the specified location.\n\nSuggestions:\n  Check if the file path is correct\n  Verify the file exists\n  Ensure you have read permissions\n```\n\n### For Confirmations\n```\nDone! Created new user account.\n\n  Username: jsmith\n  Email: john@example.com\n  Role: Editor\n\nNext: The user will receive a welcome email shortly.\n```\n\n## When to Use Each Style\n\n### Use Pretty Formatting When:\n- Showing results or status\n- Explaining concepts\n- Listing options or items\n- Providing instructions\n- Displaying data summaries\n\n### Keep Technical Formatting When:\n- User explicitly requests code/markdown\n- Showing code that needs to be copied\n- Displaying configuration files\n- Technical documentation\n- API responses that need exact format\n\n## Typography Tips\n\n### Visual Separators\n```\nSection breaks:    ---------------\nLight dividers:    . . . . . . . .\nBox drawing:       +-------------+\n                   |  Content    |\n                   +-------------+\n```\n\n### Emphasis Without Markdown\n```\nInstead of **bold**:     Use CAPS or spacing\nInstead of *italic*:     Use quotes or context\nInstead of `code`:       Use clear naming\n```\n\n### Spacing for Clarity\n```\nGroup related items with spacing:\n\n  Primary Actions\n    Save changes\n    Submit form\n\n  Secondary Actions\n    Cancel\n    Reset\n```\n\n## Examples\n\n### Bad (Raw Markdown)\n```\n### Results\n- **Found**: 5 files\n- **Size**: 2.3MB\n- **Status**: `complete`\n\nSee [documentation](https://docs.example.com) for more info.\n```\n\n### Good (Humanified)\n```\nRESULTS\n-------\nFound: 5 files\nSize: 2.3 MB\nStatus: Complete\n\nSee the documentation for more details.\n```\n\n## Remember\n\nThe goal is communication, not formatting. Choose the clearest way to convey information to a human reader. When in doubt, write it as you would explain it to a colleague standing next to you.\n",
+          "isCustomized": false
+        },
+        "compaction-skill": {
+          "enabled": true,
+          "instructions": "# Memory Compaction Skill\n\nYou have the ability to compact conversation memory when it grows too large. Compaction transforms verbose conversation history into a structured summary that preserves essential context while reducing token usage.\n\n## When to Compact\n\nCompact memory when:\n- The system indicates token threshold is approaching\n- Conversation history becomes repetitive or verbose\n- You need to preserve important context but reduce size\n- Starting a new phase of work after completing a major task\n\n## Compaction Summary Structure\n\nWhen compacting, create a summary with these 5 sections:\n\n### 1. Task Overview\nWhat the user is trying to accomplish. Include:\n- Primary goal or objective\n- Key constraints or requirements\n- Scope of the work\n\n### 2. Current State\nWhat's been completed and what's in progress:\n- Completed tasks and their outcomes\n- Work currently in flight\n- Pending decisions or blockers\n\n### 3. Important Discoveries\nKey findings, decisions, or problems encountered:\n- Technical discoveries or insights\n- Decisions made and their rationale\n- Problems encountered and solutions applied\n- User preferences learned\n\n### 4. Next Steps\nWhat needs to happen next:\n- Immediate actions required\n- Planned approach for remaining work\n- Dependencies or prerequisites\n\n### 5. Context to Preserve\nCritical details that must be retained:\n- Specific values, IDs, or references\n- User preferences or constraints\n- Technical details needed for continuity\n- Any warnings or caveats\n\n## Compaction Format\n\nOutput the compacted summary in this format:\n\n```markdown\n# Conversation Summary (Compacted)\n*Generated: [ISO timestamp]*\n\n## Task Overview\n[1-3 sentences describing the goal]\n\n## Current State\n- [Completed item 1]\n- [Completed item 2]\n- [In progress: description]\n\n## Important Discoveries\n- [Discovery 1 with context]\n- [Decision made: rationale]\n- [Problem solved: approach]\n\n## Next Steps\n1. [Next action]\n2. [Following action]\n\n## Context to Preserve\n- [Critical detail 1]\n- [Critical detail 2]\n```\n\n## Best Practices\n\n1. **Be Concise**: Each section should be brief but complete\n2. **Preserve Specifics**: Keep exact values, names, and references\n3. **Capture Decisions**: Record WHY decisions were made, not just WHAT\n4. **Include Failures**: Document what didn't work to avoid repetition\n5. **Maintain Continuity**: Summary should allow seamless continuation\n\n## What NOT to Include\n\n- Verbose back-and-forth dialogue\n- Redundant information\n- Superseded decisions (only keep final decisions)\n- Exploratory tangents that didn't lead anywhere\n- Standard pleasantries or acknowledgments\n\n## Example Compaction\n\n**Before** (verbose history):\n```\nHuman: Can you help me debug this Python function?\nAI: Of course! Please share the function.\nHuman: Here's the function: def calculate(x): return x * 2\nAI: I see the function. What issue are you experiencing?\nHuman: It returns None sometimes\nAI: That's interesting. Can you show me an example input?\nHuman: calculate(\"5\") returns None\nAI: Ah, I see the issue! When you pass a string...\n[continues for 50+ messages]\n```\n\n**After** (compacted):\n```markdown\n# Conversation Summary (Compacted)\n*Generated: 2025-02-13T10:30:00Z*\n\n## Task Overview\nDebug Python function `calculate(x)` that returns None for some inputs.\n\n## Current State\n- Identified root cause: string inputs cause implicit None return\n- Implemented fix with type checking and conversion\n- Tests passing for int, float, and string inputs\n\n## Important Discoveries\n- Original function had no type validation\n- String multiplication in Python doesn't raise error but behaves unexpectedly\n- User prefers explicit error messages over silent failures\n\n## Next Steps\n1. Add input validation for edge cases (None, empty string)\n2. Write unit tests for the fixed function\n\n## Context to Preserve\n- Function location: `utils/math_helpers.py:45`\n- User wants to maintain backward compatibility\n- Prefer raising ValueError over returning None\n```\n\n## Integration with Memory System\n\nWhen compaction is triggered:\n1. The compacted summary replaces the current memory content\n2. New conversation messages are appended after the summary\n3. The summary header indicates when compaction occurred\n\nThis allows conversation to continue naturally while maintaining reduced token usage.\n",
+          "isCustomized": false
+        },
+        "assistant-personality": {
+          "enabled": true,
+          "instructions": "# Assistant Personality\n\nYou are a helpful, harmless, and honest AI assistant. Your goal is to assist users with their requests while being truthful and avoiding harmful content.\n\n## Core Principles\n\n1. **Helpfulness**: Provide clear, accurate, and useful information\n2. **Honesty**: Be truthful about your capabilities and limitations\n3. **Safety**: Avoid generating harmful, illegal, or unethical content\n\n## Task Planning\n\nWhen a request involves **3 or more steps**, use the `write_todos` tool to plan and track your work before acting:\n\n1. **Plan first** -- call `write_todos` with a list of actionable steps, mark the first `in_progress`\n2. **Work, then update** -- after each step, call `write_todos` again to mark it `completed` and the next `in_progress`\n3. **Revise as you go** -- add new tasks, remove irrelevant ones, reword as needed\n4. **Complete all** -- keep working until every task is `completed`\n\nFor simple requests (1-2 steps), skip the todo list and respond directly.\n\n## Communication Style\n\n- Be concise but thorough\n- Use clear, simple language\n- Break down complex topics into understandable parts\n- Ask clarifying questions when needed\n- Admit when you don't know something\n\n## Response Guidelines\n\nWhen responding to users:\n1. Understand the intent behind their question\n2. For complex tasks: plan with `write_todos` first, then execute step by step\n3. For simple questions: respond directly\n4. Include relevant context or caveats\n5. Suggest follow-up actions if appropriate\n",
+          "isCustomized": false
+        },
+        "agent-builder-skill": {
+          "enabled": false,
+          "instructions": "",
+          "isCustomized": false
+        }
+      }
+    },
+    "claude_code_agent-1778411902299": {
+      "tasks": null,
+      "prompt": "{{telegramreceive.text}}",
+      "model": "claude-sonnet-4-6",
+      "system_prompt": null,
+      "working_directory": null,
+      "max_parallel": 5,
+      "allowed_credentials": null,
+      "label": "Claude Code"
+    },
+    "duckduckgoSearch-1778506339533": {
+      "max_results": 5,
+      "label": "DuckDuckGo Search"
+    },
+    "processManager-1778506349726": {
+      "operation": "list",
+      "name": "",
+      "command": "",
+      "cwd": "",
+      "input_text": "",
+      "stream": "stdout",
+      "tail": 100,
+      "label": "Process Manager"
+    },
+    "browser-1778506353729": {
+      "operation": "navigate",
+      "url": "",
+      "selector": "",
+      "text": "",
+      "value": "",
+      "expression": "",
+      "direction": "down",
+      "amount": 500,
+      "commands": "[]",
+      "full_page": false,
+      "annotate": false,
+      "screenshot_format": "png",
+      "screenshot_quality": 85,
+      "session": "",
+      "browser": "chrome",
+      "executable_path": "",
+      "headed": true,
+      "new_window": true,
+      "auto_connect": false,
+      "chrome_profile": "",
+      "user_agent": "",
+      "proxy": "",
+      "action_delay": 0,
+      "timeout": 30,
+      "label": "Browser"
+    },
+    "fileModify-1778506360537": {
+      "operation": "write",
+      "content": "",
+      "old_string": "",
+      "new_string": "",
+      "replace_all": false,
+      "label": "File Modify"
+    },
+    "fileRead-1778506361175": {
+      "offset": 0,
+      "limit": 2000,
+      "label": "File Read"
+    },
+    "fsSearch-1778506361835": {
+      "mode": "ls",
+      "path": ".",
+      "pattern": "",
+      "label": "FS Search"
+    },
+    "shell-1778506362485": {
+      "cwd": "",
+      "timeout": 30,
+      "label": "Shell"
+    }
+  }
+}
