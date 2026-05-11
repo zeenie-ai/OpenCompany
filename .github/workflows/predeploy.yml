@@ -51,8 +51,10 @@ jobs:
         # 105 tests covering build/start/stop pipelines, daemon, ports, docs,
         # release config. Run from repo root — tests resolve workspace paths
         # via `pnpm list --json` (see machina/tests/conftest.py).
+        # `pyyaml` is needed by test_release_pipeline_config.py to parse the
+        # workflow files; not a machina runtime dep, only a test-time one.
         run: |
-          uv pip install --system pytest pytest-asyncio
+          uv pip install --system pytest pytest-asyncio pyyaml
           python -m pytest machina/tests/ -v
 
   # Test build and start from source (cross-platform)
