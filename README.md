@@ -15,7 +15,7 @@ https://github.com/user-attachments/assets/5ee81bb3-12cf-4755-8532-7470c6f1d841
 
 ## Full Capabilities ↓
 
-https://github.com/user-attachments/assets/9785aefb-9424-4a80-bd83-bb1205fc70af
+https://github.com/user-attachments/assets/5798fe61-8d26-4d3a-90aa-189bf4eec79f
 
 ## Quick Start
 
