@@ -10,14 +10,14 @@
     "dev": "tsx watch src/index.ts"
   },
   "dependencies": {
-    "express": "^5.0.0"
+    "express": "^5.2.1"
   },
   "devDependencies": {
-    "@types/express": "^5.0.0",
-    "@types/node": "^22.0.0",
-    "esbuild": "^0.24.0",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.19.18",
+    "esbuild": "^0.25.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">=22.0.0"
