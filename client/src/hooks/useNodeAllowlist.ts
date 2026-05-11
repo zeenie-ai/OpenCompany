@@ -17,6 +17,10 @@ interface NodeAllowlistResponse {
    *  e.g. 'android' / 'ai' / 'social'). Empty array on older
    *  deployments. */
   disabled_credential_categories: string[];
+  /** Mode-independent blocklist for the Master Skill folder
+   *  dropdown — every entry hides the matching subfolder under
+   *  server/skills/. Empty array on older deployments. */
+  disabled_skill_folders: string[];
 }
 
 /**
@@ -63,6 +67,7 @@ export const useNodeAllowlist = () => {
           disabled_groups: response?.disabled_groups ?? [],
           disabled_nodes: response?.disabled_nodes ?? [],
           disabled_credential_categories: response?.disabled_credential_categories ?? [],
+          disabled_skill_folders: response?.disabled_skill_folders ?? [],
         });
       })
       .catch((error) => {
@@ -73,6 +78,7 @@ export const useNodeAllowlist = () => {
           disabled_groups: [],
           disabled_nodes: [],
           disabled_credential_categories: [],
+          disabled_skill_folders: [],
         });
       });
   }, [isConnected, sendRequest]);
@@ -128,5 +134,23 @@ export const useNodeAllowlist = () => {
     [config]
   );
 
-  return { isVisible, isBlocked, isAllowed, isCredentialCategoryDisabled };
+  /** True if the skill folder is in the absolute blocklist — use to
+   *  filter the Master Skill folder dropdown (e.g. hide
+   *  'android_agent' when the android feature is disabled). False
+   *  while loading so the dropdown doesn't pre-hide. */
+  const isSkillFolderDisabled = useCallback(
+    (folderName: string): boolean => {
+      if (!config) return false;
+      return config.disabled_skill_folders.includes(folderName);
+    },
+    [config]
+  );
+
+  return {
+    isVisible,
+    isBlocked,
+    isAllowed,
+    isCredentialCategoryDisabled,
+    isSkillFolderDisabled,
+  };
 };

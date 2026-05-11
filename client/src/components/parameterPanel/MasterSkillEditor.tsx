@@ -50,6 +50,7 @@ import { useWebSocket } from '../../contexts/WebSocketContext';
 import { NodeIcon } from '../../assets/icons';
 import { cn } from '@/lib/utils';
 import { useFolderSkills } from '../../hooks/useFolderSkills';
+import { useNodeAllowlist } from '../../hooks/useNodeAllowlist';
 
 // Skill configuration stored in node parameters
 // Key is skillName (folder name like 'whatsapp-skill')
@@ -151,7 +152,18 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
     },
     staleTime: Infinity,
   });
-  const availableFolders = foldersQuery.data ?? [];
+
+  // Filter out skill folders disabled via the allowlist
+  // (server/config/node_allowlist.json -> disabled_skill_folders).
+  // Same mode-independent enforcement as the credential-category and
+  // node-group blocklists. Use to auto-hide skill folders tied to a
+  // disabled feature (e.g. `android_agent` when android nodes +
+  // credentials are blocked).
+  const { isSkillFolderDisabled } = useNodeAllowlist();
+  const availableFolders = useMemo(
+    () => (foldersQuery.data ?? []).filter((f) => !isSkillFolderDisabled(f.name)),
+    [foldersQuery.data, isSkillFolderDisabled],
+  );
   const foldersLoaded = !foldersQuery.isLoading;
 
   const folderSkillsQuery = useFolderSkills(skillFolder);

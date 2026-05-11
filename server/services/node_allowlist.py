@@ -55,6 +55,16 @@ class NodeAllowlistService:
                 semantically — the same conceptual entity (android
                 feature surface) but the credential catalogue uses its
                 own category taxonomy independent of node groups.
+            disabled_skill_folders: list[str]
+                Absolute blocklist for the Master Skill folder
+                dropdown — every entry hides the matching subfolder
+                under server/skills/. Use when disabling a feature
+                that also ships its own skill folder (e.g.
+                'android_agent' so users can't see the 12 android-
+                tied skills when android nodes are disabled).
+                Email has no dedicated skill folder (email-tied skills
+                live under productivity_agent mixed with Google
+                Workspace) so no email entry is needed.
         """
         defaults = {
             "show_all": True,
@@ -62,6 +72,7 @@ class NodeAllowlistService:
             "disabled_groups": [],
             "disabled_nodes": [],
             "disabled_credential_categories": [],
+            "disabled_skill_folders": [],
         }
 
         if not self._config_path.exists():
@@ -88,6 +99,7 @@ class NodeAllowlistService:
         disabled_groups = _str_list("disabled_groups")
         disabled_nodes = _str_list("disabled_nodes")
         disabled_credential_categories = _str_list("disabled_credential_categories")
+        disabled_skill_folders = _str_list("disabled_skill_folders")
 
         show_all = len(enabled_nodes) == 0
 
@@ -97,6 +109,7 @@ class NodeAllowlistService:
             "disabled_groups": disabled_groups,
             "disabled_nodes": disabled_nodes,
             "disabled_credential_categories": disabled_credential_categories,
+            "disabled_skill_folders": disabled_skill_folders,
         }
 
 
