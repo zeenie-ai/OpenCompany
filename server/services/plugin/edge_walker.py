@@ -18,14 +18,22 @@ Three helpers:
 - :func:`format_task_context` — renders ``taskTrigger`` payload as a
   prompt prepend block.
 
+Wave 11.I, X3: the Master-Skill expansion logic moved out of this
+module (it used to ``from services.skill_loader import get_skill_loader``
+inline). The :mod:`nodes.skill` package registers an expander callback
+via :func:`register_master_skill_expander` from its ``__init__.py``;
+edge_walker calls the registered callback instead of importing
+``skill_loader`` directly.
+
 These functions have **no service dependencies** beyond the
-``Database`` instance. They mutate nothing. Wave 11.D.6 inlines the
-old ``handlers/ai.py:_collect_*`` shims to call here directly.
+``Database`` instance and the registered expander callback. They
+mutate nothing. Wave 11.D.6 inlines the old ``handlers/ai.py:_collect_*``
+shims to call here directly.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from constants import AI_AGENT_TYPES, ANDROID_SERVICE_NODE_TYPES
 from core.logging import get_logger
@@ -34,6 +42,44 @@ if TYPE_CHECKING:
     from core.database import Database
 
 logger = get_logger(__name__)
+
+
+# ---- Master-Skill expander callback registry ----------------------------
+
+MasterSkillExpander = Callable[
+    [str, Dict[str, Any]],
+    Awaitable[List[Dict[str, Any]]],
+]
+"""Async callable that expands a Master Skill node's ``skills_config``
+into a list of per-skill entries (the same shape ``_append_skill_entries``
+produces for non-master skills). Signature:
+``(source_node_id, skills_config) -> list[entry]``."""
+
+_MASTER_SKILL_EXPANDER: Optional[MasterSkillExpander] = None
+
+
+def register_master_skill_expander(fn: MasterSkillExpander) -> None:
+    """Publish the Master-Skill expander callback.
+
+    Idempotent on equality. The :mod:`nodes.skill` plugin package
+    registers its expander from ``__init__.py`` on package import.
+    Edge-walking code calls :func:`get_master_skill_expander` and runs
+    whatever's registered; the framework has no skill_loader coupling.
+    """
+    global _MASTER_SKILL_EXPANDER
+    if _MASTER_SKILL_EXPANDER is not None and _MASTER_SKILL_EXPANDER != fn:
+        raise ValueError(
+            "register_master_skill_expander: callback already registered "
+            "by a different callable; refusing to overwrite"
+        )
+    _MASTER_SKILL_EXPANDER = fn
+
+
+def get_master_skill_expander() -> Optional[MasterSkillExpander]:
+    """Return the registered expander callback, or None when no skill
+    plugin has wired it (in which case Master-Skill nodes silently
+    expand to no entries -- the agent still runs without skills)."""
+    return _MASTER_SKILL_EXPANDER
 
 
 async def collect_agent_connections(
@@ -196,37 +242,23 @@ async def _append_skill_entries(
     skill_params = await database.get_node_parameters(source_node_id) or {}
 
     if skill_type == "masterSkill":
-        from services.skill_loader import get_skill_loader
+        expander = get_master_skill_expander()
+        if expander is None:
+            logger.warning(
+                f"{log_prefix} Master Skill node found but no expander "
+                "registered. Skipping expansion -- ensure nodes.skill "
+                "is on the import path."
+            )
+            return
 
         skills_config = skill_params.get("skills_config", {})
-        logger.debug(f"{log_prefix} Master Skill found with {len(skills_config)} configured skills")
-        skill_loader = get_skill_loader()
-
-        for skill_key, skill_cfg in skills_config.items():
-            if not skill_cfg.get("enabled", False):
-                continue
-            instructions = skill_cfg.get("instructions", "")
-            if instructions:
-                logger.debug(f"{log_prefix} Using DB instructions for {skill_key}")
-            else:
-                try:
-                    skill = skill_loader.load_skill(skill_key)
-                    if skill:
-                        instructions = skill.instructions
-                        logger.debug(
-                            f"{log_prefix} Fallback: loaded instructions from skill folder for {skill_key}"
-                        )
-                except Exception as e:
-                    logger.warning(f"{log_prefix} Failed to load skill {skill_key}: {e}")
-
-            skill_data.append({
-                "node_id": f"{source_node_id}_{skill_key}",
-                "node_type": "masterSkill",
-                "skill_name": skill_key,
-                "parameters": {"instructions": instructions, "skillName": skill_key},
-                "label": skill_key,
-            })
-            logger.debug(f"{log_prefix} Master Skill enabled: {skill_key}")
+        logger.debug(
+            f"{log_prefix} Master Skill found with {len(skills_config)} configured skills"
+        )
+        entries = await expander(source_node_id, skills_config)
+        skill_data.extend(entries)
+        for entry in entries:
+            logger.debug(f"{log_prefix} Master Skill enabled: {entry['skill_name']}")
     else:
         skill_data.append({
             "node_id": source_node_id,
