@@ -232,9 +232,11 @@ async def _dispatch_tool(tool_name: str, tool_args: Dict[str, Any],
     if node_type == '_builtin_check_delegated_tasks':
         return await _execute_check_delegated_tasks(tool_args, config)
 
-    # AI Agent delegation (fire-and-forget async delegation)
-    # Includes specialized agents: android_agent, coding_agent, web_agent, task_agent, social_agent, autonomous_agent
-    if node_type in ('aiAgent', 'chatAgent', 'android_agent', 'coding_agent', 'web_agent', 'task_agent', 'social_agent', 'travel_agent', 'tool_agent', 'productivity_agent', 'payments_agent', 'consumer_agent', 'autonomous_agent', 'orchestrator_agent', 'ai_employee', 'rlm_agent', 'claude_code_agent', 'deep_agent'):
+    # AI Agent delegation (fire-and-forget async delegation).
+    # ``AI_AGENT_TYPES`` (imported above from ``constants``) is the
+    # canonical 18-entry frozenset; a new agent type added there picks
+    # up delegation support without touching this dispatcher.
+    if node_type in AI_AGENT_TYPES:
         return await _execute_delegated_agent(tool_args, config)
 
     # Generic fallback for unknown node types
