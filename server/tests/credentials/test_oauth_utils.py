@@ -52,38 +52,42 @@ class TestGetBaseUrl:
 
 
 class TestGetRedirectUri:
-    @patch("services.oauth_utils.get_callback_paths")
-    def test_google_dev_localhost(self, mock_paths):
-        mock_paths.return_value = {
-            "google": "/api/google/callback",
-            "twitter": "/api/twitter/callback",
-        }
+    """Wave 11.I, X2: callback paths come from the plugin-registered
+    `register_oauth_callback_path` registry in
+    `services.ws_handler_registry`, not from a JSON config helper in
+    `nodes/google/_oauth.py`. Tests patch the registry lookup."""
+
+    @patch("services.oauth_utils.get_oauth_callback_path")
+    def test_google_dev_localhost(self, mock_lookup):
+        mock_lookup.return_value = "/api/google/callback"
         uri = get_redirect_uri(_conn("ws://localhost:3010/ws/status"), "google")
         assert uri == "http://localhost:3010/api/google/callback"
+        mock_lookup.assert_called_once_with("google")
 
-    @patch("services.oauth_utils.get_callback_paths")
-    def test_twitter_prod_https(self, mock_paths):
-        mock_paths.return_value = {
-            "google": "/api/google/callback",
-            "twitter": "/api/twitter/callback",
-        }
+    @patch("services.oauth_utils.get_oauth_callback_path")
+    def test_twitter_prod_https(self, mock_lookup):
+        mock_lookup.return_value = "/api/twitter/callback"
         uri = get_redirect_uri(_conn("wss://flow.zeenie.xyz/ws/status"), "twitter")
         assert uri == "https://flow.zeenie.xyz/api/twitter/callback"
+        mock_lookup.assert_called_once_with("twitter")
 
-    @patch("services.oauth_utils.get_callback_paths")
-    def test_unknown_provider_falls_back_to_default_path(self, mock_paths):
-        mock_paths.return_value = {}  # no entries at all
+    def test_unknown_provider_falls_back_to_default_path(self):
+        """`get_oauth_callback_path` (the real one, not mocked) falls
+        back to ``/api/<provider>/callback`` for any unregistered
+        provider. Test the integrated path end-to-end."""
         uri = get_redirect_uri(
             _conn("http://localhost:3010/anything"), "newprovider"
         )
         assert uri == "http://localhost:3010/api/newprovider/callback"
 
-    def test_paths_loaded_from_config_not_hardcoded(self):
-        """Smoke test: the real config must expose google + twitter paths."""
-        from nodes.google._oauth import get_callback_paths
+    def test_paths_registered_by_plugins(self):
+        """Smoke test: the real plugin packages must register the
+        canonical google + twitter callback paths from their
+        ``__init__.py`` (verified by ensuring import side-effect)."""
+        import nodes.google  # noqa: F401 -- side effect registers callback path
+        import nodes.twitter  # noqa: F401
 
-        paths = get_callback_paths()
-        assert "google" in paths
-        assert "twitter" in paths
-        assert paths["google"].startswith("/api/")
-        assert paths["twitter"].startswith("/api/")
+        from services.ws_handler_registry import get_oauth_callback_path
+
+        assert get_oauth_callback_path("google") == "/api/google/callback"
+        assert get_oauth_callback_path("twitter") == "/api/twitter/callback"

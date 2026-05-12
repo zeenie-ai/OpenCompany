@@ -27,6 +27,7 @@ this module by name.
 from services.event_waiter import register_filter_builder
 from services.status_broadcaster import register_service_refresh
 from services.ws_handler_registry import (
+    register_oauth_callback_path,
     register_option_loader,
     register_router,
     register_ws_handlers,
@@ -45,6 +46,7 @@ from ._refresh import refresh_google_status
 
 register_ws_handlers(WS_HANDLERS)
 register_router(_router.router, name="google")
+register_oauth_callback_path("google", "/api/google/callback")
 register_service_refresh(refresh_google_status)
 register_filter_builder("googleGmailReceive", build_gmail_filter)
 

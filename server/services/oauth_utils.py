@@ -1,8 +1,11 @@
 """Derive OAuth redirect URIs from request context -- no hardcoded ports.
 
 WebSocket handlers call get_redirect_uri(websocket, "google") to build the full
-callback URL at runtime.  The callback *path* comes from google_apis.json; the
-base URL (scheme + host + port) comes from the connection itself.
+callback URL at runtime.  The callback *path* comes from
+:func:`services.ws_handler_registry.get_oauth_callback_path` (plugin-registered
+via ``register_oauth_callback_path("<provider>", "/api/<provider>/callback")``
+from each plugin's ``__init__.py``); the base URL (scheme + host + port) comes
+from the connection itself.
 
     ws://localhost:3010/ws/status    -> http://localhost:3010/api/google/callback
     wss://flow.zeenie.xyz/ws/status  -> https://flow.zeenie.xyz/api/google/callback
@@ -11,7 +14,7 @@ base URL (scheme + host + port) comes from the connection itself.
 
 from urllib.parse import urlparse
 
-from nodes.google._oauth import get_callback_paths
+from services.ws_handler_registry import get_oauth_callback_path
 
 
 def get_base_url(connection) -> str:
@@ -31,15 +34,16 @@ def get_base_url(connection) -> str:
 
 
 def get_redirect_uri(connection, provider: str) -> str:
-    """Build full OAuth redirect URI from request context + JSON config path.
+    """Build full OAuth redirect URI from request context + plugin-registered path.
 
     Args:
         connection: Starlette ``WebSocket`` or ``Request`` (anything with ``base_url``).
-        provider: ``"google"`` or ``"twitter"``.
+        provider: Lowercase plugin id (``"google"``, ``"twitter"``, ...).
 
     Returns:
         Full redirect URI, e.g. ``http://localhost:3010/api/google/callback``.
+        Falls back to ``/api/<provider>/callback`` if the plugin hasn't
+        registered an explicit path (the default for the existing 8+ plugins).
     """
-    paths = get_callback_paths()
-    path = paths.get(provider, f"/api/{provider}/callback")
+    path = get_oauth_callback_path(provider)
     return get_base_url(connection) + path

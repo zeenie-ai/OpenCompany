@@ -78,9 +78,25 @@ class IdempotentRegistry(Generic[K, V]):
         self._on_register = on_register
 
     def register(self, key: K, value: V) -> None:
-        """Add ``key -> value``. Idempotent on identity; raises on conflict."""
+        """Add ``key -> value``. Idempotent on equality; raises on conflict.
+
+        Equality (``!=``) instead of identity (``is not``) so the
+        registry stays idempotent across:
+
+        * String / int / dataclass value types where Python does not
+          guarantee interning (e.g. two ``"/api/google/callback"``
+          literals from separate module loads).
+        * ``importlib.reload(module)`` — reload constructs fresh
+          function / class objects whose identity differs from the
+          originals, but they're functionally equivalent and should
+          re-register cleanly. The self-containment test suite relies
+          on this.
+
+        Genuinely conflicting registrations (different values for the
+        same key) still raise ``ValueError`` at import time.
+        """
         existing = self._items.get(key)
-        if existing is not None and existing is not value:
+        if existing is not None and existing != value:
             raise ValueError(
                 f"{self._name}: {key!r} is already registered by "
                 f"{_qual(existing)}; refusing to overwrite with {_qual(value)}"

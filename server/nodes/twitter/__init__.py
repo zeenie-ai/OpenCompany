@@ -20,7 +20,11 @@ module by name.
 
 from services.event_waiter import register_filter_builder
 from services.status_broadcaster import register_service_refresh
-from services.ws_handler_registry import register_router, register_ws_handlers
+from services.ws_handler_registry import (
+    register_oauth_callback_path,
+    register_router,
+    register_ws_handlers,
+)
 
 from . import _router
 from ._filters import build_filter as build_twitter_filter
@@ -34,5 +38,6 @@ from ._refresh import refresh_twitter_status
 # (milestone K).
 register_ws_handlers(WS_HANDLERS)
 register_router(_router.router, name="twitter")
+register_oauth_callback_path("twitter", "/api/twitter/callback")
 register_service_refresh(refresh_twitter_status)
 register_filter_builder("twitterReceive", build_twitter_filter)

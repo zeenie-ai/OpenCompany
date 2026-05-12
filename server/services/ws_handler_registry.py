@@ -1,6 +1,6 @@
 """Plugin self-registration registries.
 
-Three sibling concerns share this file because they're the same pattern
+Four sibling concerns share this file because they're the same pattern
 (idempotent dict + collision check) for the same audience (plugin
 ``__init__.py`` modules wiring themselves into the framework):
 
@@ -20,9 +20,13 @@ Three sibling concerns share this file because they're the same pattern
    :func:`dispatch_load_options` (here in this module) and the matching
    WS handler in ``routers/websocket.py``.
 
+4. **OAuth callback paths** — ``register_oauth_callback_path(provider,
+   path)`` so :func:`services.oauth_utils.get_redirect_uri` can derive
+   the full redirect URI at runtime without a cross-folder import.
+
 No hardcoded plugin names anywhere in the central router or main.py.
-Adding a new plugin's WS / HTTP / option-loader surface is one
-registration call inside that plugin's package.
+Adding a new plugin's WS / HTTP / option-loader / oauth-callback
+surface is one registration call inside that plugin's package.
 """
 
 from __future__ import annotations
@@ -43,6 +47,9 @@ _WS_REGISTRY: IdempotentRegistry[str, WSHandler] = IdempotentRegistry("ws_handle
 _ROUTER_REGISTRY: IdempotentRegistry[str, APIRouter] = IdempotentRegistry("router")
 _OPTION_LOADER_REGISTRY: IdempotentRegistry[str, LoadOptionsFn] = IdempotentRegistry(
     "option_loader"
+)
+_OAUTH_CALLBACK_PATHS: IdempotentRegistry[str, str] = IdempotentRegistry(
+    "oauth_callback_path"
 )
 
 
@@ -142,3 +149,32 @@ def list_load_options_methods() -> List[str]:
     prefetches this once on boot so it knows which ``loadOptionsMethod``
     values are wired."""
     return list_registered_option_methods()
+
+
+# ---- OAuth callback paths -----------------------------------------------
+
+def register_oauth_callback_path(provider: str, path: str) -> None:
+    """Publish a plugin's OAuth callback path (``/api/<provider>/callback``).
+
+    Same idempotency contract as the other registries: the same path
+    for the same provider is a no-op; a different path for an existing
+    provider raises ``ValueError``. ``services.oauth_utils.get_redirect_uri``
+    looks up via this registry so the OAuth callback URL is plugin-
+    registered, not cross-imported from ``nodes/<plugin>/_oauth.py``.
+    """
+    _OAUTH_CALLBACK_PATHS.register(provider, path)
+
+
+def get_oauth_callback_path(provider: str) -> str:
+    """Look up the registered callback path or fall back to a default
+    (`/api/<provider>/callback`). The fallback matches the convention
+    every existing plugin uses."""
+    registered = _OAUTH_CALLBACK_PATHS.get(provider)
+    if registered is not None:
+        return registered
+    return f"/api/{provider}/callback"
+
+
+def list_registered_oauth_providers() -> List[str]:
+    """For diagnostics / startup logging."""
+    return sorted(_OAUTH_CALLBACK_PATHS.keys())
