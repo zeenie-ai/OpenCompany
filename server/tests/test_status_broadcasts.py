@@ -324,6 +324,74 @@ class TestStatusBroadcastsUseTypedBuilder:
 
 
 # ============================================================================
+# 3b) Plugin status broadcasts ALSO emit typed CloudEvents siblings
+# ============================================================================
+
+
+class TestStatusBroadcastsAlsoEmitTypedEnvelope:
+    """Wave 11.I, X4: every legacy ``update_<plugin>_status`` method
+    listed in :data:`_LEGACY_RAW_DICT_BROADCASTS` MUST also call
+    :meth:`StatusBroadcaster._emit_connection_typed` (or otherwise
+    construct ``WorkflowEvent.connection_status(...)``) so a typed
+    sibling broadcast goes out alongside the legacy raw frame.
+
+    Phase 4 Y3 retires the raw frame after frontend migrates to read
+    the typed channel. Until then, both frames coexist: existing FE
+    consumers stay compatible; typed listeners can opt in.
+    """
+
+    @pytest.fixture
+    def broadcaster_methods(self) -> dict[str, str]:
+        from services import status_broadcaster as sb
+
+        cls_src = inspect.getsource(sb.StatusBroadcaster)
+        return _split_methods(cls_src)
+
+    @pytest.mark.parametrize("method_name", sorted(_LEGACY_RAW_DICT_BROADCASTS))
+    def test_legacy_status_method_emits_typed_sibling(
+        self, broadcaster_methods, method_name: str,
+    ):
+        body = broadcaster_methods.get(method_name)
+        assert body is not None, (
+            f"StatusBroadcaster.{method_name} missing -- update "
+            f"_LEGACY_RAW_DICT_BROADCASTS or restore the method."
+        )
+        assert "_emit_connection_typed" in body or "WorkflowEvent.connection_status" in body, (
+            f"StatusBroadcaster.{method_name} emits only the legacy raw "
+            f"{{type: 'X_status', data: {{...}}}} frame. It must ALSO emit a "
+            f"CloudEvents-typed sibling via "
+            f"``await self._emit_connection_typed(plugin=..., connected=..., "
+            f"subject=..., data=...)`` so future typed-channel listeners "
+            f"can subscribe. Wave 11.I, X4 contract."
+        )
+
+    def test_emit_connection_typed_helper_exists(self):
+        """The shared helper must exist on the broadcaster -- locks
+        the canonical extension point so per-method migrations don't
+        re-invent the typed-envelope construction."""
+        from services.status_broadcaster import StatusBroadcaster
+
+        assert hasattr(StatusBroadcaster, "_emit_connection_typed"), (
+            "StatusBroadcaster._emit_connection_typed is the canonical "
+            "helper for typed plugin-connection broadcasts. It must "
+            "exist; per-method update_<plugin>_status implementations "
+            "call it after the legacy raw broadcast."
+        )
+
+    def test_emit_connection_typed_uses_workflow_event_factory(self):
+        """The helper itself must construct via the typed factory, not
+        a hand-rolled WorkflowEvent literal."""
+        from services.status_broadcaster import StatusBroadcaster
+
+        src = inspect.getsource(StatusBroadcaster._emit_connection_typed)
+        assert "WorkflowEvent.connection_status" in src, (
+            "_emit_connection_typed must call WorkflowEvent.connection_status(...) "
+            "(the typed factory) rather than hand-rolling the envelope. "
+            "Wave 11.I CloudEvents contract."
+        )
+
+
+# ============================================================================
 # 4) send_custom_event callsite ratchet
 # ============================================================================
 

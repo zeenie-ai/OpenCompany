@@ -355,6 +355,40 @@ class StatusBroadcaster:
     # Android Status Updates
     # =========================================================================
 
+    async def _emit_connection_typed(
+        self,
+        plugin: str,
+        connected: bool,
+        subject: Optional[str],
+        data: Dict[str, Any],
+    ) -> None:
+        """Emit a CloudEvents-typed sibling broadcast alongside the
+        legacy ``{plugin}_status`` raw frame (Wave 11.I, X4).
+
+        Wire key ``plugin_connection_status`` mirrors the
+        ``credential_catalogue_updated`` pattern: single wire channel
+        for typed-envelope listeners; the envelope's ``type`` field
+        carries the specific action (``{plugin}.connection.opened`` /
+        ``.closed``) and ``subject`` carries the device/account id.
+
+        Frontend listeners that grew up on the raw ``{plugin}_status``
+        frame keep working unchanged; future listeners can subscribe
+        to ``plugin_connection_status`` for the typed channel and
+        retire the raw frame in a coordinated FE migration (Phase 4 Y3).
+        """
+        from services.events import WorkflowEvent
+
+        event = WorkflowEvent.connection_status(
+            plugin=plugin,
+            connected=connected,
+            subject=subject,
+            data=data,
+        )
+        await self.broadcast({
+            "type": "plugin_connection_status",
+            "data": event.model_dump(mode="json"),
+        })
+
     async def update_android_status(
         self,
         connected: bool,
@@ -366,7 +400,12 @@ class StatusBroadcaster:
         qr_data: Optional[str] = None,
         session_token: Optional[str] = None
     ):
-        """Update Android relay connection status and broadcast."""
+        """Update Android relay connection status and broadcast.
+
+        Emits both the legacy ``android_status`` raw frame (FE
+        back-compat) and a CloudEvents-typed sibling via
+        :meth:`_emit_connection_typed` (Wave 11.I, X4).
+        """
         self._status["android"] = {
             "connected": connected,
             "paired": paired,
@@ -382,6 +421,12 @@ class StatusBroadcaster:
             "type": "android_status",
             "data": self._status["android"]
         })
+        await self._emit_connection_typed(
+            plugin="android",
+            connected=connected,
+            subject=device_id,
+            data=self._status["android"],
+        )
 
     # =========================================================================
     # Status updates -- per-service refresh bodies live in their plugin
@@ -401,7 +446,11 @@ class StatusBroadcaster:
         device_id: Optional[str] = None,
         qr: Optional[str] = None
     ):
-        """Update WhatsApp connection status and broadcast."""
+        """Update WhatsApp connection status and broadcast.
+
+        Emits both the legacy ``whatsapp_status`` raw frame and a
+        CloudEvents-typed sibling (Wave 11.I, X4).
+        """
         import time
         self._status["whatsapp"] = {
             "connected": connected,
@@ -417,6 +466,12 @@ class StatusBroadcaster:
             "type": "whatsapp_status",
             "data": self._status["whatsapp"]
         })
+        await self._emit_connection_typed(
+            plugin="whatsapp",
+            connected=connected,
+            subject=device_id,
+            data=self._status["whatsapp"],
+        )
 
     # =========================================================================
     # Telegram Status Updates
@@ -430,7 +485,11 @@ class StatusBroadcaster:
         bot_name: Optional[str] = None,
         owner_chat_id: Optional[int] = None
     ):
-        """Update Telegram bot connection status and broadcast."""
+        """Update Telegram bot connection status and broadcast.
+
+        Emits both the legacy ``telegram_status`` raw frame and a
+        CloudEvents-typed sibling (Wave 11.I, X4).
+        """
         import time
         self._status["telegram"] = {
             "connected": connected,
@@ -445,6 +504,12 @@ class StatusBroadcaster:
             "type": "telegram_status",
             "data": self._status["telegram"]
         })
+        await self._emit_connection_typed(
+            plugin="telegram",
+            connected=connected,
+            subject=bot_username,
+            data=self._status["telegram"],
+        )
 
     # =========================================================================
     # Node Status Updates
