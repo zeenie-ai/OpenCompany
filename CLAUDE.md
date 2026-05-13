@@ -3879,7 +3879,7 @@ class MyTool(ToolNode):              # or SpecializedAgentBase for an agent
     async def run(self, ctx, params): ...
 ```
 
-`BaseNode.__init_subclass__` registers the class into `NODE_METADATA`, `NODE_INPUT_MODELS`, `NODE_OUTPUT_SCHEMAS`, `_HANDLER_REGISTRY`, and `_NODE_CLASS_REGISTRY` on import. NodeSpec emits at `GET /api/schemas/nodes/<type>/spec.json`. The frontend auto-discovers via `useNodeSpec` + `componentKind` dispatch (see "Spec-driven component design" above). Icon + colour go in [`server/nodes/visuals.json`](./server/nodes/visuals.json).
+`BaseNode.__init_subclass__` registers the class into `NODE_METADATA`, `_DIRECT_MODELS`, `NODE_OUTPUT_SCHEMAS`, `_HANDLER_REGISTRY`, and `_NODE_CLASS_REGISTRY` on import. NodeSpec emits at `GET /api/schemas/nodes/<type>/spec.json`. The frontend auto-discovers via `useNodeSpec` + `componentKind` dispatch (see "Spec-driven component design" above). Icon + colour go in [`server/nodes/visuals.json`](./server/nodes/visuals.json).
 
 **Cross-cutting edits that are still required (small):**
 - New specialized agent: add the agent's `type` string to the delegation-check tuple in [`server/services/handlers/tools.py:execute_tool()`](./server/services/handlers/tools.py) (~line 224) so the parent agent's `delegate_to_*` tool finds it. Also update `AI_AGENT_TYPES` frozenset in [`server/constants.py`](./server/constants.py) — used for legacy delegation checks. Both are flagged as tech debt; see "remaining tribal arrays" note.

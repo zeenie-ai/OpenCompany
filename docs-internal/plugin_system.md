@@ -77,7 +77,7 @@ class ExampleSearchNode(ActionNode):
 **That's it.** On server restart:
 
 - `BaseNode.__init_subclass__` eagerly registers the class into four
-  registries: `NODE_METADATA`, `NODE_INPUT_MODELS`,
+  registries: `NODE_METADATA`, `_DIRECT_MODELS`,
   `NODE_OUTPUT_SCHEMAS`, `_HANDLER_REGISTRY`.
 - `_NODE_CLASS_REGISTRY` indexes the class itself so Temporal workers
   and tool dispatch can look it up by type.
@@ -465,7 +465,7 @@ themselves** into those registries from their package `__init__.py`.
 
 ```
 server/nodes/telegram/
-├── __init__.py          # imports + 6 register_* calls (no logic)
+├── __init__.py          # imports + 5 register_* calls covering 5 registries (no logic)
 ├── _credentials.py      # TelegramCredential (ApiKeyCredential)
 ├── _service.py          # TelegramService singleton (bot lifecycle)
 ├── _handlers.py         # WebSocket handlers + WS_HANDLERS dict
@@ -479,7 +479,7 @@ Underscore-prefixed files are package-private; the `nodes` walker
 skips them. The two non-underscore files are the plugin classes (one
 per node type) — same pattern as every other folder.
 
-### Five cross-cutting registries
+### Up to six cross-cutting registries — use only what your plugin needs
 
 | Concern | Registry module | Register from plugin via |
 |---|---|---|
@@ -488,9 +488,15 @@ per node type) — same pattern as every other folder.
 | Trigger pre-execution check (e.g. "bot not connected") | `services.event_waiter` | `register_trigger_precheck(node_type, fn)` |
 | Service-status refresh on WebSocket connect | `services.status_broadcaster` | `register_service_refresh(callback)` |
 | Per-node output schema (when not auto-derivable) | `services.node_output_schemas` | `register_output_schema(node_type, ModelClass)` |
+| FastAPI HTTP router (OAuth callbacks, webhook receivers, etc.) | `services.ws_handler_registry` | `register_router(router, name='<plugin>')` — Wave 11.I; declare a `_router.py` exposing an `APIRouter` and call from `__init__.py`. Discovered at startup via `services.ws_handler_registry.get_routers()`. |
 
-All five accept idempotent re-imports (same callable / class for the
+All accept idempotent re-imports (same callable / class for the
 same key is a no-op; conflicts raise `ValueError`).
+
+**Plugins use only the registries they need.** Telegram uses 5 (no
+router); Stripe uses 4 (webhook-driven, no filter/precheck); Android
+uses 4 (with router); WhatsApp uses 5. There is no "register every
+hook" rule.
 
 ### Telegram `__init__.py` (canonical wiring)
 

@@ -224,7 +224,7 @@ similar plugin.
 
 ```
 server/nodes/telegram/
-├── __init__.py          # imports + 6 register_* calls (zero logic)
+├── __init__.py          # imports + 5 register_* calls covering 5 registries (zero logic)
 ├── _credentials.py      # TelegramCredential subclass
 ├── _service.py          # singleton bot lifecycle (connect / send / poll)
 ├── _handlers.py         # WS_HANDLERS dict (telegram_connect, …)

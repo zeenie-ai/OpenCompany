@@ -36,7 +36,7 @@ Wave 3 proved the pattern for output schemas. Wave 6 generalises it to the **ful
 
 1. Define `XyzParams(BaseNodeParams)` in [server/models/nodes.py](../server/models/nodes.py) with `type: Literal["xyz"]` discriminator and Field constraints.
 2. Register in `KnownNodeParams` discriminated union.
-3. Register in `NODE_INPUT_MODELS` dict in `node_input_schemas.py`.
+3. Register in `_DIRECT_MODELS` dict in `node_input_schemas.py`.
 4. Add `NODE_METADATA["xyz"] = {displayName, icon, group, description, version}` in `node_metadata.py`.
 
 Zero frontend change for parameter rendering. Icons that are SVG assets still need frontend import until SVG payload migration is its own follow-up.
