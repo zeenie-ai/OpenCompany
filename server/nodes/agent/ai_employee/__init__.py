@@ -1,5 +1,5 @@
-from ._handles import team_lead_agent_handles
-from ._specialized import SpecializedAgentBase
+from .._handles import team_lead_agent_handles
+from .._specialized import SpecializedAgentBase
 
 
 class AIEmployeeNode(SpecializedAgentBase):

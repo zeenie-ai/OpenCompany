@@ -1,4 +1,4 @@
-from ._specialized import SpecializedAgentBase
+from .._specialized import SpecializedAgentBase
 
 
 class TravelAgentNode(SpecializedAgentBase):

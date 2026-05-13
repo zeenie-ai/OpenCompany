@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
 
-from ._handles import STD_AGENT_HINTS, std_agent_handles
+from .._handles import STD_AGENT_HINTS, std_agent_handles
 
 
 class AIAgentParams(BaseModel):
@@ -122,7 +122,7 @@ class AIAgentNode(ActionNode):
         """
         from services.plugin.deps import get_ai_service, get_database
 
-        from ._inline import prepare_agent_call
+        from .._inline import prepare_agent_call
 
         ai_service = get_ai_service()
         database = get_database()

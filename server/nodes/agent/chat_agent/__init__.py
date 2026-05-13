@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
 
-from ._handles import STD_AGENT_HINTS, std_agent_handles
+from .._handles import STD_AGENT_HINTS, std_agent_handles
 
 
 class ChatAgentParams(BaseModel):
@@ -105,7 +105,7 @@ class ChatAgentNode(ActionNode):
         """Inlined from handlers/ai.handle_chat_agent (Wave 11.D.6)."""
         from services.plugin.deps import get_ai_service, get_database
 
-        from ._inline import prepare_agent_call
+        from .._inline import prepare_agent_call
 
         ai_service = get_ai_service()
         database = get_database()

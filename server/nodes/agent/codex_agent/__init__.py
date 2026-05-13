@@ -20,7 +20,7 @@ from core.logging import get_logger
 from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
 from services.plugin.edge_walker import collect_agent_connections
 
-from ._handles import STD_AGENT_HINTS, std_agent_handles
+from .._handles import STD_AGENT_HINTS, std_agent_handles
 
 logger = get_logger(__name__)
 
