@@ -183,6 +183,62 @@ class Credential:
         """
         raise NotImplementedError
 
+    # ---- F7: credential icon resolution -----------------------------
+    #
+    # Mirrors :func:`nodes._visuals.get_plugin_icon_path` for credentials.
+    # The frontend credential modal currently reads ``cls.icon`` strings
+    # of the form ``"asset:<key>"`` and looks up bundled SVGs in
+    # ``client/src/assets/icons/``. F7 moves those icons backend-side:
+    # the endpoint ``GET /api/schemas/credentials/{provider}/icon``
+    # serves the SVG, and ``cls.icon`` can be updated to either an
+    # explicit URL or left empty (the metadata projection layer fills in
+    # the URL automatically when an icon file exists).
+    #
+    # Resolution order:
+    # 1. ``server/credentials/icons/<id>.svg`` — central catalogue
+    #    (preferred — provider icons are scope-agnostic; one shared
+    #    location avoids duplicating brand SVGs across plugin folders
+    #    when a provider's credential serves multiple plugins, e.g.
+    #    Google Workspace's 6 nodes share one ``google`` credential).
+    # 2. ``<credential_class_folder>/credential_<id>.svg`` — co-located
+    #    fallback for plugin-scoped credentials (rare; useful when the
+    #    icon is tightly coupled to a specific plugin folder).
+    # 3. ``None`` — no backend icon; frontend falls back to whatever
+    #    ``cls.icon`` declares (``asset:<key>`` / ``lobehub:<brand>`` /
+    #    ``data:`` / emoji).
+
+    @classmethod
+    def get_icon_path(cls) -> Optional["Path"]:
+        """Return the on-disk path to this credential's icon SVG, or None.
+
+        Lazy import of ``inspect`` + ``pathlib`` keeps the credential
+        module's import cost flat — both are stdlib so it's free.
+        """
+        from pathlib import Path as _Path
+        import inspect
+
+        if not cls.id:
+            return None
+
+        # 1. Central catalogue
+        # ``server/`` resolves from this file's path: services/plugin/credential.py
+        # -> services/plugin/.. -> services/.. -> server/.
+        server_root = _Path(__file__).resolve().parent.parent.parent
+        central = server_root / "credentials" / "icons" / f"{cls.id}.svg"
+        if central.exists():
+            return central
+
+        # 2. Co-located fallback
+        try:
+            cred_file = _Path(inspect.getfile(cls)).resolve()
+        except (TypeError, OSError):
+            return None
+        co_located = cred_file.parent / f"credential_{cls.id}.svg"
+        if co_located.exists():
+            return co_located
+
+        return None
+
     @classmethod
     def inject(cls, secrets: Dict[str, Any], request: Dict[str, Any]) -> Dict[str, Any]:
         """Mutate an httpx request dict (headers / params / json / auth)

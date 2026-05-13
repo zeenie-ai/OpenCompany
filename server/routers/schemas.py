@@ -85,6 +85,38 @@ async def get_node_spec_endpoint(node_type: str, response: Response):
     return spec
 
 
+@router.get("/credentials/{provider}/icon")
+async def get_credential_icon(provider: str):
+    """Return the credential's co-located icon SVG (F7).
+
+    Mirrors :func:`get_node_icon` for credentials. Resolution chain
+    lives on :meth:`services.plugin.credential.Credential.get_icon_path`
+    (central ``server/credentials/icons/<id>.svg`` first, plugin-folder
+    ``credential_<id>.svg`` fallback). 404 when no backend icon exists
+    — frontend falls back to ``cls.icon`` (``asset:<key>`` / emoji /
+    ``lobehub:<brand>``) for legacy credentials not yet migrated.
+    """
+    from services.plugin.credential import CREDENTIAL_REGISTRY
+
+    cred_cls = CREDENTIAL_REGISTRY.get(provider)
+    if cred_cls is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown credential provider {provider!r}",
+        )
+    path = cred_cls.get_icon_path()
+    if path is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No backend icon for credential {provider!r}",
+        )
+    return FileResponse(
+        path,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": _LONG_CACHE},
+    )
+
+
 @router.get("/nodes/{node_type}/icon")
 async def get_node_icon(
     node_type: str,
