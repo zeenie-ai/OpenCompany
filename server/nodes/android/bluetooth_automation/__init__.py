@@ -1,4 +1,4 @@
-from ._base import AndroidServiceBase
+from .._base import AndroidServiceBase
 
 
 class BluetoothAutomationNode(AndroidServiceBase):

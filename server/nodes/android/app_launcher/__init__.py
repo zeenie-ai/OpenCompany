@@ -2,7 +2,7 @@ from typing import Optional
 
 from pydantic import ConfigDict, Field
 
-from ._base import AndroidServiceBase, AndroidServiceParams
+from .._base import AndroidServiceBase, AndroidServiceParams
 
 
 class AppLauncherParams(AndroidServiceParams):
