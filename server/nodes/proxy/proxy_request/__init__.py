@@ -73,7 +73,7 @@ class ProxyRequestNode(ActionNode):
 
         from services.proxy.models import ProxyResult
         from services.proxy.service import get_proxy_service
-        from ._usage import track_proxy_usage
+        from .._usage import track_proxy_usage
 
         log = get_logger(__name__)
         svc = get_proxy_service()
