@@ -177,7 +177,14 @@ class BaseNode:
             if "hide_output_handle" not in cls.__dict__:
                 cls.hide_output_handle = True
         # Eager registry write — same four registries as @register_node.
+        # ORDER MATTERS: register_node_class MUST precede register_node so
+        # that cls._metadata_dict() (evaluated as the metadata argument)
+        # can resolve the plugin folder via get_node_class(cls.type) inside
+        # get_plugin_icon_path. Without this order the icon falls through
+        # to visuals.json — defeating the per-plugin icon.svg endpoint
+        # (RFC §6.5 / Phase 6).
         from services.node_registry import register_node, register_node_class
+        register_node_class(cls)
         register_node(
             type=cls.type,
             metadata=cls._metadata_dict(),
@@ -185,7 +192,6 @@ class BaseNode:
             output_model=cls.Output if cls.Output is not _EmptyOutput else None,
             handler=cls._make_legacy_handler(),
         )
-        register_node_class(cls)
 
     # ---- metadata projection ---------------------------------------------
 

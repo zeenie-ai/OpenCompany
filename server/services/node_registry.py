@@ -96,10 +96,13 @@ def registered_node_types() -> frozenset[str]:
 def register_node_class(node_cls: type) -> None:
     """Store a :class:`services.plugin.BaseNode` subclass reference.
 
-    Called from ``BaseNode.__init_subclass__`` after the eager
-    ``register_node(...)`` write. Lets Wave 11.F's Temporal worker walk
-    ``_NODE_CLASS_REGISTRY.values()`` to collect ``cls.as_activity()``
-    for registration, without re-discovering via the filesystem.
+    Called from ``BaseNode.__init_subclass__`` BEFORE the eager
+    ``register_node(...)`` write so that ``_metadata_dict()`` (which
+    runs as the ``metadata`` argument) can resolve the plugin folder
+    via :func:`get_node_class` to locate ``icon.svg``. Also lets
+    Wave 11.F's Temporal worker walk ``_NODE_CLASS_REGISTRY.values()``
+    to collect ``cls.as_activity()`` for registration, without
+    re-discovering via the filesystem.
     """
     if not getattr(node_cls, "type", ""):
         return
