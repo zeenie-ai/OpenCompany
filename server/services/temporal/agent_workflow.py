@@ -390,18 +390,30 @@ class AgentWorkflow:
                     start_to_close_timeout=COMPACT_MEMORY_TIMEOUT,
                     retry_policy=AGENT_ACTIVITY_RETRY,
                 )
-                summary = compact_result.get("summary", "")
-                if summary:
-                    # Replace the running messages with the summary
-                    # plus the last user prompt — same pattern
-                    # ``CompactionService`` uses today in services/ai.py.
-                    messages = [
-                        {"role": "system", "content": system},
-                        {"role": "system", "content": f"## Compacted summary:\n{summary}"},
-                        {"role": "user", "content": user_prompt},
-                    ]
-                    memory_markdown = summary
-                    usage_total = {}
+                # Compaction is best-effort. When the service errors or
+                # was not initialized (worker bootstrap race), keep the
+                # existing messages and let the loop continue — masking
+                # the failure would surface as a confused LLM, not a
+                # workflow crash.
+                if not compact_result.get("success"):
+                    workflow.logger.warning(
+                        "AgentWorkflow compaction failed (%s); continuing "
+                        "with un-compacted history",
+                        compact_result.get("error", "no error reported"),
+                    )
+                else:
+                    summary = compact_result.get("summary", "")
+                    if summary:
+                        # Replace the running messages with the summary
+                        # plus the last user prompt — same pattern
+                        # ``CompactionService`` uses today in services/ai.py.
+                        messages = [
+                            {"role": "system", "content": system},
+                            {"role": "system", "content": f"## Compacted summary:\n{summary}"},
+                            {"role": "user", "content": user_prompt},
+                        ]
+                        memory_markdown = summary
+                        usage_total = {}
 
         else:
             # Loop exited without break -- hit max_iterations.

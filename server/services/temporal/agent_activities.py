@@ -92,7 +92,8 @@ async def execute_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     # Lazy import — keep top-level light so the worker can register this
     # activity without pulling LangChain in for every plugin.
-    from services.ai import AIService, extract_thinking_from_response
+    from core.container import container
+    from services.ai import extract_thinking_from_response
 
     provider = payload["provider"]
     model = payload["model"]
@@ -103,7 +104,11 @@ async def execute_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
     max_tokens = payload.get("max_tokens", 4096)
     thinking_config = payload.get("thinking_config")
 
-    ai_service = AIService()
+    # AIService is a DI singleton — pull it from the container so its
+    # constructor dependencies (auth_service / database / cache / settings)
+    # are wired correctly. Direct ``AIService()`` instantiation skips DI
+    # and raises ``TypeError: missing 4 required positional arguments``.
+    ai_service = container.ai_service()
 
     chat_model = ai_service.create_model(
         provider=provider,
@@ -273,7 +278,11 @@ async def persist_agent_turn(payload: Dict[str, Any]) -> Dict[str, Any]:
     # CloudEvents v1.0 envelope (RFC §6.4) — type is
     # ``com.machinaos.node.parameters.updated``; ``source_hint="agent"``
     # distinguishes this autonomous write from a user-edited save.
-    broadcaster = container.status_broadcaster()
+    # StatusBroadcaster is a module-level singleton (not on the DI
+    # container) — same pattern handlers/tools.py / handlers/triggers.py
+    # use. ``container.status_broadcaster()`` does NOT exist.
+    from services.status_broadcaster import get_status_broadcaster
+    broadcaster = get_status_broadcaster()
     await broadcaster.broadcast_node_parameters_updated(
         memory_node_id,
         parameters=params,
@@ -310,7 +319,20 @@ async def compact_agent_memory(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     activity.heartbeat("Compacting agent memory")
     svc = get_compaction_service()
-    result = await svc.compact_context(
+    if svc is None:
+        # CompactionService is a Singleton wired by the FastAPI lifespan
+        # (main.py). If the worker activity runs before lifespan init,
+        # the singleton is None and compaction must no-op so the agent
+        # loop keeps running — the workflow checks ``success`` and
+        # keeps the existing messages list on False.
+        return {
+            "success": False,
+            "error": "CompactionService not initialized (worker bootstrap race)",
+            "summary": "",
+            "tokens_before": 0,
+            "tokens_after": 0,
+        }
+    return await svc.compact_context(
         session_id=payload["session_id"],
         node_id=payload["node_id"],
         memory_content=payload.get("memory_content", ""),
@@ -318,7 +340,6 @@ async def compact_agent_memory(payload: Dict[str, Any]) -> Dict[str, Any]:
         api_key=payload["api_key"],
         model=payload["model"],
     )
-    return result
 
 
 @activity.defn(name="agent.broadcast_progress.v1")
@@ -351,9 +372,12 @@ async def broadcast_agent_progress(payload: Dict[str, Any]) -> Dict[str, Any]:
     Returns ``{"emitted": True}`` for completeness — callers don't
     typically inspect the result.
     """
-    from core.container import container
+    # StatusBroadcaster is a module-level singleton (not on the DI
+    # container) — same pattern handlers/tools.py / handlers/triggers.py
+    # use. ``container.status_broadcaster()`` does NOT exist.
+    from services.status_broadcaster import get_status_broadcaster
 
-    broadcaster = container.status_broadcaster()
+    broadcaster = get_status_broadcaster()
     await broadcaster.broadcast_agent_progress(
         payload["node_id"],
         workflow_id=payload.get("workflow_id"),
@@ -417,7 +441,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     # worker can register this activity without dragging the whole
     # AI service in for every plugin.
     from core.container import container
-    from services.ai import AIService, _resolve_max_tokens, _resolve_temperature
+    from services.ai import _resolve_max_tokens, _resolve_temperature
     from services.ai import ThinkingConfig, get_default_model_async, is_model_valid_for_provider
     from services.plugin.edge_walker import collect_agent_connections
 
@@ -428,7 +452,10 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
 
     database = container.database()
     auth = container.auth_service()
-    ai_service = AIService()
+    # AIService is a DI singleton — pull it from the container so its
+    # constructor dependencies are wired. Direct ``AIService()`` raises
+    # ``TypeError: missing 4 required positional arguments``.
+    ai_service = container.ai_service()
 
     # ---- Node parameters ------------------------------------------------
     # The orchestrator passes context["node_data"] but DB has the
@@ -564,12 +591,16 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     # ---- Compaction threshold ------------------------------------------
     # Model-aware threshold (50% of context window per agent.compaction.ratio
     # in llm_defaults.json). Reuse the existing CompactionService helper.
+    # ``anthropic_config`` is async (awaits _get_compaction_ratio) — must
+    # be awaited. ``get_compaction_service`` returns Optional[...] so the
+    # service may not be initialized yet (e.g. worker bootstrap order).
     compaction_threshold: int | None = None
     try:
         from services.compaction import get_compaction_service
         svc = get_compaction_service()
-        cfg = svc.anthropic_config(model=model, provider=provider)
-        compaction_threshold = int(cfg.get("context_token_threshold") or 0) or None
+        if svc is not None:
+            cfg = await svc.anthropic_config(model=model, provider=provider)
+            compaction_threshold = int(cfg.get("context_token_threshold") or 0) or None
     except Exception:  # noqa: BLE001 — defensive, optional feature
         compaction_threshold = None
 

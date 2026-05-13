@@ -207,7 +207,13 @@ class MachinaWorkflow:
                 # per-type activities (F4.A path) automatically.
                 dispatch = self._resolve_dispatch(node_type)
                 if dispatch["kind"] == "child_workflow":
-                    handle = workflow.start_child_workflow(
+                    # ``workflow.start_child_workflow`` is ``async def`` —
+                    # awaiting it returns the ``ChildWorkflowHandle`` once
+                    # the child has been started by the server (fast; not
+                    # blocking on child completion). The handle is a
+                    # Task-like with ``.done()`` so it slots into the same
+                    # FIRST_COMPLETED loop as activity handles.
+                    handle = await workflow.start_child_workflow(
                         dispatch["name"],
                         args=[context],
                         # Child workflow execution timeout: agent loops can run
