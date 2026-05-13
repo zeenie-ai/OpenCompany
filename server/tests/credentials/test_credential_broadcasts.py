@@ -129,7 +129,7 @@ class TestCredentialEventCloudEventsShape:
 
         event = WorkflowEvent(
             source="machinaos://services/credentials",
-            type="credential.api_key.saved",
+            type="com.machinaos.credential.api_key.saved",
             subject="openai",
             data={"provider": "openai"},
         )
@@ -147,8 +147,9 @@ class TestCredentialEventCloudEventsShape:
         assert envelope["subject"] == "openai"
 
     def test_event_type_namespaced(self, envelope):
-        # Convention: credential.<area>.<action>
-        assert envelope["type"].startswith("credential."), envelope["type"]
+        # Convention: com.machinaos.credential.<area>.<action>
+        # (reverse-DNS prefix per CloudEvents Primer)
+        assert envelope["type"].startswith("com.machinaos.credential."), envelope["type"]
 
 
 class TestAuthServiceDbCanonicalInvariant:

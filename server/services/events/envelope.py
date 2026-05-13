@@ -2,8 +2,19 @@
 
 Field set mirrors https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/spec.md
 verbatim so future interop with EventBridge / Knative is a JSON-schema swap.
-The MachinaOs extensions (workflow_id, trigger_node_id, correlation_id)
-ride as CloudEvents extension attributes — fully compliant with the spec.
+The MachinaOs extensions (``workflow_id``, ``trigger_node_id``,
+``correlation_id``) ride as CloudEvents extension attributes. Spec §3.1
+SHOULDs lowercase-alphanumeric extension names; we deliberately keep
+Python snake_case for codebase consistency — the rest of the project
+uses snake_case as a strict naming convention and the readability win
+outweighs the spec recommendation. Internal interop only; if we ever
+publish events to an external CloudEvents broker, an alias layer can
+translate at the producer boundary.
+
+Type strings carry the reverse-DNS prefix ``com.machinaos.`` per
+Primer guidance. ``dataschema`` is auto-populated from ``type`` so
+every typed factory produces a schema URI the consumer can validate
+against.
 """
 
 from __future__ import annotations
@@ -12,7 +23,23 @@ from datetime import datetime, timezone
 from typing import Any, Literal, Mapping, Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+_TYPE_PREFIX = "com.machinaos."
+_DATASCHEMA_BASE = "machinaos://schemas/events/"
+
+
+def _dataschema_for(event_type: str) -> str:
+    """Compute the ``dataschema`` URI for a given event ``type``.
+
+    Strips the ``com.machinaos.`` prefix when present so the URI segment
+    matches the un-prefixed type (e.g. ``credential.api_key.saved``).
+    External-producer events (e.g. ``stripe.charge.succeeded`` from a
+    Stripe webhook) keep their type verbatim in the URI segment.
+    """
+    seg = event_type.removeprefix(_TYPE_PREFIX) if event_type else event_type
+    return f"{_DATASCHEMA_BASE}{seg}.json"
 
 
 class WorkflowEvent(BaseModel):
@@ -28,11 +55,24 @@ class WorkflowEvent(BaseModel):
     dataschema: Optional[str] = None
     data: Any = None
 
+    # CloudEvents extension attributes. Snake-case (Python convention)
+    # rather than lowercase-alphanumeric (CloudEvents §3.1 SHOULD) —
+    # see module docstring.
     workflow_id: Optional[str] = None
     trigger_node_id: Optional[str] = None
     correlation_id: Optional[str] = None
 
     model_config = ConfigDict(extra="allow")
+
+    @model_validator(mode="after")
+    def _auto_dataschema(self) -> "WorkflowEvent":
+        """Auto-populate ``dataschema`` from ``type`` so every envelope
+        carries the URI a consumer can use to fetch its payload schema.
+        Explicit ``dataschema`` values are preserved.
+        """
+        if self.dataschema is None and self.type:
+            self.dataschema = _dataschema_for(self.type)
+        return self
 
     @classmethod
     def from_legacy(cls, event_type: str, payload: dict) -> "WorkflowEvent":
@@ -74,7 +114,7 @@ class WorkflowEvent(BaseModel):
         ``test_credential_broadcasts.py``)."""
         return cls(
             source="machinaos://services/credentials",
-            type=f"credential.{action}",
+            type=f"{_TYPE_PREFIX}credential.{action}",
             subject=provider,
             data={"provider": provider, **extra} if extra else {"provider": provider},
         )
@@ -92,7 +132,7 @@ class WorkflowEvent(BaseModel):
         / twitter / google connect-disconnect)."""
         return cls(
             source=f"machinaos://nodes/{plugin}",
-            type=f"{plugin}.connection.{'opened' if connected else 'closed'}",
+            type=f"{_TYPE_PREFIX}{plugin}.connection.{'opened' if connected else 'closed'}",
             subject=subject,
             data=dict(data) if data else {},
         )
@@ -109,7 +149,7 @@ class WorkflowEvent(BaseModel):
         handle (email / username) used as ``subject``."""
         return cls(
             source=f"machinaos://nodes/{provider}",
-            type=f"{provider}.oauth.completed",
+            type=f"{_TYPE_PREFIX}{provider}.oauth.completed",
             subject=identifier,
             data=dict(data) if data else {"identifier": identifier},
         )
@@ -131,7 +171,7 @@ class WorkflowEvent(BaseModel):
         )
         return cls(
             source=f"machinaos://nodes/{plugin}",
-            type=f"{plugin}.message.{direction}",
+            type=f"{_TYPE_PREFIX}{plugin}.message.{direction}",
             subject=str(raw_subject) if raw_subject is not None else None,
             data=payload,
         )
@@ -148,7 +188,7 @@ class WorkflowEvent(BaseModel):
         message.sent)."""
         return cls(
             source="machinaos://services/agent_team",
-            type=f"team.{kind}",
+            type=f"{_TYPE_PREFIX}team.{kind}",
             subject=team_id,
             data=dict(data),
         )
@@ -174,7 +214,7 @@ class WorkflowEvent(BaseModel):
         contract)."""
         return cls(
             source="machinaos://services/workflow",
-            type=f"workflow.{stage}",
+            type=f"{_TYPE_PREFIX}workflow.{stage}",
             subject=workflow_id,
             workflow_id=workflow_id,
             data=dict(data) if data else {},
@@ -207,7 +247,7 @@ class WorkflowEvent(BaseModel):
         """
         return cls(
             source="machinaos://services/agent",
-            type="agent.progress",
+            type=f"{_TYPE_PREFIX}agent.progress",
             subject=node_id,
             workflow_id=workflow_id,
             data={
@@ -242,7 +282,7 @@ class WorkflowEvent(BaseModel):
         """
         return cls(
             source="machinaos://services/workflow",
-            type="workflow.deployment.snapshot",
+            type=f"{_TYPE_PREFIX}workflow.deployment.snapshot",
             data={"running_workflow_ids": list(running_workflow_ids)},
         )
 
@@ -259,7 +299,7 @@ class WorkflowEvent(BaseModel):
         succeeded vs failed; ``taskTrigger`` filters by both."""
         return cls(
             source="machinaos://services/agent",
-            type=f"agent.task.{'succeeded' if status == 'completed' else 'failed'}",
+            type=f"{_TYPE_PREFIX}agent.task.{'succeeded' if status == 'completed' else 'failed'}",
             subject=task_id,
             data=dict(data) if data else {"task_id": task_id, "agent": agent, "status": status},
         )
@@ -267,15 +307,23 @@ class WorkflowEvent(BaseModel):
     def matches_type(self, pattern: str) -> bool:
         """Glob-style match on event type. ``"all"``/empty matches any.
 
+        Patterns are matched against the type with the
+        ``com.machinaos.`` reverse-DNS prefix stripped, so callers can
+        write ``"credential.api_key.*"`` and still hit
+        ``com.machinaos.credential.api_key.saved``. External-producer
+        types (e.g. ``stripe.charge.succeeded`` from a Stripe webhook)
+        have no prefix and match directly.
+
         Examples:
             "stripe.charge.succeeded" matches itself
-            "stripe.charge.*"        matches "stripe.charge.succeeded"
-            "stripe.*"               matches "stripe.charge.succeeded"
-            "all" or ""              matches everything
+            "credential.api_key.*"    matches "com.machinaos.credential.api_key.saved"
+            "agent.*"                 matches "com.machinaos.agent.progress"
+            "all" or ""               matches everything
         """
         if not pattern or pattern == "all":
             return True
+        normalized = (self.type or "").removeprefix(_TYPE_PREFIX)
         if pattern.endswith(".*"):
             prefix = pattern[:-2]
-            return self.type.startswith(prefix + ".") or self.type == prefix
-        return self.type == pattern
+            return normalized.startswith(prefix + ".") or normalized == prefix
+        return normalized == pattern

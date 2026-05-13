@@ -68,18 +68,21 @@ describe('WorkflowEvent shape', () => {
         specversion: '1.0',
         id: 'a1b2c3d4',
         source: 'machinaos://services/credentials',
-        type: 'credential.api_key.saved',
+        type: 'com.machinaos.credential.api_key.saved',
         time: '2026-05-06T12:34:56.789Z',
         subject: 'openai',
         datacontenttype: 'application/json',
+        dataschema: 'machinaos://schemas/events/credential.api_key.saved.json',
         data: { provider: 'openai' },
       },
     };
     const envelope = payload.data as WorkflowEvent<{ provider: string }>;
     expect(envelope.specversion).toBe('1.0');
-    expect(envelope.type).toBe('credential.api_key.saved');
+    expect(envelope.type).toBe('com.machinaos.credential.api_key.saved');
     expect(envelope.subject).toBe('openai');
     expect(envelope.data.provider).toBe('openai');
+    // matchesType strips the com.machinaos. prefix, so callers write
+    // patterns without it.
     expect(matchesType(envelope, 'credential.api_key.*')).toBe(true);
     expect(matchesType(envelope, 'credential.*')).toBe(true);
     expect(matchesType(envelope, 'stripe.*')).toBe(false);

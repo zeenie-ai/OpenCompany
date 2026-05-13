@@ -14,17 +14,19 @@
  *         "specversion": "1.0",
  *         "id": "<uuid>",
  *         "source": "machinaos://services/credentials",
- *         "type": "credential.api_key.saved",   // CloudEvents `type`
+ *         "type": "com.machinaos.credential.api_key.saved",  // reverse-DNS per Primer
  *         "time": "2026-05-06T12:34:56.789Z",
  *         "subject": "openai",
  *         "datacontenttype": "application/json",
+ *         "dataschema": "machinaos://schemas/events/credential.api_key.saved.json",
  *         "data": { "provider": "openai", ... }
  *       }
  *     }
  *
  * Future Wave 12 sources (`stripe.*`, `telegram.*`, `task.*`) will use the
  * same envelope. The `matchesType` helper provides server-parity glob
- * dispatch (mirrors `WorkflowEvent.matches_type` in envelope.py).
+ * dispatch (mirrors `WorkflowEvent.matches_type` in envelope.py) — patterns
+ * match against the type with the `com.machinaos.` prefix stripped.
  *
  * Pytest invariant `server/tests/test_credential_broadcasts.py` locks the
  * backend shape; the FE vitest counterpart locks this interface.
@@ -55,24 +57,34 @@ export interface WorkflowEvent<TData = unknown> {
   correlation_id?: string | null;
 }
 
+const TYPE_PREFIX = 'com.machinaos.';
+
 /**
  * Glob-style match on the CloudEvents `type` field.
  *
  * Mirrors `WorkflowEvent.matches_type` in `server/services/events/envelope.py`.
+ * Patterns are matched against the type with the `com.machinaos.` reverse-DNS
+ * prefix stripped, so callers can write `'credential.api_key.*'` and still
+ * hit `com.machinaos.credential.api_key.saved`. External-producer types
+ * (e.g. `stripe.charge.succeeded` from a Stripe webhook) have no prefix
+ * and match directly.
+ *
  * Test parity is locked by `client/src/types/__tests__/cloudEvents.test.ts`
  * vs the corresponding pytest cases.
  *
- *   matchesType(e, 'stripe.charge.succeeded')  // exact
- *   matchesType(e, 'stripe.charge.*')          // prefix glob
- *   matchesType(e, 'stripe.*')                 // prefix glob (1 segment)
+ *   matchesType(e, 'stripe.charge.succeeded')  // exact (external)
+ *   matchesType(e, 'credential.api_key.*')     // prefix glob (internal)
+ *   matchesType(e, 'agent.*')                  // prefix glob (1 segment)
  *   matchesType(e, 'all')                      // wildcard
  *   matchesType(e, '')                         // wildcard
  */
 export function matchesType(event: WorkflowEvent, pattern: string): boolean {
   if (!pattern || pattern === 'all') return true;
+  const raw = event.type ?? '';
+  const normalized = raw.startsWith(TYPE_PREFIX) ? raw.slice(TYPE_PREFIX.length) : raw;
   if (pattern.endsWith('.*')) {
     const prefix = pattern.slice(0, -2);
-    return event.type === prefix || event.type.startsWith(prefix + '.');
+    return normalized === prefix || normalized.startsWith(prefix + '.');
   }
-  return event.type === pattern;
+  return normalized === pattern;
 }
