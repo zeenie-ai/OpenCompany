@@ -200,11 +200,31 @@ class AgentWorkflow:
         final_content: Optional[str] = None
         usage_total: Dict[str, int] = {}
 
+        agent_node_id = payload["node_id"]
+        agent_workflow_id = payload.get("workflow_id")
+
         # ---- Main loop --------------------------------------------------
         for iteration in range(max_iterations):
             workflow.logger.info(
                 f"AgentWorkflow iteration {iteration} "
                 f"(messages={len(messages)} tools={len(tools)})"
+            )
+
+            # CloudEvents-shaped agent_progress per LLM turn. Mirrors the
+            # legacy LangGraph path's super-step broadcast (RFC §6.4).
+            # FE consumes the typed envelope and updates the canvas
+            # node's "N / max" iteration badge live.
+            await workflow.execute_activity(
+                "agent.broadcast_progress.v1",
+                args=[{
+                    "node_id": agent_node_id,
+                    "workflow_id": agent_workflow_id,
+                    "iteration": iteration,
+                    "max_iterations": max_iterations,
+                    "phase": "llm_step",
+                }],
+                start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                retry_policy=AGENT_ACTIVITY_RETRY,
             )
 
             # Strip per-turn fields the activity doesn't need.

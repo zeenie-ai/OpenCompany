@@ -67,10 +67,11 @@ class TestAgentActivities:
         defn = getattr(compact_agent_memory, "__temporal_activity_definition")
         assert defn.name == "agent.compact_memory.v1"
 
-    def test_collect_returns_all_four(self):
-        """F4.B canary wiring added ``agent.prepare_payload.v1``. The
-        collector must surface all four so the worker registration covers
-        the orchestrator's prep + the workflow's loop activities."""
+    def test_collect_returns_all_five(self):
+        """Each successive sprint added one F4.B agent activity:
+        infra (3) → per-agent-wiring +prepare_payload (4) → CloudEvents
+        cleanup +broadcast_progress (5). All five must register so the
+        AgentWorkflow loop can schedule them by name."""
         from services.temporal.agent_activities import collect_agent_activities
 
         activities = collect_agent_activities()
@@ -78,6 +79,7 @@ class TestAgentActivities:
             getattr(a, "__temporal_activity_definition").name for a in activities
         )
         assert names == [
+            "agent.broadcast_progress.v1",
             "agent.compact_memory.v1",
             "agent.execute_llm_step.v1",
             "agent.persist_turn.v1",
@@ -89,6 +91,12 @@ class TestAgentActivities:
 
         defn = getattr(prepare_agent_payload, "__temporal_activity_definition")
         assert defn.name == "agent.prepare_payload.v1"
+
+    def test_broadcast_progress_registered(self):
+        from services.temporal.agent_activities import broadcast_agent_progress
+
+        defn = getattr(broadcast_agent_progress, "__temporal_activity_definition")
+        assert defn.name == "agent.broadcast_progress.v1"
 
 
 class TestWorkerWiring:

@@ -159,10 +159,12 @@ async def handle_save_node_parameters(data: Dict[str, Any], websocket: WebSocket
 
     logger.debug(f"[SAVE_PARAMS] Node ID: {node_id}, has_code: {'code' in parameters}, code_len: {len(parameters.get('code', '')) if 'code' in parameters else 0}")
     await database.save_node_parameters(node_id, parameters)
-    await broadcaster.broadcast({
-        "type": "node_parameters_updated", "node_id": node_id,
-        "parameters": parameters, "version": 1, "timestamp": time.time()
-    })
+    # CloudEvents v1.0 envelope (RFC §6.4) — type is
+    # ``com.machinaos.node.parameters.updated``; ``source_hint="user"``
+    # because this handler fires from the parameter-panel save flow.
+    await broadcaster.broadcast_node_parameters_updated(
+        node_id, parameters=parameters, source_hint="user",
+    )
     return {"node_id": node_id, "parameters": parameters, "version": 1, "timestamp": time.time()}
 
 

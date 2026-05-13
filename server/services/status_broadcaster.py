@@ -318,6 +318,46 @@ class StatusBroadcaster:
             "data": event.model_dump(mode="json"),
         })
 
+    async def broadcast_node_parameters_updated(
+        self,
+        node_id: str,
+        *,
+        parameters: Dict[str, Any],
+        workflow_id: Optional[str] = None,
+        version: int = 1,
+        source_hint: str = "user",
+    ) -> None:
+        """Emit a CloudEvents-typed ``node.parameters.updated`` event.
+
+        Replaces three legacy raw-dict broadcast sites with one typed
+        envelope (RFC §6.4 CloudEvents discipline). Wire-format key
+        ``node_parameters_updated`` stays the same for FE back-compat;
+        only the inner payload becomes the typed envelope.
+
+        Callers:
+          - ``routers/websocket.py:handle_save_node_parameters`` (user
+            edited the parameter panel — ``source_hint="user"``).
+          - ``services/cli_agent/service.py:_persist_memory`` (Claude
+            Code CLI memory bridge appended a turn —
+            ``source_hint="cli"``).
+          - ``services/temporal/agent_activities.py:persist_agent_turn``
+            (F4.B AgentWorkflow per-turn memory append —
+            ``source_hint="agent"``).
+        """
+        from services.events import WorkflowEvent
+
+        event = WorkflowEvent.node_parameters_updated(
+            node_id,
+            parameters=parameters,
+            workflow_id=workflow_id,
+            version=version,
+            source_hint=source_hint,
+        )
+        await self.broadcast({
+            "type": "node_parameters_updated",
+            "data": event.model_dump(mode="json"),
+        })
+
     async def broadcast_agent_progress(
         self,
         node_id: str,

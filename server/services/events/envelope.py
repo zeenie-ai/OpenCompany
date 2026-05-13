@@ -244,6 +244,45 @@ class WorkflowEvent(BaseModel):
         )
 
     @classmethod
+    def node_parameters_updated(
+        cls,
+        node_id: str,
+        *,
+        parameters: Mapping[str, Any],
+        workflow_id: Optional[str] = None,
+        version: int = 1,
+        source_hint: str = "user",
+    ) -> "WorkflowEvent":
+        """Server-pushed notification that a node's parameters changed.
+
+        Three emission sites today:
+          - ``routers/websocket.py:handle_save_node_parameters`` — user
+            edited the parameter panel.
+          - ``services/cli_agent/service.py:_persist_memory`` — Claude
+            Code CLI memory bridge appended a turn to ``simpleMemory``.
+          - ``services/temporal/agent_activities.py:persist_agent_turn``
+            — F4.B AgentWorkflow's per-turn memory append.
+
+        ``subject`` is the node_id so the FE routes the refetch to the
+        right parameter panel. ``source_hint`` distinguishes user edits
+        (``"user"``) from autonomous writes (``"agent"`` / ``"cli"``)
+        so the panel can choose whether to confirm a re-render against
+        the user's in-progress local edits.
+        """
+        return cls(
+            source="machinaos://services/parameters",
+            type=f"{_TYPE_PREFIX}node.parameters.updated",
+            subject=node_id,
+            workflow_id=workflow_id,
+            data={
+                "node_id": node_id,
+                "parameters": dict(parameters),
+                "version": version,
+                "source": source_hint,
+            },
+        )
+
+    @classmethod
     def deployment_snapshot(
         cls,
         running_workflow_ids: list[str],

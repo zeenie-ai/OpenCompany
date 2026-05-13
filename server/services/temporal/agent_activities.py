@@ -270,13 +270,14 @@ async def persist_agent_turn(payload: Dict[str, Any]) -> Dict[str, Any]:
     await database.save_node_parameters(memory_node_id, params)
 
     # Broadcast so the parameter panel auto-refetches mid-run.
+    # CloudEvents v1.0 envelope (RFC §6.4) — type is
+    # ``com.machinaos.node.parameters.updated``; ``source_hint="agent"``
+    # distinguishes this autonomous write from a user-edited save.
     broadcaster = container.status_broadcaster()
-    await broadcaster.broadcast(
-        {
-            "type": "node_parameters_updated",
-            "node_id": memory_node_id,
-            "parameters": params,
-        }
+    await broadcaster.broadcast_node_parameters_updated(
+        memory_node_id,
+        parameters=params,
+        source_hint="agent",
     )
 
     return {"appended": True, "trimmed_count": len(trimmed_pairs)}
@@ -318,6 +319,49 @@ async def compact_agent_memory(payload: Dict[str, Any]) -> Dict[str, Any]:
         model=payload["model"],
     )
     return result
+
+
+@activity.defn(name="agent.broadcast_progress.v1")
+async def broadcast_agent_progress(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Emit a CloudEvents-shaped ``agent_progress`` broadcast per turn.
+
+    Wraps :meth:`services.status_broadcaster.StatusBroadcaster.broadcast_agent_progress`
+    so ``AgentWorkflow`` can schedule it deterministically (workflows
+    cannot call broadcaster methods directly — they have to go through
+    an activity).
+
+    Wire-format key ``agent_progress`` is the same channel the legacy
+    LangGraph path uses (services/ai.py:execute_agent), and the inner
+    payload is a CloudEvents v1.0 ``WorkflowEvent`` with
+    ``type="com.machinaos.agent.progress"``. The FE routes
+    ``data.iteration`` / ``data.max_iterations`` into
+    ``nodeStatusStore`` so the "N / max" badge on the canvas updates
+    in real time.
+
+    ``payload`` shape::
+
+        {
+            "node_id": str,
+            "workflow_id": Optional[str],
+            "iteration": int,
+            "max_iterations": int,
+            "phase": Optional[str],  # e.g. "llm_step", "tool_dispatch"
+        }
+
+    Returns ``{"emitted": True}`` for completeness — callers don't
+    typically inspect the result.
+    """
+    from core.container import container
+
+    broadcaster = container.status_broadcaster()
+    await broadcaster.broadcast_agent_progress(
+        payload["node_id"],
+        workflow_id=payload.get("workflow_id"),
+        iteration=int(payload.get("iteration", 0)),
+        max_iterations=int(payload.get("max_iterations", 0)),
+        phase=payload.get("phase"),
+    )
+    return {"emitted": True}
 
 
 @activity.defn(name="agent.prepare_payload.v1")
@@ -564,17 +608,18 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def collect_agent_activities() -> List[Any]:
-    """Return the four F4.B agent activities for worker registration.
+    """Return the five F4.B agent activities for worker registration.
 
     Mirrors :func:`services.temporal.plugin_activities.collect_plugin_activities`
     for the workflow-orchestrated agent loop. Workers register these so
-    ``AgentWorkflow`` can schedule them; ``MachinaWorkflow`` invokes
-    only :func:`prepare_agent_payload` directly (to build the
-    AgentWorkflow input payload before scheduling the child workflow).
+    ``AgentWorkflow`` can schedule them; ``MachinaWorkflow`` doesn't
+    invoke any of them directly — AgentWorkflow.run() owns the entire
+    setup + execution + observation pipeline.
     """
     return [
         execute_llm_step,
         persist_agent_turn,
         compact_agent_memory,
         prepare_agent_payload,
+        broadcast_agent_progress,
     ]

@@ -430,19 +430,17 @@ class AICliService:
 
         # Broadcast `node_parameters_updated` so the simpleMemory's
         # parameter panel + memory editor refetch live without a page
-        # reload. Mirrors the pattern in
-        # `routers/websocket.py:handle_save_node_parameters`. Without
-        # this the DB has the latest conversation but the UI keeps
-        # showing the stale snapshot it loaded at workflow open.
+        # reload. CloudEvents v1.0 envelope (RFC §6.4) — type is
+        # ``com.machinaos.node.parameters.updated``; ``source_hint="cli"``
+        # distinguishes this Claude-CLI autonomous write from a user
+        # parameter-panel save.
         if broadcaster is not None:
             try:
-                await broadcaster.broadcast({
-                    "type": "node_parameters_updated",
-                    "node_id": memory_node_id,
-                    "parameters": params,
-                    "version": 1,
-                    "timestamp": time.time(),
-                })
+                await broadcaster.broadcast_node_parameters_updated(
+                    memory_node_id,
+                    parameters=params,
+                    source_hint="cli",
+                )
             except Exception as exc:
                 logger.warning(
                     "[CC-Agent _persist_memory] broadcast failed: %s", exc,
