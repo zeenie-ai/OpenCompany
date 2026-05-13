@@ -75,16 +75,14 @@ The diagram above shows the full lifecycle of a workflow node from TypeScript de
 - Guide: [native_llm_sdk.md](docs-internal/native_llm_sdk.md)
 
 **Add a dual-purpose tool (workflow node + AI tool)**
-- Mark node `group: ['category', 'tool']`
-- Pydantic schema in `server/services/ai.py` (`_get_tool_schema`)
-- Dispatch in `server/services/handlers/tools.py`
-- Guide: [dual_purpose_tool_node_creation.md](docs-internal/dual_purpose_tool_node_creation.md)
+- Plugin folder under `server/nodes/<category>/<name>/` with `group: ['category', 'tool']` and `usable_as_tool = True`
+- Pydantic `Params` doubles as the LLM-visible tool schema (no separate `_get_tool_schema` entry)
+- Guide: [node_creation.md](docs-internal/node_creation.md)
 
 **Add a specialized AI agent**
-- Add the plugin under `server/nodes/agent/` (typically extends the shared specialized-agent base in `server/nodes/agent/_specialized.py`)
+- Add the plugin under `server/nodes/agent/<name>/` (extends `SpecializedAgentBase` from `server/nodes/agent/_specialized.py`)
 - Add to `SPECIALIZED_AGENT_TYPES` in `server/constants.py`
-- Register in `server/services/node_executor.py`
-- Guide: [specialized_agent_node_creation.md](docs-internal/specialized_agent_node_creation.md)
+- Guide: [node_creation.md](docs-internal/node_creation.md)
 
 **Add a skill**
 - New folder under `server/skills/<category>/`
@@ -136,16 +134,15 @@ Full setup and scripts reference: [SETUP.md](docs-internal/SETUP.md) - [SCRIPTS.
 | [claude_code_agent_architecture.md](docs-internal/claude_code_agent_architecture.md) | Claude Code SDK integration as a specialized agent |
 | [autonomous_agent_creation.md](docs-internal/autonomous_agent_creation.md) | Autonomous agents with Code Mode patterns |
 | [event_waiter_system.md](docs-internal/event_waiter_system.md) | Push-based trigger waiters |
-| [status_broadcaster.md](docs-internal/status_broadcaster.md) | WebSocket broadcaster and 127 handlers |
+| [status_broadcaster.md](docs-internal/status_broadcaster.md) | WebSocket broadcaster (live handler count via `len(MESSAGE_HANDLERS) + len(get_ws_handlers())`) |
 | [credentials_encryption.md](docs-internal/credentials_encryption.md) | Fernet + PBKDF2 credentials system |
 | [memory_compaction.md](docs-internal/memory_compaction.md) | Token tracking and model-aware compaction |
 | [pricing_service.md](docs-internal/pricing_service.md) | LLM and API cost tracking |
 | [proxy_service.md](docs-internal/proxy_service.md) | Residential proxy provider management |
 | [ci_cd.md](docs-internal/ci_cd.md) | GitHub Actions workflows |
 | [node_creation.md](docs-internal/node_creation.md) | How to create new nodes |
-| [ai_tool_node_creation.md](docs-internal/ai_tool_node_creation.md) | Creating dedicated AI Agent tool nodes |
-| [specialized_agent_node_creation.md](docs-internal/specialized_agent_node_creation.md) | Creating specialized AI agent nodes |
-| [dual_purpose_tool_node_creation.md](docs-internal/dual_purpose_tool_node_creation.md) | Dual-purpose workflow + tool nodes |
+| [memory_lifecycle.md](docs-internal/memory_lifecycle.md) | Canonical home for markdown memory format, vector store, claude_code_agent session resume |
+| [tool_building_pipeline.md](docs-internal/tool_building_pipeline.md) | Canonical home for `_build_tool_from_node`, tool discovery, per-type Temporal dispatch |
 | [new_service_integration.md](docs-internal/new_service_integration.md) | External service integration guide |
 | [cli_services_integration.md](docs-internal/cli_services_integration.md) | CLI service lifecycle management |
 | [onboarding.md](docs-internal/onboarding.md) | Welcome wizard and replay |

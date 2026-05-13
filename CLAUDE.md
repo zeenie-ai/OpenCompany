@@ -14,7 +14,7 @@ This is a React Flow-based workflow automation platform implementing n8n-inspire
 | **[Node Allowlist](./docs-internal/node_allowlist.md)** | Single-config UI visibility — `server/config/node_allowlist.json` controls which nodes / credential categories / skill folders show in the UI. Five lists with two enforcement tiers (mode-gated allowlist + absolute blocklist). `useNodeAllowlist` hook exposes `isVisible` / `isBlocked` / `isAllowed` / `isCredentialCategoryDisabled` / `isSkillFolderDisabled`. Adding a new disabled domain = single JSON edit, no code change. |
 | **[Theme System](./docs-internal/theme_system.md)** | 10-way visual theme system — 5 utopian (light, dark, renaissance, greek, edo, steampunk, atomic) + 5 dystopian (cyber, wasteland, rot, plague, surveillance) — driven by `<html data-theme>` + per-theme CSS files in `client/src/themes/`. Token taxonomy (surface / fg / border / accent / typography / motion), shadcn HSL-triplet bridge, action role tokens, decorative-layer wrappers (`.app-frame` / `.canvas-host` / `.modal-frame`), per-component decorative ornaments (panel textures + canvas decorations + node pseudo-element overlays + theme-specific keyframes), **canvas-node visual contract via `--node-color` CSS custom property** (no inline `background` / `border` on node components — base.css + per-theme CSS owns visuals; `NodeStyle` helper type at [types/NodeTypes.ts](./client/src/types/NodeTypes.ts) makes the inline custom-prop typecheck-clean), **`--node-pulse-color` separate from `--node-color`** so executing-node glow uses each theme's highest-contrast accent regardless of plugin accent (Cyber neon cyan, Surveillance REC red, Renaissance ultramarine, etc.), **`data-page-hidden` animation pause** (toggled by Dashboard's `visibilitychange` listener; base.css declares `html[data-page-hidden] *, *::before, *::after { animation-play-state: paused !important }` to prevent compositor stall on tab return), **per-theme icon glyph system** (290 SVGs across 29 keys × 10 themes via [themedGlyphs.ts](./client/src/assets/icons/themedGlyphs.ts) + theme-aware [NodeIcon.tsx](./client/src/assets/icons/NodeIcon.tsx)), **per-theme canvas-grid + custom cursors** via `--canvas-grid` / `--cursor-default` slots, **decorative HTML primitives** (`<SvgFilterDefs>` mounting `#ink-blot` / `#noise` / `#crt` filter IDs at app root, `<DropCap>` wrapper for Renaissance ornament rule), **parameter panel migrated to Tailwind tokens** (no `useAppTheme()` reads; section headers carry the display-typography triplet; raw `<Button>` swapped to `<ActionButton intent>`), **per-theme scrollbar webkit rules** in all 10 themes, 9-event WebAudio sound system (10 packs via `--sound-pack` token + `useSound()` hook + global hover delegate + sonner toast monkey-patch + `withSound()` HOC + `Sounds.unlock()` gesture-unlock for AudioContext autoplay-policy compliance), `@media (prefers-reduced-motion: reduce)` accessibility, 30 ms throttle on `type` / `hover`, migration recipe, anti-patterns. Read this before adding a new theme, migrating a component to the new contract, or adding a canvas-node component. |
 | **[Schema Source of Truth RFC](./docs-internal/schema_source_of_truth_rfc.md)** | Backend is SSOT for node schemas, visual metadata, handlers, palette metadata, icons. Plugin pattern: one `BaseNode` subclass in `server/nodes/<group>/<plugin>/__init__.py`. Wire format: `asset:<key>` / `<lib>:<brand>` / URL / emoji. Endpoint: `/api/schemas/nodes/{type}/spec.json`. Live invariant total via `pytest --collect-only`. |
-| **[Plugin System (Wave 11)](./docs-internal/plugin_system.md)** | Class-based plugin-first architecture. `BaseNode` / `ActionNode` / `TriggerNode` / `ToolNode` + `@Operation` decorator. Pydantic `Params`/`Output`. Declarative `Routing` DSL + `Connection` facade (Nango pattern). 18 `Credential` subclasses live in each node folder's `_credentials.py` (or inline for single-use). `TaskQueue` constants route to Temporal worker pools. Plugins live across 9 queues (live count via `glob server/nodes/**/__init__.py`); handler bodies fully inlined (`services/handlers/` shrank 12.8K → 1.1K LOC across 16 → 4 files; only cross-cutting orchestration remains: `tools.py` AI-tool dispatch + agent delegation, `google_auth.py`, `triggers.py`). **Wave 11.H added "self-contained plugin folders"** — five generic registries (`ws_handler_registry`, `event_waiter.{register_filter_builder,register_trigger_precheck}`, `status_broadcaster.register_service_refresh`, `node_output_schemas.register_output_schema`) so rich plugins like telegram own their entire surface area without core-services edits. |
+| **[Plugin System (Wave 11)](./docs-internal/plugin_system.md)** | Class-based plugin-first architecture. `BaseNode` / `ActionNode` / `TriggerNode` / `ToolNode` + `@Operation` decorator. Pydantic `Params`/`Output`. Declarative `Routing` DSL + `Connection` facade (Nango pattern). 18 `Credential` subclasses live in each node folder's `_credentials.py` (or inline for single-use). `TaskQueue` constants route to Temporal worker pools. Plugins live across 9 queues (live count via `glob server/nodes/**/__init__.py`); handler bodies fully inlined (`services/handlers/` shrank 12.8K → 1.1K LOC across 16 → 4 files; only cross-cutting orchestration remains: `tools.py` AI-tool dispatch + agent delegation, `google_auth.py`, `triggers.py`). **Wave 11.H added "self-contained plugin folders"** — up to six generic registries (`ws_handler_registry`, `register_router`, `event_waiter.{register_filter_builder,register_trigger_precheck}`, `status_broadcaster.register_service_refresh`, `node_output_schemas.register_output_schema`) so rich plugins like telegram own their entire surface area without core-services edits. |
 | **[Nodes Cookbook](./server/nodes/README.md)** | 5-minute recipe + folder map + shared helpers (`_base.py` / `_inline.py` per domain) + shared credentials + **canonical folder-per-plugin shape (telegram is the reference implementation)** + contract invariants + common pitfalls. Lives next to the plugin files. |
 | **[Node Creation Guide](./docs-internal/node_creation.md)** | Canonical plugin recipe — one self-contained folder per plugin under `server/nodes/<group>/<plugin>/`, rooted at `__init__.py`. Multi-file split (`_service.py` / `_handlers.py` / etc.) when the plugin owns long-lived state. Zero frontend edits, zero core-services edits. Auto-registers via `BaseNode.__init_subclass__` + the six `register_*` hooks. Covers tool nodes, dual-purpose nodes (workflow + AI tool), and specialized agents as variations of the same recipe. |
 | **[Agent Architecture](./docs-internal/agent_architecture.md)** | How AI Agent and Chat Agent discover skills/tools, inject them into LLM prompts, and execute via LangGraph |
@@ -64,72 +64,17 @@ This is a React Flow-based workflow automation platform implementing n8n-inspire
 
 ### 0. Adding a new node — the canonical recipe (Wave 11.H)
 
-**Every plugin is a self-contained folder under `server/nodes/<group>/<plugin>/`.**
-Reference implementation: [`server/nodes/telegram/`](./server/nodes/telegram/).
+Every plugin is a self-contained folder under `server/nodes/<group>/<plugin>/` rooted at `__init__.py`. `BaseNode.__init_subclass__` auto-registers metadata, schemas, handlers, and Temporal activity on import — zero edits anywhere else.
 
-1. **Create the folder** with one `__init__.py` declaring a
-   `BaseNode` / `ActionNode` / `TriggerNode` / `ToolNode` subclass.
-   Declare `type`, `display_name`, `group`, `handles`, `Params`,
-   `Output`, `credentials`, `task_queue`, and `@Operation`-decorated
-   methods. Auto-registers via `BaseNode.__init_subclass__` on import.
-   Zero edits anywhere else. For single-class plugins, all the logic
-   stays in `__init__.py` — no extra files needed.
-   See [server/nodes/README.md](./server/nodes/README.md).
+**Where to look:**
+- [server/nodes/README.md](./server/nodes/README.md) — 5-minute walkthrough with the canonical folder template
+- [docs-internal/plugin_system.md → Self-contained plugin folders](./docs-internal/plugin_system.md#self-contained-plugin-folders) — full reference, plus the **up-to-six generic registries** plugins self-wire into (`register_ws_handlers`, `register_router`, `register_filter_builder`, `register_trigger_precheck`, `register_service_refresh`, `register_output_schema`)
+- [docs-internal/node_creation.md](./docs-internal/node_creation.md) — decision tree for action / trigger / tool / dual-purpose / specialized-agent nodes
+- [server/nodes/telegram/](./server/nodes/telegram/) — reference implementation of the multi-file split (`_service.py` / `_handlers.py` / `_filters.py` / `_refresh.py` / `_credentials.py` / two node files)
 
-2. **Split into helper modules** (`_service.py` / `_handlers.py` /
-   `_credentials.py` / `_filters.py` / `_refresh.py` / `_events.py`)
-   only when the plugin owns one or more of:
-   - a long-lived stateful object (bot / device / SDK session / subprocess),
-   - credentials-modal WebSocket commands beyond Save / Load / Delete,
-   - trigger pre-execution checks that need plugin-specific state,
-   - a status-refresh callback that runs on WS-client connect.
+**Wire format is the contract — not module paths.** The frontend identifies plugin commands by WebSocket message-type strings (`telegram_connect`, `telegram_status`, …). Moving handler bodies between Python files is invisible to the frontend so long as the registered keys stay the same.
 
-   Multi-file shape (telegram is the reference — one plugin folder
-   containing two node classes, `telegram_send` and `telegram_receive`):
-   ```
-   server/nodes/<group>/<plugin>/
-   ├── __init__.py          # imports + register_* calls (zero logic)
-   ├── icon.svg             # co-located plugin icon
-   ├── _credentials.py      # <Provider>Credential subclass
-   ├── _service.py          # singleton/service lifecycle
-   ├── _handlers.py         # WS_HANDLERS dict
-   ├── _filters.py          # build_<provider>_filter (event_waiter)
-   ├── _refresh.py          # refresh_*_status + precheck_*_trigger
-   ├── <provider>_send.py
-   └── <provider>_receive.py
-   ```
-   Underscore-prefixed files are package-private (the node walker skips
-   them). The package `__init__.py` is the single wiring point.
-
-3. **Five generic registries** the package self-registers into. Nothing
-   outside the plugin folder hardcodes the plugin's name:
-
-   | Concern | Register call | Backed by |
-   |---|---|---|
-   | Credentials-modal WebSocket commands | `services.ws_handler_registry.register_ws_handlers({type: handler})` | central `_resolve_handler()` in `routers/websocket.py` |
-   | Trigger event-filter builder | `services.event_waiter.register_filter_builder(node_type, fn)` | `event_waiter.FILTER_BUILDERS` |
-   | Trigger pre-execution check | `services.event_waiter.register_trigger_precheck(node_type, async_fn)` | generic `services/handlers/triggers.py` runs `run_trigger_precheck` before entering the wait loop |
-   | Service-status refresh on WS connect | `services.status_broadcaster.register_service_refresh(async_callback)` | `_refresh_all_services` TaskGroup |
-   | Output schema | `services.node_output_schemas.register_output_schema(node_type, ModelClass)` | central `NODE_OUTPUT_SCHEMAS` |
-
-   All five are idempotent (same callable / class for the same key is a
-   no-op; conflicts raise `ValueError`).
-
-4. **Wire format is the contract — not module paths.** The frontend
-   identifies plugin commands by WebSocket message-type strings
-   (`telegram_connect`, `telegram_status`, …). Moving handler bodies
-   between Python files is invisible to the frontend so long as the
-   registered keys stay the same. The 754-line telegram extraction
-   from `services/telegram_service.py` (Wave 11.H) changed zero
-   frontend code.
-
-5. **What NOT to do**: don't import the plugin folder from `routers/`,
-   `services/`, or another `nodes/` subfolder. Don't edit
-   `event_waiter.py` / `status_broadcaster.py` / `routers/websocket.py`
-   to add a new plugin's handler/filter/refresh — register from the
-   plugin's `__init__.py` instead.
-
-Full reference: [docs-internal/plugin_system.md → "Self-contained plugin folders"](./docs-internal/plugin_system.md#self-contained-plugin-folders).
+**Don't** import the plugin folder from `routers/` / `services/` / another `nodes/` subfolder. **Don't** edit `event_waiter.py` / `status_broadcaster.py` / `routers/websocket.py` to add a plugin's handler / filter / refresh — register from the plugin's `__init__.py` instead.
 
 ### 1. Use Existing Patterns - No Tribal Code
 - **Never add ad-hoc workarounds** - Use the established patterns documented in DESIGN.md
@@ -585,54 +530,13 @@ The frontend uses a layered cache + slice-subscription model so cold refreshes a
 - Applies to `SquareNode`, `AIAgentNode`, `TriggerNode`, `GenericNode`, `ToolkitNode`, `StartNode`, `TeamMonitorNode`. Add new node components the same way.
 - Reference: https://reactflow.dev/learn/advanced-use/performance
 
-### Icon + color — per-plugin folder + visuals.json fallback (post-RFC F1 + F2)
+### Icon + color — per-plugin folder + visuals.json fallback
 
-Following the plugin authoring RFC §6.5 / §6.6, icons and colors live co-located in the plugin folder; `visuals.json` is the fallback registry for emoji / library icons and the skill reverse-map.
+Plugin icons and colors live co-located in the plugin folder; `visuals.json` is the fallback registry for emoji / library icons and the skill reverse-map. Full resolution chain (per-node-type → shared → fallback) is documented in [server/nodes/README.md → Icon + color](./server/nodes/README.md) and [docs-internal/plugin_system.md](./docs-internal/plugin_system.md).
 
-**Icon resolution** (`BaseNode._metadata_dict` → `services/plugin/base.py`):
-1. **Per-node-type icon** — `<plugin_folder>/icon_<nodeType>.svg`. Lets multi-node-per-plugin folders serve distinct icons per node type (whatsapp has `icon_whatsappSend.svg` / `icon_whatsappReceive.svg` / `icon_whatsappDb.svg` in one shared folder).
-2. **Shared plugin icon** — `<plugin_folder>/icon.svg`. The standard Phase 9 contract; one icon for the whole folder (telegram / stripe / browser / search / google / etc.).
-3. Fallback: **`visuals.json` `icon`** field — emoji (`"🤖"`) or `lobehub:<brand>`. Post-F1/F7 there are **zero `asset:<key>` entries** in visuals.json.
+Backend endpoints serve SVGs at `GET /api/schemas/nodes/<type>/icon` (plugin icons) and `GET /api/schemas/credentials/<provider>/icon` (credential brand icons). Frontend resolver at [client/src/assets/icons/index.ts](./client/src/assets/icons/index.ts) dispatches `lib:brand` / URL passthrough / emoji / dead-code `asset:<key>`.
 
-When tier 1 or 2 hits, `_metadata_dict` emits the URL `/api/schemas/nodes/{type}/icon`. The endpoint serves the SVG with `Content-Type: image/svg+xml` and a long cache header.
-
-**Credential icon resolution** (F7 — `Credential.get_icon_path` → `services/plugin/credential.py`):
-1. **Central catalogue** — `server/credentials/icons/<provider>.svg` (10 brand icons today).
-2. **Co-located fallback** — `<credential_class_folder>/credential_<id>.svg` (none today; available for plugin-scoped credentials).
-3. Endpoint `GET /api/schemas/credentials/{provider}/icon` serves the SVG; `credential_providers.json` `icon_ref` entries use the URL form for the 10 migrated providers.
-
-**Color resolution** (F2 — per-plugin `meta.json`):
-1. **Per-plugin `meta.json`** in the plugin folder — `{"color": "#xxxxxx"}`. 113 plugin folders ship this today (mirrors icon co-location).
-2. Fallback: **`visuals.json` `color`** field. Only legacy entries that haven't been migrated rely on this; post-F2 visuals.json has zero `color` fields.
-
-**Files:**
-- [server/nodes/visuals.json](./server/nodes/visuals.json) — fallback registry. Post-F1/F2/F7 shape: `{nodeType: {icon?, skill?}}` (103 entries — **zero color fields, zero `asset:<key>` values**; only emoji + `lobehub:<brand>` icons + skill reverse-map remain).
-- [server/nodes/_visuals.py](./server/nodes/_visuals.py) — `get_icon`, `get_color`, `get_plugin_icon_path` (per-node-type tier + shared fallback), **`get_plugin_meta(node_type, key)`** (F2 resolver).
-- [server/nodes/&lt;group&gt;/&lt;plugin&gt;/icon.svg](./server/nodes/) — shared plugin icon (Phase 9 / RFC §6.5).
-- [server/nodes/&lt;group&gt;/&lt;plugin&gt;/icon_&lt;nodeType&gt;.svg](./server/nodes/whatsapp/) — per-node-type icon (post-F7 closure; whatsapp uses 3).
-- [server/nodes/&lt;group&gt;/&lt;plugin&gt;/meta.json](./server/nodes/) — co-located plugin color (F2 / RFC §6.6).
-- [server/credentials/icons/&lt;provider&gt;.svg](./server/credentials/icons/) — credential brand icons (F7).
-
-**Wire format** (frontend resolver at [client/src/assets/icons/index.ts](./client/src/assets/icons/index.ts)):
-- `/api/schemas/nodes/<type>/icon` — backend-served plugin icon (prefixed with `API_CONFIG.PYTHON_BASE_URL` in dev)
-- `/api/schemas/credentials/<provider>/icon` — backend-served credential icon (F7)
-- `<lib>:<brand>` — NPM icon package, e.g. `lobehub:Claude`
-- `data:` / URL passthrough — inline SVG or remote
-- plain emoji / short text — rendered as-is
-- `asset:<key>` — dead defensive code in the resolver. No `asset:<key>` values exist in visuals.json or `credential_providers.json` after F7 closure; the bundled `client/src/assets/icons/` directory was reduced to the resolver + `themedGlyphs.ts` (30 SVGs + 7 group barrels deleted at commit `f2366db`).
-
-**Latent Phase 6 bug fix (commit `95249a1`):** `BaseNode.__init_subclass__` previously called `_metadata_dict()` BEFORE `register_node_class(cls)`, so `get_plugin_icon_path` couldn't resolve the plugin via `get_node_class()`. The URL emission silently fell through to `visuals.json`'s `asset:<key>`. Swapping the two register calls activates the URL path as intended.
-
-**Frontend rendering:**
-- Single `<NodeIcon icon className />` primitive at [client/src/assets/icons/NodeIcon.tsx](./client/src/assets/icons/NodeIcon.tsx) dispatches lib-component / `<img>` / text branches.
-- Does **not** apply parent `color` — would mono-tint lobehub `.Color` brand SVGs whose paths use `currentColor`. Sites that want a tinted backdrop set `style={{ color: brandColor }}` on the parent + `bg-tint-soft` / `border-tint`.
-- SKILL.md icon/color resolves via `SkillLoader._parse_skill_metadata` from the first node in `allowed-tools` using the same handler chain. Orphan skills (personality, memory operators, autonomous patterns — no node target) keep inline `metadata.icon` and `metadata.color`.
-
-**Do not:**
-- Ship inline data URIs from the backend.
-- Maintain frontend override tables.
-- Declare `icon`/`color` on a node class (use icon.svg + meta.json, or visuals.json for fallback cases).
-- Declare them in SKILL.md when the skill targets a node.
+**Do not** declare `icon` / `color` as class attributes on a node (the override path was removed in F1). Drop `icon.svg` (or `icon_<nodeType>.svg` for multi-node folders like whatsapp) and `meta.json` into the plugin folder. SKILL.md icon/color resolves from the first node in `allowed-tools` — only orphan skills keep inline `metadata.icon` / `metadata.color`.
 
 ## Key Files & Components
 
@@ -1666,28 +1570,17 @@ server/nodes/document/
 
 ### Temporal Distributed Execution
 
-Workflows execute via Temporal for durability and horizontal scaling. Temporal is an always-on service (like WhatsApp) started unconditionally by `npm run start` and `npm run dev`.
+Workflows execute via Temporal for durability and horizontal scaling. Three dispatch paths (legacy `execute_node_activity` / per-type `node.{type}.v{version}` (F4.A) / Agent-as-child-workflow (F4.B)) gated by `TEMPORAL_PER_TYPE_DISPATCH` and `TEMPORAL_AGENT_WORKFLOW_ENABLED` settings flags.
 
-**Architecture**: Three dispatch paths, gated by settings flags (see [docs-internal/TEMPORAL_ARCHITECTURE.md](./docs-internal/TEMPORAL_ARCHITECTURE.md)):
-
-| Path | Trigger | Behavior |
-|---|---|---|
-| Legacy single activity (`execute_node_activity`) | Default | Every node routed through one dispatcher; WebSocket round-trip back to FastAPI. |
-| Per-type activity (`node.{type}.v{version}`) | `TEMPORAL_PER_TYPE_DISPATCH=true` (F4.A, commit `8261b05`) | Each plugin gets its own `@activity.defn` via `BaseNode.as_activity()`. Per-plugin retry/timeout/heartbeat configs apply. Direct call to `workflow_service.execute_node()` (no WS round-trip; worker shares FastAPI process). Foundation for future `TemporalWorkerPool` per-queue routing. |
-| Agent-as-child-workflow (`AgentWorkflow`) | `TEMPORAL_AGENT_WORKFLOW_ENABLED=true` (F4.B infra, commit `a4d009e`) | aiAgent / chatAgent / 12 specialized agents / 2 team leads become Temporal child workflows. LLM step = activity. Tool calls = per-type activities. `deep_agent` / `rlm_agent` / `claude_code_agent` keep single-activity execution (externalised loops). |
-
-- **Per-node retry** - Failed nodes retry independently (up to 3 attempts)
-- **Per-node timeout** - Long AI nodes don't block short nodes (10 min default)
-- **Horizontal scaling** - Activities distributed across worker pool
-- **Activity heartbeats** - Legacy path: `activity.heartbeat()` on every non-matching WebSocket broadcast in the read loop (`services/temporal/activities.py`). Per-type path: heartbeats at pipeline-stage boundaries inside `BaseNode.as_activity()`. Both keep long-running DeepAgent/browser operations alive past the 2-min `heartbeat_timeout`.
+Full architecture, dispatch matrix, per-node lifecycle, heartbeat semantics, the 15 migrating agent types + 3 bypass agents (deep_agent / rlm_agent / claude_code_agent), the 5 F4.B agent activities (`execute_llm_step.v1` / `persist_turn.v1` / `compact_memory.v1` / `prepare_payload.v1` / `broadcast_progress.v1`), and the future `TemporalWorkerPool` per-queue routing live in [docs-internal/TEMPORAL_ARCHITECTURE.md](./docs-internal/TEMPORAL_ARCHITECTURE.md). Tool-call dispatch under F4.A documented at [docs-internal/tool_building_pipeline.md §9](./docs-internal/tool_building_pipeline.md).
 
 **Configuration** (`.env`):
 ```env
 TEMPORAL_SERVER_ADDRESS=localhost:7233
 TEMPORAL_NAMESPACE=default
 TEMPORAL_TASK_QUEUE=machina-tasks
-TEMPORAL_PER_TYPE_DISPATCH=false        # F4.A flag (default off)
-TEMPORAL_AGENT_WORKFLOW_ENABLED=false   # F4.B flag (default off)
+TEMPORAL_PER_TYPE_DISPATCH=true         # F4.A flag — per-type activity dispatch
+TEMPORAL_AGENT_WORKFLOW_ENABLED=true    # F4.B flag — agent-as-child-workflow
 ```
 
 **Temporal Server** (`temporal-server` global CLI):

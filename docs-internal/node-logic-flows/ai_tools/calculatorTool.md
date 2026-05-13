@@ -131,4 +131,4 @@ flowchart TD
 ## Related
 
 - **Sibling tools**: [`currentTimeTool`](./currentTimeTool.md), [`duckduckgoSearch`](./duckduckgoSearch.md), [`taskManager`](./taskManager.md), [`writeTodos`](./writeTodos.md)
-- **Architecture docs**: [Agent Architecture](../../agent_architecture.md), [Dual-Purpose Tool Node Guide](../../dual_purpose_tool_node_creation.md)
+- **Architecture docs**: [Agent Architecture](../../agent_architecture.md), [Tool Building Pipeline](../../tool_building_pipeline.md), [Node Creation Guide](../../node_creation.md)

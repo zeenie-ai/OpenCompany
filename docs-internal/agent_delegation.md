@@ -2,6 +2,8 @@
 
 How memory, parameters, and execution context flow when one AI agent delegates work to another agent connected as a tool.
 
+> **Related docs:** [tool_building_pipeline.md](./tool_building_pipeline.md) for the underlying `_build_tool_from_node` + `execute_tool` pipeline that backs `delegate_to_*` (delegation tools share the same StructuredTool construction path as other AI tools — what makes them special is the fire-and-forget background task and the `{"status": "delegated"}` lifecycle opt-out documented there).
+
 ## Overview
 
 AI Agents can delegate tasks to other agents connected to their `input-tools` handle. The parent agent's LLM decides when to call the child agent by invoking a `delegate_to_<agent>` tool. The child spawns as an independent `asyncio.Task` and the parent continues working immediately -- a **fire-and-forget** pattern.

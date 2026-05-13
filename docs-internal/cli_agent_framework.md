@@ -315,6 +315,8 @@ Lifespan: `main.py` enters `mcp_app.router.lifespan_context()` so `StreamableHTT
 
 ## Memory bridge — `simpleMemory` → `claude_code_agent`
 
+> See [memory_lifecycle.md](./memory_lifecycle.md) for the shared markdown surface (every agent uses the same `parse_memory_markdown` / `append_to_memory_markdown` / `trim_markdown_window` helpers to maintain `simpleMemory.memory_content`). This section documents what's UNIQUE to `claude_code_agent`: the markdown is the UI mirror, not the resume channel.
+
 Connecting a `simpleMemory` node to a `claude_code_agent` makes the
 spawned `claude -p` resume its prior session natively across runs.
 **No system-prompt injection, no JSONL synthesis, no API fallback.**

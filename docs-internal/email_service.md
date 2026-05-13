@@ -391,8 +391,7 @@ cargo install himalaya
 
 ## Related Docs
 
-- [Node Creation Guide](./node_creation.md) — general pattern for adding workflow nodes
-- [Dual-Purpose Tool Guide](./dual_purpose_tool_node_creation.md) — how `emailSend`/`emailRead` work as both workflow nodes and AI tools
+- [Node Creation Guide](./node_creation.md) — canonical plugin recipe (covers dual-purpose nodes; `emailSend`/`emailRead` are live examples)
 - [Event Waiter System](./event_waiter_system.md) — trigger registration for `emailReceive`
 - [New Service Integration](./new_service_integration.md) — end-to-end integration pattern (use Google Workspace as a richer OAuth example)
 - [Credentials Encryption](./credentials_encryption.md) — how `email_*` keys are encrypted on disk

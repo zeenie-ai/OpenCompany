@@ -189,89 +189,35 @@ to this path (the remaining 5 are output-only legacy aliases).
 **New node checklist (post-Wave-10):**
 
 ```python
-# server/nodes/my_node.py
+# server/nodes/<group>/<plugin>/__init__.py
 from typing import Literal
 from pydantic import Field
-from models.nodes import BaseNodeParams
-from services.node_registry import register_node
+from services.plugin import ActionNode, NodeContext, Operation
 
-class MyParams(BaseNodeParams):
-    type: Literal["myNode"]
+class MyNodeParams(ActionNode.Params):
     query: str = Field(default="", json_schema_extra={"placeholder": "Search..."})
 
-async def handle_my_node(node_id, node_type, params, context):
-    return {"success": True, "result": {...}}
+class MyNodeOutput(ActionNode.Output):
+    result: dict = {}
 
-register_node(
-    type="myNode",
-    metadata={
-        "displayName": "My Node",
-        # icon + color resolved via server/nodes/visuals.json — add an
-        # entry: {"myNode": {"icon": "asset:my_icon", "color": "#8be9fd"}}
-        "group": ["tool"],
-        "componentKind": "square",
-        "handles": [...],                 # full topology
-        "description": "...",
-        "version": 1,
-    },
-    input_model=MyParams,
-    handler=handle_my_node,
-)
+class MyNode(ActionNode):
+    type = "myNode"
+    display_name = "My Node"
+    group = ("tool",)
+    component_kind = "square"
+    Params = MyNodeParams
+    Output = MyNodeOutput
+
+    @Operation("run")
+    async def run(self, ctx: NodeContext, params: MyNodeParams) -> MyNodeOutput:
+        return MyNodeOutput(success=True, result={...})
 ```
 
-Zero edits elsewhere.
+Drop `icon.svg` and `meta.json` (`{"color": "#xxx"}`) into the plugin folder. Zero edits elsewhere.
 
-### 10.B — Icon + color: central registry + handler
+### 10.B — Icon + color: per-plugin folder + visuals.json fallback
 
-Every node's icon and color live in **one** file:
-[server/nodes/visuals.json](../server/nodes/visuals.json) —
-`{nodeType: {icon, color, skill?}}`. The handler at
-[server/nodes/_visuals.py](../server/nodes/_visuals.py) exposes
-`get_icon` / `get_color`; `BaseNode._metadata_dict` consults it at
-registration time. Node plugin classes don't carry inline `icon = ...`
-or `color = ...` declarations — a subclass MAY override by setting
-the class attr (explicit value wins) but normal authoring goes
-through visuals.json.
-
-Wire format (resolver at
-[client/src/assets/icons/index.ts](../client/src/assets/icons/index.ts)):
-
-| Prefix | Source | Example |
-|---|---|---|
-| `asset:<key>` | Filesystem SVG; Vite `import.meta.glob` over `client/src/assets/icons/**/*.svg`. Key is filename minus `.svg`. | `asset:gmail` |
-| `<lib>:<brand>` | NPM icon package. `ICON_LIBRARIES` dispatch table with `lobehub` registered. | `lobehub:Claude` |
-| `data:` / `http(s)://` / `/…` | URL passthrough | — |
-| plain text | emoji | `🤖` |
-
-Frontend renders via the single
-[`<NodeIcon>`](../client/src/assets/icons/NodeIcon.tsx) primitive —
-one resolver, four branches (lib component / image / text / fallback).
-It does **not** apply parent color: lobehub `.Color` SVGs use
-`currentColor` for parts of the brand artwork, so wrapping them in
-`style={{ color: brandColor }}` would mono-tint multi-color brand
-marks. Sites that need a tinted backdrop set `style={{ color: brandColor }}`
-on the parent + `bg-tint-soft` / `border-tint`; NodeIcon sits inside
-without contributing to the cascade.
-
-Group-palette metadata follows the same pattern via
-[server/nodes/groups.py](../server/nodes/groups.py): palette groups
-declare `{label, icon, color, visibility}`. Retires the frontend's
-`CATEGORY_ICONS` / `labelMap` / `colorMap` / `SIMPLE_MODE_CATEGORIES`.
-
-**SKILL.md icon/color is auto-resolved from the target node.**
-`SkillLoader._parse_skill_metadata` reads `allowed-tools`, finds the
-first token that resolves to a node in visuals.json, and inherits
-that node's icon and color. Skills with a node target carry no
-inline `metadata.icon` / `metadata.color`. **Orphan skills**
-(personality, memory operators, autonomous patterns — no node
-target) keep inline values inside `metadata` since the resolver
-returns nothing for them. The `allowed-tools` field is snake_case
-(matching Python conventions); node `type` is camelCase (workflow
-JSON contract); the lookup converts at the boundary.
-
-`visuals.json` entries optionally carry a `skill` field pointing at
-the teaching skill folder — a reverse map for the frontend to find
-the skill from a node (e.g. a future "teach this node" button).
+Icons live as `icon.svg` (or `icon_<nodeType>.svg` for multi-node folders like whatsapp) in the plugin folder; colors live in `meta.json`. `visuals.json` is the fallback registry for emoji / `lobehub:<brand>` icons + the skill reverse-map. Full resolution chain + wire format + frontend rendering all documented in [server/nodes/README.md → Icon + color](../server/nodes/README.md). Credential brand icons via `Credential.get_icon_path()` resolve to `server/credentials/icons/<provider>.svg` or co-located `credential_<id>.svg`; served by `GET /api/schemas/credentials/{provider}/icon`.
 
 ### 10.G — Parameter panel fully spec-driven
 

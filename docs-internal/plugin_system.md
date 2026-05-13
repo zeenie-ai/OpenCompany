@@ -3,8 +3,9 @@
 The MachinaOs plugin system is a class-based, declarative node
 authoring model inspired by n8n's `INodeType`, Nango's
 `providers.yaml`, Pipedream's app/component split, and Temporal's
-activity pattern. One Python file under `server/nodes/<group>/<name>.py`
-= one node. No cross-cutting edits.
+activity pattern. One folder under `server/nodes/<group>/<plugin>/`
+rooted at `__init__.py` = one plugin (one or more node classes).
+No cross-cutting edits.
 
 **Status: shipped.** Plugin classes cover every node type in the
 product — live count via `glob server/nodes/**/__init__.py`. Pytest

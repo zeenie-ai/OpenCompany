@@ -1,5 +1,7 @@
 # Memory Compaction, Token Tracking, and Cost Calculation Service
 
+> **Related docs:** [memory_lifecycle.md](./memory_lifecycle.md) for the markdown / vector-store / state-clear surface. This doc is the SSOT for the **service** (CompactionService API, thresholds, native-API integration, pricing). memory_lifecycle.md is the SSOT for the **flow** (how the markdown moves through an agent turn).
+
 ## Overview
 
 The compaction service enables automatic memory compaction, token tracking, and **cost calculation** for MachinaOs specialized agents. It uses a hybrid approach leveraging native provider APIs (Anthropic, OpenAI) when available, with comprehensive token and cost tracking for all providers.

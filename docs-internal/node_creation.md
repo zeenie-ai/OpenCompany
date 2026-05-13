@@ -10,10 +10,10 @@ this file picks the right entry point based on what you're adding.
 
 | You're adding… | Read this | Boilerplate |
 |---|---|---|
-| A simple action node (one HTTP call, no state) | [Quick start](./plugin_system.md#quick-start--adding-a-new-node) | one `<name>.py` file under `server/nodes/<group>/` |
-| A dual-purpose node (workflow node + AI tool) | [Dual-Purpose Tool Guide](./dual_purpose_tool_node_creation.md) | one `<name>.py` with `usable_as_tool = True` |
-| A specialized AI agent | [Specialized Agent Guide](./specialized_agent_node_creation.md) | one `<name>.py` under `server/nodes/agent/` |
-| A standalone AI-tool node (no workflow surface) | [AI Tool Node Guide](./ai_tool_node_creation.md) | one `<name>.py` under `server/nodes/tool/` |
+| A simple action node (one HTTP call, no state) | [Quick start](./plugin_system.md#quick-start--adding-a-new-node) | folder under `server/nodes/<group>/<name>/` with `__init__.py` |
+| A dual-purpose node (workflow node + AI tool) | [plugin_system.md](./plugin_system.md) + whatsapp / twitter / email plugin folders | folder under `server/nodes/<group>/<name>/` with `group: ['category', 'tool']` and `usable_as_tool = True` |
+| A specialized AI agent | [plugin_system.md](./plugin_system.md) + the existing `server/nodes/agent/<name>/` folders | folder under `server/nodes/agent/<name>/` extending `SpecializedAgentBase` |
+| A standalone AI-tool node (no workflow surface) | [Tool Building Pipeline](./tool_building_pipeline.md) | folder under `server/nodes/tool/<name>/` extending `ToolNode` |
 | A node that wraps a CLI tool, supervises a daemon, or receives signed webhooks | [Wave 12 event framework](./plugin_system.md#wave-12--generalized-event-framework-servicesevents) (this section is the most important one) | self-contained folder under `server/nodes/<group>/` using `services.events` base classes |
 | A polling-based trigger node | [Wave 12 event framework](./plugin_system.md#wave-12--generalized-event-framework-servicesevents) — subclass `PollingEventSource` | new file or folder; framework owns the loop |
 | A long-lived service plugin (bot connection, WebSocket bridge, SDK session) | [Self-contained plugin folders (Wave 11.H)](./plugin_system.md#self-contained-plugin-folders) — telegram is the reference | folder with `_credentials.py` / `_service.py` / `_handlers.py` / `_filters.py` / `_refresh.py` |
@@ -217,16 +217,14 @@ walker does on startup), these registrations happen automatically:
 | Credentials | `CREDENTIAL_REGISTRY` | `Credential.__init_subclass__` when `_credentials.py` is imported |
 | Trigger registry + filter builders | `event_waiter.TRIGGER_REGISTRY`, `FILTER_BUILDERS` | back-fill from `TriggerNode` subclasses on first lookup |
 | Temporal activity wrapper | `cls.as_activity()` | first call; pooled into the worker queue declared by `task_queue` |
-| Palette icon + color | `nodes/visuals.json` | central source of truth (frontend resolver reads it) |
+| Palette icon | `<plugin_folder>/icon.svg` (or `icon_<nodeType>.svg` for multi-node folders); served via `GET /api/schemas/nodes/<type>/icon`. `visuals.json` is the fallback for emoji or `lobehub:<brand>` icons. |
+| Palette color | `<plugin_folder>/meta.json` (`{"color": "#xxx"}`); `visuals.json` is the fallback for legacy entries (post-F2 it has zero color fields). |
 
 What you **do** still write:
 
-- An entry in `server/nodes/visuals.json` for the icon + color
-  (unless the node sets them as class attributes, which override).
-- An entry in `server/nodes/groups.py` if you introduce a new
-  palette group.
-- An asset in `client/src/assets/icons/<name>.svg` for `asset:<name>`
-  icons.
+- Drop `icon.svg` (or `icon_<nodeType>.svg` for multi-node folders) and `meta.json` (`{"color": "#xxx"}`) inside the plugin folder. The class-attribute icon/color override was removed in F1 — declaring `icon` or `color` as class attrs has no effect.
+- An entry in `server/nodes/visuals.json` ONLY if you want an emoji or `lobehub:<brand>` icon (no folder SVG). Post-F1/F7 visuals.json carries zero `asset:<key>` values.
+- An entry in `server/nodes/groups.py` if you introduce a new palette group.
 
 ## Where to look next
 
@@ -239,9 +237,9 @@ What you **do** still write:
 | Stripe as the Wave 12 reference plugin (also the canonical CLI-managed-auth + auto-installer reference) | [stripe_service.md](./stripe_service.md) |
 | Backend-as-SSOT design (NodeSpec, icons, output schemas) | [schema_source_of_truth_rfc.md](./schema_source_of_truth_rfc.md) |
 | JSON workflow format, edge handle conventions | [workflow-schema.md](./workflow-schema.md) |
-| Dual-purpose nodes (workflow node + AI tool) | [dual_purpose_tool_node_creation.md](./dual_purpose_tool_node_creation.md) |
-| Specialized AI agents | [specialized_agent_node_creation.md](./specialized_agent_node_creation.md) |
 | Polling triggers + event_waiter mechanics | [event_waiter_system.md](./event_waiter_system.md) |
+| Memory lifecycle (markdown parse/append/trim, vector store, session resume) | [memory_lifecycle.md](./memory_lifecycle.md) |
+| Tool building pipeline (`_build_tool_from_node`, schema, per-type Temporal dispatch) | [tool_building_pipeline.md](./tool_building_pipeline.md) |
 | Process supervision (used by `DaemonEventSource`) | [server/services/process_service.py](../server/services/process_service.py) — singleton API |
 
 ## Wave summary (current state)

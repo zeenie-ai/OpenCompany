@@ -1,5 +1,7 @@
 # RLM Service -- Recursive Language Model Agent Integration
 
+> **Related docs:** [memory_lifecycle.md](./memory_lifecycle.md) for the shared markdown memory format (RLM uses the same simpleMemory surface as aiAgent); [tool_building_pipeline.md](./tool_building_pipeline.md) for how connected tool nodes are bound to the REPL via `ToolBridgeAdapter`.
+
 ## Overview
 
 The RLM (Recursive Language Models) service integrates the `rlms` library into MachinaOS as a specialized agent node (`rlm_agent`). Unlike other specialized agents that route to `handle_chat_agent` and use LangGraph, the RLM agent uses its own REPL-based code execution loop where the LM writes Python code blocks that are `exec()`-ed in a sandboxed environment.

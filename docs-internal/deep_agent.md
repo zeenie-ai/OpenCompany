@@ -4,7 +4,9 @@ Specialized agent node powered by [LangChain DeepAgents](https://github.com/lang
 
 > **Related Documentation:**
 > - [Agent Architecture](./agent_architecture.md) - LangGraph skill injection and tool execution
-> - [Specialized Agent Guide](./specialized_agent_node_creation.md) - Creating specialized AI agents
+> - [Node Creation Guide](./node_creation.md) - Canonical plugin recipe (covers specialized agents)
+> - [Memory Lifecycle](./memory_lifecycle.md) - Canonical home for memory markdown, vector store, compaction triggers
+> - [Tool Building Pipeline](./tool_building_pipeline.md) - Canonical home for tool schema construction
 > - [Agent Delegation](./agent_delegation.md) - Memory, parameters, and execution context flow
 
 ## Table of Contents
@@ -96,42 +98,9 @@ ResponseExtractor.extract() -> save memory -> return result
 
 ## DeepAgents Package
 
-### Installation
+MachinaOs depends on `deepagents>=0.4.12` (with `langchain-core`, `langchain`, `langchain-anthropic`, `langchain-google-genai`, `wcmatch`). Upstream API surface (`create_deep_agent`, middleware, sub-agent protocol, backend protocol) is documented at https://github.com/langchain-ai/deepagents — refer there for SDK details.
 
-```
-pip install deepagents>=0.4.12
-```
-
-**Dependencies:** `langchain-core`, `langchain`, `langchain-anthropic`, `langchain-google-genai`, `wcmatch`
-
-### create_deep_agent()
-
-```python
-from deepagents import create_deep_agent
-
-agent = create_deep_agent(
-    model=None,             # str ("provider:model") | BaseChatModel | None
-    tools=None,             # Sequence[BaseTool | Callable | dict]
-    system_prompt=None,     # str | SystemMessage
-    middleware=(),           # Sequence[AgentMiddleware]
-    subagents=None,         # Sequence[SubAgent | CompiledSubAgent | AsyncSubAgent]
-    skills=None,            # list[str] (paths to skill dirs)
-    memory=None,            # list[str] (paths to AGENTS.md files)
-    response_format=None,   # ResponseFormat | type | dict
-    context_schema=None,    # type[ContextT]
-    checkpointer=None,      # Checkpointer
-    store=None,             # BaseStore
-    backend=None,           # BackendProtocol | BackendFactory
-    interrupt_on=None,      # dict[str, bool | InterruptOnConfig]
-    debug=False,            # bool
-    name=None,              # str
-    cache=None,             # BaseCache
-)
-```
-
-Returns a **`CompiledStateGraph`** -- a compiled LangGraph graph compatible with streaming, Studio, checkpointers, and all LangGraph features.
-
-**Default model:** `claude-sonnet-4-6` (via `ChatAnthropic`). MachinaOs uses the lower-level `langchain.agents.create_agent()` instead, passing a pre-built `BaseChatModel` instance and no default middleware -- only connected MachinaOs tool nodes are used.
+MachinaOs **does not** call `create_deep_agent()` directly. We use the lower-level `langchain.agents.create_agent()` from the same package, passing a pre-built `BaseChatModel` and no default middleware so only connected MachinaOs tool nodes are used. Filesystem operations route through `LocalShellBackend(root_dir=workspace_dir, virtual_mode=True)` so paths sandbox to the per-workflow workspace.
 
 ### Built-in Tools
 
@@ -268,26 +237,7 @@ The handler passes raw `tool_data` to the service, which calls `ToolAdapter.buil
 
 ## Memory Integration
 
-Deep Agent supports MachinaOs's SimpleMemory node (markdown-based + vector store), following the same lifecycle as `execute_chat_agent`:
-
-### Load (before agent invocation)
-1. Parse markdown via `_parse_memory_markdown()` into LangChain messages
-2. If `long_term_enabled`: retrieve relevant context from `_get_memory_vector_store()` via `similarity_search()`, append to system_message
-3. Prepend history messages to the deepagents input messages list
-
-### Save (after agent invocation)
-1. Append human prompt and AI response via `_append_to_memory_markdown()`
-2. Trim to `window_size` via `_trim_markdown_window()`
-3. Archive removed messages to vector store if `long_term_enabled`
-4. Persist updated markdown to database via `save_node_parameters()`
-
-### Result Metadata
-```python
-result["memory"] = {
-    "session_id": session_id,
-    "history_loaded": history_count,
-}
-```
+Deep Agent uses MachinaOs's SimpleMemory node like every other agent — the full lifecycle (markdown parse / append / trim, vector store, claude_code_agent native session bridge) lives in [memory_lifecycle.md](./memory_lifecycle.md). Deep-Agent-specific bits: `DeepAgentService.execute()` accepts the parsed history as a LangChain `BaseMessage` list (same shape as aiAgent's input), and the post-execution save attaches a `memory.session_id` / `memory.history_loaded` block to the result envelope. No engine-specific memory format; the markdown is shared across all four agents that use simpleMemory.
 
 ---
 

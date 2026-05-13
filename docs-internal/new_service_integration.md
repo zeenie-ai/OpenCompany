@@ -520,118 +520,10 @@ from services.handlers.{service} import (
 
 ## Step 6: Frontend Node Definitions
 
-Create `client/src/nodeDefinitions/{service}Nodes.ts`:
-
-```typescript
-import { NodeDefinition, INodeProperties, NodeConnectionType } from '../types/INodeProperties';
-
-// Service icon (SVG or emoji)
-const SERVICE_ICON = `<svg>...</svg>`;
-
-// Service color
-const SERVICE_COLOR = '#4285F4';
-
-// Common service properties
-const SERVICE_COMMON_PROPS: INodeProperties[] = [
-  {
-    displayName: 'Account Mode',
-    name: 'account_mode',
-    type: 'options',
-    options: [
-      { name: 'Owner (My Account)', value: 'owner' },
-      { name: 'Customer', value: 'customer' },
-    ],
-    default: 'owner',
-    description: 'Whose account to use',
-  },
-  {
-    displayName: 'Customer ID',
-    name: 'customer_id',
-    type: 'string',
-    default: '',
-    displayOptions: { show: { account_mode: ['customer'] } },
-    description: 'Customer identifier for multi-tenant mode',
-  },
-];
-
-export const {service}Nodes: Record<string, NodeDefinition> = {
-  {operation1}Node: {
-    displayName: '{Operation 1}',
-    name: '{operation1}Node',
-    icon: SERVICE_ICON,
-    group: ['{service}', 'tool'],
-    description: 'Description of operation 1',
-    defaults: {
-      name: '{Operation 1}',
-      color: SERVICE_COLOR,
-    },
-    inputs: [{ name: 'main', displayName: 'Input', type: 'main' as NodeConnectionType }],
-    outputs: [{ name: 'main', displayName: 'Output', type: 'main' as NodeConnectionType }],
-    properties: [
-      ...SERVICE_COMMON_PROPS,
-      // Operation-specific properties
-      {
-        displayName: 'Parameter 1',
-        name: 'param1',
-        type: 'string',
-        default: '',
-        required: true,
-        description: 'Description of parameter 1',
-      },
-    ],
-  },
-
-  // Add more operations...
-};
-
-// Export node type array for constants
-export const {SERVICE}_NODE_TYPES = Object.keys({service}Nodes);
-```
-
-### Register in nodeDefinitions.ts
-
-```typescript
-// client/src/nodeDefinitions.ts
-
-import { {service}Nodes, {SERVICE}_NODE_TYPES } from './nodeDefinitions/{service}Nodes';
-
-export const nodeDefinitions: NodeDefinitionRegistry = {
-  // ... existing nodes
-  ...{service}Nodes,
-};
-```
-
-### Add to Dashboard.tsx
-
-```typescript
-// In getNodeTypes()
-} else if (type.startsWith('{service}') || {SERVICE}_NODE_TYPES.includes(type)) {
-  types[type] = SquareNode;
-}
-```
-
-### Add to executionService.ts (CRITICAL - Enables Run Button)
-
-```typescript
-// client/src/services/executionService.ts
-
-// Import node types
-import { {SERVICE}_NODE_TYPES } from '../nodeDefinitions/{service}Nodes';
-
-// Add to isNodeTypeSupported() supportedTypes array
-static isNodeTypeSupported(nodeType: string): boolean {
-  const supportedTypes = [
-    // ... existing types
-    // {Service} Nodes
-    ...{SERVICE}_NODE_TYPES,
-  ];
-  return supportedTypes.includes(nodeType);
-}
-```
-
-**CRITICAL:** Without this step, the Run button will NOT appear in the parameter panel for your new nodes. This is the execution whitelist - only nodes in this list can be executed via the Run button.
+**No frontend changes required.** Post-Wave-11 nodes are declared as Python plugins (Step 5); the frontend fetches NodeSpec via GET /api/schemas/nodes/{type}/spec.json and renders without per-service TypeScript. The Pydantic Params class doubles as the LLM-visible tool schema; icon goes in <plugin>/icon.svg; color in <plugin>/meta.json. See [node_creation.md](./node_creation.md) and [server/nodes/README.md](../server/nodes/README.md) for the canonical recipe.
 
 ---
+
 
 ## Step 7: AI Tool Schemas
 
@@ -701,70 +593,13 @@ InputSection consumes these automatically via `GET /api/schemas/nodes/{node_type
 
 ## Step 9: Credentials Modal
 
-Update `client/src/components/CredentialsModal.tsx`:
+**No React changes required.** Post-Wave-7 the Credentials Modal renders entirely from `server/config/credential_providers.json` via the catalogue → `useCatalogueQuery` → `ApiKeyPanel` / `OAuthConnect` chain. To add a new provider:
 
-### Add to CATEGORIES
+1. Add an entry to `server/config/credential_providers.json` with `id`, `name`, `category`, `fields[]` (validation/connect targets + optional secondary fields like Telegram's owner-chat-id), `icon_ref` (URL form `/api/schemas/credentials/<id>/icon`), and `panel_type` (`api_key` / `oauth` / `qr_pairing` / `email_smtp`).
+2. Drop the brand SVG at `server/credentials/icons/<id>.svg` (served by `GET /api/schemas/credentials/<id>/icon`).
+3. Implement the `Credential` subclass in your plugin folder's `_credentials.py` (validation, `_probe(api_key)` for API keys, or OAuth callback router for OAuth flows).
 
-```typescript
-const CATEGORIES = [
-  // ... existing categories
-  {
-    id: '{service}',
-    name: '{Service Name}',
-    placeholder: '',
-    color: '#4285F4',
-    desc: 'Service description',
-    CustomIcon: ServiceIcon,
-    isSpecial: true,
-    panelType: '{service}',
-  },
-];
-```
-
-### Add Icon Component
-
-```typescript
-const ServiceIcon = () => (
-  <svg viewBox="0 0 24 24" style={{ width: 20, height: 20 }}>
-    {/* SVG path */}
-  </svg>
-);
-```
-
-### Add OAuth Panel
-
-```typescript
-const render{Service}Panel = () => (
-  <div style={panelStyle}>
-    <div style={headerStyle}>
-      <ServiceIcon />
-      <span>{Service Name}</span>
-      {isConnected && <Tag color="green">Connected as {email}</Tag>}
-    </div>
-
-    {!isConnected ? (
-      <>
-        <Input
-          placeholder="Client ID"
-          value={clientId}
-          onChange={(e) => setClientId(e.target.value)}
-        />
-        <Input.Password
-          placeholder="Client Secret"
-          value={clientSecret}
-          onChange={(e) => setClientSecret(e.target.value)}
-        />
-        <Button onClick={handleSaveCredentials}>Save</Button>
-        <Button onClick={handleLogin} disabled={!clientId || !clientSecret}>
-          Login with {Service}
-        </Button>
-      </>
-    ) : (
-      <Button onClick={handleLogout}>Disconnect</Button>
-    )}
-  </div>
-);
-```
+See [credentials_encryption.md](./credentials_encryption.md) for the catalogue contract and `Credential` base class details.
 
 ---
 
