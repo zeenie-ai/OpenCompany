@@ -123,12 +123,24 @@ def get_plugin_meta(node_type: str, key: Optional[str] = None) -> Optional[dict 
 
 
 def get_plugin_icon_path(node_type: str, variant: str = "light") -> Optional[Path]:
-    """Return the on-disk path to a plugin's co-located ``icon.svg``.
+    """Return the on-disk path to a plugin's co-located icon SVG.
 
-    ``variant="dark"`` looks for ``icon.dark.svg`` first and falls back
-    to ``icon.svg`` if the dark variant is missing.
+    ``variant="dark"`` looks for the dark-mode SVG first and falls back
+    to the light variant when no dark file exists.
 
-    Resolution:
+    Resolution chain (first hit wins):
+    1. **Per-node-type icon** — ``<plugin_dir>/icon_<node_type>.svg``
+       (or ``icon_<node_type>.dark.svg`` for ``variant="dark"``).
+       Lets multi-node-per-plugin folders (whatsapp / telegram / stripe)
+       serve distinct icons per node type WITHOUT splitting the folder.
+       e.g. ``server/nodes/whatsapp/icon_whatsappSend.svg`` serves the
+       ``whatsappSend`` node while sharing the folder with
+       ``whatsappReceive`` and ``whatsappDb``.
+    2. **Shared plugin icon** — ``<plugin_dir>/icon.svg`` (or
+       ``icon.dark.svg``). The original Phase 9 contract; one icon for
+       the whole folder.
+
+    Folder resolution itself:
     1. Look up the plugin class via :func:`services.node_registry.get_node_class`.
     2. Resolve the class's source file via ``inspect.getfile``.
     3. The plugin folder is the file's parent directory — equally
@@ -136,9 +148,8 @@ def get_plugin_icon_path(node_type: str, variant: str = "light") -> Optional[Pat
        → parent ``server/nodes/tool/``) and self-contained-folder
        plugins (``server/nodes/telegram/telegram_send.py`` → parent
        ``server/nodes/telegram/``).
-    4. Return ``<plugin_dir>/icon.svg`` (or dark variant) if it exists.
 
-    Returns ``None`` when the type is unknown or no ``icon.svg`` is
+    Returns ``None`` when the type is unknown or no icon SVG is
     present — caller falls back to :func:`get_icon` (visuals.json).
     """
     # Local import to avoid a top-level circular dep (node_registry
@@ -153,12 +164,22 @@ def get_plugin_icon_path(node_type: str, variant: str = "light") -> Optional[Pat
     except (TypeError, OSError):
         return None
 
+    # Candidate filenames in resolution order. Per-node-type first so
+    # multi-node folders can override the shared icon for specific
+    # node types.
+    candidates: list[str] = []
     if variant == "dark":
-        dark = plugin_dir / "icon.dark.svg"
-        if dark.exists():
-            return dark
-    icon = plugin_dir / "icon.svg"
-    return icon if icon.exists() else None
+        candidates.append(f"icon_{node_type}.dark.svg")
+    candidates.append(f"icon_{node_type}.svg")
+    if variant == "dark":
+        candidates.append("icon.dark.svg")
+    candidates.append("icon.svg")
+
+    for name in candidates:
+        path = plugin_dir / name
+        if path.exists():
+            return path
+    return None
 
 
 def get_skill(node_type: str) -> str:

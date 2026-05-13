@@ -318,14 +318,9 @@
     "icon": "🪝"
   },
   "whatsappDb": {
-    "icon": "asset:whatsapp-db",
     "skill": "whatsapp-db-skill"
   },
-  "whatsappReceive": {
-    "icon": "asset:whatsapp-receive"
-  },
   "whatsappSend": {
-    "icon": "asset:whatsapp-send",
     "skill": "whatsapp-send-skill"
   },
   "wifiAutomation": {

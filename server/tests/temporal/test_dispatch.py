@@ -169,6 +169,39 @@ class TestAgentWorkflowDispatch:
             )
 
 
+class TestPerNodeTypeIconResolution:
+    """``get_plugin_icon_path`` resolves per-node-type icons before the
+    shared folder icon, so multi-node folders (whatsapp / telegram /
+    stripe) can serve distinct icons per node type from one folder."""
+
+    def test_whatsapp_send_resolves_per_node_icon(self):
+        from nodes._visuals import get_plugin_icon_path
+        path = get_plugin_icon_path("whatsappSend")
+        assert path is not None
+        assert path.name == "icon_whatsappSend.svg"
+
+    def test_whatsapp_receive_resolves_per_node_icon(self):
+        from nodes._visuals import get_plugin_icon_path
+        path = get_plugin_icon_path("whatsappReceive")
+        assert path is not None
+        assert path.name == "icon_whatsappReceive.svg"
+
+    def test_whatsapp_db_resolves_per_node_icon(self):
+        from nodes._visuals import get_plugin_icon_path
+        path = get_plugin_icon_path("whatsappDb")
+        assert path is not None
+        assert path.name == "icon_whatsappDb.svg"
+
+    def test_telegram_falls_back_to_shared_icon(self):
+        """telegram_send + telegram_receive share one icon.svg —
+        per-node icons aren't required when the brand mark is the
+        same for both."""
+        from nodes._visuals import get_plugin_icon_path
+        path = get_plugin_icon_path("telegramSend")
+        assert path is not None
+        assert path.name == "icon.svg"
+
+
 class TestPerTypeActivityCollection:
     """`collect_plugin_activities()` must return one callable per registered
     plugin class — TemporalWorkerManager's per-type registration depends on
