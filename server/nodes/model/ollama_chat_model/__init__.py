@@ -11,9 +11,9 @@ flows through the same ``proxy_url`` parameter cloud providers already
 use for Ollama-style auth delegation.
 """
 
-from ._base import ChatModelBase
+from .._base import ChatModelBase
 
-from ._credentials import OllamaCredential
+from .._credentials import OllamaCredential
 
 
 class OllamaChatModelNode(ChatModelBase):

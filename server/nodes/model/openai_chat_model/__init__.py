@@ -2,9 +2,9 @@ from typing import Literal, Optional
 
 from pydantic import Field
 
-from ._base import ChatModelBase, ChatModelParams
+from .._base import ChatModelBase, ChatModelParams
 
-from ._credentials import OpenAICredential
+from .._credentials import OpenAICredential
 
 
 class OpenAIChatModelParams(ChatModelParams):

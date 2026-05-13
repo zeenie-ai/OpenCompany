@@ -2,9 +2,9 @@ from typing import Optional
 
 from pydantic import Field
 
-from ._base import ChatModelBase, ChatModelParams
+from .._base import ChatModelBase, ChatModelParams
 
-from ._credentials import OpenRouterCredential
+from .._credentials import OpenRouterCredential
 
 
 class OpenRouterChatModelParams(ChatModelParams):

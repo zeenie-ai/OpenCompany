@@ -1,6 +1,6 @@
-from ._base import ChatModelBase
+from .._base import ChatModelBase
 
-from ._credentials import KimiCredential
+from .._credentials import KimiCredential
 
 
 class KimiChatModelNode(ChatModelBase):

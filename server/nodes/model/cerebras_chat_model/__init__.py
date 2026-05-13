@@ -2,9 +2,9 @@ from typing import Optional
 
 from pydantic import Field
 
-from ._base import ChatModelBase, ChatModelParams
+from .._base import ChatModelBase, ChatModelParams
 
-from ._credentials import CerebrasCredential
+from .._credentials import CerebrasCredential
 
 
 class CerebrasChatModelParams(ChatModelParams):

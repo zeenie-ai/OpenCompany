@@ -9,9 +9,9 @@ mistral. The user's custom server URL is stored as the
 ``lmstudio_proxy`` credential.
 """
 
-from ._base import ChatModelBase
+from .._base import ChatModelBase
 
-from ._credentials import LMStudioCredential
+from .._credentials import LMStudioCredential
 
 
 class LMStudioChatModelNode(ChatModelBase):

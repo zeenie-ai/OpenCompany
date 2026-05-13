@@ -1,6 +1,6 @@
-from ._base import ChatModelBase
+from .._base import ChatModelBase
 
-from ._credentials import MistralCredential
+from .._credentials import MistralCredential
 
 
 class MistralChatModelNode(ChatModelBase):
