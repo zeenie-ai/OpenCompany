@@ -6,7 +6,7 @@ from typing import Any
 
 from services.plugin import NodeContext, NodeUserError, Operation
 
-from ._base import CodeExecutorBase, CodeExecutorParams
+from .._base import CodeExecutorBase, CodeExecutorParams
 
 
 # Names available in the sandbox namespace -- kept here so the

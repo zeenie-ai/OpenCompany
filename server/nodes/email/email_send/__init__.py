@@ -54,5 +54,5 @@ class EmailSendNode(ActionNode):
     @Operation("send", cost={"service": "email", "action": "send", "count": 1})
     async def send(self, ctx: NodeContext, params: EmailSendParams) -> Any:
         # Body inlined from handlers/email.py (Wave 11.D.1).
-        from ._service import get_email_service
+        from .._service import get_email_service
         return await get_email_service().send(params.model_dump(by_alias=False))

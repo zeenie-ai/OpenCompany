@@ -70,7 +70,7 @@ class EmailReceiveNode(PollingTriggerNode):
     # four hooks below.
 
     async def setup_service(self, params: Dict[str, Any]) -> Any:
-        from ._service import get_email_service
+        from .._service import get_email_service
 
         svc = get_email_service()
         creds = await svc.resolve_credentials(params)
@@ -117,7 +117,7 @@ class EmailReceiveNode(PollingTriggerNode):
         import asyncio
         import time
         from datetime import datetime
-        from ._service import get_email_service
+        from .._service import get_email_service
         from services.status_broadcaster import get_status_broadcaster
         from services import event_waiter
 

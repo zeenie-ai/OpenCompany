@@ -120,5 +120,5 @@ class EmailReadNode(ActionNode):
     @Operation("query", cost={"service": "email", "action": "imap", "count": 1})
     async def query(self, ctx: NodeContext, params: EmailReadParams) -> Any:
         # Body inlined from handlers/email.py (Wave 11.D.1).
-        from ._service import get_email_service
+        from .._service import get_email_service
         return await get_email_service().read(params.model_dump())
