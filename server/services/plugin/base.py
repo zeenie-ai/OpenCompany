@@ -205,17 +205,24 @@ class BaseNode:
            emitted as a URL routed through ``GET /api/schemas/nodes/<type>/icon``.
         2. Fallback to ``visuals.json`` (emoji / ``lobehub:<brand>``).
 
-        ``color`` continues to come from ``visuals.json`` (orthogonal
-        to icon source; a future ``meta.json`` may eventually move
-        colors per-folder too — deferred).
+        Color resolution (per RFC §6.6 / F2):
+        1. Per-plugin ``meta.json`` ``color`` field, co-located with the
+           plugin folder. Mirrors icon co-location.
+        2. Fallback to ``visuals.json`` for legacy entries that have
+           not been migrated yet.
         """
-        from nodes._visuals import get_icon, get_color, get_plugin_icon_path
+        from nodes._visuals import (
+            get_icon,
+            get_color,
+            get_plugin_icon_path,
+            get_plugin_meta,
+        )
 
         if get_plugin_icon_path(cls.type) is not None:
             icon = f"/api/schemas/nodes/{cls.type}/icon"
         else:
             icon = get_icon(cls.type)
-        color = get_color(cls.type)
+        color = get_plugin_meta(cls.type, "color") or get_color(cls.type)
         meta: Dict[str, Any] = {
             "displayName": cls.display_name or cls.type,
             "icon": icon,

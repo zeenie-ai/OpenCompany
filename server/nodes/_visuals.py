@@ -68,11 +68,58 @@ def get_color(node_type: str) -> str:
 
     Color strings are arbitrary CSS color literals — the canvas node
     components apply them as-is to gradients, borders, and badges.
+
+    Falls back to ``visuals.json`` for legacy entries that haven't been
+    migrated to per-plugin ``meta.json`` yet (F2 cleanup of the plugin
+    authoring RFC).
     """
     entry = _VISUALS.get(node_type)
     if not entry:
         return ""
     return str(entry.get("color", ""))
+
+
+def get_plugin_meta(node_type: str, key: Optional[str] = None) -> Optional[dict | str]:
+    """Read the plugin's co-located ``meta.json`` file.
+
+    Same folder-resolution path as :func:`get_plugin_icon_path` — uses
+    :func:`inspect.getfile` on the plugin class to locate the folder,
+    then loads ``meta.json`` if present.
+
+    Returns the value at ``key`` (str) when given, the whole dict when
+    ``key`` is ``None``, or ``None`` when the file or key is absent.
+    Callers fall back to :func:`get_color` / other ``visuals.json`` keys
+    for legacy entries.
+
+    Per RFC §6.2 / F2 of the deferred follow-ups: ``meta.json`` mirrors
+    ``icon.svg`` co-location so a plugin's entire visual surface area
+    lives in one folder. The previous central ``visuals.json`` color
+    map remains as a transitional fallback for entries without a
+    per-plugin ``meta.json``.
+    """
+    from services.node_registry import get_node_class
+
+    cls = get_node_class(node_type)
+    if cls is None:
+        return None
+    try:
+        plugin_dir = Path(inspect.getfile(cls)).resolve().parent
+    except (TypeError, OSError):
+        return None
+    meta_path = plugin_dir / "meta.json"
+    if not meta_path.exists():
+        return None
+    try:
+        with meta_path.open("r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    if key is None:
+        return data
+    value = data.get(key)
+    return None if value is None else str(value)
 
 
 def get_plugin_icon_path(node_type: str, variant: str = "light") -> Optional[Path]:
