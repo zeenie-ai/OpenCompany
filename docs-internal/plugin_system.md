@@ -6,9 +6,11 @@ authoring model inspired by n8n's `INodeType`, Nango's
 activity pattern. One Python file under `server/nodes/<group>/<name>.py`
 = one node. No cross-cutting edits.
 
-**Status: shipped.** 111 plugin classes cover every node type in the
-product across 9 Temporal worker queues; 124 pytest contract
-invariants lock the architecture. `services/handlers/` shrank from
+**Status: shipped.** Plugin classes cover every node type in the
+product — live count via `glob server/nodes/**/__init__.py`. Pytest
+contract invariants (live count = test fns under
+`server/tests/test_node_spec.py` + `test_plugin_self_containment.py`)
+lock the architecture. `services/handlers/` shrank from
 12.8K → 1.1K LOC across 16 → 4 files. See
 [`server/nodes/README.md`](../server/nodes/README.md) for the
 authoring cookbook (5-minute recipe + shared helpers + common
@@ -677,7 +679,7 @@ every CI run. Examples:
   dependency).
 - Trigger registry auto-populates for every event-mode plugin.
 
-108 Wave 10 invariants in `test_node_spec.py` still run — 124 total.
+All Wave 10 invariants in `test_node_spec.py` still run; Wave 11 invariants in `test_plugin_self_containment.py`. Live total via `pytest --collect-only`.
 
 ## Canonical principles
 

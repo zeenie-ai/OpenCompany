@@ -459,7 +459,7 @@ Adding new panel behaviour: add a flag to `INodeUIHints`, annotate the relevant 
 
 ### Node output shape — backend as single source of truth
 
-Frontend does **not** declare output shapes anymore. The backend owns them exclusively via Pydantic models in [server/services/node_output_schemas.py](../server/services/node_output_schemas.py) (98 entries today). JSON Schema is emitted via Pydantic's `model_json_schema()` and exposed two ways:
+Frontend does **not** declare output shapes anymore. The backend owns them exclusively via Pydantic models in [server/services/node_output_schemas.py](../server/services/node_output_schemas.py) — live size via `len(NODE_OUTPUT_SCHEMAS)`. JSON Schema is emitted via Pydantic's `model_json_schema()` and exposed two ways:
 
 - `GET /api/schemas/nodes/{node_type}.json` — static, long-cache (`Cache-Control: public, max-age=86400`), no auth. n8n-style static-asset pattern.
 - `get_node_output_schema` WebSocket handler — authenticated editor path.

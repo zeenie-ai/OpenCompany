@@ -4,7 +4,7 @@
 
 ## Landed outcome (Wave 3 — output schemas)
 
-- Backend registry seeded with **98 Pydantic models** in [server/services/node_output_schemas.py](../server/services/node_output_schemas.py) covering every node type the deleted `sampleSchemas` map covered, plus all 18 specialized agents and 9 chat models.
+- Backend registry seeded with Pydantic models in [server/services/node_output_schemas.py](../server/services/node_output_schemas.py) — live size via `len(NODE_OUTPUT_SCHEMAS)` — covering every node type the deleted `sampleSchemas` map covered, plus all specialized agents and chat models.
 - `GET /api/schemas/nodes/{node_type}.json` serves static JSON Schema (Cache-Control `public, max-age=86400`). 404 for unknown types.
 - `get_node_output_schema` WebSocket handler for authenticated editor fetches.
 - [InputSection.tsx](../client/src/components/parameterPanel/InputSection.tsx) consumes schemas lazy via `queryClient.fetchQuery(['nodeOutputSchema', nodeType])`, in-memory cache only. **1,673 → 972 LOC** (−701). sampleSchemas map, 20 `isXxxNode` detection constants, and 60-line pattern-match chain all gone.
@@ -17,12 +17,12 @@ Wave 3 proved the pattern for output schemas. Wave 6 generalises it to the **ful
 
 **Shipped contract:**
 
-- **Input schemas** — [server/services/node_input_schemas.py](../server/services/node_input_schemas.py) registers **105 Pydantic input models** across every node type, auto-expanding `SpecializedAgentParams` (16 variants) and `AndroidServiceParams` (16 variants) via Literal union introspection.
+- **Input schemas** — [server/services/node_input_schemas.py](../server/services/node_input_schemas.py) registers Pydantic input models across every node type — live count via `len(_DIRECT_MODELS)` — auto-expanding `SpecializedAgentParams` and `AndroidServiceParams` via Literal union introspection.
 - **NodeSpec envelope** — [server/services/node_spec.py](../server/services/node_spec.py) assembles `{type, displayName, icon, group, description, version, inputs (JSON Schema), outputs (JSON Schema, reuses Wave 3), credentials, uiHints}` fusing three sources of truth.
-- **Display metadata** — [server/models/node_metadata.py](../server/models/node_metadata.py) carries **105 entries** (one per input-modeled type). The only new server-side data file.
+- **Display metadata** — [server/models/node_metadata.py](../server/models/node_metadata.py) carries one entry per input-modeled type — live size via `len(NODE_METADATA)`. The only new server-side data file.
 - **Endpoints** — alongside the Wave 3 `/nodes/{type}.json` output endpoint: `GET /api/schemas/nodes/{type}/spec.json`, `/nodes/{type}/input.json`, `/nodes/specs` (list), all with 24h `Cache-Control`. WS mirrors: `get_node_spec`, `list_node_specs`.
 - **loadOptionsMethod dispatch** — [server/services/node_option_loaders/](../server/services/node_option_loaders/) generalises the WhatsApp-only pattern to a registry. Adding a new dynamic-option loader = one-line registration. `POST /api/schemas/nodes/options/{method}` + WS `load_options`.
-- **Node-groups index** — `GET /api/schemas/nodes/groups` returns `{group: [node_type, ...]}` derived from every NodeSpec's `group` array. **25 groups with 110 entries** replacing the **34 hand-rolled `*_NODE_TYPES` arrays** scattered across 6 frontend files.
+- **Node-groups index** — `GET /api/schemas/nodes/groups` returns `{group: [node_type, ...]}` derived from every NodeSpec's `group` array — live count via `len(NODE_GROUPS)` — replacing the hand-rolled `*_NODE_TYPES` arrays scattered across 6 frontend files.
 - **Pydantic Field hints** — authors encode `displayOptions.show`/`.hide`, `loadOptionsMethod`, `placeholder`, `validation`, `typeOptions` via `Field(json_schema_extra={...})`. Currently ~36 rules encoded across TwitterSend/User, TelegramSend, HttpRequest, WhatsAppSend, SocialSend, Gmail, Calendar.
 
 **Frontend consumer (feature-flagged):**
@@ -357,7 +357,7 @@ Adds 16 invariants to the 108 Wave 10 suite → **124 total**:
 
 ### Status
 
-111 plugins live across 9 Temporal task queues (`rest-api`,
+Plugins (live count via `glob server/nodes/**/__init__.py`) live across 9 Temporal task queues (`rest-api`,
 `ai-heavy`, `code-exec`, `triggers-poll`, `triggers-event`, `android`,
 `browser`, `messaging`, `machina-default`). Handler bodies are fully
 inlined into plugin files — `services/handlers/` shrank from

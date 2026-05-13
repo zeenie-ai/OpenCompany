@@ -242,9 +242,10 @@ What you **do** still write:
 
 ## Wave summary (current state)
 
-- **Wave 11** — Class-based plugin system. 111 plugins / 9 Temporal
-  worker pools / 124 contract invariants. `services/handlers/` shrank
-  from 12.8K → 1.1K LOC.
+- **Wave 11** — Class-based plugin system. 9 Temporal worker pools;
+  plugin count via `glob server/nodes/**/__init__.py`; invariant total
+  via `pytest --collect-only`. `services/handlers/` shrank from
+  12.8K → 1.1K LOC.
 - **Wave 11.H** — Self-contained plugin folders. Five generic
   registries replace per-plugin hardcoding in core. Telegram is the
   reference.
