@@ -43,7 +43,7 @@ from services.cli_agent.mcp_server import (
 )
 from services.cli_agent.protocol import BatchResult, SessionResult
 from services.cli_agent.session import AICliSession
-from services.cli_agent.types import BaseAICliTaskSpec
+from services.cli_agent.types import BaseAICliTaskSpec, ClaudeTaskSpec
 
 logger = get_logger(__name__)
 
@@ -207,15 +207,47 @@ class AICliService:
                         except (KeyError, ValueError):
                             pass
 
+        # Pool branch: when memory is connected to a claude task, route
+        # through ``ClaudeSessionPool`` so successive turns reuse the
+        # warm PTY via ``/clear`` (saves ~1-2 s per turn). The
+        # ``claude_code_agent`` plugin already enforces ``len(tasks)==1``
+        # when memory is wired, so this branch is single-task. The pool
+        # owns the PTY lifetime; the bearer token stays embedded in the
+        # spawned claude's argv across batches (CLI handles its own MCP
+        # auth — we don't issue/unregister per turn).
+        use_pool = (
+            bool(connected_memory)
+            and provider_name == "claude"
+            and len(task_list) == 1
+        )
+        results: List[SessionResult]
         try:
-            results: List[SessionResult] = await asyncio.gather(
-                *(run_one(t) for t in task_list),
-                return_exceptions=False,
-            )
+            if use_pool:
+                results = [await self._run_pooled_turn(
+                    task=task_list[0],
+                    memory_node_id=connected_memory["node_id"],
+                    cwd=resolved_repo_root,
+                    defaults=defaults,
+                    mcp_port=port,
+                    mcp_bearer_token=token,
+                    connected_tools=connected_tools or [],
+                    workflow_id=workflow_id,
+                )]
+            else:
+                results = await asyncio.gather(
+                    *(run_one(t) for t in task_list),
+                    return_exceptions=False,
+                )
         finally:
             async with self._lock:
                 self._active_sessions.pop(key, None)
-            unregister_batch(token)
+            # When ``use_pool`` is True, the bearer token persists with
+            # the warm PTY across batches — unregistering here would
+            # break the next batch's MCP auth. The CLI owns its token;
+            # we accept that the registration leaks until app shutdown
+            # (bounded by max pool size).
+            if not use_pool:
+                unregister_batch(token)
 
         # Memory bridge: persist claude's session_id + append the
         # rendered exchange to simpleMemory's markdown transcript so the
@@ -309,6 +341,73 @@ class AICliService:
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
+
+    async def _run_pooled_turn(
+        self,
+        *,
+        task: BaseAICliTaskSpec,
+        memory_node_id: str,
+        cwd: Path,
+        defaults: Dict[str, Any],
+        mcp_port: int,
+        mcp_bearer_token: str,
+        connected_tools: List[Dict[str, Any]],
+        workflow_id: str,
+    ) -> SessionResult:
+        """Route one memory-bound claude turn through ``ClaudeSessionPool``.
+
+        Cold spawn or warm reuse is hidden behind ``pool.acquire``; the
+        ``/clear`` rotation and new-UUID capture happen inside the pool.
+        The MCP bearer token stays with the spawned claude across batches
+        — see the use-pool branch in :meth:`run_batch` for the rationale.
+        """
+        from services.cli_agent.session_pool import get_session_pool
+
+        if not isinstance(task, ClaudeTaskSpec):
+            raise TypeError(
+                "Pooled turns require ClaudeTaskSpec, got "
+                f"{type(task).__name__}"
+            )
+
+        pool = get_session_pool()
+        await pool.start_reaper()
+
+        mcp_endpoint_url = (
+            f"http://127.0.0.1:{mcp_port}/mcp/ide/mcp"
+        )
+        tool_names = [
+            t.get("node_type") for t in (connected_tools or [])
+            if t.get("node_type")
+        ]
+
+        env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+        # Project-local claude auth dir — same as ``AICliSession.env``.
+        from services.claude_oauth import MACHINA_CLAUDE_DIR
+        env["CLAUDE_CONFIG_DIR"] = str(MACHINA_CLAUDE_DIR)
+        # Composio-style parent-run-ID for MCP correlation.
+        env["MACHINA_PARENT_RUN_ID"] = (
+            f"{workflow_id}:{memory_node_id}:{mcp_bearer_token[:8]}"
+        )
+
+        pooled = await pool.acquire(
+            memory_node_id,
+            spec=task,
+            cwd=cwd,
+            env=env,
+            defaults=defaults,
+            mcp_endpoint_url=mcp_endpoint_url,
+            mcp_bearer_token=mcp_bearer_token,
+            connected_tool_names=tool_names,
+            workflow_id=workflow_id,
+        )
+        try:
+            return await pool.send_turn(
+                pooled, task.prompt,
+                timeout_seconds=task.timeout_seconds,
+                workflow_id=workflow_id,
+            )
+        finally:
+            await pool.release(pooled)
 
     @staticmethod
     async def _clear_stale_session_id(

@@ -289,15 +289,23 @@ class StatusBroadcaster:
         *,
         provider: str,
         customer_id: Optional[str] = None,
+        workflow_id: Optional[str] = None,
+        **data_extra: Any,
     ) -> None:
-        """Emit a CloudEvents-typed credential-mutation broadcast.
+        """Emit a CloudEvents-typed credential broadcast.
 
         Args:
             event_type: CloudEvents `type` field. Convention:
-                ``"credential.api_key.saved"`` / ``".deleted"``,
-                ``"credential.oauth.disconnected"``.
+                ``"credential.api_key.saved"`` / ``".deleted"`` /
+                ``".runtime_failed"``, ``"credential.oauth.connected"`` /
+                ``".disconnected"`` / ``".runtime_failed"``.
             provider: Provider id (e.g. ``"openai"``, ``"twitter"``).
             customer_id: For multi-tenant OAuth flows. Default omitted.
+            workflow_id: Optional CloudEvents extension attribute scoping
+                runtime events to the workflow that triggered them.
+            **data_extra: Additional fields merged into the envelope's
+                ``data`` block (e.g. ``reason``, ``node_id``, ``error``
+                for runtime failure events).
         """
         # Local import keeps the broadcaster module independent of the
         # event framework's load order during startup.
@@ -307,9 +315,11 @@ class StatusBroadcaster:
             source="machinaos://services/credentials",
             type=event_type,
             subject=provider,
+            workflow_id=workflow_id,
             data={
                 "provider": provider,
                 **({"customer_id": customer_id} if customer_id else {}),
+                **data_extra,
             },
         )
 
@@ -388,6 +398,117 @@ class StatusBroadcaster:
 
         await self.broadcast({
             "type": "agent_progress",
+            "data": event.model_dump(mode="json"),
+        })
+
+    async def broadcast_claude_session_spawned(
+        self,
+        memory_node_id: str,
+        *,
+        session_uuid: str,
+        pid: int,
+        workflow_id: Optional[str] = None,
+    ) -> None:
+        """Emit ``claude.session.spawned`` when a pooled claude is
+        cold-started. Single wire key for all four session-lifecycle
+        events; FE discriminates on envelope.type.
+        """
+        from services.events import WorkflowEvent
+
+        event = WorkflowEvent.claude_session_spawned(
+            memory_node_id,
+            session_uuid=session_uuid,
+            pid=pid,
+            workflow_id=workflow_id,
+        )
+        await self.broadcast({
+            "type": "claude_session_event",
+            "data": event.model_dump(mode="json"),
+        })
+
+    async def broadcast_claude_session_cleared(
+        self,
+        memory_node_id: str,
+        *,
+        old_session_uuid: str,
+        new_session_uuid: str,
+        workflow_id: Optional[str] = None,
+    ) -> None:
+        """Emit ``claude.session.cleared`` after ``/clear`` minted a new
+        session UUID. Carries both old + new so the FE can update
+        any session-uuid display + warn if there are open references."""
+        from services.events import WorkflowEvent
+
+        event = WorkflowEvent.claude_session_cleared(
+            memory_node_id,
+            old_session_uuid=old_session_uuid,
+            new_session_uuid=new_session_uuid,
+            workflow_id=workflow_id,
+        )
+        await self.broadcast({
+            "type": "claude_session_event",
+            "data": event.model_dump(mode="json"),
+        })
+
+    async def broadcast_claude_session_terminated(
+        self,
+        memory_node_id: str,
+        *,
+        reason: str,
+        session_uuid: Optional[str] = None,
+        workflow_id: Optional[str] = None,
+    ) -> None:
+        """Emit ``claude.session.terminated`` when a pooled session
+        ends. ``reason`` is one of ``idle / crashed / evicted /
+        shutdown / explicit`` (typed enum in
+        :class:`WorkflowEvent.claude_session_terminated`)."""
+        from services.events import WorkflowEvent
+
+        event = WorkflowEvent.claude_session_terminated(
+            memory_node_id,
+            reason=reason,  # type: ignore[arg-type]
+            session_uuid=session_uuid,
+            workflow_id=workflow_id,
+        )
+        await self.broadcast({
+            "type": "claude_session_event",
+            "data": event.model_dump(mode="json"),
+        })
+
+    async def broadcast_claude_session_usage(
+        self,
+        memory_node_id: str,
+        *,
+        session_uuid: str,
+        total_cost_usd: Optional[float] = None,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        cache_read_input_tokens: int = 0,
+        cache_creation_input_tokens: int = 0,
+        duration_ms: Optional[int] = None,
+        num_turns: Optional[int] = None,
+        workflow_id: Optional[str] = None,
+    ) -> None:
+        """Emit ``claude.session.usage`` after each turn's ``result``
+        event. Replaces the (unparseable) ``/usage`` TUI scrape with
+        structured data straight from the JSONL ``result.usage`` block.
+        FE renders a usage panel on simpleMemory by subscribing here."""
+        from services.events import WorkflowEvent
+
+        event = WorkflowEvent.claude_session_usage(
+            memory_node_id,
+            session_uuid=session_uuid,
+            total_cost_usd=total_cost_usd,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_read_input_tokens=cache_read_input_tokens,
+            cache_creation_input_tokens=cache_creation_input_tokens,
+            duration_ms=duration_ms,
+            num_turns=num_turns,
+            workflow_id=workflow_id,
+        )
+        await self.broadcast({
+            "type": "claude_session_usage",
             "data": event.model_dump(mode="json"),
         })
 

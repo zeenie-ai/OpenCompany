@@ -327,6 +327,135 @@ class WorkflowEvent(BaseModel):
             data=dict(data) if data else {"task_id": task_id, "agent": agent, "status": status},
         )
 
+    @classmethod
+    def claude_session_spawned(
+        cls,
+        memory_node_id: str,
+        *,
+        session_uuid: str,
+        pid: int,
+        workflow_id: Optional[str] = None,
+    ) -> "WorkflowEvent":
+        """Pool-managed claude session spawned fresh.
+
+        Fired once per cold-start of a pooled session — the warm-reuse
+        path emits ``claude.session.cleared`` instead. ``subject`` is
+        the simpleMemory node so the FE can wire a per-memory-node
+        status badge.
+        """
+        return cls(
+            source="machinaos://services/cli_agent",
+            type=f"{_TYPE_PREFIX}claude.session.spawned",
+            subject=memory_node_id,
+            workflow_id=workflow_id,
+            data={
+                "memory_node_id": memory_node_id,
+                "session_uuid": session_uuid,
+                "pid": pid,
+            },
+        )
+
+    @classmethod
+    def claude_session_cleared(
+        cls,
+        memory_node_id: str,
+        *,
+        old_session_uuid: str,
+        new_session_uuid: str,
+        workflow_id: Optional[str] = None,
+    ) -> "WorkflowEvent":
+        """Pool sent ``/clear``; claude minted a fresh session UUID.
+
+        Per issue `claude-code#32871
+        <https://github.com/anthropics/claude-code/issues/32871>`_,
+        ``/clear`` creates a NEW session UUID with a NEW JSONL file
+        rather than clearing in-place. The pool captures the new UUID
+        via :class:`JsonlDirWatcher` and emits this event so the memory
+        bridge + UI can track the rotation.
+        """
+        return cls(
+            source="machinaos://services/cli_agent",
+            type=f"{_TYPE_PREFIX}claude.session.cleared",
+            subject=memory_node_id,
+            workflow_id=workflow_id,
+            data={
+                "memory_node_id": memory_node_id,
+                "old_session_uuid": old_session_uuid,
+                "new_session_uuid": new_session_uuid,
+            },
+        )
+
+    @classmethod
+    def claude_session_terminated(
+        cls,
+        memory_node_id: str,
+        *,
+        reason: Literal["idle", "crashed", "evicted", "shutdown", "explicit"],
+        session_uuid: Optional[str] = None,
+        workflow_id: Optional[str] = None,
+    ) -> "WorkflowEvent":
+        """Pool-managed claude session ended.
+
+        ``reason`` discriminates the cause: ``idle`` (reaper exceeded
+        TTL), ``crashed`` (process died unexpectedly), ``evicted`` (LRU
+        eviction at max pool size), ``shutdown`` (FastAPI lifespan stop),
+        ``explicit`` (caller-driven terminate).
+        """
+        return cls(
+            source="machinaos://services/cli_agent",
+            type=f"{_TYPE_PREFIX}claude.session.terminated",
+            subject=memory_node_id,
+            workflow_id=workflow_id,
+            data={
+                "memory_node_id": memory_node_id,
+                "reason": reason,
+                **({"session_uuid": session_uuid} if session_uuid else {}),
+            },
+        )
+
+    @classmethod
+    def claude_session_usage(
+        cls,
+        memory_node_id: str,
+        *,
+        session_uuid: str,
+        total_cost_usd: Optional[float] = None,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        cache_read_input_tokens: int = 0,
+        cache_creation_input_tokens: int = 0,
+        duration_ms: Optional[int] = None,
+        num_turns: Optional[int] = None,
+        workflow_id: Optional[str] = None,
+    ) -> "WorkflowEvent":
+        """Per-turn cost / token usage from a claude ``result`` event.
+
+        Sourced directly from the JSONL ``result.usage`` block —
+        same data ``/usage`` displays in the TUI, but structured. The
+        FE wires a usage panel onto simpleMemory by listening for this
+        type (rather than scraping the TUI's ``/usage`` output, which
+        is plain text per Anthropic's docs and not parseable).
+        """
+        return cls(
+            source="machinaos://services/cli_agent",
+            type=f"{_TYPE_PREFIX}claude.session.usage",
+            subject=memory_node_id,
+            workflow_id=workflow_id,
+            data={
+                "memory_node_id": memory_node_id,
+                "session_uuid": session_uuid,
+                "total_cost_usd": total_cost_usd,
+                "usage": {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "cache_read_input_tokens": cache_read_input_tokens,
+                    "cache_creation_input_tokens": cache_creation_input_tokens,
+                },
+                **({"duration_ms": duration_ms} if duration_ms is not None else {}),
+                **({"num_turns": num_turns} if num_turns is not None else {}),
+            },
+        )
+
     def matches_type(self, pattern: str) -> bool:
         """Glob-style match on event type. ``"all"``/empty matches any.
 
