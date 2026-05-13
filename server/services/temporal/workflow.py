@@ -38,6 +38,35 @@ SKILL_NODE_TYPES = {
     "masterSkill",
 }
 
+# F4.B: agent types that migrate to AgentWorkflow (Temporal child workflow).
+# When ``temporal_agent_workflow_enabled`` is True the orchestrator schedules
+# AgentWorkflow for these node types instead of an activity. Tool calls
+# inside the agent loop become per-type activities (F4.A path).
+#
+# Excluded: ``deep_agent``, ``rlm_agent``, ``claude_code_agent``. Their
+# internal session state (deepagents package / RLM REPL / Claude CLI
+# --resume with stable cwd) requires single-process continuity and breaks
+# across activity boundaries. They continue via F4.A per-type activities.
+AGENT_WORKFLOW_TYPES = frozenset([
+    "aiAgent",
+    "chatAgent",
+    # Specialized agents (12)
+    "android_agent",
+    "coding_agent",
+    "web_agent",
+    "task_agent",
+    "social_agent",
+    "travel_agent",
+    "tool_agent",
+    "productivity_agent",
+    "payments_agent",
+    "consumer_agent",
+    "autonomous_agent",
+    # Team leads (2)
+    "orchestrator_agent",
+    "ai_employee",
+])
+
 @workflow.defn(sandboxed=False)
 class MachinaWorkflow:
     """Distributed workflow orchestrator.
@@ -172,28 +201,44 @@ class MachinaWorkflow:
                     "trigger_output": node.get("_trigger_output"),
                 }
 
-                # F4.A: per-type dispatch when the plugin class is registered
-                # AND the settings flag is on. Frozen-dict lookup is deterministic
-                # so it's safe inside the workflow (Temporal Workflow Definition
-                # determinism contract). Falls back to the legacy single activity
-                # name for any node type without a class registration.
-                activity_name, activity_queue = self._resolve_activity(node_type)
-                start_kwargs: Dict[str, Any] = dict(
-                    args=[context],
-                    start_to_close_timeout=timedelta(minutes=10),
-                    heartbeat_timeout=timedelta(minutes=2),
-                    retry_policy=retry_policy,
-                )
-                if activity_queue is not None:
-                    start_kwargs["task_queue"] = activity_queue
+                # F4.B: agent-as-child-workflow takes precedence over the
+                # activity path for the 15 migrating agent types when its
+                # flag is on. Tool calls inside the agent loop become
+                # per-type activities (F4.A path) automatically.
+                dispatch = self._resolve_dispatch(node_type)
+                if dispatch["kind"] == "child_workflow":
+                    handle = workflow.start_child_workflow(
+                        dispatch["name"],
+                        args=[context],
+                        # Child workflow execution timeout: agent loops can run
+                        # 10+ minutes with multiple LLM turns. Set generously.
+                        execution_timeout=timedelta(hours=1),
+                        run_timeout=timedelta(hours=1),
+                    )
+                    running[node_id] = handle
+                    workflow.logger.info(
+                        f"Scheduled child workflow for node: {node_id} "
+                        f"(workflow={dispatch['name']})"
+                    )
+                else:
+                    # F4.A activity path: per-type when the plugin class is
+                    # registered AND the per-type flag is on; legacy
+                    # execute_node_activity otherwise.
+                    start_kwargs: Dict[str, Any] = dict(
+                        args=[context],
+                        start_to_close_timeout=timedelta(minutes=10),
+                        heartbeat_timeout=timedelta(minutes=2),
+                        retry_policy=retry_policy,
+                    )
+                    if dispatch.get("queue") is not None:
+                        start_kwargs["task_queue"] = dispatch["queue"]
 
-                handle = workflow.start_activity(activity_name, **start_kwargs)
-                running[node_id] = handle
-
-                workflow.logger.info(
-                    f"Scheduled activity for node: {node_id} "
-                    f"(activity={activity_name}, queue={activity_queue or 'default'})"
-                )
+                    handle = workflow.start_activity(dispatch["name"], **start_kwargs)
+                    running[node_id] = handle
+                    workflow.logger.info(
+                        f"Scheduled activity for node: {node_id} "
+                        f"(activity={dispatch['name']}, queue={dispatch.get('queue') or 'default'})"
+                    )
 
             # Exit if nothing running and nothing ready
             if not running:
@@ -247,6 +292,32 @@ class MachinaWorkflow:
             if dep_id in outputs:
                 inputs[dep_id] = outputs[dep_id].get("result", {})
         return inputs
+
+    def _resolve_dispatch(self, node_type: str) -> Dict[str, Any]:
+        """Resolve dispatch kind for a node type.
+
+        Returns one of:
+          - ``{"kind": "child_workflow", "name": "AgentWorkflow"}`` — when
+            F4.B is enabled AND node_type is in ``AGENT_WORKFLOW_TYPES``.
+          - ``{"kind": "activity", "name": <activity_name>, "queue": <queue|None>}``
+            — F4.A per-type activity OR legacy fallback, depending on
+            ``temporal_per_type_dispatch``.
+
+        Deterministic: all lookups go through frozen dicts (Settings,
+        _NODE_CLASS_REGISTRY, AGENT_WORKFLOW_TYPES). Safe inside
+        ``MachinaWorkflow.run`` per the workflow-definition contract.
+        """
+        from core.config import Settings
+
+        settings = Settings()
+        if (
+            getattr(settings, "temporal_agent_workflow_enabled", False)
+            and node_type in AGENT_WORKFLOW_TYPES
+        ):
+            return {"kind": "child_workflow", "name": "AgentWorkflow"}
+
+        name, queue = self._resolve_activity(node_type)
+        return {"kind": "activity", "name": name, "queue": queue}
 
     def _resolve_activity(self, node_type: str) -> tuple[str, str | None]:
         """Resolve (activity_name, task_queue) for a node type.

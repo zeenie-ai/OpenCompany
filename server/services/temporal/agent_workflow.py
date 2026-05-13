@@ -94,16 +94,34 @@ class AgentWorkflow:
     """
 
     @workflow.run
-    async def run(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async def run(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """Run the agent loop.
 
-        ``payload`` shape::
+        ``context`` shape (same as the legacy ``execute_node_activity``
+        context — the orchestrator passes the same dict it would have
+        passed to an activity)::
 
             {
                 "node_id": str,
                 "node_type": str,
+                "node_data": dict,    # node parameters from canvas
                 "workflow_id": Optional[str],
                 "session_id": str,
+                "nodes": list,        # full canvas (for edge walking)
+                "edges": list,
+                "inputs": dict,       # upstream node outputs
+            }
+
+        The workflow's FIRST step is to schedule
+        ``agent.prepare_payload.v1`` which returns the fully-resolved
+        payload (provider, model, api_key, tools, memory, ...). Doing
+        prep INSIDE the workflow (as an activity) keeps the orchestrator
+        ignorant of agent-specific concerns and means the workflow
+        owns its setup — Temporal's recommended structure.
+
+        The resolved payload looks like::
+
+            {
                 "provider": str,
                 "model": str,
                 "api_key": str,
@@ -135,6 +153,15 @@ class AgentWorkflow:
         ``services/ai.py:execute_agent`` returns today so downstream
         code (OutputPanel, edge inputs, etc.) doesn't change.
         """
+        # ---- Step 0: Resolve payload via the prep activity --------------
+        # DB lookups + edge walking + tool schema build happen here, NOT
+        # in the workflow body (workflows must be deterministic).
+        payload = await workflow.execute_activity(
+            "agent.prepare_payload.v1",
+            args=[context],
+            start_to_close_timeout=PERSIST_TURN_TIMEOUT * 2,  # 60s default
+            retry_policy=AGENT_ACTIVITY_RETRY,
+        )
         # ---- Build initial message list ---------------------------------
         # Workflow state is JSON dicts. Activities rehydrate LangChain
         # message objects from these dicts (see agent_activities.py).

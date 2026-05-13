@@ -320,12 +320,261 @@ async def compact_agent_memory(payload: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
+@activity.defn(name="agent.prepare_payload.v1")
+async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
+    """Resolve everything ``AgentWorkflow`` needs from the canvas + DB.
+
+    The workflow itself cannot do DB lookups or LangChain tool builds
+    (deterministic-replay constraint). This activity runs *before* the
+    workflow is scheduled and returns the fully-resolved payload.
+
+    Mirrors the prep half of ``services.ai.AIService.execute_agent``,
+    minus the LangGraph loop (which now lives in ``AgentWorkflow.run``):
+
+    1. Read node parameters from DB via ``database.get_node_parameters``.
+    2. Walk edges via ``services.plugin.edge_walker.collect_agent_connections``
+       for ``memory_data``, ``skill_data``, ``tool_data``, ``input_data``.
+    3. Resolve api_key / proxy from ``auth_service``.
+    4. Resolve max_tokens / temperature / thinking config via the
+       model-registry helpers.
+    5. Build tool schemas — call ``AIService._build_tool_from_node`` per
+       tool entry and serialise each ``StructuredTool.args_schema``
+       Pydantic class to a JSON-schema dict (so the workflow can pass
+       it back into the LLM activity for ``bind_tools``).
+    6. Compose ``system_message`` (skill prompt injection + delegation
+       contract).
+
+    ``context`` shape (same as the legacy execute_node_activity context)::
+
+        {
+            "node_id": str,
+            "node_type": str,
+            "node_data": dict,    # node parameters from canvas
+            "workflow_id": str,
+            "session_id": str,
+            "nodes": list,        # full canvas (for edge walking)
+            "edges": list,
+            "inputs": dict,       # upstream node outputs
+        }
+
+    Returns the dict that ``AgentWorkflow.run`` expects (see its
+    docstring for the canonical shape).
+
+    Falls back gracefully when fields are missing — agents with no
+    connected tools / skills / memory still produce a valid payload
+    that AgentWorkflow can run.
+    """
+    activity.logger.info(
+        f"Preparing AgentWorkflow payload for {context.get('node_type')!r} "
+        f"node_id={context.get('node_id')!r}"
+    )
+
+    # Lazy imports — keep agent_activities.py top-level light so the
+    # worker can register this activity without dragging the whole
+    # AI service in for every plugin.
+    from core.container import container
+    from services.ai import AIService, _resolve_max_tokens, _resolve_temperature
+    from services.ai import ThinkingConfig, get_default_model_async, is_model_valid_for_provider
+    from services.plugin.edge_walker import collect_agent_connections
+
+    node_id = context["node_id"]
+    node_type = context["node_type"]
+    workflow_id = context.get("workflow_id")
+    session_id = context.get("session_id", "default")
+
+    database = container.database()
+    auth = container.auth_service()
+    ai_service = AIService()
+
+    # ---- Node parameters ------------------------------------------------
+    # The orchestrator passes context["node_data"] but DB has the
+    # authoritative version (UI saves edit -> DB; node_data is a
+    # snapshot at scheduling time). Prefer DB for liveness.
+    db_params = await database.get_node_parameters(node_id) or {}
+    parameters = {**(context.get("node_data") or {}), **db_params}
+
+    options = parameters.get("options") or {}
+    flattened = {**parameters, **options}
+
+    prompt = parameters.get("prompt", "")
+    system_message = parameters.get("system_message") or "You are a helpful assistant"
+
+    api_key = flattened.get("api_key")
+    provider = parameters.get("provider", "openai")
+    model = parameters.get("model", "")
+    if isinstance(model, str) and model.startswith("[FREE] "):
+        model = model[7:]
+
+    if not model or not is_model_valid_for_provider(model, provider):
+        model = await get_default_model_async(provider, database)
+
+    if not api_key:
+        # Try auth_service one more time (covers chatAgent flow where
+        # node params don't carry the api_key directly).
+        api_key = await auth.get_api_key(provider) or await auth.get_api_key(f"{provider}_api_key")
+    if not api_key:
+        raise RuntimeError(
+            f"API key for provider {provider!r} required for AgentWorkflow "
+            f"node {node_id!r}; configure it in the Credentials Modal."
+        )
+
+    max_tokens = _resolve_max_tokens(flattened, model, provider)
+
+    thinking_config_obj: Any = None
+    thinking_config_dict: Any = None
+    if flattened.get("thinking_enabled"):
+        thinking_config_obj = ThinkingConfig(
+            enabled=True,
+            budget=int(flattened.get("thinking_budget", 2048)),
+            effort=flattened.get("reasoning_effort", "medium"),
+            level=flattened.get("thinking_level", "medium"),
+            format=flattened.get("reasoning_format", "parsed"),
+        )
+        thinking_config_dict = {
+            "enabled": True,
+            "budget": thinking_config_obj.budget,
+            "effort": thinking_config_obj.effort,
+            "level": thinking_config_obj.level,
+            "format": thinking_config_obj.format,
+        }
+
+    temperature = _resolve_temperature(
+        flattened, model, provider,
+        bool(thinking_config_obj and thinking_config_obj.enabled),
+    )
+
+    # ---- Edge walking ---------------------------------------------------
+    walk_context = {
+        "nodes": context.get("nodes") or [],
+        "edges": context.get("edges") or [],
+        "workflow_id": workflow_id,
+    }
+    memory_data, skill_data, tool_data, input_data, _task_data = (
+        await collect_agent_connections(
+            node_id, walk_context, database, log_prefix=f"[AgentWorkflow:{node_type}]",
+        )
+    )
+
+    # ---- Skill prompt injection ----------------------------------------
+    from services.ai import _build_skill_system_prompt
+    skill_prompt, has_personality = _build_skill_system_prompt(
+        skill_data, log_prefix=f"[AgentWorkflow:{node_type}]",
+    )
+    if skill_prompt:
+        system_message = skill_prompt if has_personality else f"{system_message}\n\n{skill_prompt}"
+
+    # ---- Memory ---------------------------------------------------------
+    memory_node_id = ""
+    memory_content = ""
+    memory_window_size = 10
+    if memory_data:
+        memory_node_id = memory_data.get("node_id") or ""
+        memory_content = memory_data.get("memory_content") or ""
+        memory_window_size = int(memory_data.get("window_size") or 10)
+
+    # ---- Tools ----------------------------------------------------------
+    # Build LangChain StructuredTool per tool entry, then serialise its
+    # args_schema to JSON Schema so the AgentWorkflow's LLM step can
+    # rebuild a placeholder StructuredTool from it.
+    tools_payload: List[Dict[str, Any]] = []
+    for tool_info in tool_data or []:
+        try:
+            tool, config = await ai_service._build_tool_from_node(tool_info)
+        except Exception as e:  # noqa: BLE001 — defensive: skip a broken tool
+            activity.logger.warning(
+                f"prepare_payload: failed to build tool {tool_info.get('node_type')!r}: {e}"
+            )
+            continue
+        if tool is None:
+            continue
+        # Look up plugin class for activity-dispatch metadata.
+        from services.node_registry import get_node_class
+        cls = get_node_class(tool_info.get("node_type", ""))
+        version = getattr(cls, "version", 1) if cls else 1
+        task_queue = getattr(cls, "task_queue", "machina-default") if cls else "machina-default"
+
+        # Serialise args_schema to JSON Schema. StructuredTool.args_schema
+        # is a Pydantic model; .model_json_schema() returns a dict the
+        # LLM activity can use to bind a placeholder tool.
+        args_schema_dict: Dict[str, Any] = {}
+        try:
+            if tool.args_schema is not None:
+                args_schema_dict = tool.args_schema.model_json_schema()
+        except Exception as e:  # noqa: BLE001 — defensive
+            activity.logger.debug(
+                f"prepare_payload: failed to serialise args_schema for "
+                f"{tool_info.get('node_type')!r}: {e}"
+            )
+
+        tools_payload.append({
+            "name": tool.name,
+            "description": tool.description or "",
+            "args_schema": args_schema_dict,
+            "node_type": tool_info.get("node_type", ""),
+            "version": version,
+            "task_queue": task_queue,
+            "tool_node_id": tool_info.get("node_id", ""),
+            "parameters": tool_info.get("parameters") or {},
+        })
+
+    # ---- Compaction threshold ------------------------------------------
+    # Model-aware threshold (50% of context window per agent.compaction.ratio
+    # in llm_defaults.json). Reuse the existing CompactionService helper.
+    compaction_threshold: int | None = None
+    try:
+        from services.compaction import get_compaction_service
+        svc = get_compaction_service()
+        cfg = svc.anthropic_config(model=model, provider=provider)
+        compaction_threshold = int(cfg.get("context_token_threshold") or 0) or None
+    except Exception:  # noqa: BLE001 — defensive, optional feature
+        compaction_threshold = None
+
+    # ---- Optional auto-prompt fallback from input_data -----------------
+    # When `prompt` is empty AND a chatTrigger / whatsappReceive / etc.
+    # is connected via input-main, use the upstream output's `message`
+    # / `text` / `content` as the user prompt. Same fallback the legacy
+    # agent path uses.
+    if not prompt and input_data:
+        out = input_data.get("result") or input_data
+        for field in ("message", "text", "content"):
+            if field in out and out[field]:
+                prompt = str(out[field])
+                break
+
+    return {
+        "node_id": node_id,
+        "node_type": node_type,
+        "workflow_id": workflow_id,
+        "session_id": session_id,
+        "provider": provider,
+        "model": model,
+        "api_key": api_key,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "system_message": system_message,
+        "user_prompt": prompt,
+        "tools": tools_payload,
+        "memory_node_id": memory_node_id,
+        "memory_content": memory_content,
+        "memory_window_size": memory_window_size,
+        "max_iterations": int(parameters.get("max_iterations") or 50),
+        "thinking_config": thinking_config_dict,
+        "compaction_threshold": compaction_threshold,
+    }
+
+
 def collect_agent_activities() -> List[Any]:
-    """Return the three F4.B agent activities for worker registration.
+    """Return the four F4.B agent activities for worker registration.
 
     Mirrors :func:`services.temporal.plugin_activities.collect_plugin_activities`
     for the workflow-orchestrated agent loop. Workers register these so
-    ``AgentWorkflow`` can schedule them; ``MachinaWorkflow`` doesn't
-    invoke them directly.
+    ``AgentWorkflow`` can schedule them; ``MachinaWorkflow`` invokes
+    only :func:`prepare_agent_payload` directly (to build the
+    AgentWorkflow input payload before scheduling the child workflow).
     """
-    return [execute_llm_step, persist_agent_turn, compact_agent_memory]
+    return [
+        execute_llm_step,
+        persist_agent_turn,
+        compact_agent_memory,
+        prepare_agent_payload,
+    ]

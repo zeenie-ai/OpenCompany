@@ -67,7 +67,10 @@ class TestAgentActivities:
         defn = getattr(compact_agent_memory, "__temporal_activity_definition")
         assert defn.name == "agent.compact_memory.v1"
 
-    def test_collect_returns_all_three(self):
+    def test_collect_returns_all_four(self):
+        """F4.B canary wiring added ``agent.prepare_payload.v1``. The
+        collector must surface all four so the worker registration covers
+        the orchestrator's prep + the workflow's loop activities."""
         from services.temporal.agent_activities import collect_agent_activities
 
         activities = collect_agent_activities()
@@ -78,7 +81,14 @@ class TestAgentActivities:
             "agent.compact_memory.v1",
             "agent.execute_llm_step.v1",
             "agent.persist_turn.v1",
+            "agent.prepare_payload.v1",
         ]
+
+    def test_prepare_payload_registered(self):
+        from services.temporal.agent_activities import prepare_agent_payload
+
+        defn = getattr(prepare_agent_payload, "__temporal_activity_definition")
+        assert defn.name == "agent.prepare_payload.v1"
 
 
 class TestWorkerWiring:

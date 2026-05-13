@@ -103,6 +103,72 @@ class TestResolveActivityFlagOn:
         assert name == f"node.coding_agent.v{cls.version}"
 
 
+class TestAgentWorkflowDispatch:
+    """F4.B: when the agent-workflow flag is on AND the node type is in
+    AGENT_WORKFLOW_TYPES, dispatch must route through the child workflow
+    instead of an activity. Excluded types (deep_agent / rlm_agent /
+    claude_code_agent) keep using the activity path."""
+
+    def _set_flags(self, *, per_type: bool, agent_wf: bool):
+        from types import SimpleNamespace
+        from unittest.mock import patch as _patch
+
+        def fake_settings():
+            return SimpleNamespace(
+                temporal_per_type_dispatch=per_type,
+                temporal_agent_workflow_enabled=agent_wf,
+            )
+
+        return _patch("core.config.Settings", side_effect=lambda: fake_settings())
+
+    def test_chat_agent_routes_to_child_workflow(self, workflow_instance):
+        with self._set_flags(per_type=True, agent_wf=True):
+            dispatch = workflow_instance._resolve_dispatch("chatAgent")
+        assert dispatch["kind"] == "child_workflow"
+        assert dispatch["name"] == "AgentWorkflow"
+
+    def test_ai_agent_routes_to_child_workflow(self, workflow_instance):
+        with self._set_flags(per_type=True, agent_wf=True):
+            dispatch = workflow_instance._resolve_dispatch("aiAgent")
+        assert dispatch["kind"] == "child_workflow"
+
+    def test_specialized_agent_routes_to_child_workflow(self, workflow_instance):
+        for t in ("coding_agent", "web_agent", "orchestrator_agent", "ai_employee"):
+            with self._set_flags(per_type=True, agent_wf=True):
+                dispatch = workflow_instance._resolve_dispatch(t)
+            assert dispatch["kind"] == "child_workflow", (
+                f"{t} should route to AgentWorkflow when F4.B is on"
+            )
+
+    def test_excluded_agents_stay_on_activity_path(self, workflow_instance):
+        """deep_agent / rlm_agent / claude_code_agent are NOT migrated
+        (externalised session state). They must use the per-type activity
+        path even when F4.B is on."""
+        for t in ("deep_agent", "rlm_agent", "claude_code_agent"):
+            with self._set_flags(per_type=True, agent_wf=True):
+                dispatch = workflow_instance._resolve_dispatch(t)
+            assert dispatch["kind"] == "activity", (
+                f"{t} must NOT migrate to AgentWorkflow (externalised session)"
+            )
+            assert dispatch["name"] == f"node.{t}.v1"
+
+    def test_agent_workflow_flag_off_falls_back_to_activity(self, workflow_instance):
+        with self._set_flags(per_type=True, agent_wf=False):
+            dispatch = workflow_instance._resolve_dispatch("chatAgent")
+        assert dispatch["kind"] == "activity"
+        assert dispatch["name"] == "node.chatAgent.v1"
+
+    def test_non_agent_types_stay_on_activity_path(self, workflow_instance):
+        """Tool / utility / model nodes shouldn't accidentally route
+        through AgentWorkflow even when F4.B is on."""
+        for t in ("pythonExecutor", "calculatorTool", "openaiChatModel"):
+            with self._set_flags(per_type=True, agent_wf=True):
+                dispatch = workflow_instance._resolve_dispatch(t)
+            assert dispatch["kind"] == "activity", (
+                f"{t} is not an agent type; must NOT route to AgentWorkflow"
+            )
+
+
 class TestPerTypeActivityCollection:
     """`collect_plugin_activities()` must return one callable per registered
     plugin class — TemporalWorkerManager's per-type registration depends on
