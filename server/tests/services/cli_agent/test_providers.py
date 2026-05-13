@@ -1,8 +1,11 @@
 """Unit tests for `AnthropicClaudeProvider` and `OpenAICodexProvider`.
 
 Covers:
-  - `headless_argv` shape (every flag in the right place, defaults
-    applied, optional fields omitted when unset)
+  - `interactive_argv` shape (every flag in the right place, defaults
+    applied, optional fields omitted when unset). Claude's argv no
+    longer carries ``-p``/``--output-format``/``--max-turns``/
+    ``--max-budget-usd``/``--session-id``/``--include-hook-events`` —
+    interactive cutover ($docs-internal/claude_code_interactive_mode.md).
   - `parse_event` round-trips JSON correctly, returns None for garbage
   - `is_final_event` matches the right event types
   - `event_to_session_result` reconstructs cost / session_id /
@@ -70,56 +73,77 @@ def claude_provider():
 class TestClaudeArgv:
     def test_minimum_required_flags(self, claude_provider):
         task = ClaudeTaskSpec(prompt="hello world")
-        argv = claude_provider.headless_argv(task, defaults={})
-        # `-p hello world` must be present
-        assert "-p" in argv
+        argv = claude_provider.interactive_argv(task, defaults={})
+        # Prompt is the positional after `--` (interactive mode). No
+        # `-p` / `--print` / `--output-format stream-json` anymore.
+        assert "-p" not in argv
+        assert "--print" not in argv
+        assert "--output-format" not in argv
+        assert "--verbose" not in argv
+        assert "--include-partial-messages" not in argv
+        assert "--include-hook-events" not in argv
+        assert "--" in argv
         assert "hello world" in argv
-        # stream-json output format
-        assert "--output-format" in argv
-        assert "stream-json" in argv
+        # Ordering: `--` immediately precedes the prompt.
+        sep_idx = argv.index("--")
+        assert argv[sep_idx + 1] == "hello world"
         # Defaults applied
         assert "--model" in argv
         assert "claude-sonnet-4-6" in argv  # default_model from JSON
-        assert "--max-turns" in argv
-        assert "10" in argv  # default_max_turns
-        assert "--max-budget-usd" in argv
-        assert "5.0" in argv  # default_max_budget_usd
+        # `-p`-only flags no longer emitted
+        assert "--max-turns" not in argv
+        assert "--max-budget-usd" not in argv
+        assert "--fallback-model" not in argv
+        # Tool + permission machinery preserved
         assert "--allowedTools" in argv
         assert "--permission-mode" in argv
+        # `bypassPermissions` is the documented mode for non-interactive
+        # automation (https://code.claude.com/docs/en/permission-modes).
+        perm_idx = argv.index("--permission-mode")
+        assert argv[perm_idx + 1] == "bypassPermissions"
 
-    def test_session_id_flag(self, claude_provider):
+    def test_no_session_id_flag_in_interactive(self, claude_provider):
+        """Claude assigns its own session UUID in interactive mode; we
+        no longer pre-mint a UUID and pass it via `--session-id`. The
+        `session_id` field on ClaudeTaskSpec is kept for back-compat
+        but silently dropped from argv."""
         task = ClaudeTaskSpec(prompt="x", session_id="sess-abc-123")
-        argv = claude_provider.headless_argv(task, defaults={})
-        assert "--session-id" in argv
-        assert "sess-abc-123" in argv
-        assert "--resume" not in argv
+        argv = claude_provider.interactive_argv(task, defaults={})
+        assert "--session-id" not in argv
 
-    def test_resume_wins_over_session_id(self, claude_provider):
+    def test_resume_flag_emitted(self, claude_provider):
         task = ClaudeTaskSpec(
             prompt="x",
-            session_id="new-sess",
+            session_id="new-sess",  # silently dropped in interactive
             resume_session_id="prior-sess",
         )
-        argv = claude_provider.headless_argv(task, defaults={})
+        argv = claude_provider.interactive_argv(task, defaults={})
         assert "--resume" in argv
         assert "prior-sess" in argv
         assert "--session-id" not in argv
 
-    def test_zero_budget_omits_flag(self, claude_provider):
-        task = ClaudeTaskSpec(prompt="x", max_budget_usd=0.0)
-        argv = claude_provider.headless_argv(task, defaults={})
-        assert "--max-budget-usd" not in argv
-
     def test_system_prompt_propagates(self, claude_provider):
         task = ClaudeTaskSpec(prompt="x", system_prompt="be concise")
-        argv = claude_provider.headless_argv(task, defaults={})
+        argv = claude_provider.interactive_argv(task, defaults={})
         assert "--append-system-prompt" in argv
         assert "be concise" in argv
+
+    def test_include_prompt_false_omits_positional(self, claude_provider):
+        """The session pool uses `include_prompt=False` when spawning a
+        process whose first prompt will be written to the PTY (e.g.
+        after a `/clear`). The argv carries no positional prompt and
+        therefore no `--` separator."""
+        task = ClaudeTaskSpec(prompt="will-be-piped-to-pty")
+        argv = claude_provider.interactive_argv(
+            task, defaults={}, include_prompt=False,
+        )
+        assert "--" not in argv
+        assert "will-be-piped-to-pty" not in argv
 
     def test_wrong_task_type_raises(self, claude_provider):
         codex_task = CodexTaskSpec(prompt="x")
         with pytest.raises(TypeError, match="ClaudeTaskSpec"):
-            claude_provider.headless_argv(codex_task, defaults={})
+            claude_provider.interactive_argv(codex_task, defaults={})
 
 
 class TestClaudeParseEvent:
@@ -271,7 +295,7 @@ def codex_provider():
 class TestCodexArgv:
     def test_no_session_no_budget_no_turns(self, codex_provider):
         task = CodexTaskSpec(prompt="hello")
-        argv = codex_provider.headless_argv(task, defaults={})
+        argv = codex_provider.interactive_argv(task, defaults={})
         assert "--max-turns" not in argv
         assert "--max-budget-usd" not in argv
         assert "--session-id" not in argv
@@ -280,25 +304,25 @@ class TestCodexArgv:
 
     def test_sandbox_flag(self, codex_provider):
         task = CodexTaskSpec(prompt="x", sandbox="read-only")
-        argv = codex_provider.headless_argv(task, defaults={})
+        argv = codex_provider.interactive_argv(task, defaults={})
         assert "--sandbox" in argv
         assert "read-only" in argv
 
     def test_ask_for_approval_flag(self, codex_provider):
         task = CodexTaskSpec(prompt="x", ask_for_approval="on-request")
-        argv = codex_provider.headless_argv(task, defaults={})
+        argv = codex_provider.interactive_argv(task, defaults={})
         assert "--ask-for-approval" in argv
         assert "on-request" in argv
 
     def test_default_sandbox_workspace_write(self, codex_provider):
         task = CodexTaskSpec(prompt="x")
-        argv = codex_provider.headless_argv(task, defaults={})
+        argv = codex_provider.interactive_argv(task, defaults={})
         idx = argv.index("--sandbox")
         assert argv[idx + 1] == "workspace-write"
 
     def test_system_prompt_prepended(self, codex_provider):
         task = CodexTaskSpec(prompt="user thing", system_prompt="be careful")
-        argv = codex_provider.headless_argv(task, defaults={})
+        argv = codex_provider.interactive_argv(task, defaults={})
         # Codex has no --system-prompt flag; we prepend with <system> tags
         prompt_arg = argv[-1]  # last arg is the prompt
         assert "<system>" in prompt_arg
@@ -308,7 +332,7 @@ class TestCodexArgv:
     def test_wrong_task_type_raises(self, codex_provider):
         claude_task = ClaudeTaskSpec(prompt="x")
         with pytest.raises(TypeError, match="CodexTaskSpec"):
-            codex_provider.headless_argv(claude_task, defaults={})
+            codex_provider.interactive_argv(claude_task, defaults={})
 
 
 class TestCodexEventReconstruction:

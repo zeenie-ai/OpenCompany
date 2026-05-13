@@ -1,15 +1,40 @@
-"""Anthropic Claude Code CLI provider.
+"""Anthropic Claude Code CLI provider — interactive TUI mode.
 
-Reference implementation for the `AICliProvider` Protocol. Full feature
-set: sessions, resume, budget, turns, allowed_tools, permission_mode,
-MCP lockfile, cost-in-JSON.
+Reference implementation for the `AICliProvider` Protocol. MachinaOs
+drives the same interactive `claude` invocation a normal user runs at
+their terminal — not `claude -p` headless. The PTY keeps the process
+alive in TUI mode while we read events from the on-disk session JSONL
+at ``<CLAUDE_CONFIG_DIR>/projects/<project_key>/<session>.jsonl``
+instead of from stdout. See ``docs-internal/claude_code_interactive_mode.md``.
 
-Subprocess: ``claude -p <prompt> --output-format stream-json --verbose
---include-partial-messages --include-hook-events --ide
-[--session-id|--resume <UUID>] --model ... --max-turns ...
---max-budget-usd ... --allowedTools ... --permission-mode ...
---append-system-prompt ... [--effort ...] [--fallback-model ...]
-[--add-dir ...] [--disallowedTools ...] [--agent ...]``
+Subprocess: ``claude --permission-mode bypassPermissions
+--allowedTools <list> [--model ...] [--append-system-prompt ...]
+[--mcp-config ...] [--strict-mcp-config] [--resume <UUID>]
+[--effort ...] [--add-dir ...] [--disallowedTools ...] [--agent ...]
+-- "<prompt>"``
+
+**Tools + skills are preserved**:
+  - ``--mcp-config`` registers MachinaOs's FastMCP server; the spawned
+    `claude` discovers `mcp__machinaos__*` tools via `tools/list`.
+  - ``--allowedTools`` carries the explicit allowlist (built-ins +
+    every wired MCP tool) — same shape as the prior headless path.
+  - Skills are still materialised under ``<cwd>/.claude/skills/`` by
+    ``AICliSession._materialise_skills`` (unchanged).
+
+**Permission mode**: ``bypassPermissions`` lets every allowlist entry
+fire without a TUI prompt — non-interactive automation has no human at
+the keyboard to click "Allow." Behaviorally equivalent to
+``--dangerously-skip-permissions`` but uses the documented permission
+mode (``code.claude.com/docs/en/permission-modes``) and is the same
+flag a Composio AO "permissionless" launch sets.
+
+Flags dropped in the interactive cutover (no longer emitted; the
+on-disk JSONL gives us the same data without `-p`):
+``-p / --print``, ``--output-format``, ``--verbose``,
+``--include-partial-messages``, ``--include-hook-events``,
+``--max-turns``, ``--max-budget-usd``, ``--session-id``,
+``--fallback-model``. ``--max-budget-usd`` / ``--max-turns`` become
+external monitors (Phase 2).
 
 Binary + auth: shared with the auth surface via
 ``services.claude_oauth.claude_binary_path()`` — single project-local
@@ -17,9 +42,11 @@ install at ``<repo>/data/claude-machina/npm/`` and ``CLAUDE_CONFIG_DIR``
 set on the spawn env so the agent picks up the same credentials the
 Login button wrote.
 
-Final event: ``type == "result"`` carries ``total_cost_usd``,
-``duration_ms``, ``num_turns``, ``session_id``, and the assistant's
-``result`` string.
+Final event (parsed off disk by ``JsonlWatcher``): ``type == "result"``
+carries ``total_cost_usd``, ``duration_ms``, ``num_turns``,
+``session_id``, and the assistant's ``result`` string — same shape `-p`
+used to write to stdout (Claude Code CHANGELOG 2.1.101 / 2.1.126
+confirms the shared JSONL writer).
 """
 
 from __future__ import annotations
@@ -71,7 +98,7 @@ class AnthropicClaudeProvider:
         """
         return Path(claude_binary_path())
 
-    def headless_argv(
+    def interactive_argv(
         self,
         task: Any,  # ClaudeTaskSpec
         *,
@@ -79,43 +106,50 @@ class AnthropicClaudeProvider:
         mcp_endpoint_url: Optional[str] = None,
         mcp_bearer_token: Optional[str] = None,
         connected_tool_names: Optional[List[str]] = None,
+        include_prompt: bool = True,
     ) -> List[str]:
-        """Build the full argv (binary + flags) for one task.
+        """Build the full argv (binary + flags) for one interactive task.
+
+        Emits the same invocation a human user runs (``claude ... --
+        "<prompt>"``) rather than ``claude -p``. The TUI is held alive
+        by a PTY; events are read from the on-disk JSONL at
+        ``<CLAUDE_CONFIG_DIR>/projects/<project_key>/<session>.jsonl``.
 
         ``mcp_endpoint_url`` + ``mcp_bearer_token`` (if both set) are
         emitted as a ``--mcp-config <json>`` block so the spawned
-        ``claude -p`` registers MachinaOs's MCP server. The ``--ide`` /
-        lockfile path is for interactive IDE-host scenarios; in headless
-        mode the documented mechanism is ``--mcp-config`` (see
-        https://code.claude.com/docs/en/mcp)."""
+        ``claude`` registers MachinaOs's FastMCP server (works
+        identically in interactive + headless modes per
+        https://code.claude.com/docs/en/mcp).
+
+        Tools and skills are unchanged from the prior headless path —
+        same ``--allowedTools`` list (built-ins + every wired
+        ``mcp__machinaos__*``), same skill materialisation under
+        ``<cwd>/.claude/skills/`` (in ``AICliSession._materialise_skills``).
+        The permission flag flips from ``acceptEdits`` to
+        ``bypassPermissions`` so non-Edit tools in the allowlist fire
+        without prompting the TUI (no human to click "Allow").
+
+        ``include_prompt=False`` is used by the session pool when
+        respawning a fresh process whose first prompt will be written
+        to the PTY rather than passed on argv (e.g. after a `/clear`).
+        """
         if not isinstance(task, ClaudeTaskSpec):
             raise TypeError(
-                "AnthropicClaudeProvider.headless_argv requires ClaudeTaskSpec, "
+                "AnthropicClaudeProvider.interactive_argv requires ClaudeTaskSpec, "
                 f"got {type(task).__name__}"
             )
 
         argv: List[str] = [str(self.binary_path())]
 
-        argv += [
-            "-p", task.prompt,
-            "--output-format", "stream-json",
-            "--verbose",  # required by Claude CLI when using stream-json with --print
-            "--include-partial-messages",
-            "--include-hook-events",  # surface SessionStart / hooks into stream-json
-        ]
-
-        # MCP server registration — headless path. The shape mirrors
-        # the Claude Code MCP doc's ``mcp.json`` example and the
-        # ``claude mcp add --transport http <name> <url> --header
-        # "Authorization: Bearer ..."`` invocation.
+        # MCP server registration — same shape as the prior headless
+        # path; the Claude Code MCP doc's ``mcp.json`` example. Works
+        # identically in interactive mode.
         if mcp_endpoint_url and mcp_bearer_token:
             # `alwaysLoad: true` opts this server out of MCP tool-search
             # deferral so all `mcp__machinaos__*` tools enter context at
             # session start instead of waiting for a `ToolSearch` call
-            # that the agent often doesn't make
+            # the agent often doesn't make
             # (https://code.claude.com/docs/en/mcp#scale-with-mcp-tool-search).
-            # Startup blocks <=5s waiting for the FastMCP connection;
-            # acceptable since our server is already up before spawn.
             mcp_payload = json.dumps({
                 "mcpServers": {
                     "machinaos": {
@@ -138,44 +172,20 @@ class AnthropicClaudeProvider:
         )
         argv += ["--model", model]
 
-        # Session / resume — `resume_session_id` wins if both are set,
-        # since "resume" implies the user has a prior session.
+        # Resume — no `--session-id` in interactive mode. First-run
+        # claude assigns its own UUID, which the JsonlDirWatcher
+        # discovers from the new file appearing under
+        # `<CLAUDE_CONFIG_DIR>/projects/<project_key>/` and which
+        # `_persist_memory` saves into `simpleMemory.last_session_id`.
         if task.resume_session_id:
             argv += ["--resume", task.resume_session_id]
-        elif task.session_id:
-            argv += ["--session-id", task.session_id]
-
-        # Max turns
-        max_turns = (
-            task.max_turns
-            if task.max_turns is not None
-            else int(defaults.get(
-                "default_max_turns",
-                self._defaults.get("default_max_turns", 10),
-            ))
-        )
-        argv += ["--max-turns", str(max_turns)]
-
-        # Budget (USD)
-        max_budget = (
-            task.max_budget_usd
-            if task.max_budget_usd is not None
-            else float(defaults.get(
-                "default_max_budget_usd",
-                self._defaults.get("default_max_budget_usd", 5.0),
-            ))
-        )
-        if max_budget > 0:
-            argv += ["--max-budget-usd", str(max_budget)]
 
         # Allowed tools — built-in defaults plus every workflow tool we
-        # exposed via the per-batch FastMCP bridge. Without the
-        # `mcp__machinaos__<name>` entries here, claude sees the tools
-        # in `tools/list` but is denied permission when it tries to
-        # invoke them ("I don't have permission to run a web search…")
-        # because `--permission-mode acceptEdits` only auto-permits
-        # Edit; everything else falls through to the allowlist.
-        # Default fallback includes:
+        # exposed via the per-batch FastMCP bridge. Same shape as the
+        # prior headless argv. With ``--permission-mode bypassPermissions``
+        # (below) the allowlist becomes documentation-of-intent rather
+        # than an active gate, but we keep it explicit so the surface is
+        # auditable. Default fallback:
         #   - Read,Edit,Bash,Glob,Grep,Write — filesystem + shell escape hatches
         #   - Skill — invoke materialised `.claude/skills/<name>/SKILL.md`
         #   - WebSearch,WebFetch — escape hatches when no MCP tool matches
@@ -208,10 +218,18 @@ class AnthropicClaudeProvider:
         if allowed_list:
             argv += ["--allowedTools", ",".join(allowed_list)]
 
-        # Permission mode (default acceptEdits)
+        # Permission mode — ``bypassPermissions`` for non-interactive
+        # automation. ``acceptEdits`` (the prior default) auto-permits
+        # Edit-class tools but prompts for everything else, which would
+        # hang the PTY since no human is present to approve.
+        # ``bypassPermissions`` is one of the documented permission
+        # modes (https://code.claude.com/docs/en/permission-modes) —
+        # behaviourally equivalent to ``--dangerously-skip-permissions``
+        # but uses the documented mode enum. Per-task override still
+        # honoured if the user explicitly wants ``acceptEdits``.
         perm = task.permission_mode or defaults.get(
             "default_permission_mode",
-            self._defaults.get("default_permission_mode", "acceptEdits"),
+            self._defaults.get("default_permission_mode", "bypassPermissions"),
         )
         if perm:
             argv += ["--permission-mode", perm]
@@ -248,17 +266,27 @@ class AnthropicClaudeProvider:
                 len(directive),
             )
 
-        # Optional per-task overrides (documented at code.claude.com/docs/en/cli-reference)
+        # Optional per-task overrides (work in interactive mode per
+        # code.claude.com/docs/en/cli-reference). ``--max-turns``,
+        # ``--max-budget-usd``, ``--fallback-model`` are ``-p``-only and
+        # not emitted; the task spec keeps the fields for back-compat
+        # but they're silently dropped here.
         if task.effort:
             argv += ["--effort", task.effort]
-        if task.fallback_model:
-            argv += ["--fallback-model", task.fallback_model]
         for path in task.add_dir:
             argv += ["--add-dir", path]
         if task.disallowed_tools:
             argv += ["--disallowedTools", task.disallowed_tools]
         if task.agent:
             argv += ["--agent", task.agent]
+
+        # Prompt as positional argument after `--`. Claude auto-submits
+        # the positional as turn 1 and stays interactive (per
+        # https://code.claude.com/docs/en/cli-reference). The session
+        # pool sets include_prompt=False for spawns whose first prompt
+        # will be written to the PTY directly.
+        if include_prompt and task.prompt:
+            argv += ["--", task.prompt]
 
         return argv
 

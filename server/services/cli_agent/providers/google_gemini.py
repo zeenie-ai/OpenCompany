@@ -47,7 +47,16 @@ class GoogleGeminiProvider:
     def binary_path(self) -> Path:  # pragma: no cover
         raise NotImplementedError
 
-    def headless_argv(self, task: Any, *, defaults: Dict[str, Any]) -> List[str]:  # pragma: no cover
+    def interactive_argv(
+        self,
+        task: Any,
+        *,
+        defaults: Dict[str, Any],
+        mcp_endpoint_url: Optional[str] = None,
+        mcp_bearer_token: Optional[str] = None,
+        connected_tool_names: Optional[List[str]] = None,
+        include_prompt: bool = True,
+    ) -> List[str]:  # pragma: no cover
         raise NotImplementedError
 
     def login_argv(self) -> List[str]:  # pragma: no cover

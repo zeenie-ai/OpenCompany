@@ -1,4 +1,4 @@
-"""One CLI session per task — `BaseProcessSupervisor` subclass.
+"""One CLI session per task — interactive PTY + on-disk JSONL events.
 
 Each session is bound to:
   - one provider (Claude or Codex)
@@ -6,18 +6,29 @@ Each session is bound to:
   - one git worktree (created in `_pre_spawn`, removed in `cleanup`)
   - one IDE lockfile (written in `_pre_spawn` when the provider supports it)
 
-Inherits `BaseProcessSupervisor`'s locked idempotent start/stop, recursive
-`kill_tree`, `terminate_then_kill(5s)` grace, and Windows
-`CTRL_BREAK_EVENT` path. We override `_do_start` to wire NDJSON consumers
-instead of the parent's generic `drain_stream(logger.info)`.
+**Transport / protocol split** (see
+``docs-internal/claude_code_interactive_mode.md``):
+
+  - Transport: a PTY (``ptyprocess`` on POSIX / ``pywinpty>=3.0.3`` on
+    Windows) keeps ``claude`` alive in TUI mode. The PTY's stdout —
+    ANSI-rendered TUI — is intentionally discarded.
+  - Protocol: events are read from the on-disk session JSONL at
+    ``<CLAUDE_CONFIG_DIR>/projects/<project_key>/<session>.jsonl``,
+    same shape ``-p`` used to write to stdout (CHANGELOG 2.1.101 /
+    2.1.126 confirms the shared writer).
+
+Inherits from :class:`BaseProcessSupervisor` for its idempotent locked
+start/stop machinery but overrides ``_do_start`` / ``_do_stop`` /
+``is_running`` to drive a :class:`PtyHandle` + :class:`JsonlWatcher`
+pair instead of a plain ``anyio.open_process``. ``self._proc`` stays
+``None`` for the whole session lifetime; the PTY handle is the
+authoritative process owner.
 
 Sessions are NOT registered in the global supervisor registry — they're
-owned by `AICliService.run_batch()` for the lifetime of one batch.
+owned by ``AICliService.run_batch()`` for the lifetime of one batch.
 
-Liveness: relies on `wait_for_completion(timeout_seconds)` as the watchdog
-and the per-broadcast Temporal heartbeat fired by every
-`update_node_status()` call. We do not run our own per-second heartbeat
-loop or write diagnostic dump files.
+Liveness: ``wait_for_completion(timeout_seconds)`` waits for the JSONL
+``result`` event (signalled by ``_on_event`` setting an ``asyncio.Event``).
 """
 
 from __future__ import annotations
@@ -25,9 +36,10 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import shutil
-import subprocess
 import sys
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -37,11 +49,24 @@ import yaml
 
 from core.logging import get_logger
 from services._supervisor.process import BaseProcessSupervisor
+from services.cli_agent.jsonl_watcher import JsonlWatcher
 from services.cli_agent.lockfile import remove_ide_lockfile, write_ide_lockfile
 from services.cli_agent.protocol import AICliProvider, CanonicalUsage, SessionResult
+from services.cli_agent.transports import PtyHandle, get_pty_transport
 from services.cli_agent.types import BaseAICliTaskSpec
 
 logger = get_logger(__name__)
+
+# Claude derives its project_key from cwd by replacing every char that
+# isn't [a-zA-Z0-9.-] with `-`. Verified byte-for-byte against the
+# on-disk `~/.claude-machina/projects/` listing in the memory-bridge
+# research.
+_PROJECT_KEY_RE = re.compile(r"[^a-zA-Z0-9.-]")
+
+# How long to wait for claude to materialise its session JSONL after
+# spawn on a first-run (no `--resume`). Five seconds is generous —
+# under load the file usually appears within 200 ms.
+_FIRST_RUN_JSONL_TIMEOUT = 5.0
 
 
 class AICliSession(BaseProcessSupervisor):
@@ -101,9 +126,17 @@ class AICliSession(BaseProcessSupervisor):
 
         # Streaming state
         self._events: List[Dict[str, Any]] = []
-        self._stderr_lines: List[str] = []
+        self._stderr_lines: List[str] = []  # populated only on PTY error envelopes
         self._exit_code: Optional[int] = None
         self._lockfile_path: Optional[Path] = None
+
+        # PTY + JSONL state — set in `_do_start`, cleared in `_do_stop`.
+        self._pty_handle: Optional[PtyHandle] = None
+        self._jsonl_watcher: Optional[JsonlWatcher] = None
+        self._session_jsonl_path: Optional[Path] = None
+        # Signalled by `_on_event` when claude writes a `result` event;
+        # `wait_for_completion` awaits this.
+        self._result_event: asyncio.Event = asyncio.Event()
 
     # ------------------------------------------------------------------
     # Identity
@@ -133,7 +166,7 @@ class AICliSession(BaseProcessSupervisor):
         return self._provider.binary_path()
 
     def argv(self) -> List[str]:
-        return self._provider.headless_argv(
+        return self._provider.interactive_argv(
             self._task,
             defaults=self._defaults,
             mcp_endpoint_url=self._mcp_endpoint_url(),
@@ -302,7 +335,7 @@ class AICliSession(BaseProcessSupervisor):
                 )
 
     # ------------------------------------------------------------------
-    # _do_start: replace parent's drain tasks with NDJSON consumers
+    # _do_start: PTY spawn + JSONL watcher (interactive cutover)
     # ------------------------------------------------------------------
 
     async def _do_start(self) -> None:
@@ -312,97 +345,173 @@ class AICliSession(BaseProcessSupervisor):
 
         await self._pre_spawn()
 
-        kwargs: Dict[str, Any] = {
-            "cwd": str(self.cwd()),
-            "env": self.env(),
-            # `claude -p` opens stdin to read piped input; we never pipe
-            # anything, so without DEVNULL the CLI waits 3s and prints
-            # "Warning: no stdin data received in 3s, proceeding without
-            # it." Tools come over MCP, not stdin — close the handle
-            # explicitly to skip the warning + the 3s stall.
-            "stdin": subprocess.DEVNULL,
-            "stdout": subprocess.PIPE,
-            "stderr": subprocess.PIPE,
-        }
-        if sys.platform == "win32" and self.graceful_shutdown:
-            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
+        # The new path is claude-specific. Codex / Gemini's automation
+        # surface is `codex exec --json` / `gemini --output-format
+        # stream-json` — both write events to stdout, not disk — and
+        # need the legacy spawn path. For now claude is the only
+        # provider actually wired to a node plugin; once codex_agent
+        # ships, that branch grows here. We raise loudly if a non-
+        # claude provider tries to use this session class so the gap
+        # isn't silent.
+        if self._provider.name != "claude":
+            raise RuntimeError(
+                f"AICliSession (interactive PTY+JSONL) currently only "
+                f"supports the 'claude' provider; got "
+                f"{self._provider.name!r}. Codex / Gemini still use the "
+                f"stream-json-on-stdout path and need a separate session "
+                f"class — track via codex_agent plugin work."
+            )
 
-        self._proc = await anyio.open_process(self.argv(), **kwargs)
+        # Where claude will write its session JSONL. The project_key is
+        # derived from cwd by the algorithm verified in the memory
+        # bridge research (every non-`[a-zA-Z0-9.-]` char → `-`).
+        project_dir = self._project_dir()
+        try:
+            project_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            self._logger.warning(
+                "[%s] could not create project dir %s: %s",
+                self.label, project_dir, exc,
+            )
+
+        resume_uuid = getattr(self._task, "resume_session_id", None)
+        baseline_files: set[str] = set()
+        if resume_uuid:
+            # Resume runs: known location. Claude opens this file and
+            # appends to it on each turn.
+            self._session_jsonl_path = project_dir / f"{resume_uuid}.jsonl"
+        else:
+            # First-run: snapshot the dir BEFORE spawn so we can
+            # identify the new file claude creates afterwards.
+            try:
+                baseline_files = {
+                    p.name for p in project_dir.iterdir()
+                    if p.suffix == ".jsonl"
+                }
+            except OSError:
+                pass
+
+        # Spawn via the cross-platform PTY transport. The PtyHandle
+        # owns the subprocess; `self._proc` stays `None` for
+        # BaseProcessSupervisor-compat — `is_running` / `_do_stop` are
+        # overridden below to consult `self._pty_handle` instead.
+        transport = get_pty_transport()
+        argv = self.argv()
+        try:
+            self._pty_handle = await transport.spawn(
+                argv,
+                cwd=self.cwd() or self._repo_root,
+                env=self.env(),
+            )
+        except FileNotFoundError:
+            raise
+        except (OSError, RuntimeError) as exc:
+            raise RuntimeError(f"PTY spawn failed: {exc}") from exc
+
         self._logger.info(
-            "[%s] spawned pid=%s task=%s branch=%s",
-            self.label, self._proc.pid, self._task_id, self._branch,
+            "[%s] spawned pid=%s task=%s branch=%s cwd=%s",
+            self.label, self._pty_handle.pid, self._task_id,
+            self._branch, self.cwd(),
         )
 
-        # NDJSON consumers replace the parent's `drain_stream(logger.info)`.
-        # We populate `self._drain_tasks` so the parent's `_do_stop`
-        # cancels them on stop.
-        self._drain_tasks = [
-            asyncio.create_task(self._consume_stdout(self._proc.stdout)),
-            asyncio.create_task(self._consume_stderr(self._proc.stderr)),
-        ]
+        # Resolve the JSONL path. For first-run we wait for claude to
+        # create the file; for resume the path is already known.
+        if self._session_jsonl_path is None:
+            try:
+                self._session_jsonl_path = await self._wait_for_new_jsonl(
+                    project_dir, baseline_files,
+                )
+            except TimeoutError as exc:
+                # Surface a clean error envelope rather than letting the
+                # spawn limp on with no event source.
+                raise RuntimeError(str(exc)) from exc
+
+        self._logger.info(
+            "[%s] watching session JSONL: %s",
+            self.label, self._session_jsonl_path,
+        )
+
+        # Start the JSONL tail-f. Events flow into `_on_event` which
+        # also signals `self._result_event` when a `result` line lands.
+        # `start_from_end=False` so the watcher catches the `system/init`
+        # event claude writes immediately on startup (it's already on
+        # disk by the time we start watching).
+        self._jsonl_watcher = JsonlWatcher(
+            self._session_jsonl_path,
+            on_event=self._on_jsonl_event,
+            start_from_end=False,
+        )
+        await self._jsonl_watcher.start()
 
     # ------------------------------------------------------------------
-    # Stream consumers
+    # JSONL location helpers
     # ------------------------------------------------------------------
 
-    async def _consume_stdout(self, stream: Optional[anyio.abc.ByteReceiveStream]) -> None:
-        if stream is None:
-            return
-        buf = b""
-        try:
-            async for chunk in stream:
-                buf += chunk
-                while b"\n" in buf:
-                    raw, buf = buf.split(b"\n", 1)
-                    text = raw.decode("utf-8", errors="replace").strip()
-                    if not text:
-                        continue
-                    event = self._provider.parse_event(text)
-                    if event is None:
-                        continue
-                    self._events.append(event)
-                    await self._on_event(event)
-            if buf:
-                text = buf.decode("utf-8", errors="replace").strip()
-                if text:
-                    event = self._provider.parse_event(text)
-                    if event is not None:
-                        self._events.append(event)
-                        await self._on_event(event)
-        except (anyio.ClosedResourceError, anyio.EndOfStream, asyncio.CancelledError):
-            pass
-        except Exception as exc:  # pragma: no cover — defensive
-            self._logger.debug("[%s] stdout consumer ended: %s", self.label, exc)
+    def _project_dir(self) -> Path:
+        """Return the dir where claude writes its session JSONLs for
+        our cwd. ``<MACHINA_CLAUDE_DIR>/projects/<project_key>/``.
 
-    async def _consume_stderr(self, stream: Optional[anyio.abc.ByteReceiveStream]) -> None:
-        if stream is None:
-            return
-        buf = b""
-        try:
-            async for chunk in stream:
-                buf += chunk
-                while b"\n" in buf:
-                    raw, buf = buf.split(b"\n", 1)
-                    text = raw.decode("utf-8", errors="replace").rstrip()
-                    if not text:
-                        continue
-                    self._stderr_lines.append(text)
-                    # Mirror to backend log too — without this the spawned
-                    # CLI's MCP-discovery / auth-failure / debug output
-                    # only reaches the Terminal panel, leaving the
-                    # operator log blind during runtime debugging.
-                    self._logger.info("[CC-Agent stderr] %s", text)
-                    await self._safe_terminal_log(text, level="error")
-            if buf:
-                text = buf.decode("utf-8", errors="replace").rstrip()
-                if text:
-                    self._stderr_lines.append(text)
-                    self._logger.info("[CC-Agent stderr] %s", text)
-                    await self._safe_terminal_log(text, level="error")
-        except (anyio.ClosedResourceError, anyio.EndOfStream, asyncio.CancelledError):
-            pass
-        except Exception as exc:  # pragma: no cover
-            self._logger.debug("[%s] stderr consumer ended: %s", self.label, exc)
+        Claude derives ``project_key`` by replacing every non-
+        ``[a-zA-Z0-9.-]`` char in ``str(cwd)`` with ``-``. Verified
+        byte-for-byte against the on-disk
+        ``data/claude-machina/projects/`` listing in the memory-bridge
+        research.
+        """
+        from services.claude_oauth import MACHINA_CLAUDE_DIR
+
+        cwd = self.cwd() or self._repo_root
+        project_key = _PROJECT_KEY_RE.sub("-", str(cwd))
+        return Path(MACHINA_CLAUDE_DIR) / "projects" / project_key
+
+    async def _wait_for_new_jsonl(
+        self, project_dir: Path, baseline: set[str],
+    ) -> Path:
+        """Poll ``project_dir`` for a new ``.jsonl`` file that wasn't
+        present in ``baseline``. Used on first-run spawns when we don't
+        know the UUID claude will assign. If multiple new files appear
+        (a race we don't expect), pick the newest by mtime.
+
+        Raises :class:`TimeoutError` after :data:`_FIRST_RUN_JSONL_TIMEOUT`
+        seconds — surfaces as a clean spawn failure rather than a
+        silently dead session.
+        """
+        deadline = time.monotonic() + _FIRST_RUN_JSONL_TIMEOUT
+        while time.monotonic() < deadline:
+            try:
+                current_files = {
+                    p.name for p in project_dir.iterdir()
+                    if p.suffix == ".jsonl"
+                }
+            except OSError:
+                current_files = set()
+            new_names = current_files - baseline
+            if new_names:
+                candidates = [project_dir / n for n in new_names]
+                # Pick newest by mtime — tolerates a stale baseline race
+                # where an unrelated session was deleted concurrently.
+                try:
+                    return max(candidates, key=lambda p: p.stat().st_mtime)
+                except OSError:
+                    return candidates[0]
+            await asyncio.sleep(0.1)
+        raise TimeoutError(
+            f"No session JSONL appeared under {project_dir} within "
+            f"{_FIRST_RUN_JSONL_TIMEOUT}s — claude may have failed to "
+            f"start or the CLAUDE_CONFIG_DIR is misconfigured."
+        )
+
+    async def _on_jsonl_event(self, event: Dict[str, Any]) -> None:
+        """JsonlWatcher callback: append + dispatch + result-signal.
+
+        Wraps the existing :meth:`_on_event` so the events list is
+        updated centrally and the result-event Asyncio primitive fires
+        when claude writes a `result` line — that's the signal that the
+        turn is done.
+        """
+        self._events.append(event)
+        await self._on_event(event)
+        if self._provider.is_final_event(event):
+            self._result_event.set()
 
     # ------------------------------------------------------------------
     # Event dispatch (UI broadcasts)
@@ -532,26 +641,76 @@ class AICliSession(BaseProcessSupervisor):
     # Public lifecycle
     # ------------------------------------------------------------------
 
+    def is_running(self) -> bool:
+        """Override BaseProcessSupervisor: we own the process via the
+        PTY handle, not ``self._proc``."""
+        return self._pty_handle is not None and self._pty_handle.is_alive()
+
+    async def _do_stop(self) -> None:
+        """Override BaseProcessSupervisor: stop the JSONL watcher and
+        kill the PTY child. Idempotent — clearing both refs prevents a
+        double-stop from racing the kill-cascade."""
+        watcher = self._jsonl_watcher
+        self._jsonl_watcher = None
+        if watcher is not None:
+            try:
+                await watcher.stop()
+            except Exception as exc:  # pragma: no cover — defensive
+                self._logger.debug(
+                    "[%s] watcher stop: %s", self.label, exc,
+                )
+
+        handle = self._pty_handle
+        self._pty_handle = None
+        if handle is not None:
+            pid = handle.pid
+            try:
+                await handle.kill()
+            except Exception as exc:  # pragma: no cover — defensive
+                self._logger.debug(
+                    "[%s] PTY kill: %s", self.label, exc,
+                )
+            self._logger.info("[%s] stopped pid=%s", self.label, pid)
+
     async def wait_for_completion(self, timeout_seconds: int) -> SessionResult:
-        """Wait for the CLI to exit, with hard timeout watchdog."""
-        if self._proc is None:
+        """Wait for the JSONL ``result`` event with hard timeout.
+
+        In interactive mode the PTY process doesn't exit between turns
+        — claude stays alive waiting for the next user input. The
+        protocol contract is the ``result`` event on the JSONL: when
+        that lands, the turn is complete and we can collect the
+        outcome.
+
+        Hard timeout: matches the old stdout-driven behaviour. If the
+        result event doesn't arrive within ``timeout_seconds``, we
+        force-stop the PTY and surface a timeout error.
+        """
+        if self._pty_handle is None:
             return self._build_result(
                 success=False, error="session never started",
             )
 
         try:
-            await asyncio.wait_for(self._proc.wait(), timeout=timeout_seconds)
-            self._exit_code = self._proc.returncode
-            return self._build_result(success=(self._exit_code == 0))
+            await asyncio.wait_for(
+                self._result_event.wait(), timeout=timeout_seconds,
+            )
+            # The result event fired; claude wrote `result` on the JSONL.
+            # The subprocess is still alive (interactive TUI stays
+            # running) — we treat the turn as exit-code 0 since claude
+            # didn't crash.
+            self._exit_code = 0
+            return self._build_result(success=True)
         except asyncio.TimeoutError:
             await self.stop()
+            self._exit_code = -1
             return self._build_result(
                 success=False,
                 error=f"timeout after {timeout_seconds}s",
             )
 
     async def cleanup(self) -> None:
-        """Stop the process and remove the worktree + lockfile."""
+        """Stop the watcher + kill the PTY child and remove the
+        worktree + lockfile."""
         try:
             await self.stop()
         except Exception as exc:

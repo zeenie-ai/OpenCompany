@@ -107,10 +107,13 @@ class AICliProvider(Protocol):
         #   2) `npx --yes <package_name>` shim path
         # Raises FileNotFoundError if neither is available.
 
-    def headless_argv(self, task: Any, *, defaults: Dict[str, Any]) -> List[str]: ...
-        # Build the full argv (binary + flags) for a headless run of
-        # `task` (a `<Provider>TaskSpec` Pydantic model). `defaults`
-        # comes from `ai_cli_providers.json` for this provider.
+    def interactive_argv(self, task: Any, *, defaults: Dict[str, Any]) -> List[str]: ...
+        # Build the full argv (binary + flags) for spawning a session
+        # over `task` (a `<Provider>TaskSpec` Pydantic model). For
+        # Claude, this is the interactive-TUI shape (no `-p`, prompt as
+        # positional after `--`); for Codex, it's `codex exec --json`
+        # since that's Codex's automation surface. `defaults` comes
+        # from `ai_cli_providers.json` for this provider.
 
     # ---- native auth (no token wrapping) --------------------------------
 

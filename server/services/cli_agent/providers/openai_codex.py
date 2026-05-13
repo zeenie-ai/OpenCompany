@@ -97,15 +97,27 @@ class OpenAICodexProvider:
             f"Install with: npm install -g {self.package_name}"
         )
 
-    def headless_argv(
+    def interactive_argv(
         self,
         task: Any,  # CodexTaskSpec
         *,
         defaults: Dict[str, Any],
+        mcp_endpoint_url: Optional[str] = None,
+        mcp_bearer_token: Optional[str] = None,
+        connected_tool_names: Optional[List[str]] = None,
+        include_prompt: bool = True,
     ) -> List[str]:
+        """Build the codex spawn argv. Codex's automation surface is
+        ``codex exec --json`` (not a TUI mode like claude); this method
+        keeps the name aligned with the Protocol while emitting Codex's
+        documented non-interactive form. MCP bridging params are accepted
+        for Protocol uniformity but unused (codex's MCP config lives in
+        ``~/.codex/config.toml``). ``include_prompt`` is honoured so the
+        session pool can spawn without an initial prompt."""
+        _ = (mcp_endpoint_url, mcp_bearer_token, connected_tool_names)
         if not isinstance(task, CodexTaskSpec):
             raise TypeError(
-                "OpenAICodexProvider.headless_argv requires CodexTaskSpec, "
+                "OpenAICodexProvider.interactive_argv requires CodexTaskSpec, "
                 f"got {type(task).__name__}"
             )
 
@@ -144,11 +156,11 @@ class OpenAICodexProvider:
         # System prompt — Codex doesn't have a dedicated --system-prompt
         # flag in `exec`. Prepend it to the user prompt with a clear
         # divider when present.
-        prompt = task.prompt
-        if task.system_prompt:
-            prompt = f"<system>\n{task.system_prompt}\n</system>\n\n{task.prompt}"
-
-        argv += [prompt]
+        if include_prompt and task.prompt:
+            prompt = task.prompt
+            if task.system_prompt:
+                prompt = f"<system>\n{task.system_prompt}\n</system>\n\n{task.prompt}"
+            argv += [prompt]
         return argv
 
     # ---- native auth -----------------------------------------------------

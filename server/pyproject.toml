@@ -122,6 +122,16 @@ dependencies = [
     # to discover and call MachinaOs tools (mcp__machina__*) the same way
     # VSCode's Claude Code extension does.
     "mcp>=1.0.0",
+
+    # PTY transports — drive `claude` interactive TUI cross-platform.
+    # POSIX uses ptyprocess (wraps forkpty) for `loop.add_reader`-friendly
+    # async; Windows uses pywinpty v3.x which is Rust-backed via PyO3 +
+    # winpty-rs + Maturin (used by Jupyter Lab terminals and Spyder's
+    # IPython console). See docs-internal/claude_code_interactive_mode.md
+    # for the topology rationale and the deferred upgrade path to an
+    # out-of-process pty-host (VSCode's pattern).
+    "ptyprocess>=0.7.0; sys_platform != 'win32'",
+    "pywinpty>=3.0.3; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
