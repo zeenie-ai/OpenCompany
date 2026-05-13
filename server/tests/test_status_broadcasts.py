@@ -105,7 +105,7 @@ _LEGACY_RAW_DICT_CALLSITES: FrozenSet[str] = frozenset({
     # requiring a parallel rewrite of the frontend listener +
     # invariant test fixtures. Deferred — typed-envelope migration
     # tracked alongside the credentials.* / agent.task.* migrations.
-    "nodes/tool/agent_builder.py",
+    "nodes/tool/agent_builder/__init__.py",
 })
 
 
