@@ -58,6 +58,17 @@ class Settings(BaseSettings):
     # activities alongside the legacy one. Default off so existing deployments
     # behave identically; flip via TEMPORAL_PER_TYPE_DISPATCH=true.
     temporal_per_type_dispatch: bool = Field(default=False, env="TEMPORAL_PER_TYPE_DISPATCH")
+    # F4.B: agent-as-child-workflow. When True, MachinaWorkflow.run() schedules
+    # AgentWorkflow (child workflow) for the 15 migrating agent types
+    # (aiAgent / chatAgent / 12 specialized agents / 2 team leads) instead of
+    # an activity. Tool calls inside the agent become per-type Temporal
+    # activities. `deep_agent`, `rlm_agent`, `claude_code_agent` continue to
+    # run as F4.A per-type activities (NOT migrated -- their external session
+    # state would break across activity boundaries). Default off. Implies
+    # temporal_per_type_dispatch=True.
+    temporal_agent_workflow_enabled: bool = Field(
+        default=False, env="TEMPORAL_AGENT_WORKFLOW_ENABLED",
+    )
 
     # API Keys (all optional, injected at runtime)
     google_maps_api_key: Optional[str] = Field(default=None, env="GOOGLE_MAPS_API_KEY")

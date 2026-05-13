@@ -112,16 +112,26 @@ class TemporalWorkerManager:
             # filtering will move there. Registration cost: ~1.6s startup;
             # zero runtime cost when the flag is off (orchestrator routes to
             # execute_node_activity, per-type entries sit idle).
+            #
+            # F4.B: register AgentWorkflow + its three activities
+            # (execute_llm_step / persist_turn / compact_memory). The
+            # orchestrator schedules AgentWorkflow as a child workflow
+            # for the 15 migrating agent types when
+            # ``temporal_agent_workflow_enabled`` is on.
             from services.temporal.plugin_activities import collect_plugin_activities
+            from services.temporal.agent_activities import collect_agent_activities
+            from services.temporal.agent_workflow import AgentWorkflow
 
             per_type = collect_plugin_activities()  # no queue filter; all plugins
+            agent_activities = collect_agent_activities()
             self._worker = Worker(
                 self.client,
                 task_queue=self.task_queue,
-                workflows=[MachinaWorkflow],
+                workflows=[MachinaWorkflow, AgentWorkflow],
                 activities=[
                     self._activities.execute_node_activity,
                     *per_type,
+                    *agent_activities,
                 ],
                 # Allow concurrent activity execution for parallel branches
                 max_concurrent_activities=self.pool_size,
@@ -131,6 +141,7 @@ class TemporalWorkerManager:
                 "Registered Temporal activities",
                 legacy=1,
                 per_type=len(per_type),
+                agent=len(agent_activities),
                 task_queue=self.task_queue,
             )
             span.set_attribute("task_queue", self.task_queue)
