@@ -28,6 +28,8 @@
 
 import * as React from 'react';
 import * as Lucide from 'lucide-react';
+
+import { API_CONFIG } from '../../config/api';
 // Deep imports of just the brand icons we expose via `lobehub:<brand>`.
 // A namespace import (`import * as Lobehub`) would re-evaluate the package
 // index, which re-exports antd-using feature modules (Editor / Dashboard /
@@ -78,9 +80,13 @@ export const ICON_REGISTRY: Readonly<Record<string, string>> = Object.fromEntrie
 /**
  * Resolve a backend-declared icon string to something renderable.
  * Contract:
- *   `asset:<key>` → look up in ICON_REGISTRY (filesystem-derived)
- *   `data:...`    → pass through
- *   otherwise     → render as-is (emoji / short text / URL)
+ *   `asset:<key>`     → look up in ICON_REGISTRY (filesystem-derived)
+ *   `/api/...`        → prefix with PYTHON_BASE_URL (backend-served icon
+ *                       via GET /api/schemas/nodes/<type>/icon — RFC §6.5)
+ *   `data:...`        → pass through
+ *   `http(s)://...`   → pass through
+ *   other `/...`      → pass through (already same-origin)
+ *   otherwise         → render as-is (emoji / short text)
  * Returns `null` when the icon string is empty or an unknown asset key,
  * so callers can apply their own fallback.
  */
@@ -91,6 +97,13 @@ export const resolveIcon = (icon: string | undefined | null): string | null => {
     // client/src/assets/icons/. Return null so the gap is visible to
     // the author rather than masked by a fallback emoji.
     return ICON_REGISTRY[icon.slice('asset:'.length)] ?? null;
+  }
+  if (icon.startsWith('/api/')) {
+    // Backend-served icon endpoint. In dev the FE runs on Vite:3000 and
+    // the backend on :3010, so a bare relative path would hit the Vite
+    // server. Prefix with PYTHON_BASE_URL (empty string in prod, full
+    // localhost URL in dev) so the browser fetches the right origin.
+    return `${API_CONFIG.PYTHON_BASE_URL}${icon}`;
   }
   if (icon.startsWith('data:') || icon.startsWith('http://') || icon.startsWith('https://') || icon.startsWith('/')) {
     return icon;

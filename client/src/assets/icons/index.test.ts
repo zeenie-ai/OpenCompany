@@ -71,4 +71,14 @@ describe('resolveIcon', () => {
   it('returns null for unknown asset keys (visible gap, not silent fallback)', () => {
     expect(resolveIcon('asset:nonexistent-icon-xyz')).toBeNull();
   });
+
+  it('prefixes /api/ icon paths with PYTHON_BASE_URL (RFC §6.5 — backend-served icons)', () => {
+    // Per-plugin icon.svg endpoint emitted by BaseNode._metadata_dict
+    // when the plugin folder has a co-located icon. Resolver prefixes
+    // PYTHON_BASE_URL so dev (Vite:3000 → backend:3010) and prod
+    // (same-origin, empty prefix) both hit the right server.
+    const resolved = resolveIcon('/api/schemas/nodes/aiAgent/icon');
+    expect(resolved).not.toBeNull();
+    expect(resolved).toMatch(/\/api\/schemas\/nodes\/aiAgent\/icon$/);
+  });
 });
