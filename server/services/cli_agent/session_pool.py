@@ -466,21 +466,102 @@ class ClaudeSessionPool:
             session.new_jsonl_path = path
             session.new_jsonl_event.set()
 
-        async def _on_event(event: Dict[str, Any]) -> None:
-            session.events_this_turn.append(event)
-            if self._provider.is_final_event(event):
-                session.result_event.set()
+        def _make_event_handler(s: PooledClaudeSession):
+            async def _on_event(event: Dict[str, Any]) -> None:
+                await self._handle_jsonl_event(s, event)
+            return _on_event
 
         session.dir_watcher = JsonlDirWatcher(
             project_dir, on_new_file=_on_new_jsonl,
         )
         await session.dir_watcher.start()
         session.jsonl_watcher = JsonlWatcher(
-            jsonl_path, on_event=_on_event, start_from_end=False,
+            jsonl_path,
+            on_event=_make_event_handler(session),
+            start_from_end=False,
         )
         await session.jsonl_watcher.start()
 
         return session
+
+    async def _handle_jsonl_event(
+        self, session: PooledClaudeSession, event: Dict[str, Any],
+    ) -> None:
+        """Shared JSONL event dispatcher for both spawn-time and
+        post-``/clear`` watchers.
+
+        Three concerns:
+          1. Append to ``session.events_this_turn`` so :meth:`send_turn`
+             can build a :class:`SessionResult` from the turn's events.
+          2. Set ``session.result_event`` when the provider's final
+             event arrives (``type == "result"``).
+          3. Detect native compaction (``type=="system"``,
+             ``subtype=="compact_boundary"``) and forward to
+             :class:`CompactionService` so the existing token-tracking
+             pipeline accounts for it — avoids double-compaction
+             (client-side summarisation + native auto-compaction
+             running independently).
+        """
+        session.events_this_turn.append(event)
+        if self._provider.is_final_event(event):
+            session.result_event.set()
+
+        if (
+            event.get("type") == "system"
+            and event.get("subtype") == "compact_boundary"
+        ):
+            await self._record_native_compaction(session, event)
+
+    @staticmethod
+    async def _record_native_compaction(
+        session: PooledClaudeSession, event: Dict[str, Any],
+    ) -> None:
+        """Forward a ``system/compact_boundary`` event to the existing
+        :class:`CompactionService` so its token-state machine reflects
+        the native compaction that just happened.
+
+        Without this, the local-threshold path in
+        ``services/ai.py:_track_token_usage`` and claude's own
+        auto-compaction would both trigger summarisations and the UI's
+        token gauge would race against claude's internal state.
+        """
+        try:
+            from services.compaction import get_compaction_service
+        except Exception:  # pragma: no cover — defensive
+            return
+
+        svc = get_compaction_service()
+        if svc is None:  # not initialised in test envs
+            return
+
+        metadata = event.get("compact_metadata") or {}
+        pre_tokens = int(metadata.get("pre_tokens") or 0)
+        # `tokens_after` after native compaction isn't directly visible
+        # in the JSONL — claude doesn't emit a "post-summary token
+        # count" event. The next `result` event's `usage` block will
+        # carry the true post-compaction cumulative; recording 0 here
+        # is a conservative reset that lets the next turn's `track()`
+        # call set the accurate cumulative.
+        try:
+            await svc.record(
+                session_id=session.memory_node_id,
+                node_id=session.memory_node_id,
+                provider="claude",
+                model="",  # claude doesn't emit the model on this event
+                tokens_before=pre_tokens,
+                tokens_after=0,
+                summary=None,
+            )
+            logger.info(
+                "[ClaudeSessionPool] native compaction recorded "
+                "memory_node=%s pre_tokens=%d trigger=%s",
+                session.memory_node_id, pre_tokens,
+                metadata.get("trigger", "unknown"),
+            )
+        except Exception as exc:  # pragma: no cover — best-effort
+            logger.debug(
+                "[ClaudeSessionPool] compaction.record failed: %s", exc,
+            )
 
     async def _clear_and_swap(self, session: PooledClaudeSession) -> None:
         """Send ``/clear``, await the new JSONL filename via the dir
@@ -539,10 +620,10 @@ class ClaudeSessionPool:
             # Reattach the file watcher to whatever path we believe is
             # current. If detection failed we re-watch the previous
             # file — the next turn's `result` event will still fire.
+            # Reuses :meth:`_handle_jsonl_event` so the compaction +
+            # result-event detection are identical to the spawn path.
             async def _on_event(event: Dict[str, Any]) -> None:
-                session.events_this_turn.append(event)
-                if self._provider.is_final_event(event):
-                    session.result_event.set()
+                await self._handle_jsonl_event(session, event)
 
             session.jsonl_watcher = JsonlWatcher(
                 session.current_jsonl_path,

@@ -501,17 +501,71 @@ class AICliSession(BaseProcessSupervisor):
         )
 
     async def _on_jsonl_event(self, event: Dict[str, Any]) -> None:
-        """JsonlWatcher callback: append + dispatch + result-signal.
+        """JsonlWatcher callback: append + dispatch + result-signal +
+        compaction-record.
 
         Wraps the existing :meth:`_on_event` so the events list is
-        updated centrally and the result-event Asyncio primitive fires
-        when claude writes a `result` line — that's the signal that the
-        turn is done.
+        updated centrally, the result-event Asyncio primitive fires
+        when claude writes a `result` line, and native compactions
+        (``system/compact_boundary``) flow into the shared
+        :class:`CompactionService` so the local-threshold path doesn't
+        also fire.
         """
         self._events.append(event)
         await self._on_event(event)
         if self._provider.is_final_event(event):
             self._result_event.set()
+        if (
+            event.get("type") == "system"
+            and event.get("subtype") == "compact_boundary"
+        ):
+            await self._record_native_compaction(event)
+
+    async def _record_native_compaction(self, event: Dict[str, Any]) -> None:
+        """Forward a native ``/compact`` event into ``CompactionService``.
+
+        Avoids double-compaction: without this, the local-threshold
+        path in ``services/ai.py:_track_token_usage`` and claude's own
+        auto-compaction would both trigger and the UI's token gauge
+        would race against claude's internal state.
+        """
+        try:
+            from services.compaction import get_compaction_service
+        except Exception:  # pragma: no cover — defensive
+            return
+        svc = get_compaction_service()
+        if svc is None:
+            return
+
+        metadata = event.get("compact_metadata") or {}
+        pre_tokens = int(metadata.get("pre_tokens") or 0)
+        # Session-id for the compaction store: prefer the memory bridge
+        # session_id (stable across `--resume`), fall back to the
+        # current task's resume_session_id or the node id.
+        session_id = (
+            getattr(self._task, "resume_session_id", None)
+            or getattr(self._task, "session_id", None)
+            or self._node_id
+        )
+        model = getattr(self._task, "model", "") or ""
+        try:
+            await svc.record(
+                session_id=session_id,
+                node_id=self._node_id,
+                provider=self._provider.name,
+                model=model,
+                tokens_before=pre_tokens,
+                tokens_after=0,
+                summary=None,
+            )
+            self._logger.info(
+                "[%s] native compaction recorded pre_tokens=%d trigger=%s",
+                self.label, pre_tokens, metadata.get("trigger", "unknown"),
+            )
+        except Exception as exc:  # pragma: no cover — best-effort
+            self._logger.debug(
+                "[%s] compaction.record failed: %s", self.label, exc,
+            )
 
     # ------------------------------------------------------------------
     # Event dispatch (UI broadcasts)
