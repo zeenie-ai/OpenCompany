@@ -194,12 +194,21 @@ class BaseNode:
         """Project class attributes onto the :data:`NodeMetadata` TypedDict
         expected by the existing node_spec emitter.
 
-        ``icon`` and ``color`` are sourced from
-        ``server/nodes/visuals.json`` via the central handler — node
-        plugins don't declare them on the class.
+        Icon resolution (per RFC §6.5):
+        1. Per-plugin ``icon.svg`` co-located with the plugin folder —
+           emitted as a URL routed through ``GET /api/schemas/nodes/<type>/icon``.
+        2. Fallback to ``visuals.json`` (emoji / ``lobehub:<brand>``).
+
+        ``color`` continues to come from ``visuals.json`` (orthogonal
+        to icon source; a future ``meta.json`` may eventually move
+        colors per-folder too — deferred).
         """
-        from nodes._visuals import get_icon, get_color
-        icon = get_icon(cls.type)
+        from nodes._visuals import get_icon, get_color, get_plugin_icon_path
+
+        if get_plugin_icon_path(cls.type) is not None:
+            icon = f"/api/schemas/nodes/{cls.type}/icon"
+        else:
+            icon = get_icon(cls.type)
         color = get_color(cls.type)
         meta: Dict[str, Any] = {
             "displayName": cls.display_name or cls.type,

@@ -7,8 +7,10 @@ the design rationale and docs-internal/schema_source_of_truth_rfc.md
 for the frontend consumer (useNodeOutputSchemaQuery).
 """
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi.responses import FileResponse
 
+from nodes._visuals import get_plugin_icon_path
 from services.node_input_schemas import (
     get_node_input_schema,
     list_node_types_with_input_schema,
@@ -81,6 +83,36 @@ async def get_node_spec_endpoint(node_type: str, response: Response):
         raise HTTPException(status_code=404, detail=f"No NodeSpec for {node_type!r}")
     response.headers["Cache-Control"] = _LONG_CACHE
     return spec
+
+
+@router.get("/nodes/{node_type}/icon")
+async def get_node_icon(
+    node_type: str,
+    variant: str = Query("light", pattern="^(light|dark)$"),
+):
+    """Return the plugin folder's co-located ``icon.svg``.
+
+    Per RFC §6.5 — backend is the sole authority on plugin assets.
+    The frontend resolver dispatches by wire format: URLs route to
+    ``<img src=...>``; ``asset:<key>`` / ``lobehub:<brand>`` / emoji
+    each have their own branch in ``client/src/assets/icons/index.ts``.
+
+    - ``?variant=dark``: serve ``icon.dark.svg`` if present, fall back
+      to ``icon.svg``.
+    - 200: SVG bytes with ``image/svg+xml`` + long cache headers.
+    - 404: no per-folder icon — frontend falls back to the bundled
+      ``ICON_REGISTRY`` (Wave 11 legacy path) via the ``asset:<key>``
+      string in ``visuals.json``.
+    """
+
+    path = get_plugin_icon_path(node_type, variant=variant)
+    if path is None:
+        raise HTTPException(status_code=404, detail=f"No icon for {node_type!r}")
+    return FileResponse(
+        path,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": _LONG_CACHE},
+    )
 
 
 @router.get("/nodes/specs")
