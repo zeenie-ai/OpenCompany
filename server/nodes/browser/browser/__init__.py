@@ -317,7 +317,7 @@ class BrowserNode(ActionNode):
 
     @Operation("dispatch")
     async def dispatch(self, ctx: NodeContext, params: BrowserParams) -> BrowserOutput:
-        from ._service import get_browser_service
+        from .._service import get_browser_service
 
         svc = get_browser_service()
         if not svc:

@@ -58,7 +58,7 @@ class ShellNode(ActionNode):
         """Inlined from handlers/filesystem.py (Wave 11.D.1)."""
         import asyncio
         from core.logging import get_logger
-        from ._backend import get_backend
+        from .._backend import get_backend
 
         log = get_logger(__name__)
 

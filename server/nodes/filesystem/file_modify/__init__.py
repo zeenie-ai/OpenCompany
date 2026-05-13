@@ -53,7 +53,7 @@ class FileModifyNode(ActionNode):
     async def modify(self, ctx: NodeContext, params: FileModifyParams) -> Any:
         """Inlined from handlers/filesystem.py (Wave 11.D.1)."""
         import asyncio
-        from ._backend import get_backend, normalize_virtual_path
+        from .._backend import get_backend, normalize_virtual_path
 
         if not params.file_path:
             raise NodeUserError("file_path is required")

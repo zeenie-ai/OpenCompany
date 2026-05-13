@@ -394,15 +394,29 @@ class TestPluginHandlersDictsArePopulated:
             )
 
 
-# Files the node-discovery walker treats as plugin entry points: any
-# top-level ``*.py`` not prefixed with ``_`` (which marks
-# package-private siblings like ``_service.py`` / ``_credentials.py``)
-# and not the package ``__init__.py``.
+# Files / subpackages the node-discovery walker treats as plugin entry
+# points:
+# 1. Top-level ``*.py`` not prefixed with ``_`` (legacy / Wave 11.H
+#    single-plugin-per-group shape — e.g. nodes/telegram/telegram_send.py).
+# 2. Top-level subpackages (subfolder + ``__init__.py``) not prefixed
+#    with ``_`` (post-Phase-8 folder-default shape — e.g.
+#    nodes/tool/calculator_tool/__init__.py).
+# Underscore-prefixed siblings (``_service.py`` / ``_credentials.py``,
+# ``_relay/``, etc.) are package-private and skipped by the walker.
 def _public_plugin_files(plugin_dir: Path) -> list[Path]:
-    return [
+    flat = [
         p for p in plugin_dir.glob("*.py")
         if not p.name.startswith("_") and p.name != "__init__.py"
     ]
+    nested = [
+        sub / "__init__.py"
+        for sub in plugin_dir.iterdir()
+        if sub.is_dir()
+        and not sub.name.startswith("_")
+        and sub.name != "__pycache__"
+        and (sub / "__init__.py").exists()
+    ]
+    return flat + nested
 
 
 class TestPluginFolderHasNodeFile:

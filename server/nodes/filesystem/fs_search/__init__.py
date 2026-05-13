@@ -46,7 +46,7 @@ class FsSearchNode(ActionNode):
     async def search(self, ctx: NodeContext, params: FsSearchParams) -> Any:
         """Inlined from handlers/filesystem.py (Wave 11.D.1)."""
         import asyncio
-        from ._backend import get_backend, normalize_virtual_path
+        from .._backend import get_backend, normalize_virtual_path
 
         backend = get_backend(params.model_dump(), ctx.raw)
         path = normalize_virtual_path(params.path)
