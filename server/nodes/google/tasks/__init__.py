@@ -8,9 +8,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
 
-from ._credentials import GoogleCredential
+from .._credentials import GoogleCredential
 
-from ._base import build_google_service, run_sync, track_google_usage
+from .._base import build_google_service, run_sync, track_google_usage
 
 
 def _ensure_rfc3339(due: str) -> str:

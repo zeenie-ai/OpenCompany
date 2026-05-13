@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from services.plugin import NodeContext, Operation, TaskQueue, TriggerNode
 
-from ._credentials import TwitterCredential
+from .._credentials import TwitterCredential
 
 
 class TwitterReceiveParams(BaseModel):

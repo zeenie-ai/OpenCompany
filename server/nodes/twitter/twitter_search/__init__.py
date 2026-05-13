@@ -9,9 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
 
-from ._credentials import TwitterCredential
+from .._credentials import TwitterCredential
 
-from ._base import (
+from .._base import (
     call_with_retry, format_tweet, includes_lookups,
     sync_search_recent, track_twitter_usage,
 )

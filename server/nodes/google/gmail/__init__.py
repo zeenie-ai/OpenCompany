@@ -11,10 +11,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
 
-from ._credentials import GoogleCredential
+from .._credentials import GoogleCredential
 
-from ._base import build_google_service, run_sync, track_google_usage
-from ._gmail import fetch_email_details, format_message
+from .._base import build_google_service, run_sync, track_google_usage
+from .._gmail import fetch_email_details, format_message
 
 
 class GmailParams(BaseModel):

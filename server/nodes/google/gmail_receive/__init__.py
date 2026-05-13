@@ -14,10 +14,10 @@ from services.plugin import (
     NodeContext, Operation, PollingTriggerNode, TaskQueue,
 )
 
-from ._credentials import GoogleCredential
+from .._credentials import GoogleCredential
 
-from ._base import build_google_service, track_google_usage
-from ._gmail import fetch_email_details, mark_email_as_read, poll_gmail_ids
+from .._base import build_google_service, track_google_usage
+from .._gmail import fetch_email_details, mark_email_as_read, poll_gmail_ids
 
 logger = get_logger(__name__)
 

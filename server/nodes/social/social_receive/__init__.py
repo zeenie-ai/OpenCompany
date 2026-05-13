@@ -127,7 +127,7 @@ class SocialReceiveNode(ActionNode):
         """
         import time
 
-        from ._base import handle_social_receive
+        from .._base import handle_social_receive
 
         start_time = time.time()
         try:
