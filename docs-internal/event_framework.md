@@ -15,7 +15,7 @@ phase plan lives in `~/.claude/plans/properly-fix-the-tech-dreamy-tarjan.md`.
 | B1-B10 — plugin-owned `_events.py` modules (9 plugin folders) | ✅ shipped (commits `7e4ff7b`, `c4d9428`, `da63d73`, `de8be88`) |
 | B11 — FE handler migration to envelope-aware readers | ⏳ deferred to FE session |
 | C1 canary (webhookTrigger) — `TriggerListenerWorkflow` + Visibility-API registry | ✅ shipped 2026-05-14 (25 tests) |
-| C1 rollout — promote remaining event triggers | ⏳ pending |
+| C1 rollout (chat / task / telegram / whatsapp) — plugin-self-registered via `canary_registry` | ✅ shipped 2026-05-14 |
 | C2 — Polling triggers as long-lived workflows | ⏳ pending |
 | C3 — APScheduler → Temporal Schedules | ⏳ pending |
 | C4 — Close cross-plugin `_service` reaches (4 sites) | ⏳ pending |

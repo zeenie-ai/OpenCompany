@@ -199,7 +199,14 @@ async def broadcast_whatsapp_message(
     params: Mapping[str, Any],
 ) -> None:
     """Emit a message event (sent or received). Wire-routing key
-    preserves the legacy ``whatsapp_message_<direction>`` channel."""
+    preserves the legacy ``whatsapp_message_<direction>`` channel.
+
+    For inbound (``received``) messages, also fans out via
+    :func:`services.events.dispatch.emit` so Wave 12 C1 canary
+    :class:`TriggerListenerWorkflow` consumers can pick up the
+    envelope (no-op when ``Settings.event_framework_enabled`` is off,
+    so the legacy WS path stays default).
+    """
     from services.status_broadcaster import get_status_broadcaster
 
     broadcaster = get_status_broadcaster()
@@ -207,20 +214,29 @@ async def broadcast_whatsapp_message(
         _MESSAGE_SENT_WIRE_KEY if direction == "sent"
         else _MESSAGE_RECEIVED_WIRE_KEY
     )
+    payload = dict(params)
 
     # Legacy raw frame.
     await broadcaster.broadcast({
         "type": wire_key,
-        "data": dict(params),
+        "data": payload,
     })
 
     # Typed CloudEvents sibling — same outer wire key (the inner
     # envelope is what carries the typed contract).
-    event = whatsapp_message_event(direction, params)
+    event = whatsapp_message_event(direction, payload)
     await broadcaster.broadcast({
         "type": wire_key,
         "data": event.model_dump(mode="json"),
     })
+
+    # Wave 12 C1 rollout #4: Temporal-durable canary fan-out (received
+    # only; outbound message events are pure observation, no trigger
+    # node consumes them). emit() no-ops when the feature flag is off.
+    if direction == "received":
+        from services.events.dispatch import emit
+
+        await emit(event, wire_routing_key=wire_key)
 
 
 async def broadcast_whatsapp_newsletter(

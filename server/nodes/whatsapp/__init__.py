@@ -19,6 +19,7 @@ Two self-registrations happen on package import:
 """
 
 from services._supervisor import register_supervisor
+from services.deployment.canary_registry import register_canary_trigger_type
 from services.event_waiter import register_filter_builder
 from services.status_broadcaster import register_service_refresh
 from services.ws_handler_registry import (
@@ -64,6 +65,14 @@ register_filter_builder("whatsappReceive", build_whatsapp_filter)
 register_option_loader("whatsappGroups", load_groups)
 register_option_loader("whatsappChannels", load_channels)
 register_option_loader("whatsappGroupMembers", load_group_members)
+
+# Wave 12 C1 rollout #4: opt whatsappReceive into the
+# TriggerListenerWorkflow consumer path. Producer side:
+# broadcast_whatsapp_message(direction="received", ...) in ._events.py
+# fans out via services.events.dispatch.emit; emit() is gated by
+# Settings.event_framework_enabled so the legacy path stays default.
+# See services/deployment/canary_registry.py.
+register_canary_trigger_type("whatsappReceive")
 
 __all__ = [
     "WhatsAppRuntime",
