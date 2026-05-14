@@ -24,22 +24,18 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-# Wave 12 C1 canary: trigger types that route to TriggerListenerWorkflow
-# instead of the in-process collector/processor. Gated by
-# Settings.event_framework_enabled. When the flag is off the canary set
-# is irrelevant; when on, types outside this set stay on the legacy path.
-# Expansion path: add types here as each is proven Temporal-durable.
-# Each entry requires its producer plugin's _events.py wrapper to call
-# services.events.dispatch.emit so signals reach running listeners.
-_CANARY_LISTENER_TRIGGER_TYPES = frozenset([
-    "webhookTrigger",   # shipped 2026-05-14 (C1 canary)
-    "chatTrigger",      # shipped 2026-05-14 (C1 rollout #1)
-    "taskTrigger",      # shipped 2026-05-14 (C1 rollout #2)
-])
-
 # Listener Temporal workflow type-name. Used both for ``start_workflow``
 # and as the Visibility filter for cancellation discovery.
 _LISTENER_WORKFLOW_TYPE = "TriggerListenerWorkflow"
+
+# Wave 12 C1 canary: which trigger types route to TriggerListenerWorkflow
+# instead of the legacy in-process collector/processor is owned by the
+# plugins themselves via ``services.deployment.canary_registry``. Each
+# canary-enabled plugin's ``__init__.py`` calls
+# ``register_canary_trigger_type("<node_type>")`` and the deployment
+# manager queries ``is_canary_trigger_type`` here — no framework-side
+# allowlist to drift. Producer side (the plugin's ``_events.py`` calling
+# ``services.events.dispatch.emit``) is the second half of opt-in.
 
 
 class DeploymentManager:
@@ -428,9 +424,11 @@ class DeploymentManager:
         Three dispatch paths (in priority order):
 
         1. **Wave 12 C1 canary**: when ``Settings.event_framework_enabled``
-           is on AND ``node_type`` is in :data:`_CANARY_LISTENER_TRIGGER_TYPES`,
-           start a Temporal-durable :class:`TriggerListenerWorkflow`.
-           Survives FastAPI process restart via Temporal Event-History replay.
+           is on AND the plugin has opted into the canary via
+           :func:`services.deployment.canary_registry.register_canary_trigger_type`
+           (called from the plugin's ``__init__.py``), start a
+           Temporal-durable :class:`TriggerListenerWorkflow`. Survives
+           FastAPI process restart via Temporal Event-History replay.
 
         2. **Polling triggers** (Gmail, Twitter): API-polling factory
            registered by the plugin's ``PollingTriggerNode`` subclass.
@@ -543,10 +541,18 @@ class DeploymentManager:
     async def _canary_listener_enabled_for(node_type: str) -> bool:
         """Whether the C1 canary applies to this trigger type.
 
-        Lazy ``Settings()`` call so a runtime flag flip takes effect on
-        the next deploy without restart.
+        Two conditions, both required:
+
+        1. Plugin has opted in via
+           :func:`services.deployment.canary_registry.register_canary_trigger_type`
+           — registry lookup, no framework-side allowlist.
+        2. ``Settings.event_framework_enabled`` is on — lazy ``Settings()``
+           call so a runtime flag flip takes effect on the next deploy
+           without process restart.
         """
-        if node_type not in _CANARY_LISTENER_TRIGGER_TYPES:
+        from services.deployment.canary_registry import is_canary_trigger_type
+
+        if not is_canary_trigger_type(node_type):
             return False
         from core.config import Settings
 

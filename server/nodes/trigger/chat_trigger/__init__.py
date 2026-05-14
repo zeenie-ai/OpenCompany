@@ -17,6 +17,7 @@ from typing import Any, Callable, Dict, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from services.deployment.canary_registry import register_canary_trigger_type
 from services.plugin import NodeContext, Operation, TaskQueue, TriggerNode
 
 
@@ -69,3 +70,11 @@ class ChatTriggerNode(TriggerNode):
         raise NotImplementedError(
             "Event triggers return via TriggerNode.execute, not the op body"
         )
+
+
+# Wave 12 C1 rollout #1: opt this trigger into the TriggerListenerWorkflow
+# consumer path. Producer side: dispatch_chat_message_received in
+# ./_events.py calls dispatch.emit unconditionally; the canary registry
+# tells DeploymentManager to start a listener for this type. See
+# services/deployment/canary_registry.py.
+register_canary_trigger_type(ChatTriggerNode.type)

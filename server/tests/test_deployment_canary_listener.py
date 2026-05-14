@@ -42,6 +42,23 @@ if "machina" not in sys.modules:
     sys.modules["machina.tcp"] = _machina_tcp
 
 
+@pytest.fixture
+def fresh_canary_registry(monkeypatch):
+    """Reset the canary-registry backing store to a known empty state.
+
+    The production registry accumulates as plugin modules import — that's
+    correct for runtime. Tests that assert canary scope must isolate
+    from accumulating module state so a future plugin opt-in doesn't
+    silently flip a test outcome. This fixture monkeypatches the
+    underlying ``_REGISTERED`` set; ``monkeypatch`` restores it after
+    the test.
+    """
+    from services.deployment import canary_registry
+
+    monkeypatch.setattr(canary_registry, "_REGISTERED", set())
+    return canary_registry
+
+
 # ---------------------------------------------------------------------------
 # Helpers — build a DeploymentManager with the minimum scaffolding to drive
 # the canary code paths. Database / status broadcaster are pure mocks.
@@ -113,12 +130,16 @@ class TestDeterministicListenerId:
 
 
 class TestCanaryScope:
-    """Canary only activates for whitelisted trigger types AND when the
-    feature flag is on."""
+    """Canary only activates for trigger types opted in via
+    :func:`register_canary_trigger_type` AND when the feature flag is on.
+    Uses ``fresh_canary_registry`` so each test starts with an empty
+    registry — no cross-test pollution from accumulated plugin imports."""
 
     @pytest.mark.asyncio
-    async def test_disabled_when_flag_off(self, monkeypatch):
+    async def test_disabled_when_flag_off(self, monkeypatch, fresh_canary_registry):
         from services.deployment.manager import DeploymentManager
+
+        fresh_canary_registry.register_canary_trigger_type("webhookTrigger")
 
         class _Off:
             event_framework_enabled = False
@@ -130,22 +151,27 @@ class TestCanaryScope:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_disabled_for_non_canary_type(self, monkeypatch):
+    async def test_disabled_for_unregistered_type(self, monkeypatch, fresh_canary_registry):
+        """Plugin must opt in via register_canary_trigger_type; types
+        not in the registry stay on the legacy path even with the flag on."""
         from services.deployment.manager import DeploymentManager
 
+        # Registry is empty (fresh fixture); whatsappReceive not registered.
         class _On:
             event_framework_enabled = True
 
         import core.config
         monkeypatch.setattr(core.config, "Settings", lambda: _On())
 
-        # whatsappReceive isn't in the canary set yet.
         result = await DeploymentManager._canary_listener_enabled_for("whatsappReceive")
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_enabled_for_webhook_when_flag_on(self, monkeypatch):
+    async def test_enabled_when_registered_and_flag_on(self, monkeypatch, fresh_canary_registry):
         from services.deployment.manager import DeploymentManager
+
+        fresh_canary_registry.register_canary_trigger_type("webhookTrigger")
+        fresh_canary_registry.register_canary_trigger_type("chatTrigger")
 
         class _On:
             event_framework_enabled = True
@@ -153,22 +179,10 @@ class TestCanaryScope:
         import core.config
         monkeypatch.setattr(core.config, "Settings", lambda: _On())
 
-        result = await DeploymentManager._canary_listener_enabled_for("webhookTrigger")
-        assert result is True
-
-    @pytest.mark.asyncio
-    async def test_enabled_for_chat_trigger_when_flag_on(self, monkeypatch):
-        """C1 rollout #1: chatTrigger joined the canary set."""
-        from services.deployment.manager import DeploymentManager
-
-        class _On:
-            event_framework_enabled = True
-
-        import core.config
-        monkeypatch.setattr(core.config, "Settings", lambda: _On())
-
-        result = await DeploymentManager._canary_listener_enabled_for("chatTrigger")
-        assert result is True
+        assert await DeploymentManager._canary_listener_enabled_for("webhookTrigger") is True
+        assert await DeploymentManager._canary_listener_enabled_for("chatTrigger") is True
+        # Sanity: still respects the registry boundary.
+        assert await DeploymentManager._canary_listener_enabled_for("randomThing") is False
 
 
 class TestTriggerKindDerivation:

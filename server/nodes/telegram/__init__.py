@@ -30,6 +30,7 @@ underscore-prefixed modules are implementation detail.
 
 from __future__ import annotations
 
+from services.deployment.canary_registry import register_canary_trigger_type
 from services.event_waiter import register_filter_builder, register_trigger_precheck
 from services.node_output_schemas import register_output_schema
 from services.status_broadcaster import register_service_refresh
@@ -57,6 +58,14 @@ register_trigger_precheck("telegramReceive", precheck_telegram_trigger)
 register_service_refresh(refresh_telegram_status)
 register_output_schema("telegramReceive", TelegramReceiveOutput)
 register_output_schema("telegramSend", TelegramSendOutput)
+
+# Wave 12 C1 rollout #3: opt telegramReceive into the
+# TriggerListenerWorkflow consumer path. Producer side:
+# dispatch_telegram_message_received calls services.events.dispatch.emit
+# unconditionally; emit() is gated by Settings.event_framework_enabled
+# so the legacy path stays default. See
+# services/deployment/canary_registry.py.
+register_canary_trigger_type(TelegramReceiveNode.type)
 
 __all__ = [
     "TelegramCredential",

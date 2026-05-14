@@ -11,6 +11,7 @@ from typing import Any, Callable, Dict, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from services.deployment.canary_registry import register_canary_trigger_type
 from services.plugin import NodeContext, Operation, TaskQueue, TriggerNode
 
 
@@ -78,3 +79,10 @@ class TaskTriggerNode(TriggerNode):
         raise NotImplementedError(
             "Event triggers return via TriggerNode.execute, not the op body"
         )
+
+
+# Wave 12 C1 rollout #2: opt this trigger into the TriggerListenerWorkflow
+# consumer path. The producer side lives in nodes/agent/_events.py
+# (broadcast_agent_task_completed / _failed dual-emit via dispatch.emit).
+# See services/deployment/canary_registry.py for the contract.
+register_canary_trigger_type(TaskTriggerNode.type)

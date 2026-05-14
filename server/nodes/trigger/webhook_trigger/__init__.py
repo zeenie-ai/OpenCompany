@@ -23,6 +23,7 @@ from typing import Any, Callable, Dict, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from services.deployment.canary_registry import register_canary_trigger_type
 from services.plugin import NodeContext, Operation, TriggerNode, TaskQueue
 
 
@@ -108,3 +109,10 @@ class WebhookTriggerNode(TriggerNode):
         raise NotImplementedError(
             "Event triggers return via TriggerNode.execute, not the op body"
         )
+
+
+# Wave 12 C1 canary: opt this trigger type into TriggerListenerWorkflow.
+# Gated runtime by Settings.event_framework_enabled in DeploymentManager;
+# the producer side (broadcast_webhook_received calling dispatch.emit) is
+# unconditional. See services/deployment/canary_registry.py.
+register_canary_trigger_type(WebhookTriggerNode.type)
