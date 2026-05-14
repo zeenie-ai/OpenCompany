@@ -32,6 +32,17 @@ from .verifiers import (
     GitHubVerifier,
 )
 
+# Wave 12 D3: publish the Visibility admin WS handlers into the central
+# WS dispatcher on package import. Even though ``admin_handlers.py`` is
+# framework code (not plugin code), routing it through the same
+# ws_handler_registry keeps the router's dispatch surface uniform —
+# the registry queries don't care whether the caller is plugin or
+# framework.
+from .admin_handlers import WS_HANDLERS as _ADMIN_WS_HANDLERS  # noqa: E402
+from services.ws_handler_registry import register_ws_handlers as _register_ws_handlers  # noqa: E402
+
+_register_ws_handlers(_ADMIN_WS_HANDLERS)
+
 __all__ = [
     "BaseTriggerParams",
     "DaemonEventSource",

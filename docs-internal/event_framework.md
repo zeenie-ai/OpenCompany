@@ -21,7 +21,7 @@ phase plan lives in `~/.claude/plans/properly-fix-the-tech-dreamy-tarjan.md`.
 | D1 — Shared `_retry_policies` + `NodeUserError` non-retryable on workflow callsites | ✅ shipped 2026-05-15 (11 tests) |
 | D2 — Custom `event_dlq` SQLModel table | ❌ dropped 2026-05-15 — Temporal Event History + Visibility queries cover the ops-inspection use case; no separate table needed (matches the plan's "What Temporal eliminates" rationale) |
 | D2b — Retire `event_waiter.py` Redis-Streams branch | ⏸ deferred — gated on `event_framework_enabled` flipping to default-on |
-| D3 — Visibility admin WS handlers (`list_canary_listeners` / `list_canary_schedules` / `get_workflow_failure_history`) | ⏳ pending — reframed to Visibility-only after D2 drop |
+| D3 — Visibility admin WS handlers (`list_canary_listeners` / `list_canary_schedules` / `get_workflow_failure_history`) | ✅ shipped 2026-05-15 (13 tests) |
 | D4 — Drain `_LEGACY_RAW_DICT_BROADCASTS` | ⏸ blocked on B11 FE migration |
 | D5 — Auto-gen `DEFAULT_TOOL_NAMES` from `ToolNode` ClassVars | ⏳ pending — large-scope refactor |
 | C2 — Polling triggers as long-lived workflows | ⏳ pending |
