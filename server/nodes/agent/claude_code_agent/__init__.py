@@ -67,6 +67,13 @@ ClaudeCodeModel = Literal[
 ClaudeCodeEffort = Literal["low", "medium", "high", "xhigh", "max"]
 
 
+# Set of valid model strings for the ``mode="before"`` validator below.
+# Derived once at import time from the Literal type so the two stay in
+# sync — adding a new model to the Literal automatically updates this set.
+_VALID_CLAUDE_MODELS = frozenset(ClaudeCodeModel.__args__)  # type: ignore[attr-defined]
+_DEFAULT_CLAUDE_MODEL: str = "claude-sonnet-4-6"
+
+
 class ClaudeCodeAgentParams(BaseModel):
     """Claude Code node parameters.
 
@@ -151,6 +158,27 @@ class ClaudeCodeAgentParams(BaseModel):
     @classmethod
     def _none_is_empty_list(cls, v: Any) -> Any:
         return [] if v is None else v
+
+    # Older saved workflows (pre-Literal cutover) carry free-form
+    # ``model`` strings — empty, ``"claude-sonnet-4.6"`` (dot-spelled),
+    # ``"claude-3.5-sonnet"`` (old Claude 3.x naming), API-style date
+    # suffixes like ``"claude-3-5-sonnet-20241022"``, etc. Strict Literal
+    # validation would reject those and the whole node would fail to
+    # load. Coerce unknown values to the default so legacy workflows
+    # keep working; the UI dropdown still constrains new edits.
+    @field_validator("model", "fallback_model", mode="before")
+    @classmethod
+    def _coerce_unknown_model(cls, v: Any, info: Any) -> Any:
+        # ``fallback_model`` accepts None (no fallback) — let it through.
+        if v is None and info.field_name == "fallback_model":
+            return None
+        if isinstance(v, str) and v in _VALID_CLAUDE_MODELS:
+            return v
+        # Unknown / empty / None on ``model`` → default; unknown on
+        # ``fallback_model`` → None (drop the bad fallback).
+        if info.field_name == "fallback_model":
+            return None
+        return _DEFAULT_CLAUDE_MODEL
 
     model_config = ConfigDict(extra="ignore")
 
