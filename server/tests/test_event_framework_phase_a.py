@@ -265,6 +265,53 @@ class TestA7MachinaWorkflowSignalHandler:
             lambda e: e["type"].endswith(".nope")
         ) is False
 
+    def test_pop_matching_event_empty_returns_none(self):
+        from services.temporal.workflow import MachinaWorkflow
+
+        wf = MachinaWorkflow()
+        assert wf._pop_matching_event() is None
+        assert wf._pop_matching_event(lambda e: True) is None
+
+    def test_pop_matching_event_no_predicate_returns_fifo_head(self):
+        from services.temporal.workflow import MachinaWorkflow
+
+        wf = MachinaWorkflow()
+        first = {"id": "e1", "type": "com.machinaos.x.received"}
+        second = {"id": "e2", "type": "com.machinaos.y.received"}
+        wf._matched_events.extend([first, second])
+
+        popped = wf._pop_matching_event()
+        assert popped is first
+        assert wf._matched_events == [second]
+
+    def test_pop_matching_event_predicate_picks_first_match(self):
+        from services.temporal.workflow import MachinaWorkflow
+
+        wf = MachinaWorkflow()
+        first = {"id": "e1", "type": "com.machinaos.x.received"}
+        second = {"id": "e2", "type": "com.machinaos.y.received"}
+        third = {"id": "e3", "type": "com.machinaos.x.delivered"}
+        wf._matched_events.extend([first, second, third])
+
+        popped = wf._pop_matching_event(
+            lambda e: e["type"].startswith("com.machinaos.y")
+        )
+        assert popped is second
+        # Order preserved for non-matching siblings.
+        assert wf._matched_events == [first, third]
+
+    def test_pop_matching_event_no_predicate_match_returns_none(self):
+        from services.temporal.workflow import MachinaWorkflow
+
+        wf = MachinaWorkflow()
+        wf._matched_events.append(
+            {"id": "e1", "type": "com.machinaos.x.received"}
+        )
+        result = wf._pop_matching_event(lambda e: e["type"].endswith(".nope"))
+        assert result is None
+        # Queue untouched on miss.
+        assert len(wf._matched_events) == 1
+
 
 class TestA8EmitEventActivity:
     """A8: activity wrapper validates the envelope and forwards to emit."""

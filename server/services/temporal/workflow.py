@@ -12,7 +12,7 @@ This enables massive horizontal scaling and multi-tenant distribution.
 """
 
 from datetime import timedelta
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
@@ -147,6 +147,32 @@ class MachinaWorkflow:
         if predicate is None:
             return True
         return any(predicate(e) for e in self._matched_events)
+
+    def _pop_matching_event(self, predicate=None) -> Optional[Dict[str, Any]]:
+        """Wave 12 A7: dequeue the first event that satisfies ``predicate``.
+
+        Pairs with :meth:`_has_event_matching` — Phase C1 trigger
+        waiters call ``wait_condition`` on the predicate, then pop the
+        actual envelope here. FIFO order: the predicate is evaluated
+        against the head of ``_matched_events`` first, so events
+        arrive in the order Temporal delivered the signals (and on
+        replay, the order Event History records them — deterministic).
+
+        Returns ``None`` if no queued event matches; callers should
+        only reach this method after ``wait_condition`` resolves, in
+        which case at least one match exists. The ``None`` return path
+        exists for defensive symmetry — never silently raises mid-
+        replay.
+
+        Determinism note: list mutation inside a workflow is safe per
+        Temporal's Python SDK contract (the workflow's local state is
+        rebuilt from Event History on replay; the same signals deliver
+        the same envelopes, so the same pops happen in the same order).
+        """
+        for idx, event in enumerate(self._matched_events):
+            if predicate is None or predicate(event):
+                return self._matched_events.pop(idx)
+        return None
 
     @workflow.run
     async def run(self, workflow_data: Dict[str, Any]) -> Dict[str, Any]:
