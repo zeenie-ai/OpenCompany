@@ -280,27 +280,48 @@ When `TEMPORAL_AGENT_WORKFLOW_ENABLED=true` and the node type is in the migratin
 ```
 AgentWorkflow.run(context):
   0. execute_activity("agent.prepare_payload.v1")
-       resolves the DB-backed payload (provider / model / api_key /
-       tool schemas / memory / system_message / compaction threshold)
-       from the canvas context. Temporal workflows must be deterministic,
-       so DB lookups + edge walking + tool schema build live in this
-       activity rather than the workflow body.
+       resolves the DB-backed payload from the canvas context — runs
+       workflow_service._param_resolver.resolve so {{node.field}}
+       templates in prompt / system_message become real values BEFORE
+       the LLM sees them. Temporal workflows must be deterministic,
+       so DB lookups + edge walking + tool schema build live here.
+       Tool entries carry the raw tool_info dict — execute_llm_step
+       rebuilds the StructuredTool via ai_service._build_tool_from_node
+       inside the activity (no JSON-schema round-trip).
+  emit_phase("starting", status="executing")
   loop until "final" or max_iterations:
-    1. execute_activity("agent.broadcast_progress.v1")
-         emits CloudEvents-shaped `agent_progress` for the canvas badge
-         (one per turn, `type="com.machinaos.agent.progress"`).
-    2. execute_activity("agent.execute_llm_step.v1") -> {kind, content|calls}
+    1. emit_phase("llm_step", iteration=N)
+    2. execute_activity("agent.execute_llm_step.v1")
+         returns {kind, assistant_message, calls?, content?, usage}.
+         assistant_message is the full LangChain-serialized AIMessage
+         (messages_to_dict round-trip preserves provider-specific
+         fields: Gemini thought_signature, Anthropic cache markers,
+         OpenAI reasoning_content) — appended verbatim to messages.
     3. if kind == "tool_calls":
          for each call:
+           emit_phase("executing_tool", tool_name=...)
            execute_activity(f"node.{tool_node_type}.v{version}")
-         append tool_results to messages
-    4. execute_activity("agent.persist_turn.v1")  # append memory per turn
-         emits CloudEvents `node_parameters_updated` via the broadcaster
-         wrapper (`source_hint="agent"`).
+           emit_phase("tool_completed", tool_name=...)
+           _serialise_tool_result unwraps F4.A's {success, result, ...}
+           envelope so the LLM sees only the handler's return value
+           (matches services/ai.py:create_tool_node behavior).
+    4. execute_activity("agent.persist_turn.v1")
+         append_to_memory_markdown(content, "human", prompt) +
+         (content, "ai", response); trim window; broadcast
+         node_parameters_updated CloudEvents (source_hint="agent").
     5. if token_total >= compaction_threshold:
          execute_activity("agent.compact_memory.v1")
-         replace messages with summary
+         null-guarded against worker-bootstrap race; replaces messages
+         with summary only when result.success is True.
+  execute_activity("agent.store_output.v1")
+       wraps workflow_service.store_node_output for output_main /
+       output_top / output_0 — same writes NodeExecutor.execute does
+       at services/node_executor.py:197-199, so downstream nodes
+       can resolve {{aiAgent.response}} via ParameterResolver.
+  emit_phase("completed", status="success")
 ```
+
+`emit_phase(phase, status?)` is a thin helper that schedules `agent.broadcast_progress.v1`. The activity emits `WorkflowEvent.agent_progress` (CloudEvents v1.0, `type="com.machinaos.agent.progress"`) for FE consumers; when `status` is supplied it also drives a raw-dict `update_node_status` for the canvas-glow color (executing / success / error). Same dual-channel pattern F4.A's `_node_activity` uses.
 
 Each LLM step is one activity, each tool call is one per-type activity (the same activities F4.A registered). Failures of tool activities surface as error messages back to the LLM (matching today's LangGraph behaviour); the agent loop continues.
 

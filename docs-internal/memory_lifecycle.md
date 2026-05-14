@@ -147,7 +147,7 @@ Turn N starts
    broadcast_node_parameters_updated(...)  # CloudEvents source_hint="agent"
 ```
 
-F4.B `AgentWorkflow` runs steps 4-9 as separate Temporal activities (`execute_llm_step.v1` / `persist_turn.v1` / `compact_memory.v1`); per-turn persistence means a mid-loop failure doesn't lose progress. F4.A and legacy paths run steps 4-9 inline inside one activity.
+F4.B `AgentWorkflow` runs steps 4-9 as separate Temporal activities (`prepare_payload.v1` resolves DB params + `{{templates}}` via `workflow_service._param_resolver.resolve`; `execute_llm_step.v1` invokes the LLM with LangChain `messages_to_dict` / `messages_from_dict` round-trip preserving Gemini `thought_signature` + Anthropic cache markers + OpenAI reasoning content; `persist_turn.v1` appends per turn; `compact_memory.v1` summarises when threshold trips; `store_output.v1` writes to the OutputStore via `workflow_service.store_node_output` so downstream nodes can resolve `{{aiAgent.response}}`; `broadcast_progress.v1` emits CloudEvents `agent_progress` per phase). Per-turn persistence means a mid-loop failure doesn't lose progress. F4.A and legacy paths run steps 4-9 inline inside one activity.
 
 ## 8. Engine-specific adapters
 
