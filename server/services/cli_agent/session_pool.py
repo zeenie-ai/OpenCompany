@@ -131,6 +131,21 @@ class PooledClaudeSession:
     # in ``_terminate_locked`` to drain the FastMCP tool refcounts
     # when the subprocess dies.
     batch_token: str = ""
+    # Per-workflow workspace dir (``data/workspaces/<workflow_id>/``)
+    # passed via ``--add-dir`` so claude discovers the skills tree
+    # under ``<workspace_dir>/.claude/skills/`` per the
+    # "Automatic discovery from parent and nested directories" rule
+    # in code.claude.com/docs/en/skills. Per-workflow isolation:
+    # workflow A's wired skills never bleed into workflow B's
+    # subprocess even when both spawn with ``cwd=repo_root``.
+    workspace_dir: Optional[Path] = None
+    # Set of skill names currently materialised under
+    # ``<workspace_dir>/.claude/skills/`` for this warm subprocess.
+    # The pool calls :func:`services.cli_agent._skills.materialise_skills`
+    # with this as the ``previous_skill_names`` arg on every warm
+    # reuse, so only the delta is touched on disk. Claude's filesystem
+    # watcher picks up add/remove events without respawning.
+    materialised_skills: frozenset = field(default_factory=frozenset)
     last_used_at: float = field(default_factory=time.monotonic)
     # Per-session lock; held throughout a turn. The reaper consults
     # ``lock.locked()`` to skip in-flight sessions.
@@ -213,6 +228,7 @@ class ClaudeSessionPool:
         mcp_bearer_token: Optional[str],
         connected_tool_names: Optional[List[str]] = None,
         connected_skill_names: Optional[List[str]] = None,
+        workspace_dir: Optional[Path] = None,
         workflow_id: Optional[str] = None,
     ) -> PooledClaudeSession:
         """Return a live :class:`PooledClaudeSession`.
@@ -278,6 +294,31 @@ class ClaudeSessionPool:
                             workspace_dir=new_ctx.workspace_dir,
                         )
                         unregister_batch(mcp_bearer_token)
+                # Live skill-tree update — claude live-watches
+                # ``<workspace_dir>/.claude/skills/`` so add/remove
+                # takes effect within the current session per the
+                # skills spec's "Live change detection" rule
+                # (code.claude.com/docs/en/skills#live-change-detection).
+                # Same diff semantics as the MCP rebind above:
+                # ``apply_skill_diff`` walks (added, removed) against
+                # ``existing.materialised_skills`` and only touches
+                # the delta on disk.
+                if existing.workspace_dir is not None:
+                    from services.cli_agent._skills import materialise_skills
+                    new_set = frozenset(connected_skill_names or [])
+                    added, removed = await materialise_skills(
+                        existing.workspace_dir,
+                        new_set,
+                        previous_skill_names=existing.materialised_skills,
+                        log_label=f"pool {memory_node_id}",
+                    )
+                    if added or removed:
+                        logger.info(
+                            "[ClaudeSessionPool] skill diff "
+                            "memory_node=%s +%d -%d (now %d wired)",
+                            memory_node_id, added, removed, len(new_set),
+                        )
+                    existing.materialised_skills = new_set
                 logger.info(
                     "[ClaudeSessionPool] warm reuse memory_node=%s pid=%s uuid=%s",
                     memory_node_id, existing.process.pid,
@@ -304,6 +345,7 @@ class ClaudeSessionPool:
                 mcp_bearer_token=mcp_bearer_token,
                 connected_tool_names=connected_tool_names,
                 connected_skill_names=connected_skill_names,
+                workspace_dir=workspace_dir,
             )
             # Track the spawn-time bearer token so subsequent batches can
             # rebind the persistent BatchContext in place (warm-reuse
@@ -311,6 +353,13 @@ class ClaudeSessionPool:
             # tool refcounts on death.
             if mcp_bearer_token:
                 session.batch_token = mcp_bearer_token
+            # Track the workspace + initial skill set so warm-reuse
+            # paths know where to materialise live updates and what
+            # the prior set was for the diff.
+            session.workspace_dir = workspace_dir
+            session.materialised_skills = frozenset(
+                connected_skill_names or []
+            )
             if crashed_uuid:
                 # The new subprocess is resuming the prior session; pre-seed
                 # the UUID so the first turn's emitted CloudEvents carry
@@ -505,18 +554,29 @@ class ClaudeSessionPool:
         mcp_bearer_token: Optional[str],
         connected_tool_names: Optional[List[str]],
         connected_skill_names: Optional[List[str]] = None,
+        workspace_dir: Optional[Path] = None,
     ) -> PooledClaudeSession:
         """Cold-spawn a new pooled claude subprocess. Caller holds pool_lock."""
-        # Materialise connected skills under ``<cwd>/.claude/skills/``
-        # BEFORE spawning so the spawned claude sees them on its first
-        # filesystem scan. Same helper the non-pool ``AICliSession``
-        # path uses. Paired with the conditional ``Skill`` entry in
-        # ``--allowedTools`` (see ``interactive_argv``) — both fire when
-        # ``connected_skill_names`` is non-empty.
+        # Materialise connected skills under
+        # ``<workspace_dir>/.claude/skills/`` BEFORE spawning so the
+        # spawned claude sees them on its first filesystem scan. The
+        # workspace dir (per-workflow) is passed via ``--add-dir``
+        # (emitted by ``AICliService.run_batch``), and claude scans
+        # ``.claude/skills/`` inside every ``--add-dir`` path per
+        # code.claude.com/docs/en/skills. This gives us per-workflow
+        # isolation — workflow A's wired skills never bleed into
+        # workflow B's subprocess even when both spawn with
+        # ``cwd=repo_root``. Paired with the conditional ``Skill``
+        # entry in ``--allowedTools`` (see ``interactive_argv``) —
+        # both fire when ``connected_skill_names`` is non-empty.
+        # Falls back to ``cwd`` only when no workspace_dir was
+        # provided (defensive — every production caller passes one).
         if connected_skill_names:
             from services.cli_agent._skills import materialise_skills
+            target_dir = workspace_dir or cwd
             await materialise_skills(
-                cwd, connected_skill_names,
+                target_dir, connected_skill_names,
+                previous_skill_names=None,  # cold spawn: no prior set
                 log_label=f"pool {memory_node_id}",
             )
 

@@ -100,8 +100,14 @@ class AICliSession(BaseProcessSupervisor):
         self._task = task
         self._task_id = task.task_id or f"t_{uuid.uuid4().hex[:8]}"
         self._repo_root = Path(repo_root).resolve()
+        # Per-workflow workspace dir (``data/workspaces/<workflow_id>/``).
+        # Passed via ``--add-dir`` so claude scans
+        # ``<workspace_dir>/.claude/skills/`` for materialised skills
+        # (per-workflow isolation; ``cwd`` for memory-bound runs is
+        # ``repo_root`` which would otherwise be shared across workflows).
+        self._workspace_dir = Path(workspace_dir).resolve()
         self._worktree_dir = (
-            Path(workspace_dir).resolve() / node_id / f"wt_{self._task_id}"
+            self._workspace_dir / node_id / f"wt_{self._task_id}"
         )
         self._branch = task.branch or f"machina/{self._task_id}"
         self._broadcaster = broadcaster
@@ -261,15 +267,22 @@ class AICliSession(BaseProcessSupervisor):
                     self.label, exc,
                 )
 
-        # 3. Materialise connected skills under cwd's `.claude/skills/`.
-        # cwd is repo_root for memory-bound, worktree otherwise — both
-        # are project-scope per the spec. Same helper now also runs on
-        # the pool path (``ClaudeSessionPool._spawn``) so memory-bound
-        # runs get the built-in ``Skill`` tool too.
+        # 3. Materialise connected skills under the workspace's
+        # ``.claude/skills/``. Per-workflow isolation: workflow A's
+        # wired skills never bleed into workflow B's subprocess even
+        # when both share ``cwd=repo_root``. Claude discovers them
+        # via ``--add-dir <workspace_dir>`` (emitted in argv) per the
+        # skills spec's "Automatic discovery from parent and nested
+        # directories" rule. Same helper now also runs on the pool
+        # path so memory-bound runs get the built-in ``Skill`` tool
+        # too.
         if self._connected_skill_names:
             from services.cli_agent._skills import materialise_skills
             await materialise_skills(
-                self.cwd(), self._connected_skill_names, log_label=self.label,
+                self._workspace_dir,
+                self._connected_skill_names,
+                previous_skill_names=None,
+                log_label=self.label,
             )
 
     # ------------------------------------------------------------------

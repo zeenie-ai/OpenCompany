@@ -293,21 +293,56 @@ Combined with `--permission-mode dontAsk`, the strict allowlist is
 actually enforced (see "argv shape" above for why `bypassPermissions`
 was the wrong default).
 
-**Skills — materialised on BOTH paths via the shared helper.**
+**Skills — per-workflow workspace, live-watched, diff-based.**
 [`services/cli_agent/_skills.py::materialise_skills`](../server/services/cli_agent/_skills.py)
-writes one `SKILL.md` tree per connected skill under
-`<cwd>/.claude/skills/<name>/`. Filesystem skills (those declared
-under `server/skills/<group>/<name>/`) are copied wholesale via
-`shutil.copytree` so `scripts/` and `references/` survive
-intact; database skills (user-created from the UI) reconstruct
-the frontmatter (`name`, `description`, `allowed-tools`,
-`metadata`) plus the markdown body. Called from
+writes one `SKILL.md` tree per connected-and-enabled skill under
+`<workspace_dir>/.claude/skills/<name>/`. The workspace dir
+(`data/workspaces/<workflow_id>/`) is already passed via
+`--add-dir`, and per the skills spec's
+[Automatic discovery from parent and nested directories](https://code.claude.com/docs/en/skills#automatic-discovery-from-parent-and-nested-directories)
+rule, claude scans `.claude/skills/` inside every `--add-dir` path.
+Two properties fall out:
+
+- **Per-workflow isolation.** Workflow A's wired skills never bleed
+  into workflow B's subprocess even when both spawn with
+  `cwd=repo_root`. The workspace dir is unique per workflow.
+- **Live add/remove.** Claude live-watches the skills tree (same
+  skills spec, [Live change detection](https://code.claude.com/docs/en/skills#live-change-detection)),
+  so warm-reuse turns can toggle skills without respawning. Pool's
+  `acquire` calls `materialise_skills(workspace_dir, new_set,
+  previous_skill_names=session.materialised_skills)` to apply just
+  the delta — `rmtree`'d skills disappear from claude's registry,
+  newly-written ones become invocable. Same UX win as the MCP tool
+  rebind.
+
+Filesystem skills (declared under `server/skills/<group>/<name>/`)
+are copied wholesale via `shutil.copytree` so `scripts/` and
+`references/` subdirs survive. Database skills (user-created in
+the UI) reconstruct the frontmatter (`name`, `description`,
+`allowed-tools`, `metadata`) + the markdown body. Failure modes
+are non-fatal: a skill that fails to load or write logs at WARN
+and is skipped — the spawn continues. Same helper is called from
 `AICliSession._pre_spawn` (non-pool path) and
-`ClaudeSessionPool._spawn` (pool path) — same helper, same
-semantics, so memory-bound runs get the built-in `Skill` tool
-working too (was the open follow-up before; closed now). Failure
-modes are non-fatal: a skill that fails to load or write logs at
-WARN and is skipped — the spawn continues.
+`ClaudeSessionPool._spawn` (pool path), so behaviour is uniform
+across the two transports.
+
+**Migration note.** Pre-cutover code wrote SKILL.md trees into
+`<repo_root>/.claude/skills/` so they accumulated in the user's
+actual repo. The repo's `.claude/` is gitignored but visible;
+future runs only write into per-workflow workspaces. Run
+`rm -rf .claude/skills/` once from the repo root to clean
+accumulated trees — we deliberately do NOT auto-prune because
+the repo's `.claude/` may contain user-authored skills outside
+the MachinaOs registry.
+
+**Why filesystem (not MCP).** We surveyed alternatives: MCP
+`resources`/`prompts` require explicit `@mention`/`/command`
+invocation by the user, not auto-loaded into context. Hooks fire
+after skill discovery, not before. `settings.json` doesn't expose
+per-session skill paths. Anthropic's own
+[Agent SDK](https://code.claude.com/docs/en/agent-sdk/skills) uses
+the same filesystem-first pattern. There is no programmatic
+skill-injection channel — workspace-dir + live-watch is canonical.
 
 **Workspace dir — routed via `--add-dir`.**
 [`AICliService.run_batch`](../server/services/cli_agent/service.py)

@@ -258,6 +258,7 @@ class AICliService:
                     task=task_list[0],
                     memory_node_id=connected_memory["node_id"],
                     cwd=resolved_repo_root,
+                    workspace_dir=Path(workspace_dir).resolve(),
                     defaults=defaults,
                     mcp_port=port,
                     mcp_bearer_token=token,
@@ -390,6 +391,7 @@ class AICliService:
         task: BaseAICliTaskSpec,
         memory_node_id: str,
         cwd: Path,
+        workspace_dir: Path,
         defaults: Dict[str, Any],
         mcp_port: int,
         mcp_bearer_token: str,
@@ -442,6 +444,7 @@ class AICliService:
             mcp_bearer_token=mcp_bearer_token,
             connected_tool_names=tool_names,
             connected_skill_names=connected_skill_names,
+            workspace_dir=workspace_dir,
             workflow_id=workflow_id,
         )
         try:
@@ -490,7 +493,7 @@ class AICliService:
     ) -> None:
         """Append each successful run's user prompt + assistant response
         to ``simpleMemory.memory_content`` (markdown). Mirrors aiAgent /
-        chatAgent / deep_agent / rlm_agent's persistence pattern exactly
+        chatAgent / rlm_agent's persistence pattern exactly
         — same helpers (``append_to_memory_markdown``,
         ``trim_markdown_window``), same field. One DB write.
         """
