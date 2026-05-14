@@ -50,7 +50,9 @@ from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
 from temporalio import workflow
-from temporalio.common import RetryPolicy
+from temporalio.common import RetryPolicy  # kept for type hints
+
+from ._retry_policies import DEFAULT_ACTIVITY_RETRY
 
 
 # Activity timeouts. LLM step can stream for several minutes on
@@ -72,12 +74,11 @@ TOOL_HEARTBEAT_TIMEOUT = timedelta(minutes=2)
 DEFAULT_MAX_ITERATIONS = 50
 
 # Retry policy for the agent's own activities (LLM step, persist,
-# compact). Tool activities use their plugin's policy.
-AGENT_ACTIVITY_RETRY = RetryPolicy(
-    initial_interval=timedelta(seconds=1),
-    maximum_interval=timedelta(seconds=30),
-    maximum_attempts=3,
-)
+# compact). Tool activities use their plugin's policy. Wave 12 D1:
+# delegates to the shared constant so the policy's
+# non_retryable_error_types include ``NodeUserError`` — user-correctable
+# failures inside the LLM step fail fast instead of burning 3 retries.
+AGENT_ACTIVITY_RETRY: RetryPolicy = DEFAULT_ACTIVITY_RETRY
 
 
 @workflow.defn(sandboxed=False, name="AgentWorkflow")

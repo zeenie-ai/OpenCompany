@@ -40,6 +40,8 @@ from temporalio import workflow
 from temporalio.common import WorkflowIDReusePolicy
 from temporalio.workflow import ParentClosePolicy
 
+from ._retry_policies import DEFAULT_ACTIVITY_RETRY
+
 
 # Same continueAsNew threshold as TriggerListenerWorkflow — keeps Event
 # History under Temporal's soft ceiling. The actual count depends on
@@ -136,10 +138,16 @@ class PollingTriggerWorkflow:
                 }
 
             try:
+                # Wave 12 D1: explicit RetryPolicy with
+                # non_retryable_error_types=("NodeUserError", ...) —
+                # poll-cycle failures from user-correctable causes
+                # (bad filter expression, missing credential) fail fast
+                # instead of burning 3 retries per cycle.
                 result = await workflow.execute_activity(
                     activity_name,
                     cycle_payload,
                     start_to_close_timeout=timedelta(seconds=activity_timeout_s),
+                    retry_policy=DEFAULT_ACTIVITY_RETRY,
                 )
             except Exception as exc:  # noqa: BLE001
                 # Activity exhausted its RetryPolicy. Log + continue —

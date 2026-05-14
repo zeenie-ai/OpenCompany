@@ -15,7 +15,8 @@ from datetime import timedelta
 from typing import Any, Dict, List, Optional, Set
 
 from temporalio import workflow
-from temporalio.common import RetryPolicy
+
+from ._retry_policies import DEFAULT_ACTIVITY_RETRY
 
 # Config handles - nodes connecting via these are config nodes (not executed)
 # AI Agent handles: input-memory, input-tools, input-model, input-task, input-teammates
@@ -242,12 +243,11 @@ class MachinaWorkflow:
 
         workflow.logger.info(f"Pre-executed: {pre_executed_count}, To execute: {len(node_map) - pre_executed_count}")
 
-        # 5. Retry policy for node activities
-        retry_policy = RetryPolicy(
-            initial_interval=timedelta(seconds=1),
-            maximum_interval=timedelta(seconds=30),
-            maximum_attempts=3,
-        )
+        # 5. Retry policy for node activities. Wave 12 D1: imported
+        # shared constant declares ``non_retryable_error_types`` so
+        # NodeUserError fails fast instead of burning 3 retries on
+        # user-correctable failures.
+        retry_policy = DEFAULT_ACTIVITY_RETRY
 
         # 6. Continuous scheduling loop
         loop_count = 0
