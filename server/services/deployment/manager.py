@@ -277,6 +277,12 @@ class DeploymentManager:
         # deployment. Visibility-query-based; no local handle dict.
         canary_count = await self._cancel_canary_listeners(workflow_id)
 
+        # Wave 12 C3 canary: delete Temporal Schedules created by this
+        # deployment's cron triggers. Different Temporal resource type
+        # from listener workflows so it needs its own sweep
+        # (client.list_schedules vs client.list_workflows).
+        cron_schedule_count = await self._cancel_canary_cron_schedules(workflow_id)
+
         # Clear cron iteration counters for this workflow's cron nodes
         for node_id in cron_node_ids:
             self._cron_iterations.pop(node_id, None)
@@ -297,6 +303,7 @@ class DeploymentManager:
             "crons_cancelled": cron_count,
             "waiters_cancelled": waiter_count,
             "canary_listeners_cancelled": canary_count,
+            "canary_cron_schedules_cancelled": cron_schedule_count,
             "cancelled_listener_node_ids": listener_nodes
         }
 
@@ -356,19 +363,50 @@ class DeploymentManager:
     # =========================================================================
 
     async def _setup_cron_trigger(self, node: Dict, workflow_id: str) -> TriggerInfo:
-        """Setup cron trigger for a node."""
+        """Setup cron trigger for a node.
+
+        Two paths:
+
+        1. **Wave 12 C3 canary**: when ``Settings.event_framework_enabled``
+           is on AND ``cronScheduler`` is in the canary registry, create
+           a Temporal :class:`Schedule` whose action is the plugin's
+           :class:`CronTriggerWorkflow`. Survives FastAPI process
+           restart via the Temporal Schedule service.
+        2. **Legacy**: APScheduler ``register_cron_job`` runs an
+           in-process tick callback. Dies on process restart — kept as
+           the default while the canary stabilises.
+        """
         node_id = node['id']
+        node_type = node.get('type', 'cronScheduler')
         params = await self.database.get_node_parameters(node_id) or {}
 
         cron_expr = TriggerManager.build_cron_expression(params)
         timezone = params.get('timezone', 'UTC')
         frequency = params.get('frequency', 'minutes')
-
-        # Initialize iteration counter for this cron node
-        self._cron_iterations[node_id] = 0
-
-        # Build schedule description for output
         schedule_desc = self._get_schedule_description(params)
+
+        # Path 1: Wave 12 C3 canary — Temporal Schedule.
+        if await self._canary_listener_enabled_for(node_type):
+            schedule_id = await self._start_canary_cron_schedule(
+                node, workflow_id, params,
+                cron_expr=cron_expr,
+                timezone=timezone,
+                frequency=frequency,
+                schedule_desc=schedule_desc,
+            )
+            if schedule_id is not None:
+                await self._broadcaster.update_node_status(node_id, "waiting", {
+                    "message": f"Waiting for schedule: {cron_expr} (Temporal-durable)",
+                    "cron_expression": cron_expr,
+                    "timezone": timezone,
+                    "schedule_id": schedule_id,
+                }, workflow_id=workflow_id)
+                return TriggerInfo(node_id, "cron", job_id=schedule_id)
+            # Fall through to legacy path if Temporal unavailable
+            # (already logged inside _start_canary_cron_schedule).
+
+        # Initialize iteration counter for this cron node (legacy path).
+        self._cron_iterations[node_id] = 0
 
         def on_tick():
             if self._main_loop and self._main_loop.is_running():
@@ -718,6 +756,99 @@ class DeploymentManager:
             event_type=event_type,
         )
         return listener_id
+
+    async def _cancel_canary_cron_schedules(self, workflow_id: str) -> int:
+        """Wave 12 C3: delete every Temporal Schedule created for this
+        deployment's cron triggers.
+
+        Uses ``services.temporal.schedules.delete_cron_schedules_for_deployment``
+        which queries ``client.list_schedules`` with the ``EventWorkflowId``
+        Search Attribute filter. Same no-local-dict contract as
+        :meth:`_cancel_canary_listeners` but against the Schedule
+        resource type (Temporal Schedules and Workflows have separate
+        Visibility lists).
+        """
+        from core.container import container
+        from services.temporal.schedules import delete_cron_schedules_for_deployment
+
+        wrapper = container.temporal_client()
+        if wrapper is None or wrapper.client is None:
+            return 0
+
+        return await delete_cron_schedules_for_deployment(
+            wrapper.client, workflow_id,
+        )
+
+    async def _start_canary_cron_schedule(
+        self,
+        node: Dict,
+        workflow_id: str,
+        params: Dict,
+        *,
+        cron_expr: str,
+        timezone: str,
+        frequency: str,
+        schedule_desc: str,
+    ) -> Optional[str]:
+        """Wave 12 C3 canary: create a Temporal Schedule for a cron trigger.
+
+        Schedule action targets the plugin-owned ``CronTriggerWorkflow``
+        (registered as a :class:`temporalio.plugin.SimplePlugin` from
+        ``nodes/scheduler/cron_scheduler/__init__.py``). Each firing
+        spawns a child :class:`MachinaWorkflow`.
+
+        Returns the Schedule id on success, ``None`` when Temporal isn't
+        reachable so the caller falls back to APScheduler.
+        """
+        from core.container import container
+        from services.temporal.schedules import create_cron_schedule
+
+        node_id = node["id"]
+
+        wrapper = container.temporal_client()
+        if wrapper is None or wrapper.client is None:
+            logger.warning(
+                "Canary cron Schedule requested but Temporal not connected; "
+                "falling back to APScheduler",
+                node_id=node_id, workflow_id=workflow_id,
+            )
+            return None
+
+        state = self._deployments.get(workflow_id)
+        if state is None:
+            raise RuntimeError(f"No deployment state for workflow {workflow_id}")
+
+        listener_data: Dict[str, Any] = {
+            "workflow_id": workflow_id,
+            "trigger_node_id": node_id,
+            "node_type": node.get("type", "cronScheduler"),
+            "cron_expression": cron_expr,
+            "frequency": frequency,
+            "timezone": timezone,
+            "schedule": schedule_desc,
+            "filter_params": params,
+            "nodes": state.nodes,
+            "edges": state.edges,
+            "session_id": state.session_id,
+        }
+
+        schedule_id = await create_cron_schedule(
+            wrapper.client,
+            deployment_workflow_id=workflow_id,
+            node_id=node_id,
+            cron_expression=cron_expr,
+            timezone=timezone,
+            listener_data=listener_data,
+        )
+
+        logger.info(
+            "Canary cron Schedule created",
+            schedule_id=schedule_id,
+            workflow_id=workflow_id,
+            node_id=node_id,
+            cron_expression=cron_expr,
+        )
+        return schedule_id
 
     async def _cancel_canary_listeners(self, workflow_id: str) -> int:
         """Cancel all canary listeners for this deployment.

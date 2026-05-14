@@ -3,6 +3,21 @@
 Cron-expression-based scheduling trigger. Deployment-mode lifecycle
 (starting/stopping the cron job) is owned by ``deployment/triggers.py``;
 the run-button path executes this plugin once for testing.
+
+Self-registration on import (Wave 12 C3 — Temporal Schedules canary):
+  - ``CronTriggerWorkflow`` (the per-firing workflow shipped in
+    ``._workflow``) is wrapped in :class:`temporalio.plugin.SimplePlugin`
+    and registered with
+    :func:`services.temporal.plugin_registry.register_temporal_plugin`.
+    The Temporal worker passes the registered list to
+    ``Worker(plugins=[...])`` and the SDK's plugin chain merges this
+    plugin's workflow class into the effective worker configuration —
+    framework worker stays plugin-agnostic.
+  - ``cronScheduler`` opts into the canary set via
+    :func:`services.deployment.canary_registry.register_canary_trigger_type`.
+    ``DeploymentManager._setup_cron_trigger`` checks the registry +
+    feature flag; when both are on, the deploy path creates a Temporal
+    ``Schedule`` instead of the in-process APScheduler job.
 """
 
 from __future__ import annotations
@@ -13,11 +28,21 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
+from temporalio.plugin import SimplePlugin
 
 from core.logging import get_logger
+from services.deployment.canary_registry import register_canary_trigger_type
 from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
+from services.temporal.plugin_registry import register_temporal_plugin
+
+from ._workflow import CronTriggerWorkflow
 
 logger = get_logger(__name__)
+
+register_temporal_plugin(
+    SimplePlugin(name="cron-scheduler", workflows=[CronTriggerWorkflow])
+)
+register_canary_trigger_type("cronScheduler")
 
 
 def _calculate_wait_seconds(p: Dict[str, Any]) -> int:

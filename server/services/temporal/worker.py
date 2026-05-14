@@ -29,6 +29,7 @@ from core.logging import get_logger
 from .workflow import MachinaWorkflow
 from .trigger_listener_workflow import TriggerListenerWorkflow
 from .polling_trigger_workflow import PollingTriggerWorkflow
+from .plugin_registry import temporal_plugins
 from .activities import (
     NodeExecutionActivities,
     create_shared_session,
@@ -143,9 +144,18 @@ class TemporalWorkerManager:
             per_type = collect_plugin_activities()  # no queue filter; all plugins
             agent_activities = collect_agent_activities()
             polling_activities = collect_polling_activities()
+            # Plugin-owned workflow classes (e.g. cron's
+            # CronTriggerWorkflow) self-register a SimplePlugin via
+            # services.temporal.plugin_registry.register_temporal_plugin
+            # from their plugin __init__.py. The Temporal SDK's plugin
+            # chain merges each registered plugin's workflows / activities
+            # / interceptors into the effective worker configuration —
+            # the framework worker stays plugin-agnostic.
+            plugin_list = temporal_plugins()
             self._worker = Worker(
                 self.client,
                 task_queue=self.task_queue,
+                plugins=plugin_list,
                 workflows=[
                     MachinaWorkflow,
                     AgentWorkflow,
