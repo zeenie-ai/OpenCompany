@@ -115,7 +115,6 @@ class GmailReceiveNode(PollingTriggerNode):
         context: NodeContext,
     ) -> Dict[str, Any]:
         """Polling loop: baseline existing IDs, sleep, fetch new ones, dispatch."""
-        from services import event_waiter
         from services.status_broadcaster import get_status_broadcaster
 
         start_time = time.time()
@@ -170,7 +169,10 @@ class GmailReceiveNode(PollingTriggerNode):
                         "gmail", node_id, "receive", 1,
                         {"workflow_id": context.workflow_id, "session_id": context.session_id},
                     )
-                    event_waiter.dispatch("gmail_email_received", email_data)
+                    # Wave 12 B5: route through plugin _events.py wrapper.
+                    from nodes.google import dispatch_gmail_received
+
+                    dispatch_gmail_received(email_data)
                     logger.info(
                         f"[GmailReceive] New email: {email_data.get('subject', 'no subject')}",
                     )

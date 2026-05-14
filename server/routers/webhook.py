@@ -18,7 +18,9 @@ import asyncio
 import logging
 
 from services.events import WEBHOOK_SOURCES
-from services.status_broadcaster import get_status_broadcaster
+# Wave 12 B9: webhook event dispatch moved to
+# ``nodes/trigger/webhook_trigger/_events.broadcast_webhook_received``.
+# The router no longer reaches into the broadcaster directly.
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhook", tags=["webhook"])
@@ -83,8 +85,10 @@ async def handle_webhook(path: str, request: Request):
 
     logger.info(f"[Webhook] Received: {request.method} /webhook/{path}")
 
-    broadcaster = get_status_broadcaster()
-    await broadcaster.send_custom_event("webhook_received", webhook_data)
+    # Wave 12 B9: route through plugin _events.py wrapper.
+    from nodes.trigger.webhook_trigger._events import broadcast_webhook_received
+
+    await broadcast_webhook_received(webhook_data)
 
     return JSONResponse(
         content={

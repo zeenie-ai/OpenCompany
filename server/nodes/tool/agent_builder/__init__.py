@@ -19,8 +19,8 @@ The five operations are pure canvas mutations:
 * ``create_workflow`` -- persist a fresh empty workflow + return its
   workflow_id.
 
-Each mutation pushes a ``workflow_ops_apply`` event via
-``status_broadcaster.send_custom_event`` so the live canvas updates.
+Each mutation pushes a ``workflow_ops_apply`` event via the plugin's
+``_events.broadcast_workflow_ops`` wrapper so the live canvas updates.
 LangGraph binds tools at graph compile time, so a mutation made
 mid-run does NOT add a callable tool to the current run; the
 agent's NEXT invocation rediscovers it. Each summary string ends
@@ -70,15 +70,19 @@ _SKILLS_DIR = Path(__file__).resolve().parents[2] / "skills"
 
 
 async def _broadcast(workflow_id: Optional[str], caller_id: str, ops: List[Dict[str, Any]]) -> None:
-    """Push a workflow_ops_apply event so the live canvas updates."""
+    """Push a workflow_ops_apply event so the live canvas updates.
+
+    Wave 12 B10: routes through plugin _events.py wrapper.
+    """
     if not ops:
         return
     try:
-        from services.status_broadcaster import get_status_broadcaster
-        broadcaster = get_status_broadcaster()
-        await broadcaster.send_custom_event(
-            "workflow_ops_apply",
-            {"workflow_id": workflow_id, "caller_node_id": caller_id, "operations": ops},
+        from ._events import broadcast_workflow_ops
+
+        await broadcast_workflow_ops(
+            workflow_id=workflow_id,
+            caller_node_id=caller_id,
+            operations=ops,
         )
         logger.info(
             "[agentBuilder] broadcast workflow_ops_apply: workflow_id=%s "

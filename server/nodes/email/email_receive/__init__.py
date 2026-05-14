@@ -119,7 +119,6 @@ class EmailReceiveNode(PollingTriggerNode):
         from datetime import datetime
         from .._service import get_email_service
         from services.status_broadcaster import get_status_broadcaster
-        from services import event_waiter
 
         start_time = time.time()
         raw_params = parameters
@@ -160,7 +159,10 @@ class EmailReceiveNode(PollingTriggerNode):
                         poll["folder"],
                     )
 
-                event_waiter.dispatch("email_received", email_data)
+                # Wave 12 B4: route through plugin _events.py wrapper.
+                from nodes.email import dispatch_email_received
+
+                dispatch_email_received(email_data)
                 return {
                     "success": True, "node_id": node_id, "node_type": self.type,
                     "result": email_data,

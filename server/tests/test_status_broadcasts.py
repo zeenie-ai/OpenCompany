@@ -95,24 +95,17 @@ _LEGACY_RAW_DICT_BROADCASTS: FrozenSet[str] = frozenset({
 # send_custom_event callsites (message_sent/received + 4 newsletter
 # events + history_sync_complete) moved to typed CloudEvents wrappers
 # in ``nodes/whatsapp/_events.py``.
-_LEGACY_RAW_DICT_CALLSITES: FrozenSet[str] = frozenset({
-    # Webhook router emits ``webhook_received``. Webhook payload is
-    # arbitrary JSON; the consumer (webhookTrigger node) shape is
-    # already abstract, so a typed envelope adds little value.
-    "routers/webhook.py",
-    # Task-delegation completion. Migration would namespace as
-    # ``agent.task.{succeeded,failed}``; matched by taskTrigger.
-    "services/handlers/tools.py",
-    # Agent Builder canvas-mutation broadcast. Emits
-    # ``workflow_ops_apply`` carrying a flat
-    # ``{workflow_id, caller_node_id, operations}`` shape consumed by
-    # ``client/src/hooks/useWorkflowOpsListener.ts``. Migration to
-    # WorkflowEvent would change the wire format (envelope vs flat),
-    # requiring a parallel rewrite of the frontend listener +
-    # invariant test fixtures. Deferred — typed-envelope migration
-    # tracked alongside the credentials.* / agent.task.* migrations.
-    "nodes/tool/agent_builder/__init__.py",
-})
+# Wave 12 B9: ``routers/webhook.py`` retired — webhook_received dispatch
+# moved to ``nodes/trigger/webhook_trigger/_events.py``.
+# Wave 12 B8: ``services/handlers/tools.py`` retired — 3 task_completed
+# callsites moved to ``nodes/agent/_events.py``.
+# Wave 12 B10: ``nodes/tool/agent_builder/__init__.py`` retired —
+# workflow_ops_apply dispatch moved to
+# ``nodes/tool/agent_builder/_events.py``.
+#
+# Allowlist now empty: every send_custom_event callsite lives in a
+# plugin folder's _events.py wrapper.
+_LEGACY_RAW_DICT_CALLSITES: FrozenSet[str] = frozenset()
 
 
 # ============================================================================

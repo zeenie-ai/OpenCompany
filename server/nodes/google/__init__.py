@@ -34,6 +34,7 @@ from services.ws_handler_registry import (
 )
 
 from . import _router
+from ._events import dispatch_gmail_received  # noqa: F401 — re-export
 from ._filters import build_gmail_filter
 from ._handlers import WS_HANDLERS
 from ._option_loaders import (

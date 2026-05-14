@@ -1655,7 +1655,10 @@ async def handle_send_chat_message(data: Dict[str, Any], websocket: WebSocket) -
     them as 'chat_message_received' events to any waiting chatTrigger nodes.
     Also saves the message to database for persistence across restarts.
     """
-    from services import event_waiter
+    # Wave 12 B7: route through chat_trigger plugin _events.py wrapper —
+    # the chat_message_received event wire shape lives with the plugin,
+    # not in this central WS router.
+    from nodes.trigger.chat_trigger._events import dispatch_chat_message_received
 
     message = data["message"]
     role = data.get("role", "user")
@@ -1674,7 +1677,7 @@ async def handle_send_chat_message(data: Dict[str, Any], websocket: WebSocket) -
     }
 
     # Dispatch to chatTrigger waiters
-    resolved = event_waiter.dispatch("chat_message_received", event_data)
+    resolved = dispatch_chat_message_received(event_data)
 
     logger.info(f"[ChatMessage] Dispatched message to {resolved} chatTrigger waiter(s)")
 

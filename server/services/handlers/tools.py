@@ -505,16 +505,17 @@ async def _execute_delegated_agent(args: Dict[str, Any],
                         }
                     )
 
-                # Dispatch error event for trigger nodes
-                await broadcaster.send_custom_event('task_completed', {
-                    'task_id': task_id,
-                    'status': 'error',
-                    'agent_name': agent_label,
-                    'agent_node_id': node_id,
-                    'parent_node_id': config.get('parent_node_id', ''),
-                    'error': error_msg,
-                    'workflow_id': workflow_id,
-                })
+                # Dispatch error event for trigger nodes — Wave 12 B8.
+                from nodes.agent._events import broadcast_agent_task_failed
+
+                await broadcast_agent_task_failed(
+                    task_id=task_id,
+                    agent_name=agent_label,
+                    agent_node_id=node_id,
+                    parent_node_id=config.get('parent_node_id', ''),
+                    workflow_id=workflow_id,
+                    error=error_msg,
+                )
 
                 return result
 
@@ -562,16 +563,17 @@ async def _execute_delegated_agent(args: Dict[str, Any],
                     }
                 )
 
-            # Dispatch task_completed event for trigger nodes
-            await broadcaster.send_custom_event('task_completed', {
-                'task_id': task_id,
-                'status': 'completed',
-                'agent_name': agent_label,
-                'agent_node_id': node_id,
-                'parent_node_id': config.get('parent_node_id', ''),
-                'result': response_text,
-                'workflow_id': workflow_id,
-            })
+            # Dispatch task_completed event for trigger nodes — Wave 12 B8.
+            from nodes.agent._events import broadcast_agent_task_completed
+
+            await broadcast_agent_task_completed(
+                task_id=task_id,
+                agent_name=agent_label,
+                agent_node_id=node_id,
+                parent_node_id=config.get('parent_node_id', ''),
+                workflow_id=workflow_id,
+                result=response_text,
+            )
 
             return result
 
@@ -613,16 +615,17 @@ async def _execute_delegated_agent(args: Dict[str, Any],
                     }
                 )
 
-            # Dispatch task_completed event for trigger nodes (error case)
-            await broadcaster.send_custom_event('task_completed', {
-                'task_id': task_id,
-                'status': 'error',
-                'agent_name': agent_label,
-                'agent_node_id': node_id,
-                'parent_node_id': config.get('parent_node_id', ''),
-                'error': str(e),
-                'workflow_id': workflow_id,
-            })
+            # Dispatch task_completed event for trigger nodes (error case) — Wave 12 B8.
+            from nodes.agent._events import broadcast_agent_task_failed
+
+            await broadcast_agent_task_failed(
+                task_id=task_id,
+                agent_name=agent_label,
+                agent_node_id=node_id,
+                parent_node_id=config.get('parent_node_id', ''),
+                workflow_id=workflow_id,
+                error=str(e),
+            )
 
             return {"success": False, "error": str(e)}
 
