@@ -27,8 +27,9 @@ because the on-disk JSONL is the same format `-p` wrote to stdout
 (Claude Code CHANGELOG 2.1.101 / 2.1.126 — shared writer). The argv
 flags we care about — `--mcp-config`, `--strict-mcp-config`,
 `--allowedTools`, `--permission-mode`, `--append-system-prompt`,
-`--resume`, `--model`, `--effort`, `--add-dir`, `--disallowedTools`,
-`--agent` — all work in interactive mode.
+`--resume`, **`--continue`** (new primary continuity flag — see
+"Memory bridge" below), `--model`, `--effort`, `--add-dir`,
+`--disallowedTools`, `--agent` — all work in interactive mode.
 
 ## What we dropped
 
@@ -58,7 +59,7 @@ Two orthogonal layers:
 | **Send turn** | `pty.write((text + '\r').encode())` (NOT close stdin — see [#15553](https://github.com/anthropics/claude-code/issues/15553)) | identical |
 | **Send slash command** | `pty.write(b"/clear\r")` | identical |
 | **Completion detect** | JSONL `result` entry | identical |
-| **Resume across spawns** | `claude --resume <UUID>` | identical |
+| **Session continuity** | `claude --continue` (memory-bound) — claude auto-finds latest under cwd | identical |
 
 `pywinpty` v3.x is now production-grade (used by Jupyter Lab terminals
 and Spyder's IPython console) so the historical reason to route Windows
@@ -95,9 +96,11 @@ memory node reuse the same warm `claude` PTY:
   JSONL so the conversation continues. This is the load-bearing
   invariant for `simpleMemory` continuity.
 - **Acquire (cold)** — spawn fresh via `PtyTransport`, locate the
-  newly-created JSONL by mtime, start a `JsonlWatcher` on it. Stash
-  the MCP bearer token on the `PooledClaudeSession` so re-acquires
-  use the same token the spawned claude already has in its argv.
+  JSONL by mtime (newest `.jsonl` with `mtime >= spawn_time - 1s`
+  works uniformly for fresh `claude` and `claude --continue`), start
+  a `JsonlWatcher` on it. Stash the MCP bearer token on the
+  `PooledClaudeSession` so re-acquires use the same token the
+  spawned claude already has in its argv.
 - **Explicit `clear(session)`** — sends `/clear` to the PTY, awaits
   the new JSONL filename via the persistent `JsonlDirWatcher`, swaps
   the file watcher. Per
@@ -196,25 +199,50 @@ interactive dialogs, kill the session, or open a browser):
 `/config`, `/install-github-app`, `/install-slack-app`, `/teleport`,
 `/heapdump`.
 
-## Memory bridge — unchanged
+## Memory bridge — `--continue`, not UUID round-trip
 
-The `simpleMemory.last_session_id` ↔ `--resume <UUID>` contract works
-identically in interactive mode because the on-disk JSONL is the
-same format. The invariants:
+Late-stage simplification: the agent no longer ferries a UUID through
+`simpleMemory.last_session_id` to drive continuity. Instead it passes
+`--continue` and lets claude track its own latest session per cwd.
+
+`ClaudeTaskSpec` carries a `continue_session: bool` field. The
+argv-builder emits one of:
+
+- `--resume <UUID>` if `task.resume_session_id` is set (explicit
+  wins — used for `--fork-session` later, or any caller that already
+  knows the exact UUID).
+- `--continue` if `task.continue_session=True` (the memory-bound
+  default; per
+  [`code.claude.com/docs/en/cli-reference`](https://code.claude.com/docs/en/cli-reference)
+  this loads the most recent conversation under the cwd).
+- Neither — fresh session; claude assigns a new UUID.
+
+`claude_code_agent.execute_op` sets `continue_session=True` when a
+memory node is wired; it no longer reads `last_session_id` from the
+memory data. The invariants:
 
 - `memory_bound=True` makes the spawn cwd = `repo_root` so claude's
   `project_key` stays constant across batches.
-- First run: claude assigns its own UUID; the pool / `AICliSession`
-  discovers it via the new JSONL filename, saves it to
-  `simpleMemory.last_session_id`.
-- Subsequent runs (non-pooled): argv `--resume <last_session_id>`.
-- Subsequent runs (pooled, warm): no respawn — the warm PTY continues
-  in its current UUID.
-- Subsequent runs (pooled, after `pool.clear`): a new UUID is captured
-  on the next `result` event and persisted.
-- Auto-clear-stale: if claude reports `No conversation found with
-  session ID: <UUID>`, `_persist_memory` wipes the broken
-  `last_session_id` so the next run falls into the first-run branch.
+- First run with memory wired: argv `--continue` (no prior conversation
+  under cwd → claude starts fresh). The post-spawn `_wait_for_session_jsonl`
+  helper finds the new JSONL via mtime (newest `.jsonl` with
+  `mtime >= spawn_time - 1s`).
+- Subsequent runs with memory wired: argv `--continue` — claude
+  loads the latest conversation under cwd and continues.
+- Pooled (warm): no respawn — the warm PTY continues in its current
+  UUID; the next prompt appends to its existing JSONL.
+- Pooled (after `pool.clear`): a new UUID is captured via the
+  persistent `JsonlDirWatcher` and the file watcher swapped.
+
+`simpleMemory.last_session_id` is now **display-only metadata** —
+`_persist_memory` still writes it from the latest result for UI /
+diagnostic display, but the agent doesn't read it. Field is kept on
+the schema for back-compat.
+
+**Stale UUID auto-clear** (`_clear_stale_session_id`) still applies if
+someone explicitly sets `resume_session_id` (e.g. the future
+`--fork-session` UI). With `--continue` there's nothing to be stale —
+claude itself decides what's available.
 
 ## Out-of-process pty-host (deferred upgrade path)
 
