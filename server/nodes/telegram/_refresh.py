@@ -32,36 +32,41 @@ async def refresh_telegram_status(broadcaster: "StatusBroadcaster") -> None:
     Called once per ``_refresh_all_services`` cycle. OTel span emitted
     so cold-start ``getMe`` time is observable -- the historical
     bottleneck on local DNS for the first WebSocket connect.
+
+    Wave 12 B3: routes through plugin _events.py wrapper. Cache write
+    + dual-emit (legacy raw + typed sibling) all in one call.
     """
     with tracer.start_as_current_span("broadcaster.refresh_telegram") as span:
         try:
+            from ._events import broadcast_telegram_status
             from ._service import get_telegram_service
 
             service = get_telegram_service()
 
-            def _snapshot(connected: bool, has_token: bool) -> Dict[str, Any]:
-                s = service.get_status()
-                return {
-                    "connected": connected,
-                    "bot_id": s.get("bot_id") if connected else None,
-                    "bot_username": s.get("bot_username") if connected else None,
-                    "bot_name": s.get("bot_name") if connected else None,
-                    "owner_chat_id": s.get("owner_chat_id") if connected else None,
-                    "has_stored_token": has_token,
-                }
+            async def _emit(connected: bool, has_token: bool) -> None:
+                """Snapshot service state and broadcast (cache write + WS)."""
+                s = service.get_status() if connected else {}
+                await broadcast_telegram_status(
+                    connected=connected,
+                    bot_id=s.get("bot_id") if connected else None,
+                    bot_username=s.get("bot_username") if connected else None,
+                    bot_name=s.get("bot_name") if connected else None,
+                    owner_chat_id=s.get("owner_chat_id") if connected else None,
+                    has_stored_token=has_token,
+                )
 
             if service.connected:
-                broadcaster._status["telegram"] = _snapshot(True, True)
+                await _emit(True, True)
                 span.set_attribute("path", "already_connected")
             elif not await service.has_stored_token():
-                broadcaster._status["telegram"] = _snapshot(False, False)
+                await _emit(False, False)
                 span.set_attribute("path", "no_token")
             else:
                 span.set_attribute("path", "auto_reconnect")
                 logger.info("[StatusBroadcaster] Auto-reconnecting Telegram bot...")
                 result = await service.connect()
                 ok = bool(result.get("success"))
-                broadcaster._status["telegram"] = _snapshot(ok, True)
+                await _emit(ok, True)
                 span.set_attribute("reconnect_ok", ok)
                 if ok:
                     bot_username = broadcaster._status["telegram"].get("bot_username")
@@ -74,10 +79,6 @@ async def refresh_telegram_status(broadcaster: "StatusBroadcaster") -> None:
                         f"{result.get('error')}"
                     )
 
-            await broadcaster.broadcast({
-                "type": "telegram_status",
-                "data": broadcaster._status["telegram"],
-            })
             span.set_attribute(
                 "connected", bool(broadcaster._status["telegram"]["connected"])
             )

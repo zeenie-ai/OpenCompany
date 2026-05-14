@@ -544,47 +544,16 @@ class StatusBroadcaster:
     # Android Status Updates
     # =========================================================================
 
-    async def _emit_connection_typed(
-        self,
-        plugin: str,
-        connected: bool,
-        subject: Optional[str],
-        data: Dict[str, Any],
-    ) -> None:
-        """Emit a CloudEvents-typed sibling broadcast alongside the
-        legacy ``{plugin}_status`` raw frame (Wave 11.I, X4).
-
-        Wire key ``plugin_connection_status`` mirrors the
-        ``credential_catalogue_updated`` pattern: single wire channel
-        for typed-envelope listeners; the envelope's ``type`` field
-        carries the specific action (``{plugin}.connection.opened`` /
-        ``.closed``) and ``subject`` carries the device/account id.
-
-        Frontend listeners that grew up on the raw ``{plugin}_status``
-        frame keep working unchanged; future listeners can subscribe
-        to ``plugin_connection_status`` for the typed channel and
-        retire the raw frame in a coordinated FE migration (Phase 4 Y3).
-        """
-        from services.events import WorkflowEvent
-
-        event = WorkflowEvent.connection_status(
-            plugin=plugin,
-            connected=connected,
-            subject=subject,
-            data=data,
-        )
-        await self.broadcast({
-            "type": "plugin_connection_status",
-            "data": event.model_dump(mode="json"),
-        })
-
-    # Wave 12 B1: ``update_android_status`` MOVED to
-    # ``nodes/android/_events.py:broadcast_android_status``. Plugin
-    # owns its broadcast shape + the dual-emit (legacy raw +
-    # typed CloudEvents sibling). Status cache still lives in
-    # ``self._status["android"]`` — the plugin's wrapper mutates it
-    # so ``get_android_status()`` + the WS-connect initial-status
-    # snapshot keep working unchanged.
+    # Wave 12 B1-B3: all three ``update_<plugin>_status`` methods MOVED
+    # to per-plugin ``_events.py:broadcast_<plugin>_status`` wrappers
+    # (android / whatsapp / telegram). Each plugin owns its broadcast
+    # shape + the dual-emit (legacy raw + typed CloudEvents sibling).
+    # The shared ``_emit_connection_typed`` helper retired with B3
+    # because no remaining caller uses it — plugin-specific typed
+    # factories (e.g. ``android_connection_status``) replace the
+    # cross-plugin parametrised helper per RFC §6.4. Status cache
+    # slots in ``self._status[<plugin>]`` stay so ``get_status()`` +
+    # WS-connect initial snapshot keep working.
 
     # =========================================================================
     # Status updates -- per-service refresh bodies live in their plugin
@@ -605,39 +574,8 @@ class StatusBroadcaster:
     # Telegram Status Updates
     # =========================================================================
 
-    async def update_telegram_status(
-        self,
-        connected: bool,
-        bot_id: Optional[int] = None,
-        bot_username: Optional[str] = None,
-        bot_name: Optional[str] = None,
-        owner_chat_id: Optional[int] = None
-    ):
-        """Update Telegram bot connection status and broadcast.
-
-        Emits both the legacy ``telegram_status`` raw frame and a
-        CloudEvents-typed sibling (Wave 11.I, X4).
-        """
-        import time
-        self._status["telegram"] = {
-            "connected": connected,
-            "bot_id": bot_id,
-            "bot_username": bot_username,
-            "bot_name": bot_name,
-            "owner_chat_id": owner_chat_id,
-            "timestamp": time.time()
-        }
-
-        await self.broadcast({
-            "type": "telegram_status",
-            "data": self._status["telegram"]
-        })
-        await self._emit_connection_typed(
-            plugin="telegram",
-            connected=connected,
-            subject=bot_username,
-            data=self._status["telegram"],
-        )
+    # Wave 12 B3: ``update_telegram_status`` MOVED to
+    # ``nodes/telegram/_events.py:broadcast_telegram_status``.
 
     # =========================================================================
     # Node Status Updates

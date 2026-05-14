@@ -81,7 +81,11 @@ _LEGACY_RAW_DICT_BROADCASTS: FrozenSet[str] = frozenset({
     # ``nodes/android/_events.py:broadcast_android_status``.
     # Wave 12 B2: ``update_whatsapp_status`` retired; moved to
     # ``nodes/whatsapp/_events.py:broadcast_whatsapp_status``.
-    "update_telegram_status",  # FE: TelegramStatusPanel reads `telegram_status` wire-frame
+    # Wave 12 B3: ``update_telegram_status`` retired; moved to
+    # ``nodes/telegram/_events.py:broadcast_telegram_status``. The
+    # shared ``_emit_connection_typed`` helper retired alongside (no
+    # remaining callers). Allowlist now empty — all three plugin-named
+    # broadcast methods live in their plugin folders.
 })
 
 # ``send_custom_event`` callers that still pass raw dicts. Each entry
@@ -331,65 +335,75 @@ class TestStatusBroadcastsUseTypedBuilder:
 
 
 class TestStatusBroadcastsAlsoEmitTypedEnvelope:
-    """Wave 11.I, X4: every legacy ``update_<plugin>_status`` method
-    listed in :data:`_LEGACY_RAW_DICT_BROADCASTS` MUST also call
-    :meth:`StatusBroadcaster._emit_connection_typed` (or otherwise
-    construct ``WorkflowEvent.connection_status(...)``) so a typed
-    sibling broadcast goes out alongside the legacy raw frame.
+    """Wave 12 B1-B3: per-plugin ``broadcast_<plugin>_status`` wrappers
+    in ``nodes/<plugin>/_events.py`` MUST dual-emit (legacy raw frame +
+    typed CloudEvents sibling on ``plugin_connection_status``).
 
-    Phase 4 Y3 retires the raw frame after frontend migrates to read
-    the typed channel. Until then, both frames coexist: existing FE
-    consumers stay compatible; typed listeners can opt in.
+    Replaces the Wave 11.I X4 invariant which constrained the now-retired
+    ``StatusBroadcaster.update_<plugin>_status`` methods + their shared
+    ``_emit_connection_typed`` helper. The helper retired in B3 along
+    with the last caller (telegram). Plugin-specific typed factories
+    (``android_connection_status`` / ``whatsapp_connection_status`` /
+    ``telegram_connection_status``) replace the cross-plugin
+    parametrised helper per RFC §6.4 plugin-specific classification.
+
+    Each plugin's wrapper file is parametrized below — every entry must
+    contain both wire keys (legacy + ``plugin_connection_status``) and
+    construct a CloudEvents envelope.
     """
 
-    @pytest.fixture
-    def broadcaster_methods(self) -> dict[str, str]:
-        from services import status_broadcaster as sb
+    # (plugin_label, module_path, wrapper_function_name, legacy_wire_key)
+    _PLUGIN_WRAPPERS = [
+        ("android", "nodes.android._events", "broadcast_android_status", "android_status"),
+        ("whatsapp", "nodes.whatsapp._events", "broadcast_whatsapp_status", "whatsapp_status"),
+        ("telegram", "nodes.telegram._events", "broadcast_telegram_status", "telegram_status"),
+    ]
 
-        cls_src = inspect.getsource(sb.StatusBroadcaster)
-        return _split_methods(cls_src)
-
-    @pytest.mark.parametrize("method_name", sorted(_LEGACY_RAW_DICT_BROADCASTS))
-    def test_legacy_status_method_emits_typed_sibling(
-        self, broadcaster_methods, method_name: str,
+    @pytest.mark.parametrize(
+        "plugin,module_path,wrapper_name,legacy_key",
+        _PLUGIN_WRAPPERS,
+        ids=[row[0] for row in _PLUGIN_WRAPPERS],
+    )
+    def test_plugin_wrapper_dual_emits(
+        self, plugin: str, module_path: str, wrapper_name: str, legacy_key: str,
     ):
-        body = broadcaster_methods.get(method_name)
-        assert body is not None, (
-            f"StatusBroadcaster.{method_name} missing -- update "
-            f"_LEGACY_RAW_DICT_BROADCASTS or restore the method."
+        """Each plugin's broadcaster wrapper emits BOTH the legacy raw
+        frame AND the typed ``plugin_connection_status`` sibling.
+
+        Introspects the full module source (not just the wrapper body)
+        because plugins legitimately hoist the wire keys into
+        module-level constants for self-documentation.
+        """
+        import importlib
+
+        mod = importlib.import_module(module_path)
+        wrapper = getattr(mod, wrapper_name, None)
+        assert wrapper is not None, (
+            f"{module_path}.{wrapper_name} missing — Wave 12 B-phase "
+            f"contract violated; plugin {plugin!r} must own its broadcast "
+            f"wrapper in its plugin folder."
         )
-        assert "_emit_connection_typed" in body or "WorkflowEvent.connection_status" in body, (
-            f"StatusBroadcaster.{method_name} emits only the legacy raw "
-            f"{{type: 'X_status', data: {{...}}}} frame. It must ALSO emit a "
-            f"CloudEvents-typed sibling via "
-            f"``await self._emit_connection_typed(plugin=..., connected=..., "
-            f"subject=..., data=...)`` so future typed-channel listeners "
-            f"can subscribe. Wave 11.I, X4 contract."
+        mod_src = inspect.getsource(mod)
+        assert f'"{legacy_key}"' in mod_src or f"'{legacy_key}'" in mod_src, (
+            f"{module_path} must reference legacy wire key {legacy_key!r} "
+            f"for FE back-compat (the dual-emit transition contract)."
+        )
+        assert "plugin_connection_status" in mod_src, (
+            f"{module_path} must emit a typed CloudEvents sibling on "
+            f"``plugin_connection_status`` (the cross-plugin typed channel)."
         )
 
-    def test_emit_connection_typed_helper_exists(self):
-        """The shared helper must exist on the broadcaster -- locks
-        the canonical extension point so per-method migrations don't
-        re-invent the typed-envelope construction."""
+    def test_emit_connection_typed_helper_retired(self):
+        """B3 retired the cross-plugin helper. Locks: nothing on the
+        broadcaster should reintroduce a shared parametrised version —
+        per RFC §6.4, connection_status is plugin-specific."""
         from services.status_broadcaster import StatusBroadcaster
 
-        assert hasattr(StatusBroadcaster, "_emit_connection_typed"), (
-            "StatusBroadcaster._emit_connection_typed is the canonical "
-            "helper for typed plugin-connection broadcasts. It must "
-            "exist; per-method update_<plugin>_status implementations "
-            "call it after the legacy raw broadcast."
-        )
-
-    def test_emit_connection_typed_uses_workflow_event_factory(self):
-        """The helper itself must construct via the typed factory, not
-        a hand-rolled WorkflowEvent literal."""
-        from services.status_broadcaster import StatusBroadcaster
-
-        src = inspect.getsource(StatusBroadcaster._emit_connection_typed)
-        assert "WorkflowEvent.connection_status" in src, (
-            "_emit_connection_typed must call WorkflowEvent.connection_status(...) "
-            "(the typed factory) rather than hand-rolling the envelope. "
-            "Wave 11.I CloudEvents contract."
+        assert not hasattr(StatusBroadcaster, "_emit_connection_typed"), (
+            "StatusBroadcaster._emit_connection_typed was retired in "
+            "Wave 12 B3. Each plugin now owns its connection_status "
+            "factory in nodes/<plugin>/_events.py (RFC §6.4). Don't "
+            "reintroduce the shared helper."
         )
 
 

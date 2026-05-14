@@ -36,6 +36,10 @@ from services.status_broadcaster import register_service_refresh
 from services.ws_handler_registry import register_ws_handlers
 
 from ._credentials import TelegramCredential
+from ._events import (  # noqa: F401 — re-exported for callers
+    broadcast_telegram_status,
+    dispatch_telegram_message_received,
+)
 from ._filters import build_telegram_filter
 from ._handlers import WS_HANDLERS
 from ._refresh import precheck_telegram_trigger, refresh_telegram_status

@@ -494,8 +494,11 @@ class TelegramService(ServiceSingleton):
                 f"chat_type={event_data.get('chat_type')}"
             )
 
-            from services import event_waiter
-            resolved = event_waiter.dispatch("telegram_message_received", event_data)
+            # Wave 12 B3: route via plugin _events.py wrapper (single
+            # source of truth for the wire format).
+            from . import dispatch_telegram_message_received
+
+            resolved = await dispatch_telegram_message_received(event_data)
             logger.info(f"[Telegram] Dispatched to {resolved} waiter(s)")
         except Exception as e:
             logger.error(f"[Telegram] Message handler error: {e}")
@@ -570,9 +573,10 @@ class TelegramService(ServiceSingleton):
 
     async def _broadcast_status(self):
         try:
-            from services.status_broadcaster import get_status_broadcaster
-            broadcaster = get_status_broadcaster()
-            await broadcaster.update_telegram_status(
+            # Wave 12 B3: route via plugin _events.py wrapper.
+            from . import broadcast_telegram_status
+
+            await broadcast_telegram_status(
                 connected=self._connected,
                 bot_id=self._bot_info.get("id"),
                 bot_username=self._bot_info.get("username"),
