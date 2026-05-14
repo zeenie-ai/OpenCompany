@@ -94,10 +94,23 @@ async def _broadcast_task_event(
     result: Optional[str] = None,
     error: Optional[str] = None,
 ) -> None:
-    """Internal helper. Builds the legacy raw-dict payload shape the
-    taskTrigger filter expects, then routes through
-    ``send_custom_event`` (which both broadcasts on the WS + dispatches
-    to event_waiter)."""
+    """Internal helper. Two delivery paths (in priority order):
+
+    1. **Legacy WS broadcast + asyncio.Future event_waiter** via
+       ``broadcaster.send_custom_event`` — the in-process collector/
+       processor path; default while the canary flag is off.
+    2. **Temporal-durable listeners** via
+       ``services.events.dispatch.emit`` (Wave 12 C1 rollout #2). The
+       envelope reuses the cross-cutting :meth:`WorkflowEvent.task_completed`
+       factory (parametrised by task_id + agent + status — RFC §6.4
+       cross-cutting tier). ``emit`` is a no-op when the feature flag
+       is off, so the legacy path keeps working unchanged.
+
+    Payload shape preserved exactly so the taskTrigger filter and the
+    legacy FE consumers don't see any wire change.
+    """
+    from services.events.dispatch import emit
+    from services.events.envelope import WorkflowEvent
     from services.status_broadcaster import get_status_broadcaster
 
     payload: dict[str, Any] = {
@@ -115,6 +128,17 @@ async def _broadcast_task_event(
 
     broadcaster = get_status_broadcaster()
     await broadcaster.send_custom_event(_LEGACY_EVENT_TYPE, payload)
+
+    # Temporal-durable fan-out (Wave 12 C1 rollout #2). Cross-cutting
+    # factory because task_completed is parametrised by (task_id,
+    # agent, status) and uniformly applies across every agent type.
+    envelope = WorkflowEvent.task_completed(
+        task_id=task_id,
+        status="completed" if status == "completed" else "error",
+        agent=agent_name,
+        data=payload,
+    )
+    await emit(envelope, wire_routing_key=_LEGACY_EVENT_TYPE)
 
 
 __all__ = [

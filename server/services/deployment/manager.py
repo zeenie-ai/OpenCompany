@@ -34,6 +34,7 @@ logger = get_logger(__name__)
 _CANARY_LISTENER_TRIGGER_TYPES = frozenset([
     "webhookTrigger",   # shipped 2026-05-14 (C1 canary)
     "chatTrigger",      # shipped 2026-05-14 (C1 rollout #1)
+    "taskTrigger",      # shipped 2026-05-14 (C1 rollout #2)
 ])
 
 # Listener Temporal workflow type-name. Used both for ``start_workflow``
