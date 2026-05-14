@@ -21,6 +21,7 @@ Two self-registrations happen on package import:
 from services._supervisor import register_supervisor
 from services.deployment.canary_registry import register_canary_trigger_type
 from services.event_waiter import register_filter_builder
+from services.plugin.social_provider_registry import register_social_send_handler
 from services.status_broadcaster import register_service_refresh
 from services.ws_handler_registry import (
     register_option_loader,
@@ -39,6 +40,7 @@ from ._handlers import WS_HANDLERS
 from ._option_loaders import load_channels, load_group_members, load_groups
 from ._refresh import refresh_whatsapp_status
 from ._runtime import WhatsAppRuntime, get_whatsapp_runtime
+from ._service import handle_whatsapp_send
 
 # Supervisor: ensures shutdown_all_supervisors() reaches us.
 # get_instance() constructs the singleton once (lazy in spawn, not here).
@@ -73,6 +75,12 @@ register_option_loader("whatsappGroupMembers", load_group_members)
 # Settings.event_framework_enabled so the legacy path stays default.
 # See services/deployment/canary_registry.py.
 register_canary_trigger_type("whatsappReceive")
+
+# Wave 12 C4 sub-piece A: opt this plugin into the social-provider
+# registry so the social node dispatches by platform identifier
+# instead of cross-importing _service.handle_whatsapp_send. See
+# services/plugin/social_provider_registry.py.
+register_social_send_handler("whatsapp", handle_whatsapp_send)
 
 __all__ = [
     "WhatsAppRuntime",

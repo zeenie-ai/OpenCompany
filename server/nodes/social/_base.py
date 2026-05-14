@@ -471,11 +471,23 @@ async def _send_via_whatsapp(
     recipient_type: str,
     message_type: str
 ) -> Dict[str, Any]:
-    """Route message to WhatsApp via existing handler.
+    """Route message to WhatsApp via the social-provider registry.
 
-    Maps socialSend parameters to whatsappSend parameters.
+    Maps socialSend parameters to whatsappSend parameters, then
+    dispatches through :func:`services.plugin.social_provider_registry.
+    get_social_send_handler`. The whatsapp plugin self-registers as the
+    ``"whatsapp"`` platform from its own ``__init__.py`` — no
+    cross-plugin import from this module.
     """
-    from nodes.whatsapp._service import handle_whatsapp_send as whatsapp_send_handler
+    from services.plugin.social_provider_registry import get_social_send_handler
+
+    whatsapp_send_handler = get_social_send_handler("whatsapp")
+    if whatsapp_send_handler is None:
+        raise RuntimeError(
+            "social: 'whatsapp' platform not registered. "
+            "Check that nodes/whatsapp/__init__.py is imported at startup "
+            "and calls register_social_send_handler('whatsapp', ...). "
+        )
 
     # Map socialSend params to whatsappSend format
     whatsapp_params = {
