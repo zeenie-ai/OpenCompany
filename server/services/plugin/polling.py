@@ -166,6 +166,104 @@ class PollingTriggerNode(TriggerNode, abstract=True):
             value = self.default_poll_interval
         return max(lo, min(hi, value))
 
+    # ---- Wave 12 C2: per-cycle Temporal activity --------------------------
+    #
+    # The asyncio coroutine version above feeds the legacy
+    # ``setup_polling_trigger`` collector/processor task pair (dies on
+    # FastAPI restart). The Temporal-durable version below — yielded by
+    # :meth:`as_poll_activity` — does ONE cycle and returns events,
+    # called per ``workflow.sleep`` tick in
+    # :class:`services.temporal.polling_trigger_workflow.PollingTriggerWorkflow`.
+    # The seen-id baseline survives via workflow state (carried across
+    # ``continueAsNew``) rather than living inside the asyncio task.
+
+    @classmethod
+    def as_poll_activity(cls):
+        """Return a ``@activity.defn`` wrapping one poll cycle.
+
+        Stable activity name: ``poll.{type}.v{version}``.
+
+        Activity payload (in)::
+
+            {
+                "node_id": str,
+                "params": Dict[str, Any],
+                "seen_ids": List[str],   # provider-side IDs from prior cycle
+                "baseline_only": bool,    # True on the first call after start
+            }
+
+        Activity result (out)::
+
+            {
+                "events": List[Dict],     # NEW event payloads this cycle
+                "seen_ids": List[str],    # union of prior seen + current
+            }
+
+        Determinism: every operation runs inside the activity (network
+        I/O, mutable state) — the workflow body only sees the serialised
+        result so replay stays deterministic. Per-cycle errors raise
+        out of the activity; the workflow's ``RetryPolicy`` / try-except
+        owns retry semantics.
+        """
+        from temporalio import activity
+
+        activity_name = f"poll.{cls.type}.v{cls.version}"
+
+        @activity.defn(name=activity_name)
+        async def _poll_cycle_activity(payload: Dict[str, Any]) -> Dict[str, Any]:
+            node_id = payload.get("node_id", "")
+            params = payload.get("params", {}) or {}
+            prior_seen: Set[str] = set(payload.get("seen_ids") or [])
+            baseline_only = bool(payload.get("baseline_only"))
+
+            instance = cls()
+            try:
+                service = await instance.setup_service(params)
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    "Polling activity setup failed",
+                    node_id=node_id, node_type=cls.type, error=str(exc),
+                )
+                raise
+
+            current = await instance.fetch_ids(service, params)
+
+            if baseline_only:
+                # First call after workflow start: establish the seen
+                # baseline without emitting anything. Matches the
+                # pre-Temporal collector's baseline pass.
+                return {"events": [], "seen_ids": list(current)}
+
+            new_ids = current - prior_seen
+            events: list[Dict[str, Any]] = []
+            for msg_id in new_ids:
+                try:
+                    detail = await instance.fetch_detail(service, msg_id, params)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Polling activity fetch_detail failed; skipping id",
+                        node_id=node_id, node_type=cls.type,
+                        msg_id=msg_id, error=str(exc),
+                    )
+                    continue
+                # The workflow needs a stable event.id for cross-cycle
+                # dedup. Fall back to the provider id when fetch_detail
+                # doesn't supply one.
+                if "id" not in detail:
+                    detail["id"] = msg_id
+                events.append(detail)
+                # post_emit side effect (e.g. mark-as-read). Failures
+                # MUST NOT block the next emit or kill the cycle —
+                # mirror the legacy coroutine semantics.
+                try:
+                    await instance.post_emit(service, msg_id, params)
+                except Exception:
+                    pass
+
+            return {"events": events, "seen_ids": list(prior_seen | current)}
+
+        return _poll_cycle_activity
+
     def _build_poll_coroutine(
         self, node_id: str, params: Dict[str, Any]
     ) -> Callable[[asyncio.Queue, Callable[[], bool]], Any]:

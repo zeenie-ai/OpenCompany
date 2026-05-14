@@ -28,6 +28,7 @@ from temporalio.worker import Worker
 from core.logging import get_logger
 from .workflow import MachinaWorkflow
 from .trigger_listener_workflow import TriggerListenerWorkflow
+from .polling_trigger_workflow import PollingTriggerWorkflow
 from .activities import (
     NodeExecutionActivities,
     create_shared_session,
@@ -132,20 +133,30 @@ class TemporalWorkerManager:
             # orchestrator schedules AgentWorkflow as a child workflow
             # for the 15 migrating agent types when
             # ``temporal_agent_workflow_enabled`` is on.
-            from services.temporal.plugin_activities import collect_plugin_activities
+            from services.temporal.plugin_activities import (
+                collect_plugin_activities,
+                collect_polling_activities,
+            )
             from services.temporal.agent_activities import collect_agent_activities
             from services.temporal.agent_workflow import AgentWorkflow
 
             per_type = collect_plugin_activities()  # no queue filter; all plugins
             agent_activities = collect_agent_activities()
+            polling_activities = collect_polling_activities()
             self._worker = Worker(
                 self.client,
                 task_queue=self.task_queue,
-                workflows=[MachinaWorkflow, AgentWorkflow, TriggerListenerWorkflow],
+                workflows=[
+                    MachinaWorkflow,
+                    AgentWorkflow,
+                    TriggerListenerWorkflow,
+                    PollingTriggerWorkflow,
+                ],
                 activities=[
                     self._activities.execute_node_activity,
                     *per_type,
                     *agent_activities,
+                    *polling_activities,
                 ],
                 # Allow concurrent activity execution for parallel branches
                 max_concurrent_activities=self.pool_size,
@@ -368,7 +379,11 @@ async def run_standalone_worker(
         worker = Worker(
             client,
             task_queue=task_queue,
-            workflows=[MachinaWorkflow, TriggerListenerWorkflow],
+            workflows=[
+                MachinaWorkflow,
+                TriggerListenerWorkflow,
+                PollingTriggerWorkflow,
+            ],
             activities=[activities.execute_node_activity],  # Pass bound method
             max_concurrent_activities=pool_size,
             max_concurrent_workflow_tasks=10,
@@ -407,7 +422,11 @@ async def create_worker(
     return Worker(
         client,
         task_queue=task_queue,
-        workflows=[MachinaWorkflow, TriggerListenerWorkflow],
+        workflows=[
+            MachinaWorkflow,
+            TriggerListenerWorkflow,
+            PollingTriggerWorkflow,
+        ],
         activities=[activities.execute_node_activity],  # Pass bound method
         max_concurrent_activities=100,
         max_concurrent_workflow_tasks=10,

@@ -87,6 +87,37 @@ def collect_plugin_activities_for_queue(task_queue: str) -> List[Callable]:
     return collect_plugin_activities(task_queue=task_queue)
 
 
+def collect_polling_activities() -> List[Callable]:
+    """Return ``@activity.defn``-decorated per-cycle activities for every
+    :class:`services.plugin.PollingTriggerNode` subclass.
+
+    Wave 12 C2: each polling plugin's
+    :meth:`PollingTriggerNode.as_poll_activity` produces an activity that
+    does ONE poll cycle (vs ``cls.as_activity()`` which does ONE workflow
+    execution). The new :class:`PollingTriggerWorkflow` calls these per
+    ``workflow.sleep`` tick.
+
+    Stable activity name: ``poll.{type}.v{version}``. Registered alongside
+    the regular per-type activities in the Temporal worker.
+    """
+    from services.node_registry import registered_node_classes
+    from services.plugin import PollingTriggerNode
+
+    activities: List[Callable] = []
+    for node_type, cls in registered_node_classes().items():
+        if not isinstance(cls, type) or not issubclass(cls, PollingTriggerNode):
+            continue
+        try:
+            activities.append(cls.as_poll_activity())
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to build poll activity for %s: %s", node_type, exc,
+            )
+
+    logger.info("Collected %d polling activities", len(activities))
+    return activities
+
+
 def distinct_task_queues() -> List[str]:
     """Return every task_queue string declared by any registered plugin.
 

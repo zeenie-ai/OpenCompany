@@ -24,9 +24,22 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-# Listener Temporal workflow type-name. Used both for ``start_workflow``
-# and as the Visibility filter for cancellation discovery.
-_LISTENER_WORKFLOW_TYPE = "TriggerListenerWorkflow"
+# Listener Temporal workflow type-names. Used both for ``start_workflow``
+# and as the Visibility filter for cancellation discovery. Push-based
+# triggers (webhook, chat, task, telegram, whatsapp) use the
+# signal-driven listener; polling triggers (gmail, twitter) use the
+# workflow.sleep-driven listener (Wave 12 C2). Cancel queries both via
+# an OR clause so deployment cancel reaches every canary listener
+# without per-type code.
+_PUSH_LISTENER_WORKFLOW_TYPE = "TriggerListenerWorkflow"
+_POLLING_LISTENER_WORKFLOW_TYPE = "PollingTriggerWorkflow"
+_LISTENER_WORKFLOW_TYPES = (
+    _PUSH_LISTENER_WORKFLOW_TYPE,
+    _POLLING_LISTENER_WORKFLOW_TYPE,
+)
+# Kept for back-compat with any reader that still imports the old
+# single-type constant. Equals the push workflow name.
+_LISTENER_WORKFLOW_TYPE = _PUSH_LISTENER_WORKFLOW_TYPE
 
 # Wave 12 C1 canary: which trigger types route to TriggerListenerWorkflow
 # instead of the legacy in-process collector/processor is owned by the
@@ -558,13 +571,37 @@ class DeploymentManager:
 
         return bool(Settings().event_framework_enabled)
 
+    @staticmethod
+    def _is_polling_trigger_class(node_type: str) -> bool:
+        """True iff ``node_type`` resolves to a
+        :class:`services.plugin.PollingTriggerNode` subclass.
+
+        Used by :meth:`_start_canary_listener` to dispatch between the
+        push-driven :class:`TriggerListenerWorkflow` and the poll-driven
+        :class:`PollingTriggerWorkflow`. Lazy imports the registry +
+        base class to keep the manager free of top-level cycles.
+        """
+        try:
+            from services.node_registry import get_node_class
+            from services.plugin import PollingTriggerNode
+        except Exception:  # noqa: BLE001
+            return False
+        cls = get_node_class(node_type)
+        return isinstance(cls, type) and issubclass(cls, PollingTriggerNode)
+
     async def _start_canary_listener(
         self,
         node: Dict,
         workflow_id: str,
         params: Dict,
     ) -> Optional[str]:
-        """Start a TriggerListenerWorkflow for a canary trigger.
+        """Start the canary listener workflow for a trigger.
+
+        Dispatches by plugin class:
+          - :class:`PollingTriggerNode` subclasses → :class:`PollingTriggerWorkflow`
+            (Wave 12 C2 — workflow.sleep loop + per-cycle activity).
+          - Everything else → :class:`TriggerListenerWorkflow`
+            (Wave 12 C1 — signal-driven wait_condition).
 
         Returns the Temporal listener workflow_id on success, or
         ``None`` if the Temporal client isn't connected (caller falls
@@ -603,7 +640,43 @@ class DeploymentManager:
         config = event_waiter.get_trigger_config(node_type)
         event_type = config.event_type if config else f"unknown_{node_type}"
 
+        # Pick workflow type by plugin class. EventTriggerKind picks up
+        # the "polling" classification for ops dashboards independent
+        # of the per-plugin kind (gmail / twitter / ...).
+        is_polling = self._is_polling_trigger_class(node_type)
+        workflow_type_name = (
+            _POLLING_LISTENER_WORKFLOW_TYPE if is_polling
+            else _PUSH_LISTENER_WORKFLOW_TYPE
+        )
+        trigger_kind = "polling" if is_polling else self._trigger_kind_for(node_type)
+
         listener_id = self._listener_workflow_id(workflow_id, node_id)
+
+        # Common payload shape for both workflow types (signal-driven
+        # TriggerListenerWorkflow ignores poll-specific fields like
+        # ``version`` / ``seen_ids``; polling workflow reads them).
+        listener_args: Dict[str, Any] = {
+            "workflow_id": workflow_id,
+            "trigger_node_id": node_id,
+            "node_type": node_type,
+            "event_type": event_type,
+            "filter_params": params,
+            "nodes": state.nodes,
+            "edges": state.edges,
+            "session_id": state.session_id,
+        }
+        if is_polling:
+            # ``version`` feeds the polling workflow's activity-name
+            # construction (``poll.{type}.v{version}``). Pulled from the
+            # plugin class — single source of truth.
+            from services.node_registry import get_node_class
+
+            cls = get_node_class(node_type)
+            listener_args["version"] = getattr(cls, "version", 1) if cls else 1
+            # First start: empty seen_ids; the workflow runs a
+            # baseline-only cycle to establish the seen set without
+            # emitting events.
+            listener_args["seen_ids"] = []
 
         # Search Attribute keys mirror services/temporal/search_attributes.py
         # (the A4 registration spec). All Keyword-typed; values are scalars.
@@ -613,17 +686,8 @@ class DeploymentManager:
         event_trigger_kind_key = SearchAttributeKey.for_keyword("EventTriggerKind")
 
         await wrapper.client.start_workflow(
-            _LISTENER_WORKFLOW_TYPE,
-            args=[{
-                "workflow_id": workflow_id,
-                "trigger_node_id": node_id,
-                "node_type": node_type,
-                "event_type": event_type,
-                "filter_params": params,
-                "nodes": state.nodes,
-                "edges": state.edges,
-                "session_id": state.session_id,
-            }],
+            workflow_type_name,
+            args=[listener_args],
             id=listener_id,
             task_queue="machina-tasks",
             id_conflict_policy=WorkflowIDConflictPolicy.USE_EXISTING,
@@ -631,7 +695,7 @@ class DeploymentManager:
                 SearchAttributePair(event_type_key, event_type),
                 SearchAttributePair(trigger_node_id_key, node_id),
                 SearchAttributePair(event_workflow_id_key, workflow_id),
-                SearchAttributePair(event_trigger_kind_key, self._trigger_kind_for(node_type)),
+                SearchAttributePair(event_trigger_kind_key, trigger_kind),
             ]),
         )
 
@@ -676,9 +740,13 @@ class DeploymentManager:
             return 0
 
         # Visibility List Filter query — operators per docs.temporal.io/list-filter.
+        # Match BOTH workflow types via ``WorkflowType IN (...)`` so push
+        # (TriggerListenerWorkflow) and polling (PollingTriggerWorkflow)
+        # listeners drain in one sweep.
+        wf_types_in = ", ".join(f"'{t}'" for t in _LISTENER_WORKFLOW_TYPES)
         query = (
             f"EventWorkflowId='{workflow_id}' "
-            f"AND WorkflowType='{_LISTENER_WORKFLOW_TYPE}' "
+            f"AND WorkflowType IN ({wf_types_in}) "
             f"AND ExecutionStatus='Running'"
         )
 

@@ -24,6 +24,7 @@ the FastAPI app pick up the plugin's surface without ever importing
 this module by name.
 """
 
+from services.deployment.canary_registry import register_canary_trigger_type
 from services.event_waiter import register_filter_builder
 from services.status_broadcaster import register_service_refresh
 from services.ws_handler_registry import (
@@ -56,3 +57,12 @@ register_option_loader("gmailLabels", load_gmail_labels)
 register_option_loader("googleCalendarList", load_calendar_list)
 register_option_loader("googleDriveFolders", load_drive_folders)
 register_option_loader("googleTasklists", load_tasklists)
+
+# Wave 12 C2: opt googleGmailReceive into the PollingTriggerWorkflow
+# consumer path. DeploymentManager detects the PollingTriggerNode
+# subclass and routes to PollingTriggerWorkflow (vs the push-side
+# TriggerListenerWorkflow) automatically. Producer side: the per-cycle
+# Temporal activity is emitted by GmailReceiveNode.as_poll_activity()
+# and registered via collect_polling_activities() in the worker. See
+# services/deployment/canary_registry.py.
+register_canary_trigger_type("googleGmailReceive")

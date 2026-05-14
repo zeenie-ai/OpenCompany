@@ -414,11 +414,17 @@ class TestCancelCanaryListeners:
 
         cancelled = await mgr._cancel_canary_listeners("wf-1")
 
-        # Query shape: EventWorkflowId + WorkflowType + ExecutionStatus.
+        # Query shape: EventWorkflowId + WorkflowType IN (...) +
+        # ExecutionStatus. The IN clause covers both push
+        # (TriggerListenerWorkflow) and polling (PollingTriggerWorkflow)
+        # listener workflow types since Wave 12 C2 — deployment cancel
+        # drains both in one sweep.
         assert len(recorded_queries) == 1
         q = recorded_queries[0]
         assert "EventWorkflowId='wf-1'" in q
-        assert "WorkflowType='TriggerListenerWorkflow'" in q
+        assert "'TriggerListenerWorkflow'" in q
+        assert "'PollingTriggerWorkflow'" in q
+        assert "WorkflowType IN" in q
         assert "ExecutionStatus='Running'" in q
 
         assert cancelled == 2
