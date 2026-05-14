@@ -346,13 +346,15 @@ runtime log shows exactly this).
 ```
 
 **Spec note.** The lockfile is for IDE-host scenarios (VSCode publishes
-this so a spawned `claude` can discover the IDE). Headless `claude -p`
-ignores it — the documented headless path is `--mcp-config`. Our
-lockfile is currently ornamental; doesn't hurt, but `transport: "http"`
-is the wrong value for what Claude's VSCode extension actually publishes
-(`"ws"` per the live extension dump in
-[#16434](https://github.com/anthropics/claude-code/issues/16434)).
-**Defer.** Documented note in `cli_agent_framework.md` is enough.
+this so a spawned `claude` can discover the IDE). The pool path now
+emits `--ide` in its argv, so claude does discover and connect to the
+lockfile's MCP endpoint at spawn time. `transport: "http"` stays —
+that matches what our FastMCP sub-app at `/mcp/ide` actually speaks
+(streamable HTTP). The `"ws"` upgrade (matching what Claude's VSCode
+extension publishes in its own lockfile per the live extension dump
+in [#16434](https://github.com/anthropics/claude-code/issues/16434))
+is **deferred** — `"http"` is interoperable and unblocks the pool
+path today.
 
 ### 4.5 FastMCP server tools
 

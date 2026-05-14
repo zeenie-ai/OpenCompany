@@ -19,7 +19,7 @@ from __future__ import annotations
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -38,42 +38,110 @@ from services.cli_agent import ClaudeTaskSpec  # noqa: E402
 from services.cli_agent.types import SessionResultModel  # noqa: E402
 
 
-class ClaudeCodeAgentParams(BaseModel):
-    """Multi-task batch parameters for Claude Code.
+# Claude Code-supported models. Per
+# https://code.claude.com/docs/en/cli-reference the ``--model`` flag
+# accepts either an Anthropic-managed alias (``sonnet`` / ``opus`` /
+# ``haiku`` — resolves to the latest in that family) or a full model ID.
+# We surface both so users can pin a specific revision OR float to the
+# tier-latest. Free-text ``str`` was the prior type; switching to
+# ``Literal`` gives the parameter panel a dropdown without losing
+# back-compat (every value the field used to accept is still in the list).
+ClaudeCodeModel = Literal[
+    # Anthropic-managed aliases — track the freshest model per family
+    "sonnet",
+    "opus",
+    "haiku",
+    # Pinned full IDs — current generation (Claude 4.x)
+    "claude-opus-4-7",
+    "claude-opus-4-6",
+    "claude-opus-4-5",
+    "claude-opus-4-1",
+    "claude-opus-4",
+    "claude-sonnet-4-6",
+    "claude-sonnet-4-5",
+    "claude-sonnet-4",
+    "claude-haiku-4-5",
+]
 
-    Two paths:
-      1. ``tasks=[...]`` — explicit list, runs N in parallel
-      2. ``tasks=[]`` + legacy ``prompt`` — synthesises a single-task batch
+
+ClaudeCodeEffort = Literal["low", "medium", "high", "xhigh", "max"]
+
+
+class ClaudeCodeAgentParams(BaseModel):
+    """Claude Code node parameters.
+
+    UI surface: a single ``prompt`` field. Every other field is kept on
+    the model for back-compat with existing saved workflows and to feed
+    sensible defaults into the per-task ``ClaudeTaskSpec`` — but is
+    hidden from the parameter panel via ``json_schema_extra.hidden``
+    so the canvas-side surface stays minimal.
+
+    Two execution paths (both invisible to the user):
+      1. ``tasks=[...]`` — explicit list (advanced; saved workflows only)
+      2. ``tasks=[]`` + ``prompt`` — synthesises a single-task batch (default)
     """
 
-    tasks: List[ClaudeTaskSpec] = Field(
-        default_factory=list,
-        description="List of Claude tasks to run in parallel (max 5 concurrent).",
-        json_schema_extra={"rows": 1},
-    )
-    # Legacy single-task fallback ----------------------------------------
+    # The ONLY visible field. Everything below is ``hidden: true``.
     prompt: str = Field(
         default="",
-        description="Legacy: single-prompt fallback used only when "
-                    "`tasks` is empty.",
-        json_schema_extra={"rows": 4, "placeholder": "Or use the tasks array..."},
+        description="The prompt sent to Claude Code.",
+        json_schema_extra={"rows": 4, "placeholder": "Ask Claude Code to..."},
     )
-    model: str = Field(
+
+    # --- Hidden: advanced multi-task batch ---
+    tasks: List[ClaudeTaskSpec] = Field(
+        default_factory=list,
+        description="Advanced: list of Claude tasks to run in parallel "
+                    "(max 5 concurrent). Use ``prompt`` for the common case.",
+        json_schema_extra={"hidden": True, "rows": 1},
+    )
+
+    # --- Hidden: model + system prompt + execution scoping ---
+    model: ClaudeCodeModel = Field(
         default="claude-sonnet-4-6",
-        description="Default model for tasks that don't override it.",
+        description=(
+            "Default model for tasks that don't override it. Aliases "
+            "(``sonnet`` / ``opus`` / ``haiku``) resolve to the latest in "
+            "each family; full IDs pin a specific revision."
+        ),
+        json_schema_extra={"hidden": True},
     )
-    system_prompt: Optional[str] = Field(default=None, json_schema_extra={"rows": 3})
+    system_prompt: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"hidden": True, "rows": 3},
+    )
     working_directory: Optional[str] = Field(
         default=None,
         description="Git repo root. Defaults to the workflow's workspace dir.",
+        json_schema_extra={"hidden": True},
     )
     max_parallel: int = Field(
         default=5, ge=1, le=20,
         description="Concurrency cap.",
+        json_schema_extra={"hidden": True},
     )
     allowed_credentials: List[str] = Field(
         default_factory=list,
         description="Credential names the CLI is permitted to fetch via MCP.",
+        json_schema_extra={"hidden": True},
+    )
+
+    # --- Hidden: model knobs (effort, fallback) ---
+    effort: Optional[ClaudeCodeEffort] = Field(
+        default=None,
+        description=(
+            "Reasoning-effort level passed via ``--effort``. Applies to "
+            "thinking-capable models (Opus / Sonnet); ignored by Haiku."
+        ),
+        json_schema_extra={"hidden": True},
+    )
+    fallback_model: Optional[ClaudeCodeModel] = Field(
+        default=None,
+        description=(
+            "Model to fall back to when the primary is overloaded. "
+            "Passed via ``--fallback-model``."
+        ),
+        json_schema_extra={"hidden": True},
     )
 
     # Saved workflow JSON may persist these list fields as `null` rather
@@ -219,6 +287,10 @@ class ClaudeCodeAgentNode(ActionNode):
                 "system_prompt": params.system_prompt,
                 "continue_session": continue_session,
             }
+            if params.effort is not None:
+                spec_kwargs["effort"] = params.effort
+            if params.fallback_model is not None:
+                spec_kwargs["fallback_model"] = params.fallback_model
             tasks = [ClaudeTaskSpec(**spec_kwargs)]
         else:
             # Apply node-level defaults to tasks that don't override.
@@ -228,6 +300,10 @@ class ClaudeCodeAgentNode(ActionNode):
                     changed["model"] = params.model
                 if not t.system_prompt and params.system_prompt:
                     changed["system_prompt"] = params.system_prompt
+                if t.effort is None and params.effort is not None:
+                    changed["effort"] = params.effort
+                if t.fallback_model is None and params.fallback_model is not None:
+                    changed["fallback_model"] = params.fallback_model
                 # Only auto-enable --continue when memory is wired AND
                 # the task didn't explicitly opt in/out or pick a UUID.
                 if (

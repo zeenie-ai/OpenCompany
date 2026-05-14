@@ -112,6 +112,13 @@ type InodeType = INodeProperties['type'];
  * the user sees an editable field rather than a blank slot.
  */
 function mapPropertyType(prop: JsonSchemaProperty): InodeType {
+  // ``json_schema_extra={"hidden": True}`` on the Pydantic Field hides
+  // the parameter from the panel. ParameterRenderer.tsx returns ``null``
+  // when ``parameter.type === 'hidden'``. Check both the top-level flag
+  // (Pydantic flattens ``json_schema_extra`` keys onto the property) and
+  // ``uiHints.hidden`` (nested alternate). Honoured BEFORE enum/editor
+  // checks so hidden enum fields don't render as visible dropdowns.
+  if ((prop as any).hidden === true || prop.uiHints?.hidden === true) return 'hidden';
   if (prop.enum && prop.enum.length > 0) return 'options';
   // Pydantic Field(json_schema_extra={"editor": "code"}) lands at the
   // property top-level; nested ``uiHints: {...}`` is the alternate

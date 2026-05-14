@@ -74,33 +74,41 @@ class TestClaudeArgv:
     def test_minimum_required_flags(self, claude_provider):
         task = ClaudeTaskSpec(prompt="hello world")
         argv = claude_provider.interactive_argv(task, defaults={})
-        # Prompt is the positional after `--` (interactive mode). No
-        # `-p` / `--print` / `--output-format stream-json` anymore.
+        # VSCode-extension pattern (stream-json over stdio pipes, no PTY).
+        # ``-p`` / ``--print`` are NEVER emitted — we stay in interactive
+        # billing (entrypoint ``claude-vscode``, not ``sdk-cli``).
         assert "-p" not in argv
         assert "--print" not in argv
-        assert "--output-format" not in argv
-        assert "--verbose" not in argv
-        assert "--include-partial-messages" not in argv
-        assert "--include-hook-events" not in argv
-        assert "--" in argv
-        assert "hello world" in argv
-        # Ordering: `--` immediately precedes the prompt.
-        sep_idx = argv.index("--")
-        assert argv[sep_idx + 1] == "hello world"
+        # Stream-json I/O flags ARE emitted now (replace the headless
+        # PTY pattern):
+        assert "--output-format" in argv
+        out_idx = argv.index("--output-format")
+        assert argv[out_idx + 1] == "stream-json"
+        assert "--input-format" in argv
+        in_idx = argv.index("--input-format")
+        assert argv[in_idx + 1] == "stream-json"
+        assert "--verbose" in argv  # required for stream-json detail
+        assert "--ide" in argv  # lockfile auto-discovery
+        # The prompt is NEVER a positional in stream-json mode — it goes
+        # over ``proc.stdin``. ``--`` separator is gone.
+        assert "--" not in argv
+        assert "hello world" not in argv
         # Defaults applied
         assert "--model" in argv
         assert "claude-sonnet-4-6" in argv  # default_model from JSON
-        # `-p`-only flags no longer emitted
+        # ``-p``-only flags still not emitted (kept on the spec for back-compat)
         assert "--max-turns" not in argv
         assert "--max-budget-usd" not in argv
         assert "--fallback-model" not in argv
         # Tool + permission machinery preserved
         assert "--allowedTools" in argv
         assert "--permission-mode" in argv
-        # `bypassPermissions` is the documented mode for non-interactive
-        # automation (https://code.claude.com/docs/en/permission-modes).
+        # Default permission mode is read from ``config/ai_cli_providers.json``
+        # (currently ``acceptEdits``). Callers wanting ``bypassPermissions``
+        # set it explicitly on ``task.permission_mode`` or via the per-call
+        # ``defaults`` arg.
         perm_idx = argv.index("--permission-mode")
-        assert argv[perm_idx + 1] == "bypassPermissions"
+        assert argv[perm_idx + 1] == "acceptEdits"
 
     def test_no_session_id_flag_in_interactive(self, claude_provider):
         """Claude assigns its own session UUID in interactive mode; we
@@ -162,17 +170,24 @@ class TestClaudeArgv:
         assert "--append-system-prompt" in argv
         assert "be concise" in argv
 
-    def test_include_prompt_false_omits_positional(self, claude_provider):
-        """The session pool uses `include_prompt=False` when spawning a
-        process whose first prompt will be written to the PTY (e.g.
-        after a `/clear`). The argv carries no positional prompt and
-        therefore no `--` separator."""
-        task = ClaudeTaskSpec(prompt="will-be-piped-to-pty")
-        argv = claude_provider.interactive_argv(
+    def test_include_prompt_is_ignored_in_stream_json_mode(self, claude_provider):
+        """``include_prompt`` is kept on the signature for back-compat
+        but is intentionally ignored in stream-json input mode — passing
+        ``-- "<prompt>"`` would double-send the first turn (once via
+        argv, once via stdin). Both ``True`` and ``False`` produce the
+        same argv shape: no ``--`` separator, no positional prompt."""
+        task = ClaudeTaskSpec(prompt="will-be-piped-via-stdin")
+        argv_true = claude_provider.interactive_argv(
+            task, defaults={}, include_prompt=True,
+        )
+        argv_false = claude_provider.interactive_argv(
             task, defaults={}, include_prompt=False,
         )
-        assert "--" not in argv
-        assert "will-be-piped-to-pty" not in argv
+        for argv in (argv_true, argv_false):
+            assert "--" not in argv
+            assert "will-be-piped-via-stdin" not in argv
+        # Same shape regardless of the back-compat flag.
+        assert argv_true == argv_false
 
     def test_wrong_task_type_raises(self, claude_provider):
         codex_task = CodexTaskSpec(prompt="x")

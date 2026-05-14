@@ -56,6 +56,28 @@ def _stub_log_execution_time(*_args, **_kwargs):
 # real submodule attributes so imports resolve without touching the real
 # heavy deps (dependency_injector, cryptography, ...).
 _core_pkg = _make_package("core")
+def _stub_log_context(**_fields):
+    """Stub for ``core.logging.log_context`` (async ctx manager) and
+    ``log_context_sync``. Both are no-ops under test."""
+    from contextlib import asynccontextmanager, contextmanager
+
+    @asynccontextmanager
+    async def _async_cm():
+        yield
+
+    return _async_cm()
+
+
+def _stub_log_context_sync(**_fields):
+    from contextlib import contextmanager
+
+    @contextmanager
+    def _sync_cm():
+        yield
+
+    return _sync_cm()
+
+
 _make_submodule(
     "core",
     "logging",
@@ -63,6 +85,8 @@ _make_submodule(
         "get_logger": MagicMock(return_value=MagicMock()),
         "log_execution_time": _stub_log_execution_time,
         "log_api_call": MagicMock(),
+        "log_context": _stub_log_context,
+        "log_context_sync": _stub_log_context_sync,
     },
 )
 _make_submodule("core", "container", {"container": MagicMock()})

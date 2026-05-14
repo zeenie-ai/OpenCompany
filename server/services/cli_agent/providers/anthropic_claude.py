@@ -108,30 +108,40 @@ class AnthropicClaudeProvider:
         connected_tool_names: Optional[List[str]] = None,
         include_prompt: bool = True,
     ) -> List[str]:
-        """Build the full argv (binary + flags) for one interactive task.
+        """Build the full argv for one ``claude`` invocation, VSCode-style.
 
-        Emits the same invocation a human user runs (``claude ... --
-        "<prompt>"``) rather than ``claude -p``. The TUI is held alive
-        by a PTY; events are read from the on-disk JSONL at
-        ``<CLAUDE_CONFIG_DIR>/projects/<project_key>/<session>.jsonl``.
+        Spawned as a regular subprocess with stdio pipes — NOT a PTY.
+        Matches the invocation Anthropic's own VSCode extension uses
+        (verified in
+        ``C:\\Users\\Tgroh\\.vscode\\extensions\\anthropic.claude-code-2.1.140-win32-x64\\extension.js``
+        line 156):
+
+          ``claude --output-format stream-json --input-format stream-json
+          --verbose --ide [task-flags...]``
+
+        User prompts arrive over ``proc.stdin`` as newline-delimited JSON
+        of shape ``{"type":"user","message":{"role":"user","content":...}}``,
+        not as an argv positional. Events stream back on ``proc.stdout``
+        in the same shape claude writes to its on-disk JSONL — the FE-
+        facing event handlers downstream are file-source-agnostic so
+        we keep tailing the JSONL via ``JsonlWatcher`` either way.
+
+        Critically NOT emitted:
+
+          - ``-p`` / ``--print``: keeps us in the interactive billing
+            bucket (entrypoint ``claude-vscode``, NOT ``sdk-cli``). The
+            VSCode extension confirms this exact pattern works without
+            ``--print``.
+          - The positional prompt (``-- "<prompt>"``): the prompt
+            arrives via ``proc.stdin`` in stream-json input mode.
+            ``include_prompt`` is kept for back-compat but ignored.
 
         ``mcp_endpoint_url`` + ``mcp_bearer_token`` (if both set) are
-        emitted as a ``--mcp-config <json>`` block so the spawned
-        ``claude`` registers MachinaOs's FastMCP server (works
-        identically in interactive + headless modes per
-        https://code.claude.com/docs/en/mcp).
-
-        Tools and skills are unchanged from the prior headless path —
-        same ``--allowedTools`` list (built-ins + every wired
-        ``mcp__machinaos__*``), same skill materialisation under
-        ``<cwd>/.claude/skills/`` (in ``AICliSession._materialise_skills``).
-        The permission flag flips from ``acceptEdits`` to
-        ``bypassPermissions`` so non-Edit tools in the allowlist fire
-        without prompting the TUI (no human to click "Allow").
-
-        ``include_prompt=False`` is used by the session pool when
-        respawning a fresh process whose first prompt will be written
-        to the PTY rather than passed on argv (e.g. after a `/clear`).
+        emitted as ``--mcp-config <json>`` so the spawned claude
+        registers MachinaOs's FastMCP server. Tools allowlist
+        (``--allowedTools``) lists every wired ``mcp__machinaos__*``
+        plus the 5 built-ins. Skill materialisation under
+        ``<cwd>/.claude/skills/`` is unchanged.
         """
         if not isinstance(task, ClaudeTaskSpec):
             raise TypeError(
@@ -140,6 +150,23 @@ class AnthropicClaudeProvider:
             )
 
         argv: List[str] = [str(self.binary_path())]
+
+        # Stream-json I/O — the VSCode extension pattern. Prompts go via
+        # ``proc.stdin``, events come back on ``proc.stdout``. Verified
+        # against
+        # ``$VSCODE_EXT_DIR/anthropic.claude-code-<ver>/extension.js:156``
+        # which spawns claude with exactly these four flags. ``--verbose``
+        # is required so the stream-json output includes the full event
+        # detail (without it, only the final result line is emitted).
+        # ``--ide`` makes claude discover the IDE lockfile we write at
+        # ``<CLAUDE_CONFIG_DIR>/ide/<pid>.lock`` for auto-connection to
+        # MachinaOs's MCP server.
+        argv += [
+            "--output-format", "stream-json",
+            "--input-format", "stream-json",
+            "--verbose",
+            "--ide",
+        ]
 
         # MCP server registration — same shape as the prior headless
         # path; the Claude Code MCP doc's ``mcp.json`` example. Works
@@ -270,13 +297,13 @@ class AnthropicClaudeProvider:
         if task.agent:
             argv += ["--agent", task.agent]
 
-        # Prompt as positional argument after `--`. Claude auto-submits
-        # the positional as turn 1 and stays interactive (per
-        # https://code.claude.com/docs/en/cli-reference). The session
-        # pool sets include_prompt=False for spawns whose first prompt
-        # will be written to the PTY directly.
-        if include_prompt and task.prompt:
-            argv += ["--", task.prompt]
+        # Prompt arrives via ``proc.stdin`` as stream-json — NOT as
+        # an argv positional. ``include_prompt`` is kept on the signature
+        # for back-compat (older callers pass ``include_prompt=False``)
+        # but is ignored: stream-json input mode and a positional prompt
+        # would double-send the first turn. Caller writes prompts to
+        # ``ClaudeSessionPool.send_turn``'s ``proc.stdin`` instead.
+        _ = include_prompt
 
         return argv
 
@@ -370,6 +397,35 @@ class AnthropicClaudeProvider:
             if final.get("subtype") == "error":
                 success = False
                 error = error or response or "result event reports error"
+
+            # Surface routable extras on ``provider_data`` so downstream
+            # workflow nodes can read them off ``tasks[i].provider_data.*``.
+            # ``canonical_usage`` flattens token counts across all models;
+            # ``modelUsage`` preserves the per-model breakdown (with the
+            # per-model ``costUSD`` + ``contextWindow`` + ``maxOutputTokens``
+            # claude itself reports). The minor fields below either drive
+            # FE diagnostics (``terminal_reason`` / ``api_error_status``)
+            # or feed cost analytics (``service_tier`` / ``inference_geo``
+            # land inside the usage block but aren't propagated by
+            # ``canonical_usage`` because that struct is per-event, not
+            # per-result).
+            for key in (
+                "modelUsage",
+                "permission_denials",
+                "terminal_reason",
+                "fast_mode_state",
+                "api_error_status",
+            ):
+                if key in final and final[key] is not None:
+                    provider_data.setdefault(key, final[key])
+            # Pull the service-tier / cache-creation / inference-geo bits
+            # off the usage block so downstream consumers don't have to
+            # re-iterate the events themselves.
+            usage_block = final.get("usage") or {}
+            for key in ("service_tier", "inference_geo"):
+                v = usage_block.get(key)
+                if v:
+                    provider_data.setdefault(key, v)
 
         cu = self.canonical_usage(events)
 

@@ -323,6 +323,38 @@ class JsonlDirWatcher:
                 pass
 
 
+def snapshot_jsonl_sizes(project_dir: Path) -> Dict[str, int]:
+    """Return ``{name: size_bytes}`` for every ``.jsonl`` in ``project_dir``.
+
+    Used by ``ClaudeSessionPool._wait_for_session_jsonl`` (and the
+    equivalent in :class:`AICliSession`) to baseline the project dir
+    before spawning ``claude``. Post-spawn the caller polls again and
+    picks whichever file is new (absent from baseline) or grew
+    (``current_size > baseline_size``) — both fresh spawns and
+    ``--continue`` spawns produce a size-positive delta.
+
+    Returns an empty dict if ``project_dir`` doesn't exist yet (first
+    spawn under a new cwd). Silently skips entries the filesystem
+    refuses to ``stat`` — they're typically transient and the post-spawn
+    poll will catch them on the next tick once they settle.
+    """
+    sizes: Dict[str, int] = {}
+    try:
+        entries = list(project_dir.iterdir())
+    except (FileNotFoundError, NotADirectoryError):
+        return sizes
+    except OSError:
+        return sizes
+    for entry in entries:
+        if entry.suffix != ".jsonl":
+            continue
+        try:
+            sizes[entry.name] = entry.stat().st_size
+        except OSError:
+            continue
+    return sizes
+
+
 def session_uuid_from_jsonl_path(path: Path) -> Optional[str]:
     """Extract the session UUID from a JSONL filename, or None if the
     name doesn't match the ``<uuid>.jsonl`` convention.

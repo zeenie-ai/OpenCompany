@@ -1,158 +1,185 @@
-# Claude Code interactive mode (in-process PTY + on-disk JSONL)
+# Claude Code interactive mode (subprocess + stream-json)
 
-> **TL;DR.** MachinaOs drives the same interactive `claude` invocation a
-> normal user runs at their terminal — not `claude -p`. A PTY keeps the
-> TUI alive in-process; events come off the on-disk session JSONL,
-> not stdout. A pool keyed by `simpleMemory.node_id` keeps the warm
-> process across batches.
+> **TL;DR.** `ClaudeSessionPool` keeps a warm `claude` subprocess per
+> `simpleMemory.node_id` and drives it with the same flags Anthropic's
+> own VSCode extension uses — stdio pipes, `--output-format stream-json
+> --input-format stream-json --verbose --ide`. Multi-turn happens by
+> writing newline-delimited JSON to `proc.stdin` of the long-lived
+> subprocess. Events arrive on `proc.stdout`. The on-disk JSONL is no
+> longer the runtime contract — claude writes it for `--continue` /
+> `--resume` persistence but the `result` event is stdout-only in
+> stream-json mode.
 
 ## Why we cut over from `-p`
 
 Pre-cutover MachinaOs spawned `claude -p --output-format stream-json`
-and parsed NDJSON events on stdout. Two-direction motivation:
+and parsed NDJSON events on stdout. Two reasons to leave `-p`:
 
-1. **Match how users actually use Claude Code.** The headless path is
-   sanctioned for automation, but most Claude Code users run the
-   interactive TUI. Driving the same surface lets us inherit fixes /
-   behavior changes the team prioritises for the human-facing mode.
-2. **Anthropic billing change (2026-06-15).** Per
+1. **Anthropic billing change (2026-06-15).** Per
    [`code.claude.com/docs/en/headless`](https://code.claude.com/docs/en/headless),
-   subscription plans now bill `claude -p` and Agent-SDK usage from a
-   separate "monthly Agent SDK credit." Interactive usage stays on the
-   subscription's interactive bucket. The cutover puts us in the
-   user's interactive bucket when they supply their own API key.
+   subscription plans bill `claude -p` and Agent-SDK usage from a
+   separate "monthly Agent SDK credit." The interactive entrypoint
+   (`claude-vscode`, not `sdk-cli`) stays on the subscription's
+   interactive bucket. Dropping `-p` puts us in the user's interactive
+   bucket when they supply their own API key.
+2. **Match how Anthropic itself drives `claude` programmatically.** The
+   VSCode extension at
+   `C:/Users/Tgroh/.vscode/extensions/anthropic.claude-code-2.1.140-win32-x64/extension.js:156`
+   spawns claude with exactly four flags (`--output-format stream-json
+   --input-format stream-json --verbose --ide`) and never emits `-p`.
+   That's the wire we reuse.
 
-The corollary: every protocol detail still works in interactive mode
-because the on-disk JSONL is the same format `-p` wrote to stdout
-(Claude Code CHANGELOG 2.1.101 / 2.1.126 — shared writer). The argv
-flags we care about — `--mcp-config`, `--strict-mcp-config`,
-`--allowedTools`, `--permission-mode`, `--append-system-prompt`,
-`--resume`, **`--continue`** (new primary continuity flag — see
-"Memory bridge" below), `--model`, `--effort`, `--add-dir`,
-`--disallowedTools`, `--agent` — all work in interactive mode.
+## Architecture
 
-## What we dropped
+One transport (`asyncio.create_subprocess_exec` with `stdin/stdout/stderr=PIPE`),
+one protocol (line-delimited stream-json events on stdout). No PTY.
+A background `stdout_reader_task` parses each line and dispatches via
+`_handle_stream_event`.
 
-| Flag | Why dropped |
+| Layer | Mechanism |
 |---|---|
-| `-p` / `--print` | The headless toggle itself. |
-| `--output-format stream-json` | Only meaningful under `-p`. |
-| `--verbose` | Only meaningful with `-p --output-format stream-json`. |
-| `--include-partial-messages` | Only meaningful with stream-json. |
-| `--include-hook-events` | Only meaningful with stream-json. The hooks fire regardless and we can detect them via JSONL. |
-| `--max-turns` | `-p`-only. External counter is a Phase 2 follow-up. |
-| `--max-budget-usd` | `-p`-only. External monitor on `result.total_cost_usd` is a Phase 2 follow-up. |
-| `--session-id <UUID>` | No longer pre-mint UUIDs. First-run claude assigns its own; we discover it via the new JSONL filename. |
-| `--fallback-model` | `-p`-only. |
-
-`ClaudeTaskSpec` keeps the corresponding Pydantic fields for
-back-compat; they're silently dropped in `interactive_argv`.
-
-## Architecture — transport vs. protocol
-
-Two orthogonal layers:
-
-| Layer | macOS / Linux | Windows |
-|---|---|---|
-| **Transport** (PTY holds `claude` alive) | `ptyprocess>=0.7.0` | `pywinpty>=3.0.3` (Rust-backed via PyO3 + winpty-rs + Maturin) |
-| **Protocol** (read events) | tail `<CLAUDE_CONFIG_DIR>/projects/<project_key>/<session>.jsonl` | identical |
-| **Send turn** | `pty.write((text + '\r').encode())` (NOT close stdin — see [#15553](https://github.com/anthropics/claude-code/issues/15553)) | identical |
-| **Send slash command** | `pty.write(b"/clear\r")` | identical |
-| **Completion detect** | JSONL `result` entry | identical |
-| **Session continuity** | `claude --continue` (memory-bound) — claude auto-finds latest under cwd | identical |
-
-`pywinpty` v3.x is now production-grade (used by Jupyter Lab terminals
-and Spyder's IPython console) so the historical reason to route Windows
-through a Node.js sidecar (pywinpty flakiness) no longer holds. Both
-backends run in-process behind a single `PtyTransport` Protocol; the
-factory in [`server/services/cli_agent/transports/__init__.py`](../server/services/cli_agent/transports/__init__.py)
-picks per `sys.platform`.
+| **Transport** | `asyncio.subprocess.Process` with stdio pipes — same on POSIX + Windows |
+| **Send turn** | `proc.stdin.write(json.dumps({"type":"user","message":{"role":"user","content":...}}) + "\n")` |
+| **Read events** | `proc.stdout.readline()` loop → `json.loads(line)` → `_handle_stream_event` |
+| **Completion detect** | stream-json event where `type == "result"` (set via `provider.is_final_event`) |
+| **Context reset (`/clear` equivalent)** | kill subprocess + drop captured UUID — stream-json input has no slash-command path (confirmed in VSCode extension source) |
+| **Crash recovery** | `acquire()` checks `process.returncode`; respawns with `--resume <captured_uuid>` so the same on-disk JSONL keeps growing |
 
 ### Code layout (`server/services/cli_agent/`)
 
 ```
 cli_agent/
 ├── providers/
-│   └── anthropic_claude.py         # interactive_argv (replaces headless_argv)
-├── transports/
-│   ├── __init__.py                 # get_pty_transport() factory
-│   ├── base.py                     # PtyTransport / PtyHandle Protocols
-│   ├── posix.py                    # PosixPtyTransport (ptyprocess)
-│   └── windows.py                  # WindowsPtyTransport (pywinpty)
-├── jsonl_watcher.py                # JsonlWatcher (tail-f) + JsonlDirWatcher
-├── session.py                      # AICliSession — one-shot non-pooled path
-├── session_pool.py                 # ClaudeSessionPool — warm-process reuse
-└── service.py                      # AICliService.run_batch + _run_pooled_turn
+│   └── anthropic_claude.py   # interactive_argv — emits the four VSCode-pattern flags
+├── jsonl_watcher.py          # still used by the non-pooled AICliSession; NOT used by the pool
+├── session.py                # AICliSession — one-shot non-pooled path (PTY on POSIX; out of scope for this refactor)
+├── session_pool.py           # ClaudeSessionPool — subprocess-based warm-process reuse
+└── service.py                # AICliService.run_batch — entry point; routes to pool when memory-bound
 ```
+
+## argv shape
+
+Built by [`AnthropicClaudeProvider.interactive_argv`](../server/services/cli_agent/providers/anthropic_claude.py).
+Stable head, task-driven tail:
+
+```
+claude
+  --output-format stream-json
+  --input-format stream-json
+  --verbose
+  --ide
+  [--mcp-config <json> --strict-mcp-config]
+  --model <name>
+  [--resume <UUID> | --continue]
+  [--allowedTools <csv>]
+  --permission-mode bypassPermissions
+  [--append-system-prompt <text>]
+  [--effort low|medium|high]
+  [--add-dir <path>]...
+  [--disallowedTools <csv>]
+  [--agent <name>]
+```
+
+Notable absences (intentional):
+
+| Flag | Reason omitted |
+|---|---|
+| `-p` / `--print` | Drops us into the SDK billing bucket; the whole point of the cutover. |
+| Positional prompt (`-- "<text>"`) | Prompt arrives via stdin in stream-json input mode; an argv positional would double-send the first turn. `interactive_argv`'s `include_prompt` parameter is kept for back-compat but ignored. |
+| `--session-id <UUID>` | Rejected by claude in non-headless mode. We discover the UUID from the first event that carries `session_id`. |
+| `--include-partial-messages`, `--include-hook-events`, `--max-turns`, `--max-budget-usd`, `--fallback-model` | All `-p`-only. `ClaudeTaskSpec` keeps the fields for back-compat; they're silently dropped here. External cost / turn caps are a Phase 2 follow-up. |
+
+`--permission-mode bypassPermissions` is required for non-interactive
+automation — there's no human at the keyboard to approve the per-tool
+prompts `acceptEdits` would surface. Documented at
+[`code.claude.com/docs/en/permission-modes`](https://code.claude.com/docs/en/permission-modes).
 
 ## Session pool — warm-process reuse
 
 [`ClaudeSessionPool`](../server/services/cli_agent/session_pool.py) is
-keyed by `simpleMemory.node_id`. Successive batches against the same
-memory node reuse the same warm `claude` PTY:
+keyed by `simpleMemory.node_id`. Each entry is a
+`PooledClaudeSession` carrying the live `asyncio.subprocess.Process`,
+the captured session UUID (filled in from the first event that has
+one), the MCP bearer token embedded in the spawn argv, a per-session
+`asyncio.Lock`, an `asyncio.Event` signalled by the stdout reader on
+`result`, and a per-turn event buffer.
 
-- **Acquire (warm)** — returns the existing live session. **No
-  implicit `/clear`** — the next prompt appends to claude's current
-  JSONL so the conversation continues. This is the load-bearing
-  invariant for `simpleMemory` continuity.
-- **Acquire (cold)** — spawn fresh via `PtyTransport`, locate the
-  JSONL by mtime (newest `.jsonl` with `mtime >= spawn_time - 1s`
-  works uniformly for fresh `claude` and `claude --continue`), start
-  a `JsonlWatcher` on it. Stash the MCP bearer token on the
-  `PooledClaudeSession` so re-acquires use the same token the
-  spawned claude already has in its argv.
-- **Explicit `clear(session)`** — sends `/clear` to the PTY, awaits
-  the new JSONL filename via the persistent `JsonlDirWatcher`, swaps
-  the file watcher. Per
-  [`claude-code#32871`](https://github.com/anthropics/claude-code/issues/32871),
-  `/clear` mints a **new UUID** with a **new JSONL file** rather than
-  clearing in-place. Pre-clear conversation stays resumable by its
-  old UUID.
+| Operation | Behaviour |
+|---|---|
+| `acquire(memory_node_id, ...)` | Live + healthy entry → return as-is (warm reuse). Live + dead entry → drop, capture its UUID, spawn fresh with `--resume <UUID>` so the same JSONL keeps growing. No entry → cold spawn. At cap → LRU evict (skipping in-flight). |
+| `send_turn(session, prompt, ...)` | Holds `session.lock`. Clears `result_event` + `events_this_turn`. Writes one stream-json line to `proc.stdin`, awaits `result_event` (timeout = 600s default). Returns a `SessionResult` built from the per-turn event buffer. Persists `result.session_id` onto `session.current_session_uuid`. |
+| `clear(session, ...)` | Kill the subprocess, drop the captured UUID. Next `acquire` spawns fresh with no continuity flag (claude assigns a new UUID). Emits `claude.session.cleared`. |
+| `release(session)` | Updates `last_used_at` so the reaper measures idle from now. |
+| `terminate(memory_node_id)` | Force-drop a specific entry: close stdin → 2s grace → `proc.kill()` → cancel reader/drain tasks. |
+| `shutdown_all()` | Stop the reaper + terminate every entry. Wire into FastAPI's lifespan `shutdown`. |
 
 Lifecycle policy:
 
 - **Idle TTL** 30 min (`_DEFAULT_IDLE_TTL`). Background reaper task
-  terminates pooled sessions whose `last_used_at` exceeds the cap
-  AND aren't currently locked.
-- **Max size** 16 (`_DEFAULT_MAX_SIZE`). LRU eviction at cap.
-- **Crash recovery** — `acquire` calls `pty_handle.is_alive()` and
-  respawns transparently when the pooled PTY has died.
+  terminates pooled sessions whose `last_used_at` exceeds the cap AND
+  aren't currently locked.
+- **Max size** 16 (`_DEFAULT_MAX_SIZE`). LRU eviction at cap (skipping
+  in-flight entries).
 - **Concurrency** — per-key `asyncio.Lock` serialises turns against
-  the same pooled session. `lock.locked()` doubles as the reaper's
-  in-flight detector.
-- **Shutdown** — `ClaudeSessionPool.shutdown_all()` is the target for
-  FastAPI's lifespan `shutdown` event (TODO: wire from `main.py`).
+  the same pooled subprocess so two `send_turn` calls can't interleave
+  their stream-json lines on stdin. `lock.locked()` doubles as the
+  reaper's in-flight detector.
+
+## Stream-json event dispatch
+
+`_handle_stream_event` has three concerns:
+
+1. **UUID capture.** Any event carrying `session_id` (or `sessionId`)
+   seeds `session.current_session_uuid` if it isn't already set —
+   `system/init` fires this for fresh spawns, `result` carries the
+   authoritative value at turn end. Crash-recovery respawns read this
+   field to emit `--resume <UUID>`.
+2. **Per-turn buffering.** Every event is appended to
+   `events_this_turn`. When `provider.is_final_event(event)` returns
+   True (i.e. `event.type == "result"`), `result_event` is set and
+   `send_turn` returns. `SessionResult` is built by
+   `AnthropicClaudeProvider.event_to_session_result` over the buffered
+   events — same shape `-p` used to produce.
+3. **Native compaction forwarding.** `type == "system"` +
+   `subtype == "compact_boundary"` events forward to
+   `CompactionService.record(...)` via `_record_native_compaction` so
+   the local-threshold path doesn't double-fire on claude's auto-
+   compaction. Trigger metadata (`pre_tokens`, `trigger: auto|manual`)
+   is preserved on the compaction record.
+
+## Continuity across process restarts
+
+The pool's continuity model is two-layered:
+
+- **Intra-process (warm pool).** Within a live subprocess, every turn
+  writes to the same `proc.stdin` and claude itself keeps the conversation
+  in memory. No `--continue` / `--resume` needed — same session UUID
+  flows across turns. Verified: turn 1 `13ac5819-...`, turn 2 same UUID.
+- **Cross-process (cold spawn / crash recovery).** Cold spawns of a
+  memory-bound run emit `--continue` (claude auto-finds the latest
+  conversation under the cwd via `project_key`). If `acquire` finds the
+  pooled subprocess has died, it captures the dead session's UUID
+  before respawning and splices `--resume <UUID>` into the spec so the
+  new subprocess continues writing to the same on-disk JSONL.
+
+`ClaudeTaskSpec` carries `continue_session: bool` and
+`resume_session_id: Optional[str]`. `resume_session_id` wins if both
+are set. `simpleMemory.last_session_id` is display-only metadata —
+`_persist_memory` writes it for the UI but the agent doesn't read it
+back (continuity rides through `--continue` + the warm pool, not a
+ferried UUID).
 
 ## MCP bearer token lifecycle
 
 `claude` handles its own MCP authentication. We embed the bearer in
 `--mcp-config` at spawn time; the spawned claude uses it for the
-lifetime of its process. The pool does NOT issue or unregister tokens
-— the caller (`AICliService.run_batch`) owns the lifecycle, with the
-twist that for pooled sessions the token persists with the warm PTY
-across batches:
-
-```python
-# run_batch — non-pool path (unchanged)
-token = issue_token()
-register_batch(token, ctx)
-try:
-    results = await asyncio.gather(*(run_one(t) for t in tasks))
-finally:
-    unregister_batch(token)
-
-# run_batch — pool path
-token = issue_token()
-register_batch(token, ctx)
-try:
-    result = await self._run_pooled_turn(..., mcp_bearer_token=token)
-    # token stays embedded in the warm PTY for the next batch.
-    # On pool eviction / shutdown the registration orphans (bounded
-    # by max pool size, acceptable for Phase 1).
-finally:
-    if not use_pool:
-        unregister_batch(token)
-```
+lifetime of its process. The pool stashes the token on
+`PooledClaudeSession.bearer_token` at spawn time so warm-reuse callers
+(`AICliService.run_batch`'s pool path) can re-register the batch
+context against the SAME token claude already has in its argv. The pool
+itself never issues / unregisters — that's `run_batch`'s job, with the
+twist that for pooled sessions the token persists across batches and
+orphans on pool eviction (bounded by `max_size`, acceptable for Phase 1).
 
 ## CloudEvents broadcasts
 
@@ -162,119 +189,62 @@ fired via the corresponding `broadcaster.broadcast_claude_session_*`
 methods on
 [`server/services/status_broadcaster.py`](../server/services/status_broadcaster.py):
 
-| Event type | Wire key | When fired |
-|---|---|---|
-| `com.machinaos.claude.session.spawned` | `claude_session_event` | Cold spawn (new PTY) |
-| `com.machinaos.claude.session.cleared` | `claude_session_event` | Explicit `pool.clear` → new UUID |
-| `com.machinaos.claude.session.terminated` | `claude_session_event` | Pool terminate (reason: `idle` / `crashed` / `evicted` / `shutdown` / `explicit`) |
-| `com.machinaos.claude.session.usage` | `claude_session_usage` | Each `result` event (per-turn cost + tokens) |
+| Event type | When fired |
+|---|---|
+| `com.machinaos.claude.session.spawned` | Cold spawn (new subprocess) |
+| `com.machinaos.claude.session.cleared` | Explicit `pool.clear` → new UUID on next acquire |
+| `com.machinaos.claude.session.terminated` | Pool terminate (reason: `idle` / `crashed` / `evicted` / `shutdown` / `explicit`) |
+| `com.machinaos.claude.session.usage` | Each `result` event (per-turn cost + tokens + duration + num_turns) |
 
-Frontend listeners should switch on `envelope.type` and route the
-inner `data` payload (memory_node_id, session_uuid, cost, tokens, …)
-into whichever store renders the simpleMemory usage panel.
+The usage event is the source of truth for the simpleMemory usage panel
+— `/usage` is TUI-only plain text per Anthropic and not parseable.
+Frontend listeners switch on `envelope.type` and route the inner `data`
+payload (`memory_node_id`, `session_uuid`, cost, tokens, …) into the
+store that renders the panel.
+
+## Tools and skills
+
+**Tools (MCP) — unchanged from the `-p` era.** Spawn argv carries
+`--mcp-config <json>` (HTTP transport, bearer header) + `--strict-mcp-config`
+so the spawned claude only loads MachinaOs's FastMCP server. The
+`mcpServers.machinaos` block sets `alwaysLoad: true` to opt out of MCP
+tool-search deferral so all `mcp__machinaos__*` tools enter context at
+session start. `--allowedTools` lists the explicit allowlist:
+five built-ins (`Read,Edit,Bash,Glob,Grep,Write,Skill,WebSearch,WebFetch`),
+every `mcp__machinaos__<connected_tool>` passed by the caller, plus the
+five core MCP tools (`getWorkspaceFiles`, `listSkills`, `getSkill`,
+`getCredential`, `broadcastLog`).
+
+**Skills — known gap on the pool path.** `AICliSession._materialise_skills`
+writes connected skills under `<cwd>/.claude/skills/` for the one-shot
+non-pooled path. The pool path skips that materialisation; agents
+discover skills via MCP `listSkills` / `getSkill` tools at runtime
+instead. Fine for now, but pool-side skill materialisation is an open
+follow-up.
 
 ## `/usage` and `/compact` semantics
 
-Per the research:
-
-- **`/usage`** — TUI-only plain text per Anthropic. Not parseable.
-  The data it displays (cost, tokens, duration, num_turns) is already
-  on every `result` JSONL event under `usage` + `total_cost_usd`. We
-  surface it via the `claude.session.usage` CloudEvent instead.
-- **`/clear`** — mints a new session UUID + new JSONL file (issue
-  [#32871](https://github.com/anthropics/claude-code/issues/32871)).
-  Pool exposes this as `pool.clear(session)` for explicit reset; not
-  fired on warm acquire.
-- **`/compact`** — emits `system/compact_boundary` with
+- **`/usage`** — TUI-only plain text per Anthropic. Not parseable. We
+  surface the same data (cost, tokens, duration, num_turns) via the
+  `claude.session.usage` CloudEvent built from every `result` event.
+- **`/clear`** — the stream-json input wire has no slash-command path
+  (confirmed in the VSCode extension source). Context reset is
+  `pool.clear(session)` — kill subprocess, drop UUID, next acquire
+  spawns fresh.
+- **`/compact`** — emits `system/compact_boundary` on stdout with
   `compact_metadata.pre_tokens` + `compact_metadata.trigger` (auto vs
-  manual). Both `AICliSession._on_jsonl_event` and
-  `ClaudeSessionPool._handle_jsonl_event` forward it to
+  manual). `_handle_stream_event` forwards it to
   `CompactionService.record(...)` so the local-threshold path doesn't
-  double-fire.
+  double-fire on claude's native auto-compaction.
 
-Commands MachinaOs must **avoid** in PTY-driven automation (they open
-interactive dialogs, kill the session, or open a browser):
-`/feedback`, `/bug`, `/exit`, `/quit`, `/login`, `/logout`,
-`/permissions`, `/agents`, `/mcp`, `/model` (with no arg), `/rewind`,
-`/config`, `/install-github-app`, `/install-slack-app`, `/teleport`,
-`/heapdump`.
+## What changed (historical note)
 
-## Memory bridge — `--continue`, not UUID round-trip
-
-Late-stage simplification: the agent no longer ferries a UUID through
-`simpleMemory.last_session_id` to drive continuity. Instead it passes
-`--continue` and lets claude track its own latest session per cwd.
-
-`ClaudeTaskSpec` carries a `continue_session: bool` field. The
-argv-builder emits one of:
-
-- `--resume <UUID>` if `task.resume_session_id` is set (explicit
-  wins — used for `--fork-session` later, or any caller that already
-  knows the exact UUID).
-- `--continue` if `task.continue_session=True` (the memory-bound
-  default; per
-  [`code.claude.com/docs/en/cli-reference`](https://code.claude.com/docs/en/cli-reference)
-  this loads the most recent conversation under the cwd).
-- Neither — fresh session; claude assigns a new UUID.
-
-`claude_code_agent.execute_op` sets `continue_session=True` when a
-memory node is wired; it no longer reads `last_session_id` from the
-memory data. The invariants:
-
-- `memory_bound=True` makes the spawn cwd = `repo_root` so claude's
-  `project_key` stays constant across batches.
-- First run with memory wired: argv `--continue` (no prior conversation
-  under cwd → claude starts fresh). The post-spawn `_wait_for_session_jsonl`
-  helper finds the new JSONL via mtime (newest `.jsonl` with
-  `mtime >= spawn_time - 1s`).
-- Subsequent runs with memory wired: argv `--continue` — claude
-  loads the latest conversation under cwd and continues.
-- Pooled (warm): no respawn — the warm PTY continues in its current
-  UUID; the next prompt appends to its existing JSONL.
-- Pooled (after `pool.clear`): a new UUID is captured via the
-  persistent `JsonlDirWatcher` and the file watcher swapped.
-
-`simpleMemory.last_session_id` is now **display-only metadata** —
-`_persist_memory` still writes it from the latest result for UI /
-diagnostic display, but the agent doesn't read it. Field is kept on
-the schema for back-compat.
-
-**Stale UUID auto-clear** (`_clear_stale_session_id`) still applies if
-someone explicitly sets `resume_session_id` (e.g. the future
-`--fork-session` UI). With `--continue` there's nothing to be stale —
-claude itself decides what's available.
-
-## Out-of-process pty-host (deferred upgrade path)
-
-If `pywinpty` / `ptyprocess` stability becomes an issue (crashes
-bringing down FastAPI), promote `PtyTransport` to an out-of-process
-Python sidecar — VSCode's `ptyHostMain.ts` pattern, in Python.
-Supervised by `machina/tree.py`'s Job Object, JSON-RPC over stdio.
-The `PtyTransport` Protocol boundary makes the swap cheap (~1 day).
-See VSCode issue
-[#74620](https://github.com/microsoft/vscode/issues/74620) for the
-rationale (heartbeat, flow control, isolation from main app).
-
-## Open follow-ups
-
-- **Cancellation path.** Pool sessions bypass
-  `AICliService._active_sessions`, so `cancel_workflow` /
-  `cancel_node` don't reach the pooled PTY. Add pool-in-flight
-  tracking or hook cancel into `pool.terminate`.
-- **Lifespan integration.** Wire `pool.shutdown_all()` to FastAPI's
-  shutdown event from `main.py`. Currently the pool dies with the
-  process; orphan PTY children are caught by `machina/tree.py` Job
-  Object on Windows and `os.setsid` on POSIX.
-- **Frontend usage panel.** `claude.session.usage` CloudEvents are
-  flowing; the React hook + simpleMemory panel UI are the missing
-  half (Step 7 of the implementation plan).
-- **`--fork-session` UI.** `--fork-session` is the documented working
-  fork primitive; surface a "Branch this conversation" `<ActionButton>`
-  on simpleMemory + a `branches: List[{uuid, name, created_at}]`
-  param. Avoids `/rewind` which has bug
-  [#55347](https://github.com/anthropics/claude-code/issues/55347)
-  (documented as fork but implemented as in-place mutation).
-- **External cost cap / turn cap.** Replacements for the dropped
-  `--max-budget-usd` and `--max-turns` flags. Aggregate
-  `result.total_cost_usd` / count `assistant` events with
-  `stop_reason: "tool_use"` and kill the PTY at the limit.
+The previous iteration of this doc described a PTY transport
+(`pywinpty` on Windows, `ptyprocess` on POSIX) reading events from the
+on-disk session JSONL via `JsonlWatcher` / `JsonlDirWatcher`. That path
+was abandoned for the pool: `pywinpty`'s ConPTY emulation did not
+deliver keystrokes to claude's Ink TUI on Windows (empirically
+confirmed across four test variants). Stdio pipes + stream-json work
+cross-platform and match the Anthropic-blessed pattern. The non-pooled
+`AICliSession` still uses a PTY on POSIX for its one-shot
+`AICliService.run_batch` path — out of scope for this refactor.

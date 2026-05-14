@@ -1,41 +1,73 @@
-"""Warm-process pool for interactive ``claude`` sessions.
+"""Long-lived ``claude`` subprocess pool — VSCode-extension pattern.
 
-Keeps a live ``claude`` PTY per ``simpleMemory.node_id`` so successive
-turns can reuse the warm process — the PTY stays alive across batches
-and the next prompt rides on the existing claude session (saves the
-~1-2 s spawn cost). By default acquire is **non-disruptive**: warm
-reuse returns the same session UUID, so the memory bridge's
-conversation continuity stays intact (claude appends to its existing
-JSONL).
+Keeps one warm ``claude --output-format stream-json --input-format
+stream-json --verbose --ide`` subprocess per ``simpleMemory.node_id``
+so successive turns can reuse the same process — same session UUID
+across turns, no respawn cost. Mirrors what Anthropic's official
+VSCode extension does (verified from the on-disk extension source at
+``$VSCODE_EXT_DIR/anthropic.claude-code-<ver>/extension.js`` line 156).
 
-Context reset is an **explicit** operation via :meth:`clear`. ``/clear``
-mints a NEW session UUID with a NEW JSONL file — per issue
-`claude-code#32871 <https://github.com/anthropics/claude-code/issues/32871>`_
-— so calling it is the right primitive when the user wants to start a
-fresh conversation in the same pooled process (e.g. a "Clear
-conversation" button on simpleMemory). The memory bridge auto-picks
-up the new UUID from the next turn's ``result`` event.
+Why subprocess (not PTY): pywinpty's ConPTY emulation does not deliver
+keystrokes to claude's Ink TUI on Windows — empirically confirmed
+across four test variants (`docs-internal/claude_code_interactive_mode.md`
+records the post-mortem). Plain stdio pipes work cross-platform and
+match the documented multi-turn integration pattern.
+
+Per-turn mechanics:
+
+  1. Caller writes one stream-json line to ``proc.stdin``:
+     ``{"type":"user","message":{"role":"user","content":"..."}}\\n``
+  2. Claude reads stdin, processes the turn, emits stream-json events
+     to ``proc.stdout`` (``system/init``, ``assistant``, ``user``,
+     ``system/compact_boundary``, and finally ``result``). Claude
+     ALSO writes a subset of events to the on-disk session JSONL at
+     ``<CLAUDE_CONFIG_DIR>/projects/<project_key>/<session_uuid>.jsonl``
+     for persistent multi-batch memory — but the ``result`` event is
+     stdout-only in stream-json mode, so stdout is our runtime contract.
+  3. A background ``stdout_reader_task`` started at spawn time parses
+     each line as a stream-json event and dispatches via
+     :meth:`_handle_stream_event`. Events flow into the per-turn
+     buffer; ``result_event`` fires when the final ``type=="result"``
+     event lands.
+  4. ``send_turn`` returns a :class:`SessionResult` built from the
+     turn's events. The session UUID is captured from the result event
+     so subsequent batches can spawn ``--resume <UUID>`` if the
+     pooled process has been reaped.
 
 Lifecycle policy:
-  - **Idle TTL**: 30 min default. A background reaper task terminates
-    pooled sessions whose ``last_used_at`` exceeds the threshold.
-  - **Max size**: 16 default. LRU eviction when full.
-  - **Crash recovery**: ``acquire()`` checks ``is_alive()`` and respawns
-    transparently when the pooled PTY has died.
-  - **Concurrency**: per-key ``asyncio.Lock`` serialises turns against
-    the same pooled session (the existing parallel-batch guard in
-    ``claude_code_agent`` enforces N=1 per memory node, so the lock is
-    a belt-and-braces invariant).
-  - **Shutdown**: ``ClaudeSessionPool.shutdown_all()`` terminates every
-    pooled PTY. Wire into FastAPI's lifespan hook.
 
-Pattern mirrors :mod:`services.process_service` (long-lived process pool)
-and :mod:`nodes.telegram._service` (singleton service with lifecycle).
+  - **Idle TTL**: 30 min default. Background reaper terminates
+    long-idle subprocesses.
+  - **Max size**: 16 concurrent pooled sessions. LRU eviction at cap.
+  - **Crash recovery**: ``acquire()`` checks ``process.returncode`` and
+    respawns transparently when the pooled subprocess has died.
+  - **Per-session lock**: serialises turns against the same pooled
+    process so two ``send_turn`` calls don't write overlapping
+    stream-json lines.
+  - **Shutdown**: :meth:`shutdown_all` closes every subprocess's stdin
+    (claude exits cleanly on EOF) and waits briefly, then kills any
+    holdouts. Wire into FastAPI's lifespan ``shutdown`` event.
+
+Continuity across process restarts:
+
+  - First spawn for a memory-bound run: argv emits ``--continue``
+    (claude resolves the latest conversation under cwd's
+    ``project_key`` automatically; works whether or not a prior
+    JSONL exists).
+  - Each successful turn captures ``result.session_id`` onto
+    ``session.current_session_uuid``. If the subprocess is later
+    reaped and a new ``acquire`` happens, the next spawn emits
+    ``--resume <session.current_session_uuid>`` so the SAME JSONL
+    keeps growing across process restarts.
+  - :meth:`clear` is an explicit context-reset primitive: kill the
+    subprocess, drop the captured UUID, let the next ``acquire``
+    spawn fresh with no continuity flag (claude assigns a new UUID).
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -44,79 +76,81 @@ from typing import Any, Dict, List, Literal, Optional
 
 from core.logging import get_logger
 from services.cli_agent.factory import create_cli_provider
-from services.cli_agent.jsonl_watcher import (
-    JsonlDirWatcher,
-    JsonlWatcher,
-    session_uuid_from_jsonl_path,
-)
 from services.cli_agent.protocol import AICliProvider, SessionResult
-from services.cli_agent.transports import PtyHandle, get_pty_transport
 from services.cli_agent.types import ClaudeTaskSpec
 
 logger = get_logger(__name__)
 
 
-# Defaults — keep aligned with the operator's mental model. The 30 min
-# idle TTL matches a typical "I switched tasks but might come back"
-# workflow; 16 concurrent pooled sessions matches the FastAPI default
-# worker count.
+# Defaults — keep aligned with the operator's mental model.
 _DEFAULT_IDLE_TTL = 30 * 60.0
 _DEFAULT_MAX_SIZE = 16
 _DEFAULT_REAPER_INTERVAL = 60.0  # reaper tick
 
-# How long to wait for the new JSONL file to appear after sending
-# ``/clear``. Empirically ~200 ms on Linux; 5 s is a generous cap that
-# matches the first-spawn JSONL-locate timeout in ``AICliSession``.
-_CLEAR_JSONL_TIMEOUT = 5.0
+# Soft window for stdin EOF to drive a graceful claude shutdown before
+# we escalate to ``proc.kill()``. Claude exits within ~100 ms of EOF.
+_SHUTDOWN_GRACE = 2.0
 
 
 @dataclass
 class PooledClaudeSession:
-    """One live ``claude`` PTY + the metadata to reuse it across turns.
+    """One live ``claude`` subprocess + the metadata to reuse it across turns.
 
-    Owns the PTY transport handle, the current ``JsonlWatcher``, and a
-    persistent ``JsonlDirWatcher`` over the project dir (used to detect
-    the new UUID claude assigns after each ``/clear``).
+    No PTY, no file watcher. ``process`` is an ``asyncio.subprocess.Process``
+    opened with ``stdin=PIPE``, ``stdout=PIPE``, ``stderr=PIPE``. Prompts
+    go via ``process.stdin.write(stream_json_line)``; events come back on
+    ``process.stdout`` (stream-json output mode), parsed line-by-line by
+    a background ``stdout_reader_task`` that dispatches each parsed event
+    via :meth:`ClaudeSessionPool._handle_stream_event`. Stderr is drained
+    separately and logged.
+
+    The on-disk JSONL at
+    ``<CLAUDE_CONFIG_DIR>/projects/<project_key>/<session_uuid>.jsonl``
+    is still written by claude — it's the persistence layer that
+    ``--continue`` / ``--resume`` rehydrate from across process
+    restarts — but the runtime contract here is stdout-only because
+    the ``result`` event (final turn outcome) goes ONLY to stdout in
+    stream-json mode, NOT to the JSONL file.
     """
 
     memory_node_id: str
-    project_dir: Path
-    pty_handle: PtyHandle
-    current_session_uuid: str
-    current_jsonl_path: Path
-    dir_watcher: JsonlDirWatcher
-    jsonl_watcher: JsonlWatcher
+    process: asyncio.subprocess.Process
     cwd: Path
-    # MCP bearer token embedded in the spawned claude's `--mcp-config`.
-    # Set by the caller at spawn time so the warm-reuse path can read
-    # it back and re-register the batch context with the SAME token
-    # the live claude already has in its argv. The pool does NOT
-    # issue/unregister tokens — the CLI handles its own MCP auth, the
-    # caller (run_batch) owns the lifecycle.
-    bearer_token: str = ""
+    # ``current_session_uuid`` is "" until the first turn's ``system/init``
+    # or ``result`` event reveals it. Subsequent spawns for the same
+    # memory_node_id (after a crash / reap) emit ``--resume <UUID>`` so
+    # the same on-disk JSONL keeps growing across process restarts.
+    current_session_uuid: str = ""
     last_used_at: float = field(default_factory=time.monotonic)
-    # Per-session lock; held throughout a turn or a /clear rotation. The
-    # reaper consults ``lock.locked()`` to skip in-flight sessions — no
-    # separate in_flight flag needed.
+    # Per-session lock; held throughout a turn. The reaper consults
+    # ``lock.locked()`` to skip in-flight sessions.
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-    # Set by the JSONL handler when claude writes a ``result`` event;
+    # Set by the stdout reader when claude emits a ``result`` event;
     # ``send_turn`` awaits this. Cleared before each new turn.
     result_event: asyncio.Event = field(default_factory=asyncio.Event)
-    # Per-turn event buffer, cleared on each ``send_turn`` so the result
-    # builder only sees the current turn's events.
+    # Per-turn event buffer, cleared on each ``send_turn``.
     events_this_turn: List[Dict[str, Any]] = field(default_factory=list)
-    # Dir-watcher signal for ``/clear``: fires when a new ``.jsonl``
-    # appears under ``project_dir``.
-    new_jsonl_event: asyncio.Event = field(default_factory=asyncio.Event)
-    new_jsonl_path: Optional[Path] = None
+    # Background tasks: parse stream-json events from stdout (single
+    # source of truth for runtime events), drain stderr (logged at
+    # warning level).
+    stdout_reader_task: Optional[asyncio.Task[None]] = None
+    stderr_drain_task: Optional[asyncio.Task[None]] = None
 
 
 class ClaudeSessionPool:
-    """Per-``memory_node_id`` pool of warm ``claude`` PTYs.
+    """Per-``memory_node_id`` pool of warm ``claude`` subprocesses.
 
-    Acquired via :meth:`acquire` (auto-spawns if missing, sends
-    ``/clear`` + captures new UUID if reusing). Released via
-    :meth:`release` (marks idle for the reaper).
+    Public surface (unchanged from the PTY-era pool — callers in
+    :mod:`services.cli_agent.service` see the same method shapes):
+
+      - :meth:`acquire` — get or spawn a session for a memory_node_id
+      - :meth:`send_turn` — write one stream-json user message, return result
+      - :meth:`release` — mark idle for the reaper
+      - :meth:`clear` — kill subprocess + drop UUID (next acquire spawns fresh)
+      - :meth:`terminate` — force-drop a specific entry
+      - :meth:`shutdown_all` — drop everything (FastAPI lifespan hook target)
+      - :meth:`peek` — read-only inspection
+      - :meth:`start_reaper` — begin background idle-eviction
     """
 
     def __init__(
@@ -130,8 +164,6 @@ class ClaudeSessionPool:
         self._idle_ttl = float(idle_ttl)
         self._max_size = int(max_size)
         self._reaper_interval = float(reaper_interval)
-        # Top-level lock guards `self._pool` mutations only (insert,
-        # evict). Per-session turns serialise via `PooledClaudeSession.lock`.
         self._pool_lock = asyncio.Lock()
         self._reaper_task: Optional[asyncio.Task[None]] = None
         self._shutdown = asyncio.Event()
@@ -151,19 +183,11 @@ class ClaudeSessionPool:
         )
 
     def peek(self, memory_node_id: str) -> Optional[PooledClaudeSession]:
-        """Return the live session for ``memory_node_id`` or ``None``.
-
-        Useful for callers that need to know whether to issue a fresh
-        MCP bearer token before :meth:`acquire`. ``None`` means either
-        no entry or the entry's PTY has died (caller should issue a
-        fresh token for the impending cold-spawn). Best-effort: a TOCTOU
-        race between this check and a concurrent :meth:`acquire` is
-        harmless — the orphaned token leaks until app shutdown.
-        """
+        """Return the live session for ``memory_node_id`` or ``None``."""
         session = self._pool.get(memory_node_id)
         if session is None:
             return None
-        if not session.pty_handle.is_alive():
+        if session.process.returncode is not None:
             return None
         return session
 
@@ -183,83 +207,77 @@ class ClaudeSessionPool:
         """Return a live :class:`PooledClaudeSession`.
 
         Behaviour:
-          - **No live entry**: spawn fresh. ``spec.prompt`` is *not*
-            included in argv (the caller writes it via
-            :meth:`send_turn` once the watcher is attached).
-          - **Live entry**: return as-is. The next :meth:`send_turn`
-            writes the prompt to the existing PTY; claude appends to
-            its current JSONL so the conversation continues in the
-            same session UUID. **No implicit ``/clear``** — that would
-            break the memory bridge's continuity contract. The caller
-            can explicitly call :meth:`clear` to reset context (mints
-            a new UUID via ``/clear`` and swaps the watcher).
-          - **Dead entry**: drop and spawn fresh.
 
-        Caller MUST call :meth:`release` (or use the contextmanager
-        wrapper) so the reaper can free idle sessions.
+          - No live entry → spawn fresh.
+          - Live entry whose subprocess is dead → drop and respawn,
+            propagating ``current_session_uuid`` so the new spawn
+            emits ``--resume <UUID>`` and continues the same JSONL.
+          - Live entry with live subprocess → return as-is. Next
+            ``send_turn`` writes the prompt to the existing subprocess's
+            stdin and claude appends to the same session JSONL.
+
+        Caller MUST call :meth:`release` so the reaper can mark idle.
         """
         async with self._pool_lock:
             existing = self._pool.get(memory_node_id)
-            if existing is not None and not existing.pty_handle.is_alive():
+            crashed_uuid = ""
+            if existing is not None and existing.process.returncode is not None:
                 logger.info(
-                    "[ClaudeSessionPool] dropping dead session for "
-                    "memory_node=%s pid=%s",
-                    memory_node_id, existing.pty_handle.pid,
+                    "[ClaudeSessionPool] dropping dead session "
+                    "memory_node=%s pid=%s exit=%s — will respawn",
+                    memory_node_id, existing.process.pid,
+                    existing.process.returncode,
                 )
+                crashed_uuid = existing.current_session_uuid
                 await self._terminate_locked(memory_node_id, reason="crashed")
                 existing = None
 
             if existing is not None:
-                # Warm path. Take the per-session lock OUTSIDE the
-                # pool_lock to avoid deadlocks if a turn is still
-                # finishing.
-                pass
-            else:
-                # Cold path. Evict LRU if at capacity.
-                if len(self._pool) >= self._max_size:
-                    await self._evict_lru_locked()
-                session = await self._spawn(
-                    memory_node_id=memory_node_id,
-                    spec=spec,
-                    cwd=cwd,
-                    env=env,
-                    defaults=defaults,
-                    mcp_endpoint_url=mcp_endpoint_url,
-                    mcp_bearer_token=mcp_bearer_token,
-                    connected_tool_names=connected_tool_names,
-                )
-                self._pool[memory_node_id] = session
+                existing.last_used_at = time.monotonic()
                 logger.info(
-                    "[ClaudeSessionPool] spawned new session memory_node=%s "
-                    "pid=%s uuid=%s",
-                    memory_node_id, session.pty_handle.pid,
-                    session.current_session_uuid,
+                    "[ClaudeSessionPool] warm reuse memory_node=%s pid=%s uuid=%s",
+                    memory_node_id, existing.process.pid,
+                    existing.current_session_uuid or "(unresolved)",
                 )
-                # Typed CloudEvent — FE wires per-memory-node lifecycle
-                # status from the same envelope as agent_progress /
-                # node_parameters_updated. Fire-and-forget; broadcaster
-                # is the process-wide singleton.
-                await self._emit_event(
-                    "spawned",
-                    memory_node_id=memory_node_id,
-                    workflow_id=workflow_id,
-                    session_uuid=session.current_session_uuid,
-                    pid=session.pty_handle.pid,
-                )
-                return session
+                return existing
 
-        # Warm-reuse path. Returned as-is — preserves memory continuity
-        # (claude appends to its existing JSONL on the next prompt). The
-        # caller can opt in to context reset via the explicit
-        # :meth:`clear` method.
-        assert existing is not None
-        existing.last_used_at = time.monotonic()
-        logger.info(
-            "[ClaudeSessionPool] warm reuse memory_node=%s pid=%s uuid=%s",
-            memory_node_id, existing.pty_handle.pid,
-            existing.current_session_uuid,
-        )
-        return existing
+            if len(self._pool) >= self._max_size:
+                await self._evict_lru_locked()
+
+            # When recovering from a crash, splice the captured UUID
+            # into the spec so the spawn emits ``--resume <UUID>``.
+            if crashed_uuid and not spec.resume_session_id:
+                spec.resume_session_id = crashed_uuid
+                spec.continue_session = False
+
+            session = await self._spawn(
+                memory_node_id=memory_node_id,
+                spec=spec,
+                cwd=cwd,
+                env=env,
+                defaults=defaults,
+                mcp_endpoint_url=mcp_endpoint_url,
+                mcp_bearer_token=mcp_bearer_token,
+                connected_tool_names=connected_tool_names,
+            )
+            if crashed_uuid:
+                # The new subprocess is resuming the prior session; pre-seed
+                # the UUID so the first turn's emitted CloudEvents carry
+                # the right id even before the result event lands.
+                session.current_session_uuid = crashed_uuid
+            self._pool[memory_node_id] = session
+            logger.info(
+                "[ClaudeSessionPool] spawned new session memory_node=%s pid=%s",
+                memory_node_id, session.process.pid,
+            )
+            await self._emit_event(
+                "spawned",
+                memory_node_id=memory_node_id,
+                workflow_id=workflow_id,
+                session_uuid=session.current_session_uuid,
+                pid=session.process.pid,
+            )
+            return session
 
     async def clear(
         self,
@@ -267,43 +285,44 @@ class ClaudeSessionPool:
         *,
         workflow_id: Optional[str] = None,
     ) -> str:
-        """Explicit ``/clear`` — mints a new session UUID and rotates
-        the watcher. Returns the new UUID. Use when the user wants to
-        start a fresh conversation in the same pooled process (e.g.
-        a "Clear conversation" button on simpleMemory). The memory
-        bridge auto-picks up the new UUID via the next ``send_turn``
-        result event."""
-        old_uuid = session.current_session_uuid
-        await self._clear_and_swap(session)
-        if session.current_session_uuid != old_uuid:
+        """Kill the subprocess, drop the captured UUID. Next ``acquire``
+        spawns fresh with no continuity flag (claude assigns a new
+        session UUID).
+
+        Stream-json input mode has no in-process slash-command
+        equivalent of the TUI's ``/clear`` (the VSCode extension
+        source confirms this — context resets are subprocess restarts,
+        not slash messages). Emits ``claude.session.cleared`` for FE
+        parity with the old PTY-era contract.
+        """
+        async with session.lock:
+            old_uuid = session.current_session_uuid
+            # Drop the pool entry and kill the subprocess.
+            await self.terminate(session.memory_node_id)
+        if old_uuid:
             await self._emit_event(
                 "cleared",
                 memory_node_id=session.memory_node_id,
                 workflow_id=workflow_id,
                 old_session_uuid=old_uuid,
-                new_session_uuid=session.current_session_uuid,
+                new_session_uuid="",
             )
-        return session.current_session_uuid
+        return ""
 
-    async def release(
-        self, session: PooledClaudeSession,
-    ) -> None:
-        """Update last-used-at so the reaper measures idle time from now.
-
-        Nothing else needed — the per-turn lock is released by
-        ``send_turn``'s context manager, so once ``release`` returns the
-        session is genuinely idle and the reaper may evict it.
-        """
+    async def release(self, session: PooledClaudeSession) -> None:
+        """Update ``last_used_at`` so the reaper measures from now."""
         session.last_used_at = time.monotonic()
 
     async def terminate(self, memory_node_id: str) -> None:
-        """Force-terminate a specific pooled session."""
+        """Force-drop a specific pooled session."""
         async with self._pool_lock:
             await self._terminate_locked(memory_node_id)
 
     async def shutdown_all(self) -> None:
-        """Terminate every pooled session + stop the reaper. Wire into
-        FastAPI's lifespan ``shutdown`` event."""
+        """Terminate every pooled subprocess + stop the reaper.
+
+        Wire into FastAPI's lifespan ``shutdown`` event.
+        """
         self._shutdown.set()
         if self._reaper_task is not None and not self._reaper_task.done():
             self._reaper_task.cancel()
@@ -312,7 +331,6 @@ class ClaudeSessionPool:
             except (asyncio.CancelledError, Exception):
                 pass
             self._reaper_task = None
-
         async with self._pool_lock:
             keys = list(self._pool.keys())
             for key in keys:
@@ -326,18 +344,53 @@ class ClaudeSessionPool:
         timeout_seconds: int = 600,
         workflow_id: Optional[str] = None,
     ) -> SessionResult:
-        """Write a prompt to a pooled session and await the next
-        ``result`` event. Serialises against other callers via the
-        session's lock. Emits a ``claude.session.usage`` CloudEvent
-        after each successful turn so the FE can render cost/token
-        data per memory node."""
+        """Write one stream-json user message to ``proc.stdin`` and await
+        the next ``result`` event from claude's stdout stream.
+
+        The stdout reader task (started at spawn time) parses each line
+        as a stream-json event and dispatches via
+        :meth:`_handle_stream_event`. When the final ``result`` event
+        lands, ``result_event`` is set and we return.
+
+        Serialised by ``session.lock`` so two concurrent ``send_turn``
+        calls can't interleave their stream-json lines on stdin.
+        """
         async with session.lock:
+            if session.process.returncode is not None:
+                return self._build_result_from_events(
+                    session=session,
+                    events=[],
+                    prompt=prompt,
+                    success=False,
+                    error=(
+                        f"claude subprocess exited (code "
+                        f"{session.process.returncode}) before turn"
+                    ),
+                )
+
             session.result_event.clear()
             session.events_this_turn = []
-            # Claude's interactive TUI reads input on Enter (``\r``);
-            # closing stdin does NOT submit (claude-code#15553).
-            payload = (prompt.rstrip("\r\n") + "\r").encode("utf-8")
-            await session.pty_handle.write(payload)
+
+            # Stream-json input shape — the VSCode extension's wire
+            # format. Newline-delimited; one JSON object per turn.
+            message = {
+                "type": "user",
+                "message": {"role": "user", "content": prompt},
+            }
+            payload = (json.dumps(message) + "\n").encode("utf-8")
+            try:
+                assert session.process.stdin is not None
+                session.process.stdin.write(payload)
+                await session.process.stdin.drain()
+            except (ConnectionError, BrokenPipeError, AttributeError) as exc:
+                return self._build_result_from_events(
+                    session=session,
+                    events=[],
+                    prompt=prompt,
+                    success=False,
+                    error=f"failed to deliver prompt to claude stdin: {exc}",
+                )
+
             try:
                 await asyncio.wait_for(
                     session.result_event.wait(),
@@ -351,19 +404,24 @@ class ClaudeSessionPool:
                 )
                 return self._build_result_from_events(
                     session=session,
+                    events=session.events_this_turn,
                     prompt=prompt,
                     success=False,
                     error=f"timeout after {timeout_seconds}s",
                 )
+
             session.last_used_at = time.monotonic()
             result = self._build_result_from_events(
                 session=session,
+                events=session.events_this_turn,
                 prompt=prompt,
                 success=True,
             )
-            # Surface per-turn usage as a typed CloudEvent. Same data
-            # ``/usage`` displays in the TUI — but structured, so the FE
-            # can render a panel without scraping plain-text TUI output.
+            # Persist the authoritative UUID from the result event so
+            # crash-recovery respawns can emit ``--resume <UUID>``.
+            if result.session_id:
+                session.current_session_uuid = result.session_id
+
             cu = result.canonical_usage
             await self._emit_event(
                 "usage",
@@ -381,7 +439,7 @@ class ClaudeSessionPool:
             return result
 
     # ------------------------------------------------------------------
-    # Spawn / clear / dispatch internals
+    # Spawn internals
     # ------------------------------------------------------------------
 
     async def _spawn(
@@ -396,24 +454,11 @@ class ClaudeSessionPool:
         mcp_bearer_token: Optional[str],
         connected_tool_names: Optional[List[str]],
     ) -> PooledClaudeSession:
-        """Cold-spawn a new pooled claude session. Caller holds pool_lock."""
-        from services.claude_oauth import MACHINA_CLAUDE_DIR
-        from .session import _PROJECT_KEY_RE  # noqa: PLC0415 — internal reuse
-
-        # Where claude will write JSONLs for this cwd.
-        project_key = _PROJECT_KEY_RE.sub("-", str(cwd))
-        project_dir = Path(MACHINA_CLAUDE_DIR) / "projects" / project_key
-        try:
-            project_dir.mkdir(parents=True, exist_ok=True)
-        except OSError as exc:
-            logger.warning(
-                "[ClaudeSessionPool] mkdir project_dir failed dir=%s exc=%s",
-                project_dir, exc,
-            )
-
-        # Build argv WITHOUT the prompt — we'll write the first turn's
-        # prompt to the PTY in `send_turn` so the spawn-to-ready path
-        # is the same as the post-/clear path.
+        """Cold-spawn a new pooled claude subprocess. Caller holds pool_lock."""
+        # ``include_prompt`` is ignored by the new ``interactive_argv``
+        # (stream-json input mode reads the prompt from stdin), but we
+        # pass ``False`` to make the intent explicit for any future
+        # provider that still honours it.
         argv = self._provider.interactive_argv(
             spec,
             defaults=defaults,
@@ -423,81 +468,124 @@ class ClaudeSessionPool:
             include_prompt=False,
         )
 
-        # Spawn via the cross-platform PTY transport.
-        transport = get_pty_transport()
-        spawn_time = time.monotonic()
-        pty_handle = await transport.spawn(argv, cwd=cwd, env=env)
-
-        # Locate the JSONL claude is using. Works uniformly for fresh
-        # spawns (new file appears) and ``--continue`` spawns (existing
-        # file's mtime updates as claude appends a system/init event).
-        jsonl_path = await self._wait_for_session_jsonl(
-            project_dir, spawn_time,
+        # Subprocess spawn — the VSCode-extension pattern. PIPE on
+        # stdin/stdout/stderr; no PTY. The stdout-reader task below
+        # parses each stream-json line into an event and dispatches it.
+        process = await asyncio.create_subprocess_exec(
+            *argv,
+            cwd=str(cwd),
+            env=env,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
-        session_uuid = session_uuid_from_jsonl_path(jsonl_path) or ""
 
-        # Build the session shell with placeholder watchers, then start
-        # them. Order: dir_watcher first so any subsequent /clear
-        # detects the post-clear file via the dir baseline. The bearer
-        # token is stored on the session so warm reuse can re-register
-        # the batch context with the SAME token the claude already has
-        # in its argv (the caller owns issue / unregister).
         session = PooledClaudeSession(
             memory_node_id=memory_node_id,
-            project_dir=project_dir,
-            pty_handle=pty_handle,
-            current_session_uuid=session_uuid,
-            current_jsonl_path=jsonl_path,
-            dir_watcher=None,  # type: ignore[arg-type]
-            jsonl_watcher=None,  # type: ignore[arg-type]
+            process=process,
             cwd=cwd,
-            bearer_token=mcp_bearer_token or "",
         )
 
-        async def _on_new_jsonl(path: Path) -> None:
-            session.new_jsonl_path = path
-            session.new_jsonl_event.set()
+        # stdout reader — the single runtime contract in stream-json
+        # output mode. Each line is one stream-json event
+        # (``system/init``, ``assistant``, ``user``, ``result``,
+        # ``system/compact_boundary``, etc.). We dispatch via
+        # :meth:`_handle_stream_event` which populates the per-turn
+        # buffer and signals ``result_event`` on the final event.
+        async def _consume_stdout() -> None:
+            assert process.stdout is not None
+            try:
+                while True:
+                    raw = await process.stdout.readline()
+                    if not raw:
+                        return
+                    line = raw.decode("utf-8", errors="replace").strip()
+                    if not line:
+                        continue
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        logger.debug(
+                            "[ClaudeSessionPool] stdout non-JSON line "
+                            "memory_node=%s line=%r",
+                            memory_node_id, line[:200],
+                        )
+                        continue
+                    try:
+                        await self._handle_stream_event(session, event)
+                    except Exception as exc:  # pragma: no cover
+                        logger.warning(
+                            "[ClaudeSessionPool] handler raised "
+                            "memory_node=%s exc=%s",
+                            memory_node_id, exc,
+                        )
+            except (asyncio.CancelledError, ConnectionError):
+                return
+            except Exception as exc:  # pragma: no cover — defensive
+                logger.debug(
+                    "[ClaudeSessionPool] stdout reader memory_node=%s exc=%s",
+                    memory_node_id, exc,
+                )
 
-        def _make_event_handler(s: PooledClaudeSession):
-            async def _on_event(event: Dict[str, Any]) -> None:
-                await self._handle_jsonl_event(s, event)
-            return _on_event
+        async def _drain_stderr() -> None:
+            assert process.stderr is not None
+            try:
+                while True:
+                    raw = await process.stderr.readline()
+                    if not raw:
+                        return
+                    line = raw.decode("utf-8", errors="replace").rstrip()
+                    if line:
+                        logger.warning(
+                            "[ClaudeSessionPool] claude stderr "
+                            "memory_node=%s pid=%s: %s",
+                            memory_node_id, process.pid, line,
+                        )
+            except (asyncio.CancelledError, ConnectionError):
+                return
+            except Exception as exc:  # pragma: no cover — defensive
+                logger.debug(
+                    "[ClaudeSessionPool] stderr drain memory_node=%s exc=%s",
+                    memory_node_id, exc,
+                )
 
-        session.dir_watcher = JsonlDirWatcher(
-            project_dir, on_new_file=_on_new_jsonl,
+        session.stdout_reader_task = asyncio.create_task(
+            _consume_stdout(),
+            name=f"ClaudeSessionPool.stdout_reader({memory_node_id})",
         )
-        await session.dir_watcher.start()
-        session.jsonl_watcher = JsonlWatcher(
-            jsonl_path,
-            on_event=_make_event_handler(session),
-            start_from_end=False,
+        session.stderr_drain_task = asyncio.create_task(
+            _drain_stderr(),
+            name=f"ClaudeSessionPool.stderr_drain({memory_node_id})",
         )
-        await session.jsonl_watcher.start()
 
         return session
 
-    async def _handle_jsonl_event(
+    # ------------------------------------------------------------------
+    # Stream-json event dispatch
+    # ------------------------------------------------------------------
+
+    async def _handle_stream_event(
         self, session: PooledClaudeSession, event: Dict[str, Any],
     ) -> None:
-        """Shared JSONL event dispatcher for both spawn-time and
-        post-``/clear`` watchers.
+        """Per-event dispatcher for stream-json lines on ``proc.stdout``.
 
         Three concerns:
-          1. Append to ``session.events_this_turn`` so :meth:`send_turn`
-             can build a :class:`SessionResult` from the turn's events.
-          2. Set ``session.result_event`` when the provider's final
-             event arrives (``type == "result"``).
-          3. Detect native compaction (``type=="system"``,
-             ``subtype=="compact_boundary"``) and forward to
-             :class:`CompactionService` so the existing token-tracking
-             pipeline accounts for it — avoids double-compaction
-             (client-side summarisation + native auto-compaction
-             running independently).
+          1. Capture the session UUID from any event that carries one
+             (``system/init`` for fresh spawns, ``result`` for the
+             authoritative value) so crash-recovery respawns can emit
+             ``--resume <UUID>``.
+          2. Append to the per-turn buffer + signal ``result_event``
+             on the final ``result`` event so ``send_turn`` returns.
+          3. Forward ``system/compact_boundary`` events to
+             :class:`CompactionService` so the local-threshold path
+             doesn't double-fire on claude's native auto-compaction.
         """
+        sid = event.get("session_id") or event.get("sessionId")
+        if sid and not session.current_session_uuid:
+            session.current_session_uuid = sid
         session.events_this_turn.append(event)
         if self._provider.is_final_event(event):
             session.result_event.set()
-
         if (
             event.get("type") == "system"
             and event.get("subtype") == "compact_boundary"
@@ -508,38 +596,24 @@ class ClaudeSessionPool:
     async def _record_native_compaction(
         session: PooledClaudeSession, event: Dict[str, Any],
     ) -> None:
-        """Forward a ``system/compact_boundary`` event to the existing
-        :class:`CompactionService` so its token-state machine reflects
-        the native compaction that just happened.
-
-        Without this, the local-threshold path in
-        ``services/ai.py:_track_token_usage`` and claude's own
-        auto-compaction would both trigger summarisations and the UI's
-        token gauge would race against claude's internal state.
-        """
+        """Forward a ``system/compact_boundary`` event to
+        :class:`CompactionService` so the local-threshold path doesn't
+        double-fire on claude's native auto-compaction."""
         try:
             from services.compaction import get_compaction_service
-        except Exception:  # pragma: no cover — defensive
+        except Exception:  # pragma: no cover
             return
-
         svc = get_compaction_service()
-        if svc is None:  # not initialised in test envs
+        if svc is None:
             return
-
         metadata = event.get("compact_metadata") or {}
         pre_tokens = int(metadata.get("pre_tokens") or 0)
-        # `tokens_after` after native compaction isn't directly visible
-        # in the JSONL — claude doesn't emit a "post-summary token
-        # count" event. The next `result` event's `usage` block will
-        # carry the true post-compaction cumulative; recording 0 here
-        # is a conservative reset that lets the next turn's `track()`
-        # call set the accurate cumulative.
         try:
             await svc.record(
                 session_id=session.memory_node_id,
                 node_id=session.memory_node_id,
                 provider="claude",
-                model="",  # claude doesn't emit the model on this event
+                model="",
                 tokens_before=pre_tokens,
                 tokens_after=0,
                 summary=None,
@@ -550,132 +624,23 @@ class ClaudeSessionPool:
                 session.memory_node_id, pre_tokens,
                 metadata.get("trigger", "unknown"),
             )
-        except Exception as exc:  # pragma: no cover — best-effort
+        except Exception as exc:  # pragma: no cover
             logger.debug(
                 "[ClaudeSessionPool] compaction.record failed: %s", exc,
             )
-
-    async def _clear_and_swap(self, session: PooledClaudeSession) -> None:
-        """Send ``/clear``, await the new JSONL filename via the dir
-        watcher, swap the file watcher to the new path. Holds the
-        per-session lock so concurrent turns don't race."""
-        async with session.lock:
-            session.new_jsonl_event.clear()
-            session.new_jsonl_path = None
-            # Stop the current file watcher BEFORE sending /clear so
-            # any tail-end output of the old session doesn't leak into
-            # the new turn's events buffer.
-            await session.jsonl_watcher.stop()
-            session.events_this_turn = []
-            session.result_event.clear()
-
-            # Slash commands must be at the start of a line; claude
-            # auto-fires on Enter.
-            await session.pty_handle.write(b"/clear\r")
-
-            try:
-                await asyncio.wait_for(
-                    session.new_jsonl_event.wait(),
-                    timeout=_CLEAR_JSONL_TIMEOUT,
-                )
-            except asyncio.TimeoutError:
-                logger.warning(
-                    "[ClaudeSessionPool] /clear didn't produce a new JSONL "
-                    "memory_node=%s within %ss; falling back to mtime sort",
-                    session.memory_node_id, _CLEAR_JSONL_TIMEOUT,
-                )
-
-            new_path = session.new_jsonl_path
-            if new_path is None:
-                # Fallback: pick the newest .jsonl in the project dir.
-                try:
-                    candidates = [
-                        p for p in session.project_dir.iterdir()
-                        if p.suffix == ".jsonl"
-                    ]
-                    if candidates:
-                        new_path = max(candidates, key=lambda p: p.stat().st_mtime)
-                except OSError:
-                    pass
-
-            if new_path is not None and new_path != session.current_jsonl_path:
-                session.current_jsonl_path = new_path
-                session.current_session_uuid = (
-                    session_uuid_from_jsonl_path(new_path) or ""
-                )
-                logger.info(
-                    "[ClaudeSessionPool] /clear rotated memory_node=%s "
-                    "new_uuid=%s",
-                    session.memory_node_id, session.current_session_uuid,
-                )
-
-            # Reattach the file watcher to whatever path we believe is
-            # current. If detection failed we re-watch the previous
-            # file — the next turn's `result` event will still fire.
-            # Reuses :meth:`_handle_jsonl_event` so the compaction +
-            # result-event detection are identical to the spawn path.
-            async def _on_event(event: Dict[str, Any]) -> None:
-                await self._handle_jsonl_event(session, event)
-
-            session.jsonl_watcher = JsonlWatcher(
-                session.current_jsonl_path,
-                on_event=_on_event,
-                start_from_end=False,
-            )
-            await session.jsonl_watcher.start()
-
-    async def _wait_for_session_jsonl(
-        self, project_dir: Path, spawn_time: float,
-    ) -> Path:
-        """Find the JSONL claude is using post-spawn via mtime.
-
-        Works for both fresh-spawn (claude creates a new file) and
-        ``--continue`` (claude appends an init event to the most
-        recent existing file, updating its mtime). Picks the newest
-        ``.jsonl`` whose mtime is at least ``spawn_time - 1s`` (grace
-        for clock skew + filesystem mtime resolution).
-        """
-        deadline = spawn_time + _CLEAR_JSONL_TIMEOUT
-        mtime_floor = spawn_time - 1.0
-        while time.monotonic() < deadline:
-            try:
-                jsonls = [
-                    p for p in project_dir.iterdir()
-                    if p.suffix == ".jsonl"
-                ]
-            except OSError:
-                jsonls = []
-            if jsonls:
-                try:
-                    newest = max(jsonls, key=lambda p: p.stat().st_mtime)
-                    if newest.stat().st_mtime >= mtime_floor:
-                        return newest
-                except OSError:
-                    pass
-            await asyncio.sleep(0.1)
-        raise TimeoutError(
-            f"No session JSONL touched under {project_dir} within "
-            f"{_CLEAR_JSONL_TIMEOUT}s"
-        )
 
     def _build_result_from_events(
         self,
         *,
         session: PooledClaudeSession,
+        events: List[Dict[str, Any]],
         prompt: str,
         success: bool,
         error: Optional[str] = None,
     ) -> SessionResult:
-        """Translate the per-turn event buffer to a ``SessionResult``.
-
-        Reuses the provider's ``event_to_session_result`` so the cost
-        / token / response extraction stays identical to the non-
-        pooled path.
-        """
+        """Translate per-turn JSONL events to a :class:`SessionResult`."""
         provider_result = self._provider.event_to_session_result(
-            session.events_this_turn,
-            stderr="",
-            exit_code=0 if success else -1,
+            events, stderr="", exit_code=0 if success else -1,
         )
         final_success = success and provider_result.get("success", True)
         final_error = error or provider_result.get("error")
@@ -693,14 +658,14 @@ class ClaudeSessionPool:
             tool_calls=int(provider_result.get("tool_calls", 0)),
             canonical_usage=provider_result.get(
                 "canonical_usage",
-            ) or self._provider.canonical_usage(session.events_this_turn),
+            ) or self._provider.canonical_usage(events),
             provider_data=dict(provider_result.get("provider_data") or {}),
             success=final_success,
             error=final_error if not final_success else None,
         )
 
     # ------------------------------------------------------------------
-    # Eviction / reaper
+    # Termination + eviction
     # ------------------------------------------------------------------
 
     async def _terminate_locked(
@@ -709,35 +674,55 @@ class ClaudeSessionPool:
         *,
         reason: str = "explicit",
     ) -> None:
-        """Caller holds ``self._pool_lock``. ``reason`` is the
-        CloudEvent ``reason`` value (``idle`` / ``crashed`` / ``evicted``
-        / ``shutdown`` / ``explicit``) — drives the
-        ``claude.session.terminated`` envelope."""
+        """Caller holds ``self._pool_lock``. Stop the watcher, close
+        stdin (graceful exit), wait briefly, then kill if still alive.
+        Emits the ``claude.session.terminated`` CloudEvent."""
         session = self._pool.pop(memory_node_id, None)
         if session is None:
             return
         session_uuid = session.current_session_uuid
-        try:
-            await session.jsonl_watcher.stop()
-        except Exception as exc:  # pragma: no cover — defensive
-            logger.debug(
-                "[ClaudeSessionPool] watcher stop on terminate: %s", exc,
-            )
-        try:
-            await session.dir_watcher.stop()
-        except Exception as exc:  # pragma: no cover
-            logger.debug(
-                "[ClaudeSessionPool] dir watcher stop on terminate: %s", exc,
-            )
-        try:
-            await session.pty_handle.kill()
-        except Exception as exc:  # pragma: no cover
-            logger.debug(
-                "[ClaudeSessionPool] PTY kill on terminate: %s", exc,
-            )
+
+        # 1. Close stdin so claude can exit gracefully.
+        process = session.process
+        if process.returncode is None and process.stdin is not None:
+            try:
+                process.stdin.close()
+            except (ConnectionError, BrokenPipeError, AttributeError):
+                pass
+
+        # 2. Brief grace period for graceful exit.
+        if process.returncode is None:
+            try:
+                await asyncio.wait_for(process.wait(), timeout=_SHUTDOWN_GRACE)
+            except asyncio.TimeoutError:
+                pass
+
+        # 3. Escalate to kill if still alive.
+        if process.returncode is None:
+            try:
+                process.kill()
+                await process.wait()
+            except ProcessLookupError:
+                pass
+            except Exception as exc:  # pragma: no cover
+                logger.debug(
+                    "[ClaudeSessionPool] kill memory_node=%s exc=%s",
+                    memory_node_id, exc,
+                )
+
+        # 4. Cancel reader/drain tasks (they'll exit on their own when
+        # the pipes close, but cancel makes the cleanup deterministic).
+        for task in (session.stdout_reader_task, session.stderr_drain_task):
+            if task is not None and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
+
         logger.info(
-            "[ClaudeSessionPool] terminated memory_node=%s reason=%s",
-            memory_node_id, reason,
+            "[ClaudeSessionPool] terminated memory_node=%s pid=%s reason=%s",
+            memory_node_id, process.pid, reason,
         )
         await self._emit_event(
             "terminated",
@@ -754,8 +739,6 @@ class ClaudeSessionPool:
             if not sess.lock.locked()
         ]
         if not idle_entries:
-            # All sessions in-flight; nothing safe to evict. Caller
-            # spawns over the soft cap.
             logger.info(
                 "[ClaudeSessionPool] all %d entries in-flight; pool over cap",
                 len(self._pool),
@@ -770,7 +753,7 @@ class ClaudeSessionPool:
         await self._terminate_locked(oldest_key, reason="evicted")
 
     # ------------------------------------------------------------------
-    # CloudEvent emission helper
+    # CloudEvent emission helper (unchanged)
     # ------------------------------------------------------------------
 
     async def _emit_event(
@@ -783,16 +766,15 @@ class ClaudeSessionPool:
     ) -> None:
         """Dispatch one of the four claude-session CloudEvents.
 
-        Lazy-imports the broadcaster singleton so the pool stays a
-        leaf service. Failures are swallowed (best-effort) — a missed
-        UI update must not break the agent loop.
+        Lazy-imports the broadcaster singleton so the pool stays a leaf
+        service. Best-effort: a missed UI update must not break the
+        agent loop.
         """
         try:
             from services.status_broadcaster import get_status_broadcaster
             broadcaster = get_status_broadcaster()
-        except Exception:  # pragma: no cover — defensive
+        except Exception:  # pragma: no cover
             return
-
         try:
             if kind == "spawned":
                 await broadcaster.broadcast_claude_session_spawned(
@@ -832,10 +814,9 @@ class ClaudeSessionPool:
                     num_turns=payload.get("num_turns"),
                     workflow_id=workflow_id,
                 )
-        except Exception as exc:  # pragma: no cover — best-effort
+        except Exception as exc:  # pragma: no cover
             logger.debug(
-                "[ClaudeSessionPool] _emit_event(%s) failed: %s",
-                kind, exc,
+                "[ClaudeSessionPool] _emit_event(%s) failed: %s", kind, exc,
             )
 
     async def _reaper_loop(self) -> None:
@@ -846,14 +827,11 @@ class ClaudeSessionPool:
                         self._shutdown.wait(),
                         timeout=self._reaper_interval,
                     )
-                    return  # shutdown fired
+                    return
                 except asyncio.TimeoutError:
                     pass
-
                 now = time.monotonic()
                 async with self._pool_lock:
-                    # Skip in-flight sessions — a turn that takes longer
-                    # than idle_ttl would otherwise get reaped mid-flight.
                     expired_keys = [
                         key for key, sess in self._pool.items()
                         if not sess.lock.locked()

@@ -49,7 +49,7 @@ import yaml
 
 from core.logging import get_logger
 from services._supervisor.process import BaseProcessSupervisor
-from services.cli_agent.jsonl_watcher import JsonlWatcher
+from services.cli_agent.jsonl_watcher import JsonlWatcher, snapshot_jsonl_sizes
 from services.cli_agent.lockfile import remove_ide_lockfile, write_ide_lockfile
 from services.cli_agent.protocol import AICliProvider, CanonicalUsage, SessionResult
 from services.cli_agent.transports import PtyHandle, get_pty_transport
@@ -273,7 +273,16 @@ class AICliSession(BaseProcessSupervisor):
         connected skill so the spawned claude can invoke them via the
         built-in `Skill` tool. Filesystem skills are copied wholesale
         (preserves `scripts/` + `references/`); DB skills are
-        reconstructed from frontmatter."""
+        reconstructed from frontmatter.
+
+        Only ``AICliSession`` (the non-pooled, one-shot agent path)
+        calls this. ``ClaudeSessionPool`` (the pooled, memory-bound
+        path) leaves skills accessible via the FastMCP server's
+        ``listSkills``/``getSkill`` tools instead. Switching the pool
+        to the standard ``--add-dir`` skill discovery is tracked
+        separately (requires restructuring ``server/skills/`` to the
+        Agent Skills `<root>/.claude/skills/<name>/SKILL.md` shape).
+        """
         from services.skill_loader import get_skill_loader
 
         loader = get_skill_loader()
@@ -382,15 +391,13 @@ class AICliSession(BaseProcessSupervisor):
             # Resume runs: known location. Claude opens this file and
             # appends to it on each turn.
             self._session_jsonl_path = project_dir / f"{resume_uuid}.jsonl"
-        # Else: post-spawn we'll discover the file via mtime — works
-        # uniformly for fresh-spawn (claude creates new) and
-        # --continue (claude appends to existing).
 
-        # Spawn via the cross-platform PTY transport. The PtyHandle
-        # owns the subprocess; `self._proc` stays `None` for
-        # BaseProcessSupervisor-compat — `is_running` / `_do_stop` are
-        # overridden below to consult `self._pty_handle` instead.
-        spawn_time = time.monotonic()
+        # Snapshot every existing JSONL's size BEFORE spawn so the post-spawn
+        # locator can detect "claude wrote here" via deterministic size-diff —
+        # works uniformly for fresh spawns (new filename) AND ``--continue``
+        # spawns (existing file grows). Size is monotonic and filesystem-
+        # portable; mtime / wall-clock comparisons are not.
+        baseline_sizes = snapshot_jsonl_sizes(project_dir)
         transport = get_pty_transport()
         argv = self.argv()
         try:
@@ -412,14 +419,14 @@ class AICliSession(BaseProcessSupervisor):
 
         # Resolve the JSONL path. For known-UUID `--resume` runs the
         # path is already known; otherwise (fresh OR `--continue`)
-        # discover via mtime — claude either creates a new file (fresh)
-        # or updates the latest existing file's mtime by appending an
-        # init event (--continue). Either way "newest .jsonl with
-        # mtime >= spawn_time - grace" is the right file.
+        # discover via size-diff against the pre-spawn baseline: claude
+        # either creates a new file (fresh) or appends an init event to
+        # the existing latest file (--continue). Either way, the first
+        # ``.jsonl`` whose size > baseline is the right file.
         if self._session_jsonl_path is None:
             try:
                 self._session_jsonl_path = await self._wait_for_session_jsonl(
-                    project_dir, spawn_time,
+                    project_dir, baseline_sizes,
                 )
             except TimeoutError as exc:
                 # Surface a clean error envelope rather than letting the
@@ -464,42 +471,33 @@ class AICliSession(BaseProcessSupervisor):
         return Path(MACHINA_CLAUDE_DIR) / "projects" / project_key
 
     async def _wait_for_session_jsonl(
-        self, project_dir: Path, spawn_time: float,
+        self, project_dir: Path, baseline: Dict[str, int],
     ) -> Path:
-        """Find the JSONL claude is using post-spawn via mtime.
+        """Find the JSONL claude is using post-spawn via size-diff vs baseline.
 
-        Works for both fresh-spawn (claude creates a new file) and
-        ``--continue`` (claude appends an init event to the most
-        recent existing file, updating its mtime). Picks the newest
-        ``.jsonl`` whose mtime is at least ``spawn_time - 1s``
-        (1s grace for clock skew + mtime resolution).
+        ``baseline`` is the ``{name: size}`` snapshot taken BEFORE the
+        spawn. After spawn we poll for the first ``.jsonl`` that's
+        either new (not in baseline) or grown (size > baseline size).
+        Handles both fresh spawns (new filename) and ``--continue``
+        spawns (existing file grows). File size is a monotonic,
+        filesystem-portable signal — no wall-clock vs monotonic clock
+        comparison, no mtime-resolution races.
 
         Raises :class:`TimeoutError` after
-        :data:`_FIRST_RUN_JSONL_TIMEOUT` seconds — surfaces as a
-        clean spawn failure rather than a silently dead session.
+        :data:`_FIRST_RUN_JSONL_TIMEOUT` seconds — surfaces as a clean
+        spawn failure rather than a silently dead session.
         """
-        deadline = spawn_time + _FIRST_RUN_JSONL_TIMEOUT
-        mtime_floor = spawn_time - 1.0  # grace for clock skew
-        while time.monotonic() < deadline:
-            try:
-                jsonls = [
-                    p for p in project_dir.iterdir()
-                    if p.suffix == ".jsonl"
-                ]
-            except OSError:
-                jsonls = []
-            if jsonls:
-                try:
-                    newest = max(jsonls, key=lambda p: p.stat().st_mtime)
-                    if newest.stat().st_mtime >= mtime_floor:
-                        return newest
-                except OSError:
-                    pass
+        deadline_mono = time.monotonic() + _FIRST_RUN_JSONL_TIMEOUT
+        while time.monotonic() < deadline_mono:
+            current = snapshot_jsonl_sizes(project_dir)
+            for name, size in current.items():
+                if size > baseline.get(name, 0):
+                    return project_dir / name
             await asyncio.sleep(0.1)
         raise TimeoutError(
-            f"No session JSONL touched under {project_dir} within "
-            f"{_FIRST_RUN_JSONL_TIMEOUT}s — claude may have failed to "
-            f"start or the CLAUDE_CONFIG_DIR is misconfigured."
+            f"No session JSONL appeared or grew under {project_dir} "
+            f"within {_FIRST_RUN_JSONL_TIMEOUT}s — claude may have "
+            f"failed to start or the CLAUDE_CONFIG_DIR is misconfigured."
         )
 
     async def _on_jsonl_event(self, event: Dict[str, Any]) -> None:
