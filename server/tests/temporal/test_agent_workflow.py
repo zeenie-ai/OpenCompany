@@ -67,7 +67,7 @@ class TestAgentActivities:
         defn = getattr(compact_agent_memory, "__temporal_activity_definition")
         assert defn.name == "agent.compact_memory.v1"
 
-    def test_collect_returns_all_five(self):
+    def test_collect_returns_all_six(self):
         """Each successive sprint added one F4.B agent activity:
         infra (3) → per-agent-wiring +prepare_payload (4) → CloudEvents
         cleanup +broadcast_progress (5). All five must register so the
@@ -84,6 +84,7 @@ class TestAgentActivities:
             "agent.execute_llm_step.v1",
             "agent.persist_turn.v1",
             "agent.prepare_payload.v1",
+            "agent.store_output.v1",
         ]
 
     def test_prepare_payload_registered(self):

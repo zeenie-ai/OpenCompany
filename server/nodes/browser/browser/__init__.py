@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from core.logging import get_logger
 from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
+from services.plugin.base import NodeUserError
 
 logger = get_logger(__name__)
 
@@ -85,13 +86,13 @@ def _resolve_browser(selection: str, custom_path: str) -> Optional[str]:
 def _req(p: Dict[str, Any], key: str) -> str:
     v = (p.get(key) or "").strip()
     if not v:
-        raise ValueError(f"{key} is required")
+        raise NodeUserError(f"{key} is required")
     return v
 
 
 def _req_sel(s: str) -> str:
     if not s:
-        raise ValueError("selector is required")
+        raise NodeUserError("selector is required")
     return s
 
 

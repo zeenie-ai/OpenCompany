@@ -99,15 +99,11 @@ async def execute_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
     model = payload["model"]
     api_key = payload["api_key"]
     messages = payload.get("messages", [])
-    tools_schemas = payload.get("tools", [])
+    tool_data = payload.get("tool_data", [])
     temperature = payload.get("temperature", 0.7)
     max_tokens = payload.get("max_tokens", 4096)
     thinking_config = payload.get("thinking_config")
 
-    # AIService is a DI singleton — pull it from the container so its
-    # constructor dependencies (auth_service / database / cache / settings)
-    # are wired correctly. Direct ``AIService()`` instantiation skips DI
-    # and raises ``TypeError: missing 4 required positional arguments``.
     ai_service = container.ai_service()
 
     chat_model = ai_service.create_model(
@@ -119,73 +115,34 @@ async def execute_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
         thinking=thinking_config,
     )
 
-    # Bind tools so the LLM sees their schemas. Tool schemas in the
-    # payload are already serialised StructuredTool definitions — we
-    # rebuild LangChain StructuredTool wrappers from them. The tools
-    # themselves are NOT executed here; the workflow schedules them as
-    # separate activities once the LLM emits tool_calls.
-    if tools_schemas:
-        from langchain_core.tools import StructuredTool
-        from pydantic import create_model
-
-        bound_tools: List[Any] = []
-        for ts in tools_schemas:
-            # Materialise a no-op StructuredTool — execution is deferred
-            # to the workflow's tool activity dispatch.
-            def _placeholder(**kwargs):  # noqa: ARG001
-                raise NotImplementedError("Tool is dispatched via Temporal activity")
-
-            # Recreate a minimal Pydantic args schema. The real type
-            # safety lives in the plugin's Params model; here we just
-            # need names + descriptions for the LLM.
-            args_schema = ts.get("args_schema") or {}
-            fields = {
-                k: (Any, v.get("description", "") if isinstance(v, dict) else "")
-                for k, v in args_schema.get("properties", {}).items()
-            }
-            Args = create_model(f"{ts['name']}Args", **fields) if fields else None
-
-            bound_tools.append(
-                StructuredTool.from_function(
-                    func=_placeholder,
-                    name=ts["name"],
-                    description=ts.get("description", ""),
-                    args_schema=Args,
-                )
-            )
+    # Reuse the same tool-binding path execute_agent uses. The returned
+    # StructuredTool has a proper Pydantic args_schema every provider's
+    # bind_tools knows how to convert. The tool's callback is never
+    # invoked here — the workflow schedules per-type activities for each
+    # tool_call the model emits.
+    bound_tools: List[Any] = []
+    for tool_info in tool_data:
+        tool, _config = await ai_service._build_tool_from_node(tool_info)
+        if tool is not None:
+            bound_tools.append(tool)
+    if bound_tools:
         chat_model = chat_model.bind_tools(bound_tools)
 
-    # Reconstruct LangChain message objects from the workflow's dict
-    # representation. Workflow state is serialisable JSON dicts; the
-    # activity rehydrates them.
-    from langchain_core.messages import (
-        AIMessage,
-        HumanMessage,
-        SystemMessage,
-        ToolMessage,
-    )
+    # Workflow state is serialisable JSON dicts. Use LangChain's own
+    # ``messages_from_dict`` / ``messages_to_dict`` helpers so
+    # provider-specific metadata (Gemini ``thought_signature``,
+    # Anthropic cache fields, OpenAI ``reasoning_content``) survives
+    # the workflow ↔ activity round-trip. Manually constructing
+    # AIMessage(content=...) from a stripped dict loses these and
+    # blows up Gemini's ``Function call is missing a thought_signature``
+    # on the next turn.
+    from langchain_core.messages import messages_from_dict
+    from services.ai import filter_empty_messages
 
-    rehydrated = []
-    for m in messages:
-        role = m.get("role")
-        content = m.get("content", "")
-        if role == "system":
-            rehydrated.append(SystemMessage(content=content))
-        elif role == "user":
-            rehydrated.append(HumanMessage(content=content))
-        elif role == "assistant":
-            ai = AIMessage(content=content)
-            if m.get("tool_calls"):
-                ai.tool_calls = m["tool_calls"]
-            rehydrated.append(ai)
-        elif role == "tool":
-            rehydrated.append(
-                ToolMessage(
-                    content=content,
-                    tool_call_id=m.get("tool_call_id", ""),
-                    name=m.get("name", ""),
-                )
-            )
+    rehydrated = messages_from_dict(messages)
+    # Same filter the legacy create_agent_node runs (services/ai.py:775)
+    # — empty-content messages trigger 400s on Gemini/Anthropic.
+    rehydrated = filter_empty_messages(rehydrated)
 
     activity.heartbeat("LLM step: invoking model")
     response = await chat_model.ainvoke(rehydrated)
@@ -200,10 +157,17 @@ async def execute_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
         if meta_usage:
             usage = dict(meta_usage)
 
-    # Tool calls → return them for the workflow to schedule.
+    # Serialise the full assistant message so the workflow can append
+    # it verbatim to its messages list (preserves thought_signature,
+    # cache metadata, etc.). The workflow extracts ``tool_calls`` from
+    # ``response.tool_calls`` separately for scheduling.
+    from langchain_core.messages import messages_to_dict
+    assistant_dict = messages_to_dict([response])[0]
+
     if hasattr(response, "tool_calls") and response.tool_calls:
         return {
             "kind": "tool_calls",
+            "assistant_message": assistant_dict,
             "calls": [
                 {
                     "id": tc.get("id", ""),
@@ -219,6 +183,7 @@ async def execute_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
     text, thinking = extract_thinking_from_response(response)
     return {
         "kind": "final",
+        "assistant_message": assistant_dict,
         "content": text or "",
         "thinking": thinking,
         "usage": usage,
@@ -262,11 +227,8 @@ async def persist_agent_turn(payload: Dict[str, Any]) -> Dict[str, Any]:
     params = await database.get_node_parameters(memory_node_id) or {}
     current = params.get("memory_content", "")
 
-    updated = append_to_memory_markdown(
-        current,
-        human_text=payload.get("human_text", ""),
-        assistant_text=payload.get("assistant_text", ""),
-    )
+    updated = append_to_memory_markdown(current, "human", payload.get("human_text", ""))
+    updated = append_to_memory_markdown(updated, "ai", payload.get("assistant_text", ""))
 
     window_size = int(payload.get("window_size", 10))
     trimmed_content, trimmed_pairs = trim_markdown_window(updated, window_size)
@@ -378,14 +340,63 @@ async def broadcast_agent_progress(payload: Dict[str, Any]) -> Dict[str, Any]:
     from services.status_broadcaster import get_status_broadcaster
 
     broadcaster = get_status_broadcaster()
+    node_id = payload["node_id"]
+    workflow_id = payload.get("workflow_id")
+    phase = payload.get("phase")
+
+    # Optional canvas-glow status update (raw-dict, same idiom F4.A's
+    # _node_activity wrapper uses). Lets the FE swap node colors on
+    # executing/success/error without a separate CloudEvents handler.
+    status = payload.get("status")
+    if status:
+        await broadcaster.update_node_status(
+            node_id,
+            status,
+            {"agent_type": "temporal", **({"phase": phase} if phase else {})},
+            workflow_id=workflow_id,
+        )
+
+    # CloudEvents v1.0 envelope (com.machinaos.agent.progress). Drives
+    # the iteration badge + phase indicator on the canvas.
     await broadcaster.broadcast_agent_progress(
-        payload["node_id"],
-        workflow_id=payload.get("workflow_id"),
+        node_id,
+        workflow_id=workflow_id,
         iteration=int(payload.get("iteration", 0)),
         max_iterations=int(payload.get("max_iterations", 0)),
-        phase=payload.get("phase"),
+        phase=phase,
     )
     return {"emitted": True}
+
+
+@activity.defn(name="agent.store_output.v1")
+async def store_agent_output(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Persist the agent's final ``result`` dict via the existing
+    ``WorkflowService.store_node_output`` so ``ParameterResolver`` can
+    resolve ``{{aiAgent.response}}`` template references in downstream
+    nodes. The F4.A activity path stores via ``NodeExecutor``; F4.B
+    needs this dedicated activity because ``AgentWorkflow`` doesn't go
+    through ``WorkflowService.execute_node``.
+
+    ``payload`` shape::
+
+        {
+            "node_id": str,
+            "session_id": str,
+            "result": dict,  # AgentWorkflow.run() return.result
+        }
+
+    Mirrors what ``NodeExecutor.execute`` writes for every output handle
+    (``output_main`` / ``output_top`` / ``output_0``).
+    """
+    from core.container import container
+
+    workflow_service = container.workflow_service()
+    node_id = payload["node_id"]
+    session_id = payload.get("session_id", "default")
+    data = payload.get("result") or {}
+    for output_name in ("output_main", "output_top", "output_0"):
+        await workflow_service.store_node_output(session_id, node_id, output_name, data)
+    return {"stored": True}
 
 
 @activity.defn(name="agent.prepare_payload.v1")
@@ -463,6 +474,17 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     # snapshot at scheduling time). Prefer DB for liveness.
     db_params = await database.get_node_parameters(node_id) or {}
     parameters = {**(context.get("node_data") or {}), **db_params}
+
+    # Resolve {{node.field}} template variables — same step NodeExecutor
+    # runs before dispatching to handlers in the legacy path. Without
+    # this the agent receives literal "{{chatTrigger.message}}" strings.
+    workflow_service = container.workflow_service()
+    nodes = context.get("nodes") or []
+    edges = context.get("edges") or []
+    if nodes and edges:
+        parameters = await workflow_service._param_resolver.resolve(
+            parameters, node_id, nodes, edges, session_id,
+        )
 
     options = parameters.get("options") or {}
     flattened = {**parameters, **options}
@@ -544,13 +566,20 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         memory_window_size = int(memory_data.get("window_size") or 10)
 
     # ---- Tools ----------------------------------------------------------
-    # Build LangChain StructuredTool per tool entry, then serialise its
-    # args_schema to JSON Schema so the AgentWorkflow's LLM step can
-    # rebuild a placeholder StructuredTool from it.
+    # We call ``ai_service._build_tool_from_node`` once here ONLY to
+    # extract the LLM-visible tool name (the workflow needs it to map
+    # ``tool_call.name`` back to a node_id when scheduling the per-type
+    # activity). The actual StructuredTool — with its proper Pydantic
+    # ``args_schema`` — gets rebuilt inside ``execute_llm_step`` against
+    # the same ``tool_info`` dict via the same helper. We never serialise
+    # the schema to JSON-Schema-and-back: that round-trip strips type
+    # info and the reconstructed ``(Any, default_string)`` placeholder
+    # blew up Gemini's ``convert_to_genai_function_declarations``
+    # (``properties.<field> Input should be a valid dictionary or object``).
     tools_payload: List[Dict[str, Any]] = []
     for tool_info in tool_data or []:
         try:
-            tool, config = await ai_service._build_tool_from_node(tool_info)
+            tool, _config = await ai_service._build_tool_from_node(tool_info)
         except Exception as e:  # noqa: BLE001 — defensive: skip a broken tool
             activity.logger.warning(
                 f"prepare_payload: failed to build tool {tool_info.get('node_type')!r}: {e}"
@@ -564,28 +593,18 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         version = getattr(cls, "version", 1) if cls else 1
         task_queue = getattr(cls, "task_queue", "machina-default") if cls else "machina-default"
 
-        # Serialise args_schema to JSON Schema. StructuredTool.args_schema
-        # is a Pydantic model; .model_json_schema() returns a dict the
-        # LLM activity can use to bind a placeholder tool.
-        args_schema_dict: Dict[str, Any] = {}
-        try:
-            if tool.args_schema is not None:
-                args_schema_dict = tool.args_schema.model_json_schema()
-        except Exception as e:  # noqa: BLE001 — defensive
-            activity.logger.debug(
-                f"prepare_payload: failed to serialise args_schema for "
-                f"{tool_info.get('node_type')!r}: {e}"
-            )
-
         tools_payload.append({
             "name": tool.name,
-            "description": tool.description or "",
-            "args_schema": args_schema_dict,
             "node_type": tool_info.get("node_type", ""),
             "version": version,
             "task_queue": task_queue,
             "tool_node_id": tool_info.get("node_id", ""),
             "parameters": tool_info.get("parameters") or {},
+            # Raw tool_info — what ``collect_agent_connections`` returned
+            # and what ``_build_tool_from_node`` accepts as input. Passed
+            # through the workflow verbatim so ``execute_llm_step`` can
+            # rebuild the real StructuredTool inside the activity.
+            "tool_info": tool_info,
         })
 
     # ---- Compaction threshold ------------------------------------------
@@ -653,4 +672,5 @@ def collect_agent_activities() -> List[Any]:
         compact_agent_memory,
         prepare_agent_payload,
         broadcast_agent_progress,
+        store_agent_output,
     ]

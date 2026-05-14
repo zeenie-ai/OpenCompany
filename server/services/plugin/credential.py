@@ -373,9 +373,18 @@ class OAuth2Credential(Credential):
         auth_service = container.auth_service()
         tokens = await auth_service.get_oauth_tokens(cls.id, user_id)
         if not tokens or not tokens.get("access_token"):
-            raise PermissionError(
+            # Annotate the exception so BaseNode.execute can surface the
+            # failing provider in the response envelope and emit a
+            # CloudEvents-typed broadcast (credential.oauth.runtime_failed)
+            # via broadcast_credential_event. Plain attribute assignment —
+            # no new exception class.
+            err = PermissionError(
                 f"No OAuth tokens for '{cls.id}'. Connect via Credentials modal."
             )
+            err.provider = cls.id
+            err.reason = "missing"
+            err.auth = cls.auth  # "oauth2"
+            raise err
         return tokens
 
     @classmethod
@@ -442,9 +451,13 @@ class ApiKeyCredential(Credential):
         auth_service = container.auth_service()
         api_key = await auth_service.get_api_key(cls.id)
         if not api_key:
-            raise PermissionError(
+            err = PermissionError(
                 f"No API key for '{cls.id}'. Add via Credentials modal."
             )
+            err.provider = cls.id
+            err.reason = "missing"
+            err.auth = cls.auth  # "api_key"
+            raise err
         secrets: Dict[str, Any] = {"api_key": api_key}
         for field in cls.extra_fields:
             value = await auth_service.get_api_key(field)

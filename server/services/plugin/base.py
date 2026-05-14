@@ -321,8 +321,59 @@ class BaseNode:
         try:
             result = await self._run_operation(op_spec, params_obj, context)
         except PermissionError as e:
+            # Credential.resolve() raises PermissionError annotated with
+            # .provider / .reason / .auth attributes (see
+            # services/plugin/credential.py). When .provider is present,
+            # emit a CloudEvents-typed broadcast via
+            # ``broadcast_credential_event`` — the existing wire used by
+            # every credential mutation. The envelope rides as a
+            # WorkflowEvent with type ``credential.{auth}.runtime_failed``
+            # so frontend consumers can glob-match ``credential.*.*``
+            # without inventing a new wire-frame key. Surface a
+            # ``credential`` block in the operation response so the user
+            # gets a structured error envelope rather than a raw string.
+            provider = getattr(e, "provider", None)
+            reason = getattr(e, "reason", "denied")
+            auth = getattr(e, "auth", "api_key")
+            # Normalize "oauth2" -> "oauth" so the event type aligns with
+            # the existing CloudEvents naming (``credential.oauth.connected``,
+            # ``credential.oauth.disconnected``, ``credential.oauth.validated``).
+            auth_kind = "oauth" if auth == "oauth2" else auth
+            workflow_id: Optional[str] = None
+            if isinstance(context.raw, dict):
+                workflow_id = context.raw.get("workflow_id")
+            if provider:
+                try:
+                    from services.status_broadcaster import get_status_broadcaster
+                    broadcaster = get_status_broadcaster()
+                    await broadcaster.broadcast_credential_event(
+                        event_type=f"credential.{auth_kind}.runtime_failed",
+                        provider=provider,
+                        workflow_id=workflow_id,
+                        reason=reason,
+                        node_id=node_id,
+                        error=str(e),
+                    )
+                except Exception:
+                    # Broadcast failure must never mask the original error.
+                    logger.debug(
+                        "[%s] failed to broadcast credential runtime failure for %s",
+                        self.type, provider, exc_info=True,
+                    )
+            extra: Optional[Dict[str, Any]] = None
+            if provider:
+                extra = {
+                    "credential": {
+                        "provider": provider,
+                        "reason": reason,
+                        "remediation": "add_key" if reason == "missing" else "reconnect",
+                    }
+                }
             return self._wrap_error(
-                start_time=start_time, error=str(e), error_type="PermissionDeniedError"
+                start_time=start_time,
+                error=str(e),
+                error_type="PermissionDeniedError",
+                extra=extra,
             )
         except NodeUserError as e:
             # Expected, user-correctable: log a single WARN line so it
@@ -431,15 +482,23 @@ class BaseNode:
         }
 
     def _wrap_error(
-        self, *, start_time: float, error: str, error_type: str = "Error"
+        self,
+        *,
+        start_time: float,
+        error: str,
+        error_type: str = "Error",
+        extra: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        return {
+        envelope: Dict[str, Any] = {
             "success": False,
             "error": error,
             "error_type": error_type,
             "execution_time": round(time.time() - start_time, 3),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
+        if extra:
+            envelope.update(extra)
+        return envelope
 
     # ---- Temporal ---------------------------------------------------------
 
@@ -468,10 +527,11 @@ class BaseNode:
         async def _node_activity(context: Dict[str, Any]) -> Dict[str, Any]:
             from datetime import datetime
             from core.container import container
+            from services.status_broadcaster import get_status_broadcaster
 
             node_id = context["node_id"]
             workflow_id = context.get("workflow_id")
-            broadcaster = container.status_broadcaster()
+            broadcaster = get_status_broadcaster()
 
             # Pre-executed trigger nodes — return cached output without dispatching.
             if context.get("pre_executed"):

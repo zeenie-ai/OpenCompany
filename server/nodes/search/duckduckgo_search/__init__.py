@@ -16,6 +16,7 @@ from typing import List
 from pydantic import BaseModel, Field
 
 from services.plugin import NodeContext, Operation, TaskQueue, ToolNode
+from services.plugin.base import NodeUserError
 
 
 class DuckDuckGoResult(BaseModel):
@@ -60,11 +61,19 @@ class DuckDuckGoSearchNode(ToolNode):
         self, ctx: NodeContext, params: DuckDuckGoSearchParams,
     ) -> DuckDuckGoSearchOutput:
         from ddgs import DDGS
+        from ddgs.exceptions import DDGSException
 
         def _search_sync():
             return list(DDGS().text(params.query, max_results=params.max_results))
 
-        raw = await asyncio.get_event_loop().run_in_executor(None, _search_sync)
+        try:
+            raw = await asyncio.get_event_loop().run_in_executor(None, _search_sync)
+        except DDGSException as e:
+            # Upstream search service rejected the query (rate-limit /
+            # transient network failure / bot detection). LLM can retry
+            # with a different query — surface as NodeUserError so
+            # BaseNode logs one WARN line, no traceback.
+            raise NodeUserError(f"DuckDuckGo search failed: {e}") from e
         results = [
             DuckDuckGoResult(
                 title=item.get("title", ""),
