@@ -595,41 +595,11 @@ class StatusBroadcaster:
     # zero per-plugin knowledge.
     # =========================================================================
 
-    async def update_whatsapp_status(
-        self,
-        connected: bool,
-        has_session: bool = False,
-        running: bool = False,
-        pairing: bool = False,
-        device_id: Optional[str] = None,
-        qr: Optional[str] = None
-    ):
-        """Update WhatsApp connection status and broadcast.
-
-        Emits both the legacy ``whatsapp_status`` raw frame and a
-        CloudEvents-typed sibling (Wave 11.I, X4).
-        """
-        import time
-        self._status["whatsapp"] = {
-            "connected": connected,
-            "has_session": has_session,
-            "running": running,
-            "pairing": pairing,
-            "device_id": device_id,
-            "qr": qr,
-            "timestamp": time.time()
-        }
-
-        await self.broadcast({
-            "type": "whatsapp_status",
-            "data": self._status["whatsapp"]
-        })
-        await self._emit_connection_typed(
-            plugin="whatsapp",
-            connected=connected,
-            subject=device_id,
-            data=self._status["whatsapp"],
-        )
+    # Wave 12 B2: ``update_whatsapp_status`` MOVED to
+    # ``nodes/whatsapp/_events.py:broadcast_whatsapp_status``. Plus the
+    # 7 send_custom_event callsites (message_sent/received, 4 newsletter
+    # events, history_sync_complete) all moved to the plugin's
+    # ``_events.py`` typed wrappers. Status cache slot stays here.
 
     # =========================================================================
     # Telegram Status Updates

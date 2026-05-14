@@ -79,18 +79,19 @@ _TELEMETRY_CARVE_OUT: FrozenSet[str] = frozenset({
 _LEGACY_RAW_DICT_BROADCASTS: FrozenSet[str] = frozenset({
     # Wave 12 B1: ``update_android_status`` retired; moved to
     # ``nodes/android/_events.py:broadcast_android_status``.
-    "update_whatsapp_status",  # FE: WhatsAppStatusPanel reads `whatsapp_status` wire-frame
+    # Wave 12 B2: ``update_whatsapp_status`` retired; moved to
+    # ``nodes/whatsapp/_events.py:broadcast_whatsapp_status``.
     "update_telegram_status",  # FE: TelegramStatusPanel reads `telegram_status` wire-frame
 })
 
 # ``send_custom_event`` callers that still pass raw dicts. Each entry
 # documents WHY. Per-plugin migration unlocks each one.
+#
+# Wave 12 B2: ``nodes/whatsapp/_service.py`` retired — all 7
+# send_custom_event callsites (message_sent/received + 4 newsletter
+# events + history_sync_complete) moved to typed CloudEvents wrappers
+# in ``nodes/whatsapp/_events.py``.
 _LEGACY_RAW_DICT_CALLSITES: FrozenSet[str] = frozenset({
-    # WhatsApp event router emits 7 distinct wire types. Migration would
-    # also rename ``whatsapp_message_received`` etc. to
-    # ``whatsapp.message.received`` namespaced types, requiring FE
-    # listener updates.
-    "nodes/whatsapp/_service.py",
     # Webhook router emits ``webhook_received``. Webhook payload is
     # arbitrary JSON; the consumer (webhookTrigger node) shape is
     # already abstract, so a typed envelope adds little value.

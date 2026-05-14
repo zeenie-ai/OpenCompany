@@ -26,6 +26,12 @@ from services.ws_handler_registry import (
     register_ws_handlers,
 )
 
+from ._events import (  # noqa: F401 — re-exported for callers
+    broadcast_whatsapp_history_synced,
+    broadcast_whatsapp_message,
+    broadcast_whatsapp_newsletter,
+    broadcast_whatsapp_status,
+)
 from ._filters import build_filter as build_whatsapp_filter
 from ._handlers import WS_HANDLERS
 from ._option_loaders import load_channels, load_group_members, load_groups

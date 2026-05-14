@@ -28,32 +28,30 @@ tracer = trace.get_tracer(__name__)
 
 async def refresh_whatsapp_status(broadcaster: "StatusBroadcaster") -> None:
     """Refresh WhatsApp cache + broadcast. One pass per
-    ``_refresh_all_services`` cycle.
+    ``_refresh_all_services`` cycle. Wave 12 B2 — routes through the
+    plugin's canonical broadcaster wrapper so the wire shape is
+    single-sourced in ``_events.py``.
     """
     with tracer.start_as_current_span("broadcaster.refresh_whatsapp") as span:
         try:
+            from ._events import broadcast_whatsapp_status
             from ._service import get_client
 
             client = await get_client()
             status_data = await client.call("status")
 
-            broadcaster._status["whatsapp"] = {
-                "connected": status_data.get("connected", False),
-                "has_session": status_data.get("has_session", False),
-                "running": status_data.get("running", False),
-                "pairing": status_data.get("pairing", False),
-                "device_id": status_data.get("device_id"),
-                "qr": None,
-                "timestamp": time.time(),
-            }
+            await broadcast_whatsapp_status(
+                connected=status_data.get("connected", False),
+                has_session=status_data.get("has_session", False),
+                running=status_data.get("running", False),
+                pairing=status_data.get("pairing", False),
+                device_id=status_data.get("device_id"),
+                qr=None,
+            )
             logger.debug(
                 "[StatusBroadcaster] Refreshed WhatsApp status: connected=%s",
                 status_data.get("connected"),
             )
-            await broadcaster.broadcast({
-                "type": "whatsapp_status",
-                "data": broadcaster._status["whatsapp"],
-            })
             span.set_attribute("connected", bool(status_data.get("connected", False)))
         except Exception as exc:  # noqa: BLE001
             span.record_exception(exc)

@@ -133,114 +133,119 @@ class RPCClient:
         logger.debug(f"[WhatsApp RPC] Event: {method}")
 
         try:
-            from services.status_broadcaster import get_status_broadcaster
-            broadcaster = get_status_broadcaster()
+            # Wave 12 B2: all whatsapp wire emission routes through the
+            # plugin's _events.py wrappers — single source of truth for
+            # shape. No more direct broadcaster.* reaches into framework.
+            from . import (
+                broadcast_whatsapp_history_synced,
+                broadcast_whatsapp_message,
+                broadcast_whatsapp_newsletter,
+                broadcast_whatsapp_status,
+            )
 
             if method == "event.status":
                 # Initial status sent on WebSocket connection
-                await broadcaster.update_whatsapp_status(
+                await broadcast_whatsapp_status(
                     connected=params.get("connected", False),
                     has_session=params.get("has_session", False),
                     running=params.get("running", False),
                     pairing=params.get("pairing", False),
                     device_id=params.get("device_id"),
-                    qr=None
+                    qr=None,
                 )
 
             elif method == "event.connected":
                 # Connected successfully with device_id
-                await broadcaster.update_whatsapp_status(
+                await broadcast_whatsapp_status(
                     connected=True,
                     has_session=True,
                     running=True,
                     pairing=False,
                     device_id=params.get("device_id"),
-                    qr=None
+                    qr=None,
                 )
 
             elif method == "event.disconnected":
                 # Disconnected - service still running
-                await broadcaster.update_whatsapp_status(
+                await broadcast_whatsapp_status(
                     connected=False,
                     has_session=False,
                     running=True,
                     pairing=False,
                     device_id=None,
-                    qr=None
+                    qr=None,
                 )
 
             elif method == "event.connection_failure":
                 # Connection failed
                 logger.error(f"[WhatsApp] Connection failure: {params.get('error')} - {params.get('reason')}")
-                await broadcaster.update_whatsapp_status(
+                await broadcast_whatsapp_status(
                     connected=False,
                     has_session=False,
                     running=True,
                     pairing=False,
                     device_id=None,
-                    qr=None
+                    qr=None,
                 )
 
             elif method == "event.logged_out":
                 # Logged out - session cleared
                 logger.warning(f"[WhatsApp] Logged out: {params.get('reason')}")
-                await broadcaster.update_whatsapp_status(
+                await broadcast_whatsapp_status(
                     connected=False,
                     has_session=False,
                     running=True,
                     pairing=False,
                     device_id=None,
-                    qr=None
+                    qr=None,
                 )
 
             elif method == "event.temporary_ban":
                 # Temporary ban
                 logger.error(f"[WhatsApp] Temporary ban: code={params.get('code')} reason={params.get('reason')}")
-                await broadcaster.update_whatsapp_status(
+                await broadcast_whatsapp_status(
                     connected=False,
                     has_session=False,
                     running=True,
                     pairing=False,
                     device_id=None,
-                    qr=None
+                    qr=None,
                 )
 
             elif method == "event.qr_code":
                 # New QR code available for pairing
                 code = params.get("code")
                 qr_image = qr_code_to_base64(code) if code else None
-                await broadcaster.update_whatsapp_status(
+                await broadcast_whatsapp_status(
                     connected=False,
                     has_session=False,
                     running=True,
                     pairing=True,
                     device_id=None,
-                    qr=qr_image
+                    qr=qr_image,
                 )
 
             elif method == "event.message_sent":
-                # Message sent - broadcast as custom event
-                await broadcaster.send_custom_event("whatsapp_message_sent", params)
+                await broadcast_whatsapp_message("sent", params)
 
             elif method == "event.message_received":
-                # Message received - broadcast as custom event for trigger nodes
-                # (includes newsletter messages with newsletter_meta field)
-                await broadcaster.send_custom_event("whatsapp_message_received", params)
+                # Includes newsletter messages with newsletter_meta field.
+                await broadcast_whatsapp_message("received", params)
 
             elif method == "event.newsletter_join":
-                await broadcaster.send_custom_event("whatsapp_newsletter_join", params)
+                await broadcast_whatsapp_newsletter("joined", params)
 
             elif method == "event.newsletter_leave":
-                await broadcaster.send_custom_event("whatsapp_newsletter_leave", params)
+                await broadcast_whatsapp_newsletter("left", params)
 
             elif method == "event.newsletter_mute_change":
-                await broadcaster.send_custom_event("whatsapp_newsletter_mute_change", params)
+                await broadcast_whatsapp_newsletter("muted", params)
 
             elif method == "event.newsletter_live_update":
-                await broadcaster.send_custom_event("whatsapp_newsletter_live_update", params)
+                await broadcast_whatsapp_newsletter("live_updated", params)
 
             elif method == "event.history_sync_complete":
-                await broadcaster.send_custom_event("whatsapp_history_sync_complete", params)
+                await broadcast_whatsapp_history_synced(params)
 
             # Forward to custom handler if set
             if self._event_handler:
@@ -353,16 +358,16 @@ async def handle_whatsapp_status() -> dict:
         client = await get_client()
         status_data = await client.call("status")
 
-        # Broadcast status update to all connected WebSocket clients
-        from services.status_broadcaster import get_status_broadcaster
-        broadcaster = get_status_broadcaster()
-        await broadcaster.update_whatsapp_status(
+        # Broadcast status via the plugin's canonical wrapper (Wave 12 B2).
+        from . import broadcast_whatsapp_status
+
+        await broadcast_whatsapp_status(
             connected=status_data.get("connected", False),
             has_session=status_data.get("has_session", False),
             running=status_data.get("running", False),
             pairing=status_data.get("pairing", False),
             device_id=status_data.get("device_id"),
-            qr=None  # QR code comes from event.qr_code events
+            qr=None,  # QR code comes from event.qr_code events
         )
 
         device_id = status_data.get("device_id")
@@ -652,15 +657,15 @@ async def handle_whatsapp_start() -> dict:
         result = await client.call("start")
 
         # Broadcast that service is now running (waiting for QR or connection)
-        from services.status_broadcaster import get_status_broadcaster
-        broadcaster = get_status_broadcaster()
-        await broadcaster.update_whatsapp_status(
+        from . import broadcast_whatsapp_status
+
+        await broadcast_whatsapp_status(
             connected=False,
             has_session=False,
             running=True,
             pairing=False,  # Will be set to True by event.qr_code event
             device_id=None,
-            qr=None
+            qr=None,
         )
 
         return {
@@ -685,15 +690,15 @@ async def handle_whatsapp_restart() -> dict:
         client = await get_client(force_reconnect=True)
 
         # Broadcast that we're restarting (brief disconnected state)
-        from services.status_broadcaster import get_status_broadcaster
-        broadcaster = get_status_broadcaster()
-        await broadcaster.update_whatsapp_status(
+        from . import broadcast_whatsapp_status
+
+        await broadcast_whatsapp_status(
             connected=False,
             has_session=False,
             running=True,
             pairing=False,
             device_id=None,
-            qr=None
+            qr=None,
         )
 
         # Call restart RPC method
