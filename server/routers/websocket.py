@@ -367,13 +367,12 @@ async def handle_get_credential_catalogue(data: Dict[str, Any], websocket: WebSo
         # Declarative per-provider override for the "stored" check.
         # Lets Telegram (kind=oauth + status_hook but actual storage
         # is api_key for the bot token) signal that "stored" should
-        # be ``has_valid_key("telegram_bot_token")`` rather than the
-        # default ``get_oauth_tokens(status_hook)`` lookup. Other
-        # providers don't declare ``stored_check`` and keep the
-        # original kind/status_hook-based logic untouched -- so
-        # Google's saved client_secret (password field) does NOT
-        # flip the connected dot before the user actually completes
-        # the OAuth flow.
+        # be ``has_valid_key("telegram")`` rather than the default
+        # ``get_oauth_tokens(status_hook)`` lookup. Other providers
+        # don't declare ``stored_check`` and keep the original
+        # kind/status_hook-based logic untouched -- so Google's saved
+        # client_secret (password field) does NOT flip the connected
+        # dot before the user actually completes the OAuth flow.
         stored_check = provider.get("stored_check")
         if stored_check and stored_check.get("type") == "api_key":
             provider["stored"] = await auth_service.has_valid_key(stored_check.get("key", pid))

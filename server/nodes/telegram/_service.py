@@ -30,7 +30,7 @@ Public surface (consumed by `_handlers.py`, `telegram_send.py`,
                                                     handlers.
 
 Auth lookups go through :class:`TelegramCredential.resolve` (lifted from
-the per-key ``auth.get_api_key("telegram_bot_token")`` / ``..._owner_chat_id``
+the per-key ``auth.get_api_key("telegram")`` / ``..._owner_chat_id``
 calls scattered across the previous handler/router code).  The credential
 class stays declarative — :class:`ApiKeyCredential` does the heavy lifting,
 this service just consumes the resolved dict.
@@ -165,7 +165,7 @@ class TelegramService(ServiceSingleton):
     # =========================================================================
 
     async def has_stored_token(self) -> bool:
-        """Whether `telegram_bot_token` is persisted in auth credentials."""
+        """Whether the `telegram` bot-token credential is persisted in auth."""
         try:
             secrets = await TelegramCredential.resolve()
             return bool(secrets.get("api_key"))
@@ -175,17 +175,16 @@ class TelegramService(ServiceSingleton):
     async def connect(self, token: Optional[str] = None) -> Dict[str, Any]:
         """Connect to Telegram with bot token and start polling.
 
-        When ``token`` is omitted, falls back to the stored
-        ``telegram_bot_token`` credential — matches the Twitter/Google
-        OAuth pattern where the frontend saves credentials first and then
-        calls connect.
+        When ``token`` is omitted, falls back to the stored ``telegram``
+        bot-token credential — matches the Twitter/Google OAuth pattern
+        where the frontend saves credentials first and then calls connect.
 
         Idempotent: if already connected, returns success without tearing
         down the working bot.  See the in-line comment block for the race
         this guards against.
         """
         # Resolve credentials via the declarative class instead of raw
-        # ``auth.get_api_key("telegram_bot_token")`` / ``..._owner_chat_id``
+        # ``auth.get_api_key("telegram")`` / ``..._owner_chat_id``
         # lookups.  Keeps the credential id in one place.
         secrets: Dict[str, Any] = {}
         if not token:

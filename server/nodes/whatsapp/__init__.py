@@ -26,6 +26,7 @@ from services.ws_handler_registry import (
     register_ws_handlers,
 )
 
+from ._credentials import WhatsAppCredential  # noqa: F401 — side-effect register
 from ._events import (  # noqa: F401 — re-exported for callers
     broadcast_whatsapp_history_synced,
     broadcast_whatsapp_message,

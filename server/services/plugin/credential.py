@@ -186,26 +186,27 @@ class Credential:
     # ---- F7: credential icon resolution -----------------------------
     #
     # Mirrors :func:`nodes._visuals.get_plugin_icon_path` for credentials.
-    # The frontend credential modal currently reads ``cls.icon`` strings
-    # of the form ``"asset:<key>"`` and looks up bundled SVGs in
-    # ``client/src/assets/icons/``. F7 moves those icons backend-side:
-    # the endpoint ``GET /api/schemas/credentials/{provider}/icon``
-    # serves the SVG, and ``cls.icon`` can be updated to either an
-    # explicit URL or left empty (the metadata projection layer fills in
-    # the URL automatically when an icon file exists).
+    # The frontend credential modal reads ``cls.icon`` strings of the
+    # form ``"asset:<key>"`` / ``"lobehub:<brand>"`` / emoji, OR fetches
+    # the SVG from the backend via ``GET /api/schemas/credentials/{provider}/icon``.
+    #
+    # Plugin-folder canonical convention (brand-name files):
+    #     ``server/nodes/<plugin>/<cls.id>.svg``
+    #
+    # The credential icon lives directly inside its owner plugin's
+    # folder, named after the credential's brand (e.g.
+    # ``server/nodes/telegram/telegram.svg``). Distinguished from node
+    # icons by the absence of the ``icon`` / ``icon_<type>`` prefix —
+    # node icons follow that convention (see
+    # ``nodes/_visuals.py::get_plugin_icon_path``), credential icons
+    # don't. No ambiguity.
     #
     # Resolution order:
-    # 1. ``server/credentials/icons/<id>.svg`` — central catalogue
-    #    (preferred — provider icons are scope-agnostic; one shared
-    #    location avoids duplicating brand SVGs across plugin folders
-    #    when a provider's credential serves multiple plugins, e.g.
-    #    Google Workspace's 6 nodes share one ``google`` credential).
-    # 2. ``<credential_class_folder>/credential_<id>.svg`` — co-located
-    #    fallback for plugin-scoped credentials (rare; useful when the
-    #    icon is tightly coupled to a specific plugin folder).
-    # 3. ``None`` — no backend icon; frontend falls back to whatever
-    #    ``cls.icon`` declares (``asset:<key>`` / ``lobehub:<brand>`` /
-    #    ``data:`` / emoji).
+    # 1. ``<plugin_folder>/<cls.id>.svg`` — co-located brand-name file.
+    # 2. ``server/credentials/icons/<cls.id>.svg`` — legacy central
+    #    catalogue (pre-Wave 11.K; new credentials should ship the icon
+    #    inside their plugin folder).
+    # 3. ``None`` — no backend icon; frontend falls back to ``cls.icon``.
 
     @classmethod
     def get_icon_path(cls) -> Optional["Path"]:
@@ -220,22 +221,22 @@ class Credential:
         if not cls.id:
             return None
 
-        # 1. Central catalogue
-        # ``server/`` resolves from this file's path: services/plugin/credential.py
-        # -> services/plugin/.. -> services/.. -> server/.
+        # 1. Co-located in the plugin folder, brand-name basename.
+        try:
+            cred_file = _Path(inspect.getfile(cls)).resolve()
+        except (TypeError, OSError):
+            cred_file = None
+        if cred_file is not None:
+            co_located = cred_file.parent / f"{cls.id}.svg"
+            if co_located.exists():
+                return co_located
+
+        # 2. Legacy central catalogue. ``server/`` resolves from this
+        # file: services/plugin/credential.py -> services/.. -> server/.
         server_root = _Path(__file__).resolve().parent.parent.parent
         central = server_root / "credentials" / "icons" / f"{cls.id}.svg"
         if central.exists():
             return central
-
-        # 2. Co-located fallback
-        try:
-            cred_file = _Path(inspect.getfile(cls)).resolve()
-        except (TypeError, OSError):
-            return None
-        co_located = cred_file.parent / f"credential_{cls.id}.svg"
-        if co_located.exists():
-            return co_located
 
         return None
 

@@ -19,7 +19,7 @@ _TELEGRAM_API = "https://api.telegram.org"
 
 
 class TelegramCredential(ApiKeyCredential):
-    id = "telegram_bot_token"
+    id = "telegram"
     display_name = "Telegram Bot"
     category = "Social"
     key_name = ""  # not used — python-telegram-bot takes the token directly

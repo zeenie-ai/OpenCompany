@@ -293,11 +293,11 @@ class TestCredentialRuntimeFailureBroadcast:
         asyncio.get_event_loop().run_until_complete(
             broadcaster.broadcast_credential_event(
                 event_type="credential.api_key.runtime_failed",
-                provider="telegram_bot_token",
+                provider="telegram",
                 workflow_id="wf-test",
                 reason="missing",
                 node_id="telegramSend-1",
-                error="No API key for 'telegram_bot_token'.",
+                error="No API key for 'telegram'.",
             )
         )
 
@@ -307,10 +307,10 @@ class TestCredentialRuntimeFailureBroadcast:
         envelope = payload["data"]
         assert envelope["specversion"] == "1.0"
         assert envelope["type"] == "credential.api_key.runtime_failed"
-        assert envelope["subject"] == "telegram_bot_token"
+        assert envelope["subject"] == "telegram"
         assert envelope["workflow_id"] == "wf-test"
         data = envelope["data"]
-        assert data["provider"] == "telegram_bot_token"
+        assert data["provider"] == "telegram"
         assert data["reason"] == "missing"
         assert data["node_id"] == "telegramSend-1"
         assert "error" in data

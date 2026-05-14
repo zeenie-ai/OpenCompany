@@ -178,7 +178,7 @@ class TestSaveApiKey:
         result = await _call(
             ws_module.handle_save_api_key,
             {
-                "provider": "telegram_bot_token",
+                "provider": "telegram",
                 "api_key": "123:abc",
                 "models": [],
             },
@@ -189,7 +189,7 @@ class TestSaveApiKey:
         # No model fetch (Pattern C)
         patched_container.ai.fetch_models.assert_not_called()
 
-        stored = await patched_container.auth.get_api_key("telegram_bot_token")
+        stored = await patched_container.auth.get_api_key("telegram")
         assert stored == "123:abc"
 
     async def test_save_strips_whitespace_and_lowercases_provider(

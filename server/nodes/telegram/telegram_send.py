@@ -1,9 +1,10 @@
 """Telegram Send — Wave 11.C migration.
 
 Workflow-only ActionNode (no AI-tool exposure). The Telegram bot
-token lives in ``auth_service`` under ``telegram_bot_token``. Plugin
-delegates to the legacy ``handle_telegram_send`` handler during
-thin-migration; 11.E converts to a declarative ``TelegramCredential``.
+token lives in ``auth_service`` under the ``telegram`` credential id
+(was ``telegram_bot_token`` pre-rename). Plugin delegates to the
+legacy ``handle_telegram_send`` handler during thin-migration; 11.E
+converts to a declarative ``TelegramCredential``.
 """
 
 from __future__ import annotations

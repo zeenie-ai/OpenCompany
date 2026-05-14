@@ -27,13 +27,13 @@ class TestApiKeyOps:
         assert await auth_service.get_stored_models("openai") == ["gpt-4", "gpt-3.5"]
 
     async def test_store_with_empty_models_for_non_llm_keys(self, auth_service):
-        # Pattern C: save-only API keys (telegram_bot_token, android_remote, etc.)
+        # Pattern C: save-only API keys (telegram, android_remote, etc.)
         ok = await auth_service.store_api_key(
-            "telegram_bot_token", "123:abc", models=[]
+            "telegram", "123:abc", models=[]
         )
         assert ok is True
-        assert await auth_service.get_api_key("telegram_bot_token") == "123:abc"
-        assert await auth_service.get_stored_models("telegram_bot_token") == []
+        assert await auth_service.get_api_key("telegram") == "123:abc"
+        assert await auth_service.get_stored_models("telegram") == []
 
     async def test_store_requires_models_keyword(self, auth_service):
         # Invariant 7: store_api_key takes `models` as required argument.

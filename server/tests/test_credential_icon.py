@@ -106,11 +106,11 @@ class TestEndpointResolution:
 
     def test_well_known_providers_registered(self):
         """Sanity check that the registry includes the providers the
-        endpoint will eventually serve icons for. Uses actual credential
-        ids (telegram registers as ``telegram_bot_token``, not
-        ``telegram`` — the id matches the secret-store key, not the
-        brand)."""
-        well_known = {"apify", "stripe", "telegram_bot_token", "twitter", "google"}
+        endpoint will eventually serve icons for. Credential ids match
+        the catalogue keys (and brand names): ``telegram`` (bot token),
+        ``google`` (Google Workspace), ``whatsapp`` (QR-paired session),
+        etc."""
+        well_known = {"apify", "stripe", "telegram", "twitter", "google", "whatsapp"}
         registered = set(CREDENTIAL_REGISTRY.keys())
         missing = well_known - registered
         assert not missing, f"Expected credentials not registered: {missing}"

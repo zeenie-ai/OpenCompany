@@ -156,10 +156,10 @@ describe('useApiKeys.saveApiKey', () => {
 
     let res: any;
     await act(async () => {
-      res = await result.current.saveApiKey('telegram_bot_token', '123:abc');
+      res = await result.current.saveApiKey('telegram', '123:abc');
     });
 
-    expect(wsMock.saveApiKey).toHaveBeenCalledWith('telegram_bot_token', '123:abc');
+    expect(wsMock.saveApiKey).toHaveBeenCalledWith('telegram', '123:abc');
     expect(res.isValid).toBe(true);
   });
 
