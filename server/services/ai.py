@@ -1,4 +1,4 @@
-"""AI service for managing language models with LangGraph state machine support."""
+"""AI service: LangChain-based chat-model construction + plain async agent loop."""
 
 from __future__ import annotations
 
@@ -8,37 +8,29 @@ import time
 import httpx
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, Any, List, Optional, Callable, Type, TypedDict, Annotated, Sequence, TYPE_CHECKING
-import operator
+from typing import Dict, Any, List, Optional, Callable, Type, TYPE_CHECKING
 
 # ---------------------------------------------------------------------------
 # LangChain imports — fully lazy except for ``BaseMessage``.
 #
 # Cold-start measurement (Windows, fresh disk):
 #   ``from langchain_openai import ChatOpenAI``          ~20.8s (pulls openai SDK + tiktoken)
-#   ``from langchain_core.tools/langgraph/pydantic``     ~3.0s (langgraph state-graph init)
-# Total eager cost was ~23.8s on first launch.
+# Deferring the heavy imports until the first agent run trims server-ready time.
 #
 # ``services/llm/`` (the native LLM SDK layer) handles ``execute_chat()`` and
 # ``fetch_models()`` without LangChain. LangChain is only needed on the agent
-# execution path (``execute_agent`` / ``execute_chat_agent``). Deferring the
-# imports until the first agent run trims that 23.8s off server-ready time.
+# execution path (``execute_agent`` / ``execute_chat_agent``) for the per-
+# provider ``ChatOpenAI`` / ``ChatAnthropic`` / ``ChatGoogleGenerativeAI``
+# instances and ``chat_model.bind_tools()`` provider-unified tool calling.
 #
-# Only ``BaseMessage`` stays eager: ``AgentState`` (a module-level TypedDict)
-# carries ``Annotated[Sequence[BaseMessage], operator.add]``, which LangGraph
-# resolves via ``typing.get_type_hints()`` when ``StateGraph(AgentState)`` is
-# constructed. ``get_type_hints`` ``eval()``s the string annotations against
-# this module's globals, and ``module.__getattr__`` is NOT consulted by
-# ``eval``, so ``BaseMessage`` must live in the real namespace. Importing
-# ``langchain_core.messages`` standalone is cheap (it doesn't pull tiktoken
-# or the openai SDK).
-#
-# Everything else is resolved via ``@functools.cache``'d helpers or local
-# imports inside the function/method that needs them. Python's ``sys.modules``
-# cache makes repeated local imports microsecond-cheap after the first.
+# ``BaseMessage`` stays eager because ``_run_agent_loop`` type-hints it in
+# its signature; the import is cheap (no tiktoken / openai SDK pull) and
+# keeps type checkers happy. Everything else is lazy via
+# ``@functools.cache``'d helpers or local imports inside the methods that
+# need them.
 # ---------------------------------------------------------------------------
 
-from langchain_core.messages import BaseMessage  # eager: needed for AgentState type resolution
+from langchain_core.messages import BaseMessage  # eager: type hint for _run_agent_loop
 import json
 
 # Eager imports — both are tiny and read on every chat/agent execution
@@ -54,8 +46,6 @@ if TYPE_CHECKING:
     from langchain_openai import ChatOpenAI  # noqa: F401
     from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage  # noqa: F401
     from langchain_core.tools import StructuredTool  # noqa: F401
-    from langgraph.graph import StateGraph, END  # noqa: F401
-    from langgraph.errors import GraphRecursionError  # noqa: F401
     from pydantic import BaseModel, Field, create_model  # noqa: F401
     from langchain_anthropic import ChatAnthropic  # noqa: F401
     from langchain_groq import ChatGroq  # noqa: F401
@@ -552,7 +542,7 @@ def is_valid_message_content(content: Any) -> bool:
     return bool(content)
 
 
-def filter_empty_messages(messages: Sequence[BaseMessage]) -> List[BaseMessage]:
+def filter_empty_messages(messages: List[BaseMessage]) -> List[BaseMessage]:
     """Filter out messages with empty content to prevent API errors.
 
     This is a standardized utility that handles empty message filtering for all
@@ -579,7 +569,7 @@ def filter_empty_messages(messages: Sequence[BaseMessage]) -> List[BaseMessage]:
     filtered = []
 
     for m in messages:
-        # ToolMessage - always keep (contains tool execution results from LangGraph)
+        # ToolMessage - always keep (contains tool execution results)
         if isinstance(m, ToolMessage):
             filtered.append(m)
             continue
@@ -622,29 +612,6 @@ def filter_empty_messages(messages: Sequence[BaseMessage]) -> List[BaseMessage]:
             filtered.append(m)
 
     return filtered
-
-
-# =============================================================================
-# LANGGRAPH STATE MACHINE DEFINITIONS
-# =============================================================================
-
-class AgentState(TypedDict):
-    """State for the LangGraph agent workflow.
-
-    Uses Annotated with operator.add to accumulate messages over steps.
-    This is the core pattern from LangGraph for stateful conversations.
-    """
-    messages: Annotated[Sequence[BaseMessage], operator.add]
-    # Tool outputs storage
-    tool_outputs: Dict[str, Any]
-    # Tool calling support
-    pending_tool_calls: List[Dict[str, Any]]  # Tool calls from LLM to execute
-    # Agent metadata
-    iteration: int
-    max_iterations: int
-    should_continue: bool
-    # Thinking/reasoning content accumulated across iterations
-    thinking_content: Optional[str]
 
 
 def extract_thinking_from_response(response) -> tuple:
@@ -751,213 +718,136 @@ def extract_thinking_from_response(response) -> tuple:
     return text, thinking
 
 
-def create_agent_node(chat_model):
-    """Create the agent node function for LangGraph.
+async def _run_agent_loop(
+    chat_model,
+    initial_messages: List[BaseMessage],
+    *,
+    tools: Optional[List[Any]] = None,
+    tool_executor: Optional[Callable] = None,
+    max_iterations: int = 500,
+    progress_callback: Optional[Callable[[int], Any]] = None,
+) -> Dict[str, Any]:
+    """Drive an LLM agent loop with optional tool calling.
 
-    The agent node:
-    1. Receives current state with messages
-    2. Invokes the LLM
-    3. Extracts thinking content if present
-    4. Checks for tool calls in response
-    5. Returns updated state with new AI message, thinking, and pending tool calls
+    Plain-async ``while iteration < max:`` loop. Each iteration:
+
+    1. Invoke ``chat_model.ainvoke(filtered_messages)`` and append the
+       returned assistant message verbatim. Appending the message object
+       itself preserves Gemini ``thought_signature``, Anthropic cache
+       markers, OpenAI ``reasoning_content``, etc.
+    2. Extract thinking content; accumulate across iterations with the
+       ``--- Iteration N ---`` separator.
+    3. If the response carries ``tool_calls``, dispatch each via the
+       supplied ``tool_executor`` and append a ``ToolMessage`` per call.
+       Executor failures get surfaced to the model as an error JSON so
+       the loop can recover rather than abort.
+    4. If no tool calls, return.
+
+    On hitting ``max_iterations``, append a terminal ``AIMessage`` with
+    a truncation note so downstream extraction has a usable response —
+    same shape the old ``GraphRecursionError`` handler synthesised.
+
+    ``progress_callback(iteration)`` is awaited at the top of each turn
+    (replaces the per-snapshot broadcast inside ``astream``).
+
+    Returns ``{messages, iteration, thinking_content, truncated}``.
+    ``messages`` is the full accumulated list (system + history +
+    interleaved AI / Tool messages); callers extract the last AIMessage
+    as the final response.
     """
-    def agent_node(state: AgentState) -> Dict[str, Any]:
-        """Process messages through the LLM and return response."""
-        messages = state["messages"]
-        iteration = state.get("iteration", 0)
-        max_iterations = state.get("max_iterations", 10)
-        existing_thinking = state.get("thinking_content") or ""
+    from langchain_core.messages import AIMessage, ToolMessage
 
-        logger.debug(f"[LangGraph] Agent node invoked, iteration={iteration}, messages={len(messages)}")
+    model = chat_model.bind_tools(tools) if tools else chat_model
+    messages: List[BaseMessage] = list(initial_messages)
+    thinking_accumulated = ""
+    iteration = 0
 
-        # Filter out messages with empty content using standardized utility
-        # Prevents API errors/warnings from Gemini, Claude, and other providers
-        filtered_messages = filter_empty_messages(messages)
-
-        if len(filtered_messages) != len(messages):
-            logger.debug(f"[LangGraph] Filtered out {len(messages) - len(filtered_messages)} empty messages")
-
-        # Invoke the model
-        response = chat_model.invoke(filtered_messages)
-
-        logger.debug(f"[LangGraph] LLM response type: {type(response).__name__}")
-
-        # Extract thinking content from response
-        _, new_thinking = extract_thinking_from_response(response)
-
-        # Accumulate thinking across iterations (for multi-step tool usage)
-        accumulated_thinking = existing_thinking
-        if new_thinking:
-            if accumulated_thinking:
-                accumulated_thinking = f"{accumulated_thinking}\n\n--- Iteration {iteration + 1} ---\n{new_thinking}"
-            else:
-                accumulated_thinking = new_thinking
-            logger.debug(f"[LangGraph] Extracted thinking content ({len(new_thinking)} chars)")
-
-        # Check for Gemini-specific response attributes (safety ratings, block reason)
-        if hasattr(response, 'response_metadata'):
-            meta = response.response_metadata
-            if meta.get('finish_reason') == 'SAFETY':
-                logger.warning("[LangGraph] Gemini response blocked by safety filters")
-            if meta.get('block_reason'):
-                logger.warning(f"[LangGraph] Gemini block reason: {meta.get('block_reason')}")
-
-        # Check for tool calls in the response
-        pending_tool_calls = []
-        should_continue = False
-
-        if hasattr(response, 'tool_calls') and response.tool_calls:
-            # Model wants to use tools
-            pending_tool_calls = response.tool_calls
-            should_continue = True
-            logger.debug(f"[LangGraph] Agent requesting {len(pending_tool_calls)} tool call(s)")
-            # Debug: log raw tool calls to diagnose empty args issue
-            for tc in pending_tool_calls:
-                logger.debug(f"[LangGraph] Raw tool_call object: {tc}")
-                logger.debug(f"[LangGraph] Tool call type: {type(tc)}, keys: {tc.keys() if hasattr(tc, 'keys') else 'N/A'}")
-
-        return {
-            "messages": [response],  # Will be appended via operator.add
-            "tool_outputs": {},
-            "pending_tool_calls": pending_tool_calls,
-            "iteration": iteration + 1,
-            "max_iterations": max_iterations,
-            "should_continue": should_continue,
-            "thinking_content": accumulated_thinking or None
-        }
-
-    return agent_node
-
-
-def create_tool_node(tool_executor: Callable):
-    """Create an async tool execution node for LangGraph.
-
-    The tool node:
-    1. Receives pending tool calls from agent
-    2. Executes each tool via the async tool_executor callback
-    3. Returns ToolMessages with results for the agent
-
-    Note: This returns an async function for use with ainvoke().
-    LangGraph supports async node functions natively.
-    """
-    from langchain_core.messages import ToolMessage
-    async def tool_node(state: AgentState) -> Dict[str, Any]:
-        """Execute pending tool calls and return results as ToolMessages."""
-        tool_messages = []
-
-        for tool_call in state.get("pending_tool_calls", []):
-            tool_name = tool_call.get("name", "unknown")
-            tool_args = tool_call.get("args", {})
-            tool_id = tool_call.get("id", "")
-
-            logger.debug(f"[LangGraph] Executing tool: {tool_name} (args={tool_args})")
-
+    for iteration in range(1, max_iterations + 1):
+        if progress_callback is not None:
             try:
-                # Directly await the async tool executor (proper async pattern)
-                result = await tool_executor(tool_name, tool_args)
-                logger.debug(f"[LangGraph] Tool {tool_name} returned: {str(result)[:100]}")
+                await progress_callback(iteration)
             except Exception as e:
-                logger.error(f"[LangGraph] Tool execution failed: {tool_name}", error=str(e))
-                result = {"error": str(e)}
+                logger.debug(f"[Agent loop] progress_callback raised: {e}")
 
-            # Create ToolMessage with result
-            tool_messages.append(ToolMessage(
+        filtered = filter_empty_messages(messages)
+        response = await model.ainvoke(filtered)
+        messages.append(response)
+
+        _, new_thinking = extract_thinking_from_response(response)
+        if new_thinking:
+            if thinking_accumulated:
+                thinking_accumulated = (
+                    f"{thinking_accumulated}\n\n--- Iteration {iteration} ---\n{new_thinking}"
+                )
+            else:
+                thinking_accumulated = new_thinking
+
+        # Gemini occasionally returns a blocked / safety-stopped response;
+        # surface the same warning the legacy agent_node did so operators
+        # can spot the cause in the logs.
+        if hasattr(response, "response_metadata"):
+            meta = response.response_metadata or {}
+            if meta.get("finish_reason") == "SAFETY":
+                logger.warning("[Agent loop] Gemini response blocked by safety filters")
+            if meta.get("block_reason"):
+                logger.warning(f"[Agent loop] Gemini block reason: {meta.get('block_reason')}")
+
+        tool_calls = getattr(response, "tool_calls", None) or []
+        if not tool_calls:
+            return {
+                "messages": messages,
+                "iteration": iteration,
+                "thinking_content": thinking_accumulated or None,
+                "truncated": False,
+            }
+
+        if tool_executor is None:
+            logger.warning(
+                "[Agent loop] LLM emitted %d tool_call(s) but no tool_executor "
+                "configured; treating response as final",
+                len(tool_calls),
+            )
+            return {
+                "messages": messages,
+                "iteration": iteration,
+                "thinking_content": thinking_accumulated or None,
+                "truncated": False,
+            }
+
+        for call in tool_calls:
+            tool_name = call.get("name", "")
+            tool_args = call.get("args", {}) or {}
+            tool_id = call.get("id", "")
+            try:
+                result = await tool_executor(tool_name, tool_args)
+            except Exception as e:
+                logger.error(f"[Agent loop] Tool {tool_name!r} raised: {e}")
+                result = {"error": str(e)}
+            messages.append(ToolMessage(
                 content=json.dumps(result, default=str),
                 tool_call_id=tool_id,
-                name=tool_name
+                name=tool_name,
             ))
 
-            logger.debug(f"[LangGraph] Tool {tool_name} completed, result added to messages")
-
-        return {
-            "messages": tool_messages,
-            "pending_tool_calls": [],  # Clear pending after execution
-        }
-
-    return tool_node
-
-
-def should_continue(state: AgentState) -> str:
-    """Conditional edge: route to ``tools`` when the LLM emitted tool calls,
-    otherwise terminate the graph.
-
-    The previous implementation tracked a custom ``iteration`` counter to cap
-    the loop. That counter shared a name with LangGraph internals and was
-    being mutated unexpectedly, causing the edge to return ``"end"`` on the
-    first tool call. The standard LangGraph pattern is to route purely on
-    pending tool calls and rely on ``recursion_limit`` (passed via
-    ``ainvoke(config=...)``) as the safety net.
-    """
-    if state.get("pending_tool_calls"):
-        return "tools"
-    return "end"
-
-
-def build_agent_graph(chat_model, tools: List = None, tool_executor: Callable = None):
-    """Build the LangGraph agent workflow with optional tool support.
-
-    Architecture (with tools):
-        START -> agent -> (conditional) -> tools -> agent -> ... -> END
-                             |
-                             +-> END (no tool calls)
-
-    Architecture (without tools):
-        START -> agent -> END
-
-    Args:
-        chat_model: The LangChain chat model
-        tools: Optional list of LangChain tools to bind to the model
-        tool_executor: Optional async callback to execute tools
-    """
-    from langgraph.graph import StateGraph, END
-    # Create the graph with our state schema
-    graph = StateGraph(AgentState)
-
-    # Bind tools to model if provided
-    model_with_tools = chat_model
-    if tools:
-        model_with_tools = chat_model.bind_tools(tools)
-        logger.debug(f"[LangGraph] Bound {len(tools)} tools to model")
-
-    # Add the agent node
-    agent_fn = create_agent_node(model_with_tools)
-    graph.add_node("agent", agent_fn)
-
-    # Set entry point
-    graph.set_entry_point("agent")
-
-    if tools and tool_executor:
-        # Add tool execution node
-        tool_fn = create_tool_node(tool_executor)
-        graph.add_node("tools", tool_fn)
-
-        # Conditional routing: agent -> tools or end
-        graph.add_conditional_edges(
-            "agent",
-            should_continue,
-            {
-                "tools": "tools",
-                "end": END
-            }
-        )
-
-        # Tools always route back to agent
-        graph.add_edge("tools", "agent")
-
-        logger.debug("[LangGraph] Built graph with tool execution loop")
-    else:
-        # Simple graph without tools
-        graph.add_conditional_edges(
-            "agent",
-            should_continue,
-            {
-                "tools": "agent",  # Fallback loop (shouldn't happen without tools)
-                "end": END
-            }
-        )
-
-    # Compile the graph
-    return graph.compile()
+    # Loop exited without returning -- hit max_iterations. Append a
+    # terminal AIMessage so downstream extraction (and post-loop token
+    # tracking / memory persistence) still have a usable state, matching
+    # the legacy ``GraphRecursionError`` handler.
+    messages.append(AIMessage(content=(
+        f"[Recursion limit reached: {max_iterations} iterations. "
+        f"Adjust agent.recursion_limit in llm_defaults.json or "
+        f"simplify the task.]"
+    )))
+    logger.warning(
+        f"[Agent loop] max_iterations hit ({max_iterations}); "
+        f"returning partial response with {len(messages)} message(s)"
+    )
+    return {
+        "messages": messages,
+        "iteration": iteration,
+        "thinking_content": thinking_accumulated or None,
+        "truncated": True,
+    }
 
 
 def _build_skill_system_prompt(skill_data: List[Dict[str, Any]], log_prefix: str = "[Agent]") -> tuple:
@@ -1029,9 +919,6 @@ class AIService:
         # RLM service (lazy import to avoid circular deps)
         from services.rlm import RLMService
         self.rlm_service = RLMService(auth=self.auth)
-        # Deep Agent service (deepagents package)
-        from services.agents import DeepAgentService
-        self.deep_agent_service = DeepAgentService(auth=self.auth, model_factory=self.create_model, token_tracker=self._track_token_usage)
 
     def detect_provider(self, model: str) -> str:
         """Detect AI provider from model name."""
@@ -1070,7 +957,7 @@ class AIService:
             if extracted.strip():
                 return extracted
             # List was present but no text extracted
-            logger.warning(f"[LangGraph] Content was list but no text extracted: {content}")
+            logger.warning(f"[Agent] Content was list but no text extracted: {content}")
 
         # Handle string content
         if isinstance(content, str) and content.strip():
@@ -1129,13 +1016,13 @@ class AIService:
 
         # Generic empty response - log full response details for debugging
         if ai_response:
-            logger.warning(f"[LangGraph] Empty response debug - content_blocks: {getattr(ai_response, 'content_blocks', None)}")
-            logger.warning(f"[LangGraph] Empty response debug - additional_kwargs: {getattr(ai_response, 'additional_kwargs', {})}")
+            logger.warning(f"[Agent] Empty response debug - content_blocks: {getattr(ai_response, 'content_blocks', None)}")
+            logger.warning(f"[Agent] Empty response debug - additional_kwargs: {getattr(ai_response, 'additional_kwargs', {})}")
             if hasattr(ai_response, 'response_metadata'):
                 meta = ai_response.response_metadata
-                logger.warning(f"[LangGraph] Empty response debug - finish_reason: {meta.get('finish_reason')}")
-                logger.warning(f"[LangGraph] Empty response debug - token_usage: {meta.get('token_usage')}")
-        logger.warning(f"[LangGraph] Empty response with no error details. Content type: {type(content)}, value: {repr(content)}")
+                logger.warning(f"[Agent] Empty response debug - finish_reason: {meta.get('finish_reason')}")
+                logger.warning(f"[Agent] Empty response debug - token_usage: {meta.get('token_usage')}")
+        logger.warning(f"[Agent] Empty response with no error details. Content type: {type(content)}, value: {repr(content)}")
         raise ValueError("AI generated empty response. Try rephrasing your prompt or using a different model.")
 
     async def _track_token_usage(
@@ -1646,12 +1533,15 @@ class AIService:
                             workflow_id: Optional[str] = None,
                             context: Optional[Dict[str, Any]] = None,
                             database = None) -> Dict[str, Any]:
-        """Execute AI Agent using LangGraph state machine.
+        """Execute AI Agent via the plain-async agent loop.
 
-        This method uses LangGraph for structured agent execution with:
-        - State management via TypedDict
-        - Tool calling via bind_tools and tool execution node
-        - Message accumulation via operator.add pattern
+        Drives :func:`_run_agent_loop` with the LangChain chat model returned by
+        :meth:`create_model`. Each iteration: invoke the model, dispatch any
+        ``tool_calls`` through the supplied closure, append ``ToolMessage`` results,
+        loop until a final response (or the configured recursion limit hits).
+
+        Features:
+        - Tool calling via ``chat_model.bind_tools`` + the shared tool dispatcher
         - Real-time status broadcasts for UI animations
 
         Args:
@@ -1666,7 +1556,6 @@ class AIService:
             context: Optional execution context with nodes, edges for nested agent delegation
         """
         from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-        from langgraph.errors import GraphRecursionError
         start_time = time.time()
         provider = 'unknown'
         model = 'unknown'
@@ -1685,7 +1574,7 @@ class AIService:
             if broadcaster:
                 await broadcaster.update_node_status(node_id, "executing", {
                     "phase": phase,
-                    "agent_type": "langgraph",
+                    "agent_type": "loop",
                     **(details or {})
                 }, workflow_id=workflow_id)
 
@@ -1713,7 +1602,7 @@ class AIService:
             if model.startswith('[FREE] '):
                 model = model[7:]
 
-            logger.debug(f"[LangGraph] Agent: {provider}/{model}, tools={len(tool_data) if tool_data else 0}")
+            logger.debug(f"[Agent] Agent: {provider}/{model}, tools={len(tool_data) if tool_data else 0}")
 
             # If no model specified or model doesn't match provider, use default (DB > config)
             if not model or not is_model_valid_for_provider(model, provider):
@@ -1740,7 +1629,7 @@ class AIService:
                     level=flattened.get('thinking_level', 'medium'),
                     format=flattened.get('reasoning_format', 'parsed'),
                 )
-                logger.debug(f"[LangGraph] Thinking enabled: budget={thinking_config.budget}, effort={thinking_config.effort}")
+                logger.debug(f"[Agent] Thinking enabled: budget={thinking_config.budget}, effort={thinking_config.effort}")
 
             temperature = _resolve_temperature(flattened, model, provider, bool(thinking_config and thinking_config.enabled))
 
@@ -1755,7 +1644,7 @@ class AIService:
             proxy_url = await self.auth.get_api_key(f"{provider}_proxy")
 
             # Create LLM using the provider from node configuration
-            logger.debug(f"[LangGraph] Creating {provider} model: {model}")
+            logger.debug(f"[Agent] Creating {provider} model: {model}")
             chat_model = self.create_model(provider, api_key, model, temperature, max_tokens, thinking_config, proxy_url)
 
             # Build initial messages for state. The SystemMessage is
@@ -1798,14 +1687,14 @@ class AIService:
                             if docs:
                                 context = "\n---\n".join(d.page_content for d in docs)
                                 initial_messages.append(SystemMessage(content=f"Relevant past context:\n{context}"))
-                                logger.info(f"[LangGraph Memory] Retrieved {len(docs)} relevant memories from long-term store")
+                                logger.info(f"[Agent Memory] Retrieved {len(docs)} relevant memories from long-term store")
                         except Exception as e:
-                            logger.debug(f"[LangGraph Memory] Long-term retrieval skipped: {e}")
+                            logger.debug(f"[Agent Memory] Long-term retrieval skipped: {e}")
 
                 # Add parsed history messages
                 initial_messages.extend(history_messages)
 
-                logger.info(f"[LangGraph Memory] Loaded {history_count} messages from markdown")
+                logger.info(f"[Agent Memory] Loaded {history_count} messages from markdown")
 
                 # Broadcast: Memory loaded
                 await broadcast_status("memory_loaded", {
@@ -1832,9 +1721,9 @@ class AIService:
                     if tool:
                         tools.append(tool)
                         tool_configs[tool.name] = config
-                        logger.debug(f"[LangGraph] Registered tool: name={tool.name}, node_id={config.get('node_id')}")
+                        logger.debug(f"[Agent] Registered tool: name={tool.name}, node_id={config.get('node_id')}")
 
-                logger.debug(f"[LangGraph] Built {len(tools)} tools")
+                logger.debug(f"[Agent] Built {len(tools)} tools")
 
                 # Auto-inject check_delegated_tasks tool when delegation tools present
                 if any(name.startswith('delegate_to_') for name in tool_configs):
@@ -1848,7 +1737,7 @@ class AIService:
                     if check_tool:
                         tools.append(check_tool)
                         tool_configs[check_tool.name] = check_config
-                        logger.debug("[LangGraph] Auto-injected check_delegated_tasks tool")
+                        logger.debug("[Agent] Auto-injected check_delegated_tasks tool")
 
                     # Add delegation guidance to system message
                     delegate_names = [n for n in tool_configs if n.startswith('delegate_to_')]
@@ -1877,8 +1766,8 @@ class AIService:
                 config = tool_configs.get(tool_name, {})
                 tool_node_id = config.get('node_id')
 
-                logger.debug(f"[LangGraph] Executing tool: {tool_name} (args={tool_args})")
-                logger.debug(f"[LangGraph] Tool node_id={tool_node_id}, workflow_id={workflow_id}")
+                logger.debug(f"[Agent] Executing tool: {tool_name} (args={tool_args})")
+                logger.debug(f"[Agent] Tool node_id={tool_node_id}, workflow_id={workflow_id}")
 
                 # Parent-agent phase broadcast (does not touch tool node).
                 await broadcast_status("executing_tool", {
@@ -1911,40 +1800,21 @@ class AIService:
 
                 except Exception as e:
                     error_msg = str(e)
-                    logger.error(f"[LangGraph] Tool execution failed: {tool_name}", error=error_msg)
+                    logger.error(f"[Agent] Tool execution failed: {tool_name}", error=error_msg)
 
-                    # Re-raise to let LangGraph handle the error
+                    # Re-raise to let _run_agent_loop surface the error to the LLM
                     raise
 
-            # Broadcast: Building graph
+            # Broadcast: Building agent
             await broadcast_status("building_graph", {
-                "message": "Building LangGraph agent...",
+                "message": "Building agent...",
                 "message_count": len(initial_messages),
                 "has_memory": bool(session_id),
                 "history_count": history_count,
                 "tool_count": len(tools)
             })
 
-            # Build and execute LangGraph agent
-            logger.debug(f"[LangGraph] Building agent graph with {len(initial_messages)} messages")
-            agent_graph = build_agent_graph(
-                chat_model,
-                tools=tools if tools else None,
-                tool_executor=tool_executor if tools else None
-            )
-
-            # Create initial state with thinking_content for reasoning models
-            initial_state: AgentState = {
-                "messages": initial_messages,
-                "tool_outputs": {},
-                "pending_tool_calls": [],
-                "iteration": 0,
-                "max_iterations": 10,
-                "should_continue": False,
-                "thinking_content": None
-            }
-
-            # Broadcast: Executing graph
+            # Broadcast: Invoking LLM
             await broadcast_status("invoking_llm", {
                 "message": f"Invoking {provider} LLM...",
                 "provider": provider,
@@ -1954,49 +1824,33 @@ class AIService:
                 "history_count": history_count
             })
 
-            # Execute the graph. ``recursion_limit`` (cap on agent/tool
-            # supersteps) is sourced from llm_defaults.json so deployments
-            # tune it without code changes. On hit, synthesise a terminal
-            # AIMessage from whatever the agent produced before stopping
-            # so downstream extraction returns a usable partial response
-            # instead of failing the workflow.
+            # Run the agent loop. ``recursion_limit`` (read from
+            # llm_defaults.json:agent.recursion_limit) is the hard cap on
+            # how many LLM turns the loop will run. The real termination
+            # signal is the LLM returning a final response without tool
+            # calls; this cap is the safety backstop. On hit, the loop
+            # appends a synthetic terminal AIMessage so downstream
+            # extraction returns a usable partial response.
             from services.model_registry import get_model_registry
             recursion_limit = int(get_model_registry().get_agent_defaults()["recursion_limit"])
-            final_state = None
-            try:
-                async for snapshot in agent_graph.astream(
-                    initial_state,
-                    config={"recursion_limit": recursion_limit},
-                    stream_mode="values",
-                ):
-                    final_state = snapshot
-                    # Per-step iteration broadcast (CloudEvents envelope
-                    # via broadcast_agent_progress -> wire key
-                    # `agent_progress`). The FE updates nodeStatusStore
-                    # so the AI agent body shows live "iteration / max".
-                    if broadcaster:
-                        iter_count = snapshot.get("iteration", 0) if isinstance(snapshot, dict) else 0
-                        await broadcaster.broadcast_agent_progress(
-                            node_id,
-                            workflow_id=workflow_id,
-                            iteration=iter_count,
-                            max_iterations=recursion_limit,
-                        )
-            except GraphRecursionError:
-                # Append a terminal AIMessage so downstream extraction (and
-                # the post-loop _track_token_usage / compact_context call)
-                # still has a usable state instead of a half-built one.
-                msgs = list((final_state or {}).get("messages") or [])
-                msgs.append(AIMessage(content=(
-                    f"[Recursion limit reached: {recursion_limit} supersteps. "
-                    f"Adjust agent.recursion_limit in llm_defaults.json or "
-                    f"simplify the task.]"
-                )))
-                final_state = {**(final_state or {}), "messages": msgs}
-                logger.warning(
-                    f"[LangGraph] Recursion limit hit ({recursion_limit}); "
-                    f"returning partial response with {len(msgs)} message(s)"
-                )
+
+            async def _emit_progress(iter_count: int) -> None:
+                if broadcaster:
+                    await broadcaster.broadcast_agent_progress(
+                        node_id,
+                        workflow_id=workflow_id,
+                        iteration=iter_count,
+                        max_iterations=recursion_limit,
+                    )
+
+            final_state = await _run_agent_loop(
+                chat_model,
+                initial_messages,
+                tools=tools if tools else None,
+                tool_executor=tool_executor if tools else None,
+                max_iterations=recursion_limit,
+                progress_callback=_emit_progress if broadcaster else None,
+            )
 
             # Extract the AI response (last message in the accumulated messages)
             all_messages = final_state["messages"]
@@ -2013,7 +1867,7 @@ class AIService:
             # Get accumulated thinking content from state
             thinking_content = final_state.get("thinking_content")
 
-            logger.info(f"[LangGraph] Agent completed in {iterations} iteration(s), thinking={'yes' if thinking_content else 'no'}")
+            logger.info(f"[Agent] Agent completed in {iterations} iteration(s), thinking={'yes' if thinking_content else 'no'}")
 
             # Track token usage if memory connected (for compaction service)
             # Also triggers compaction if threshold exceeded
@@ -2050,7 +1904,7 @@ class AIService:
                     updated_content = compaction_result['summary']
                     updated_content = _append_to_memory_markdown(updated_content, 'human', prompt)
                     updated_content = _append_to_memory_markdown(updated_content, 'ai', response_content)
-                    logger.info("[LangGraph Memory] Using compacted summary as new base")
+                    logger.info("[Agent Memory] Using compacted summary as new base")
                 else:
                     # Normal flow: append to existing memory
                     updated_content = memory_data.get('memory_content', '# Conversation History\n\n*No messages yet.*\n')
@@ -2067,9 +1921,9 @@ class AIService:
                     if store:
                         try:
                             store.add_texts(removed_texts)
-                            logger.info(f"[LangGraph Memory] Archived {len(removed_texts)} messages to long-term store")
+                            logger.info(f"[Agent Memory] Archived {len(removed_texts)} messages to long-term store")
                         except Exception as e:
-                            logger.warning(f"[LangGraph Memory] Failed to archive to vector store: {e}")
+                            logger.warning(f"[Agent Memory] Failed to archive to vector store: {e}")
 
                 # Save updated markdown to node parameters. Schema-
                 # canonical key is snake_case; drop any pre-migration
@@ -2079,7 +1933,7 @@ class AIService:
                 current_params['memory_content'] = updated_content
                 current_params.pop('memoryContent', None)
                 await self.database.save_node_parameters(memory_node_id, current_params)
-                logger.info(f"[LangGraph Memory] Saved markdown to memory node '{memory_node_id}'")
+                logger.info(f"[Agent Memory] Saved markdown to memory node '{memory_node_id}'")
 
             result = {
                 "response": response_content,
@@ -2087,7 +1941,7 @@ class AIService:
                 "thinking_enabled": thinking_config.enabled if thinking_config else False,
                 "model": model,
                 "provider": provider,
-                "agent_type": "langgraph",
+                "agent_type": "loop",
                 "iterations": iterations,
                 "finish_reason": "stop",
                 "timestamp": datetime.now().isoformat(),
@@ -2104,7 +1958,7 @@ class AIService:
                     "history_loaded": history_count
                 }
 
-            log_execution_time(logger, "ai_agent_langgraph", start_time, time.time())
+            log_execution_time(logger, "ai_agent_loop", start_time, time.time())
             log_api_call(logger, provider, model, "agent", True)
 
             return {
@@ -2123,7 +1977,7 @@ class AIService:
             raise NodeUserError(str(e)) from e
 
         except Exception as e:
-            logger.error("[LangGraph] AI agent execution failed", node_id=node_id, error=str(e))
+            logger.error("[Agent] AI agent execution failed", node_id=node_id, error=str(e))
             log_api_call(logger, provider, model, "agent", False, error=str(e))
 
             return {
@@ -2148,7 +2002,7 @@ class AIService:
         Chat Agent supports:
         - Memory (input-memory): Markdown-based conversation history (same as AI Agent)
         - Skills (input-skill): Provide context/instructions via SKILL.md
-        - Tools (input-tools): Tool nodes (httpRequest, etc.) for LangGraph tool calling
+        - Tools (input-tools): Tool nodes (httpRequest, etc.) for agent tool calling
 
         Args:
             node_id: The node identifier
@@ -2161,7 +2015,6 @@ class AIService:
             context: Optional execution context with nodes, edges for nested agent delegation
         """
         from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-        from langgraph.errors import GraphRecursionError
         start_time = time.time()
         provider = 'unknown'
         model = 'unknown'
@@ -2356,8 +2209,8 @@ class AIService:
             iterations = 1
 
             if all_tools:
-                # Use LangGraph for tool execution (like AI Agent)
-                logger.debug(f"[ChatAgent] Using LangGraph with {len(all_tools)} tools")
+                # Use the agent loop for tool execution (like AI Agent)
+                logger.debug(f"[ChatAgent] Using agent loop with {len(all_tools)} tools")
 
                 # Create tool executor callback. Tool-node status lifecycle
                 # is owned by ``handlers.tools.execute_tool`` (single source
@@ -2391,60 +2244,31 @@ class AIService:
                         logger.error(f"[ChatAgent] Tool execution failed: {tool_name}", error=str(e))
                         return {"error": str(e)}
 
-                # Build LangGraph agent with all tools
-                agent_graph = build_agent_graph(
-                    chat_model,
-                    tools=all_tools,
-                    tool_executor=chat_tool_executor
-                )
-
-                # Create initial state
-                initial_state: AgentState = {
-                    "messages": messages,
-                    "tool_outputs": {},
-                    "pending_tool_calls": [],
-                    "iteration": 0,
-                    "max_iterations": 10,
-                    "should_continue": False,
-                    "thinking_content": None
-                }
-
-                # Execute the graph. ``recursion_limit`` is sourced from
-                # llm_defaults.json; see ``execute_agent`` for the rationale.
+                # Run the agent loop. See ``execute_agent`` for the
+                # rationale on ``recursion_limit`` + the truncation
+                # behaviour on hit.
                 from services.model_registry import get_model_registry
                 recursion_limit = int(
                     get_model_registry().get_agent_defaults()["recursion_limit"]
                 )
-                final_state = None
-                try:
-                    async for snapshot in agent_graph.astream(
-                        initial_state,
-                        config={"recursion_limit": recursion_limit},
-                        stream_mode="values",
-                    ):
-                        final_state = snapshot
-                        # Per-step iteration broadcast — see execute_agent
-                        # for the rationale.
-                        if broadcaster:
-                            iter_count = snapshot.get("iteration", 0) if isinstance(snapshot, dict) else 0
-                            await broadcaster.broadcast_agent_progress(
-                                node_id,
-                                workflow_id=workflow_id,
-                                iteration=iter_count,
-                                max_iterations=recursion_limit,
-                            )
-                except GraphRecursionError:
-                    msgs = list((final_state or {}).get("messages") or [])
-                    msgs.append(AIMessage(content=(
-                        f"[Recursion limit reached: {recursion_limit} supersteps. "
-                        f"Adjust agent.recursion_limit in llm_defaults.json or "
-                        f"simplify the task.]"
-                    )))
-                    final_state = {**(final_state or {}), "messages": msgs}
-                    logger.warning(
-                        f"[LangGraph] Recursion limit hit ({recursion_limit}); "
-                        f"returning partial response with {len(msgs)} message(s)"
-                    )
+
+                async def _emit_progress(iter_count: int) -> None:
+                    if broadcaster:
+                        await broadcaster.broadcast_agent_progress(
+                            node_id,
+                            workflow_id=workflow_id,
+                            iteration=iter_count,
+                            max_iterations=recursion_limit,
+                        )
+
+                final_state = await _run_agent_loop(
+                    chat_model,
+                    messages,
+                    tools=all_tools,
+                    tool_executor=chat_tool_executor,
+                    max_iterations=recursion_limit,
+                    progress_callback=_emit_progress if broadcaster else None,
+                )
 
                 # Extract response
                 all_messages = final_state["messages"]
@@ -2664,7 +2488,6 @@ class AIService:
             'ai_employee': 'delegate_to_ai_employee',
             'rlm_agent': 'delegate_to_rlm_agent',
             'claude_code_agent': 'delegate_to_claude_code_agent',
-            'deep_agent': 'delegate_to_deep_agent',
             # Android service nodes (direct tool usage)
             'batteryMonitor': 'android_battery',
             'networkMonitor': 'android_network',
@@ -2798,7 +2621,7 @@ class AIService:
 
             if db_schema:
                 # Use database schema as source of truth
-                logger.debug(f"[LangGraph] Using DB schema for tool node {node_id}")
+                logger.debug(f"[Agent] Using DB schema for tool node {node_id}")
                 tool_name = db_schema.get('tool_name', DEFAULT_TOOL_NAMES.get(node_type, f"tool_{node_label}"))
                 tool_description = db_schema.get('tool_description', DEFAULT_TOOL_DESCRIPTIONS.get(node_type, f"Execute {node_label}"))
                 # Use stored connected_services if available (for toolkit nodes)
@@ -2843,7 +2666,7 @@ class AIService:
                         f"This agent has the following capabilities:\n{capabilities_text}\n"
                         f"Call ONCE per task, returns task_id. Agent works in background."
                     )
-                    logger.info(f"[LangGraph] Enhanced tool description for {node_type} with {len(child_tools)} child tools")
+                    logger.info(f"[Agent] Enhanced tool description for {node_type} with {len(child_tools)} child tools")
 
             # Clean tool name (LangChain requires alphanumeric + underscores)
             import re
@@ -2878,11 +2701,11 @@ class AIService:
                 'connected_services': connected_services  # Pass through for execution
             }
 
-            logger.debug(f"[LangGraph] Built tool '{tool_name}' with node_id={node_id}")
+            logger.debug(f"[Agent] Built tool '{tool_name}' with node_id={node_id}")
             return tool, config
 
         except Exception as e:
-            logger.error(f"[LangGraph] Failed to build tool from node: {e}")
+            logger.error(f"[Agent] Failed to build tool from node: {e}")
             return None, None
 
     def _get_tool_schema(self, node_type: str, params: Dict[str, Any]) -> Type[BaseModel]:
@@ -2913,7 +2736,7 @@ class AIService:
             'task_agent', 'social_agent', 'travel_agent', 'tool_agent',
             'productivity_agent', 'payments_agent', 'consumer_agent',
             'autonomous_agent', 'orchestrator_agent', 'ai_employee',
-            'rlm_agent', 'claude_code_agent', 'deep_agent',
+            'rlm_agent', 'claude_code_agent',
         )
         if node_type in _AGENT_DELEGATION_TYPES:
             agent_label = params.get('label', node_type)

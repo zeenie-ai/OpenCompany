@@ -5,7 +5,7 @@ Covers:
   (android_agent, coding_agent, web_agent, task_agent, social_agent,
   travel_agent, tool_agent, productivity_agent, payments_agent,
   consumer_agent, autonomous_agent, orchestrator_agent, ai_employee)
-- 3 dedicated-handler agents (deep_agent, rlm_agent, claude_code_agent)
+- 2 dedicated-handler agents (rlm_agent, claude_code_agent)
 
 These freeze the input -> output behaviour documented in
 `docs-internal/node-logic-flows/specialized_agents/`. A refactor that breaks
@@ -257,121 +257,6 @@ class TestGenericSpecializedAgents:
 
         harness.assert_envelope(result, success=False)
         assert result["error"] == "model unavailable"
-
-
-# ============================================================================
-# Deep Agent
-# ============================================================================
-
-
-class TestDeepAgent:
-    def _wire_deep_agent_service(self, harness, response=None):
-        """Attach a mock deep_agent_service.execute to the harness AI service."""
-        deep_service = MagicMock(name="DeepAgentService")
-        deep_service.execute = AsyncMock(
-            return_value=response
-            or {
-                "success": True,
-                "result": {
-                    "response": "deep done",
-                    "model": "claude-sonnet-4-6",
-                    "provider": "anthropic",
-                },
-            }
-        )
-        harness.ai_service.deep_agent_service = deep_service
-        # _build_tool_from_node is passed through as build_tool_fn kwarg.
-        harness.ai_service._build_tool_from_node = MagicMock(return_value=None)
-        return deep_service
-
-    async def test_happy_path_delegates_to_deep_agent_service(self, harness):
-        deep_service = self._wire_deep_agent_service(harness)
-
-        with patched_container(auth_api_keys={"anthropic": "tk"}), patched_broadcaster():
-            result = await harness.execute(
-                "deep_agent",
-                {
-                    "provider": "anthropic",
-                    "model": "claude-sonnet-4-6",
-                    "prompt": "plan something",
-                },
-            )
-
-        harness.assert_envelope(result, success=True)
-        assert result["result"]["response"] == "deep done"
-        assert deep_service.execute.await_count == 1
-
-    async def test_workspace_dir_injected_into_parameters(self, harness):
-        deep_service = self._wire_deep_agent_service(harness)
-
-        ctx = harness.build_context(workspace_dir="/tmp/fake_workspace")
-
-        with patched_container(auth_api_keys={"anthropic": "tk"}), patched_broadcaster():
-            await harness.execute(
-                "deep_agent",
-                {
-                    "provider": "anthropic",
-                    "model": "claude-sonnet-4-6",
-                    "prompt": "x",
-                },
-                context=ctx,
-            )
-
-        args, kwargs = deep_service.execute.await_args
-        # args[1] is the parameters dict that the handler built.
-        assert args[1]["workspace_dir"] == "/tmp/fake_workspace"
-
-    async def test_missing_deep_agent_service_surfaces_as_failure(self, harness):
-        """When deep_agent_service is absent, the executor wraps the
-        AttributeError into a failure envelope via its generic try/except."""
-        # Do NOT attach deep_agent_service. Accessing it on a MagicMock
-        # returns a new child mock, so we need to explicitly break it.
-        bad_service = MagicMock(spec=[])  # no attributes at all
-        harness.ai_service.deep_agent_service = bad_service
-
-        with patched_container(auth_api_keys={"anthropic": "tk"}), patched_broadcaster():
-            result = await harness.execute(
-                "deep_agent",
-                {
-                    "provider": "anthropic",
-                    "model": "claude-sonnet-4-6",
-                    "prompt": "x",
-                },
-            )
-
-        harness.assert_envelope(result, success=False)
-
-    async def test_teammate_handle_collected_for_deep_agent(self, harness):
-        deep_service = self._wire_deep_agent_service(harness)
-
-        nodes = [
-            {"id": "mate-1", "type": "coding_agent", "data": {"label": "coder"}},
-            {"id": "deep-1", "type": "deep_agent"},
-        ]
-        edges = [
-            {
-                "source": "mate-1",
-                "target": "deep-1",
-                "targetHandle": "input-teammates",
-            },
-        ]
-        ctx = harness.build_context(nodes=nodes, edges=edges)
-
-        with patched_container(auth_api_keys={"anthropic": "tk"}), patched_broadcaster():
-            await harness.execute(
-                "deep_agent",
-                {
-                    "provider": "anthropic",
-                    "model": "claude-sonnet-4-6",
-                    "prompt": "x",
-                },
-                node_id="deep-1",
-                context=ctx,
-            )
-
-        _, kwargs = deep_service.execute.await_args
-        teammates = kwargs.get("teammates") or []
-        assert any(t["node_id"] == "mate-1" for t in teammates)
 
 
 # ============================================================================

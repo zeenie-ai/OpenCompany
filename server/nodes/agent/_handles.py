@@ -41,15 +41,3 @@ def team_lead_agent_handles() -> tuple:
     )
 
 
-def deep_agent_handles() -> tuple:
-    """Skill / Teammates / Tool bottom — used by deep_agent only."""
-    return (
-        {"name": "input-skill",     "kind": "input",  "position": "bottom", "offset": "30%", "label": "Skill", "role": "skill"},
-        {"name": "input-teammates", "kind": "input",  "position": "bottom", "offset": "55%", "label": "Team",  "role": "teammates"},
-        {"name": "input-tools",     "kind": "input",  "position": "bottom", "offset": "80%", "label": "Tool",  "role": "tools"},
-        {"name": "input-main",      "kind": "input",  "position": "left",   "offset": "25%", "label": "Input", "role": "main"},
-        {"name": "input-memory",    "kind": "input",  "position": "left",   "offset": "50%", "label": "Memory","role": "memory"},
-        {"name": "input-task",      "kind": "input",  "position": "left",   "offset": "75%", "label": "Task",  "role": "task"},
-        {"name": "output-main",     "kind": "output", "position": "right",  "offset": "50%", "label": "Output","role": "main"},
-        {"name": "output-top",      "kind": "output", "position": "top",                     "label": "Output","role": "main"},
-    )

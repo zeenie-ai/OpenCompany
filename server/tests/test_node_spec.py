@@ -74,8 +74,8 @@ class TestInputSchemas:
         assert schema["groups"]["options"]["placeholder"] == "Add Option"
 
     def test_specialized_agents_share_schema(self):
-        # All 16 specialized agents go through SpecializedAgentParams
-        for agent_type in ["android_agent", "coding_agent", "deep_agent"]:
+        # Specialized agents go through SpecializedAgentParams
+        for agent_type in ["android_agent", "coding_agent", "web_agent"]:
             assert get_node_input_schema(agent_type) is not None
 
     def test_android_service_nodes_covered(self):
@@ -224,7 +224,7 @@ class TestPhase3cCoverage:
         "social_agent", "travel_agent", "tool_agent", "productivity_agent",
         "payments_agent", "consumer_agent", "autonomous_agent",
         "orchestrator_agent", "ai_employee", "rlm_agent",
-        "claude_code_agent", "deep_agent",
+        "claude_code_agent",
         # Chat models (9)
         "openaiChatModel", "anthropicChatModel", "geminiChatModel",
         "openrouterChatModel", "groqChatModel", "cerebrasChatModel",
@@ -872,9 +872,9 @@ class TestPluginContractInvariants:
                 )
 
     def test_agent_kind_has_skill_tool_memory_handles(self):
-        # Contract: anything registered as a LangGraph-style agent must
-        # accept skill, tools, memory, and task inputs (the core n8n
-        # AIAgent handle set). Keeps the AIAgentNode renderer honest.
+        # Contract: anything registered as an agent must accept skill,
+        # tools, memory, and task inputs (the core n8n AIAgent handle
+        # set). Keeps the AIAgentNode renderer honest.
         for t in self._plugin_types():
             spec = get_node_spec(t)
             if spec.get("componentKind") != "agent":

@@ -1,7 +1,7 @@
 """RLM Agent — Wave 11.E.3 inlined.
 
-Recursive Language Model agent. Distinct from the standard LangGraph
-chat agent — spins a recursive LM loop inside a REPL sandbox via
+Recursive Language Model agent. Distinct from the standard chat
+agent — spins a recursive LM loop inside a REPL sandbox via
 ``ai_service.rlm_service.execute``.
 """
 

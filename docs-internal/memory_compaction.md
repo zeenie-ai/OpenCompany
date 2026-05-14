@@ -138,7 +138,7 @@ class TokenUsageMetric(SQLModel, table=True):
     cache_read_tokens: int = 0       # Anthropic cache hit
     reasoning_tokens: int = 0        # OpenAI o-series reasoning
 
-    iteration: int = 1               # LangGraph iteration number
+    iteration: int = 1               # Agent loop iteration number
     execution_id: Optional[str]      # Workflow execution ID
     created_at: Optional[datetime]
 ```
@@ -392,7 +392,7 @@ usage = response.usage_metadata
 #     'output_token_details': {'reasoning': 256}
 # }
 
-# Aggregate across LangGraph iterations
+# Aggregate across agent-loop iterations
 total_usage = None
 for msg in final_state["messages"]:
     if hasattr(msg, 'usage_metadata') and msg.usage_metadata:
@@ -404,7 +404,7 @@ for msg in final_state["messages"]:
 In `server/services/ai.py`, after agent execution:
 
 ```python
-# After LangGraph execution, before memory save
+# After agent-loop execution, before memory save
 if memory_data and memory_data.get('session_id'):
     from services.compaction import get_compaction_service
     svc = get_compaction_service()

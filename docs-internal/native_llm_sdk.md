@@ -3,7 +3,7 @@
 > **⚠️ Pre-Wave-11 — historical reference only.**
 > Node authoring now happens on the backend: each node is a Python plugin under `server/nodes/<category>/<node>.py` that emits a `NodeSpec`. The frontend reads specs via [client/src/lib/nodeSpec.ts](../client/src/lib/nodeSpec.ts) + [adapters/nodeSpecToDescription.ts](../client/src/adapters/nodeSpecToDescription.ts). See [plugin_system.md](./plugin_system.md) and [server/nodes/README.md](../server/nodes/README.md) for the current model. The snippets below that reference `client/src/nodeDefinitions/*` are kept for historical context.
 
-MachinaOS uses a hybrid LLM architecture: a native SDK layer in `server/services/llm/` for direct chat completions and model fetching, and a LangChain + LangGraph path in `server/services/ai.py` for agent tool-calling. This document describes the native layer, its design, and how both paths coexist.
+MachinaOS uses a hybrid LLM architecture: a native SDK layer in `server/services/llm/` for direct chat completions and model fetching, and a LangChain-backed agent loop in `server/services/ai.py` (the plain `_run_agent_loop` async function) for agent tool-calling. This document describes the native layer, its design, and how both paths coexist.
 
 ## Why a Native Layer
 
@@ -188,8 +188,8 @@ No new provider class, no new import. The factory's fallback branch picks up `ba
 
 ```
 execute_chat(parameters, node_id, node_type)          -> native SDK where possible
-execute_agent(parameters, node_id)                    -> LangChain + LangGraph
-execute_chat_agent(parameters, node_id)               -> LangChain + LangGraph
+execute_agent(parameters, node_id)                    -> LangChain chat model + _run_agent_loop
+execute_chat_agent(parameters, node_id)               -> LangChain chat model + _run_agent_loop
 ```
 
 **`execute_chat()` routing:**
@@ -207,7 +207,7 @@ is_native_provider(provider)?
 
 **`execute_agent()` and `execute_chat_agent()` routing:**
 
-All providers go through `create_model()` which returns a LangChain `ChatOpenAI` / `ChatAnthropic` / `ChatGoogleGenerativeAI` / `ChatGroq` / `ChatCerebras` instance. The agent then builds a LangGraph `StateGraph` with `bind_tools()` for tool calling. This path is used because LangGraph's agent loop, checkpointer, and tool-execution callback layer do not have a native-layer equivalent today.
+All providers go through `create_model()` which returns a LangChain `ChatOpenAI` / `ChatAnthropic` / `ChatGoogleGenerativeAI` / `ChatGroq` / `ChatCerebras` instance. The agent then calls `chat_model.bind_tools(tools)` and runs `_run_agent_loop` (plain async while loop, ~140 LOC). LangChain's chat-model classes are used because they unify `bind_tools` + `usage_metadata` + `content_blocks` extraction across all providers; the native-SDK layer doesn't yet have provider-unified tool binding.
 
 OpenAI-compatible providers like DeepSeek/Kimi/Mistral still use `ChatOpenAI` with `base_url` from `llm_defaults.json` in the agent path, and pass `max_tokens` via `extra_body` to bypass LangChain's `max_completion_tokens` conversion.
 

@@ -562,7 +562,7 @@ class ModelRegistryService:
     def get_agent_defaults(self) -> Dict[str, Any]:
         """Return the ``agent`` block from ``llm_defaults.json``.
 
-        Holds runtime defaults shared across the LangGraph executor and
+        Holds runtime defaults shared across the agent executor and
         compaction layer (e.g. ``recursion_limit``, ``compaction.ratio``).
         Callers should ``.get(...)`` with their own fallback so the system
         still boots if the JSON is missing or partial.

@@ -2,8 +2,8 @@
 
 Parse, append, and trim conversation history stored in the bespoke
 ``### **Human/Assistant** (timestamp)`` markdown format. Used by
-aiAgent, chatAgent, deep_agent, and rlm_agent for persistent memory
-across turns. The claude_code_agent bridge uses the JSONL helpers in
+aiAgent, chatAgent, and rlm_agent for persistent memory across turns.
+The claude_code_agent bridge uses the JSONL helpers in
 :mod:`services.memory.jsonl` instead.
 """
 

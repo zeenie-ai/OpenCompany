@@ -147,7 +147,7 @@ async def _dispatch_tool(tool_name: str, tool_args: Dict[str, Any],
 
     # Execution context for tool handlers. Includes canvas state
     # (nodes/edges/workflow_id) that callers (chat_tool_executor in
-    # ai.py / rlm adapter / deepagents adapter) plumb in via `config`.
+    # ai.py / rlm adapter) plumb in via `config`.
     # Tools that need canvas awareness (e.g. agentBuilder.inspect_canvas)
     # read these via NodeContext.nodes / .edges / .workflow_id; tools
     # that don't simply ignore them.

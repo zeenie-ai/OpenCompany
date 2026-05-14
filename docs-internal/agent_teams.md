@@ -217,7 +217,7 @@ Connect Team Monitor to a team lead's output to visualize team activity.
 
 1. **AI-Driven Delegation**: The team lead's AI decides when to delegate, not automatic forwarding to all teammates
 
-2. **Tool-Based Pattern**: Teammates become `delegate_to_*` tools, leveraging existing LangGraph tool calling
+2. **Tool-Based Pattern**: Teammates become `delegate_to_*` tools, leveraging the existing agent-loop tool calling
 
 3. **Fire-and-Forget**: Delegated agents run as background tasks; team lead can check status via `check_delegated_tasks`
 

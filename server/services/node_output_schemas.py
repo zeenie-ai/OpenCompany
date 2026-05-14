@@ -732,7 +732,6 @@ _AGENT_TYPES = [
     "ai_employee",
     "rlm_agent",
     "claude_code_agent",
-    "deep_agent",
 ]
 
 _CHAT_MODEL_TYPES = [

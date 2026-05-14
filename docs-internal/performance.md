@@ -194,7 +194,7 @@ Tracked but explicitly **not** in any active plan.
 | Item | Estimated saving | Notes |
 |---|---|---|
 | Plugin walker lazy-loading | ~0.5-0.8 s on server-ready | Would need to defer registration until first NodeSpec request rather than at module-import time. Touches every `BaseNode` subclass — biggest blast radius of the candidates. |
-| `BaseMessage`-free `AgentState` (move LangGraph state schema off the `Annotated` form) | ~0.3-0.5 s | Removes the only remaining eager LangChain import in `services/ai.py`. Requires understanding how LangGraph resolves `Annotated[Sequence[BaseMessage], operator.add]` reducers. |
+| `BaseMessage`-free agent loop (drop the only eager `langchain_core.messages` import in `services/ai.py`) | ~0.3-0.5 s | Native-SDK provider classes already use their own message types; `_run_agent_loop` could be retyped against them and the eager import dropped. |
 | `+5 s` HTTP-ready → first-WS-connect gap | up to 5 s | Diagnostics needed (see "remaining +5 s gap"). May reveal nothing actionable. |
 | Standalone Nuitka / PyOxidizer release binary | full Python interpreter init (~0.4 s) + `.pyc` regeneration on cold disk | User explicitly declined when scoping the build pipeline; revisit if "ship a single binary" becomes a product requirement. |
 

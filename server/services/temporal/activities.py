@@ -177,8 +177,8 @@ class NodeExecutionActivities:
         avoiding race conditions when multiple activities run concurrently.
 
         Heartbeats are sent both on incoming non-matching messages AND on a
-        30-second timer. This is critical for long-running nodes (DeepAgent,
-        browser, AI multi-tool) where the backend may be processing internally
+        30-second timer. This is critical for long-running nodes (browser,
+        AI multi-tool, claude_code_agent) where the backend may be processing internally
         without broadcasting any WS messages for minutes. Without the periodic
         timer, the 2-minute heartbeat_timeout would cancel the activity even
         though the node is actively executing.

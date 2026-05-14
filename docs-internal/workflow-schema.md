@@ -83,7 +83,7 @@ A workflow JSON document contains:
 - `mistralChatModel` - Mistral Large / Small / Codestral
 
 ### AI Agents and Memory (3 nodes)
-- `aiAgent` - LangGraph-based agent with tool calling
+- `aiAgent` - Tool-calling agent loop
 - `chatAgent` - Conversational agent (Zeenie) with skill support
 - `simpleMemory` - Markdown-based conversation memory with optional vector DB
 

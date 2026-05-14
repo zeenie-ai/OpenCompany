@@ -1,6 +1,6 @@
 """Chat Agent (Zeenie) — Wave 11.C migration.
 
-Conversational LangGraph agent with skills + memory. Distinct from
+Conversational agent with skills + memory. Distinct from
 :class:`AIAgentNode` because it uses ``handle_chat_agent`` which
 applies a different default system message + skill prompt assembly.
 """

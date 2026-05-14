@@ -4,7 +4,7 @@ Reorganised from the single-file ``services/memory.py`` so each
 storage format / concern owns its own module:
 
   - :mod:`services.memory.markdown` — markdown parse/append/trim
-    (used by aiAgent / chatAgent / deep_agent / rlm_agent)
+    (used by aiAgent / chatAgent / rlm_agent)
   - :mod:`services.memory.jsonl` — Anthropic Messages JSONL
     parse/append/trim (used by claude_code_agent's session bridge)
   - :mod:`services.memory.vector_store` — per-session
@@ -35,7 +35,7 @@ from services.memory.jsonl import (
 
 __all__ = [
     # Markdown helpers — used by every agent bridge (aiAgent /
-    # chatAgent / deep_agent / rlm_agent / claude_code_agent).
+    # chatAgent / rlm_agent / claude_code_agent).
     "parse_memory_markdown",
     "append_to_memory_markdown",
     "trim_markdown_window",

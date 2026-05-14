@@ -3,8 +3,8 @@
 Pure functions extracted from ``services/handlers/ai.py`` so every
 agent plugin can call them without depending on the legacy handler
 module. Used by :class:`AIAgentNode`, :class:`ChatAgentNode`,
-:class:`SpecializedAgentBase`, :class:`DeepAgentNode`,
-:class:`RLMAgentNode`, :class:`ClaudeCodeAgentNode`.
+:class:`SpecializedAgentBase`, :class:`RLMAgentNode`,
+:class:`ClaudeCodeAgentNode`.
 
 Three helpers:
 
@@ -14,7 +14,7 @@ Three helpers:
   ``masterSkill`` expansion + the ``androidTool`` Sub-Node pattern +
   child-agent tool discovery.
 - :func:`collect_teammate_connections` — walks ``input-teammates``
-  edges (orchestrator / ai_employee / deep_agent team-lead pattern).
+  edges (orchestrator / ai_employee team-lead pattern).
 - :func:`format_task_context` — renders ``taskTrigger`` payload as a
   prompt prepend block.
 
@@ -417,7 +417,7 @@ async def collect_teammate_connections(
 ) -> List[Dict[str, Any]]:
     """Walk ``input-teammates`` edges and return connected agents.
 
-    Used by ``orchestrator_agent`` / ``ai_employee`` / ``deep_agent``.
+    Used by ``orchestrator_agent`` / ``ai_employee``.
     """
     nodes = context.get("nodes", [])
     edges = context.get("edges", [])

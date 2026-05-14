@@ -1,18 +1,18 @@
 # Memory Lifecycle
 
-Canonical home for how conversation memory is loaded, appended, trimmed, archived, cleared, and resumed across every MachinaOs agent. Replaces the partial explanations previously scattered across `agent_architecture.md`, `deep_agent.md`, `cli_agent_framework.md`, `rlm_service.md`, and `memory_compaction.md`.
+Canonical home for how conversation memory is loaded, appended, trimmed, archived, cleared, and resumed across every MachinaOs agent. Replaces the partial explanations previously scattered across `agent_architecture.md`, `cli_agent_framework.md`, `rlm_service.md`, and `memory_compaction.md`.
 
 > **Related docs:**
 > - [memory_compaction.md](./memory_compaction.md) — `CompactionService`, token thresholds, pricing
-> - [agent_architecture.md](./agent_architecture.md) — LangGraph agent loop that calls these helpers
+> - [agent_architecture.md](./agent_architecture.md) — agent loop that calls these helpers
 > - [cli_agent_framework.md](./cli_agent_framework.md) — `claude_code_agent` native session bridge
-> - [deep_agent.md](./deep_agent.md) / [rlm_service.md](./rlm_service.md) — engine-specific adapters
+> - [rlm_service.md](./rlm_service.md) — `rlm_agent` engine-specific adapter
 
 ## 1. Two storage formats
 
 | Format | File | Used by | Wire shape |
 |---|---|---|---|
-| **Markdown transcript** | [`services/memory/markdown.py`](../server/services/memory/markdown.py) | aiAgent, chatAgent, deep_agent, rlm_agent, claude_code_agent (mirror) | `### **Human/Assistant** (timestamp)` blocks under a top-level `# Conversation History` heading |
+| **Markdown transcript** | [`services/memory/markdown.py`](../server/services/memory/markdown.py) | aiAgent, chatAgent, rlm_agent, claude_code_agent (mirror) | `### **Human/Assistant** (timestamp)` blocks under a top-level `# Conversation History` heading |
 | **Anthropic-Messages JSONL** | [`services/memory/jsonl.py`](../server/services/memory/jsonl.py) | Standalone primitive — not used by any agent today | One JSON object per line: `{"role": "user"|"assistant", "content": str \| [ContentBlock], ...metadata}` |
 
 The markdown format is the visible UI surface — `simpleMemory.memory_content` is rendered as a markdown editor in the parameter panel. The JSONL helpers were prepared for a future SDK migration; the live `claude_code_agent` bridge uses claude's own native session JSONL on disk (see §6) and mirrors the transcript into `memory_content` via the **markdown** helpers for user visibility.
@@ -126,7 +126,7 @@ Turn N starts
    → prepend retrieved long-term context as a system message
     │
     ▼
-4. LangGraph agent loop runs (ainvoke + tool calls)
+4. Agent loop runs (_run_agent_loop: ainvoke + tool calls)
     │
     ▼
 5. _track_token_usage(...) — see memory_compaction.md
@@ -154,7 +154,6 @@ F4.B `AgentWorkflow` runs steps 4-9 as separate Temporal activities (`prepare_pa
 | Engine | Memory shape on input | Memory shape on output | Notes |
 |---|---|---|---|
 | `aiAgent` / `chatAgent` | LangChain `BaseMessage` list parsed from markdown | Appended pair + trim | Standard path; see §7 |
-| `deep_agent` | Same as aiAgent — `DeepAgentService` accepts `BaseMessage` list | Same | `FilesystemBackend(virtual_mode=True, root_dir=workspace_dir)` is independent of memory; see [deep_agent.md](./deep_agent.md) |
 | `rlm_agent` | Markdown injected as REPL pre-context | Last `FINAL(...)` call's payload | RLM internal recursion uses its own state machine; only entry/exit cross the memory boundary |
 | `claude_code_agent` | `--resume <UUID>` reads native JSONL; `memory_content` ignored on input | Bridge writes markdown mirror + saves `last_session_id` | See §6 |
 

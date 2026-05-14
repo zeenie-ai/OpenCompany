@@ -7,10 +7,10 @@ agent nodes that route to the same backend handler:
 `travel_agent`, `tool_agent`, `productivity_agent`, `payments_agent`,
 `consumer_agent`, `autonomous_agent`, `orchestrator_agent`, `ai_employee`.
 
-All 13 nodes use the `handle_chat_agent` handler wired in
-`server/services/node_executor.py` (lines 134-146). They differ only in
-frontend presentation (icon, theme color, default skills) and intended use
-case. The three agents with **dedicated** handlers (`deep_agent`, `rlm_agent`,
+All specialized nodes use the `handle_chat_agent` handler wired in
+`server/services/node_executor.py`. They differ only in frontend
+presentation (icon, theme color, default skills) and intended use case.
+The two agents with **dedicated** handlers (`rlm_agent`,
 `claude_code_agent`) are documented separately.
 
 | Field | Value |
@@ -44,7 +44,7 @@ All 13 agents share these input handles.
 | `input-main` | main | no | Upstream data; auto-prompt fallback when `prompt` param is empty |
 | `input-skill` | main | no | Skill node(s) providing SKILL.md context |
 | `input-memory` | main | no | `simpleMemory` node for conversation history |
-| `input-tools` | main | no | Tool nodes exposed to the LLM via LangGraph |
+| `input-tools` | main | no | Tool nodes exposed to the LLM via `chat_model.bind_tools` |
 | `input-task` | main | no | `taskTrigger` events from delegated child agents |
 | `input-teammates` | main | no | **Only on `orchestrator_agent` and `ai_employee`** -- connected agents become `delegate_to_*` tools |
 
@@ -143,7 +143,7 @@ flowchart TD
   `error`), plus `executing_tool` fired on connected tool nodes when the LLM
   invokes them.
 - **External API calls**: one or more calls to the configured LLM provider
-  (see `services/ai.py::execute_chat_agent` -> LangChain / LangGraph).
+  (see `services/ai.py::execute_chat_agent` -> LangChain chat model + `_run_agent_loop`).
 - **Subprocess / file I/O**: none directly in the handler; tools invoked by
   the LLM may trigger those themselves.
 
@@ -153,7 +153,7 @@ flowchart TD
   configured LLM provider.
 - **Services**: `AIService.execute_chat_agent`, `CompactionService`,
   `PricingService`, `StatusBroadcaster`.
-- **Python packages**: `langchain-core`, `langgraph`, plus provider SDKs.
+- **Python packages**: `langchain-core`, plus provider SDKs.
 
 ## Edge cases & known limits
 

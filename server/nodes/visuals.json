@@ -92,9 +92,6 @@
   "currentTimeTool": {
     "icon": "🕐"
   },
-  "deep_agent": {
-    "icon": "🧠"
-  },
   "deepseekChatModel": {
     "icon": "lobehub:deepseek"
   },

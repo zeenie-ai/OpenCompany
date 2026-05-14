@@ -1,10 +1,10 @@
 """F4.B: per-turn agent activities for ``AgentWorkflow``.
 
-The legacy ``execute_agent`` / ``execute_chat_agent`` in ``services/ai.py``
-run an entire LangGraph loop inside a single Temporal activity. F4.B
-splits that loop across Temporal workflow boundaries so tool calls can
-land as separate activities on per-type worker pools (per RFC §6.3
-plus the F4 deferred follow-up). Activities defined here:
+The in-process ``execute_agent`` / ``execute_chat_agent`` in
+``services/ai.py`` run the entire agent loop inside a single Temporal
+activity. F4.B splits that loop across Temporal workflow boundaries so
+tool calls can land as separate activities on per-type worker pools (per
+RFC §6.3 plus the F4 deferred follow-up). Activities defined here:
 
 - :func:`execute_llm_step` — one ``chat_model.ainvoke()`` turn. Returns
   either ``{"kind": "final", ...}`` (no tool calls) or
@@ -313,8 +313,8 @@ async def broadcast_agent_progress(payload: Dict[str, Any]) -> Dict[str, Any]:
     cannot call broadcaster methods directly — they have to go through
     an activity).
 
-    Wire-format key ``agent_progress`` is the same channel the legacy
-    LangGraph path uses (services/ai.py:execute_agent), and the inner
+    Wire-format key ``agent_progress`` is the same channel the in-process
+    agent-loop path uses (services/ai.py:execute_agent), and the inner
     payload is a CloudEvents v1.0 ``WorkflowEvent`` with
     ``type="com.machinaos.agent.progress"``. The FE routes
     ``data.iteration`` / ``data.max_iterations`` into
@@ -408,7 +408,8 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     workflow is scheduled and returns the fully-resolved payload.
 
     Mirrors the prep half of ``services.ai.AIService.execute_agent``,
-    minus the LangGraph loop (which now lives in ``AgentWorkflow.run``):
+    minus the agent loop (which lives in ``AgentWorkflow.run`` for the
+    F4.B Temporal path and ``services.ai._run_agent_loop`` in-process):
 
     1. Read node parameters from DB via ``database.get_node_parameters``.
     2. Walk edges via ``services.plugin.edge_walker.collect_agent_connections``

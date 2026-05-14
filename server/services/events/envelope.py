@@ -222,13 +222,12 @@ class WorkflowEvent(BaseModel):
         phase: Optional[str] = None,
         data: Optional[Mapping[str, Any]] = None,
     ) -> "WorkflowEvent":
-        """Live LangGraph supervised-loop progress for one agent node.
+        """Live agent-loop progress for one agent node.
 
-        Emitted from inside the ``astream`` loop in
+        Emitted from inside the agent loop in
         ``services/ai.py:execute_agent`` and ``execute_chat_agent`` after
-        each super-step. ``iteration`` advances on every ``agent_node``
-        invocation; ``max_iterations`` mirrors the LangGraph
-        ``recursion_limit`` (sourced from
+        each LLM turn. ``iteration`` advances on every model invocation;
+        ``max_iterations`` mirrors the loop's hard cap (sourced from
         ``llm_defaults.json:agent.recursion_limit``).
 
         ``subject`` carries the executing node id so the FE routes the

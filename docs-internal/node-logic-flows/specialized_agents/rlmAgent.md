@@ -11,7 +11,7 @@
 
 ## Purpose
 
-Recursive Language Model agent. Instead of LangGraph tool-calling, the
+Recursive Language Model agent. Instead of the standard tool-calling loop, the
 LLM is prompted to emit Python code that is executed in a REPL and may
 recursively call `llm_query()` or `rlm_query()` and end with `FINAL(...)`
 to return a result. See [RLM Service](../../rlm_service.md).

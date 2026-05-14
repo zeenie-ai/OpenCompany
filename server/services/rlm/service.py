@@ -1,7 +1,7 @@
 """RLM execution service.
 
 Follows the same interface as AIService.execute_agent() / execute_chat_agent()
-but replaces LangGraph with RLM's REPL-based execution loop.
+but replaces the agent loop with RLM's REPL-based execution.
 """
 
 import asyncio

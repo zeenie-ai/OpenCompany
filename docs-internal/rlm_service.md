@@ -4,19 +4,19 @@
 
 ## Overview
 
-The RLM (Recursive Language Models) service integrates the `rlms` library into MachinaOS as a specialized agent node (`rlm_agent`). Unlike other specialized agents that route to `handle_chat_agent` and use LangGraph, the RLM agent uses its own REPL-based code execution loop where the LM writes Python code blocks that are `exec()`-ed in a sandboxed environment.
+The RLM (Recursive Language Models) service integrates the `rlms` library into MachinaOS as a specialized agent node (`rlm_agent`). Unlike other specialized agents that route to `handle_chat_agent` and use the standard agent loop, the RLM agent uses its own REPL-based code execution loop where the LM writes Python code blocks that are `exec()`-ed in a sandboxed environment.
 
 **Library**: [rlms](https://pypi.org/project/rlms/) (pip install rlms)
 **Paper**: https://arxiv.org/abs/2512.24601
 **Docs**: https://alexzhang13.github.io/rlm/
 
-### How RLM Differs from LangGraph Agents
+### How RLM Differs from Standard Agents
 
-| Aspect | LangGraph Agents (aiAgent, chatAgent, etc.) | RLM Agent (rlm_agent) |
-|--------|----------------------------------------------|----------------------|
+| Aspect | Standard Agents (aiAgent, chatAgent, etc.) | RLM Agent (rlm_agent) |
+|--------|---------------------------------------------|----------------------|
 | Execution model | LLM -> tool call -> LLM -> tool call | LLM -> `\`\`\`repl` code block -> exec() -> stdout -> LLM |
 | Tool interface | LangChain StructuredTool with Pydantic schemas | Python functions injected into REPL namespace |
-| State management | LangGraph StateGraph with message accumulation | Python variables in REPL namespace + `context` variable |
+| State management | Message accumulation in `_run_agent_loop` | Python variables in REPL namespace + `context` variable |
 | Completion signal | LLM stops making tool calls | LLM calls `FINAL(answer)` or `FINAL_VAR(variable_name)` |
 | Recursion | Agent delegation (fire-and-forget) | `rlm_query()` spawns child RLM with own REPL |
 | Strengths | Structured tool calling, provider-agnostic | Complex reasoning, code-driven decomposition, recursive sub-problems |

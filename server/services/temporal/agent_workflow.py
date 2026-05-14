@@ -1,10 +1,10 @@
 """F4.B: ``AgentWorkflow`` — Temporal child workflow for AI agent loops.
 
-Replaces the inline LangGraph loop inside ``services/ai.py:execute_agent``
-with a workflow-orchestrated loop: each LLM turn is an activity, each
-tool call is a per-type activity (registered via
-``BaseNode.as_activity()``, F4.A), and memory persistence happens per
-turn so a workflow failure mid-loop doesn't lose progress.
+Workflow-orchestrated alternative to the in-process ``_run_agent_loop``
+inside ``services/ai.py``: each LLM turn is an activity, each tool call
+is a per-type activity (registered via ``BaseNode.as_activity()``,
+F4.A), and memory persistence happens per turn so a workflow failure
+mid-loop doesn't lose progress.
 
 Architecture (matches Temporal's AI Cookbook canonical pattern):
 
@@ -22,14 +22,14 @@ Architecture (matches Temporal's AI Cookbook canonical pattern):
 
 User decisions baked in (plan §15):
 - **Path 1** (agent-as-child-workflow), confirmed.
-- ``deep_agent``, ``rlm_agent``, ``claude_code_agent`` are NOT migrated
-  here. Their loops are externalised (deepagents / RLM REPL / Claude
-  CLI ``--resume`` session) and live in single Temporal activities via
-  the F4.A per-type dispatch path. They never enter ``AgentWorkflow``.
+- ``rlm_agent``, ``claude_code_agent`` are NOT migrated here. Their
+  loops are externalised (RLM REPL / Claude CLI ``--resume`` session)
+  and live in single Temporal activities via the F4.A per-type
+  dispatch path. They never enter ``AgentWorkflow``.
 - Memory appends per turn (not on completion).
 - Tool activity failure (after retries) returns an error to the LLM as
-  a ``ToolMessage`` and the agent continues — matches today's LangGraph
-  behaviour.
+  a ``ToolMessage`` and the agent continues — matches the in-process
+  ``_run_agent_loop`` behaviour.
 
 Determinism:
 - ``sandboxed=False`` so we can import frozen registry dicts
@@ -90,8 +90,8 @@ class AgentWorkflow:
       - the node type is in the migrating set (``aiAgent``,
         ``chatAgent``, 12 specialized agents, 2 team leads).
 
-    ``deep_agent`` / ``rlm_agent`` / ``claude_code_agent`` skip this
-    workflow and stay as F4.A per-type activities.
+    ``rlm_agent`` / ``claude_code_agent`` skip this workflow and stay
+    as F4.A per-type activities.
     """
 
     @workflow.run
@@ -224,7 +224,7 @@ class AgentWorkflow:
             )
 
             # CloudEvents-shaped agent_progress per LLM turn. Mirrors the
-            # legacy LangGraph path's super-step broadcast (RFC §6.4).
+            # the in-process agent loop's per-turn broadcast (RFC §6.4).
             # FE consumes the typed envelope and updates the canvas
             # node's "N / max" iteration badge live.
             await self._emit_phase(
@@ -356,7 +356,7 @@ class AgentWorkflow:
                 except Exception as e:  # noqa: BLE001 — Temporal handles retries
                     # After all retries exhausted, surface the error to
                     # the LLM (per user decision: LLM sees error and
-                    # continues — matches LangGraph today).
+                    # continues — matches the in-process agent loop).
                     workflow.logger.warning(
                         f"AgentWorkflow tool {tool_info['node_type']!r} failed: {e}"
                     )

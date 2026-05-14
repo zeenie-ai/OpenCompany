@@ -233,7 +233,7 @@ return {
 ```
 
 Inside `run_child_agent()` (line 1208-1267), the child handler is selected based on node_type:
-- `aiAgent` -> `handle_ai_agent()` (LangGraph state machine)
+- `aiAgent` -> `handle_ai_agent()` (agent loop with tools)
 - All others -> `handle_chat_agent()` (direct LLM invoke)
 
 ---

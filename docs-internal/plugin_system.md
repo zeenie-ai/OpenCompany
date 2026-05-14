@@ -469,11 +469,10 @@ agents (`android_agent`, `coding_agent`, `web_agent`, `task_agent`,
 `payments_agent`, `consumer_agent`, `autonomous_agent`), 2 team
 leads (`orchestrator_agent`, `ai_employee`).
 
-**Agents that stay as single activities** (3): `deep_agent`,
-`rlm_agent`, `claude_code_agent`. Their internal session state
-(deepagents package / RLM REPL / Claude CLI `--resume` with stable
-`cwd`) requires single-process continuity that would break across
-activity boundaries.
+**Agents that stay as single activities** (2): `rlm_agent`,
+`claude_code_agent`. Their internal session state (RLM REPL / Claude
+CLI `--resume` with stable `cwd`) requires single-process continuity
+that would break across activity boundaries.
 
 Queue distribution (live count via
 `distinct_task_queues()` and `len(_NODE_CLASS_REGISTRY)`):
@@ -807,9 +806,9 @@ All Wave 10 invariants in `test_node_spec.py` still run; Wave 11 invariants in `
   `services/whatsapp_service.py`, dedup'd `TRIGGER_NODE_TYPES`.
 - Wave 11.E.3 — Inlined the last per-domain handler bodies into
   plugins. Deleted 8 fully-orphan handler files (search, code,
-  telegram, http, filesystem, email, process, todo) and 5
-  still-referenced ones (browser, android, claude_code, rlm,
-  deep_agent) by inlining into their plugins. Split `handlers/ai.py`
+  telegram, http, filesystem, email, process, todo) and 4
+  still-referenced ones (browser, android, claude_code, rlm) by
+  inlining into their plugins. Split `handlers/ai.py`
   4 ways: `handle_ai_chat_model` → `ChatModelBase.chat`,
   `handle_simple_memory` → `SimpleMemoryNode.read`,
   `handle_ai_agent` / `handle_chat_agent` → deleted entirely.

@@ -8,9 +8,9 @@ Each workflow node executes as a **Temporal activity** with its own isolated con
 |---|---|---|
 | **Legacy single activity** (`execute_node_activity`) | Default | Every node routed through one dispatcher activity. WebSocket round-trip back to the FastAPI server. Stable since Wave 11. |
 | **Per-type activity** (`node.{type}.v{version}`) | `TEMPORAL_PER_TYPE_DISPATCH=true` | Each plugin gets its own `@activity.defn`. Per-plugin retry / timeout / heartbeat configs apply. Worker pool can later specialise per `cls.task_queue` (browser / code-exec / ai-heavy / ...). Shipped in F4.A (commit `8261b05`). |
-| **Agent-as-child-workflow** (`AgentWorkflow`) | `TEMPORAL_AGENT_WORKFLOW_ENABLED=true` | AI Agents (aiAgent, chatAgent, 12 specialized agents, 2 team leads) run as Temporal child workflows. Each LLM turn = activity; each tool call = per-type activity. Mirrors Temporal's AI Cookbook canonical pattern. F4.B infrastructure shipped (commit `a4d009e`); per-agent migrations follow. |
+| **Agent-as-child-workflow** (`AgentWorkflow`) | `TEMPORAL_AGENT_WORKFLOW_ENABLED=true` | AI Agents (aiAgent, chatAgent, 11 specialized agents, 2 team leads) run as Temporal child workflows. Each LLM turn = activity; each tool call = per-type activity. Mirrors Temporal's AI Cookbook canonical pattern. F4.B infrastructure shipped (commit `a4d009e`); per-agent migrations follow. |
 
-`deep_agent`, `rlm_agent`, `claude_code_agent` are intentionally excluded from AgentWorkflow — their externalised loops (deepagents package / RLM REPL / Claude CLI `--resume`) require single-process state continuity.
+`rlm_agent`, `claude_code_agent` are intentionally excluded from AgentWorkflow — their externalised loops (RLM REPL / Claude CLI `--resume`) require single-process state continuity.
 
 ## System Architecture
 
@@ -187,7 +187,7 @@ async def _node_activity(context: Dict[str, Any]) -> Dict[str, Any]:
 
 **Heartbeat strategy (critical for long-running activities):**
 
-The 2-minute `heartbeat_timeout` would kill DeepAgent or browser activities that routinely run 5-10 minutes. Both dispatch paths emit `activity.heartbeat()` at progress points — legacy on every non-matching WebSocket message, per-type at the start of each pipeline stage.
+The 2-minute `heartbeat_timeout` would kill browser or claude_code_agent activities that routinely run 5-10 minutes. Both dispatch paths emit `activity.heartbeat()` at progress points — legacy on every non-matching WebSocket message, per-type at the start of each pipeline stage.
 
 In the legacy path the server broadcasts status updates, tool-glow events, and progress messages continuously during execution, so the WS-read-loop heartbeats keep the activity alive for as long as anything is happening. Start/end heartbeats alone are not enough — any operation longer than 2 minutes would trigger `TIMEOUT_TYPE_HEARTBEAT` and Temporal would retry (or fail) the activity.
 
@@ -323,11 +323,11 @@ AgentWorkflow.run(context):
 
 `emit_phase(phase, status?)` is a thin helper that schedules `agent.broadcast_progress.v1`. The activity emits `WorkflowEvent.agent_progress` (CloudEvents v1.0, `type="com.machinaos.agent.progress"`) for FE consumers; when `status` is supplied it also drives a raw-dict `update_node_status` for the canvas-glow color (executing / success / error). Same dual-channel pattern F4.A's `_node_activity` uses.
 
-Each LLM step is one activity, each tool call is one per-type activity (the same activities F4.A registered). Failures of tool activities surface as error messages back to the LLM (matching today's LangGraph behaviour); the agent loop continues.
+Each LLM step is one activity, each tool call is one per-type activity (the same activities F4.A registered). Failures of tool activities surface as error messages back to the LLM (matching the in-process agent loop behaviour); the agent loop continues.
 
 **Broadcasts inside the loop** wrap `WorkflowEvent` (CloudEvents v1.0) per RFC §6.4: `agent_progress` events (`com.machinaos.agent.progress`) and `node_parameters_updated` events (`com.machinaos.node.parameters.updated`) flow through the `StatusBroadcaster.broadcast_agent_progress` and `StatusBroadcaster.broadcast_node_parameters_updated` wrappers respectively. The latter is reused by the legacy `routers/websocket.py:handle_save_node_parameters` (user-source) and `services/cli_agent/service.py:_persist_memory` (cli-source) — all three emission sites share the same envelope, distinguished by `source_hint` (`"user"` / `"cli"` / `"agent"`).
 
-`deep_agent`, `rlm_agent`, `claude_code_agent` are NOT migrated — their internal session state (`deepagents` package / RLM REPL / Claude CLI `--resume` with stable `cwd`) requires single-process continuity and would break across activity boundaries.
+`rlm_agent`, `claude_code_agent` are NOT migrated — their internal session state (RLM REPL / Claude CLI `--resume` with stable `cwd`) requires single-process continuity and would break across activity boundaries.
 
 References: [Temporal AI Cookbook](https://docs.temporal.io/ai-cookbook), [`temporal-community/temporal-ai-agent`](https://github.com/temporal-community/temporal-ai-agent), [`temporalio.contrib.openai_agents`](https://github.com/temporalio/sdk-python/tree/main/temporalio/contrib/openai_agents).
 

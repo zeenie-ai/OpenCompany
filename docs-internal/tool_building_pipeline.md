@@ -1,9 +1,9 @@
 # Tool Building Pipeline
 
-Canonical home for how AI Agents discover connected tool nodes, build LangChain `StructuredTool` instances, bind them to the LLM, and dispatch tool calls back to the right handler. Replaces the partial explanations previously scattered across `agent_architecture.md`, `agent_delegation.md`, and `deep_agent.md`.
+Canonical home for how AI Agents discover connected tool nodes, build LangChain `StructuredTool` instances, bind them to the LLM, and dispatch tool calls back to the right handler. Replaces the partial explanations previously scattered across `agent_architecture.md` and `agent_delegation.md`.
 
 > **Related docs:**
-> - [agent_architecture.md](./agent_architecture.md) — overall LangGraph loop that holds the bound tools
+> - [agent_architecture.md](./agent_architecture.md) — overall agent loop that holds the bound tools
 > - [agent_delegation.md](./agent_delegation.md) — `delegate_to_*` tools + taskTrigger / input-task patterns
 > - [TEMPORAL_ARCHITECTURE.md](./TEMPORAL_ARCHITECTURE.md) — per-type Temporal activity dispatch (F4.A) that backs tool calls when the flag is on
 > - [node_creation.md](./node_creation.md) — recipe for adding a new tool node
@@ -19,12 +19,12 @@ Canonical home for how AI Agents discover connected tool nodes, build LangChain 
                   → tool_data entry → (StructuredTool, config_dict)
                        │
                        ▼
-3. BIND         LangGraph create_react_agent(model, tools=...)
-                  → llm.bind_tools(tools) under the hood
+3. BIND         services/ai.py:_run_agent_loop
+                  → chat_model.bind_tools(tools)
                        │
                        ▼
 4. INVOKE       LLM emits tool_calls in its response
-                  → LangGraph ToolNode routes by name
+                  → loop dispatches each via tool_executor
                        │
                        ▼
 5. DISPATCH     services/handlers/tools.py:execute_tool
@@ -108,21 +108,21 @@ config = {
 
 The returned `config` is threaded down to `execute_tool` so handlers can read injected services + graph context without going through globals.
 
-## 4. Stage 3 — Bind (LangGraph)
+## 4. Stage 3 — Bind (`_run_agent_loop`)
 
-[`services/ai.py:execute_agent`](../server/services/ai.py) builds the agent graph via `create_react_agent(model, tools=tools)` from `langgraph.prebuilt`. Under the hood this calls `model.bind_tools(tools)` on the LangChain chat model, which uses each tool's `args_schema` to render a JSON Schema in the LLM's tool-use prompt.
+[`services/ai.py:execute_agent`](../server/services/ai.py) calls `_run_agent_loop(chat_model, ...)`, which does `chat_model.bind_tools(tools)` once at the top before the iteration loop. `bind_tools` reads each tool's `args_schema` to render a JSON Schema in the LLM's tool-use prompt.
 
 Per-provider quirks live in the chat model class, not here — see [native_llm_sdk.md](./native_llm_sdk.md) for the OpenAI / Anthropic / Gemini differences.
 
 ## 5. Stage 4 — Invoke (LLM response handling)
 
-When the LLM emits `tool_calls` in its response, LangGraph's `ToolNode` routes each call to the matching `StructuredTool` by name. The tool's async `coroutine` callback fires — this is the `_make_callback_async` closure created in stage 2 — and inside that closure:
+When the LLM emits `tool_calls` in its response, `_run_agent_loop` iterates them and dispatches each via the supplied `tool_executor` callback — the `_make_callback_async` closure created in stage 2 — and inside that closure:
 
 1. Broadcast `executing_tool` to the parent agent (phase broadcast, not the tool node's lifecycle).
 2. `from services.handlers.tools import execute_tool`
 3. `result = await execute_tool(tool_name, tool_args, config)` — this owns the tool node's lifecycle.
 4. Broadcast `tool_completed` to the parent agent.
-5. Return `result` to LangGraph → goes back into the LLM as a tool result message.
+5. Return `result` to the loop → wrapped as a `ToolMessage`, appended to `messages`, fed back to the LLM on the next turn.
 
 **Single-source-of-truth rule.** `execute_tool` owns `executing` / `success` / `error` broadcasts for the **tool node**. The parent-agent closure in `services/ai.py` only emits `executing_tool` / `tool_completed` phase events for the **parent agent**. Don't duplicate either.
 

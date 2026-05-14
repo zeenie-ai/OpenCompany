@@ -76,7 +76,7 @@ When neither Temporal nor Redis is available, workflow execution falls back to a
 
 `rlm_agent` is the only agent node type that does not go through `handle_chat_agent`. It has a dedicated handler `handle_rlm_agent` that routes to `RLMService` in `services/rlm_service.py`.
 
-The Recursive Language Model pattern replaces LangGraph's tool-calling loop with a Python REPL (`exec()`) where the agent writes code that can call:
+The Recursive Language Model pattern replaces the standard tool-calling loop with a Python REPL (`exec()`) where the agent writes code that can call:
 
 - `llm_query(prompt)` - invoke the small model connected to `input-model`
 - `rlm_query(prompt)` - recursively invoke the agent itself

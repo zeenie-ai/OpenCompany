@@ -1,6 +1,6 @@
 # AI Agent Architecture: Skill Injection & Tool Execution
 
-Detailed architecture reference for how AI Agent (`aiAgent`) and Chat Agent (`chatAgent`) discover skills and tools from connected nodes, inject them into the LLM prompt, and execute tools via LangGraph.
+Detailed architecture reference for how AI Agent (`aiAgent`) and Chat Agent (`chatAgent`) discover skills and tools from connected nodes, inject them into the LLM prompt, and execute tools via the plain-async agent loop.
 
 > **Related Documentation:**
 > - [Node Creation Guide](./node_creation.md) - Canonical plugin recipe (covers tool nodes, dual-purpose nodes, specialized agents)
@@ -11,7 +11,7 @@ Detailed architecture reference for how AI Agent (`aiAgent`) and Chat Agent (`ch
 ## Table of Contents
 
 1. [End-to-End Data Flow](#end-to-end-data-flow)
-2. [LangGraph Agent Graph](#langgraph-agent-graph)
+2. [Agent Loop](#agent-loop)
 3. [Skill Injection Pipeline](#skill-injection-pipeline)
 4. [Tool Building Pipeline](#tool-building-pipeline)
 5. [Tool Execution Flow](#tool-execution-flow)
@@ -56,14 +56,13 @@ _collect_agent_connections()              server/services/handlers/ai.py
 AIService.execute_agent()                 server/services/ai.py
   1. Inject skills into system message
   2. Build LangChain StructuredTools from tool_data
-  3. Construct LangGraph with agent + tools nodes
-  4. Run graph with initial messages
-  5. Save memory, return result
+  3. Call _run_agent_loop() (plain async while loop)
+  4. Save memory, return result
         |
         v
-LangGraph StateGraph execution
-  agent node <-> tool node loop
-  LLM decides when to call tools
+_run_agent_loop() execution
+  invoke LLM -> if tool_calls: dispatch each via tool_executor -> loop
+  Return on final response (no tool_calls) or max_iterations cap.
         |
         v
 Result broadcast via WebSocket
@@ -78,123 +77,60 @@ Result broadcast via WebSocket
 | `server/services/workflow.py` | Facade, builds context, delegates to NodeExecutor |
 | `server/services/node_executor.py` | Handler registry, dispatches via `functools.partial` |
 | `server/services/handlers/ai.py` | `_collect_agent_connections()`, `handle_ai_agent()`, `handle_chat_agent()` |
-| `server/services/ai.py` | `AIService` -- LangGraph construction, skill injection, tool building |
+| `server/services/ai.py` | `AIService` -- `_run_agent_loop`, skill injection, tool building |
 | `server/services/handlers/tools.py` | `execute_tool()` -- dispatch router for all tool types |
 | `server/services/skill_loader.py` | `SkillLoader` -- filesystem/DB skill discovery and loading |
 
 ---
 
-## LangGraph Agent Graph
+## Agent Loop
 
-### AgentState Schema
+The agent loop is a plain `for iteration in range(max_iterations):` async function in `server/services/ai.py:_run_agent_loop`. No state machine, no graph DSL — each iteration:
 
-Defined in `server/services/ai.py:386-402`:
+1. Optional `progress_callback(iteration)` so consumers (UI iteration badge) get a per-turn tick.
+2. `filter_empty_messages(messages)` strips empty `HumanMessage` content (Gemini / Claude reject them).
+3. `response = await chat_model.ainvoke(filtered)` — single LLM call. The full assistant message is appended to `messages` verbatim so provider-specific metadata survives (Gemini `thought_signature`, Anthropic cache markers, OpenAI `reasoning_content`).
+4. `extract_thinking_from_response(response)` — accumulates thinking across iterations with the `--- Iteration N ---` separator (multi-step reasoning).
+5. If `response.tool_calls` is empty → return `{messages, iteration, thinking_content, truncated: False}`.
+6. Otherwise dispatch each `tool_call` via the supplied `tool_executor`, wrap each result as a `ToolMessage`, append, and loop.
 
-```python
-class AgentState(TypedDict):
-    messages: Annotated[Sequence[BaseMessage], operator.add]  # Accumulates via operator.add
-    tool_outputs: Dict[str, Any]
-    pending_tool_calls: List[Dict[str, Any]]
-    iteration: int
-    max_iterations: int
-    should_continue: bool
-    thinking_content: Optional[str]  # Accumulated across iterations
-```
+On hitting `max_iterations`, append a terminal `AIMessage` with a truncation note (same behaviour the old `GraphRecursionError` handler synthesised) and return `truncated: True`.
 
-Key design: `Annotated[..., operator.add]` on messages means new messages are **appended** to state, not replaced.
-
-### Graph Topology
-
-Built by `build_agent_graph()` in `server/services/ai.py:646-709`:
-
-```
-WITH TOOLS:
-    START --> agent --> should_continue() --> tools --> agent --> ... --> END
-                            |
-                            +--> END (no tool calls or max iterations)
-
-WITHOUT TOOLS:
-    START --> agent --> END
-```
+### Signature
 
 ```python
-def build_agent_graph(chat_model, tools=None, tool_executor=None):
-    graph = StateGraph(AgentState)
-
-    # Bind tools to model (makes LLM aware of tool schemas)
-    model_with_tools = chat_model
-    if tools:
-        model_with_tools = chat_model.bind_tools(tools)
-
-    # Add nodes
-    graph.add_node("agent", create_agent_node(model_with_tools))
-    graph.set_entry_point("agent")
-
-    if tools and tool_executor:
-        graph.add_node("tools", create_tool_node(tool_executor))
-        graph.add_conditional_edges("agent", should_continue, {"tools": "tools", "end": END})
-        graph.add_edge("tools", "agent")  # Loop back
-
-    return graph.compile()
+async def _run_agent_loop(
+    chat_model,
+    initial_messages: List[BaseMessage],
+    *,
+    tools: Optional[List[Any]] = None,
+    tool_executor: Optional[Callable] = None,
+    max_iterations: int = 500,
+    progress_callback: Optional[Callable[[int], Any]] = None,
+) -> Dict[str, Any]:
+    """Returns {messages, iteration, thinking_content, truncated}."""
 ```
 
-### Agent Node
+Tools bind once at the top via `chat_model.bind_tools(tools)`; the same provider-unified LangChain method every chat model honours.
 
-`create_agent_node()` in `server/services/ai.py:509-584`:
+### Termination
 
-1. Receives `state["messages"]` (accumulated conversation)
-2. Filters empty messages (prevents API errors for Gemini/Claude)
-3. Invokes LLM: `response = chat_model.invoke(filtered_messages)`
-4. Extracts thinking content (Claude content_blocks, Gemini metadata, Groq additional_kwargs)
-5. Checks `response.tool_calls` -- if present, sets `should_continue=True`
-6. Returns updated state with `[response]` appended via `operator.add`
+| Trigger | What happens |
+|---|---|
+| LLM emits no `tool_calls` | Return with `truncated: False`. This is the normal exit. |
+| `tool_executor` is `None` but LLM emits tool calls | WARN + return (treat as final). |
+| `iteration` reaches `max_iterations` | Append synthetic terminal `AIMessage` + return with `truncated: True`. |
 
-### Tool Node
+`max_iterations` defaults to 500 (sourced from `llm_defaults.json:agent.recursion_limit`). It's a backstop, not the load-bearing signal — compaction (token-based, post-turn) is the actual termination control.
 
-`create_tool_node()` in `server/services/ai.py:587-631`:
+### Where it's called
 
-```python
-async def tool_node(state: AgentState) -> Dict[str, Any]:
-    tool_messages = []
-    for tool_call in state.get("pending_tool_calls", []):
-        tool_name = tool_call.get("name")
-        tool_args = tool_call.get("args", {})
-        tool_id = tool_call.get("id", "")
+Two callsites in `server/services/ai.py`:
 
-        try:
-            result = await tool_executor(tool_name, tool_args)
-        except Exception as e:
-            result = {"error": str(e)}
+- `execute_agent` — for `aiAgent` plugins.
+- `execute_chat_agent` — for `chatAgent` + all specialized agents + team leads.
 
-        tool_messages.append(ToolMessage(
-            content=json.dumps(result, default=str),
-            tool_call_id=tool_id,
-            name=tool_name
-        ))
-
-    return {"messages": tool_messages, "pending_tool_calls": []}
-```
-
-- Iterates all pending tool calls from the LLM
-- Calls the `tool_executor` callback (closure built in `execute_agent()`)
-- Wraps results as `ToolMessage` objects with matching `tool_call_id`
-- Errors are caught and returned as `{"error": ...}` -- the LLM sees the error and can retry or respond
-
-### Routing Logic
-
-`should_continue()` in `server/services/ai.py:634-643`:
-
-```python
-def should_continue(state: AgentState) -> str:
-    if state.get("should_continue", False):
-        if state.get("iteration", 0) < state.get("max_iterations", 10):
-            return "tools"
-    return "end"
-```
-
-Routes to `"tools"` when:
-- LLM returned tool calls (`should_continue=True`)
-- AND iteration count < `max_iterations` (default 10)
+Both build `initial_messages` (system + memory history + current prompt + skill injection), build tools via `_build_tool_from_node`, then call `_run_agent_loop` and extract the final assistant message + accumulated thinking + iteration count from the returned dict.
 
 ---
 
@@ -358,7 +294,7 @@ This text is appended to the system message. The full SKILL.md body (instruction
 
 ## Tool Building Pipeline
 
-Tool building + dispatch lives in [tool_building_pipeline.md](./tool_building_pipeline.md). The five stages (DISCOVER edges → BUILD StructuredTool → BIND to LangGraph → INVOKE via LLM tool_calls → DISPATCH through execute_tool) and the dispatch matrix (delegated agents / Android services / dual-purpose plugins / direct tools / search APIs / generic fallback) are documented there. The single-source-of-truth rule — execute_tool owns the tool node lifecycle, parent-agent closures only emit phase broadcasts — is the contract test enforces.
+Tool building + dispatch lives in [tool_building_pipeline.md](./tool_building_pipeline.md). The five stages (DISCOVER edges → BUILD StructuredTool → BIND via `chat_model.bind_tools` → INVOKE via LLM tool_calls → DISPATCH through execute_tool) and the dispatch matrix (delegated agents / Android services / dual-purpose plugins / direct tools / search APIs / generic fallback) are documented there. The single-source-of-truth rule — execute_tool owns the tool node lifecycle, parent-agent closures only emit phase broadcasts — is the contract test enforces.
 
 Patterns covered in the canonical doc:
 
@@ -375,7 +311,7 @@ Patterns covered in the canonical doc:
 
 ## Memory Integration
 
-Memory load + save lives in [memory_lifecycle.md](./memory_lifecycle.md). The agent loop reads `memory_data` from `_collect_agent_connections()` (via the `input-memory` edge), prepends parsed history to the system message + current prompt, runs the graph, then appends the turn + trims the window + archives trimmed text to the vector store. The markdown helpers (`parse_memory_markdown`, `append_to_memory_markdown`, `trim_markdown_window`) and the vector store (`InMemoryVectorStore` with HuggingFace embeddings) are the load-bearing surface — see the canonical doc for signatures, the markdown format, and the engine-specific adapter table (aiAgent / deep_agent / rlm_agent / claude_code_agent native session resume bridge).
+Memory load + save lives in [memory_lifecycle.md](./memory_lifecycle.md). The agent loop reads `memory_data` from `_collect_agent_connections()` (via the `input-memory` edge), prepends parsed history to the system message + current prompt, runs `_run_agent_loop`, then appends the turn + trims the window + archives trimmed text to the vector store. The markdown helpers (`parse_memory_markdown`, `append_to_memory_markdown`, `trim_markdown_window`) and the vector store (`InMemoryVectorStore` with HuggingFace embeddings) are the load-bearing surface — see the canonical doc for signatures, the markdown format, and the engine-specific adapter table (aiAgent / rlm_agent / claude_code_agent native session resume bridge).
 
 ---
 
@@ -385,14 +321,14 @@ Both methods live in `server/services/ai.py` and follow the same general pattern
 
 | Aspect | `execute_agent()` | `execute_chat_agent()` |
 |--------|-------------------|----------------------|
-| **Graph construction** | Always builds full LangGraph StateGraph | Conditional: LangGraph if tools, simple `ainvoke()` if no tools |
-| **Tool failure** | Re-raises exceptions (LangGraph handles) | Returns `{"error": str(e)}` (softer handling) |
-| **No-tool path** | N/A -- always uses graph | `response = await chat_model.ainvoke(messages)` (no graph overhead) |
+| **Loop call** | Always calls `_run_agent_loop` (even with zero tools — single-turn happy path returns immediately) | Conditional: calls `_run_agent_loop` if tools, simple `await chat_model.ainvoke(messages)` if no tools |
+| **Tool failure** | Re-raises exceptions (the loop wraps them as `{"error": ...}` ToolMessages on retry) | Returns `{"error": str(e)}` (softer handling) |
+| **No-tool path** | N/A -- always uses the loop | `response = await chat_model.ainvoke(messages)` (skips loop overhead) |
 | **Result metadata** | `agent_type: "agent"` | `agent_type: "chat" / "chat_with_skills" / "chat_with_tools" / "chat_with_skills_and_tools"` |
 
 ### Specialized Agent Routing
 
-There are **15 specialized agents**. Most route to `handle_chat_agent`; `rlm_agent` and `claude_code_agent` have dedicated handlers:
+There are **11 specialized agents** plus 2 team leads. Most route to `handle_chat_agent`; `rlm_agent` and `claude_code_agent` have dedicated handlers:
 
 ```python
 # server/services/node_executor.py
@@ -403,11 +339,11 @@ SPECIALIZED_AGENT_TYPES = {
     # rlm_agent and claude_code_agent are handled by dedicated handlers, not handle_chat_agent
 }
 
-# Most specialized agents map to handle_chat_agent
+# Most specialized agents map to handle_chat_agent (uses _run_agent_loop)
 for agent_type in SPECIALIZED_AGENT_TYPES:
     registry[agent_type] = partial(handle_chat_agent, ai_service=self.ai_service, database=self.database)
 
-# Dedicated handlers for agents that do not use LangGraph tool-calling
+# Dedicated handlers for agents with externalised session state
 registry['rlm_agent'] = partial(handle_rlm_agent, ai_service=self.ai_service, database=self.database)
 registry['claude_code_agent'] = partial(handle_claude_code_agent, ...)
 ```
@@ -419,7 +355,7 @@ Two settings flags route agent execution through different Temporal paths (see [
 | Flag | Off (default) | On |
 |---|---|---|
 | `TEMPORAL_PER_TYPE_DISPATCH` | Every node routes through the legacy `execute_node_activity` single dispatcher (WS round-trip to the FastAPI handler). | Each node routes through its per-type activity `node.{type}.v{version}` registered via `BaseNode.as_activity()`. Per-plugin retry / timeout / heartbeat configs apply. |
-| `TEMPORAL_AGENT_WORKFLOW_ENABLED` | All 15 specialized + 2 base agents (`aiAgent` / `chatAgent`) run inside `execute_node_activity` (LangGraph loop in-activity). | The 15 migrating agent types become Temporal **child workflows** (`AgentWorkflow`). LLM steps + tool calls become activities; `agent.prepare_payload.v1` resolves the DB-backed payload as the workflow's first step. `deep_agent` / `rlm_agent` / `claude_code_agent` stay on the F4.A per-type activity path (externalised session state). |
+| `TEMPORAL_AGENT_WORKFLOW_ENABLED` | All 11 specialized + 2 team leads + 2 base agents (`aiAgent` / `chatAgent`) run inside `execute_node_activity` (`_run_agent_loop` in-activity). | The 14 migrating agent types become Temporal **child workflows** (`AgentWorkflow`). LLM steps + tool calls become activities; `agent.prepare_payload.v1` resolves the DB-backed payload as the workflow's first step. `rlm_agent` / `claude_code_agent` stay on the F4.A per-type activity path (externalised session state). |
 
 Today both flags default to `false`; the wiring is shipped (F4.A at `8261b05`, F4.B infrastructure at `a4d009e`, per-agent dispatch at `0459131`) but production rollout awaits canary verification on a Temporal dev cluster.
 
@@ -427,7 +363,7 @@ Today both flags default to `false`; the wiring is shipped (F4.A at `8261b05`, F
 
 ### RLM Agent Pattern
 
-`rlm_agent` replaces LangGraph tool-calling with a Python REPL executing LM calls recursively. Instead of paying one network round-trip per tool call, the RLM agent writes a code block that orchestrates many model invocations at once:
+`rlm_agent` replaces the standard tool-calling loop with a Python REPL executing LM calls recursively. Instead of paying one network round-trip per tool call, the RLM agent writes a code block that orchestrates many model invocations at once:
 
 ```python
 # The LLM generates code like this, executed by RLMService
@@ -453,17 +389,22 @@ registry['rlm_agent'] = partial(handle_rlm_agent, ai_service=self.ai_service, da
 
 `handle_rlm_agent` delegates to `RLMService` in `server/services/rlm_service.py`. See [rlm_service.md](rlm_service.md) for full details.
 
-### Chat Agent Conditional Graph
+### Chat Agent Conditional Loop
 
 ```python
 # In execute_chat_agent():
 if all_tools:
-    # Full LangGraph with tool execution loop
-    agent_graph = build_agent_graph(chat_model, tools=all_tools, tool_executor=executor)
-    final_state = await agent_graph.ainvoke(initial_state)
+    # Run the agent loop with bound tools
+    final_state = await _run_agent_loop(
+        chat_model, messages,
+        tools=all_tools,
+        tool_executor=chat_tool_executor,
+        max_iterations=recursion_limit,
+        progress_callback=_emit_progress if broadcaster else None,
+    )
 else:
-    # Simple invoke -- no graph, no tool overhead
+    # Simple invoke -- no loop overhead
     response = await chat_model.ainvoke(messages)
 ```
 
-This optimization means tool-less Chat Agent conversations skip LangGraph entirely for faster response times.
+This optimisation means tool-less Chat Agent conversations skip `_run_agent_loop` entirely for faster response times.

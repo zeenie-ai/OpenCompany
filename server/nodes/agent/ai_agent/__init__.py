@@ -1,8 +1,8 @@
-"""AI Agent — Wave 11.C migration (LangGraph agent).
+"""AI Agent — Wave 11.C migration (tool-calling agent).
 
-Tool-calling LangGraph agent with memory, skills, and iterative
+Tool-calling agent with memory, skills, and iterative
 reasoning. Delegates execution to ``handlers/ai.handle_ai_agent`` —
-that body owns the LangGraph graph construction + tool binding +
+that body owns the agent-loop construction + tool binding +
 streaming + memory persistence + delegation.
 """
 
@@ -98,9 +98,9 @@ class AIAgentOutput(BaseModel):
 class AIAgentNode(ActionNode):
     type = "aiAgent"
     display_name = "AI Agent"
-    subtitle = "LangGraph Agent"
+    subtitle = "AI Agent"
     group = ("agent",)
-    description = "LangGraph agent with tool calling, memory, and iterative reasoning"
+    description = "AI agent with tool calling, memory, and iterative reasoning"
     component_kind = "agent"
     handles = std_agent_handles()
     ui_hints = STD_AGENT_HINTS
@@ -117,8 +117,8 @@ class AIAgentNode(ActionNode):
         Pre-dispatch flow (edge walk + task inject + prompt fallback)
         lives in :mod:`nodes.agent._inline`. This method just calls
         ``AIService.execute_agent`` with the prepared kwargs. The
-        underlying LangGraph orchestration + tool binding + memory
-        I/O + streaming hooks stay in AIService.
+        underlying agent loop + tool binding + memory I/O + streaming
+        hooks stay in AIService.
         """
         from services.plugin.deps import get_ai_service, get_database
 

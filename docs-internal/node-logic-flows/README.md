@@ -100,7 +100,6 @@ match its doc here, and each doc must still describe what the code does.
 - [Claude Code Agent (`claude_code_agent`)](./specialized_agents/claudeCodeAgent.md)
 - [Coding Agent (`coding_agent`)](./specialized_agents/codingAgent.md)
 - [Consumer Agent (`consumer_agent`)](./specialized_agents/consumerAgent.md)
-- [Deep Agent (`deep_agent`)](./specialized_agents/deepAgent.md)
 - [Orchestrator Agent (`orchestrator_agent`)](./specialized_agents/orchestratorAgent.md)
 - [Payments Agent (`payments_agent`)](./specialized_agents/paymentsAgent.md)
 - [Productivity Agent (`productivity_agent`)](./specialized_agents/productivityAgent.md)

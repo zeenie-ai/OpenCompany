@@ -29,7 +29,7 @@ the node registry wires all of those to `handle_chat_agent` via
 | `input-main` | main | no | Upstream data. Auto-prompt fallback when `prompt` is empty. |
 | `input-skill` | main | no | Skill nodes (including `masterSkill` aggregation). |
 | `input-memory` | main | no | `simpleMemory` node for conversation history. |
-| `input-tools` | main | no | Tool nodes bound to the LLM via LangGraph. |
+| `input-tools` | main | no | Tool nodes bound to the LLM via `chat_model.bind_tools`. |
 | `input-task` | main | no | `taskTrigger` output - formatted and prepended to the prompt. |
 | `input-teammates` | main | no | **Team-lead only** (`orchestrator_agent`, `ai_employee`). Agents on this handle become `delegate_to_<name>` tools. |
 
@@ -125,9 +125,8 @@ flowchart TD
 - **Empty `teammates` on a team-lead is benign** - the handler simply runs
   without delegation tools, so an `orchestrator_agent` with nothing wired to
   `input-teammates` behaves exactly like `chatAgent`.
-- **`rlm_agent` and `deep_agent` do NOT route here** - they have dedicated
-  handlers (`handle_rlm_agent`, `handle_deep_agent`). All other specialized
-  agents do.
+- **`rlm_agent` and `claude_code_agent` do NOT route here** - they have dedicated
+  handlers. All other specialized agents do.
 
 ## Related
 

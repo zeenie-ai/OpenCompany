@@ -1,12 +1,12 @@
 """Specialized agent base — subclass + set 5 attrs to mint a new agent.
 
-13 specialized agents (android / coding / web / task / social / travel
-/ tool / productivity / payments / consumer / autonomous / rlm /
-claude_code) all share the LangGraph-via-handle_chat_agent execution
-path. The only differences are display name, icon, colour, subtitle,
-description. Each agent gets its own file under ``nodes/agent/`` so
-the user can find ``android_agent.py`` directly — but the body lives
-here so changing the dispatch path is a one-file edit.
+All specialized agents (android / coding / web / task / social / travel
+/ tool / productivity / payments / consumer / autonomous) share the
+``handle_chat_agent`` execution path. The only differences are display
+name, icon, colour, subtitle, description. Each agent gets its own file
+under ``nodes/agent/`` so the user can find ``android_agent.py``
+directly — but the body lives here so changing the dispatch path is a
+one-file edit.
 """
 
 from __future__ import annotations

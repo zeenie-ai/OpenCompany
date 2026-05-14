@@ -17,7 +17,7 @@ This is a React Flow-based workflow automation platform implementing n8n-inspire
 | **[Plugin System (Wave 11)](./docs-internal/plugin_system.md)** | Class-based plugin-first architecture. `BaseNode` / `ActionNode` / `TriggerNode` / `ToolNode` + `@Operation` decorator. Pydantic `Params`/`Output`. Declarative `Routing` DSL + `Connection` facade (Nango pattern). 18 `Credential` subclasses live in each node folder's `_credentials.py` (or inline for single-use). `TaskQueue` constants route to Temporal worker pools. Plugins live across 9 queues (live count via `glob server/nodes/**/__init__.py`); handler bodies fully inlined (`services/handlers/` shrank 12.8K → 1.1K LOC across 16 → 4 files; only cross-cutting orchestration remains: `tools.py` AI-tool dispatch + agent delegation, `google_auth.py`, `triggers.py`). **Wave 11.H added "self-contained plugin folders"** — up to six generic registries (`ws_handler_registry`, `register_router`, `event_waiter.{register_filter_builder,register_trigger_precheck}`, `status_broadcaster.register_service_refresh`, `node_output_schemas.register_output_schema`) so rich plugins like telegram own their entire surface area without core-services edits. |
 | **[Nodes Cookbook](./server/nodes/README.md)** | 5-minute recipe + folder map + shared helpers (`_base.py` / `_inline.py` per domain) + shared credentials + **canonical folder-per-plugin shape (telegram is the reference implementation)** + contract invariants + common pitfalls. Lives next to the plugin files. |
 | **[Node Creation Guide](./docs-internal/node_creation.md)** | Canonical plugin recipe — one self-contained folder per plugin under `server/nodes/<group>/<plugin>/`, rooted at `__init__.py`. Multi-file split (`_service.py` / `_handlers.py` / etc.) when the plugin owns long-lived state. Zero frontend edits, zero core-services edits. Auto-registers via `BaseNode.__init_subclass__` + the six `register_*` hooks. Covers tool nodes, dual-purpose nodes (workflow + AI tool), and specialized agents as variations of the same recipe. |
-| **[Agent Architecture](./docs-internal/agent_architecture.md)** | How AI Agent and Chat Agent discover skills/tools, inject them into LLM prompts, and execute via LangGraph |
+| **[Agent Architecture](./docs-internal/agent_architecture.md)** | How AI Agent and Chat Agent discover skills/tools, inject them into LLM prompts, and execute via the plain-async `_run_agent_loop` |
 | **[Agent Delegation](./docs-internal/agent_delegation.md)** | How memory, parameters, and execution context flow when one AI agent delegates work to another agent connected as a tool |
 | **[Agent Teams](./docs-internal/agent_teams.md)** | Claude SDK Agent Teams pattern - AI Employee and Orchestrator nodes with input-teammates handle for multi-agent coordination |
 | **[Memory Compaction](./docs-internal/memory_compaction.md)** | Token tracking and model-aware memory compaction using native provider APIs (Anthropic, OpenAI) with threshold = 50% of context window |
@@ -54,7 +54,6 @@ This is a React Flow-based workflow automation platform implementing n8n-inspire
 | **[Claude Code Permission Modes (snapshot)](./docs-internal/claude_code_permission_modes_reference.md)** | Verbatim [code.claude.com/docs/en/permission-modes](https://code.claude.com/docs/en/permission-modes) — `default` / `acceptEdits` / `plan` / `auto` / `dontAsk` / `bypassPermissions` semantics, Shift+Tab cycle, protected paths. MachinaOs default is `acceptEdits`. |
 | **[Claude Code Headless / Print Mode (snapshot)](./docs-internal/claude_code_headless_reference.md)** | Verbatim [code.claude.com/docs/en/headless](https://code.claude.com/docs/en/headless) — `claude -p`, `--output-format` (`text` / `json` / `stream-json`), `--input-format`, `--bare`, stream-json event schema (`system/init`, `system/api_retry`, `system/plugin_install`). MachinaOs no longer uses `-p`; the pool path emits `--output-format stream-json --input-format stream-json --verbose --ide` over stdio pipes (interactive billing). The event schema is the contract `services/cli_agent/session_pool.py` parses off `proc.stdout`. |
 | **[Claude Code Skills (snapshot)](./docs-internal/claude_code_skills_reference.md)** | Verbatim [code.claude.com/docs/en/skills](https://code.claude.com/docs/en/skills) — `SKILL.md` frontmatter spec, discovery paths, content lifecycle, `context: fork`, dynamic context injection via `` !`<command>` ``. The spec MachinaOs materialises connected skills against in `_pre_spawn`. |
-| **[Deep Agent](./docs-internal/deep_agent.md)** | LangChain DeepAgents integration with filesystem tools, sub-agent delegation, auto-summarization, and planning |
 | **[Autonomous Agent Creation](./docs-internal/autonomous_agent_creation.md)** | Creating autonomous agents with Code Mode patterns and agentic loops |
 | **[Polyglot Server](../polyglot-server/ARCHITECTURE.md)** | Plugin registry microservice with MCP gateway (optional integration) |
 
@@ -140,11 +139,6 @@ server/services/
 │       ├── openai.py        # OpenAIProvider (openai SDK)
 │       ├── gemini.py        # GeminiProvider (google-genai SDK)
 │       └── openrouter.py    # OpenRouterProvider (extends OpenAIProvider)
-├── agents/                  # Deep Agent execution engine (deepagents package)
-│   ├── __init__.py          # Exports DeepAgentService
-│   ├── service.py           # Orchestration: graph creation + invocation
-│   ├── adapters.py          # ToolAdapter, SubAgentAdapter, ResponseExtractor
-│   └── constants.py         # PROVIDER_PREFIX, DEFAULT_MAX_TURNS
 ├── proxy/                   # Residential proxy provider management
 │   ├── __init__.py          # Exports get_proxy_service, ProxyService
 │   ├── service.py           # ProxyService singleton - provider selection, URL generation
@@ -185,7 +179,7 @@ server/models/
 └── database.py              # ConversationMessage, NodeParameter, ToolSchema, ChatMessage, TokenUsageMetric, APIUsageMetric, CompactionEvent, SessionTokenState, UserSettings, ProviderDefaults, AgentTeam, TeamMember, TeamTask, AgentMessage tables
 
 server/config/
-├── llm_defaults.json        # Per-provider defaults (model, base_url, max_output_tokens, context_length, temperature_range, reasoning_models, thinking_type, ...) AND a top-level `agent` block (recursion_limit, default_temperature, compaction.ratio) that drives the LangGraph agent loop and CompactionService — no env-var defaults; this is the source of truth.
+├── llm_defaults.json        # Per-provider defaults (model, base_url, max_output_tokens, context_length, temperature_range, reasoning_models, thinking_type, ...) AND a top-level `agent` block (recursion_limit, default_temperature, compaction.ratio) that drives the agent loop and CompactionService — no env-var defaults; this is the source of truth.
 ├── model_registry.json      # Cached model data from OpenRouter (auto-refreshed)
 ├── pricing.json             # LLM and API pricing config
 ├── google_apis.json         # Google Workspace API endpoints, scopes, OAuth callback paths
@@ -701,11 +695,11 @@ The project uses WebSocket as the primary communication method between frontend 
 - **groqChatModel**: Groq ultra-fast inference with Llama, Qwen3, and GPT-OSS models. Qwen3-32b supports reasoning_format.
 - **cerebrasChatModel**: Cerebras ultra-fast inference on custom AI hardware with Llama and Qwen models
 - **deepseekChatModel**: DeepSeek V3 models (deepseek-chat, deepseek-reasoner). Reasoner has always-on Chain-of-Thought with reasoning_content in response. 128K context, up to 64K output.
-- **kimiChatModel**: Kimi K2 models by Moonshot AI (kimi-k2.5, kimi-k2-thinking). 256K context, 96K output. Thinking on by default for k2.5 (explicitly disabled for LangGraph agent compatibility). Fixed temperature: 0.6 (instant) / 1.0 (thinking).
+- **kimiChatModel**: Kimi K2 models by Moonshot AI (kimi-k2.5, kimi-k2-thinking). 256K context, 96K output. Thinking on by default for k2.5 (explicitly disabled for tool-calling agent compatibility). Fixed temperature: 0.6 (instant) / 1.0 (thinking).
 - **mistralChatModel**: Mistral AI models (mistral-large-latest, mistral-small-latest, codestral-latest). Up to 256K context. No thinking support. Temperature 0-1.5.
 
 ### AI Agents & Memory (3 nodes)
-- **aiAgent**: Advanced AI agent with tool calling, memory input handle, and iterative reasoning. Uses LangGraph for structured execution. Parameters: Provider, Model, Prompt, System Message, Options.
+- **aiAgent**: Advanced AI agent with tool calling, memory input handle, and iterative reasoning. Uses the plain-async `_run_agent_loop` for structured execution. Parameters: Provider, Model, Prompt, System Message, Options.
 - **chatAgent**: Conversational AI agent with memory and skill support for multi-turn chat interactions. Parameters: Provider, Model, Prompt (supports `{{chatTrigger.message}}` template or auto-fallback from connected input), System Message. Behavior extended by connected skills.
 ### AI Agent Tool Nodes (6 dedicated + 10 dual-purpose)
 Tool nodes connect to AI Agent's `input-tools` handle to provide capabilities the agent can invoke during reasoning. Both `masterSkill` and `simpleMemory` are in the AI Tools category.
@@ -961,11 +955,10 @@ Specialized agents are AI Agents pre-configured for specific domains. They inher
 - **autonomous_agent**: Autonomous Agent - AI agent for autonomous operations using Code Mode patterns. Uses agentic loops, progressive discovery, error recovery, and multi-tool orchestration for 81-98% token savings. Connect autonomous skills via Master Skill.
 - **orchestrator_agent**: Orchestrator Agent - Team lead agent for coordinating multiple agents. Connect specialized agents via `input-teammates` handle; they become `delegate_to_*` tools the AI can invoke.
 - **ai_employee**: AI Employee - Team lead agent similar to orchestrator_agent. Connect specialized agents via `input-teammates` handle for intelligent task delegation.
-- **rlm_agent**: RLM Agent - Recursive Language Model agent using REPL-based code execution with recursive LM calls. Replaces LangGraph tool-calling with RLM's `exec()` REPL loop (`llm_query()`, `rlm_query()`, `FINAL()`). Routes to dedicated `handle_rlm_agent` handler and `RLMService` (not `handle_chat_agent`). Connect AI chat model nodes as small LMs for depth>=1 calls. See `docs-internal/rlm_service.md`.
-- **deep_agent**: Deep Agent - AI agent powered by LangChain DeepAgents with built-in filesystem tools (read, write, edit, glob, grep, execute), sub-agent delegation, auto-summarization, and todo planning. Routes to dedicated `handle_deep_agent` handler and `DeepAgentService` (not `handle_chat_agent`). Supports memory, skills, connected tools, and teammate delegation via `input-teammates`. See `docs-internal/deep_agent.md`.
+- **rlm_agent**: RLM Agent - Recursive Language Model agent using REPL-based code execution with recursive LM calls. Replaces the standard tool-calling loop with RLM's `exec()` REPL loop (`llm_query()`, `rlm_query()`, `FINAL()`). Routes to dedicated `handle_rlm_agent` handler and `RLMService` (not `handle_chat_agent`). Connect AI chat model nodes as small LMs for depth>=1 calls. See `docs-internal/rlm_service.md`.
 
 **Backend Routing:**
-Specialized agents are detected by `SPECIALIZED_AGENT_TYPES` and dispatched through `BaseNode.execute()` via the node registry (Wave 11). Dedicated engines: `rlm_agent` -> `RLMService`, `deep_agent` -> `DeepAgentService` (`services/agents/`).
+Specialized agents are detected by `SPECIALIZED_AGENT_TYPES` and dispatched through `BaseNode.execute()` via the node registry (Wave 11). Dedicated engine: `rlm_agent` -> `RLMService`.
 ```python
 SPECIALIZED_AGENT_TYPES = {
     'android_agent', 'coding_agent', 'web_agent', 'task_agent', 'social_agent',
@@ -979,7 +972,6 @@ Team leads (`orchestrator_agent`, `ai_employee`) have a special `input-teammates
 ```python
 # In handlers/ai.py
 TEAM_LEAD_TYPES = {'orchestrator_agent', 'ai_employee'}
-# deep_agent collects teammates in handle_deep_agent and converts to deepagents SubAgent dicts
 
 # Teammates become delegate_to_* tools automatically
 if node_type in TEAM_LEAD_TYPES:
@@ -1637,7 +1629,7 @@ server/nodes/document/
 
 Workflows execute via Temporal for durability and horizontal scaling. Three dispatch paths (legacy `execute_node_activity` / per-type `node.{type}.v{version}` (F4.A) / Agent-as-child-workflow (F4.B)) gated by `TEMPORAL_PER_TYPE_DISPATCH` and `TEMPORAL_AGENT_WORKFLOW_ENABLED` settings flags.
 
-Full architecture, dispatch matrix, per-node lifecycle, heartbeat semantics, the 15 migrating agent types + 3 bypass agents (deep_agent / rlm_agent / claude_code_agent), the 5 F4.B agent activities (`execute_llm_step.v1` / `persist_turn.v1` / `compact_memory.v1` / `prepare_payload.v1` / `broadcast_progress.v1`), and the future `TemporalWorkerPool` per-queue routing live in [docs-internal/TEMPORAL_ARCHITECTURE.md](./docs-internal/TEMPORAL_ARCHITECTURE.md). Tool-call dispatch under F4.A documented at [docs-internal/tool_building_pipeline.md §9](./docs-internal/tool_building_pipeline.md).
+Full architecture, dispatch matrix, per-node lifecycle, heartbeat semantics, the 14 migrating agent types + 2 bypass agents (rlm_agent / claude_code_agent), the 6 F4.B agent activities (`prepare_payload.v1` / `execute_llm_step.v1` / `persist_turn.v1` / `compact_memory.v1` / `store_output.v1` / `broadcast_progress.v1`), and the future `TemporalWorkerPool` per-queue routing live in [docs-internal/TEMPORAL_ARCHITECTURE.md](./docs-internal/TEMPORAL_ARCHITECTURE.md). Tool-call dispatch under F4.A documented at [docs-internal/tool_building_pipeline.md §9](./docs-internal/tool_building_pipeline.md).
 
 **Configuration** (`.env`):
 ```env
@@ -2050,10 +2042,9 @@ workspace_base_dir: str = Field(default="data/workspaces", env="WORKSPACE_BASE_D
 |------|-------------|
 | `server/core/config.py` | `workspace_base_dir` setting |
 | `server/services/workflow.py` | `_get_workspace_dir()`, injects into context |
-| `server/services/agents/service.py` | `FilesystemBackend(root_dir=workspace_dir, virtual_mode=True)` |
-| `server/services/handlers/deep_agent.py` | Passes `workspace_dir` from context to service |
 | `server/services/handlers/document.py` | `fileDownloader` uses workspace for downloads |
 | `server/services/handlers/code.py` | `workspace_dir` available in Python/JS/TS execution |
+| `server/nodes/filesystem/_backend.py` | `NushellBackend(root_dir=workspace_dir, virtual_mode=True)` for the file/shell plugins |
 
 ### Execution System
 - **Supported Components**: AI models, location services, Android automation, WhatsApp messaging, HTTP requests, webhooks
@@ -2106,7 +2097,7 @@ deploy_workflow() -> Sets up triggers, returns immediately
 
 **Dual-path execution architecture:**
 - **Native SDK path** (`execute_chat()`, `fetch_models()`): OpenAI, Anthropic, Gemini, OpenRouter, xAI, DeepSeek, Kimi, Mistral, Ollama, LM Studio use the `openai` Python SDK via `services/llm/` layer with config-driven `base_url`. Local providers (Ollama, LM Studio) ride the same OpenAI-compat path — `OpenAIProvider` is constructed with `base_url={user-stored URL}` so requests stay on `http://localhost:…` and never hit api.openai.com. Factory: `create_provider(name, api_key)` with lazy imports.
-- **LangChain agent path** (`execute_agent()`, `execute_chat_agent()`): All providers use `ChatOpenAI` with `base_url` from `llm_defaults.json` + LangGraph for tool calling. OpenAI-compatible providers (DeepSeek, Kimi, Mistral) pass `max_tokens` via `extra_body` to bypass LangChain's `max_completion_tokens` conversion.
+- **LangChain agent path** (`execute_agent()`, `execute_chat_agent()`): All providers use `ChatOpenAI` with `base_url` from `llm_defaults.json` + `chat_model.bind_tools` for tool calling, driven by the plain-async `_run_agent_loop`. OpenAI-compatible providers (DeepSeek, Kimi, Mistral) pass `max_tokens` via `extra_body` to bypass LangChain's `max_completion_tokens` conversion.
 - **LangChain fallback** (`execute_chat()`): Groq, Cerebras still use LangChain `create_model()` + `chat_model.invoke()`.
 - Native types aliased in ai.py: `NativeMessage`, `NativeThinkingConfig`, `LLMResponse` to avoid naming conflicts with LangChain's `ThinkingConfig`.
 - Provider configs (base_url, models_endpoint, supported_params, temperature constraints) are driven by `server/config/llm_defaults.json` -- no hardcoded URLs in Python code.
@@ -2305,7 +2296,7 @@ _AGENT_TYPES = ['aiAgent', 'chatAgent', 'android_agent', 'coding_agent',
                 'web_agent', 'task_agent', 'social_agent', 'travel_agent',
                 'tool_agent', 'productivity_agent', 'payments_agent',
                 'consumer_agent', 'autonomous_agent', 'orchestrator_agent',
-                'ai_employee', 'rlm_agent', 'claude_code_agent', 'deep_agent']
+                'ai_employee', 'rlm_agent', 'claude_code_agent']
 _CHAT_MODEL_TYPES = ['openaiChatModel', 'anthropicChatModel', 'geminiChatModel', ...]
 NODE_OUTPUT_SCHEMAS = {
     **{t: AIAgentOutput for t in _AGENT_TYPES},
@@ -2329,12 +2320,12 @@ Adding a new node type's output shape: define one Pydantic model, register it in
 
 ## AI Agent Node Architecture
 
-### LangGraph Loop Termination
-The standard agent path (`build_agent_graph` in `services/ai.py`) routes purely on `pending_tool_calls` — no custom iteration counter. Termination is bounded by LangGraph's built-in `recursion_limit`, sourced from `agent.recursion_limit` in `llm_defaults.json` (currently 500 — generous backstop, not the load-bearing termination signal).
+### Agent Loop Termination
+The standard agent path (`_run_agent_loop` in `services/ai.py`) routes purely on `response.tool_calls` — no custom iteration counter beyond `max_iterations`. The cap is sourced from `agent.recursion_limit` in `llm_defaults.json` (currently 500 — generous backstop, not the load-bearing termination signal).
 
 The token-based compaction threshold (`agent.compaction.ratio` × context_length, ≈100K for claude-sonnet-4-6) is the real termination signal: `_track_token_usage` runs after each agent turn, and when cumulative tokens cross the threshold it invokes `CompactionService.compact_context` to summarise the transcript before the next turn.
 
-If the recursion cap is ever hit anyway, the `GraphRecursionError` handler appends a terminal `AIMessage` carrying a truncation note so `_extract_text_content` returns a usable partial response and the workflow continues — `_track_token_usage` and any post-loop persistence still run.
+If the iteration cap is ever hit anyway, `_run_agent_loop` appends a terminal `AIMessage` carrying a truncation note and returns `truncated=True` so `_extract_text_content` returns a usable partial response and the workflow continues — `_track_token_usage` and any post-loop persistence still run.
 
 ### Spec-driven component design (Wave 10.D)
 
@@ -2378,7 +2369,7 @@ The dispatch keys off `spec.componentKind` (a backend-declared string), never `s
 
 | Feature | AI Agent | Zeenie |
 |---------|----------|------------|
-| Tool Calling | Yes (LangGraph) | Yes (LangGraph) |
+| Tool Calling | Yes (agent loop) | Yes (agent loop) |
 | Memory Support | Yes | Yes |
 | Skill Support | Yes | Yes |
 | Task Input | Yes (input-task) | Yes (input-task) |
@@ -2403,7 +2394,7 @@ Handler collects tool_data: {node_id, node_type, parameters, label, connected_se
         ↓
 AIService._build_tool_from_node() → creates schema-only StructuredTool
         ↓
-LangGraph binds tools to LLM
+_run_agent_loop binds tools via chat_model.bind_tools(tools)
         ↓
 LLM decides to call tool with arguments
         ↓
@@ -2442,7 +2433,7 @@ Chat Trigger → Zeenie ← HTTP Skill (SKILL.md context)
 The Zeenie will:
 - Load SKILL.md instructions from connected skill nodes
 - Build tools from connected tool nodes (httpRequest, calculatorTool, etc.)
-- Use LangGraph for tool execution when tools are connected
+- Use `_run_agent_loop` for tool execution when tools are connected
 
 ### Backend Handlers
 Wave 11: `handle_ai_agent` / `handle_chat_agent` were deleted. Agent execution now flows through `BaseNode.execute()` + `NodeContext.from_legacy()` via the node registry (`server/nodes/agent/`). Connection collection is handled by the agent node classes, which internally call `_collect_agent_connections()` to:
@@ -2451,8 +2442,8 @@ Wave 11: `handle_ai_agent` / `handle_chat_agent` were deleted. Agent execution n
 - Handles MasterSkill expansion into individual skill entries
 
 Both call corresponding AI service methods:
-- `AIService.execute_agent()` - Full LangGraph execution with tool binding
-- `AIService.execute_chat_agent()` - LangGraph execution with skills providing context + tools
+- `AIService.execute_agent()` - Runs `_run_agent_loop` with tool binding
+- `AIService.execute_chat_agent()` - Runs `_run_agent_loop` (when tools) or single `ainvoke` (no tools), with skills providing context + tools
 
 ### Async Agent Delegation (Nested Agents)
 
@@ -3439,7 +3430,7 @@ I don't have access to real-time weather data...
   - `services/memory/vector_store.py` — `get_memory_vector_store` + per-session `InMemoryVectorStore` cache
   - `services/memory/state.py` — `clear_agent_session_state(session_id, workflow_id, clear_long_term, memory_node_id)`; when `memory_node_id` is supplied it resets `memory_content` to the default placeholder AND wipes `last_session_id` server-side (single DB write)
   - `services/memory/__init__.py` — re-exports the full surface so existing `from services.memory import …` callers keep working
-- **AI Integration (aiAgent / chatAgent / deep_agent / rlm_agent)**: `server/services/ai.py` — `execute_agent` / `execute_chat_agent` consume `memory_data`, call the markdown helpers via the package re-exports
+- **AI Integration (aiAgent / chatAgent / rlm_agent)**: `server/services/ai.py` — `execute_agent` / `execute_chat_agent` consume `memory_data`, call the markdown helpers via the package re-exports
 - **CLI bridge (`claude_code_agent`)**: `server/services/cli_agent/service.py:_persist_memory` — appends turns to `memory_content` via the same markdown helpers AND saves `simpleMemory.last_session_id` from the most recent successful run's `r.session_id`. Always broadcasts `node_parameters_updated` so the simpleMemory parameter panel refetches live (no page reload needed).
 - **Edge walker**: `server/services/plugin/edge_walker.py:_build_memory_entry` — surfaces `memory_content` + `window_size` + `long_term_enabled` + `retrieval_count` + `last_session_id` to every consuming agent
 
@@ -3864,7 +3855,7 @@ Tool nodes provide capabilities that AI Agents can invoke during reasoning. Each
 ```
 Tool Node (calculatorTool) → (tool output) → AI Agent (input-tools handle)
                                                     ↓
-                                            LangGraph builds tools from schemas
+                                            _run_agent_loop builds tools from schemas
                                                     ↓
                                             LLM decides when to call tools
                                                     ↓
@@ -3876,7 +3867,7 @@ Tool Node (calculatorTool) → (tool output) → AI Agent (input-tools handle)
 ### Tool Execution Flow
 1. **Tool Discovery**: AI Agent scans edges for nodes connected to `input-tools` handle
 2. **Schema Building**: `_get_tool_schema()` in `ai.py` creates Pydantic schema for each tool type
-3. **Tool Binding**: LangGraph binds tools to the LLM model
+3. **Tool Binding**: `_run_agent_loop` binds tools via `chat_model.bind_tools(tools)`
 4. **LLM Decision**: LLM decides when to call tools based on user query
 5. **Status Broadcast**: `executing_tool` status broadcast with tool_name for UI animation
 6. **Tool Execution**: `execute_tool()` in `tools.py` dispatches to appropriate handler
@@ -4974,7 +4965,7 @@ Updated `client_left` and presence handlers use `has_real_android_devices()` ins
 | `android_status` | Android device connection update |
 | `node_status` | Node execution status change |
 | `node_output` | Node execution output data |
-| `agent_progress` | CloudEvents v1.0 envelope (type=`agent.progress`) — per-step LangGraph iteration count, drives the live "N / max" badge on AI Agent canvas nodes |
+| `agent_progress` | CloudEvents v1.0 envelope (type=`agent.progress`) — per-step agent-loop iteration count, drives the live "N / max" badge on AI Agent canvas nodes |
 | `variable_update` | Single variable value change |
 | `workflow_status` | Workflow execution progress |
 | `api_key_status` | API key validation status |
@@ -5214,7 +5205,7 @@ This function:
 - **Onboarding Service**: 5-step welcome wizard (Welcome, Concepts, API Keys, Canvas Tour, Get Started) using Ant Design Steps/Card/Button/Typography. Database-backed via `UserSettings.onboarding_completed` + `onboarding_step`. Existing users auto-skip (migration marks `examples_loaded=1` as completed). Replayable from Settings "Help" section. No new WebSocket handlers needed. See [Onboarding Service](./docs-internal/onboarding.md) for details.
 - **Node.js Code Executor**: Persistent Node.js server (Express + tsx) at port 3020 for JavaScript/TypeScript execution, replacing subprocess spawning per execution. Handlers in `server/services/handlers/code.py` call `NodeJSClient` which makes HTTP requests to the Node.js server. All config via environment variables (`NODEJS_EXECUTOR_URL`, `NODEJS_EXECUTOR_PORT`, etc.).
 - **writeTodos Tool Node**: Dedicated AI tool for task planning connecting to any agent's `input-tools` handle. `TodoService` singleton (`server/services/todo_service.py`) stores JSON-based per-session todo state keyed by workflow_id. Handler broadcasts `phase: "todo_update"` via WebSocket on each update for real-time UI; `formatTodoOutput()` in `OutputDisplayPanel.tsx` renders the result as a checklist with `[ ]` / `[~]` / `[x]` icons. Schema uses `TodoItem`/`TodoStatus` Pydantic enum. Skill at `server/skills/assistant/write-todos-skill/SKILL.md` teaches the plan-work-update loop.
-- **Temporal Activity Heartbeats**: Activities send `activity.heartbeat()` on every non-matching WebSocket broadcast inside the read loop in `services/temporal/activities.py`. This keeps long-running DeepAgent and browser operations alive past the 2-minute `heartbeat_timeout`. Start/end heartbeats alone were causing `TIMEOUT_TYPE_HEARTBEAT` failures on ops taking 5-10 minutes. Connection config: `heartbeat=30`, `receive_timeout=540` (fits within 10-min `start_to_close_timeout`).
+- **Temporal Activity Heartbeats**: Activities send `activity.heartbeat()` on every non-matching WebSocket broadcast inside the read loop in `services/temporal/activities.py`. This keeps long-running browser and claude_code_agent operations alive past the 2-minute `heartbeat_timeout`. Start/end heartbeats alone were causing `TIMEOUT_TYPE_HEARTBEAT` failures on ops taking 5-10 minutes. Connection config: `heartbeat=30`, `receive_timeout=540` (fits within 10-min `start_to_close_timeout`).
 - **WebSocket `_safe_send` Guard**: `server/routers/websocket.py` checks `websocket.client_state.name != "CONNECTED"` before sending and logs at `debug` level (not `error`) on failure. Prevents "ASGI message after websocket.close" errors when broadcasts race with disconnects.
 - **Claude Code CLI Flag**: `server/services/claude_code_service.py` uses `--max-budget-usd <amount>` (previously incorrectly `--max-cost`, which caused "unknown option" errors on every run).
 - **Persisted-prefix cache contract**: `PersistQueryClientProvider` hydrates entries with the QueryClient's *default* options, so any prefix in `PERSISTED_KEY_PREFIXES` (`client/src/lib/queryPersist.ts`) MUST also have a matching `queryClient.setQueryDefaults(['<prefix>'], { staleTime: FOREVER, gcTime: FOREVER })` declaration in `client/src/lib/queryClient.ts`. Per-call options don't apply on hydration. Canonical set: `nodeSpec`, `nodeGroups`, `skillContent`. `credentialValues` was previously persisted here but was removed per OWASP HTML5 Security Cheat Sheet / ASVS V9.9 — decrypted API keys must never live in `localStorage`. The in-memory TanStack Query cache (`gcTime: ∞`) keeps the credentials form populated for the session lifetime; on reload the panel refetches via WS. `credentialCatalogue` has its own `idb-keyval` warm-start path so it is intentionally not in either list.

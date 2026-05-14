@@ -21,8 +21,8 @@ The five operations are pure canvas mutations:
 
 Each mutation pushes a ``workflow_ops_apply`` event via the plugin's
 ``_events.broadcast_workflow_ops`` wrapper so the live canvas updates.
-LangGraph binds tools at graph compile time, so a mutation made
-mid-run does NOT add a callable tool to the current run; the
+The agent loop binds tools at the start of each turn, so a mutation
+made mid-run does NOT add a callable tool to the current turn; the
 agent's NEXT invocation rediscovers it. Each summary string ends
 with "Available on your next turn" so the LLM doesn't loop trying
 to call something that isn't there yet.
@@ -58,7 +58,7 @@ _TOOL_OUTPUT_HANDLE = "output-main"
 _MASTER_SKILL_TYPE = "masterSkill"
 _MASTER_SKILL_LABEL = "Master Skill"
 _AGENT_BUILDER_TYPE = "agentBuilder"
-_TEAM_LEAD_TYPES = frozenset({"orchestrator_agent", "ai_employee", "deep_agent"})
+_TEAM_LEAD_TYPES = frozenset({"orchestrator_agent", "ai_employee"})
 _DENIED_TOOL_TYPES = frozenset({_AGENT_BUILDER_TYPE, _MASTER_SKILL_TYPE})
 _KEY_PARAM_FIELDS = ("provider", "model", "operation", "url", "query")
 _SKILLS_DIR = Path(__file__).resolve().parents[2] / "skills"
@@ -245,7 +245,7 @@ class AgentBuilderParams(BaseModel):
             "For add_subagent: agent node type to spawn (e.g. "
             "'coding_agent', 'web_agent'). Must be component_kind='agent' "
             "and not a team-lead. Caller must itself be a team-lead "
-            "(orchestrator_agent / ai_employee / deep_agent)."
+            "(orchestrator_agent / ai_employee)."
         ),
         json_schema_extra={"displayOptions": {"show": {"operation": ["add_subagent"]}}},
     )

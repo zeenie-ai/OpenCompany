@@ -28,7 +28,7 @@ Kimi K2 models by Moonshot AI (`kimi-k2.5`, `kimi-k2-thinking`). 256K context, 9
 | `model` | string | injected | no | - | `kimi-k2.5` (instant) or `kimi-k2-thinking` |
 | `temperature` | number | **fixed** | no | - | Fixed at 0.6 (instant) or 1.0 (thinking). Input is ignored. |
 | `maxTokens` | number | up to 96K | no | - | |
-| `thinkingEnabled` | boolean | true for k2.5 | no | - | ON by default for k2.5; explicitly disabled for LangGraph agents |
+| `thinkingEnabled` | boolean | true for k2.5 | no | - | ON by default for k2.5; explicitly disabled for tool-calling agents |
 | `apiKey` | string | injected | no | - | `auth_service.get_api_key('kimi', 'default')` |
 
 ## Outputs (handles)
@@ -74,7 +74,7 @@ flowchart TD
 - **Validation**: missing api_key / empty prompt -> error envelope.
 - **Provider routing**: `detect_ai_provider` matches `'kimi' in node_type.lower()`. Ordering guarantees it lands in the kimi lane before groq / openrouter / anthropic / gemini.
 - **Fixed temperature**: `native_resolve_temperature` ignores user input for Kimi and forces 0.6 (instant) or 1.0 (thinking).
-- **Thinking default-on for k2.5**: if user leaves `thinkingEnabled` unset, k2.5 still thinks. To disable, must pass `thinkingEnabled=false`. This is done explicitly for the LangGraph agent integration (where thinking streams break tool-call parsing).
+- **Thinking default-on for k2.5**: if user leaves `thinkingEnabled` unset, k2.5 still thinks. To disable, must pass `thinkingEnabled=false`. This is done explicitly for the tool-calling agent integration (where thinking streams break tool-call parsing).
 - **Native path**: uses the OpenAI SDK with Moonshot base_url from `llm_defaults.json`.
 
 ## Side Effects
@@ -96,7 +96,7 @@ flowchart TD
 
 - **Temperature is non-configurable**: any user-supplied `temperature` is overridden. Documented in the prompt help text but easy to miss.
 - **Thinking default is ON** for k2.5: contrast with every other chat model, which defaults thinking OFF.
-- **Agent compatibility quirk**: when Kimi is used as the LangGraph agent model, `thinkingEnabled` is explicitly forced False because streamed thinking tokens corrupt tool-call JSON. This is handled in the agent path, not here.
+- **Agent compatibility quirk**: when Kimi is used as a tool-calling agent model, `thinkingEnabled` is explicitly forced False because streamed thinking tokens corrupt tool-call JSON. This is handled in the agent path, not here.
 - **256K context / 96K output**: largest of the native providers.
 - **Errors swallowed into envelope**.
 

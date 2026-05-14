@@ -10,10 +10,10 @@
 
 ## Purpose
 
-`aiAgent` is the general-purpose LangGraph-backed agent node. It reads a prompt
+`aiAgent` is the general-purpose tool-calling agent node. It reads a prompt
 and system message, optionally merges conversation history from a connected
 `simpleMemory`, loads instructions from connected skill nodes, binds tool nodes
-as LangGraph tools, and runs the tool-calling loop until the LLM produces a
+via `chat_model.bind_tools`, and runs the tool-calling loop until the LLM produces a
 final answer. All of the heavy lifting (LLM invocation, tool execution, memory
 persistence) lives in `AIService.execute_agent`; the handler's job is purely
 to gather the connected-node payloads via `_collect_agent_connections` and
@@ -141,7 +141,7 @@ flowchart TD
   (`<provider>_proxy` API key) for Ollama-style local routing.
 - **Services**: `AIService`, `Database`, `StatusBroadcaster`, `CompactionService`,
   `PricingService`, `SkillLoader` (for `masterSkill` expansion).
-- **Python packages**: `langchain-core`, `langgraph`, `langchain-openai`,
+- **Python packages**: `langchain-core`, `langchain-openai`,
   `langchain-anthropic`, provider SDKs (`anthropic`, `openai`, `google-genai`).
 - **Environment variables**: none read directly by the handler.
 
