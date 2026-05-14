@@ -57,6 +57,12 @@ def _sql_datastore(
     pg: dict[str, Any], db_name: str, *,
     max_conns: int, max_conn_lifetime: str,
 ) -> dict[str, Any]:
+    # ``maxIdleConns`` matches ``maxConns`` so the pool stays fully
+    # warm — Temporal's matching-engine periodic UpdateTaskQueue
+    # writes are bursty, and a too-small idle pool causes "context
+    # canceled" errors when the burst arrives faster than the pool
+    # can create new connections. Mirrors the Temporal community
+    # recommendation; see docs-internal/TEMPORAL_ARCHITECTURE.md.
     return {
         "sql": {
             "pluginName": "postgres12",
@@ -66,7 +72,7 @@ def _sql_datastore(
             "user": pg["user"],
             "password": pg["password"],
             "maxConns": max_conns,
-            "maxIdleConns": max(2, max_conns // 4),
+            "maxIdleConns": max_conns,
             "maxConnLifetime": max_conn_lifetime,
         },
     }

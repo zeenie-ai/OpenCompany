@@ -125,8 +125,14 @@ class Settings(BaseSettings):
     temporal_visibility_max_conns: int = Field(
         default=4, env="TEMPORAL_VISIBILITY_MAX_CONNS", ge=1, le=500,
     )
+    # Postgres connection rotation interval. Temporal community
+    # recommendation is ~5 minutes (much shorter than the 1h default)
+    # because Postgres' default `tcp_keepalives_idle` and pooled-driver
+    # state can lead to "context canceled" errors on idle connections
+    # being reused — periodic refresh sidesteps the issue. Accepts
+    # Go-duration strings (`30s`, `5m`, `1h`).
     temporal_max_conn_lifetime: str = Field(
-        default="1h", env="TEMPORAL_MAX_CONN_LIFETIME",
+        default="5m", env="TEMPORAL_MAX_CONN_LIFETIME",
     )
     temporal_binary_version: str = Field(
         default="1.31.0", env="TEMPORAL_BINARY_VERSION",

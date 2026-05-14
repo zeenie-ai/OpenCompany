@@ -460,7 +460,7 @@ The Temporal binary + persistence layer are managed in-process by the plugin-fol
 
 | Setting | Env var | Default | Purpose |
 |---|---|---|---|
-| `temporal_backend` | `TEMPORAL_BACKEND` | `sqlite` | Backend selector — `sqlite` (dev) / `postgres` (prod). |
+| `temporal_backend` | `TEMPORAL_BACKEND` | `postgres` | Backend selector — `postgres` (default, durable) / `sqlite` (fast-iteration dev). |
 | `temporal_frontend_grpc_port` | `TEMPORAL_FRONTEND_GRPC_PORT` | `7233` | gRPC port the SDK client connects to. Drives the readiness probe + cluster `rpcAddress`. |
 | `temporal_matching_grpc_port` | `TEMPORAL_MATCHING_GRPC_PORT` | `7235` | Internal matching service. |
 | `temporal_history_grpc_port` | `TEMPORAL_HISTORY_GRPC_PORT` | `7234` | Internal history service. |
@@ -469,7 +469,7 @@ The Temporal binary + persistence layer are managed in-process by the plugin-fol
 | `temporal_num_history_shards` | `TEMPORAL_NUM_HISTORY_SHARDS` | `4` | History-shard count. Bump for higher write throughput; not online-resizable. |
 | `temporal_default_max_conns` | `TEMPORAL_DEFAULT_MAX_CONNS` | `20` | Postgres pool size for the `temporal` (history) datastore. |
 | `temporal_visibility_max_conns` | `TEMPORAL_VISIBILITY_MAX_CONNS` | `4` | Postgres pool size for the `temporal_visibility` datastore. |
-| `temporal_max_conn_lifetime` | `TEMPORAL_MAX_CONN_LIFETIME` | `1h` | Postgres connection rotation interval. Accepts Go-duration strings (`30m`, `2h`, etc.). |
+| `temporal_max_conn_lifetime` | `TEMPORAL_MAX_CONN_LIFETIME` | `5m` | Postgres connection rotation interval. Accepts Go-duration strings (`30m`, `2h`, etc.). Short window forces periodic refresh — Temporal community recommendation. |
 | `temporal_binary_version` | `TEMPORAL_BINARY_VERSION` | `1.31.0` | Pinned `temporalio/temporal` release tag. Bumping requires a matching entry in `_install.py:_CHECKSUMS_BY_VERSION`. |
 | `temporal_graceful_shutdown_seconds` | `TEMPORAL_GRACEFUL_SHUTDOWN_SECONDS` | `30` | SIGTERM → SIGKILL grace window for the Temporal binary supervisor. Shared with the embedded worker shutdown. |
 | `temporal_postgres_dsn` | `TEMPORAL_POSTGRES_DSN` | (unset) | Reserved for multi-host deployments — when set, bypasses pgserver and points Temporal at an external Postgres. Out of scope for current sprint. |
@@ -480,6 +480,17 @@ Two supervisor-build-time env vars (read inside `_temporal_specs.py`, not in `Se
 |---|---|---|
 | `TEMPORAL_PG_READY_TIMEOUT_SECONDS` | `60` | How long the supervisor waits for pgserver to be ready before marking the spec failed. |
 | `TEMPORAL_SERVER_READY_TIMEOUT_SECONDS` | `120` | How long the supervisor waits for Temporal's gRPC port to come up. Includes the first-run binary download (~90 MB). |
+
+### Known benign log noise
+
+Temporal's matching engine periodically writes task-queue metadata for the **internal `temporal-system` namespace** (e.g. `/_sys/default-worker-tq/1`). When two writes contend, the older one's request context gets canceled — Temporal then auto-retries, and workflow execution is unaffected. The cancellation surfaces in the server log as:
+
+```
+ERROR msg="Operation failed with internal error." error="UpdateTaskQueue failed. Failed to start transaction. Error: context canceled" operation=UpdateTaskQueue
+ERROR msg="Persistent store operation failure" component=matching-engine wf-task-queue-name=/_sys/default-worker-tq/1 wf-namespace=temporal-system
+```
+
+These are **not caused by the Postgres backend** — they appeared identically with the previous SQLite path and are reported as benign across the Temporal community ([forum thread](https://community.temporal.io/t/persistent-store-operation-failure-on-updatetaskqueue-operations/11173)). The connection-pool tunables above (`temporal_default_max_conns`, `temporal_max_conn_lifetime`) are sized per Temporal's recommended baseline to minimise the frequency. No further action is required unless you see them in a **user namespace** (e.g. `default` instead of `temporal-system`), which would indicate a real persistence problem.
 
 ## Debugging
 
