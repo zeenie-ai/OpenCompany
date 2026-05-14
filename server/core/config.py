@@ -88,11 +88,15 @@ class Settings(BaseSettings):
     )
 
     # Persistence backend for the supervised Temporal cluster.
-    # 'sqlite' (dev default) — single ServiceSpec runs `temporal api`.
-    # 'postgres' (prod)     — pgserver + temporal-server binary with
-    #                          YAML config managed by services/temporal/.
+    # 'postgres' (default) — pgserver + temporal-server binary with
+    #                         YAML config managed by services/temporal/.
+    #                         Cross-platform via pip-installed binaries.
+    # 'sqlite'             — single ServiceSpec running `temporal api`.
+    #                         Lighter dev path; in-process SQLite, lost on
+    #                         restart. Set when you need fast iteration
+    #                         and don't care about workflow durability.
     temporal_backend: Literal["sqlite", "postgres"] = Field(
-        default="sqlite", env="TEMPORAL_BACKEND",
+        default="postgres", env="TEMPORAL_BACKEND",
     )
     # Internal Temporal service gRPC ports — exposed for the YAML config
     # renderer and the runtime's readiness probe. Defaults match the
