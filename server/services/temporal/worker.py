@@ -27,6 +27,7 @@ from temporalio.worker import Worker
 
 from core.logging import get_logger
 from .workflow import MachinaWorkflow
+from .trigger_listener_workflow import TriggerListenerWorkflow
 from .activities import (
     NodeExecutionActivities,
     create_shared_session,
@@ -140,7 +141,7 @@ class TemporalWorkerManager:
             self._worker = Worker(
                 self.client,
                 task_queue=self.task_queue,
-                workflows=[MachinaWorkflow, AgentWorkflow],
+                workflows=[MachinaWorkflow, AgentWorkflow, TriggerListenerWorkflow],
                 activities=[
                     self._activities.execute_node_activity,
                     *per_type,
@@ -367,7 +368,7 @@ async def run_standalone_worker(
         worker = Worker(
             client,
             task_queue=task_queue,
-            workflows=[MachinaWorkflow],
+            workflows=[MachinaWorkflow, TriggerListenerWorkflow],
             activities=[activities.execute_node_activity],  # Pass bound method
             max_concurrent_activities=pool_size,
             max_concurrent_workflow_tasks=10,
@@ -406,7 +407,7 @@ async def create_worker(
     return Worker(
         client,
         task_queue=task_queue,
-        workflows=[MachinaWorkflow],
+        workflows=[MachinaWorkflow, TriggerListenerWorkflow],
         activities=[activities.execute_node_activity],  # Pass bound method
         max_concurrent_activities=100,
         max_concurrent_workflow_tasks=10,

@@ -7,6 +7,22 @@ Temporal-native event-routing layer for MachinaOs. Implements RFC sections
 This doc is the operator + plugin-author reference. The design rationale +
 phase plan lives in `~/.claude/plans/properly-fix-the-tech-dreamy-tarjan.md`.
 
+## Status (2026-05-14)
+
+| Phase | State |
+|---|---|
+| A1-A9 — Temporal primitives + CloudEvents spec compliance | ✅ shipped (commit `c3dc85a`) |
+| B1-B10 — plugin-owned `_events.py` modules (9 plugin folders) | ✅ shipped (commits `7e4ff7b`, `c4d9428`, `da63d73`, `de8be88`) |
+| B11 — FE handler migration to envelope-aware readers | ⏳ deferred to FE session |
+| C1 canary (webhookTrigger) — `TriggerListenerWorkflow` + Visibility-API registry | ✅ shipped 2026-05-14 (25 tests) |
+| C1 rollout — promote remaining event triggers | ⏳ pending |
+| C2 — Polling triggers as long-lived workflows | ⏳ pending |
+| C3 — APScheduler → Temporal Schedules | ⏳ pending |
+| C4 — Close cross-plugin `_service` reaches (4 sites) | ⏳ pending |
+| D1-D5 — Visibility / retry / DLQ / drain / Y5 | ⏳ pending |
+
+`Settings.event_framework_enabled` gates the new dispatch path (default off in Phase A). When off, `services.events.dispatch.emit` is a no-op pass-through; plugin emitters still call `status_broadcaster.broadcast(...)` directly, so the FE fan-out is unchanged. Turn on per-callsite for opt-in dogfooding without flipping the flag globally.
+
 ## What this framework does
 
 Every inbound event (HTTP webhook, Telegram message, Gmail poll result,

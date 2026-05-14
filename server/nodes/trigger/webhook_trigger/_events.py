@@ -52,20 +52,36 @@ def webhook_received(webhook_data: Mapping[str, Any]) -> WorkflowEvent:
 async def broadcast_webhook_received(webhook_data: Mapping[str, Any]) -> None:
     """Broadcast an incoming webhook to ``webhookTrigger`` nodes.
 
-    Routes through ``broadcaster.send_custom_event`` (the existing
-    transport that does both the WS legacy broadcast AND the
-    ``event_waiter`` dispatch). Wire shape unchanged from pre-B9.
+    Three delivery paths (kept in this order for back-compat):
 
-    The typed envelope is constructed for future log/audit use even
-    though no FE listener consumes it today.
+    1. **Legacy WS broadcast + asyncio.Future waiters** via
+       ``broadcaster.send_custom_event`` (the in-process collector /
+       processor path; default while the canary flag is off).
+    2. **Temporal Signal fan-out** via ``services.events.dispatch.emit``
+       (Wave 12 C1 canary). Gated by ``Settings.event_framework_enabled``;
+       inside :func:`emit` the flag-off branch is a no-op pass-through
+       so it's cheap to always invoke. When on, the dispatch helper
+       runs a Visibility query and signals every running
+       :class:`TriggerListenerWorkflow` whose ``EventType`` matches
+       the envelope.
+
+    Both paths are non-overlapping consumers — legacy reaches the
+    in-process collector/processor task pair; the Temporal path
+    reaches the durable listener workflow. Producer doesn't need to
+    pick one.
     """
     from services.status_broadcaster import get_status_broadcaster
 
     broadcaster = get_status_broadcaster()
-    # Build the typed envelope (currently unused on the wire, but
-    # available for any future audit log / DLQ replay).
-    _ = webhook_received(webhook_data)
+    envelope = webhook_received(webhook_data)
     await broadcaster.send_custom_event(_LEGACY_EVENT_TYPE, dict(webhook_data))
+
+    # Temporal-durable fan-out (Wave 12 C1 canary). Always-call;
+    # dispatch.emit is a no-op when the feature flag is off, so the
+    # legacy path keeps working unchanged.
+    from services.events.dispatch import emit
+
+    await emit(envelope, wire_routing_key=_LEGACY_EVENT_TYPE)
 
 
 __all__ = [

@@ -24,6 +24,18 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+# Wave 12 C1 canary: trigger types that route to TriggerListenerWorkflow
+# instead of the in-process collector/processor. Gated by
+# Settings.event_framework_enabled. When the flag is off the canary set
+# is irrelevant; when on, types outside this set stay on the legacy path.
+# Expansion path: add types here as each is proven Temporal-durable.
+_CANARY_LISTENER_TRIGGER_TYPES = frozenset(["webhookTrigger"])
+
+# Listener Temporal workflow type-name. Used both for ``start_workflow``
+# and as the Visibility filter for cancellation discovery.
+_LISTENER_WORKFLOW_TYPE = "TriggerListenerWorkflow"
+
+
 class DeploymentManager:
     """Manages event-driven workflow deployment.
 
@@ -246,6 +258,10 @@ class DeploymentManager:
         for node in state.nodes:
             waiter_count += event_waiter.cancel_for_node(node['id'])
 
+        # Wave 12 C1 canary: cancel Temporal-durable listeners for this
+        # deployment. Visibility-query-based; no local handle dict.
+        canary_count = await self._cancel_canary_listeners(workflow_id)
+
         # Clear cron iteration counters for this workflow's cron nodes
         for node_id in cron_node_ids:
             self._cron_iterations.pop(node_id, None)
@@ -265,6 +281,7 @@ class DeploymentManager:
             "listeners_cancelled": listener_count,
             "crons_cancelled": cron_count,
             "waiters_cancelled": waiter_count,
+            "canary_listeners_cancelled": canary_count,
             "cancelled_listener_node_ids": listener_nodes
         }
 
@@ -400,10 +417,34 @@ class DeploymentManager:
         return TriggerInfo(node_id, "start", fired=True)
 
     async def _setup_event_trigger(self, node: Dict, workflow_id: str) -> TriggerInfo:
-        """Setup event-based trigger."""
+        """Setup event-based trigger.
+
+        Three dispatch paths (in priority order):
+
+        1. **Wave 12 C1 canary**: when ``Settings.event_framework_enabled``
+           is on AND ``node_type`` is in :data:`_CANARY_LISTENER_TRIGGER_TYPES`,
+           start a Temporal-durable :class:`TriggerListenerWorkflow`.
+           Survives FastAPI process restart via Temporal Event-History replay.
+
+        2. **Polling triggers** (Gmail, Twitter): API-polling factory
+           registered by the plugin's ``PollingTriggerNode`` subclass.
+
+        3. **Legacy**: in-process collector/processor task pair via
+           ``trigger_manager.setup_event_trigger``. Dies on process
+           restart — pre-Wave-12 behaviour, kept for triggers not yet
+           on the canary list.
+        """
         node_id = node['id']
         node_type = node.get('type', '')
         params = await self.database.get_node_parameters(node_id) or {}
+
+        # Path 1: Wave 12 C1 canary — Temporal-durable listener.
+        if await self._canary_listener_enabled_for(node_type):
+            listener_id = await self._start_canary_listener(node, workflow_id, params)
+            if listener_id is not None:
+                return TriggerInfo(node_id, node_type, job_id=listener_id)
+            # Fall through to legacy path if Temporal client unavailable
+            # (already logged inside _start_canary_listener).
 
         async def on_event(event_data: Dict):
             trigger_data = {
@@ -443,6 +484,203 @@ class DeploymentManager:
             workflow_id=workflow_id
         )
         return TriggerInfo(node_id, node_type)
+
+    # =========================================================================
+    # WAVE 12 C1 CANARY: TEMPORAL-DURABLE LISTENERS
+    # =========================================================================
+    #
+    # Pattern (cross-confirmed across Temporal docs, samples-python,
+    # Inngest, Prefect, n8n): deterministic workflow_id mapped to
+    # business entity (deployment + node), WorkflowIDConflictPolicy.
+    # USE_EXISTING for idempotent re-deploy, Search Attributes set at
+    # start, Visibility API queries for cross-workflow discovery on
+    # cancel. The Temporal server's Visibility store IS the registry —
+    # no Python dict of handles, no instance state to drift on
+    # FastAPI restart. Cancellation uses ``cancel()`` (graceful) over
+    # ``terminate()`` per docs.temporal.io/develop/python/cancellation.
+    #
+    # Refs:
+    # - https://docs.temporal.io/develop/python/temporal-clients
+    #   ("Workflow ID mapped to business entities")
+    # - https://docs.temporal.io/visibility + /list-filter
+    # - https://docs.temporal.io/develop/python/cancellation
+    # - https://github.com/temporalio/samples-python/blob/main/hello/hello_search_attributes.py
+    # =========================================================================
+
+    @staticmethod
+    def _listener_workflow_id(workflow_id: str, node_id: str) -> str:
+        """Deterministic Temporal workflow_id for a canary listener.
+
+        Mapped to the business entity (deployment workflow_id + trigger
+        node_id) so re-deploy of the same workflow produces the same
+        listener id. Pairs with ``WorkflowIDConflictPolicy.USE_EXISTING``
+        for idempotent start.
+        """
+        return f"trigger-listener-{workflow_id}-{node_id}"
+
+    @staticmethod
+    async def _canary_listener_enabled_for(node_type: str) -> bool:
+        """Whether the C1 canary applies to this trigger type.
+
+        Lazy ``Settings()`` call so a runtime flag flip takes effect on
+        the next deploy without restart.
+        """
+        if node_type not in _CANARY_LISTENER_TRIGGER_TYPES:
+            return False
+        from core.config import Settings
+
+        return bool(Settings().event_framework_enabled)
+
+    async def _start_canary_listener(
+        self,
+        node: Dict,
+        workflow_id: str,
+        params: Dict,
+    ) -> Optional[str]:
+        """Start a TriggerListenerWorkflow for a canary trigger.
+
+        Returns the Temporal listener workflow_id on success, or
+        ``None`` if the Temporal client isn't connected (caller falls
+        through to the legacy collector/processor path).
+
+        Idempotent: re-deploying the same MachinaOs workflow re-runs
+        this with the same deterministic id; Temporal returns the
+        existing handle via ``WorkflowIDConflictPolicy.USE_EXISTING``
+        instead of erroring. Search Attributes provide the registry
+        used by :meth:`_cancel_canary_listeners`.
+        """
+        from core.container import container
+        from temporalio.common import (
+            SearchAttributeKey,
+            SearchAttributePair,
+            TypedSearchAttributes,
+            WorkflowIDConflictPolicy,
+        )
+
+        node_id = node["id"]
+        node_type = node.get("type", "")
+
+        wrapper = container.temporal_client()
+        if wrapper is None or wrapper.client is None:
+            logger.warning(
+                "Canary listener requested but Temporal not connected; "
+                "falling back to legacy collector/processor path",
+                node_id=node_id, workflow_id=workflow_id, node_type=node_type,
+            )
+            return None
+
+        state = self._deployments.get(workflow_id)
+        if state is None:
+            raise RuntimeError(f"No deployment state for workflow {workflow_id}")
+
+        config = event_waiter.get_trigger_config(node_type)
+        event_type = config.event_type if config else f"unknown_{node_type}"
+
+        listener_id = self._listener_workflow_id(workflow_id, node_id)
+
+        # Search Attribute keys mirror services/temporal/search_attributes.py
+        # (the A4 registration spec). All Keyword-typed; values are scalars.
+        event_type_key = SearchAttributeKey.for_keyword("EventType")
+        trigger_node_id_key = SearchAttributeKey.for_keyword("TriggerNodeId")
+        event_workflow_id_key = SearchAttributeKey.for_keyword("EventWorkflowId")
+        event_trigger_kind_key = SearchAttributeKey.for_keyword("EventTriggerKind")
+
+        await wrapper.client.start_workflow(
+            _LISTENER_WORKFLOW_TYPE,
+            args=[{
+                "workflow_id": workflow_id,
+                "trigger_node_id": node_id,
+                "node_type": node_type,
+                "event_type": event_type,
+                "filter_params": params,
+                "nodes": state.nodes,
+                "edges": state.edges,
+                "session_id": state.session_id,
+            }],
+            id=listener_id,
+            task_queue="machina-tasks",
+            id_conflict_policy=WorkflowIDConflictPolicy.USE_EXISTING,
+            search_attributes=TypedSearchAttributes([
+                SearchAttributePair(event_type_key, event_type),
+                SearchAttributePair(trigger_node_id_key, node_id),
+                SearchAttributePair(event_workflow_id_key, workflow_id),
+                SearchAttributePair(event_trigger_kind_key, "webhook"),
+            ]),
+        )
+
+        # Broadcast waiting status (parity with legacy path).
+        await self._broadcaster.update_node_status(
+            node_id, "waiting",
+            {
+                "message": f"Waiting for {config.display_name if config else node_type} (Temporal-durable)...",
+                "event_type": event_type,
+                "listener_id": listener_id,
+            },
+            workflow_id=workflow_id,
+        )
+
+        logger.info(
+            "Canary listener started",
+            listener_id=listener_id,
+            workflow_id=workflow_id,
+            node_id=node_id,
+            event_type=event_type,
+        )
+        return listener_id
+
+    async def _cancel_canary_listeners(self, workflow_id: str) -> int:
+        """Cancel all canary listeners for this deployment.
+
+        Uses Visibility API query — the Temporal server's Visibility
+        store IS the registry, no local dict. ``cancel()`` is graceful;
+        listeners drain in-flight child spawns before exiting.
+
+        Visibility is eventually consistent
+        (https://docs.temporal.io/visibility) — a freshly-started listener
+        might not appear in the query result for a few seconds. Acceptable
+        here: the listener will eventually surface in a subsequent cancel
+        sweep, AND its parent_close_policy=ABANDON means in-flight runs
+        complete regardless.
+        """
+        from core.container import container
+
+        wrapper = container.temporal_client()
+        if wrapper is None or wrapper.client is None:
+            return 0
+
+        # Visibility List Filter query — operators per docs.temporal.io/list-filter.
+        query = (
+            f"EventWorkflowId='{workflow_id}' "
+            f"AND WorkflowType='{_LISTENER_WORKFLOW_TYPE}' "
+            f"AND ExecutionStatus='Running'"
+        )
+
+        cancelled = 0
+        try:
+            async for wf in wrapper.client.list_workflows(query=query):
+                try:
+                    await wrapper.client.get_workflow_handle(wf.id).cancel()
+                    cancelled += 1
+                except Exception as exc:  # noqa: BLE001
+                    # Per-listener failures don't block sweep of the rest.
+                    logger.warning(
+                        f"Failed to cancel canary listener {wf.id}: {exc}",
+                        workflow_id=workflow_id,
+                    )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                f"Visibility query for canary listeners failed: {exc} "
+                f"(query={query!r})",
+                workflow_id=workflow_id,
+            )
+
+        if cancelled:
+            logger.info(
+                "Canary listeners cancelled",
+                workflow_id=workflow_id,
+                count=cancelled,
+            )
+        return cancelled
 
     # =========================================================================
     # EXECUTION RUNS
