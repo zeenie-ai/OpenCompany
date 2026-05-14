@@ -385,14 +385,79 @@ from services.some_service import global_instance
 #### Logging Configuration
 ```bash
 # In server/.env
-LOG_LEVEL=INFO      # Default: INFO, DEBUG for verbose
-LOG_FORMAT=text     # text or json
+LOG_LEVEL=INFO                  # Default: INFO, DEBUG for verbose
+LOG_FORMAT=json                 # 'json' (default) or 'text' for console
+LOG_FILE=                       # Optional rotating-file destination
+LOG_FILE_MAX_BYTES=10485760     # 10 MiB ceiling per file
+LOG_FILE_BACKUP_COUNT=5         # Keep 5 backups (50 MiB total cap)
 ```
 
 **What logs at each level:**
 - `DEBUG`: Template resolution, parameter resolution, node execution details, event waiter registration, downstream traversal
 - `INFO`: Workflow completion, deployment start/stop, significant state changes
 - `ERROR`: Failures, exceptions, validation errors
+
+#### Logging Infrastructure (canonical patterns)
+
+**Console mode is timestamp-less by design.** The supervisor
+(`machina/colors.py`) prepends `[HH:MM:SS.fff]` to every aggregated
+line, so `configure_logging` does NOT add an inner `TimeStamper` in
+console mode. JSON mode keeps ISO timestamps for machine consumers.
+Helpers that print pre-logger init (`_startup_log` in `main.py`,
+`_clog` in `core/container.py`) emit raw `print()` so the CLI prefix
+is the single timing source.
+
+**Context propagation via `structlog.contextvars`.** Bind once at the
+entry point; every log record inside that async context picks the
+fields up automatically. Stdlib `contextvars` rides `asyncio.gather`
+child tasks.
+
+```python
+from core.logging import log_context
+
+async with log_context(workflow_id=wf_id, node_id=node_id):
+    await do_work()  # all logs inside carry workflow_id + node_id
+```
+
+`BaseNode.execute()` already wraps its body in
+`log_context(node_id, node_type, workflow_id?)` so plugin operation
+logs are auto-tagged — don't pass these as kwargs at each call site.
+
+**Per-plugin OpenTelemetry span.** `BaseNode.execute()` opens a
+`node.<type>.execute` span with attributes `node.id` / `node.type` /
+`workflow.id` around the operation body. Single edit instruments every
+plugin — no per-plugin span code needed.
+
+**Source-tag resolver for the Terminal UI panel.** `record.name`
+collapses to a ≤12-char tag via `_resolve_source_tag` in
+`core/logging.py`:
+
+1. `nodes.<plugin>.*` → `<plugin>` (auto-rule; no per-plugin entry)
+2. `routers.<name>.*` → `<name>` (auto-rule)
+3. Explicit registry `_LOG_SOURCE_TAGS` — only for cross-cutting
+   services with long module names (`workflow_validator` → `validator`,
+   `status_broadcaster` → `broadcaster`, `user_auth` → `auth`, etc.)
+4. Second-segment fallback (`services.ai` → `ai`)
+
+Plugins that genuinely want a different label from their folder name
+call `register_log_source_tag(prefix, tag)` from their package
+`__init__.py` — same self-registration pattern as the five plugin
+registries (`ws_handler`, `filter_builder`, `trigger_precheck`,
+`service_refresh`, `output_schema`).
+
+**RotatingFileHandler** swaps in when `LOG_FILE` is set — no
+unbounded log growth.
+
+**NodeUserError vs Exception contract** (`services/plugin/base.py`):
+- `NodeUserError` → single WARN line, no traceback, structured response
+- `PermissionError` annotated with `.provider` / `.reason` / `.auth` →
+  `error_type="PermissionDeniedError"` + `credential` envelope block +
+  CloudEvents `credential.{auth}.runtime_failed` broadcast
+- Bare `Exception` → `logger.exception` with full traceback
+
+Reach for `NodeUserError` for any user-correctable failure
+(missing required field, unknown enum value, bad regex). Reserve
+`RuntimeError` / `Exception` for genuinely unexpected server bugs.
 
 ### 6. Cleanup & Lifecycle
 - **Use existing teardown methods** - e.g., `_teardown_all_cron_triggers()` for cron cleanup
@@ -1115,7 +1180,7 @@ Telegram bot integration using `python-telegram-bot` SDK with long-polling for i
 | `telegram_receive.py` | `TelegramReceiveNode(TriggerNode)` + `TelegramReceiveOutput` — the trigger plugin (declares `event_type = "telegram_message_received"`). |
 | `client/src/components/CredentialsModal.tsx` | Telegram bot token panel (frontend; identifies commands by WebSocket message-type strings, not Python paths). |
 
-**Authentication:** Bot token from @BotFather on Telegram. Stored via `auth_service.store_api_key('telegram_bot_token', token, models=[])`. **Owner detection has three independent layers** (commit f746ddf): (1) explicit `Your Chat ID (optional)` text input in the Telegram credentials modal — declared as a secondary `FieldDef` in `credential_providers.json` and rendered by `ApiKeyPanel`'s `SecondaryFieldRow`; saves directly to `telegram_owner_chat_id` via `auth_service.store_api_key`; (2) pre-poll peek in `connect()` via `_capture_owner_from_pending_updates()` — `bot.get_updates(timeout=0)` BEFORE `start_polling(drop_pending_updates=True)` discards the queue; (3) atomic write-through in `_on_message_received` — persists FIRST, sets in-memory only on success, ERROR-level logging on failure. Lazy fallback in `telegram_send.py` reads DB and calls `service.set_owner` if in-memory is empty. Credentials panel: Save (store only), Connect (store + connect), Reconnect. All credential access uses `from core.container import container; container.auth_service()` (NOT `from services.auth import get_auth_service`).
+**Authentication:** Bot token from @BotFather on Telegram. Stored via `auth_service.store_api_key('telegram', token, models=[])` (renamed from `telegram_bot_token` — class id, catalogue key, and co-located SVG basename now all align with the brand name). **Owner detection has three independent layers** (commit f746ddf): (1) explicit `Your Chat ID (optional)` text input in the Telegram credentials modal — declared as a secondary `FieldDef` in `credential_providers.json` and rendered by `ApiKeyPanel`'s `SecondaryFieldRow`; saves directly to `telegram_owner_chat_id` via `auth_service.store_api_key`; (2) pre-poll peek in `connect()` via `_capture_owner_from_pending_updates()` — `bot.get_updates(timeout=0)` BEFORE `start_polling(drop_pending_updates=True)` discards the queue; (3) atomic write-through in `_on_message_received` — persists FIRST, sets in-memory only on success, ERROR-level logging on failure. Lazy fallback in `telegram_send.py` reads DB and calls `service.set_owner` if in-memory is empty. Credentials panel: Save (store only), Connect (store + connect), Reconnect. All credential access uses `from core.container import container; container.auth_service()` (NOT `from services.auth import get_auth_service`).
 
 **Environment Variables:**
 ```bash
@@ -3428,7 +3493,11 @@ When `simpleMemory` is connected to `claude_code_agent`, memory continuity is ha
 
 **Parallel-batch guard.** When memory is wired AND `len(tasks) > 1`, `claude_code_agent` raises `NodeUserError` at handler entry — concurrent `--continue` spawns against one project_key would race claude's session-resolution.
 
-**Live UI refresh.** `_persist_memory` broadcasts `node_parameters_updated` after `save_node_parameters` so the simpleMemory parameter panel auto-refetches the moment a turn completes — without this the DB has the latest conversation but the UI shows the stale snapshot loaded at workflow open. Mirrors the pattern in `routers/websocket.py:handle_save_node_parameters`.
+**Live UI refresh — CloudEvents v1.0 envelope.** `_persist_memory` calls `broadcaster.broadcast_node_parameters_updated(...)` after `save_node_parameters`. The broadcast carries a `WorkflowEvent` envelope (`type: "com.machinaos.node.parameters.updated"`, `subject: <memory_node_id>`, `data: {node_id, parameters, version, source: "cli"}`) wrapped in the wire-key `{type: "node_parameters_updated", data: <envelope>}`. The FE handler in `client/src/contexts/WebSocketContext.tsx` casts to `WorkflowEvent<{node_id, parameters, version, source}>`, reads `inner.node_id || envelope.subject`, and routes the inner payload to `setNodeParameters` + `queryClient.setQueryData` so the simpleMemory parameter panel auto-refreshes the moment the turn completes. Pre-cutover the FE read the old flat top-level keys (`message.parameters`, `message.node_id`) and silently dropped every broadcast — symptom was "memory only updates after a page reload."
+
+**Workspace dir routed via `--add-dir`.** The per-workflow workspace (`data/workspaces/<workflow_id>/`, injected into `ctx.raw` by `workflow.py:_get_workspace_dir`) is spliced into each task's `add_dir` list in `AICliService.run_batch` so the spawned claude can read files dropped by upstream nodes (`fileDownloader`, `documentParser`, code executors). Without this the workspace is invisible: memory-bound runs spawn with `cwd=repo_root` (stable for `--continue`'s `project_key`) and non-memory runs with `cwd=worktree`, neither of which sees the workspace files. Mirrors the ai_agent pattern (`services/ai.py:1899` — `config['workspace_dir'] = context.get('workspace_dir', '')`) but uses claude's native `--add-dir` instead of MCP-tool-config injection because claude has its own filesystem tools.
+
+**Stale-model coercion.** `ClaudeCodeAgentParams.model` is a `Literal` of supported model IDs + aliases — strict validation would reject legacy saved values like `"claude-sonnet-4.6"` (dot-spelled), `"claude-3-5-sonnet-20241022"` (date-suffixed), `""`. A `field_validator("model", "fallback_model", mode="before")` coerces unknown values to the default (`"claude-sonnet-4-6"` for `model`, `None` for `fallback_model`) so old workflows keep loading; the UI dropdown still constrains new edits.
 
 **Logs to grep on a live run:**
 - `[Claude Code memory] memory_node=<id> -> --continue (claude auto-finds latest session under cwd)`

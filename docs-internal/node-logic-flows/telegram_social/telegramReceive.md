@@ -124,7 +124,7 @@ flowchart TD
 
 ## External Dependencies
 
-- **Credentials**: bot token via `auth_service.get_api_key("telegram_bot_token")`
+- **Credentials**: bot token via `auth_service.get_api_key("telegram")`
   (read by the service on connect, not by the handler).
 - **Services**: `TelegramService`, `event_waiter`, `StatusBroadcaster`.
 - **Python packages**: `python-telegram-bot` v22.x.

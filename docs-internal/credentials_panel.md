@@ -90,7 +90,7 @@ After validation succeeds, the frontend still calls `saveApiKey` (or backend sto
 
 ### 2.3 Pattern C — Save-only API key (no validation)
 
-**Providers**: android_remote, serper, twitter_client_id, twitter_client_secret, google_client_id, google_client_secret, telegram_bot_token, email_*.
+**Providers**: android_remote, serper, twitter_client_id, twitter_client_secret, google_client_id, google_client_secret, telegram, email_*.
 
 `saveApiKey(provider, key)` calls WebSocket `save_api_key` directly. Backend `handle_save_api_key` (websocket.py:1023) skips model fetch and just calls `auth_service.store_api_key(provider, key, models=[])`.
 
@@ -227,25 +227,25 @@ No logout WebSocket handler — user can manually delete the credentials file or
 
 ### 2.9 Pattern I — Bot token + polling (Telegram)
 
-**Credentials stored**: API key table — `telegram_bot_token`. Owner chat ID auto-captured on first private message and stored as `telegram_owner_chat_id`.
+**Credentials stored**: API key table — `telegram`. Owner chat ID auto-captured on first private message and stored as `telegram_owner_chat_id`.
 
 **Happy path**:
 ```
 1. User pastes BotFather token, clicks Save
-   -> saveApiKey('telegram_bot_token', token)   // Pattern C
+   -> saveApiKey('telegram', token)   // Pattern C
 2. User clicks Connect
    -> sendRequest('telegram_connect', {token})
    handle_telegram_connect (websocket.py:1844):
       -> TelegramService.connect(token)
          -> validate via getMe
          -> start long-polling (get_updates_read_timeout=30s)
-      -> auth_service.store_api_key('telegram_bot_token', token, models=[])
+      -> auth_service.store_api_key('telegram', token, models=[])
 3. broadcast 'telegram_status' arrives with connected=true, bot_username, bot_name, bot_id
 4. First private message captures owner_chat_id -> stored as telegram_owner_chat_id API key
 5. broadcast 'telegram_status' updated with owner_chat_id
 ```
 
-**Disconnect**: `telegram_disconnect` stops polling AND removes both `telegram_bot_token` and `telegram_owner_chat_id` API keys.
+**Disconnect**: `telegram_disconnect` stops polling AND removes both `telegram` and `telegram_owner_chat_id` API keys.
 
 **Reconnect**: Re-establishes polling using stored token (no token re-entry).
 
@@ -329,7 +329,7 @@ Provider × table examples:
 - Google access/refresh tokens → OAuth token table under provider=`google`
 - `twitter_client_id`, `twitter_client_secret` → API key table
 - Twitter access/refresh → OAuth token table under provider=`twitter`
-- `telegram_bot_token` → API key table (Pattern I uses no OAuth table)
+- `telegram` → API key table (Pattern I uses no OAuth table)
 
 ### 4.4 Encryption layer
 [server/core/encryption.py](../server/core/encryption.py): `EncryptionService` uses Fernet (AES-128-CBC + HMAC-SHA256) with PBKDF2-SHA256 key derivation (600,000 iterations, OWASP 2024). Salt is 32 random bytes, generated on first DB init and stored in `credentials_metadata` table. The encryption password is the server-scoped `API_KEY_ENCRYPTION_KEY` env var, loaded once at startup ([server/main.py](../server/main.py) lifespan).

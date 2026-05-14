@@ -117,7 +117,7 @@ User presses Ctrl+K or clicks sidebar → search input focus
   ↓
 User types "whats" → fuzzysort.go() → 3ms → filtered list
   ↓
-User selects WhatsApp → setSelectedId('whatsapp_personal')
+User selects WhatsApp → setSelectedId('whatsapp')
   ↓
 PanelRenderer looks up config by id → determines kind='qrPairing'
   ↓

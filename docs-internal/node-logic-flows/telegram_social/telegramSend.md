@@ -137,7 +137,7 @@ flowchart TD
 ## External Dependencies
 
 - **Credentials**: `auth_service.get_api_key("telegram_owner_chat_id")` when
-  restoring the self-owner. Bot token comes from `auth_service.store_api_key("telegram_bot_token", ...)`
+  restoring the self-owner. Bot token comes from `auth_service.store_api_key("telegram", ...)`
   and is consumed by `TelegramService.connect()` elsewhere, not by this handler.
 - **Services**: `TelegramService` singleton (`services.telegram_service.get_telegram_service`).
 - **Python packages**: `python-telegram-bot` (v22.x), `markdown-it-py` (via
