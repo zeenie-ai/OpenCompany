@@ -59,13 +59,25 @@ class WindowsPtyHandle:
     async def write(self, data: bytes) -> None:
         if not data:
             return
-        # pywinpty's PtyProcess.write accepts bytes; defer the actual
-        # WriteFile to a worker thread because ConPTY can briefly block
-        # under back-pressure (https://github.com/microsoft/node-pty/issues/388).
+        # pywinpty v3's ``PtyProcess.write`` is str-only — the underlying
+        # Rust core's ``self.pty.write(s)`` raises
+        # ``TypeError: argument 'to_write': 'bytes' object cannot be cast
+        # as 'str'`` on bytes. POSIX ``ptyprocess`` is bytes-native; the
+        # ``PtyHandle`` Protocol picks bytes for that reason. We decode
+        # at this boundary so the rest of the stack stays bytes-only.
+        # Defer the actual WriteFile to a worker thread because ConPTY
+        # can briefly block under back-pressure
+        # (https://github.com/microsoft/node-pty/issues/388).
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ConnectionError(
+                f"PTY write failed (pid={self.pid}): non-UTF-8 payload: {exc}"
+            ) from exc
         loop = asyncio.get_running_loop()
         try:
             await loop.run_in_executor(
-                None, self._proc.write, data,  # type: ignore[attr-defined]
+                None, self._proc.write, text,  # type: ignore[attr-defined]
             )
         except OSError as exc:
             raise ConnectionError(

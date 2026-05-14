@@ -256,29 +256,6 @@ class AnthropicClaudeProvider:
                 len(task.system_prompt), task.system_prompt[:200],
             )
 
-        # Connected-tools steering directive — ensures the agent prefers
-        # wired MCP tools over built-in escape hatches (WebSearch,
-        # WebFetch, Bash) when their purpose matches the user's request.
-        # Mirrors Cursor's per-request rule prepend pattern
-        # (https://cursor.com/docs/rules). Multiple `--append-system-prompt`
-        # flags concatenate per the CLI reference.
-        if connected_tool_names:
-            tool_list = ", ".join(
-                f"mcp__machinaos__{name}" for name in connected_tool_names
-            )
-            directive = (
-                f"Workflow tools wired to this agent: {tool_list}. "
-                "Prefer them over built-in equivalents (WebSearch, "
-                "WebFetch, Bash) when the user's request matches their "
-                "purpose."
-            )
-            argv += ["--append-system-prompt", directive]
-            logger.info(
-                "[CC-Agent argv] --append-system-prompt (tools-directive) "
-                "length=%d",
-                len(directive),
-            )
-
         # Optional per-task overrides (work in interactive mode per
         # code.claude.com/docs/en/cli-reference). ``--max-turns``,
         # ``--max-budget-usd``, ``--fallback-model`` are ``-p``-only and
