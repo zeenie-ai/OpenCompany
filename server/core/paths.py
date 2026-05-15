@@ -181,24 +181,94 @@ def _legacy_renames() -> list[tuple[Path, Path]]:
     ]
 
 
+def _merge_into_destination(src: Path, dst: Path, log_label: str) -> int:
+    """Recursively move ``src`` contents into ``dst`` skipping conflicts.
+
+    Three cases:
+
+    1. **``dst`` doesn't exist** — atomic ``rename`` (with ``shutil.move``
+       fallback for cross-fs). Returns ``1``.
+    2. **Both exist as files** — log WARNING and skip (the operator
+       picks which to keep). Returns ``0``.
+    3. **Both exist as dirs** — recurse into ``src``'s children;
+       any child that doesn't exist in ``dst`` gets moved. Empty
+       ``src`` afterwards is ``rmdir``'d. Returns the count of
+       child items successfully moved.
+
+    This solves the real-user breakage where ``~/.machina/claude/``
+    might already exist with a stale ``npm/`` subdir (from a smoke
+    test or partial install) while the actual auth + session JSONLs
+    still live in ``<repo>/data/claude-machina/``. The plain
+    ``rename`` would skip; recursive merge moves the real data
+    into the new location item-by-item.
+    """
+    if not src.exists():
+        return 0
+
+    if not dst.exists():
+        try:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                src.rename(dst)
+            except OSError:
+                shutil.move(str(src), str(dst))
+            logger.info("[%s] moved %s -> %s", log_label, src, dst)
+            return 1
+        except Exception as exc:
+            logger.warning(
+                "[%s] failed move %s -> %s: %s", log_label, src, dst, exc,
+            )
+            return 0
+
+    # Destination exists.
+    if src.is_file() or dst.is_file():
+        logger.warning(
+            "[%s] conflict %s vs %s — both exist; manual merge required",
+            log_label, src, dst,
+        )
+        return 0
+
+    # Both are dirs — recurse into src.
+    merged = 0
+    try:
+        children = list(src.iterdir())
+    except OSError as exc:
+        logger.warning(
+            "[%s] cannot list %s: %s — skipping merge", log_label, src, exc,
+        )
+        return 0
+    for item in children:
+        merged += _merge_into_destination(item, dst / item.name, log_label)
+
+    # Try removing src if empty now (all children either moved or
+    # conflicting). Leave in place otherwise so the operator can see
+    # what wasn't migrated.
+    try:
+        src.rmdir()
+    except OSError:
+        # Not empty — leave it. The earlier WARNINGs identify what
+        # held it back.
+        pass
+    return merged
+
+
 def migrate_legacy_layout() -> int:
-    """Rename pre-cutover locations into the new ``.machina/`` layout.
+    """Migrate pre-cutover ``<repo>/data/`` + ``<repo>/workflows/`` into
+    the new ``machina_root()`` layout.
 
-    Called once on app startup from ``main.py``. Idempotent: only
-    moves a path when the source exists AND the destination doesn't.
-    Returns the count of successful renames.
+    Called once on app startup from ``main.py``. Idempotent: a marker
+    file at ``<machina_root>/.migrated`` short-circuits subsequent
+    calls. Returns the count of items moved.
 
-    Safety contract:
-
-    - **Never overwrites existing destinations.** If
-      ``.machina/claude/`` already exists, ``data/claude-machina/``
-      is left in place even if it still exists — the user can
-      delete it manually.
-    - **Best-effort per item.** A failed rename on one entry doesn't
-      block the others; failures log at WARNING.
-    - **No data loss.** Renames are atomic (``Path.rename``) when
-      source and destination are on the same filesystem; falls back
-      to ``shutil.move`` (copy + delete) when they aren't.
+    Recursive merge semantics (see :func:`_merge_into_destination`):
+    when both source and destination exist as directories, walks into
+    src and moves any child that doesn't conflict with dst. Files in
+    both locations are flagged at WARNING and left for manual
+    resolution. This handles the real-user case where the destination
+    has been partially populated by a smoke-test / earlier upgrade
+    attempt — the actual user data still in ``data/claude-machina/``
+    gets moved into ``~/.machina/claude/`` item-by-item instead of
+    silently skipped.
     """
     root = machina_root()
     try:
@@ -210,39 +280,21 @@ def migrate_legacy_layout() -> int:
         )
         return 0
 
+    stamp = root / ".migrated"
+    if stamp.exists():
+        logger.debug(
+            "[paths] migration already ran (stamp %s present); skipping",
+            stamp,
+        )
+        return 0
+
     moved = 0
     for src, dst in _legacy_renames():
-        if not src.exists():
-            continue
-        if dst.exists():
-            # Both source and destination exist — migration won't merge
-            # automatically (risk of overwriting newer state). Surface
-            # at WARNING so the user can choose to consolidate manually.
-            logger.warning(
-                "[paths] migration skip: %s -> %s — destination already "
-                "exists; keep the newer one and delete the other, or "
-                "merge their contents manually.",
-                src, dst,
-            )
-            continue
-        try:
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            # Path.rename is atomic same-fs; falls back via shutil.move
-            # which handles cross-fs copy+delete.
-            try:
-                src.rename(dst)
-            except OSError:
-                shutil.move(str(src), str(dst))
-            moved += 1
-            logger.info("[paths] migrated %s -> %s", src, dst)
-        except Exception as exc:
-            logger.warning(
-                "[paths] migration failed %s -> %s: %s", src, dst, exc,
-            )
+        moved += _merge_into_destination(src, dst, log_label="paths")
 
-    # If ``data/`` is now empty after the per-subdir moves, remove it
-    # so the user's tree is clean. Don't force-remove if anything's
-    # still in there (could be user-authored content).
+    # If ``data/`` is empty after per-subdir merges, remove it so the
+    # user's tree is clean. Don't force-remove if anything's still
+    # in there (could be user-authored content).
     legacy_data = project_root() / "data"
     if legacy_data.is_dir():
         try:
@@ -252,10 +304,28 @@ def migrate_legacy_layout() -> int:
             # Not empty — leave it alone.
             pass
 
+    # Write the stamp regardless of whether anything moved. On a
+    # fresh install with no legacy layout, this still prevents future
+    # boots from re-walking the empty source dirs.
+    try:
+        stamp.write_text(
+            "MachinaOs migrated this directory from the pre-cutover "
+            "<repo>/data/ + <repo>/workflows/ layout. Delete this file "
+            "to force migration to re-run on next startup.\n",
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        logger.debug("[paths] could not write migration stamp: %s", exc)
+
     if moved:
         logger.info(
             "[paths] migration complete: %d items moved into %s",
             moved, root,
+        )
+    else:
+        logger.debug(
+            "[paths] migration complete: nothing to migrate (fresh install "
+            "or already-migrated state)",
         )
     return moved
 
