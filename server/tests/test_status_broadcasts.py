@@ -328,24 +328,24 @@ class TestStatusBroadcastsUseTypedBuilder:
 
 
 class TestStatusBroadcastsAlsoEmitTypedEnvelope:
-    """Wave 12 B1-B3: per-plugin ``broadcast_<plugin>_status`` wrappers
-    in ``nodes/<plugin>/_events.py`` MUST dual-emit (legacy raw frame +
-    typed CloudEvents sibling on ``plugin_connection_status``).
+    """Wave 12 D4: per-plugin ``broadcast_<plugin>_status`` wrappers in
+    ``nodes/<plugin>/_events.py`` MUST emit ONLY the typed CloudEvents
+    envelope on ``plugin_connection_status`` (legacy raw frame retired).
 
-    Replaces the Wave 11.I X4 invariant which constrained the now-retired
-    ``StatusBroadcaster.update_<plugin>_status`` methods + their shared
-    ``_emit_connection_typed`` helper. The helper retired in B3 along
-    with the last caller (telegram). Plugin-specific typed factories
-    (``android_connection_status`` / ``whatsapp_connection_status`` /
-    ``telegram_connection_status``) replace the cross-plugin
-    parametrised helper per RFC §6.4 plugin-specific classification.
+    Phase history:
+      - B1-B3: dual-emit (legacy raw + typed sibling) so the FE could
+        switch between channels without breaking back-compat.
+      - B11: FE adds the ``case 'plugin_connection_status'`` handler
+        that reads the typed envelope.
+      - D4: drops the legacy raw frames now that FE consumes via the
+        typed channel.
 
     Each plugin's wrapper file is parametrized below — every entry must
-    contain both wire keys (legacy + ``plugin_connection_status``) and
-    construct a CloudEvents envelope.
+    reference ``plugin_connection_status`` AND must NOT reference the
+    retired legacy wire key.
     """
 
-    # (plugin_label, module_path, wrapper_function_name, legacy_wire_key)
+    # (plugin_label, module_path, wrapper_function_name, retired_legacy_key)
     _PLUGIN_WRAPPERS = [
         ("android", "nodes.android._events", "broadcast_android_status", "android_status"),
         ("whatsapp", "nodes.whatsapp._events", "broadcast_whatsapp_status", "whatsapp_status"),
@@ -353,19 +353,19 @@ class TestStatusBroadcastsAlsoEmitTypedEnvelope:
     ]
 
     @pytest.mark.parametrize(
-        "plugin,module_path,wrapper_name,legacy_key",
+        "plugin,module_path,wrapper_name,retired_legacy_key",
         _PLUGIN_WRAPPERS,
         ids=[row[0] for row in _PLUGIN_WRAPPERS],
     )
-    def test_plugin_wrapper_dual_emits(
-        self, plugin: str, module_path: str, wrapper_name: str, legacy_key: str,
+    def test_plugin_wrapper_emits_typed_only(
+        self, plugin: str, module_path: str, wrapper_name: str,
+        retired_legacy_key: str,
     ):
-        """Each plugin's broadcaster wrapper emits BOTH the legacy raw
-        frame AND the typed ``plugin_connection_status`` sibling.
-
-        Introspects the full module source (not just the wrapper body)
-        because plugins legitimately hoist the wire keys into
-        module-level constants for self-documentation.
+        """Each plugin's broadcaster wrapper emits ONLY the typed
+        ``plugin_connection_status`` envelope. The legacy raw wire key
+        retired in Wave 12 D4 — reintroducing it would resurrect the
+        dual-broadcast bug where the FE handler fired twice per status
+        change.
         """
         import importlib
 
@@ -377,13 +377,23 @@ class TestStatusBroadcastsAlsoEmitTypedEnvelope:
             f"wrapper in its plugin folder."
         )
         mod_src = inspect.getsource(mod)
-        assert f'"{legacy_key}"' in mod_src or f"'{legacy_key}'" in mod_src, (
-            f"{module_path} must reference legacy wire key {legacy_key!r} "
-            f"for FE back-compat (the dual-emit transition contract)."
-        )
+        # Positive: typed envelope channel still emitted.
         assert "plugin_connection_status" in mod_src, (
-            f"{module_path} must emit a typed CloudEvents sibling on "
+            f"{module_path} must emit a typed CloudEvents envelope on "
             f"``plugin_connection_status`` (the cross-plugin typed channel)."
+        )
+        # Negative: legacy raw wire key retired in D4.
+        legacy_double = f'"{retired_legacy_key}"'
+        legacy_single = f"'{retired_legacy_key}'"
+        # Allow mentions inside docstrings / comments — narrow the
+        # negative assertion to lines that look like an actual emit
+        # (``broadcaster.broadcast({"type": "<legacy_key>"`` pattern).
+        emit_double = f'"type": "{retired_legacy_key}"'
+        emit_single = f"'type': '{retired_legacy_key}'"
+        assert emit_double not in mod_src and emit_single not in mod_src, (
+            f"{module_path} must NOT emit on the retired legacy wire key "
+            f"{retired_legacy_key!r}. Wave 12 D4 dropped the dual-emit; "
+            f"FE now consumes via ``plugin_connection_status``."
         )
 
     def test_emit_connection_typed_helper_retired(self):

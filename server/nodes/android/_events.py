@@ -11,10 +11,13 @@ factory in ``services/events/envelope.py`` is borderline (parametrized
 by plugin but each plugin's payload differs) — Phase B moves the
 plugin-specific shape into per-plugin factories.
 
-Wire format unchanged from X4 (the dual-emit transition pattern):
-  - Legacy raw frame: ``{type: "android_status", data: <raw dict>}``
+Wire format (Wave 12 D4 — legacy ``android_status`` raw frame retired):
   - Typed CloudEvents sibling: ``{type: "plugin_connection_status",
     data: <WorkflowEvent envelope>}``
+
+The FE handler at ``client/src/contexts/WebSocketContext.tsx::case
+'plugin_connection_status'`` routes by ``envelope.source`` substring to
+the matching Zustand setter.
 
 Caller pattern (from ``_refresh.py`` / ``_relay/broadcaster.py``):
     from nodes.android import broadcast_android_status
@@ -28,9 +31,7 @@ from typing import Any, Dict, List, Optional
 from services.events.envelope import WorkflowEvent
 
 
-# Wire-routing keys are the OUTER ``type`` field on the WS frame, which
-# the FE switches on. Unchanged from X4 so FE listeners keep working.
-_LEGACY_WIRE_KEY = "android_status"
+# Wire-routing key — outer ``type`` field on the WS frame.
 _TYPED_WIRE_KEY = "plugin_connection_status"
 
 # Module-level cache mirror — kept in sync with
@@ -106,12 +107,13 @@ async def broadcast_android_status(
     qr_data: Optional[str] = None,
     session_token: Optional[str] = None,
 ) -> None:
-    """Update the android status cache + emit both the legacy raw
-    ``android_status`` frame AND the typed ``plugin_connection_status``
-    CloudEvents sibling.
+    """Update the android status cache + emit the typed
+    ``plugin_connection_status`` CloudEvents envelope.
 
-    Replaces ``StatusBroadcaster.update_android_status``. Same wire shape
-    on both channels — FE consumers see no change.
+    Replaces ``StatusBroadcaster.update_android_status``. The legacy
+    raw ``android_status`` frame retired in Wave 12 D4 — FE consumes
+    via the envelope-aware ``plugin_connection_status`` case in
+    ``WebSocketContext.tsx`` (routes by ``envelope.source``).
     """
     from services.status_broadcaster import get_status_broadcaster
 
@@ -132,13 +134,6 @@ async def broadcast_android_status(
     }
     broadcaster._status["android"] = payload
 
-    # Legacy raw frame (FE back-compat).
-    await broadcaster.broadcast({
-        "type": _LEGACY_WIRE_KEY,
-        "data": payload,
-    })
-
-    # Typed CloudEvents sibling — X4 dual-emit pattern.
     event = android_connection_status(
         connected=connected,
         paired=paired,

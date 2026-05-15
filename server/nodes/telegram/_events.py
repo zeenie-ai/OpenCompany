@@ -15,12 +15,12 @@ the only callers.
 Per RFC plugin_authoring_rfc.md §6.4: plugin-specific factories live in
 the plugin folder.
 
-Wire format preserved:
-  - Status: ``{type: "telegram_status", data: <raw>}`` + typed sibling
-    on ``plugin_connection_status``
+Wire format (Wave 12 D4 — legacy ``telegram_status`` raw frame retired):
+  - Status: typed CloudEvent on ``plugin_connection_status`` (FE routes
+    by ``envelope.source``).
   - Message: typed CloudEvent dispatched to ``event_waiter`` so
     ``telegramReceive`` trigger nodes match it; legacy wire key
-    ``telegram_message_received`` preserved for FE
+    ``telegram_message_received`` preserved for FE.
 """
 
 from __future__ import annotations
@@ -33,7 +33,6 @@ from services.events.envelope import WorkflowEvent
 
 # ---- Wire-routing keys -----------------------------------------------------
 
-_STATUS_LEGACY_WIRE_KEY = "telegram_status"
 _STATUS_TYPED_WIRE_KEY = "plugin_connection_status"
 
 # Legacy event_type the event_waiter dispatches by; trigger nodes
@@ -108,11 +107,12 @@ async def broadcast_telegram_status(
     owner_chat_id: Optional[int] = None,
     has_stored_token: Optional[bool] = None,
 ) -> None:
-    """Update the telegram status cache + emit both the legacy raw
-    ``telegram_status`` frame AND the typed ``plugin_connection_status``
-    CloudEvents sibling.
+    """Update the telegram status cache + emit the typed
+    ``plugin_connection_status`` CloudEvents envelope.
 
-    Replaces ``StatusBroadcaster.update_telegram_status``.
+    Replaces ``StatusBroadcaster.update_telegram_status``. Legacy raw
+    ``telegram_status`` frame retired in Wave 12 D4 — FE consumes via
+    the envelope-aware ``plugin_connection_status`` case.
     """
     from services.status_broadcaster import get_status_broadcaster
 
@@ -129,11 +129,6 @@ async def broadcast_telegram_status(
     if has_stored_token is not None:
         payload["has_stored_token"] = has_stored_token
     broadcaster._status["telegram"] = payload
-
-    await broadcaster.broadcast({
-        "type": _STATUS_LEGACY_WIRE_KEY,
-        "data": payload,
-    })
 
     event = telegram_connection_status(
         connected=connected,

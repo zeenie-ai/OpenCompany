@@ -17,15 +17,12 @@ Per RFC plugin_authoring_rfc.md §6.4:
   - Cross-cutting factories (``credential``, ``oauth_completed``, …)
     stay in central envelope.
 
-Wire format preserved from the pre-migration shape (so FE consumers
-keep working). Each wrapper dual-emits:
-  - Legacy raw frame: ``{type: <legacy_key>, data: <raw payload>}``
-  - Typed CloudEvents sibling: ``{type: <typed_wire_key>, data:
-    <WorkflowEvent envelope>}``
-
-Status events use the existing ``plugin_connection_status`` typed
-channel (matches Wave 11.I X4 + the B1 android migration); message /
-newsletter / history events use new dedicated typed channels.
+Wire format (Wave 12 D4 — legacy ``whatsapp_status`` raw frame retired):
+  - Status: typed CloudEvents envelope on ``plugin_connection_status``
+    (FE routes by ``envelope.source``).
+  - Message / newsletter / history: still dual-emit on their legacy
+    wire keys until the matching FE handlers migrate to envelope-aware
+    readers (follow-up D4 round).
 """
 
 from __future__ import annotations
@@ -42,7 +39,6 @@ from services.events.envelope import WorkflowEvent
 # legacy keys). Only the INNER ``data.type`` gains the ``com.machinaos.``
 # reverse-DNS prefix via the typed CloudEvents factories below.
 
-_STATUS_LEGACY_WIRE_KEY = "whatsapp_status"
 _STATUS_TYPED_WIRE_KEY = "plugin_connection_status"  # shared cross-plugin channel
 
 _MESSAGE_SENT_WIRE_KEY = "whatsapp_message_sent"
@@ -152,11 +148,12 @@ async def broadcast_whatsapp_status(
     device_id: Optional[str] = None,
     qr: Optional[str] = None,
 ) -> None:
-    """Update the whatsapp status cache + emit both the legacy raw
-    ``whatsapp_status`` frame AND the typed
-    ``plugin_connection_status`` CloudEvents sibling.
+    """Update the whatsapp status cache + emit the typed
+    ``plugin_connection_status`` CloudEvents envelope.
 
-    Replaces ``StatusBroadcaster.update_whatsapp_status``.
+    Replaces ``StatusBroadcaster.update_whatsapp_status``. Legacy raw
+    ``whatsapp_status`` frame retired in Wave 12 D4 — FE consumes via
+    the envelope-aware ``plugin_connection_status`` case.
     """
     from services.status_broadcaster import get_status_broadcaster
 
@@ -173,13 +170,6 @@ async def broadcast_whatsapp_status(
     }
     broadcaster._status["whatsapp"] = payload
 
-    # Legacy raw frame (FE back-compat).
-    await broadcaster.broadcast({
-        "type": _STATUS_LEGACY_WIRE_KEY,
-        "data": payload,
-    })
-
-    # Typed CloudEvents sibling — shared `plugin_connection_status` channel.
     event = whatsapp_connection_status(
         connected=connected,
         has_session=has_session,

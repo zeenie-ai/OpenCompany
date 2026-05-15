@@ -784,15 +784,6 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           break;
         }
 
-        case 'android_status':
-          setAndroidStatus(data || defaultAndroidStatus);
-          break;
-
-        case 'whatsapp_status':
-          setWhatsappStatus(data || defaultWhatsAppStatus);
-          invalidateCatalogue(queryClient);
-          break;
-
         case 'twitter_oauth_complete':
           // Handle Twitter OAuth completion broadcast from backend
           if (data?.success) {
@@ -827,20 +818,6 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               connected: data.connected || false,
               email: data.email || null,
               name: data.name,
-            });
-            invalidateCatalogue(queryClient);
-          }
-          break;
-
-        case 'telegram_status':
-          // Handle Telegram bot status updates
-          if (data) {
-            setTelegramStatus({
-              connected: data.connected || false,
-              bot_username: data.bot_username || null,
-              bot_name: data.bot_name || null,
-              bot_id: data.bot_id || null,
-              owner_chat_id: data.owner_chat_id ?? null,
             });
             invalidateCatalogue(queryClient);
           }
