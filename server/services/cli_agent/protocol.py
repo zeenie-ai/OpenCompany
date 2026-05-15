@@ -97,7 +97,7 @@ class AICliProvider(Protocol):
     package_name: str                  # npm package
     binary_name: str                   # "claude" | "codex" | "gemini"
     ide_lock_env_var: Optional[str]    # CLAUDE_IDE_LOCK | GEMINI_IDE_LOCK | None
-    ide_lockfile_dir: Optional[Path]   # ~/.claude/ide | <tmpdir>/gemini/ide
+    ide_lockfile_dir: Optional[Path]   # <MACHINA_CLAUDE_DIR>/ide | <tmpdir>/gemini/ide
 
     # ---- spawn surface ---------------------------------------------------
 

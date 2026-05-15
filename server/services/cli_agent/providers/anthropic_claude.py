@@ -83,7 +83,18 @@ class AnthropicClaudeProvider:
         self.package_name = cfg.package_name
         self.binary_name = cfg.binary_name
         self.ide_lock_env_var = cfg.ide_lock_env_var
-        self.ide_lockfile_dir = cfg.ide_lockfile_dir
+        # IDE lockfile lives at ``<CLAUDE_CONFIG_DIR>/ide/<pid>.lock``
+        # per claude's own resolution rules — there is no separate
+        # "lockfile path" knob. We set
+        # ``CLAUDE_CONFIG_DIR=MACHINA_CLAUDE_DIR`` on every spawn (see
+        # ``service.py``, ``session.py``, ``claude_oauth.py``), so the
+        # canonical lockfile dir is unambiguously
+        # ``MACHINA_CLAUDE_DIR/ide``. Deriving it directly from the
+        # single source of truth keeps the lockfile-write side (here)
+        # in sync with the lockfile-read side (spawned claude) without
+        # a duplicated JSON path that can drift.
+        from services.claude_oauth import MACHINA_CLAUDE_DIR
+        self.ide_lockfile_dir = MACHINA_CLAUDE_DIR / "ide"
         self._defaults = cfg.defaults
         self._supports = cfg.supports
         self._login_argv = cfg.login_argv

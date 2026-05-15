@@ -511,12 +511,22 @@ except Exception as exc:  # pragma: no cover — defensive; MCP must not block s
 @app.on_event("startup")
 async def _sweep_cli_lockfiles_on_startup() -> None:
     try:
-        from services.cli_agent.config import list_provider_names, get_provider_config
+        from services.cli_agent.config import list_provider_names
+        from services.cli_agent.factory import create_cli_provider
         from services.cli_agent.lockfile import sweep_stale_lockfiles
+        # Ask the provider class for its lockfile dir rather than the
+        # raw JSON config — the provider is the source of truth (e.g.
+        # the claude provider derives its dir from
+        # ``MACHINA_CLAUDE_DIR/ide`` so it stays in sync with the
+        # ``CLAUDE_CONFIG_DIR`` env var we set on spawn). Reading from
+        # the config dict would miss provider-class-computed paths.
         for name in list_provider_names():
-            cfg = get_provider_config(name)
-            if cfg and cfg.ide_lockfile_dir:
-                sweep_stale_lockfiles(cfg.ide_lockfile_dir)
+            try:
+                provider = create_cli_provider(name)
+            except Exception:
+                continue
+            if provider.ide_lockfile_dir:
+                sweep_stale_lockfiles(provider.ide_lockfile_dir)
     except Exception as exc:
         logger.debug("[main] CLI lockfile sweep failed: %s", exc)
 

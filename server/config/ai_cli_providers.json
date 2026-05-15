@@ -5,7 +5,6 @@
     "login_argv": ["claude", "login"],
     "auth_status_argv": ["claude", "--print", "-p", "ok"],
     "ide_lock_env_var": "CLAUDE_IDE_LOCK",
-    "ide_lockfile_dir": "~/.claude/ide",
     "default_model": "claude-sonnet-4-6",
     "default_max_turns": 10,
     "default_max_budget_usd": 5.0,
