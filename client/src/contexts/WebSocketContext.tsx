@@ -752,6 +752,38 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           break;
         }
 
+        case 'plugin_connection_status': {
+          // CloudEvents-typed connection-status envelope (Wave 12 B1-B3).
+          // Backend dual-emits today: the legacy raw wire key
+          // (android_status / whatsapp_status / telegram_status) keeps
+          // the existing handlers below alive, while this case reads
+          // from the typed envelope. After Wave 12 D4 drains the raw
+          // siblings, the legacy cases below retire and this one
+          // becomes the only path.
+          //
+          // Routing is by envelope.source substring — each plugin's
+          // _events.py declares source="machinaos://nodes/<plugin>".
+          const event = data as WorkflowEvent<Record<string, unknown>>;
+          const source = event?.source || '';
+          const payload = (event?.data || {}) as Record<string, unknown>;
+          if (source.includes('/android')) {
+            setAndroidStatus({ ...defaultAndroidStatus, ...(payload as Partial<typeof defaultAndroidStatus>) });
+          } else if (source.includes('/whatsapp')) {
+            setWhatsappStatus({ ...defaultWhatsAppStatus, ...(payload as Partial<typeof defaultWhatsAppStatus>) });
+            invalidateCatalogue(queryClient);
+          } else if (source.includes('/telegram')) {
+            setTelegramStatus({
+              connected: Boolean(payload.connected),
+              bot_username: (payload.bot_username as string | null) ?? null,
+              bot_name: (payload.bot_name as string | null) ?? null,
+              bot_id: (payload.bot_id as string | null) ?? null,
+              owner_chat_id: (payload.owner_chat_id as string | null) ?? null,
+            });
+            invalidateCatalogue(queryClient);
+          }
+          break;
+        }
+
         case 'android_status':
           setAndroidStatus(data || defaultAndroidStatus);
           break;
