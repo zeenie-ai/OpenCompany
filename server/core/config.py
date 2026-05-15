@@ -77,14 +77,18 @@ class Settings(BaseSettings):
     temporal_graceful_shutdown_seconds: int = Field(
         default=30, env="TEMPORAL_GRACEFUL_SHUTDOWN_SECONDS", ge=1,
     )
-    # Wave 12 A6: feature flag for the Temporal-native event dispatch
-    # path (services/events/dispatch.py:emit). Default off in Phase A
-    # so the new dispatch + Signal-based consumer fan-out activates only
-    # for opt-in dogfooding before Phase B migrates plugin callsites.
-    # Phase A acceptance criterion is enabling this flag on a single
-    # canary callsite (e.g. whatsappReceive).
+    # Wave 12 canary-flag default flipped to True (2026-05-15).
+    # The Temporal-native event dispatch path
+    # (services/events/dispatch.py:emit) is production-default;
+    # consumer fan-out + WS broadcast both fire.
+    #
+    # Rollback procedure: set EVENT_FRAMEWORK_ENABLED=false in the
+    # .env (or process env) and restart. dispatch.emit() reverts to a
+    # pass-through no-op; legacy event_waiter.dispatch path keeps
+    # working unchanged for non-canary triggers. See
+    # docs-internal/event_framework.md § Rollback procedure.
     event_framework_enabled: bool = Field(
-        default=False, env="EVENT_FRAMEWORK_ENABLED",
+        default=True, env="EVENT_FRAMEWORK_ENABLED",
     )
 
     # Persistence backend for the supervised Temporal cluster.

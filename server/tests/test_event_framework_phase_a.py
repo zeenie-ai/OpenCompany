@@ -143,6 +143,79 @@ class TestA4SearchAttributesSpec:
         assert required.issubset(set(attribute_names()))
 
 
+class TestEventFrameworkEnabledDefault:
+    """Wave 12 canary-flag default — flipped to ``True`` on 2026-05-15.
+
+    The env var override (``EVENT_FRAMEWORK_ENABLED=false``) stays as the
+    rollback channel. This test locks the new default so a future revert
+    requires updating both core/config.py and this assertion (in the
+    same commit) — preventing accidental flips.
+
+    Source-introspection rather than ``Settings()`` instantiation because
+    conftest stubs ``core.config.Settings`` as a MagicMock for the test
+    session.
+    """
+
+    def test_event_framework_enabled_defaults_true(self):
+        """The ``Field(default=True, env="EVENT_FRAMEWORK_ENABLED")`` line
+        in core/config.py is the canary flag's production default."""
+        from pathlib import Path
+
+        config_src = (Path(__file__).parent.parent / "core" / "config.py").read_text(encoding="utf-8")
+        # The default-True declaration MUST be present.
+        assert 'default=True, env="EVENT_FRAMEWORK_ENABLED"' in config_src, (
+            "event_framework_enabled default flipped to True in Wave 12 "
+            "(2026-05-15). The declaration "
+            '``Field(default=True, env="EVENT_FRAMEWORK_ENABLED")`` is '
+            "missing from core/config.py. Use EVENT_FRAMEWORK_ENABLED=false "
+            "in .env to opt out — not by reverting the default."
+        )
+        # And the legacy default-False must not be reintroduced.
+        assert 'default=False, env="EVENT_FRAMEWORK_ENABLED"' not in config_src, (
+            "event_framework_enabled reverted to default=False. Wave 12 "
+            "flipped the default to True on 2026-05-15. Use the env var "
+            "(EVENT_FRAMEWORK_ENABLED=false) for opt-out, not a code revert."
+        )
+
+
+class TestCanaryRegistryCoverage:
+    """Wave 12 — every canary trigger type opts into the
+    ``services.deployment.canary_registry`` self-registration pattern.
+
+    Locks the 7-canary surface that gated the flag default flip.
+    Adding a new canary plugin must register via
+    :func:`register_canary_trigger_type` from its ``__init__.py``;
+    removing one needs an explicit edit here.
+    """
+
+    def test_seven_canary_types_registered(self):
+        """All 7 production canary types are registered after plugin import."""
+        # Triggers import side-effect: each canary plugin's __init__.py
+        # calls register_canary_trigger_type(<type>).
+        import nodes  # noqa: F401
+        from services.deployment.canary_registry import canary_trigger_types
+
+        expected = frozenset({
+            # Push triggers (Wave 12 C1)
+            "webhookTrigger",
+            "chatTrigger",
+            "taskTrigger",
+            "telegramReceive",
+            "whatsappReceive",
+            # Polling trigger (Wave 12 C2)
+            "googleGmailReceive",
+            # Cron trigger (Wave 12 C3)
+            "cronScheduler",
+        })
+        actual = canary_trigger_types()
+        missing = expected - actual
+        assert not missing, (
+            f"Canary registry missing expected types: {sorted(missing)}. "
+            f"Plugin folder for each must call register_canary_trigger_type "
+            f"from its __init__.py side-effect import."
+        )
+
+
 class TestA6DispatchEmitFeatureFlag:
     """A6: ``emit`` is a no-op pass-through when the flag is off."""
 

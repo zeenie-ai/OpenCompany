@@ -26,20 +26,35 @@ phase plan lives in `~/.claude/plans/properly-fix-the-tech-dreamy-tarjan.md`.
 | C4 sub-piece C — `service_factories` registry closes `core/container.py` top-level imports | ✅ commit `73c5f08` (9 tests) |
 | D1 — Shared `_retry_policies` + `NodeUserError` non-retryable | ✅ commit `751ab94` (11 tests) |
 | D3 — Visibility admin WS handlers (`list_canary_listeners` / `list_canary_schedules` / `get_workflow_failure_history`) | ✅ commit `aebfb35` (13 tests) |
+| D5 — Auto-gen `DEFAULT_TOOL_NAMES` from `ToolNode` ClassVars | ✅ commits `a01f590` / `07906f0` / `899771c` (78 plugin classes + golden fixture + 3 invariant tests; 75 passed) |
+| B11 — FE `plugin_connection_status` envelope handler | ✅ commit `899771c` |
+| D4 — Drop legacy `*_status` raw frames (status-only round) | ✅ commit `5ea4e90` (whatsapp/android/telegram status retired; FE consumes typed channel) |
+| Canary flag default flip + invariant lock | ✅ this commit (default `True`; `EVENT_FRAMEWORK_ENABLED=false` is the rollback) |
 
 ### Dropped / Deferred / Pending
 
 | Phase | State |
 |---|---|
 | D2 — Custom `event_dlq` SQLModel table | ❌ **dropped** (commit `89b15bd`, docs only). Temporal Event History + Visibility queries cover the ops-inspection use case; reinventing them would contradict Wave 12's "Temporal-native, no custom infra" thesis. See § "Failure inspection — no separate DLQ table". |
-| D2b — Retire `event_waiter.py` Redis-Streams branch | ⏸ **deferred** — gated on `event_framework_enabled` flipping default-on. Branch is still production-live for non-canary triggers. |
-| B11 — FE handler migration to envelope-aware readers | ⏳ deferred to coordinated FE session |
-| D4 — Drain `_LEGACY_RAW_DICT_BROADCASTS` | ⏸ blocked on B11 |
-| D5 — Auto-gen `DEFAULT_TOOL_NAMES` from `ToolNode` ClassVars | ⏳ pending — ~70 plugins + `services/ai.py:2515-2780` rewrite + snapshot test |
+| D2b — Retire `event_waiter.py` Redis-Streams branch | ⏳ pending — flag default now `True`; gated on production-stability window before draining the legacy collector. |
+| D4 — Drain remaining dual-emit on message/newsletter/history wire keys | ⏳ pending — paired with FE migration to envelope-aware readers on those channels (`whatsapp_message_received` et al). |
+| WorkflowEnvironment integration smoke test | ⏳ pending — full 7-canary in-process Temporal cluster. Existing unit tests + per-canary producer tests + `TestCanaryRegistryCoverage` cover the static surface; the integration smoke would catch real-cluster regressions only. |
 
 **Test surface: 256 passed + 1 xfail** across 18 event-framework test files.
 
-`Settings.event_framework_enabled` gates the new dispatch path (default-OFF). When off, `services.events.dispatch.emit` is a no-op pass-through; plugin emitters still call `status_broadcaster.broadcast(...)` directly, so the FE fan-out is unchanged. Turn on per-callsite for opt-in dogfooding without flipping the flag globally.
+`Settings.event_framework_enabled` gates the new dispatch path. **Default flipped to `True` on 2026-05-15** — the Temporal-Signal consumer fan-out is now production-default. The env var `EVENT_FRAMEWORK_ENABLED=false` is the rollback channel; when set, `services.events.dispatch.emit` reverts to a pass-through no-op and the legacy `event_waiter.dispatch` path keeps working unchanged for non-canary triggers.
+
+### Rollback procedure
+
+If the canary fan-out causes regressions in production:
+
+1. Set `EVENT_FRAMEWORK_ENABLED=false` in `.env` (or the process environment).
+2. Restart the server (`npm run start` / `uvicorn` reload). Pydantic Settings re-reads on startup.
+3. Confirm pass-through: `dispatch.emit()` logs `event-framework disabled — emit no-op` at DEBUG.
+
+No DB migrations, no schema changes — the rollback is one env var + restart. The legacy `event_waiter` collector/processor keeps trigger nodes firing because plugin producers still call `event_waiter.dispatch(...)` alongside `dispatch.emit(...)` (the dual-dispatch pattern stays until D2b retires the Redis-Streams branch).
+
+Locked by `tests/test_event_framework_phase_a.py::TestEventFrameworkEnabledDefault::test_event_framework_enabled_defaults_true` (source-introspection check that the `Field(default=True, ...)` declaration is present) and `TestCanaryRegistryCoverage::test_seven_canary_types_registered` (every canary plugin opted in via `register_canary_trigger_type`).
 
 ## What this framework does
 
