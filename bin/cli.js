@@ -106,7 +106,7 @@ function checkDeps() {
 function doctor() {
   console.log('\nMachinaOS Doctor\n');
   try {
-    execSync('npx envinfo --system --binaries --npmPackages concurrently,edgymeow,temporal-server', {
+    execSync('npx envinfo --system --binaries --npmPackages edgymeow,agent-browser,cross-env', {
       cwd: ROOT, stdio: 'inherit', shell: true,
     });
   } catch { /* envinfo not available, continue with manual checks */ }
@@ -114,7 +114,7 @@ function doctor() {
   console.log('  Additional checks:');
   const checks = [
     ['uv', getVersion('uv --version')],
-    ['temporal-server', getVersion('temporal --version')],
+    ['temporal', getVersion('temporal --version')],
   ];
   for (const [name, ver] of checks) {
     console.log(ver ? `    ${name}: ${ver}` : `    ${name}: Not Found`);

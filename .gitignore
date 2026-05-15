@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# npm-generated lock file. This project uses pnpm (canonical lock:
+# ``pnpm-lock.yaml``, tracked). Source checkouts are gated to pnpm
+# by ``scripts/preinstall.js``; ``package-lock.json`` only appears
+# if npm runs outside the workspace. Keep it out of commits.
+package-lock.json
+
 # =============================================================================
 # SECURITY - Credentials and Secrets (NEVER COMMIT)
 # =============================================================================
