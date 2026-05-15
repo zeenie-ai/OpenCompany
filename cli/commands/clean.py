@@ -1,4 +1,4 @@
-"""``machina clean`` -- replaces ``scripts/clean.js``.
+"""``machina clean`` — reset the repo to a fresh-checkout state.
 
 Stops every process listening on the configured ports + orphaned project
 processes, waits for file locks to release, then removes build artefacts
@@ -30,9 +30,6 @@ _TARGETS = [
     # out of the user-home default by setting ``DATA_DIR=.machina``
     # in ``.env`` (per the resolution rules in ``cli/config.py``).
     ".machina",
-    # Pre-cutover legacy data paths; harmless to remove if absent.
-    "data",
-    "server/data",
     # Python venvs
     "server/.venv",
     ".venv",             # stale root venv (should not exist)
@@ -69,10 +66,9 @@ def clean_command() -> None:
             killed_ports += len(result.killed_pids)
 
     # Step 2: kill orphaned project processes (may hold .venv file locks).
-    # ``exclude_substring`` skips the supervisor that's running this very
-    # ``clean`` command — its cmdline is ``python -m cli clean`` post-rename
-    # (was ``python -m machina ...`` pre-cutover; supervisor entry-point
-    # moved with the source dir).
+    # ``exclude_substring="-m cli"`` skips the supervisor running this
+    # very ``clean`` command — its cmdline contains the entry-point
+    # token ``-m cli``.
     orphaned = kill_orphaned_machina_processes(str(root), exclude_substring="-m cli")
     if orphaned:
         console.print(f"  Orphaned: Killed {len(orphaned)} process(es)")
