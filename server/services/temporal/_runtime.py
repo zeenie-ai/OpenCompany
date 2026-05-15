@@ -35,7 +35,7 @@ logger = get_logger(__name__)
 _PG_DEFAULT_PORT = 5432
 
 # How long each TCP-readiness probe waits per attempt. Mirrors
-# ``machina.tcp.probe_tcp_port``'s semantics inside the server-side
+# ``cli.tcp.probe_tcp_port``'s semantics inside the server-side
 # supervisor — sub-second so a stalled subprocess fails health fast.
 _PROBE_TIMEOUT_SECONDS = 1.0
 
@@ -44,8 +44,8 @@ async def _probe_tcp_port(port: int, host: str = "127.0.0.1") -> bool:
     """Return ``True`` iff a TCP connection to ``host:port`` succeeds
     within :data:`_PROBE_TIMEOUT_SECONDS`. Loopback-friendly readiness
     check used by both runtimes' ``health_check`` overrides. Mirrors
-    :func:`machina.tcp.probe_tcp_port` but keeps server-side modules
-    independent of the ``machina`` CLI package."""
+    :func:`cli.tcp.probe_tcp_port` but keeps server-side modules
+    independent of the ``cli`` CLI package."""
     try:
         _, writer = await asyncio.wait_for(
             asyncio.open_connection(host, port),

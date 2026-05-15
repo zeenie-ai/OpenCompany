@@ -11,11 +11,11 @@ dependencies = [
 ]
 
 [project.scripts]
-machina = "machina.cli:app"
+machina = "cli.cli:app"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["machina"]
+packages = ["cli"]

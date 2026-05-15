@@ -26,12 +26,12 @@ import pytest
 
 # Stub `machina` namespace.
 if "machina" not in sys.modules:
-    _machina = types.ModuleType("machina")
+    _machina = types.ModuleType("cli")
     _machina.__path__ = []
-    sys.modules["machina"] = _machina
-    _machina_tcp = types.ModuleType("machina.tcp")
+    sys.modules["cli"] = _machina
+    _machina_tcp = types.ModuleType("cli.tcp")
     _machina_tcp.probe_tcp_port = MagicMock(return_value=False)
-    sys.modules["machina.tcp"] = _machina_tcp
+    sys.modules["cli.tcp"] = _machina_tcp
 
 
 _EVENT_WAITER_DISPATCH_PATTERN = re.compile(r"event_waiter\.dispatch\s*\(")

@@ -82,28 +82,30 @@ async function main() {
     console.log('Installing dependencies...');
     await runScript(resolve(__dirname, 'install.js'));
 
-    // Note: we deliberately do NOT `pip install -e ./machina` here. An
+    // Note: we deliberately do NOT `pip install -e ./cli` here. An
     // editable install creates a `Scripts/machina.exe` (or
-    // `bin/machina`) entry-point that imports `machina.cli` from the
+    // `bin/machina`) entry-point that imports `cli.cli` from the
     // package's npm install directory. When npm later moves, prunes,
     // or upgrades that directory, the shim survives but its target
     // disappears -- the user runs `machina start` and gets
-    // `ModuleNotFoundError: No module named 'machina'`. The same
+    // `ModuleNotFoundError: No module named 'cli'`. The same
     // shim also wins PATH precedence over the npm bin shim at
     // bin/cli.js, masking the real entry point.
     //
-    // Both call sites that need the Python CLI use `python -m machina
+    // Both call sites that need the Python CLI use `python -m cli
     // <cmd>` (npm run start, .github/workflows/release.yml version
     // sync). `-m` resolves the package from the working directory's
     // sys.path entry, which `bin/cli.js` already pins to the npm
     // package root via `cwd: ROOT`. No pip install required.
 
     // Detect a stale `Scripts/machina.exe` (or `bin/machina`) left
-    // behind by a prior version's `pip install -e ./machina`. If pip
-    // shows the package installed but the current `machina` on PATH
-    // is NOT our Node shim, surface the cleanup command -- otherwise
-    // the user keeps hitting the dead Python entry-point even after
-    // upgrading.
+    // behind by a prior version's `pip install -e ./machina` (the dir
+    // was renamed from `machina/` to `cli/`; pip's metadata can lag).
+    // The pip distribution name is still ``machina`` (the public CLI
+    // name); the source dir is ``cli/``. If pip shows the package
+    // installed but the current `machina` on PATH is NOT our Node
+    // shim, surface the cleanup command -- otherwise the user keeps
+    // hitting the dead Python entry-point even after upgrading.
     try {
       const pipShow = execSync('python -m pip show machina 2>nul || python3 -m pip show machina 2>/dev/null', {
         encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], shell: true,
