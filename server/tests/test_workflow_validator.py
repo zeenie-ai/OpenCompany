@@ -277,9 +277,11 @@ class TestExecuteAndDeployHandlersGate:
         )
 
     def test_deploy_workflow_calls_validator_unconditionally(self):
-        from routers import websocket as ws_module
+        # Wave 13.2: handle_deploy_workflow moved out of routers.websocket
+        # into services/deployment/handlers.py.
+        from services.deployment.handlers import handle_deploy_workflow
 
-        src = self._handler_source(ws_module.handle_deploy_workflow)
+        src = self._handler_source(handle_deploy_workflow)
         assert "validate_workflow" in src, (
             "handle_deploy_workflow must call validate_workflow — a broken "
             "workflow deployed on a schedule is much worse than a failed "
