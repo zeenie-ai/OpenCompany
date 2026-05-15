@@ -2436,6 +2436,19 @@ class AIService:
         Uses database-stored schema as source of truth if available, otherwise
         falls back to dynamic schema generation.
 
+        Tool name + description resolution chain (Wave 12 D5):
+          1. DB-stored schema (per-node override via UI)
+          2. ``cls.tool_name`` / ``cls.tool_description`` ClassVars on the
+             plugin class. ``tool_description`` falls back to
+             ``cls.description`` when empty.
+          3. ``_PSEUDO_TOOL_FALLBACK`` for built-in / aggregator pseudo-types
+             that have no plugin class (``_builtin_check_delegated_tasks``,
+             ``androidTool``)
+          4. ``node_params.get('tool_name')`` / ``...tool_description``
+             (per-node override declared as a Pydantic field on the plugin's
+             Params model — e.g. brave_search / serper_search / perplexity).
+          5. Last-resort default: ``f"tool_{label}"`` / ``f"Execute {label}"``
+
         Args:
             tool_info: Dict containing node_id, node_type, parameters, label, connected_services (for androidTool)
 
@@ -2443,171 +2456,46 @@ class AIService:
             Tuple of (StructuredTool, config_dict) or (None, None) on failure
         """
         from langchain_core.tools import StructuredTool
-        # Default tool names matching frontend toolNodes.ts definitions
-        DEFAULT_TOOL_NAMES = {
-            'calculatorTool': 'calculator',
-            'currentTimeTool': 'get_current_time',
-            'duckduckgoSearch': 'web_search',
-            'pythonExecutor': 'python_code',
-            'javascriptExecutor': 'javascript_code',
-            'androidTool': 'android_device',
-            'whatsappSend': 'whatsapp_send',
-            'whatsappDb': 'whatsapp_db',
-            'gmaps_locations': 'geocode',
-            'gmaps_nearby_places': 'nearby_places',
-            'braveSearch': 'brave_search',
-            'serperSearch': 'serper_search',
-            'perplexitySearch': 'perplexity_search',
-            'taskManager': 'task_manager',
-            'writeTodos': 'write_todos',
-            'processManager': 'process_manager',
-            'timer': 'timer',
-            'cronScheduler': 'cron_scheduler',
-            # Filesystem and shell tools (deepagents backends)
-            'fileRead': 'file_read',
-            'fileModify': 'file_modify',
-            'shell': 'shell_execute',
-            'fsSearch': 'fs_search',
-            # Built-in check tool for delegation results
-            '_builtin_check_delegated_tasks': 'check_delegated_tasks',
-            # Agent delegation tools
-            'aiAgent': 'delegate_to_ai_agent',
-            'chatAgent': 'delegate_to_chat_agent',
-            'android_agent': 'delegate_to_android_agent',
-            'coding_agent': 'delegate_to_coding_agent',
-            'web_agent': 'delegate_to_web_agent',
-            'task_agent': 'delegate_to_task_agent',
-            'social_agent': 'delegate_to_social_agent',
-            'travel_agent': 'delegate_to_travel_agent',
-            'tool_agent': 'delegate_to_tool_agent',
-            'productivity_agent': 'delegate_to_productivity_agent',
-            'payments_agent': 'delegate_to_payments_agent',
-            'consumer_agent': 'delegate_to_consumer_agent',
-            'autonomous_agent': 'delegate_to_autonomous_agent',
-            'orchestrator_agent': 'delegate_to_orchestrator_agent',
-            'ai_employee': 'delegate_to_ai_employee',
-            'rlm_agent': 'delegate_to_rlm_agent',
-            'claude_code_agent': 'delegate_to_claude_code_agent',
-            # Android service nodes (direct tool usage)
-            'batteryMonitor': 'android_battery',
-            'networkMonitor': 'android_network',
-            'systemInfo': 'android_system_info',
-            'location': 'android_location',
-            'appLauncher': 'android_app_launcher',
-            'appList': 'android_app_list',
-            'wifiAutomation': 'android_wifi',
-            'bluetoothAutomation': 'android_bluetooth',
-            'audioAutomation': 'android_audio',
-            'deviceStateAutomation': 'android_device_state',
-            'screenControlAutomation': 'android_screen_control',
-            'airplaneModeControl': 'android_airplane_mode',
-            'motionDetection': 'android_motion_detection',
-            'environmentalSensors': 'android_environmental_sensors',
-            'cameraControl': 'android_camera',
-            'mediaControl': 'android_media',
-            # Google Workspace (consolidated nodes)
-            'gmail': 'google_gmail',
-            'calendar': 'google_calendar',
-            'drive': 'google_drive',
-            'sheets': 'google_sheets',
-            'tasks': 'google_tasks',
-            'contacts': 'google_contacts',
-            # Proxy (dual-purpose tools)
-            'proxyRequest': 'proxy_request',
-            'proxyConfig': 'proxy_config',
-            'proxyStatus': 'proxy_status',
-            # Crawlee web scraping (dual-purpose tool)
-            'crawleeScraper': 'web_reader',
-            # Browser automation (dual-purpose tool)
-            'browser': 'browser',
-            # Email (Himalaya CLI, dual-purpose tools)
-            'emailSend': 'email_send',
-            'emailRead': 'email_read',
-            # Stripe (CLI pass-through, dual-purpose tool)
-            'stripeAction': 'stripe_action',
+        # Built-in / aggregator pseudo-types — no plugin class, no ClassVar.
+        # These must stay as an explicit fallback dict (Wave 12 D5).
+        _PSEUDO_TOOL_FALLBACK = {
+            '_builtin_check_delegated_tasks': (
+                'check_delegated_tasks',
+                'Check status and retrieve results of previously delegated tasks.',
+            ),
+            'androidTool': (
+                'android_device',
+                'Control Android device. Available services are determined by connected nodes.',
+            ),
         }
-        DEFAULT_TOOL_DESCRIPTIONS = {
-            'calculatorTool': 'Perform mathematical calculations. Operations: add, subtract, multiply, divide, power, sqrt, mod, abs',
-            'currentTimeTool': 'Get the current date and time. Optionally specify timezone.',
-            'duckduckgoSearch': 'Search the web for information using DuckDuckGo. Returns relevant search results. Free, no API key required.',
-            'pythonExecutor': 'Execute Python code for calculations, data processing, and automation. Available: math, json, datetime, Counter, defaultdict. Set output variable with result.',
-            'javascriptExecutor': 'Execute JavaScript code for calculations, data processing, and JSON manipulation. Set output variable with result.',
-            'androidTool': 'Control Android device. Available services are determined by connected nodes.',
-            'whatsappSend': 'Send WhatsApp messages to contacts or groups. Supports text, media, location, and contact messages.',
-            'whatsappDb': 'Query WhatsApp database - list contacts, search groups, get contact/group info, retrieve chat history.',
-            'braveSearch': 'Search the web using Brave Search. Returns web results with titles, snippets, and URLs.',
-            'serperSearch': 'Search the web using Google via Serper API. Returns web results with titles, snippets, and URLs.',
-            'perplexitySearch': 'Search the web using Perplexity Sonar AI. Returns an AI-generated answer with citations and source URLs.',
-            'gmaps_locations': 'Geocode addresses to coordinates or reverse geocode coordinates to addresses using Google Maps.',
-            'gmaps_nearby_places': 'Search for nearby places (restaurants, hospitals, banks, etc.) using Google Maps Places API.',
-            'taskManager': 'Track delegated sub-agent tasks. Operations: list_tasks (see all tasks), get_task (check specific task status/result), mark_done (cleanup completed tasks).',
-            'writeTodos': 'Create and manage a structured task list for your current work session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user. Only use this tool if you think it will be helpful in staying organized. If the user\'s request is trivial and takes less than 3 steps, it is better to NOT use this tool and just do the task directly. Use for complex multi-step tasks (3+ steps), non-trivial planning, or when user explicitly requests a todo list. Task states: pending, in_progress, completed. Mark tasks as in_progress BEFORE beginning work, completed IMMEDIATELY after finishing. Remove irrelevant tasks. Break complex tasks into smaller steps.',
-            'processManager': 'Start, stop, and manage long-running processes (dev servers, watchers, build tools). Operations: start (spawn a process), stop (kill process tree), restart, list (show all running), send_input (write to stdin), get_output (read recent output lines). Output streams to Terminal tab. Use get_output to check what a process printed.',
-            'timer': 'Wait/sleep for a specified duration. Specify duration (1-3600) and unit (seconds, minutes, or hours). Returns timestamp and elapsed time after waiting.',
-            'cronScheduler': 'Schedule a delayed or recurring execution. Supports seconds, minutes, hours, daily, weekly, monthly frequencies with timezone. Use frequency to set schedule type, then set the relevant interval/time parameters.',
-            # Filesystem and shell tools (deepagents backends)
-            'fileRead': 'Read file contents with pagination. Returns line-numbered text.',
-            'fileModify': 'Write a new file or edit an existing file with string replacement. Operations: write (create/overwrite), edit (find and replace).',
-            'shell': 'Execute a shell command. Returns stdout, stderr, and exit code.',
-            'fsSearch': 'Search the filesystem. Modes: ls (list directory), glob (pattern match files), grep (search file contents for text).',
-            # Built-in check tool for delegation results
-            '_builtin_check_delegated_tasks': 'Check status and retrieve results of previously delegated tasks.',
-            # Agent delegation tools - ONE-SHOT fire-and-forget pattern
-            'aiAgent': 'ONE-SHOT delegation to AI Agent. Call ONCE per task, returns task_id immediately. Agent works in background - do NOT re-call.',
-            'chatAgent': 'ONE-SHOT delegation to Chat Agent. Call ONCE per task, returns task_id immediately. Agent works in background - do NOT re-call.',
-            'android_agent': 'ONE-SHOT delegation to Android Agent. Call ONCE per task, returns task_id. Agent works in background - do NOT re-call.',
-            'coding_agent': 'ONE-SHOT delegation to Coding Agent. Call ONCE per task, returns task_id. Agent works in background - do NOT re-call.',
-            'web_agent': 'ONE-SHOT delegation to Web Agent. Call ONCE per task, returns task_id. Agent works in background - do NOT re-call.',
-            'task_agent': 'ONE-SHOT delegation to Task Agent. Call ONCE per task, returns task_id. Agent works in background - do NOT re-call.',
-            'social_agent': 'ONE-SHOT delegation to Social Agent. Call ONCE per task, returns task_id. Agent works in background - do NOT re-call.',
-            'travel_agent': 'ONE-SHOT delegation to Travel Agent. Call ONCE per task, returns task_id. Agent works in background - do NOT re-call.',
-            'tool_agent': 'ONE-SHOT delegation to Tool Agent. Call ONCE per task, returns task_id. Agent works in background - do NOT re-call.',
-            'productivity_agent': 'ONE-SHOT delegation to Productivity Agent. Call ONCE per task, returns task_id. Agent works in background - do NOT re-call.',
-            'payments_agent': 'ONE-SHOT delegation to Payments Agent. Call ONCE per task, returns task_id. Agent works in background - do NOT re-call.',
-            'consumer_agent': 'ONE-SHOT delegation to Consumer Agent. Call ONCE per task, returns task_id. Agent works in background - do NOT re-call.',
-            'autonomous_agent': 'ONE-SHOT delegation to Autonomous Agent. Call ONCE per task, returns task_id. Agent works in background using Code Mode patterns - do NOT re-call.',
-            'orchestrator_agent': 'ONE-SHOT delegation to Orchestrator Agent. Call ONCE per task, returns task_id. Coordinates multiple agents - do NOT re-call.',
-            'ai_employee': 'ONE-SHOT delegation to AI Employee. Call ONCE per task, returns task_id. Coordinates multiple agents - do NOT re-call.',
-            'rlm_agent': 'ONE-SHOT delegation to RLM Agent. Call ONCE per task, returns task_id. Uses recursive REPL-based reasoning with code execution - do NOT re-call.',
-            'claude_code_agent': 'ONE-SHOT delegation to Claude Code Agent. Call ONCE per task, returns task_id. Agentic coding with file reading, editing, and command execution - do NOT re-call.',
-            # Android service nodes (direct tool usage)
-            'batteryMonitor': 'Monitor Android battery status, level, charging state, temperature, and health.',
-            'networkMonitor': 'Monitor Android network connectivity, type, and internet availability.',
-            'systemInfo': 'Get Android device and OS information including version, API level, memory, hardware.',
-            'location': 'Get Android GPS location with latitude, longitude, accuracy, and provider.',
-            'appLauncher': 'Launch Android applications by package name.',
-            'appList': 'Get list of installed Android applications with package names and versions.',
-            'wifiAutomation': 'Control Android WiFi - enable, disable, get status, scan for networks.',
-            'bluetoothAutomation': 'Control Android Bluetooth - enable, disable, get status, paired devices.',
-            'audioAutomation': 'Control Android volume and audio - get/set volume, mute, unmute.',
-            'deviceStateAutomation': 'Control Android device state - airplane mode, screen, power save, brightness.',
-            'screenControlAutomation': 'Control Android screen - brightness, wake, auto-brightness, timeout.',
-            'airplaneModeControl': 'Monitor and control Android airplane mode.',
-            'motionDetection': 'Read Android accelerometer and gyroscope - detect motion, shake, orientation.',
-            'environmentalSensors': 'Read Android environmental sensors - temperature, humidity, pressure, light.',
-            'cameraControl': 'Control Android camera - get info, take photos, camera capabilities.',
-            'mediaControl': 'Control Android media playback - volume, playback control, play media files.',
-            # Google Workspace (consolidated nodes)
-            'gmail': 'Send, search, and read emails via Gmail. Operations: send (compose email), search (find emails by query), read (get email by ID).',
-            'calendar': 'Manage Google Calendar events. Operations: create (new event), list (events in date range), update (modify event), delete (remove event).',
-            'drive': 'Manage Google Drive files. Operations: upload (add file from URL), download (get file by ID), list (find files), share (share with user).',
-            'sheets': 'Read and write Google Sheets data. Operations: read (get range), write (set range), append (add rows).',
-            'tasks': 'Manage Google Tasks. Operations: create (new task), list (find tasks), complete (mark done), update (modify task), delete (remove task).',
-            'contacts': 'Manage Google Contacts. Operations: create (new contact), list (browse), search (find by name/email/phone), get (details by resource name), update (modify), delete (remove).',
-            # Proxy (dual-purpose tools)
-            'proxyRequest': 'Make HTTP requests through residential proxy providers with geo-targeting, session control, and automatic failover. Supports GET, POST, PUT, DELETE, PATCH methods.',
-            'proxyConfig': 'Manage proxy providers and routing rules. Operations: list_providers, add_provider, update_provider, remove_provider, set_credentials, test_provider, get_stats, add_routing_rule, list_routing_rules, remove_routing_rule.',
-            'proxyStatus': 'Get proxy provider health stats, scores, and usage statistics. Returns enabled status, provider list with health scores, and aggregated stats.',
-            # Crawlee web scraping (dual-purpose tool)
-            'crawleeScraper': 'Read and extract content from web pages. Fetches page text, links, and data. Use beautifulsoup for static pages or playwright for JS-rendered pages. You MUST use this tool when the user asks to read, fetch, or get content from any URL.',
-            # Browser automation (dual-purpose tool)
-            'browser': 'Control a web browser interactively. Use snapshot to see the page (returns accessibility tree with @eN refs). Then click/type/fill with those refs. Workflow: navigate -> snapshot -> interact -> snapshot. Operations: navigate, click, type, fill, screenshot, snapshot, get_text, get_html, eval, wait, scroll, select, batch.',
-            # Email (Himalaya CLI, dual-purpose tools)
-            'emailSend': 'Send email via SMTP. Specify to, subject, body. Optional: cc, bcc, body_type (text/html).',
-            'emailRead': 'Read and manage emails via IMAP. Operations: list (envelopes), search (query), read (message by ID), folders (list), move, delete, flag.',
-            # Stripe (CLI pass-through, dual-purpose tool)
-            'stripeAction': "Run any Stripe CLI command and return the parsed JSON response. Pass a 'command' field exactly as you would type after 'stripe ' (e.g. 'customers create --email a@b.com', 'charges list --limit 10', 'payment_intents create --amount 2000 --currency usd', 'refunds create --payment-intent pi_xxx', 'trigger charge.succeeded'). Covers every Stripe resource: customers, charges, payment_intents, refunds, invoices, products, prices, subscriptions, payment_methods, setup_intents, transfers, payouts, plus 'trigger <event>' for synthetic test events.",
-        }
+
+        def _resolve_default_tool_name_description(node_type: str) -> tuple:
+            """Resolve ``(tool_name, tool_description)`` via the post-D5 chain.
+
+            ``tool_description`` falls back to ``cls.description`` when the
+            plugin doesn't override it — only ~15-20 of the 68 plugins need
+            an LLM-tuned description distinct from the human-facing one
+            (writeTodos, pythonExecutor, the 16 specialized agents,
+            stripeAction, ...). The rest share their existing
+            ``description``.
+
+            Returns ``(None, None)`` when the node_type matches no entry —
+            callers fall through to ``node_params`` then ``f"tool_{label}"``.
+            """
+            from services.node_registry import get_node_class
+            node_cls = get_node_class(node_type)
+            if node_cls is not None:
+                cv_name = (getattr(node_cls, 'tool_name', '') or '').strip()
+                cv_desc = (getattr(node_cls, 'tool_description', '') or '').strip()
+                if cv_name:
+                    # tool_description falls back to the plugin's regular
+                    # ``description`` ClassVar (avoids duplicating the same
+                    # text in two ClassVars on most plugins).
+                    return cv_name, cv_desc or (getattr(node_cls, 'description', '') or '').strip() or None
+            pseudo = _PSEUDO_TOOL_FALLBACK.get(node_type)
+            if pseudo is not None:
+                return pseudo
+            return None, None
 
         try:
             node_type = tool_info.get('node_type', '')
@@ -2616,14 +2504,16 @@ class AIService:
             node_id = tool_info.get('node_id', '')
             connected_services = tool_info.get('connected_services', [])
 
+            default_tool_name, default_tool_description = _resolve_default_tool_name_description(node_type)
+
             # Check database for stored schema (source of truth)
             db_schema = await self.database.get_tool_schema(node_id) if node_id else None
 
             if db_schema:
                 # Use database schema as source of truth
                 logger.debug(f"[Agent] Using DB schema for tool node {node_id}")
-                tool_name = db_schema.get('tool_name', DEFAULT_TOOL_NAMES.get(node_type, f"tool_{node_label}"))
-                tool_description = db_schema.get('tool_description', DEFAULT_TOOL_DESCRIPTIONS.get(node_type, f"Execute {node_label}"))
+                tool_name = db_schema.get('tool_name', default_tool_name or f"tool_{node_label}")
+                tool_description = db_schema.get('tool_description', default_tool_description or f"Execute {node_label}")
                 # Use stored connected_services if available (for toolkit nodes)
                 if db_schema.get('connected_services'):
                     connected_services = db_schema['connected_services']
@@ -2631,12 +2521,12 @@ class AIService:
                 # Fall back to dynamic generation from node params
                 tool_name = (
                     node_params.get('tool_name') or
-                    DEFAULT_TOOL_NAMES.get(node_type) or
+                    default_tool_name or
                     f"tool_{node_label}".replace(' ', '_').replace('-', '_').lower()
                 )
                 tool_description = (
                     node_params.get('tool_description') or
-                    DEFAULT_TOOL_DESCRIPTIONS.get(node_type) or
+                    default_tool_description or
                     f"Execute {node_label} node"
                 )
 
@@ -2656,8 +2546,10 @@ class AIService:
                     for child_tool in child_tools:
                         child_type = child_tool.get('node_type', '')
                         child_label = child_tool.get('label', child_type)
-                        # Get the tool description from DEFAULT_TOOL_DESCRIPTIONS
-                        child_desc = DEFAULT_TOOL_DESCRIPTIONS.get(child_type, f"Use {child_label}")
+                        # Resolve via the post-D5 chain (ClassVar → pseudo → legacy)
+                        _, child_desc = _resolve_default_tool_name_description(child_type)
+                        if not child_desc:
+                            child_desc = f"Use {child_label}"
                         capability_descriptions.append(f"- {child_label}: {child_desc}")
 
                     capabilities_text = "\n".join(capability_descriptions)

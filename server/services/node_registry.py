@@ -121,6 +121,40 @@ def registered_node_classes() -> dict[str, type]:
     return dict(_NODE_CLASS_REGISTRY)
 
 
+def iter_tool_node_classes():
+    """Yield ``(type, cls)`` for every plugin surfaced as an LLM tool.
+
+    Three plugin patterns map into ``services.ai._build_tool_from_node``:
+
+    1. Pure ToolNode (``component_kind == "tool"``) — calculator,
+       duckduckgoSearch, writeTodos, agentBuilder, ...
+    2. Dual-purpose ActionNode (``usable_as_tool=True``) — pythonExecutor,
+       gmail, twitter*, brave_search, all 16 android service nodes, ...
+    3. SpecializedAgentBase subclasses (``component_kind == "agent"``) —
+       routed via ``delegate_to_*`` dispatch in
+       ``services/handlers/tools.py``.
+
+    Config aggregators with ``uiHints.isMasterSkillEditor`` (masterSkill)
+    are excluded — they live on the canvas as ToolNode visually but are
+    never invoked directly by the LLM (the LLM uses the connected skills
+    instead).
+
+    Used by Wave 12 D5 to replace the function-local ``DEFAULT_TOOL_NAMES``
+    / ``DEFAULT_TOOL_DESCRIPTIONS`` dicts with a registry walk over
+    ``cls.tool_name`` / ``cls.tool_description`` ClassVars.
+    """
+    for node_type, node_cls in _NODE_CLASS_REGISTRY.items():
+        component_kind = getattr(node_cls, "component_kind", "")
+        ui_hints = getattr(node_cls, "ui_hints", {}) or {}
+        if ui_hints.get("isMasterSkillEditor") is True:
+            continue
+        if (
+            component_kind in ("tool", "agent")
+            or getattr(node_cls, "usable_as_tool", False)
+        ):
+            yield node_type, node_cls
+
+
 def register_group(*, key: str, metadata: GroupMetadata) -> None:
     """Register a component-palette group's metadata.
 

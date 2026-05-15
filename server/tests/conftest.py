@@ -92,6 +92,7 @@ _make_submodule(
 _make_submodule("core", "container", {"container": MagicMock()})
 _make_submodule("core", "database", {"Database": MagicMock})
 _make_submodule("core", "config", {"Settings": MagicMock})
+_make_submodule("core", "cache", {"CacheService": MagicMock})
 
 # core.paths — central path resolution. Stub the public surface with
 # tmpdir-rooted Paths so plugin module imports don't trip over the

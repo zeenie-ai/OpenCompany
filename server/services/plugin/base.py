@@ -144,6 +144,23 @@ class BaseNode:
     component_kind: ClassVar[str] = "generic"
     usable_as_tool: ClassVar[bool] = False
 
+    # Wave 12 D5: LLM-visible name + description for plugins surfaced as
+    # AI tools (ToolNode subclasses, ActionNodes marked usable_as_tool=True,
+    # SpecializedAgentBase subclasses).
+    #
+    # ``tool_name`` is genuinely distinct from ``type`` (camelCase → snake;
+    # e.g. ``calculatorTool`` → ``calculator``, ``pythonExecutor`` →
+    # ``python_code``); plugins declare it when they want an LLM-facing
+    # name that differs from the registry key.
+    #
+    # ``tool_description`` defaults to falling back to ``cls.description``
+    # at resolve time — plugins ONLY override when the LLM-facing variant
+    # needs to differ materially from the human-facing description
+    # (writeTodos' instruction-heavy prompt, pythonExecutor's available-
+    # libraries hint, specialized agents' ONE-SHOT pattern, etc.).
+    tool_name: ClassVar[str] = ""
+    tool_description: ClassVar[str] = ""
+
     # Set by __init_subclass__: {op_name: OperationSpec}
     _operations: ClassVar[Dict[str, OperationSpec]] = {}
     # Flag so concrete subclasses auto-register; abstract kinds don't.
@@ -178,6 +195,24 @@ class BaseNode:
                 cls.hide_input_handle = True
             if "hide_output_handle" not in cls.__dict__:
                 cls.hide_output_handle = True
+        # Wave 12 D5: auto-derive ``tool_name`` / ``tool_description`` for
+        # agents (component_kind=="agent") that don't declare their own.
+        # Pattern is parametric — every agent surfaces as
+        # ``delegate_to_<type>`` to the parent LLM. Subclasses with a
+        # distinct delegation contract (autonomous_agent's Code Mode hint,
+        # orchestrator_agent / ai_employee's "Coordinates multiple agents",
+        # rlm_agent's REPL note, claude_code_agent's coding note) override
+        # ``tool_description`` directly on the class.
+        if cls.component_kind == "agent":
+            if "tool_name" not in cls.__dict__:
+                cls.tool_name = f"delegate_to_{cls.type}"
+            if "tool_description" not in cls.__dict__:
+                agent_label = cls.display_name or cls.type
+                cls.tool_description = (
+                    f"ONE-SHOT delegation to {agent_label}. Call ONCE per "
+                    f"task, returns task_id immediately. Agent works in "
+                    f"background - do NOT re-call."
+                )
         # Eager registry write — same four registries as @register_node.
         # ORDER MATTERS: register_node_class MUST precede register_node so
         # that cls._metadata_dict() (evaluated as the metadata argument)
