@@ -180,9 +180,10 @@ class Settings(BaseSettings):
     # (``~/.claude/``), Stripe (``~/.config/stripe/``), ngrok
     # (``~/.ngrok2/``). Survives ``rm -rf`` of the repo. Resolution
     # rules (``~``, absolute, repo-relative) live in
-    # :func:`core.paths.machina_root`. One-time auto-migration of
-    # the pre-cutover ``data/`` + ``workflows/`` layout runs on
-    # startup via :func:`core.paths.migrate_legacy_layout`.
+    # :func:`core.paths.machina_root`. No auto-migration from the
+    # pre-cutover ``data/`` + ``workflows/`` layout — operators
+    # either set ``DATA_DIR=data`` to keep the old layout or move
+    # the contents manually (see ``paths.py`` docstring).
     data_dir: str = Field(default="~/.machina", env="DATA_DIR")
 
     # Credentials Database (separate encrypted database for API keys and OAuth tokens)

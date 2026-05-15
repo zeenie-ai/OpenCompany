@@ -506,20 +506,6 @@ except Exception as exc:  # pragma: no cover — defensive; MCP must not block s
     logger.warning("[main] failed to mount CLI agent MCP server: %s", exc)
 
 
-# One-time on-disk layout migration: rename pre-cutover ``data/`` +
-# ``workflows/`` trees into the flat ``.machina/`` root. Idempotent;
-# no-op on subsequent boots. Must run BEFORE any lockfile sweep or
-# CLI service init so those consumers see the new paths. See
-# ``server/core/paths.py::migrate_legacy_layout``.
-@app.on_event("startup")
-async def _migrate_legacy_layout_on_startup() -> None:
-    try:
-        from core.paths import migrate_legacy_layout
-        migrate_legacy_layout()
-    except Exception as exc:  # pragma: no cover — defensive
-        logger.warning("[main] legacy-layout migration failed: %s", exc)
-
-
 # Stale lockfile sweep on startup — mirrors VSCode's behavior. PIDs in
 # leftover lockfiles that are no longer alive get cleaned up.
 @app.on_event("startup")

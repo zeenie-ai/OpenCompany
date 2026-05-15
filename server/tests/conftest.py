@@ -110,7 +110,6 @@ _make_submodule("core", "paths", {
     "workflows_dir": lambda: _TEST_MACHINA_ROOT / "workflows",
     "whatsapp_dir": lambda: _TEST_MACHINA_ROOT / "whatsapp",
     "credentials_db_path": lambda: _TEST_MACHINA_ROOT / "credentials.db",
-    "migrate_legacy_layout": lambda: 0,
 })
 
 

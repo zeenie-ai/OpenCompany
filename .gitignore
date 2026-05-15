@@ -131,16 +131,14 @@ pnpm-store/
 .claude/
 # MachinaOs runtime root (`server/core/paths.py::machina_root`). Holds
 # claude/, workspaces/, workflows/, whatsapp/, credentials.db,
-# machina.db — every machine-local artefact. Override path via
-# `DATA_DIR` env var in `.env`. Auto-migrated from the legacy `data/`
-# + `workflows/` layout on first boot.
+# workflow.db — every machine-local artefact. Override path via
+# `DATA_DIR` env var in `.env` (default is `~/.machina`, the user
+# home dir; not normally present at the repo root).
 /.machina/
-# Legacy data dir (pre-cutover layout). Auto-migrated into `.machina/`
-# on first boot but the empty husk may linger if rmdir failed; keep
-# ignored so partial state can't accidentally land in commits.
+# Legacy data + workflows dirs from the pre-cutover layout. Operators
+# upgrading from older releases either set `DATA_DIR=data` to keep
+# the old layout or `mv` the contents to `~/.machina/` manually.
 /data/
-# Legacy workflows dir (pre-cutover layout). Auto-migrated into
-# `.machina/workflows/` on first boot.
 /workflows/
 # Patch archive left behind by `git format-patch` during one-off
 # merges (see ../.merge-archive cleanup commits). Never committed.
