@@ -180,7 +180,15 @@ async def delete_cron_schedules_for_deployment(
 
     deleted = 0
     try:
-        async for desc in client.list_schedules(query=query):
+        # ``Client.list_schedules`` is ``async def`` (returns a coroutine
+        # that resolves to ``ScheduleAsyncIterator``), unlike
+        # ``Client.list_workflows`` which is a plain function returning
+        # the iterator directly. Calling ``async for`` on the coroutine
+        # raises "'async for' requires an object with __aiter__".
+        # Reference:
+        #   https://python.temporal.io/temporalio.client.Client.html#list_schedules
+        iterator = await client.list_schedules(query=query)
+        async for desc in iterator:
             sched_id = desc.id
             try:
                 handle = client.get_schedule_handle(sched_id)

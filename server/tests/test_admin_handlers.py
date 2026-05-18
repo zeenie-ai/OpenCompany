@@ -142,14 +142,35 @@ class TestListCanarySchedules:
 
     @pytest.mark.asyncio
     async def test_visibility_query_filters_cron_kind(self, monkeypatch):
+        """``Client.list_schedules`` is ``async def`` (returns coroutine
+        resolving to ``ScheduleAsyncIterator``) — distinct from
+        ``Client.list_workflows`` which returns the iterator directly.
+        Stub must match the real SDK shape: a coroutine that returns
+        an async iterator. Pre-fix the stub was an async generator
+        function which masked an ``async for`` over a coroutine bug —
+        production code raised ``'async for' requires an object with
+        __aiter__ method, got coroutine`` on every deployment cancel.
+        """
         from services.events.admin_handlers import handle_list_canary_schedules
 
         recorded_queries: List[str] = []
 
-        async def fake_list(query):
+        class _FakeScheduleIterator:
+            def __init__(self, ids):
+                self._ids = list(ids)
+
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                if not self._ids:
+                    raise StopAsyncIteration
+                sched_id = self._ids.pop(0)
+                return MagicMock(id=sched_id, search_attributes=None)
+
+        async def fake_list(query, **kwargs):
             recorded_queries.append(query)
-            for sched_id in ["cron-schedule-wf-1-a", "cron-schedule-wf-1-b"]:
-                yield MagicMock(id=sched_id, search_attributes=None)
+            return _FakeScheduleIterator(["cron-schedule-wf-1-a", "cron-schedule-wf-1-b"])
 
         client = MagicMock()
         client.list_schedules = fake_list
@@ -169,6 +190,35 @@ class TestListCanarySchedules:
         q = recorded_queries[0]
         assert "EventWorkflowId='wf-1'" in q
         assert "EventTriggerKind='cron'" in q
+
+    def test_handler_awaits_list_schedules_before_async_for(self):
+        """Regression: the production code MUST await
+        ``client.list_schedules(...)`` before iterating. ``list_schedules``
+        is ``async def`` in the temporalio SDK; raw ``async for`` over
+        the coroutine raises ``'async for' requires an object with
+        __aiter__ method, got coroutine`` — observed in prod on every
+        deployment cancel before the Wave 13 follow-up fix.
+        """
+        import inspect
+
+        from services.events import admin_handlers
+
+        src = inspect.getsource(admin_handlers)
+        # The handler must NOT have a bare ``async for ... in
+        # wrapper.client.list_schedules(...)``. It must capture the
+        # iterator via ``await`` first.
+        import re
+
+        bare_pattern = re.compile(
+            r"async\s+for\s+\w+\s+in\s+\w+\.list_schedules\s*\(",
+        )
+        assert not bare_pattern.search(src), (
+            "admin_handlers contains a bare ``async for ... in "
+            "client.list_schedules(...)`` — list_schedules is async def "
+            "in temporalio; raw async for over the coroutine fails. "
+            "Use ``iterator = await client.list_schedules(query=...)`` "
+            "then ``async for desc in iterator:`` instead."
+        )
 
 
 # ---------------------------------------------------------------------------

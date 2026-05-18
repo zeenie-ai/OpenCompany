@@ -146,7 +146,12 @@ async def handle_list_canary_schedules(
 
     schedules: List[Dict[str, Any]] = []
     try:
-        async for desc in wrapper.client.list_schedules(query=query):
+        # ``Client.list_schedules`` is ``async def`` — must await it
+        # before iterating. Distinct from ``Client.list_workflows``
+        # which returns the iterator directly. See
+        # https://python.temporal.io/temporalio.client.Client.html#list_schedules
+        iterator = await wrapper.client.list_schedules(query=query)
+        async for desc in iterator:
             schedules.append(_describe_schedule(desc))
     except Exception as exc:  # noqa: BLE001
         logger.warning(

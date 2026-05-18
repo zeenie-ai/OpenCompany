@@ -177,6 +177,31 @@ class TestCreateCronSchedule:
         assert schedule_id == "cron-schedule-wf-1-cron-1"
 
 
+class _FakeScheduleIterator:
+    """Match the temporalio SDK's ``ScheduleAsyncIterator`` shape —
+    an explicit async iterator object, NOT an async generator.
+
+    ``Client.list_schedules`` is ``async def`` in the real SDK: it
+    returns a coroutine that resolves to ``ScheduleAsyncIterator``.
+    Pre-fix stubs used ``async def fake(query): yield ...`` (an async
+    generator function), which when called returns an async generator
+    directly — making ``async for fake(...)`` work AND hiding the
+    real bug that production code was doing exactly that against the
+    real coroutine-returning method.
+    """
+
+    def __init__(self, ids):
+        self._ids = list(ids)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if not self._ids:
+            raise StopAsyncIteration
+        return MagicMock(id=self._ids.pop(0))
+
+
 class TestDeleteCronSchedulesForDeployment:
     @pytest.mark.asyncio
     async def test_query_filters_by_workflow_id(self):
@@ -187,10 +212,13 @@ class TestDeleteCronSchedulesForDeployment:
         recorded_queries: List[str] = []
         deleted_ids: List[str] = []
 
-        async def fake_list(query):
+        async def fake_list(query, **kwargs):
+            # ``async def`` returning the iterator — matches real
+            # ``Client.list_schedules`` signature. NOT ``yield``.
             recorded_queries.append(query)
-            for sched_id in ["cron-schedule-wf-1-a", "cron-schedule-wf-1-b"]:
-                yield MagicMock(id=sched_id)
+            return _FakeScheduleIterator(
+                ["cron-schedule-wf-1-a", "cron-schedule-wf-1-b"],
+            )
 
         def fake_get_handle(sid):
             handle = MagicMock()
@@ -223,9 +251,10 @@ class TestDeleteCronSchedulesForDeployment:
             delete_cron_schedules_for_deployment,
         )
 
-        async def fake_list(query):
-            for sid in ["cron-schedule-wf-1-good", "cron-schedule-wf-1-bad"]:
-                yield MagicMock(id=sid)
+        async def fake_list(query, **kwargs):
+            return _FakeScheduleIterator(
+                ["cron-schedule-wf-1-good", "cron-schedule-wf-1-bad"],
+            )
 
         def fake_get_handle(sid):
             handle = MagicMock()
@@ -247,6 +276,35 @@ class TestDeleteCronSchedulesForDeployment:
         # Only the good one deleted; the bad one's failure was logged
         # + skipped.
         assert count == 1
+
+    def test_source_awaits_list_schedules_before_async_for(self):
+        """Regression: ``Client.list_schedules`` is ``async def`` in
+        the temporalio SDK. Bare ``async for ... in client.list_schedules(...)``
+        raises ``'async for' requires an object with __aiter__ method,
+        got coroutine`` at runtime — observed in prod on every deployment
+        cancel before the Wave 13 follow-up.
+
+        The fix captures the iterator via ``await`` first:
+            iterator = await client.list_schedules(query=query)
+            async for desc in iterator:
+                ...
+        """
+        import inspect
+        import re
+
+        from services.temporal import schedules as schedules_mod
+
+        src = inspect.getsource(schedules_mod.delete_cron_schedules_for_deployment)
+        bare_pattern = re.compile(
+            r"async\s+for\s+\w+\s+in\s+\w+\.list_schedules\s*\(",
+        )
+        assert not bare_pattern.search(src), (
+            "delete_cron_schedules_for_deployment contains bare "
+            "``async for ... in client.list_schedules(...)``. "
+            "list_schedules is ``async def`` in temporalio — must "
+            "``await`` to get the iterator first. See "
+            "https://python.temporal.io/temporalio.client.Client.html#list_schedules"
+        )
 
 
 # ---------------------------------------------------------------------------
