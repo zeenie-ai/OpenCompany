@@ -11,9 +11,12 @@ this refresh callback and ``_handlers.py``'s WS commands.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.logging import get_logger
+
+if TYPE_CHECKING:
+    from services.status_broadcaster import StatusBroadcaster
 
 logger = get_logger(__name__)
 
@@ -38,11 +41,16 @@ def temporal_status_snapshot() -> dict[str, Any]:
     }
 
 
-async def refresh_temporal_status() -> None:
-    """Broadcast the Temporal + Postgres status snapshots on WS connect."""
-    from services.status_broadcaster import get_status_broadcaster
+async def refresh_temporal_status(broadcaster: "StatusBroadcaster") -> None:
+    """Broadcast the Temporal + Postgres status snapshots on WS connect.
 
-    broadcaster = get_status_broadcaster()
+    Signature matches the ``register_service_refresh`` callback contract
+    — :meth:`StatusBroadcaster._refresh_all_services` invokes every
+    registered callback as ``callback(self)`` (passes the broadcaster
+    as the sole positional argument). Without the parameter the
+    framework's ``TaskGroup`` swallows a ``TypeError: takes 0 positional
+    arguments but 1 was given`` on every server boot.
+    """
     await broadcaster.broadcast({
         "type": "temporal_status",
         "data": temporal_status_snapshot(),

@@ -492,6 +492,79 @@ class TestSendCustomEventPayload:
 
 
 # ============================================================================
+# 5) Service-refresh callback signature contract
+# ============================================================================
+
+
+class TestServiceRefreshCallbackSignature:
+    """``StatusBroadcaster._refresh_all_services`` invokes every callback
+    registered via ``register_service_refresh`` as ``callback(self)`` — the
+    broadcaster is passed as the sole positional argument.
+
+    Regression: a callback declared ``async def refresh() -> None`` (no
+    args) crashes at refresh-fan-out time with ``TypeError: takes 0
+    positional arguments but 1 was given``. The TaskGroup swallows the
+    exception and logs at WARNING, so the broken callback never throws
+    loudly — observed in prod for ``refresh_temporal_status`` until the
+    Wave 13 follow-up. This invariant catches the shape mismatch at
+    test time so future refresh registrations can't reintroduce it.
+    """
+
+    def test_every_registered_callback_accepts_one_positional_arg(self):
+        import inspect
+
+        # Importing the broadcaster module triggers plugin-side
+        # ``register_service_refresh(...)`` calls via the standard
+        # plugin import side-effects.
+        from services.status_broadcaster import _SERVICE_REFRESH_CALLBACKS
+
+        offenders: list[str] = []
+        for cb in list(_SERVICE_REFRESH_CALLBACKS):
+            try:
+                sig = inspect.signature(cb)
+            except (TypeError, ValueError):  # pragma: no cover — defensive
+                offenders.append(f"{cb!r} (couldn't introspect)")
+                continue
+
+            params = [
+                p for p in sig.parameters.values()
+                if p.kind in (
+                    inspect.Parameter.POSITIONAL_ONLY,
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                )
+            ]
+            required = [p for p in params if p.default is inspect.Parameter.empty]
+            # Must accept at least one positional arg (the broadcaster);
+            # additional defaults are fine, varargs (*args) is fine.
+            accepts_one_positional = (
+                any(
+                    p.kind == inspect.Parameter.VAR_POSITIONAL
+                    for p in sig.parameters.values()
+                )
+                or len(params) >= 1
+            )
+            # Must NOT require MORE than one positional — the framework
+            # only supplies the broadcaster, nothing else.
+            too_many_required = len(required) > 1
+
+            if not accepts_one_positional or too_many_required:
+                offenders.append(
+                    f"{cb.__module__}.{cb.__qualname__}{sig}"
+                )
+
+        assert not offenders, (
+            f"register_service_refresh callbacks must accept the "
+            f"StatusBroadcaster as their sole positional argument: "
+            f"``async def refresh(broadcaster) -> None``. These "
+            f"violate that contract: {offenders}. The framework calls "
+            f"each callback as ``callback(self)`` inside "
+            f"``StatusBroadcaster._refresh_all_services`` — a 0-arg "
+            f"callback raises ``TypeError: takes 0 positional arguments "
+            f"but 1 was given`` and the TaskGroup swallows it at WARNING."
+        )
+
+
+# ============================================================================
 # Module-private helpers (used by the test bodies above)
 # ============================================================================
 
