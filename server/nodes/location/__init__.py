@@ -7,10 +7,18 @@ Self-registration on import:
     The DI container's ``maps_service`` provider looks up the factory
     at instantiation time, so the framework no longer carries a
     top-level ``from nodes.location._service import MapsService``.
+  - Eager-import the three gmaps subpackages so their ``BaseNode``
+    subclasses auto-register regardless of ``pkgutil.walk_packages``
+    recursion behaviour. The conftest plugin-discovery path was
+    occasionally skipping nested subpackages on CI Linux; this
+    belt-and-braces approach makes the registration deterministic.
 """
 
 from services.plugin.service_factories import register_service_factory
 
 from ._service import MapsService
+from . import gmaps_create as _gmaps_create  # noqa: F401 — side-effect: registers GmapsCreateNode
+from . import gmaps_locations as _gmaps_locations  # noqa: F401 — registers GmapsLocationsNode
+from . import gmaps_nearby_places as _gmaps_nearby_places  # noqa: F401 — registers GmapsNearbyPlacesNode
 
 register_service_factory("maps", MapsService)
