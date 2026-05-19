@@ -14,6 +14,12 @@ from core.paths import example_workflows_dir
 logger = logging.getLogger(__name__)
 
 
+# Module-level alias so callers (and the workflow-validator contract
+# test in ``tests/test_workflow_validator.py``) can ``glob(EXAMPLES_DIR /
+# "*.json")`` without re-resolving the path on every call.
+EXAMPLES_DIR = example_workflows_dir()
+
+
 def get_example_workflows() -> List[Dict[str, Any]]:
     """Load all example workflow JSON files from disk."""
     examples = []

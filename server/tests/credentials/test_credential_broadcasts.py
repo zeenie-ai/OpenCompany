@@ -260,20 +260,29 @@ class TestCredentialRuntimeFailureBroadcast:
             )
 
     def test_basenode_permission_branch_broadcasts(self):
-        """BaseNode.execute's PermissionError branch must call
+        """BaseNode's PermissionError branch must call
         broadcast_credential_event (CloudEvents path) so the wire emits
-        a credential.<auth>.runtime_failed event the frontend can route."""
+        a credential.<auth>.runtime_failed event the frontend can route.
+
+        The actual try/except + broadcast lives in ``_execute_body``;
+        ``execute`` is a thin shell that opens the log-context + OTEL
+        span and delegates. Inspect both so the contract holds regardless
+        of which method owns the branch.
+        """
         from services.plugin import base as base_module
 
-        src = inspect.getsource(base_module.BaseNode.execute)
+        src = (
+            inspect.getsource(base_module.BaseNode.execute)
+            + inspect.getsource(base_module.BaseNode._execute_body)
+        )
         assert _BROADCAST_PATTERN.search(src), (
-            "BaseNode.execute must broadcast on PermissionError so missing "
+            "BaseNode must broadcast on PermissionError so missing "
             "credentials surface to the Credentials modal. Reuses the "
             "existing broadcast contract — same regex as mutation handlers."
         )
         # Type string convention: credential.<auth>.runtime_failed
         assert "runtime_failed" in src, (
-            "BaseNode.execute should emit credential.<auth>.runtime_failed "
+            "BaseNode should emit credential.<auth>.runtime_failed "
             "(matches the credential.oauth.connected naming convention)."
         )
 

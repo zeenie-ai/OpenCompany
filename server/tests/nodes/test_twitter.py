@@ -598,8 +598,8 @@ class TestTwitterReceive:
         waiter = _make_waiter_stub(canned_event=self.CANNED)
 
         with patched_broadcaster(), patch(
-            "services.node_executor.event_waiter", waiter
-        ), patch("services.handlers.triggers.event_waiter", waiter):
+            "services.handlers.triggers.event_waiter", waiter
+        ):
             result = await harness.execute(
                 "twitterReceive",
                 {"trigger_type": "mentions", "poll_interval": 60},
@@ -619,8 +619,8 @@ class TestTwitterReceive:
         waiter.wait_for_event = AsyncMock(side_effect=asyncio.CancelledError())
 
         with patched_broadcaster(), patch(
-            "services.node_executor.event_waiter", waiter
-        ), patch("services.handlers.triggers.event_waiter", waiter):
+            "services.handlers.triggers.event_waiter", waiter
+        ):
             result = await harness.execute(
                 "twitterReceive", {"trigger_type": "mentions"}
             )
@@ -634,8 +634,8 @@ class TestTwitterReceive:
         waiter.get_trigger_config = MagicMock(return_value=None)
 
         with patched_broadcaster(), patch(
-            "services.node_executor.event_waiter", waiter
-        ), patch("services.handlers.triggers.event_waiter", waiter):
+            "services.handlers.triggers.event_waiter", waiter
+        ):
             result = await harness.execute(
                 "twitterReceive", {"trigger_type": "mentions"}
             )
@@ -649,8 +649,8 @@ class TestTwitterReceive:
         waiter.wait_for_event = AsyncMock(side_effect=RuntimeError("boom"))
 
         with patched_broadcaster(), patch(
-            "services.node_executor.event_waiter", waiter
-        ), patch("services.handlers.triggers.event_waiter", waiter):
+            "services.handlers.triggers.event_waiter", waiter
+        ):
             result = await harness.execute(
                 "twitterReceive", {"trigger_type": "mentions"}
             )

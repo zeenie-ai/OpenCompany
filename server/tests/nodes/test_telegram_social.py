@@ -355,7 +355,16 @@ class TestSocialSend:
             return_value={"success": True, "message_id": "wamid.xyz"}
         )
 
-        with patch("nodes.whatsapp._service.handle_whatsapp_send", whatsapp_send):
+        # The social node resolves the platform handler via the
+        # social_provider_registry (Wave 11.I plugin self-registration).
+        # Patching nodes.whatsapp._service.handle_whatsapp_send does NOT
+        # affect the registered handler — the registry captured a strong
+        # ref to the original function object at import time. Patch the
+        # registry lookup instead.
+        with patch(
+            "services.plugin.social_provider_registry.get_social_send_handler",
+            return_value=whatsapp_send,
+        ):
             result = await harness.execute(
                 "socialSend",
                 {
@@ -425,7 +434,12 @@ class TestSocialSend:
             return_value={"success": False, "error": "rpc boom"}
         )
 
-        with patch("nodes.whatsapp._service.handle_whatsapp_send", whatsapp_send):
+        # See test_whatsapp_text_happy_path: patch the registry lookup,
+        # not the module attribute the registry already captured.
+        with patch(
+            "services.plugin.social_provider_registry.get_social_send_handler",
+            return_value=whatsapp_send,
+        ):
             result = await harness.execute(
                 "socialSend",
                 {
