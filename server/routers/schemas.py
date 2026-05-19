@@ -7,7 +7,7 @@ the design rationale and docs-internal/schema_source_of_truth_rfc.md
 for the frontend consumer (useNodeOutputSchemaQuery).
 """
 
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, HTTPException, Path, Query, Response
 from fastapi.responses import FileResponse
 
 from nodes._visuals import get_plugin_icon_path
@@ -19,6 +19,7 @@ from services.node_output_schemas import (
     list_node_types_with_schema,
 )
 from services.node_spec import get_node_spec, list_node_groups, list_node_types_with_spec
+from services.plugin.identifiers import NODE_TYPE_PATTERN
 
 router = APIRouter(prefix="/api/schemas", tags=["schemas"])
 
@@ -118,7 +119,7 @@ async def get_credential_icon(provider: str):
 
 @router.get("/nodes/{node_type}/icon")
 async def get_node_icon(
-    node_type: str,
+    node_type: str = Path(..., pattern=NODE_TYPE_PATTERN),
     variant: str = Query("light", pattern="^(light|dark)$"),
 ):
     """Return the plugin folder's co-located ``icon.svg``.

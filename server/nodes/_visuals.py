@@ -30,6 +30,8 @@ import json
 from pathlib import Path
 from typing import Dict, Optional
 
+from services.plugin.identifiers import is_valid_node_type
+
 
 _VISUALS_PATH = Path(__file__).resolve().parent / "visuals.json"
 
@@ -99,6 +101,8 @@ def get_plugin_meta(node_type: str, key: Optional[str] = None) -> Optional[dict 
     """
     from services.node_registry import get_node_class
 
+    if not is_valid_node_type(node_type):
+        return None
     cls = get_node_class(node_type)
     if cls is None:
         return None
@@ -156,6 +160,8 @@ def get_plugin_icon_path(node_type: str, variant: str = "light") -> Optional[Pat
     # itself doesn't import _visuals, but plugin modules import both).
     from services.node_registry import get_node_class
 
+    if not is_valid_node_type(node_type):
+        return None
     cls = get_node_class(node_type)
     if cls is None:
         return None
