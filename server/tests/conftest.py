@@ -91,6 +91,7 @@ _make_submodule(
 )
 _make_submodule("core", "container", {"container": MagicMock()})
 _make_submodule("core", "database", {"Database": MagicMock})
+_make_submodule("core", "credentials_database", {"CredentialsDatabase": MagicMock})
 _make_submodule("core", "config", {"Settings": MagicMock})
 _make_submodule("core", "cache", {"CacheService": MagicMock})
 
@@ -104,6 +105,8 @@ _TEST_MACHINA_ROOT = Path(__file__).parent / "_test_machina_root"
 _make_submodule("core", "paths", {
     "project_root": lambda: _TEST_MACHINA_ROOT.parent,
     "machina_root": lambda: _TEST_MACHINA_ROOT,
+    "packages_dir": lambda: _TEST_MACHINA_ROOT / "packages",
+    "package_dir": lambda name: _TEST_MACHINA_ROOT / "packages" / name,
     "claude_config_dir": lambda: _TEST_MACHINA_ROOT / "claude",
     "claude_npm_dir": lambda: _TEST_MACHINA_ROOT / "claude" / "npm",
     "workspaces_dir": lambda: _TEST_MACHINA_ROOT / "workspaces",

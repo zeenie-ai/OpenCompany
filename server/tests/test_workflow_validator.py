@@ -393,11 +393,12 @@ class TestRemapNodeIds:
         import glob
         import json
 
-        from services.example_loader import EXAMPLES_DIR
+        from core.paths import example_workflows_dir
         from services.workflow_import import remap_node_ids
 
+        examples_dir = example_workflows_dir()
         all_ids = collections.defaultdict(list)
-        for path in sorted(glob.glob(str(EXAMPLES_DIR / "*.json"))):
+        for path in sorted(glob.glob(str(examples_dir / "*.json"))):
             with open(path, encoding="utf-8") as fh:
                 wf = json.load(fh)
             nodes, _, _ = remap_node_ids(
