@@ -184,7 +184,19 @@ class Manager:
             await anyio.sleep_forever()
 
     async def _stop_proc(self, proc: anyio.abc.Process, spec: ServiceSpec) -> None:
-        """SIGTERM (POSIX) / TerminateProcess (Win) -> wait grace -> tree-kill.
+        """Graceful stop -> wait grace -> tree-kill.
+
+        POSIX: ``proc.terminate()`` sends ``SIGTERM`` to the child.
+
+        Windows: ``os.kill(pid, CTRL_BREAK_EVENT)`` — the only Win32
+        signal-equivalent that lets a child run cleanup handlers. We
+        spawn every child with ``CREATE_NEW_PROCESS_GROUP``
+        (``cli/tree.py:new_session_kwargs``) so ``CTRL_BREAK_EVENT`` is
+        deliverable. The alternative — ``proc.terminate()`` — maps to
+        ``TerminateProcess()``, which is an instant hard kill (exit
+        code 1, no flush, no atexit, no buffer drain). That's what was
+        making temporal log ``stopped (exit 1)`` on every Ctrl+C.
+        See https://docs.python.org/3/library/subprocess.html#subprocess.CREATE_NEW_PROCESS_GROUP.
 
         Wrapped in ``CancelScope(shield=True)`` -- this is the anyio-
         documented idiom for cleanup that must run to completion during
@@ -200,8 +212,11 @@ class Manager:
         emit(spec.name, color, "stopping", stream="stderr")
         with anyio.CancelScope(shield=True):
             try:
-                proc.terminate()
-            except ProcessLookupError:
+                if sys.platform == "win32":
+                    os.kill(proc.pid, signal.CTRL_BREAK_EVENT)
+                else:
+                    proc.terminate()
+            except (ProcessLookupError, OSError):
                 return
             with anyio.move_on_after(spec.terminate_grace_seconds):
                 await proc.wait()

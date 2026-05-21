@@ -1,12 +1,29 @@
 """Cross-platform process-tree control.
 
-The single most important pattern from VS Code's process model:
-guarantee that supervised children die when the supervisor dies. On
-POSIX we use ``setsid`` + ``killpg``. On Windows we use a Job Object
-with ``JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`` so the OS atomically reaps
-every descendant when the supervisor handle closes.
+Two cooperating mechanisms guarantee supervised children die when we
+want them to (gracefully) AND die when the supervisor dies (forcibly):
+
+POSIX:
+  - ``setsid`` makes each child a process-group leader so ``killpg``
+    reaches the whole descendant tree.
+
+Windows:
+  - ``CREATE_NEW_PROCESS_GROUP`` (per-child) so the supervisor can
+    target each child with ``CTRL_BREAK_EVENT`` for graceful shutdown
+    without the signal also reaching the supervisor itself
+    (https://docs.python.org/3/library/subprocess.html#subprocess.CREATE_NEW_PROCESS_GROUP).
+    Required because ``proc.terminate()`` on Windows is
+    ``TerminateProcess()`` — an instant hard kill that leaves no time
+    for cleanup and forces exit code 1.
+  - A single Job Object with ``JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`` for
+    automatic atomic tree-kill if the supervisor dies abnormally.
+    Children created by ``CreateProcess`` auto-inherit the job, so
+    grandchildren are reaped without manual tree walks
+    (https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects).
 
 References:
+- https://docs.python.org/3/library/subprocess.html#subprocess.CREATE_NEW_PROCESS_GROUP
+- https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects
 - https://nikhilism.com/post/2017/windows-job-objects-process-tree-management/
 - microsoft/node-pty (uses Job Objects in production)
 """
@@ -15,23 +32,30 @@ from __future__ import annotations
 
 import os
 import signal
+import subprocess
 import sys
 from typing import Optional
 
 import psutil
 
 
-# ---------------------------------------------------------------- POSIX
+# ---------------------------------------------------------------- POSIX / Windows spawn kwargs
 
 def new_session_kwargs() -> dict:
-    """``Popen``/``open_process`` kwargs to start the child in a new session.
+    """``Popen``/``open_process`` kwargs to spawn the child in its own group.
 
-    Empty dict on Windows; uses ``start_new_session`` on POSIX so the
-    child is the leader of its own process group and ``killpg`` reaches
-    the entire descendant tree.
+    POSIX: ``start_new_session=True`` (``setsid``) makes the child a
+    process-group leader so ``killpg`` reaches the whole tree.
+
+    Windows: ``creationflags=CREATE_NEW_PROCESS_GROUP`` so the child can
+    receive ``CTRL_BREAK_EVENT`` from the supervisor without the console
+    Ctrl+C also reaching it. Without this flag, ``proc.terminate()`` on
+    Windows falls back to ``TerminateProcess()`` (instant hard kill,
+    exit 1, no cleanup chance) — what we're trying to avoid for daemons
+    like temporal that buffer state.
     """
     if sys.platform == "win32":
-        return {}
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
     return {"start_new_session": True}
 
 

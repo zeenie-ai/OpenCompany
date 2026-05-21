@@ -34,11 +34,11 @@ dependencies = [
     # YAML parsing (for SKILL.md files + Temporal config rendering)
     "pyyaml>=6.0",
 
-    # Temporal Postgres backend (services/temporal/)
-    # - pooch: cross-platform GitHub-release binary download + checksum + cache
-    # - pgserver: bundles PostgreSQL 16.2 binaries per platform (no Docker)
+    # Temporal CLI installer (services/temporal/_install.py).
+    # pooch: cross-platform binary download + cache (extracts the
+    # ``temporal`` CLI from the official URL at
+    # https://temporal.download/cli/archive/latest).
     "pooch>=1.8.2",
-    "pgserver>=0.1.4",
 
     # Auth
     "bcrypt>=4.2.0",

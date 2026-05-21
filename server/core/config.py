@@ -47,17 +47,18 @@ class Settings(BaseSettings):
     # Execution Engine
     dlq_enabled: bool = Field(default=False, env="DLQ_ENABLED")
 
-    # Temporal Configuration
-    temporal_enabled: bool = Field(default=False, env="TEMPORAL_ENABLED")
-    temporal_server_address: str = Field(default="localhost:7233", env="TEMPORAL_SERVER_ADDRESS")
-    temporal_namespace: str = Field(default="default", env="TEMPORAL_NAMESPACE")
-    temporal_task_queue: str = Field(default="machina-tasks", env="TEMPORAL_TASK_QUEUE")
+    # Temporal Configuration. All sourced from ``.env.template``
+    # (canonical defaults live there); no Python-side fallbacks.
+    temporal_enabled: bool = Field(env="TEMPORAL_ENABLED")
+    temporal_server_address: str = Field(env="TEMPORAL_SERVER_ADDRESS")
+    temporal_namespace: str = Field(env="TEMPORAL_NAMESPACE")
+    temporal_task_queue: str = Field(env="TEMPORAL_TASK_QUEUE")
     # F4.A: per-type activity dispatch. When True, MachinaWorkflow.run() schedules
     # `node.{type}.v{version}` per plugin (with task_queue=cls.task_queue) instead
     # of the single `execute_node_activity` legacy name. Workers register per-type
     # activities alongside the legacy one. Default off so existing deployments
     # behave identically; flip via TEMPORAL_PER_TYPE_DISPATCH=true.
-    temporal_per_type_dispatch: bool = Field(default=False, env="TEMPORAL_PER_TYPE_DISPATCH")
+    temporal_per_type_dispatch: bool = Field(env="TEMPORAL_PER_TYPE_DISPATCH")
     # F4.B: agent-as-child-workflow. When True, MachinaWorkflow.run() schedules
     # AgentWorkflow (child workflow) for the 14 migrating agent types
     # (aiAgent / chatAgent / 11 specialized agents / 2 team leads) instead of
@@ -67,7 +68,7 @@ class Settings(BaseSettings):
     # break across activity boundaries). Default off. Implies
     # temporal_per_type_dispatch=True.
     temporal_agent_workflow_enabled: bool = Field(
-        default=False, env="TEMPORAL_AGENT_WORKFLOW_ENABLED",
+        env="TEMPORAL_AGENT_WORKFLOW_ENABLED",
     )
     # Wave 12 A3: SIGTERM grace window for Temporal workers. Activities
     # mid-flight finish (or hand back to the server for retry) instead of
@@ -75,7 +76,7 @@ class Settings(BaseSettings):
     # heartbeat interval — a worker drain completes within one polling
     # cycle. Tune via env when SIGTERM-to-restart latency matters.
     temporal_graceful_shutdown_seconds: int = Field(
-        default=30, env="TEMPORAL_GRACEFUL_SHUTDOWN_SECONDS", ge=1,
+        env="TEMPORAL_GRACEFUL_SHUTDOWN_SECONDS", ge=1,
     )
     # Wave 12 canary-flag default flipped to True (2026-05-15).
     # The Temporal-native event dispatch path
@@ -91,79 +92,25 @@ class Settings(BaseSettings):
         default=True, env="EVENT_FRAMEWORK_ENABLED",
     )
 
-    # Persistence backend for the supervised Temporal cluster.
-    # 'postgres' (default) — pgserver + temporal-server binary with
-    #                         YAML config managed by services/temporal/.
-    #                         Cross-platform via pip-installed binaries.
-    # 'sqlite'             — single ServiceSpec running `temporal api`.
-    #                         Lighter dev path; in-process SQLite, lost on
-    #                         restart. Set when you need fast iteration
-    #                         and don't care about workflow durability.
-    temporal_backend: Literal["sqlite", "postgres"] = Field(
-        default="postgres", env="TEMPORAL_BACKEND",
-    )
-    # Internal Temporal service gRPC ports — exposed for the YAML config
-    # renderer and the runtime's readiness probe. Defaults match the
-    # ports Temporal documents at https://docs.temporal.io/references/configuration
+    # gRPC frontend port — the port ``temporal server start-dev``
+    # exposes for clients + supervisor readiness probe. Sourced from
+    # ``.env.template`` (canonical default lives there). Reference:
+    # https://docs.temporal.io/references/configuration
     temporal_frontend_grpc_port: int = Field(
-        default=7233, env="TEMPORAL_FRONTEND_GRPC_PORT", ge=1024, le=65535,
+        env="TEMPORAL_FRONTEND_GRPC_PORT", ge=1024, le=65535,
     )
-    temporal_matching_grpc_port: int = Field(
-        default=7235, env="TEMPORAL_MATCHING_GRPC_PORT", ge=1024, le=65535,
+    # Web UI port. ``temporal server start-dev`` defaults this to
+    # ``--port + 1000`` (i.e. 8233 alongside the default 7233 gRPC
+    # port); declared explicitly via ``--ui-port`` so the binding is
+    # intentional and surfaces in status snapshots.
+    temporal_ui_port: int = Field(
+        env="TEMPORAL_UI_PORT", ge=1024, le=65535,
     )
-    temporal_history_grpc_port: int = Field(
-        default=7234, env="TEMPORAL_HISTORY_GRPC_PORT", ge=1024, le=65535,
-    )
-    temporal_worker_grpc_port: int = Field(
-        default=7239, env="TEMPORAL_WORKER_GRPC_PORT", ge=1024, le=65535,
-    )
-    temporal_bind_local_only: bool = Field(
-        default=True, env="TEMPORAL_BIND_LOCAL_ONLY",
-    )
-    temporal_num_history_shards: int = Field(
-        default=4, env="TEMPORAL_NUM_HISTORY_SHARDS", ge=1, le=4096,
-    )
-    temporal_default_max_conns: int = Field(
-        default=20, env="TEMPORAL_DEFAULT_MAX_CONNS", ge=1, le=500,
-    )
-    temporal_visibility_max_conns: int = Field(
-        default=4, env="TEMPORAL_VISIBILITY_MAX_CONNS", ge=1, le=500,
-    )
-    # Postgres connection rotation interval. Temporal community
-    # recommendation is ~5 minutes (much shorter than the 1h default)
-    # because Postgres' default `tcp_keepalives_idle` and pooled-driver
-    # state can lead to "context canceled" errors on idle connections
-    # being reused — periodic refresh sidesteps the issue. Accepts
-    # Go-duration strings (`30s`, `5m`, `1h`).
-    temporal_max_conn_lifetime: str = Field(
-        default="5m", env="TEMPORAL_MAX_CONN_LIFETIME",
-    )
-    temporal_binary_version: str = Field(
-        default="1.31.0", env="TEMPORAL_BINARY_VERSION",
-    )
-    temporal_postgres_dsn: Optional[str] = Field(
-        default=None, env="TEMPORAL_POSTGRES_DSN",
-    )
-    # On-disk locations for Temporal persistence. Both resolve relative
-    # to ``DATA_DIR`` (cross-platform via ``Settings._resolve_under_data``);
-    # absolute paths are used verbatim. ``temporal_sqlite_path`` is the
-    # SQLite database file the dev server opens via ``temporal server
-    # start-dev --db-filename ...``. ``temporal_postgres_subdir`` is the
-    # pgserver data directory (where PostgreSQL writes its own files
-    # before Temporal touches them). ``temporal_server_subdir`` is the
-    # cwd for the postgres-backed ``temporal-server`` process (config
-    # YAML lands there). All three are env-driven so test harnesses and
-    # alternative installs can point them wherever needed without code
-    # changes.
-    temporal_sqlite_path: str = Field(
-        default="temporal/temporal.db", env="TEMPORAL_SQLITE_PATH",
-    )
-    temporal_postgres_subdir: str = Field(
-        default="postgres", env="TEMPORAL_POSTGRES_SUBDIR",
-    )
-    temporal_server_subdir: str = Field(
-        default="_temporal", env="TEMPORAL_SERVER_SUBDIR",
-    )
+    # SQLite db path passed to ``temporal server start-dev
+    # --db-filename ...``. Resolved relative to ``DATA_DIR``
+    # (``Settings._resolve_under_data``) unless absolute. Sourced from
+    # ``.env.template`` (canonical default lives there).
+    temporal_sqlite_path: str = Field(env="TEMPORAL_SQLITE_PATH")
 
     # API Keys (all optional, injected at runtime)
     google_maps_api_key: Optional[str] = Field(default=None, env="GOOGLE_MAPS_API_KEY")
@@ -287,7 +234,7 @@ class Settings(BaseSettings):
     # Filesystem-path fields that may use ``~`` in ``.env``. Expanded
     # once at load time so every downstream consumer
     # (``core.paths.machina_root``, ``Settings._resolve_under_data``,
-    # the Temporal pgserver data dir, WhatsApp runtime dir, ...) sees
+    # the Temporal SQLite path, WhatsApp runtime dir, ...) sees
     # a real path. ``Path.expanduser()`` is a no-op when ``~`` isn't
     # present, so we can run it unconditionally.
     @field_validator("data_dir", "log_file", mode="after")
@@ -346,7 +293,12 @@ class Settings(BaseSettings):
         "env_file": "../.env",
         "env_file_encoding": "utf-8",
         "case_sensitive": False,
-        "extra": "forbid",
+        # ``ignore`` lets stale ``.env`` files survive obsolete vars
+        # (e.g. the postgres-backend Temporal knobs stripped from the
+        # supervised cluster path). Without this, existing installs
+        # carrying ``TEMPORAL_BACKEND`` / ``TEMPORAL_BIND_LOCAL_ONLY`` /
+        # etc. would raise ValidationError on startup.
+        "extra": "ignore",
         "env_parse_none_str": "none",
         "env_nested_delimiter": "__",
     }

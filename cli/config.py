@@ -3,18 +3,10 @@
 Stdlib-only env-var loader. ``.env.template`` ships with every install
 and is the canonical source of defaults; ``.env`` (created by
 ``scripts/postinstall.js`` on ``npm install -g machinaos``) layers user
-overrides on top; ``os.environ`` wins over both at the call site (so
-``TEMPORAL_BACKEND=foo machina start`` still works).
+overrides on top; ``os.environ`` wins over both at the call site.
 
 Merged values are pushed into ``os.environ`` so downstream consumers
-that read ``os.environ`` directly (e.g.
-:mod:`cli.commands._temporal_specs` deciding which Temporal ServiceSpec
-set to build) see the same view as this module. Without that push the
-supervisor's environment lookups would return ``None`` even after
-``postinstall.js`` copied ``.env.template`` to ``.env`` -- the bug that
-made v0.0.79's ``npm install -g machinaos && machina start`` path
-silently fall back to the sqlite Temporal spec instead of the
-``postgres`` default declared in ``.env.template``.
+that read ``os.environ`` directly see the same view as this module.
 
 No Python-side hardcoded defaults: ``.env.template`` is the single
 source of truth. If the template is missing (broken install), we error
@@ -79,23 +71,26 @@ class Config:
     nodejs_port: int
     temporal_address: str
     temporal_enabled: bool
-    temporal_backend: str
+    temporal_ui_port: int
 
     @property
     def temporal_port(self) -> int:
-        try:
-            return int(self.temporal_address.rsplit(":", 1)[-1])
-        except (ValueError, IndexError):
-            return 7233
+        return int(self.temporal_address.rsplit(":", 1)[-1])
 
     @property
     def all_ports(self) -> list[int]:
+        # Ports the supervisor frees pre-spawn and verifies are released
+        # on ``machina stop``. ``temporal_port`` (gRPC) and
+        # ``temporal_ui_port`` are bound by the same ``temporal server
+        # start-dev`` process, so killing one kills both — listing both
+        # only matters when cleaning up stale orphans on either port.
         return [
             self.client_port,
             self.backend_port,
             self.whatsapp_port,
             self.nodejs_port,
             self.temporal_port,
+            self.temporal_ui_port,
         ]
 
 
@@ -141,5 +136,5 @@ def load_config(root: Path | None = None) -> Config:
         nodejs_port=_int(env, "NODEJS_EXECUTOR_PORT"),
         temporal_address=_require(env, "TEMPORAL_SERVER_ADDRESS"),
         temporal_enabled=_bool(env, "TEMPORAL_ENABLED"),
-        temporal_backend=_require(env, "TEMPORAL_BACKEND"),
+        temporal_ui_port=_int(env, "TEMPORAL_UI_PORT"),
     )

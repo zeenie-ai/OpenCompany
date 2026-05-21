@@ -2,8 +2,8 @@
 
 The CLI's ``Manager`` supervisor (``cli/supervisor.py``) schedules
 ``ServiceSpec`` entries by spawning a subprocess and supervising it.
-``BaseSupervisor``-managed runtimes (pgserver, Temporal binary) don't
-ship a CLI of their own -- they're Python singletons started via
+``BaseSupervisor``-managed runtimes (e.g. the Temporal CLI dev server)
+don't ship a CLI of their own -- they're Python singletons started via
 ``await runtime.start()``.
 
 This shim bridges the two: import a runtime factory by dotted path,
@@ -12,23 +12,24 @@ call it, ``await singleton.start()``, then block on a shutdown signal.
 ``await singleton.stop()``, then exit cleanly.
 
 Module location: this lives inside the ``server`` package because the
-factory targets it resolves (``services.temporal._runtime:get_postgres
-_runtime`` etc.) are server-side singletons. Hosting the shim here
-keeps the CLI free of server-side imports and lets a single ``uv run
-python -m services.temporal._supervised_runtime <factory>`` invocation
-work against the workspace ``.venv`` -- no PYTHONPATH composition, no
+factory targets it resolves
+(``services.temporal._runtime:get_temporal_server_runtime``) are
+server-side singletons. Hosting the shim here keeps the CLI free of
+server-side imports and lets a single ``uv run python -m
+services.temporal._supervised_runtime <factory>`` invocation work
+against the workspace ``.venv`` -- no PYTHONPATH composition, no
 cross-venv plumbing.
 
 Invocation (inside ``ServiceSpec.argv``, built via ``cli.run.uv_run``):
 
     uv_run("python", "-m",
            "services.temporal._supervised_runtime",
-           "services.temporal._runtime:get_postgres_runtime")
+           "services.temporal._runtime:get_temporal_server_runtime")
 
 Equivalent to (Python idiom):
 
-    from services.temporal._runtime import get_postgres_runtime
-    runtime = get_postgres_runtime()
+    from services.temporal._runtime import get_temporal_server_runtime
+    runtime = get_temporal_server_runtime()
     await runtime.start()
     await asyncio.Event().wait()  # block on signal
 """

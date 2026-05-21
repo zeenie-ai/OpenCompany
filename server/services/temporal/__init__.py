@@ -20,25 +20,21 @@ When TEMPORAL_ENABLED=false:
 __all__ = [
     "TemporalExecutor",
     "TemporalClientWrapper",
-    "PostgresRuntime",
     "TemporalServerRuntime",
-    "get_postgres_runtime",
     "get_temporal_server_runtime",
 ]
 
 from .executor import TemporalExecutor
 from .client import TemporalClientWrapper
 from ._runtime import (
-    PostgresRuntime,
     TemporalServerRuntime,
-    get_postgres_runtime,
     get_temporal_server_runtime,
 )
 
 # ---- self-registration (Wave 11 plugin-folder pattern) -------------------
 # WS handlers (temporal_status / _start / _stop) + WS-connect refresh
-# (broadcasts current Postgres+Temporal snapshot). Registries are
-# idempotent on re-import; same callable for same key is a no-op.
+# (broadcasts current Temporal snapshot). Registries are idempotent on
+# re-import; same callable for same key is a no-op.
 from ._handlers import WS_HANDLERS as _WS_HANDLERS
 from ._refresh import refresh_temporal_status as _refresh_temporal_status
 from services.ws_handler_registry import register_ws_handlers

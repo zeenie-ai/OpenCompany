@@ -1,15 +1,15 @@
-"""WebSocket handlers for Temporal + Postgres lifecycle commands.
+"""WebSocket handlers for the Temporal lifecycle commands.
 
 Wire keys registered in :mod:`services.ws_handler_registry`:
 
-  - ``temporal_status``  → status snapshot of both runtimes
-  - ``temporal_start``   → idempotent start (postgres → temporal)
-  - ``temporal_stop``    → idempotent stop (temporal → postgres)
+  - ``temporal_status``  → status snapshot of the runtime
+  - ``temporal_start``   → idempotent start
+  - ``temporal_stop``    → idempotent stop
 
 All three share the snapshot shape from
 :func:`services.temporal._refresh.temporal_status_snapshot` — the
-single source of truth for the ``{postgres, temporal}`` payload that
-the WS-connect refresh callback also emits.
+single source of truth for the ``{temporal}`` payload that the
+WS-connect refresh callback also emits.
 """
 from __future__ import annotations
 
@@ -26,21 +26,17 @@ logger = get_logger(__name__)
 async def handle_temporal_status(
     data: dict[str, Any], websocket: WebSocket,
 ) -> dict[str, Any]:
-    """Return the status snapshot for both Postgres + Temporal runtimes."""
+    """Return the status snapshot for the Temporal runtime."""
     return temporal_status_snapshot()
 
 
 async def handle_temporal_start(
     data: dict[str, Any], websocket: WebSocket,
 ) -> dict[str, Any]:
-    """Start Postgres then Temporal. Idempotent — each ``.start()``
-    returns immediately if the runtime is already running."""
-    from services.temporal._runtime import (
-        get_postgres_runtime,
-        get_temporal_server_runtime,
-    )
+    """Start Temporal. Idempotent — ``.start()`` returns immediately if
+    the runtime is already running."""
+    from services.temporal._runtime import get_temporal_server_runtime
 
-    await get_postgres_runtime().start()
     await get_temporal_server_runtime().start()
     return {"ok": True, **temporal_status_snapshot()}
 
@@ -48,14 +44,10 @@ async def handle_temporal_start(
 async def handle_temporal_stop(
     data: dict[str, Any], websocket: WebSocket,
 ) -> dict[str, Any]:
-    """Stop Temporal then Postgres. Idempotent."""
-    from services.temporal._runtime import (
-        get_postgres_runtime,
-        get_temporal_server_runtime,
-    )
+    """Stop Temporal. Idempotent."""
+    from services.temporal._runtime import get_temporal_server_runtime
 
     await get_temporal_server_runtime().stop()
-    await get_postgres_runtime().stop()
     return {"ok": True, **temporal_status_snapshot()}
 
 
