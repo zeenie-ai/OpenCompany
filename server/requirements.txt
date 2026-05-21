@@ -85,7 +85,7 @@ xdk>=0.1.0
 apify-client>=1.8.0
 
 # Telegram Bot API
-python-telegram-bot==22.6
+python-telegram-bot==22.7
 
 # Gmail API
 google-api-python-client>=2.100.0

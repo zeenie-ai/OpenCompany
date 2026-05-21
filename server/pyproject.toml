@@ -7,7 +7,7 @@ dependencies = [
     # Core
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
-    "pydantic>=2.10.0",
+    "pydantic==2.13.4",
     "pydantic-settings>=2.6.0",
 
     # Database
@@ -55,11 +55,11 @@ dependencies = [
     # langchain-core <=1.3.2), the langchain-openai DNS-rebinding SSRF
     # advisory (<1.1.14), and the langchain-text-splitters SSRF advisory
     # (<1.1.2). Full backend suite (1018/1018) re-validated after the bump.
-    "langchain-core==1.3.3",
-    "langchain-openai==1.1.14",
-    "langchain-anthropic==1.4.0",
-    "anthropic==0.94.0",
-    "langchain-google-genai==4.2.1",
+    "langchain-core==1.4.0",
+    "langchain-openai==1.2.1",
+    "langchain-anthropic==1.4.3",
+    "anthropic==0.103.1",
+    "langchain-google-genai==4.2.2",
     "google-genai==1.72.0",
     "langchain-groq==1.1.2",
     "langchain-cerebras==0.8.2",
@@ -68,7 +68,7 @@ dependencies = [
     # HTMLHeaderTextSplitter SSRF advisory; the 1.1 line requires
     # langchain-core>=1.3, which we now satisfy.
     "langchain-text-splitters==1.1.2",
-    "deepagents==0.5.2",
+    "deepagents==0.6.3",
 
     # Pydantic 2.13 changed validator ordering; pin to main's 2.12 line
     # to keep AIMessage construction/tool-schema generation identical.
