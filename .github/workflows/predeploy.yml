@@ -303,7 +303,7 @@ jobs:
         # `allowed-skips`. Without this, a doc-only PR that skips
         # backend-tests would fail the aggregator -- defeating the
         # plan-job optimisation.
-        uses: re-actors/alls-green@afee1c1eac2a506084c274e9c02c8e0687b48d9e # v1.2.2
+        uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # v1.2.2
         with:
           allowed-skips: pre-commit, build-and-lint, backend-tests, cli-tests, test-build-start
           jobs: ${{ toJSON(needs) }}
