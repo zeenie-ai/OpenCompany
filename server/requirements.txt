@@ -13,7 +13,7 @@ aiosqlite>=0.20.0
 greenlet>=3.0.0  # Required by SQLAlchemy asyncio on some platforms
 
 # Settings & Configuration
-pydantic>=2.6.0
+pydantic>=2.13.4
 pydantic-settings>=2.2.0
 python-dotenv>=1.0.0
 
