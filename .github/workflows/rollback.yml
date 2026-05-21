@@ -1,0 +1,176 @@
+# Release rollback workflow.
+#
+# Manual `workflow_dispatch`. Given a published version, marks the
+# corresponding npm tarball as deprecated with a stable message and
+# (optionally) opens a revert-the-release-commit PR so subsequent
+# CI can ship a fixed version. Pattern lifted from vercel/vercel +
+# google-gemini/gemini-cli rollback workflows.
+#
+# What this DOESN'T do (deliberate):
+#   - It does not delete the npm publication. npm policy disallows
+#     un-publishing public packages older than 72 hours; for fresh
+#     publications, `npm unpublish` is permitted but breaks every
+#     downstream consumer relying on the version. `npm deprecate`
+#     is the standard rollback verb -- the install still works for
+#     anyone with a lockfile, but new installs surface a warning.
+#   - It does not yank from PyPI. PyPI has `pip install` shim for
+#     a yank semantic but it requires manual action through the
+#     PyPI admin UI -- see https://docs.pypi.org/help/#yanked.
+#   - It does not delete the GitHub release. We keep the tag for
+#     forensics; rollback adds a stable note to the release body.
+#
+# Inputs (only `version` is required):
+#   version        — semver tag to roll back, e.g. "v0.0.72"
+#   deprecate_msg  — message npm shows during install/list. Defaults
+#                    to a security-conservative template.
+#   open_revert_pr — if true, also open a PR reverting the release
+#                    commit. Default false; usually you want to ship
+#                    a forward fix.
+
+name: Rollback Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to roll back (e.g. v0.0.72).'
+        type: string
+        required: true
+      deprecate_msg:
+        description: 'npm deprecation notice shown to installers.'
+        type: string
+        default: 'This version has been deprecated by the maintainers. Please install the latest version.'
+      open_revert_pr:
+        description: 'Open a PR reverting the release commit.'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  deprecate-npm:
+    name: npm deprecate
+    runs-on: ubuntu-latest
+    # No id-token needed -- this uses NPM_TOKEN, not OIDC, because
+    # `npm deprecate` is not in the trusted-publisher allowlist.
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+          cache: ''
+
+      - name: Normalise version
+        id: ver
+        # `npm deprecate` wants a bare semver (e.g. 0.0.72), not a tag
+        # (e.g. v0.0.72). Strip the leading `v` if present.
+        run: |
+          v="${{ inputs.version }}"
+          v="${v#v}"
+          echo "semver=${v}" >> "$GITHUB_OUTPUT"
+
+      - name: Deprecate on npm (unscoped)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm deprecate \
+            "machinaos@${{ steps.ver.outputs.semver }}" \
+            "${{ inputs.deprecate_msg }}"
+
+      - name: Deprecate on GitHub Packages (scoped)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm config set @zeenie-ai:registry https://npm.pkg.github.com
+          npm deprecate \
+            "@zeenie-ai/machinaos@${{ steps.ver.outputs.semver }}" \
+            "${{ inputs.deprecate_msg }}"
+
+  yank-pypi-notice:
+    name: PyPI yank reminder
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Print PyPI yank instructions
+        # PyPI yank is gated on UI access -- no API path that the
+        # release token can take. Emit a notice so the operator
+        # remembers to do this by hand.
+        run: |
+          echo "::notice title=Manual PyPI yank required::Yank machinaos-server@${{ inputs.version }} via https://pypi.org/manage/project/machinaos-server/release/${{ inputs.version }}/ -- 'Options' -> 'Yank'."
+
+  open-revert-pr:
+    name: Open revert PR
+    needs: deprecate-npm
+    if: inputs.open_revert_pr == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release commit
+        id: commit
+        # The release commit is the one the tag points at. `git
+        # rev-list -n1 <tag>` works regardless of whether the tag
+        # is annotated or lightweight.
+        run: |
+          sha=$(git rev-list -n1 "${{ inputs.version }}")
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+
+      - name: Create revert branch + commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          branch="rollback/${{ inputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${branch}"
+          git revert --no-edit "${{ steps.commit.outputs.sha }}"
+          git push origin "${branch}"
+
+          gh pr create \
+            --base main \
+            --head "${branch}" \
+            --title "Revert: ${{ inputs.version }} (rollback)" \
+            --body "Automated revert of ${{ inputs.version }}.
+
+          npm package deprecated via rollback.yml.
+          PyPI yank pending manual action -- see https://pypi.org/manage/project/machinaos-server/.
+
+          Reason: ${{ inputs.deprecate_msg }}"
+
+  summary:
+    name: Rollback summary
+    needs: [deprecate-npm, yank-pypi-notice]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print summary
+        run: |
+          {
+            echo "## Rollback summary for ${{ inputs.version }}"
+            echo ""
+            echo "| Step | Status |"
+            echo "|---|---|"
+            echo "| npm deprecate | ${{ needs.deprecate-npm.result }} |"
+            echo "| PyPI yank reminder | ${{ needs.yank-pypi-notice.result }} |"
+            echo "| Revert PR | ${{ inputs.open_revert_pr == true && 'requested' || 'skipped (open_revert_pr=false)' }} |"
+            echo ""
+            echo "Next steps:"
+            echo ""
+            echo "1. Manually yank \`machinaos-server@${{ inputs.version }}\` from PyPI."
+            echo "2. If shipping a forward fix, bump version and re-run release.yml."
+            echo "3. If reverting, merge the rollback PR (if requested)."
+          } >> "$GITHUB_STEP_SUMMARY"

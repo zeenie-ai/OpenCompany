@@ -113,7 +113,10 @@ venv/
 # uv (Python package manager)
 uv.lock
 server/uv.lock
-.python-version
+# .python-version at the repo root IS tracked -- it's the project-wide
+# toolchain pin (read by uv, pyenv, asdf, AND ``setup-python`` via
+# python-version-file: in our GitHub Actions workflows). Per-developer
+# overrides live in server/.python-version (still ignored).
 server/.python-version
 
 # =============================================================================

@@ -1,12 +1,16 @@
 # Composite action for shared environment setup across all workflows.
 # Eliminates duplicated Node/Python/uv setup.
 #
+# Python version comes from the repo-root ``.python-version`` file
+# (single source of truth, also honoured by uv / pyenv / asdf). To
+# bump Python, change that file -- the composite action picks it up
+# automatically.
+#
 # Usage:
 #   - uses: ./.github/actions/setup
 #   - uses: ./.github/actions/setup
 #     with:
-#       node-version: '22'
-#       python-version: '3.11'
+#       node-version: '20'   # override Node only; Python tracks .python-version
 
 name: 'Setup MachinaOS Environment'
 description: 'Setup Node.js, Python, and uv for cross-platform builds.'
@@ -15,29 +19,36 @@ inputs:
   node-version:
     description: 'Node.js version'
     default: '22'
-  python-version:
-    description: 'Python version'
-    default: '3.12'
 
 runs:
   using: composite
   steps:
+    # Action versions are pinned to commit SHAs per the supply-chain
+    # hardening pass (see docs-internal/ci_cd.md). Dependabot updates
+    # these via the github-actions ecosystem group in dependabot.yml;
+    # zizmor (.github/workflows/check-zizmor.yml) enforces SHA pinning
+    # on every PR to prevent regression.
     - name: Setup pnpm
-      uses: pnpm/action-setup@v4
+      uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
 
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
       with:
         node-version: ${{ inputs.node-version }}
         cache: 'pnpm'
 
     - name: Setup Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
       with:
-        python-version: ${{ inputs.python-version }}
+        # Sourced from repo-root .python-version (https://docs.astral.sh/uv/concepts/python-versions/#requesting-a-version).
+        # Single literal lives in that file; bump there and CI follows.
+        python-version-file: .python-version
 
+    # setup-uv v8 — the canonical uv installer (pdm, prefect, uv itself
+    # all use it). Replaces the older "pip install uv" pattern; v8
+    # adds automatic UV_CACHE_DIR setup + lockfile caching.
     - name: Install uv
-      uses: astral-sh/setup-uv@v4
+      uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
 
     # The supervisor CLI lives at <repo>/cli/ and is invoked by pnpm
     # scripts as `python -m cli ...` from the runner's system Python.

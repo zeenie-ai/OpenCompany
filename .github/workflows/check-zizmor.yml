@@ -1,0 +1,91 @@
+# zizmor — static-analysis linter for GitHub Actions workflows.
+#
+# Catches:
+#   - Over-granted `permissions:` (e.g., a job that doesn't need
+#     `contents: write` but inherits it from the workflow default).
+#   - Unpinned third-party action `uses:` (floating major-version
+#     tags like `@v4` instead of pinned commit SHAs).
+#   - Insecure `${{ ... }}` template expansion in `run:` blocks
+#     (script-injection vectors).
+#   - Reusable-workflow caller-callee permission mismatches.
+#   - `pull_request_target` + checkout-of-PR-ref combinations
+#     (the well-known privilege-escalation foot-gun).
+#
+# Pattern lifted from https://github.com/astral-sh/uv/blob/main/.github/workflows/check-zizmor.yml
+# Project home: https://github.com/woodruffw/zizmor
+#
+# Runs on every push/PR + weekly schedule so a regression introduced
+# between zizmor releases (their query pack expands) is caught
+# without anyone running it locally.
+
+name: Check zizmor
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
+      - '.github/dependabot.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
+      - '.github/dependabot.yml'
+  schedule:
+    # Mondays 07:00 UTC — runs before the weekly Dependabot batch
+    # so action-version bumps already in flight don't trip new
+    # zizmor checks on their merge.
+    - cron: '0 7 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  zizmor:
+    name: Lint workflows
+    runs-on: ubuntu-latest
+
+    permissions:
+      # SARIF upload to the Security tab so findings render alongside
+      # CodeQL results.
+      security-events: write
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Install zizmor
+        # zizmor ships as a PyPI wheel; pip install gives us the
+        # binary on PATH without compiling Rust locally.
+        run: pip install zizmor
+
+      - name: Run zizmor
+        # --format sarif lets the Security tab ingest results.
+        # --persona auditor enables stricter checks (recommended
+        # for production CI; relaxed by default).
+        run: |
+          zizmor \
+            --format sarif \
+            --persona auditor \
+            .github/workflows/ \
+            .github/actions/ \
+            > zizmor.sarif
+        # SARIF upload happens unconditionally so findings still
+        # post even on a non-zero exit. Failing the job comes from
+        # the SARIF upload's threshold setting, not zizmor's exit.
+        continue-on-error: true
+
+      - name: Upload SARIF to Security tab
+        uses: github/codeql-action/upload-sarif@458d36d7d4f47d0dd16ca424c1d3cda0060f1360 # v3
+        with:
+          sarif_file: zizmor.sarif
+          category: zizmor

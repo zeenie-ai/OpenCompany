@@ -1,328 +1,269 @@
 # CI/CD Pipeline
 
-Internal reference for the GitHub Actions CI/CD pipeline. Covers all workflows, the shared composite action, predeploy validation, release publishing, and documentation deployment.
+Internal reference for MachinaOs's GitHub Actions setup. Workflow inventory, security posture, release flow.
 
 ---
 
-## Overview
+## Workflow inventory
 
 ```
-                          +------------------+
-  push to main ---------> |     ci.yml       |---+
-  PR to main -----------> |                  |   |
-                          +------------------+   |
-                                                 |    +--------------------+
-  PR to main (Dockerfile +------------------+    +--> |  predeploy.yml     |
-  or compose changes) --> | docker-build.yml |---+--> |  (reusable)        |
-                          +------------------+   |    |                    |
-                                                 |    | - build-and-lint   |
-  v*.*.* tag push ------> +------------------+  |    | - docker-build     |
-  GitHub release -------> |   release.yml    |---+    | - docker-compose   |
-  manual dispatch ------> |                  |        | - test-install     |
-                          |  +-- predeploy --+        +--------------------+
-                          |  |
-                          |  +-- publish-npm ---------> npmjs.org (machina)
-                          |  +-- publish-github-pkgs -> GitHub Packages (@zeenie-ai/machina)
-                          +------------------+
+                           +------------------+
+  push to main ----------> |     ci.yml       |---+
+  PR to main ------------> |                  |   |
+                           +------------------+   |
+                                                  |    +---------------------+
+                                                  +--> |   predeploy.yml     |
+                                                  |    |   (workflow_call)   |
+  v*.*.* tag push -------> +------------------+   |    |                     |
+  manual dispatch -------> |   release.yml    |---+    | - plan              |
+                           |   (dry-run by    |        | - pre-commit        |
+                           |    default for   |        | - build-and-lint    |
+                           |    manual runs)  |        | - backend-tests     |
+                           +------------------+        |   (3 shards)        |
+                                  |                    | - cli-tests         |
+                                  +-- predeploy        | - test-build-start  |
+                                  +-- audit            |   (3 OS)            |
+                                  +-- build-for-publish| - ci-passed (alls)  |
+                                  +-- publish-npm      +---------------------+
+                                  +-- publish-github-packages
+                                  +-- publish-pypi  --> publish-pypi.yml (reusable)
+                                  +-- create-github-release
+                                  +-- test-install --> test-install.yml
+
+  manual dispatch -------> +------------------+
+                           |   rollback.yml   |  npm deprecate + (optional) revert PR
+                           +------------------+
+
+  weekly + on PR --------> +------------------+
+                           |   codeql.yml     |  Python + JS/TS SAST (security-extended)
+                           +------------------+
+
+  on .github changes ----> +------------------+
+                           |  check-zizmor.yml|  workflow-security linter (SARIF)
+                           +------------------+
 
   push to docs-MachinaOs/ +------------------+
-  manual dispatch ------> |    docs.yml      |-------> Mintlify (docs site)
-                          +------------------+
+                           |    docs.yml      |  Mintlify documentation deploy
+                           +------------------+
 ```
 
-### Workflow Summary
+### Workflow summary
 
 | Workflow | File | Triggers | Purpose |
 |----------|------|----------|---------|
-| CI | `.github/workflows/ci.yml` | Push to main, PRs to main | Validate every code change via predeploy |
-| Docker Build | `.github/workflows/docker-build.yml` | PRs to main (Dockerfile/compose changes) | Validate Docker-specific changes via predeploy |
-| Release | `.github/workflows/release.yml` | `v*.*.*` tags, GitHub releases, manual | Predeploy gate then publish to npm + GitHub Packages |
-| Deploy Docs | `.github/workflows/docs.yml` | Push to `docs-MachinaOs/**` on main, manual | Deploy Mintlify documentation |
-| Predeploy | `.github/workflows/predeploy.yml` | Called by other workflows (`workflow_call`) | Reusable validation: build, lint, Docker, cross-platform install |
-| Setup Action | `.github/actions/setup/action.yml` | Used as composite action step | Shared Node.js + Python + uv environment setup |
+| CI | `.github/workflows/ci.yml` | push/PR → main | Delegates to predeploy.yml |
+| Predeploy | `.github/workflows/predeploy.yml` | `workflow_call` | Plan + pre-commit + build/lint + sharded tests + OS-matrix build/start + alls-green |
+| Release | `.github/workflows/release.yml` | `v*.*.*` tag, manual (dry-run default) | predeploy → audit → publish (npm + GH Packages + PyPI) → SLSA attest → release → test-install |
+| Publish PyPI | `.github/workflows/publish-pypi.yml` | `workflow_call` | OIDC trusted publishing for `machinaos-server` |
+| Test Install | `.github/workflows/test-install.yml` | manual, called from release | Cross-platform install smoke (3 OS × 3 paths) |
+| Rollback | `.github/workflows/rollback.yml` | manual (`workflow_dispatch`) | npm deprecate + optional revert PR |
+| CodeQL | `.github/workflows/codeql.yml` | push/PR + weekly Sun 20:30 UTC | Python + JS/TS SAST |
+| Zizmor | `.github/workflows/check-zizmor.yml` | `.github/**` changes + weekly Mon 07:00 UTC | Workflow-security linter |
+| Docs | `.github/workflows/docs.yml` | push to `docs-MachinaOs/**` | Mintlify deploy |
+| Setup | `.github/actions/setup/action.yml` | (composite) | pnpm 9 + Node 22 + Python (from `.python-version`) + uv |
 
-### Required Secrets
+### Supply chain
 
-| Secret | Used By | Description |
+- **All action `uses:` references are pinned to commit SHAs.** Enforced by [zizmor](https://github.com/woodruffw/zizmor) on every PR touching `.github/`. Dependabot rewrites pins via the `github-actions` ecosystem group.
+- **`.github/dependabot.yml`** — weekly grouped updates for npm + pip (root + server/) + github-actions ecosystems. Each grouped PR is one ecosystem × one dependency-type.
+- **`.pre-commit-config.yaml`** — ruff (format + lint), prettier (client/), eslint, actionlint, stdlib hygiene. Mirrored as a CI job in predeploy.yml so missed local installs still gate merges.
+- **`.python-version`** — single source of truth (`3.12`). Consumed via `python-version-file:` in `setup-python` everywhere except the `test-install.yml` jobs which run after `actions/checkout` so the file is available.
+
+### Required secrets
+
+| Secret | Used by | Description |
 |--------|---------|-------------|
-| `NPM_TOKEN` | release.yml | npm registry authentication for publishing |
-| `GITHUB_TOKEN` | release.yml | GitHub Packages authentication (auto-provided by Actions) |
-| `MINTLIFY_TOKEN` | docs.yml | Mintlify documentation deployment token |
+| `NPM_TOKEN` | release.yml, rollback.yml | npm registry publish + deprecate |
+| `GITHUB_TOKEN` | release.yml, rollback.yml | GitHub Packages publish + revert-PR creation (auto-provided) |
+| `MINTLIFY_TOKEN` | docs.yml | Mintlify documentation deployment |
+
+PyPI publishing uses **OIDC trusted publishing** (no PYPI_TOKEN secret needed). One-time setup: configure MachinaOs as a trusted publisher on PyPI with workflow=`publish-pypi.yml`, environment=`pypi`.
 
 ---
 
-## Composite Setup Action
+## Composite setup action
 
-**File:** `.github/actions/setup/action.yml`
-
-Shared environment setup used by `predeploy.yml` jobs. Eliminates duplicated Node/Python/uv installation across workflows.
+**File:** [.github/actions/setup/action.yml](../.github/actions/setup/action.yml)
 
 ```yaml
-# Usage in workflow steps:
 - uses: ./.github/actions/setup
 - uses: ./.github/actions/setup
   with:
-    node-version: '22'
+    node-version: '20'   # override Node only; Python tracks .python-version
 ```
 
-### What It Installs
+| Tool | Version source | Action (pinned SHA) |
+|------|---------------|---------------------|
+| pnpm | hard-coded `9` (default) | `pnpm/action-setup` |
+| Node.js | `node-version` input, default `22` | `actions/setup-node` |
+| Python | `.python-version` file (`3.12`) | `actions/setup-python` |
+| uv | latest in v8 line | `astral-sh/setup-uv` |
 
-| Tool | Default Version | Action Used |
-|------|----------------|-------------|
-| Node.js | 20 | `actions/setup-node@v4` (with npm cache) |
-| Python | 3.12 | `actions/setup-python@v5` |
-| uv | latest | `astral-sh/setup-uv@v4` |
-
-### Inputs
-
-| Input | Default | Description |
-|-------|---------|-------------|
-| `node-version` | `'20'` | Node.js version to install |
-| `python-version` | `'3.12'` | Python version to install |
-
-Python and uv are needed because `postinstall.js` skips Python venv setup in CI, so they must be available for the `machina build` command in `test-install`.
+After tool install, the composite installs the supervisor CLI editably (`uv pip install --system -e .`) and runs a verify step that prints each tool's version.
 
 ---
 
-## Predeploy Validation
+## Predeploy validation
 
-**File:** `.github/workflows/predeploy.yml`
+**File:** [.github/workflows/predeploy.yml](../.github/workflows/predeploy.yml)
 
-The core reusable workflow. Triggered via `workflow_call` by `ci.yml`, `docker-build.yml`, and `release.yml`. Contains 4 jobs -- `build-and-lint`, `docker-build`, and `test-install` run in parallel; `docker-compose-test` depends on `docker-build`.
+Six jobs gated by a `plan` job that emits change-detection booleans (lifted from [astral-sh/uv's `ci.yml`](https://github.com/astral-sh/uv/blob/main/.github/workflows/ci.yml)):
 
-### Job: build-and-lint
+- `plan` — `dorny/paths-filter` decides which downstream jobs need to run. Boolean outputs: `backend_changed`, `frontend_changed`, `cli_changed`, `workflows_changed`, `docs_only`.
+- `pre-commit` — runs `pre-commit run --all-files`. Catches lint/format issues for contributors who haven't installed the hook locally. Skipped for doc-only PRs (unless workflows also changed).
+- `build-and-lint` — full `pnpm run build` + frontend tests (vitest, 148 cases) + ESLint + tsgo type-check. Skipped for doc-only PRs.
+- `backend-tests` — pytest sharded by domain (prefect pattern):
+  - `nodes` — `tests/nodes/`
+  - `services` — `tests/services/` + `tests/temporal/` + `tests/llm/` + `tests/credentials/`
+  - `root` — everything else (cross-cutting invariants)
 
-Validates that the full project builds and the client passes linting.
-
-| Step | Command | Description |
-|------|---------|-------------|
-| Checkout | `actions/checkout@v4` | Clone repo |
-| Setup environment | `./.github/actions/setup` | Install Node.js 20, Python 3.12, uv |
-| Build all services | `npm run build` | Full production build |
-| Lint client | `cd client && npm run lint` | ESLint/TypeScript validation |
-
-### Job: docker-build
-
-Validates all 3 Docker images build successfully. Uses Docker Buildx with GitHub Actions cache for layer reuse.
-
-| Image | Context | Dockerfile | Notes |
-|-------|---------|------------|-------|
-| Frontend | `./client` | `./client/Dockerfile` | Multi-stage build, `target: production` |
-| Backend | `./server` | `./server/Dockerfile` | Python 3.12-slim |
-| WhatsApp | `./docker` | `./docker/Dockerfile.whatsapp` | Node.js 20-alpine with whatsapp-rpc |
-
-All builds use:
-- `docker/setup-buildx-action@v3`
-- `docker/build-push-action@v6`
-- `push: false` (validation only, no registry push)
-- `cache-from: type=gha` / `cache-to: type=gha,mode=max` (GitHub Actions layer cache)
-
-### Job: docker-compose-test
-
-**Depends on:** `docker-build`
-
-Full-stack smoke test using the production Docker Compose configuration.
-
-**Steps:**
-1. Create `.env` from `.env.template`
-2. Build with `docker compose -f docker-compose.prod.yml build`
-3. Start services with `docker compose -f docker-compose.prod.yml up -d`
-4. Health check loop (30 retries, 2s interval = 60s max):
-   - Backend: `curl -sf http://localhost:3010/health`
-   - Frontend: `curl -f http://localhost:3000`
-   - Print `docker compose ps` on success
-5. On failure: dump all container logs
-6. Always: `docker compose -f docker-compose.prod.yml down -v` (cleanup)
-
-### Job: test-install
-
-Cross-platform npm package installation and CLI validation.
-
-**Matrix:**
-
-| Axis | Values |
-|------|--------|
-| OS | `ubuntu-latest`, `macos-latest`, `windows-latest` |
-| Node.js | 20, 22 |
-
-Total: **6 combinations**, `fail-fast: false` (all run regardless of individual failures).
-
-**Steps:**
-1. Checkout
-2. Setup environment (composite action with matrix `node-version`)
-3. `npm pack` -- create tarball
-4. `npm install -g machina-*.tgz` -- global install from tarball
-5. `machina --help` -- verify CLI is available
-6. `machina build` -- install client deps, build client, setup Python venv
-7. Verify build artifacts exist at `$(npm root -g)/machina`:
-   - `.env` file
-   - `client/dist/` directory
-   - `server/.venv/` directory
-8. `machina start &` -- start in background, wait 10s, verify process is still running
-
-All steps use `shell: bash` for cross-platform compatibility (Windows uses Git Bash).
+  Gated on `backend_changed || workflows_changed`. Each shard runs the same `uv sync` + `uv run pytest` pattern.
+- `cli-tests` — 106 CLI tests via `python -m pytest cli/tests/`. Gated on `cli_changed || workflows_changed`.
+- `test-build-start` — cross-OS (`ubuntu-latest`, `macos-latest`, `windows-latest`) build + start smoke. Verifies `client/dist/` + `server/.venv/` materialise and the supervisor brings up the backend reachable at `localhost:3010/health`. Skipped for doc-only PRs.
+- `ci-passed` — single aggregator job using [`re-actors/alls-green`](https://github.com/re-actors/alls-green) (hatch pattern). Branch protection targets this one job name; matrix changes don't break protection rules. `allowed-skips` lets the plan-job optimisations skip downstream jobs without failing the aggregator.
 
 ---
 
-## CI Workflow
+## Release workflow
 
-**File:** `.github/workflows/ci.yml`
-
-Thin wrapper that delegates all validation to `predeploy.yml`.
-
-```yaml
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-
-jobs:
-  predeploy:
-    uses: ./.github/workflows/predeploy.yml
-```
-
-Every push to main and every PR targeting main runs the full predeploy suite (build, lint, Docker, cross-platform install).
-
----
-
-## Docker Build Workflow
-
-**File:** `.github/workflows/docker-build.yml`
-
-Scoped validation for Docker-related changes. Only triggers when specific files are modified in a PR.
-
-```yaml
-on:
-  pull_request:
-    branches: [main]
-    paths:
-      - 'client/Dockerfile'
-      - 'server/Dockerfile'
-      - 'docker/Dockerfile.whatsapp'
-      - 'docker-compose*.yml'
-```
-
-Delegates to `predeploy.yml`. Dockerfile changes in PRs get validated by both `ci.yml` (always runs on PRs) and `docker-build.yml` (path-scoped). The reusable workflow pattern and GHA caching make this overlap low-cost.
-
----
-
-## Release Workflow
-
-**File:** `.github/workflows/release.yml`
-
-Publishes the npm package after predeploy validation passes.
+**File:** [.github/workflows/release.yml](../.github/workflows/release.yml)
 
 ### Triggers
-
-| Trigger | Condition |
+| Trigger | Behaviour |
 |---------|-----------|
-| Push tags | `v*.*.*` (e.g., `v1.0.0`, `v2.3.1`) |
-| Release | GitHub release published |
-| Manual | `workflow_dispatch` |
+| Push of `v*.*.*` tag | Full release (npm + GH Packages + PyPI + SLSA attest + GitHub release + test-install) |
+| `workflow_dispatch` | Dry-run by default; explicit `dry_run=false` required to publish (gemini-cli pattern) |
 
-### Job: predeploy (gate)
-
-Calls `predeploy.yml` as a prerequisite. Both publish jobs require this to pass (`needs: predeploy`).
-
-### Job: publish-npm
-
-Publishes the unscoped `machina` package to the public npm registry.
+### Job graph
 
 ```
-npm install --ignore-scripts  # Install deps without running postinstall
-npm pack --dry-run             # Verify package contents
-npm publish --access public    # Publish to npmjs.org
+predeploy (uses predeploy.yml)
+   |
+   v
+audit              -- pnpm audit --prod --audit-level moderate (BLOCKING)
+   |
+   v
+build-for-publish  -- once-per-release client build, uploaded as artifact
+   |  |  |
+   v  v  v
+publish-npm        publish-github-packages       publish-pypi
+   |                  |                          (uses publish-pypi.yml)
+   +- SLSA           +- npm scope rewrite        +- uv build --no-sources
+   +- attest-build-provenance@v2                 +- attest-build-provenance@v2
+   +- conditional on dry_run                     +- pypa/gh-action-pypi-publish
+                                                 +- OIDC, no token
+   |  |  |
+   v  v  v
+create-github-release  -- generate-notes + verify-tag (skipped on dry-run)
+   |
+   v
+test-install (uses test-install.yml)
 ```
 
-Uses `NODE_AUTH_TOKEN` from `secrets.NPM_TOKEN`. Registry URL: `https://registry.npmjs.org`.
+### Hardening (lifted from gh CLI + vercel + wrangler + uv)
 
-### Job: publish-github-packages
-
-Publishes the scoped `@zeenie-ai/machina` package to GitHub Packages.
-
-Requires `packages: write` permission. Before publishing, an inline Node.js script rewrites `package.json`:
-
-```javascript
-// Executed at build time to scope the package name:
-const pkg = require('./package.json');
-pkg.name = '@zeenie-ai/machina';
-pkg.publishConfig = { registry: 'https://npm.pkg.github.com' };
-require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
-```
-
-Then publishes via `npm publish` with `GITHUB_TOKEN` as auth token. Registry URL: `https://npm.pkg.github.com`.
+- `NPM_CONFIG_PROVENANCE=true` set at workflow env-level — supersedes per-command `--provenance` flag.
+- `pnpm audit --prod --audit-level moderate` is **blocking** (previous `|| true` masked vulnerabilities).
+- `workflow_dispatch` defaults `dry_run=true`; explicit override required to publish.
+- `cache: ''` on `setup-node` in publish jobs — prevents poisoned-cache supply-chain contamination (wrangler pattern).
+- `actions/attest-build-provenance@v2` on every published artifact (npm tarball + Python wheel + sdist). SLSA Level 3. Verifiable via `gh attestation verify <artifact> --repo zeenie-ai/MachinaOS`.
 
 ---
 
-## Docs Workflow
+## Reusable: publish-pypi.yml
 
-**File:** `.github/workflows/docs.yml`
+**File:** [.github/workflows/publish-pypi.yml](../.github/workflows/publish-pypi.yml)
 
-Deploys the Mintlify documentation site when docs change.
+Called via `workflow_call` from release.yml. Three jobs:
 
-### Triggers
+1. `build` — `uv build --no-sources` in `server/`, produces wheel + sdist, uploads artifact.
+2. `attest` — `actions/attest-build-provenance@v2` signs each artifact via OIDC.
+3. `publish` — `pypa/gh-action-pypi-publish` with `environment: pypi` for the OIDC subject claim. `skip-existing: true` so re-runs after partial failures don't error.
 
-| Trigger | Condition |
-|---------|-----------|
-| Push | Changes to `docs-MachinaOs/**` on main branch |
-| Manual | `workflow_dispatch` |
-
-### Steps
-
-1. Checkout repo
-2. Setup Node.js 20
-3. `npm install -g mintlify` -- install Mintlify CLI
-4. `mintlify deploy` -- deploy docs (working directory: `docs-MachinaOs`)
-
-Uses `MINTLIFY_TOKEN` secret for authentication.
+Inputs:
+- `package_dir` (default `server`)
+- `dry_run` (boolean) — skips the publish job
 
 ---
 
-## Workflow Dependency Graph
+## Rollback workflow
 
-```
-+------------------+        +---------------------+
-|     ci.yml       |------->|                     |
-| (push/PR main)   |        |   predeploy.yml     |
-+------------------+        |   (workflow_call)    |
-                            |                     |
-+------------------+        |  +-- build-and-lint  |
-| docker-build.yml |------->|  +-- docker-build    |
-| (PR, Dockerfiles)|        |  +-- compose-test    |
-+------------------+        |  +-- test-install    |
-                            |                     |
-+------------------+        +---------------------+
-|   release.yml    |------->|         |
-| (tags, releases) |        |         v
-+------------------+        |  +-- publish-npm
-                            |  +-- publish-github-packages
-                            +---------------------+
+**File:** [.github/workflows/rollback.yml](../.github/workflows/rollback.yml)
 
-+------------------+
-|    docs.yml      |------> Mintlify deployment
-| (docs-MachinaOs/)|        (independent pipeline)
-+------------------+
-```
+Manual `workflow_dispatch` with inputs:
+- `version` (required, e.g. `v0.0.72`)
+- `deprecate_msg` (default: security-conservative template)
+- `open_revert_pr` (boolean, default `false`)
 
-### Key Design Decisions
+Three jobs:
+1. `deprecate-npm` — `npm deprecate` on both `machinaos@VERSION` (npm) and `@zeenie-ai/machinaos@VERSION` (GitHub Packages).
+2. `yank-pypi-notice` — prints PyPI yank instructions (PyPI yank is UI-only, no API).
+3. `open-revert-pr` — opens a `rollback/<version>` branch + revert PR (skipped unless `open_revert_pr=true`).
 
-- **Reusable `predeploy.yml`**: Single source of truth for validation logic. All entry-point workflows delegate to it, avoiding duplication.
-- **Composite setup action**: Node.js, Python, and uv installation centralized in `.github/actions/setup/action.yml`. Workflows pass version overrides as inputs.
-- **`fail-fast: false` in test-install**: All 6 OS/Node combinations run to completion, giving visibility into platform-specific failures even when one platform fails.
-- **Docker layer caching via GHA**: `cache-from: type=gha` reuses layers across runs, reducing Docker build times.
-- **Scoped `docker-build.yml`**: Prevents full Docker rebuild on every PR -- only triggers when Dockerfile or compose files change.
-- **Dual npm publish**: Unscoped `machina` for public npm, scoped `@zeenie-ai/machina` for GitHub Packages. The scoped name is rewritten at publish time, not in source.
+A `summary` job posts a step-summary table of what ran.
 
 ---
 
-## Source Files
+## Security workflows
 
-| File | Lines | Description |
-|------|-------|-------------|
-| `.github/workflows/ci.yml` | 15 | CI entry point, delegates to predeploy |
-| `.github/workflows/predeploy.yml` | 157 | Reusable validation (build, lint, Docker, install) |
-| `.github/workflows/release.yml` | 73 | Predeploy gate + dual npm publish |
-| `.github/workflows/docker-build.yml` | 18 | Docker-scoped PR validation |
-| `.github/workflows/docs.yml` | 33 | Mintlify documentation deployment |
-| `.github/actions/setup/action.yml` | 37 | Composite action: Node.js + Python + uv |
+### CodeQL
+
+**File:** [.github/workflows/codeql.yml](../.github/workflows/codeql.yml)
+
+Two-language matrix:
+- `python` — covers cli/, server/, scripts/.
+- `javascript-typescript` — covers client/, server/nodejs/.
+
+Triggers: push to main + PR to main (both with `paths-ignore` excluding docs) + weekly schedule (Sun 20:30 UTC). Query pack: `security-extended` (broader than default, narrower than `security-and-quality` which adds noisy code-quality queries).
+
+### Zizmor
+
+**File:** [.github/workflows/check-zizmor.yml](../.github/workflows/check-zizmor.yml)
+
+Lints workflows for over-granted permissions, unpinned action `uses:`, insecure `${{ ... }}` template expansion, and `pull_request_target` + checkout-of-PR-ref combinations. Triggers on `.github/**` changes + weekly Mon 07:00 UTC (before the Mon 06:00 Dependabot batch).
+
+Outputs SARIF to the Security tab.
+
+---
+
+## Test-install workflow
+
+**File:** [.github/workflows/test-install.yml](../.github/workflows/test-install.yml)
+
+Validates the end-user install paths after a release publishes (or on manual dispatch). Three jobs × three OS = nine matrix cells:
+
+| Job | What it does |
+|-----|--------------|
+| `test-npm-install` | `npm install -g machinaos`, run `machina --help` / `--version`, smoke-start the backend |
+| `test-git-clone` | `git clone` the public repo, `pnpm run build`, smoke-start |
+| `test-install-script-unix` / `test-install-script-windows` | Curl/iwr the install script from the repo, validate the resulting `machina` is on PATH |
+
+Each job runs an `actions/checkout` first so `.python-version` is available for `setup-python` — independent of the install path being tested.
+
+---
+
+## Docs workflow
+
+**File:** [.github/workflows/docs.yml](../.github/workflows/docs.yml)
+
+Triggers on push to `docs-MachinaOs/**` on main + manual dispatch. Single job: install Mintlify CLI, run `mintlify deploy` with `MINTLIFY_TOKEN`. No predeploy gate — docs are static, independent of the application's build.
+
+---
+
+## Source files
+
+| File | Purpose |
+|------|---------|
+| `.github/workflows/ci.yml` | CI entry point |
+| `.github/workflows/predeploy.yml` | Reusable validation (plan + pre-commit + build/lint + tests + OS matrix + alls-green) |
+| `.github/workflows/release.yml` | Tag-triggered release pipeline (dry-run default on manual) |
+| `.github/workflows/publish-pypi.yml` | Reusable: build wheel + sdist + OIDC trusted publish |
+| `.github/workflows/rollback.yml` | Manual deprecate + revert PR |
+| `.github/workflows/codeql.yml` | SAST (Python + JS/TS) |
+| `.github/workflows/check-zizmor.yml` | Workflow-security linter |
+| `.github/workflows/test-install.yml` | Cross-platform user-install smoke |
+| `.github/workflows/docs.yml` | Mintlify documentation deploy |
+| `.github/actions/setup/action.yml` | Composite: pnpm + Node + Python + uv |
+| `.github/dependabot.yml` | Weekly grouped updates (npm + pip × 2 + actions) |
+| `.pre-commit-config.yaml` | ruff + prettier + eslint + actionlint hooks |
+| `.python-version` | Toolchain pin (`3.12`) — single source of truth |

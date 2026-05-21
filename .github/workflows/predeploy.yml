@@ -1,5 +1,22 @@
-# Reusable validation workflow called by ci.yml and release.yml
-# Jobs: build-and-lint, test-build-start
+# Reusable validation workflow called by ci.yml and release.yml.
+#
+# Job graph:
+#   plan ─┬─> build-and-lint (gated on should_lint_or_test_frontend)
+#         ├─> backend-tests   (matrix: domain shards, gated on should_test_backend)
+#         ├─> cli-tests       (gated on should_test_cli)
+#         ├─> test-build-start (matrix: OS, gated on should_full_build)
+#         └─> ci-passed       (alls-green aggregator — branch protection target)
+#
+# Patterns (Tier 3 of the CI/CD plan):
+#   - `plan` job: change-detection booleans via dorny/paths-filter
+#     (lifted from astral-sh/uv ci.yml). Doc-only PRs skip the heavy
+#     suites; cli-only PRs skip the backend tests; etc.
+#   - Domain-sharded test matrix (lifted from prefect's python-tests.yaml):
+#     parallelises 1376 pytest cases by test-tree subdir so one slow
+#     shard doesn't gate the others' results.
+#   - `ci-passed` job using re-actors/alls-green (lifted from hatch):
+#     single required-check job name for branch protection that doesn't
+#     break when matrix dimensions change.
 
 name: Predeploy
 
@@ -10,11 +27,86 @@ permissions:
   contents: read
 
 jobs:
-  build-and-lint:
+  # ----------------------------------------------------------------------
+  # plan -- change-detection booleans gate the downstream graph.
+  # ----------------------------------------------------------------------
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    outputs:
+      backend_changed: ${{ steps.filter.outputs.backend }}
+      frontend_changed: ${{ steps.filter.outputs.frontend }}
+      cli_changed: ${{ steps.filter.outputs.cli }}
+      workflows_changed: ${{ steps.filter.outputs.workflows }}
+      docs_only: ${{ steps.filter.outputs.docs_only }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Detect changed paths
+        id: filter
+        uses: dorny/paths-filter@6852f92c20ea7fd3b0c25de3b5112db3a98da050 # v3
+        with:
+          # On `workflow_call`, paths-filter compares against the base
+          # branch automatically. For push events, it compares with the
+          # previous SHA. No `base:` needed in the workflow_call case.
+          filters: |
+            backend:
+              - 'server/**'
+              - 'pyproject.toml'
+              - 'pnpm-workspace.yaml'
+            frontend:
+              - 'client/**'
+              - 'pnpm-workspace.yaml'
+            cli:
+              - 'cli/**'
+              - 'pyproject.toml'
+            workflows:
+              - '.github/**'
+            docs_only:
+              - 'docs-MachinaOs/**'
+              - '**/*.md'
+
+  # ----------------------------------------------------------------------
+  # pre-commit -- run all pre-commit hooks on every PR. Catches missed
+  # local installs of the hook so unfixed format/lint can't land.
+  # ----------------------------------------------------------------------
+  pre-commit:
+    name: pre-commit
+    needs: plan
+    if: needs.plan.outputs.docs_only != 'true' || needs.plan.outputs.workflows_changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+          # pre-commit caches its own hook envs under ~/.cache/pre-commit;
+          # actions/setup-python's pip cache is orthogonal -- leave at
+          # default behaviour.
+
+      - name: Run pre-commit
+        # pre-commit/action handles its own caching keyed on the
+        # pre-commit-config.yaml hash, so a hook-pin bump invalidates
+        # cleanly without manual cache busting.
+        uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
+
+  # ----------------------------------------------------------------------
+  # build-and-lint -- client build + frontend tests + lint + tsgo
+  # ----------------------------------------------------------------------
+  build-and-lint:
+    name: Build + lint
+    needs: plan
+    # Frontend changes / workflow changes / full pushes to main always
+    # trigger this. Doc-only PRs skip.
+    if: needs.plan.outputs.docs_only != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Setup environment
         uses: ./.github/actions/setup
@@ -40,32 +132,83 @@ jobs:
         # bootstrap, and credentials flows to ship.
         run: pnpm --filter react-flow-client run test
 
-      - name: Backend tests (server pytest)
-        # 1376 tests covering plugin contracts, credential broadcasts, native
-        # LLM SDK wiring, parameter resolution, workflow ops, MCP tokens.
+  # ----------------------------------------------------------------------
+  # backend-tests -- pytest sharded by domain (prefect pattern)
+  # ----------------------------------------------------------------------
+  backend-tests:
+    name: Backend tests (${{ matrix.shard }})
+    needs: plan
+    if: needs.plan.outputs.backend_changed == 'true' || needs.plan.outputs.workflows_changed == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Three shards balance parallelism vs. matrix-dispatch overhead.
+        # Add new shards by carving subdirs out of `backend-root` as
+        # the test tree grows.
+        include:
+          - shard: nodes
+            paths: tests/nodes/
+          - shard: services
+            # Pulls tests/services + tests/temporal + tests/llm +
+            # tests/credentials together because they share the same
+            # heavy setup (DI container + auth_service init).
+            paths: tests/services/ tests/temporal/ tests/llm/ tests/credentials/
+          - shard: root
+            # Root-level cross-cutting invariants (plugin self-containment,
+            # broadcast contracts, no-raw-prints, etc.). Cheap to run
+            # but logically distinct from per-domain tests.
+            paths: tests/ --ignore=tests/nodes/ --ignore=tests/services/ --ignore=tests/temporal/ --ignore=tests/llm/ --ignore=tests/credentials/
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup environment
+        uses: ./.github/actions/setup
+
+      - name: Backend tests (server pytest, shard=${{ matrix.shard }})
         # ``uv sync`` (no flag) includes the PEP 735 ``[dependency-groups].dev``
-        # bundle by default — pytest, pytest-asyncio, pytest-mock, respx,
-        # ruff. The previous ``--extra dev`` invocation read PEP 621
-        # ``[project.optional-dependencies].dev``, which no longer exists
-        # (moved to PEP 735 groups so ``pnpm install`` keeps dev tools
-        # installed instead of stripping them on every dependency bump).
+        # bundle by default — pytest, pytest-asyncio, pytest-mock, respx, ruff.
         working-directory: server
         run: |
           uv sync
-          uv run pytest tests/ -v
+          uv run pytest ${{ matrix.paths }} -v
+
+  # ----------------------------------------------------------------------
+  # cli-tests -- supervisor CLI pytest (small, fast, separate from backend)
+  # ----------------------------------------------------------------------
+  cli-tests:
+    name: CLI tests
+    needs: plan
+    if: needs.plan.outputs.cli_changed == 'true' || needs.plan.outputs.workflows_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup environment
+        uses: ./.github/actions/setup
 
       - name: Supervisor CLI tests (pytest)
-        # 106 tests covering build/start/stop pipelines, daemon, ports, docs,
-        # release config, clean. Run from repo root — tests resolve workspace
-        # paths via `pnpm list --json` (see cli/tests/conftest.py).
-        # `pyyaml` is needed by test_release_pipeline_config.py to parse the
-        # workflow files; not a CLI runtime dep, only a test-time one.
+        # 106 tests covering build/start/stop pipelines, daemon, ports,
+        # docs, release config, clean. Run from repo root — tests
+        # resolve workspace paths via `pnpm list --json`.
+        # `pyyaml` is needed by test_release_pipeline_config.py to parse
+        # the workflow files; not a CLI runtime dep, only a test-time one.
         run: |
           uv pip install --system pytest pytest-asyncio pyyaml
           python -m pytest cli/tests/ -v
 
-  # Test build and start from source (cross-platform)
+  # ----------------------------------------------------------------------
+  # test-build-start -- cross-OS build + start smoke test
+  # ----------------------------------------------------------------------
   test-build-start:
+    name: Build + start (${{ matrix.os }})
+    needs: plan
+    # Always runs unless the change is doc-only -- catches platform-
+    # specific build regressions (Windows path handling, macOS arm
+    # binary fallbacks, etc.) that can't be ID'd from Linux alone.
+    if: needs.plan.outputs.docs_only != 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -73,7 +216,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Setup environment
         uses: ./.github/actions/setup
@@ -137,3 +280,30 @@ jobs:
             Receive-Job $job
             exit 1
           }
+
+  # ----------------------------------------------------------------------
+  # ci-passed -- single aggregator job; the one branch protection rule
+  # points at. Matrix dimensions can grow/shrink without breaking
+  # protection (hatch pattern).
+  # ----------------------------------------------------------------------
+  ci-passed:
+    name: CI passed
+    if: always()
+    needs:
+      - plan
+      - pre-commit
+      - build-and-lint
+      - backend-tests
+      - cli-tests
+      - test-build-start
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all jobs passed (or were skipped intentionally)
+        # alls-green treats `skipped` as success when listed in
+        # `allowed-skips`. Without this, a doc-only PR that skips
+        # backend-tests would fail the aggregator -- defeating the
+        # plan-job optimisation.
+        uses: re-actors/alls-green@afee1c1eac2a506084c274e9c02c8e0687b48d9e # v1.2.2
+        with:
+          allowed-skips: pre-commit, build-and-lint, backend-tests, cli-tests, test-build-start
+          jobs: ${{ toJSON(needs) }}

@@ -1,0 +1,92 @@
+# CodeQL static-analysis SAST scanning.
+#
+# Two-language matrix matches MachinaOs's split: Python (CLI +
+# FastAPI backend + plugins under server/) and JavaScript/TypeScript
+# (React Flow client + Node.js sidecar at server/nodejs). One job per
+# language so a failure in one doesn't block the other's results from
+# landing in the Security tab.
+#
+# Triggers (lifted from prefect's codeql.yml + GitHub's own
+# recommended cadence):
+#   - push to main:    scan-then-baseline every merge
+#   - pull_request:    catch regressions before they land (path
+#                      filter excludes docs-only PRs so we don't
+#                      burn 15+ minutes of compute on copy edits)
+#   - schedule weekly: catch zero-days in dependencies + new query-
+#                      pack releases without waiting for the next
+#                      merge. Sun 20:30 UTC matches the cadence
+#                      prefect uses.
+#
+# Permissions follow the least-privilege model documented at
+# https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/configuring-default-setup-for-code-scanning
+# `security-events: write` is the one required scope; everything else
+# stays at the workflow-default `none`.
+
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs-MachinaOs/**'
+      - '**/*.md'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - 'docs-MachinaOs/**'
+      - '**/*.md'
+  schedule:
+    # Sundays 20:30 UTC. Mid-low-traffic window for runner pool +
+    # gives the Security tab a fresh baseline each week.
+    - cron: '30 20 * * 0'
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze ${{ matrix.language }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    permissions:
+      # Minimum needed for CodeQL to publish to the Security tab.
+      # Documented at https://github.com/github/codeql-action#permissions
+      security-events: write
+      contents: read
+      actions: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: python
+            # Repo Python files live under cli/ + server/ + scripts/.
+            # CodeQL auto-detects entrypoints; no build step needed
+            # for Python (it's interpreted).
+          - language: javascript-typescript
+            # Combined JS/TS query pack — single language slot in
+            # the matrix per CodeQL's 2024+ convention.
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@458d36d7d4f47d0dd16ca424c1d3cda0060f1360 # v3
+        with:
+          languages: ${{ matrix.language }}
+          # security-extended pulls in queries beyond the default
+          # security pack (e.g., taint-tracking on more sinks,
+          # CWE coverage). security-and-quality adds code-quality
+          # queries which produce noise we don't want gating PRs.
+          queries: security-extended
+
+      # No autobuild step: Python is interpreted; JS/TS via the
+      # tsgo+vite toolchain already runs in predeploy.yml — CodeQL
+      # only needs to read source files, not build artifacts.
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@458d36d7d4f47d0dd16ca424c1d3cda0060f1360 # v3
+        with:
+          category: "/language:${{ matrix.language }}"

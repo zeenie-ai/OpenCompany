@@ -1,0 +1,91 @@
+# pre-commit hooks shared across Python (ruff) + JS/TS (eslint, prettier)
+# + workflow files (actionlint).
+#
+# Install once with:   pre-commit install
+# Run on all files:    pre-commit run --all-files
+# Update hook pins:    pre-commit autoupdate
+#
+# Hook pins are revisions, not floating tags — pre-commit caches per
+# revision, and Dependabot bumps these via the `github-actions`
+# ecosystem (pre-commit-ci.com extends Dependabot's coverage to
+# pre-commit's own rev pins via the same PR cadence).
+#
+# CI mirror: `predeploy.yml` runs `pre-commit run --all-files` so
+# unfixed lint issues block merges even when a contributor skipped
+# `pre-commit install` locally.
+
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
+
+# Run hooks against staged files only by default; CI uses
+# `pre-commit run --all-files` for full-tree validation.
+default_stages: [pre-commit]
+
+repos:
+  # ---------------------------------------------------------------- stdlib
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$'  # Markdown trailing whitespace = line break
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: ['--allow-multiple-documents']
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=500']  # generous cap; binaries should live elsewhere
+      - id: detect-private-key
+
+  # ---------------------------------------------------------------- Python: ruff
+  # Format + lint in one pass. Matches server/pyproject.toml's
+  # [tool.ruff] config (line-length=140, ignores E402/E701).
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff-format
+        types_or: [python, pyi]
+      - id: ruff
+        args: ['--fix', '--exit-non-zero-on-fix']
+        types_or: [python, pyi]
+
+  # ---------------------------------------------------------------- JS/TS: prettier
+  # Prettier owns formatting (semicolons, quote style, indent). ESLint
+  # is invoked separately below for lint rules.
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        # Limit to the client/ workspace -- the server's TS sidecar
+        # (server/nodejs/) is generated/copied and intentionally
+        # unprettierified to keep diffs against upstream minimal.
+        files: '^client/.*\.(ts|tsx|js|jsx|json|css|md)$'
+        additional_dependencies:
+          - prettier@3.4.2
+
+  # ---------------------------------------------------------------- JS/TS: eslint
+  # Run on staged TS/TSX files only. Full workspace lint runs in
+  # predeploy.yml via `pnpm --filter react-flow-client run lint`.
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v9.17.0
+    hooks:
+      - id: eslint
+        files: '^client/src/.*\.(ts|tsx)$'
+        additional_dependencies:
+          # Match the ESLint major version in client/package.json so
+          # plugin compatibility holds across the local + CI run.
+          - eslint@9
+          - typescript-eslint@8
+          - eslint-plugin-react-hooks@5
+          - eslint-plugin-react-refresh@0.4
+
+  # ---------------------------------------------------------------- Workflows: actionlint
+  # Catches GitHub Actions schema errors, shellcheck issues inside
+  # `run:` blocks, and known anti-patterns (e.g. running an action
+  # without a pinned version -- complements zizmor's deeper scan).
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.4
+    hooks:
+      - id: actionlint
