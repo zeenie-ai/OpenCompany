@@ -96,7 +96,7 @@ google-auth-httplib2>=0.2.0
 # Document Processing Nodes
 beautifulsoup4>=4.12.0
 langchain-text-splitters>=0.3.0
-langchain-huggingface>=0.1.0
+langchain-huggingface>=1.2.2
 chromadb>=0.5.0
 qdrant-client>=1.12.0
 sentence-transformers>=3.0.0
