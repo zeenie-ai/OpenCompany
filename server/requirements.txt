@@ -8,7 +8,7 @@ orjson>=3.10.0
 
 # Database & ORM (Python 3.13 compatible versions)
 sqlmodel>=0.0.18
-sqlalchemy[asyncio]>=2.0.35
+sqlalchemy[asyncio]>=2.0.49
 aiosqlite>=0.20.0
 greenlet>=3.0.0  # Required by SQLAlchemy asyncio on some platforms
 
