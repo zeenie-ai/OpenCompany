@@ -68,7 +68,7 @@ ddgs>=9.0.0
 # Authentication
 bcrypt>=4.1.0
 python-jose[cryptography]>=3.3.0
-email-validator>=2.0.0
+email-validator>=2.3.0
 
 # Credential Encryption & Storage
 cryptography>=44.0.0  # Fernet encryption (base backend)
