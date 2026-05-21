@@ -88,7 +88,7 @@ apify-client>=1.8.0
 python-telegram-bot==22.6
 
 # Gmail API
-google-api-python-client>=2.100.0
+google-api-python-client>=2.196.0
 google-auth>=2.27.0
 google-auth-oauthlib>=1.2.0
 google-auth-httplib2>=0.2.0
