@@ -21,7 +21,7 @@ python-dotenv>=1.0.0
 dependency-injector>=4.41.0
 
 # Caching (Redis) - Python 3.13 compatible
-redis>=5.0.0
+redis>=7.4.0
 
 # HTTP Client
 httpx>=0.27.0
