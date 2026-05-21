@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-from cli import buildenv
 from cli.commands import start
 from cli.config import Config, load_config
 
@@ -18,22 +17,12 @@ def _cfg() -> Config:
     return load_config()
 
 
-def test_venv_python_returns_none_when_missing(tmp_path: Path):
-    assert buildenv.venv_python(tmp_path) is None
-
-
-def test_venv_python_finds_windows_layout(tmp_path: Path):
-    win_py = tmp_path / "server" / ".venv" / "Scripts" / "python.exe"
-    win_py.parent.mkdir(parents=True)
-    win_py.write_text("")
-    assert buildenv.venv_python(tmp_path) == win_py
-
-
-def test_venv_python_finds_posix_layout(tmp_path: Path):
-    posix_py = tmp_path / "server" / ".venv" / "bin" / "python"
-    posix_py.parent.mkdir(parents=True)
-    posix_py.write_text("")
-    assert buildenv.venv_python(tmp_path) == posix_py
+# The previous ``test_venv_python_*`` cases verified a custom helper
+# that walked ``server/.venv/{Scripts,bin}`` paths. That helper has been
+# retired: subprocess launchers now build their argv via
+# :func:`cli.run.uv_run`, which delegates interpreter selection to
+# ``uv run`` (https://docs.astral.sh/uv/reference/cli/#uv-run). Nothing
+# platform-specific to assert from the CLI side anymore.
 
 
 def test_temporal_running_false_when_port_closed():

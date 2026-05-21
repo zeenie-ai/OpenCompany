@@ -16,7 +16,7 @@ from pathlib import Path
 import typer
 
 from cli.colors import console
-from cli.platform_ import project_root
+from cli.platform_ import project_root, server_dir
 
 
 app = typer.Typer(
@@ -125,7 +125,7 @@ def _rewrite_index(root: Path) -> None:
 
 def _check_completeness(root: Path) -> int:
     documented = _collect_documented_keys(_docs_dir(root))
-    registered = _collect_registry_keys(root / "server" / "nodes")
+    registered = _collect_registry_keys(server_dir(root) / "nodes")
     missing = sorted(k for k in registered if k not in documented)
     if not missing:
         console.print(

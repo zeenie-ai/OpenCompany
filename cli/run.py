@@ -40,6 +40,33 @@ def which_argv(argv: list[str]) -> list[str]:
     return [shutil.which(argv[0]) or argv[0], *argv[1:]]
 
 
+def uv_run(*args: str) -> list[str]:
+    """Standardized argv for executing a command inside the workspace
+    ``.venv`` via ``uv run``.
+
+    ``uv run`` is the documented subcommand for executing commands
+    against a uv project / workspace environment
+    (https://docs.astral.sh/uv/reference/cli/#uv-run). With the workspace
+    declared in the repo-root ``pyproject.toml``, ``uv sync`` materialises
+    one shared ``.venv`` at the workspace root and installs every member
+    (currently ``server/``) editable into it -- so ``python -m
+    services.*`` resolves out of that single environment
+    (https://docs.astral.sh/uv/concepts/projects/sync/).
+
+    ``--no-sync`` skips the per-invocation lockfile re-check that ``uv
+    run`` does by default. ``machina build`` is the single place that
+    actually re-syncs; every other entry point (start, dev, daemon,
+    supervised runtimes, preflight) trusts the lockfile and just
+    activates the env. This is the documented optimisation for hot
+    spawn paths (https://docs.astral.sh/uv/reference/cli/#uv-run).
+
+    All ``uv run ...`` invocations in this CLI MUST go through this
+    helper -- never inline ``["uv", "run", ...]`` argv lists -- so the
+    flags + semantics stay uniform.
+    """
+    return ["uv", "run", "--no-sync", *args]
+
+
 def run(
     argv: list[str],
     *,

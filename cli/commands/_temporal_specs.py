@@ -8,7 +8,8 @@ Returns the right Temporal ``ServiceSpec`` set based on
   - ``postgres`` (default) — two specs running the supervised runtimes:
     ``temporal-postgres`` (pgserver) then ``temporal-server`` (Temporal
     binary with YAML config). Both wrap ``BaseSupervisor`` singletons
-    via ``cli.commands._supervised_runtime``. Data lands under
+    via ``services.temporal._supervised_runtime`` (a thin shim that
+    lives next to the runtime factories it imports). Data lands under
     ``DATA_DIR/postgres/``; binaries come from a pooch-managed cache
     (no system install required).
 
@@ -32,6 +33,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from cli.platform_ import server_dir
+from cli.run import uv_run
 from cli.supervisor import RestartPolicy, ServiceSpec
 
 # Backend names — must match ``core.config.Settings.temporal_backend``
@@ -65,12 +68,18 @@ _GRACE_SECONDS = float(
 def _runtime_argv(factory_path: str) -> list[str]:
     """Build the argv for one BaseSupervisor singleton, invoked via the
     generic supervised-runtime shim. ``factory_path`` is the dotted
-    ``module:attr`` accessor."""
-    return [
-        "uv", "run", "python", "-m",
-        "cli.commands._supervised_runtime",
+    ``module:attr`` accessor.
+
+    Composes the uv invocation through :func:`cli.run.uv_run` so every
+    ``uv run --no-sync`` callsite in the CLI shares the same flag set.
+    The shim itself lives at ``services.temporal._supervised_runtime``
+    (next to the runtime factories), so the spawned python only needs
+    to resolve modules out of the workspace ``.venv``.
+    """
+    return uv_run(
+        "python", "-m", "services.temporal._supervised_runtime",
         factory_path,
-    ]
+    )
 
 
 def temporal_specs(root: Path, cfg) -> list[ServiceSpec]:
@@ -81,14 +90,14 @@ def temporal_specs(root: Path, cfg) -> list[ServiceSpec]:
     readiness probe (same port for both ``sqlite`` and ``postgres``).
     """
     backend = cfg.temporal_backend.strip().lower()
-    server_dir = root / "server"
+    server_cwd = server_dir(root)
 
     if backend == _BACKEND_POSTGRES:
         return [
             ServiceSpec(
                 name="postgres",
                 argv=_runtime_argv("services.temporal._runtime:get_postgres_runtime"),
-                cwd=server_dir,
+                cwd=server_cwd,
                 # pgserver picks a dynamic port; skip the TCP probe here
                 # and rely on the temporal spec to gate readiness via
                 # gRPC (it can't connect until Postgres accepts).
@@ -102,7 +111,7 @@ def temporal_specs(root: Path, cfg) -> list[ServiceSpec]:
                 argv=_runtime_argv(
                     "services.temporal._runtime:get_temporal_server_runtime",
                 ),
-                cwd=server_dir,
+                cwd=server_cwd,
                 ready_port=cfg.temporal_port,
                 ready_timeout=_SERVER_READY_TIMEOUT_SECONDS,
                 restart=RestartPolicy.ON_CRASH,
@@ -122,7 +131,7 @@ def temporal_specs(root: Path, cfg) -> list[ServiceSpec]:
             argv=_runtime_argv(
                 "services.temporal._runtime:get_temporal_server_runtime",
             ),
-            cwd=server_dir,
+            cwd=server_cwd,
             ready_port=cfg.temporal_port,
             ready_timeout=_SERVER_READY_TIMEOUT_SECONDS,
             restart=RestartPolicy.ON_CRASH,

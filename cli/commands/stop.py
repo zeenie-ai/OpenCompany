@@ -11,19 +11,17 @@ import time
 
 import typer
 
+from cli._common import free_all_ports, preflight
 from cli.colors import console
-from cli.config import load_config
-from cli.platform_ import platform_name, project_root
+from cli.platform_ import platform_name
 from cli.ports import (
     kill_by_pattern,
     kill_orphaned_machina_processes,
-    kill_port,
 )
 
 
 def stop_command() -> None:
-    cfg = load_config()
-    root = project_root()
+    cfg, root = preflight()
 
     console.print()
     console.print("[bold]Stopping MachinaOS services...[/]")
@@ -33,8 +31,7 @@ def stop_command() -> None:
     console.print()
 
     all_stopped = True
-    for port in cfg.all_ports:
-        result = kill_port(port)
+    for port, result in zip(cfg.all_ports, free_all_ports(cfg)):
         status = "[green]\\[OK][/]" if result.port_free else "[red]\\[!!][/]"
         if result.port_free:
             if result.killed_pids:

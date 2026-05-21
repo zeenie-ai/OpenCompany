@@ -20,11 +20,17 @@ from pathlib import Path
 
 import typer
 
+from cli._common import build_backend_spec, error_block, free_all_ports, preflight
 from cli.colors import console
-from cli.config import load_config
-from cli.platform_ import IS_WINDOWS, IS_WSL, platform_name, project_root
-from cli.buildenv import validate_build, venv_python
-from cli.ports import kill_port
+from cli.platform_ import (
+    IS_WINDOWS,
+    IS_WSL,
+    platform_name,
+    server_venv,
+    static_client_script,
+)
+from cli.buildenv import validate_build
+from cli.run import uv_run
 from cli.supervisor import Manager, ServiceSpec
 from cli.commands._temporal_specs import temporal_specs
 
@@ -37,28 +43,34 @@ def _sqlalchemy_preflight(root: Path) -> None:
     calls even after exclusions are added. Catching it here gives a
     clear remediation message instead of letting uvicorn hang silently.
     See ``docs-internal/errors.md`` #1 / #1a.
+
+    Runs the probe inside the workspace ``.venv`` through ``uv run``
+    (via :func:`cli.run.uv_run`) -- same environment the supervised
+    services will use, no path-to-interpreter logic on this side.
     """
-    py = venv_python(root)
-    if py is None:
-        return
     started = time.monotonic()
     try:
         subprocess.run(
-            [str(py), "-c", "import sqlalchemy"],
+            uv_run("python", "-c", "import sqlalchemy"),
+            cwd=str(root),
             timeout=15,
             check=True,
             capture_output=True,
         )
     except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
         elapsed = time.monotonic() - started
-        console.print(f"[red]Error: Python venv health check failed ({elapsed:.1f}s).[/]")
-        console.print("  sqlalchemy import hung or crashed.")
-        console.print("  Likely cause: Windows Defender scan cache or stale kernel state.")
-        console.print("  Fix options:")
-        console.print("    1. Restart-Service WinDefend  (admin PowerShell)")
-        console.print("    2. Reboot the machine")
-        console.print(f"    3. Add {root / 'server' / '.venv'} to Defender exclusions")
-        console.print("  See docs-internal/errors.md #1 / #1a for details.")
+        error_block(
+            f"Python venv health check failed ({elapsed:.1f}s).",
+            [
+                "sqlalchemy import hung or crashed.",
+                "Likely cause: Windows Defender scan cache or stale kernel state.",
+                "Fix options:",
+                "  1. Restart-Service WinDefend  (admin PowerShell)",
+                "  2. Reboot the machine",
+                f"  3. Add {server_venv(root)} to Defender exclusions",
+                "See docs-internal/errors.md #1 / #1a for details.",
+            ],
+        )
         raise typer.Exit(code=1)
     elapsed = time.monotonic() - started
     if elapsed > 5.0:
@@ -87,33 +99,19 @@ def _read_version(root: Path) -> str:
 
 
 def _build_specs(root: Path, cfg, *, temporal_running: bool) -> list[ServiceSpec]:
-    static_client = root / "scripts" / "serve-client.js"
-    server_dir = root / "server"
-
     # Match the existing behaviour: production uses python:start
     # (bind 127.0.0.1) on Windows/WSL, python:daemon (bind 0.0.0.0)
     # on POSIX.
     backend_host = "127.0.0.1" if (IS_WINDOWS or IS_WSL) else "0.0.0.0"
-    backend_argv = [
-        "uv", "run", "uvicorn", "main:app",
-        "--host", backend_host,
-        "--port", str(cfg.backend_port),
-        "--log-level", "warning",
-    ]
 
     specs: list[ServiceSpec] = [
         ServiceSpec(
             name="client",
-            argv=["node", str(static_client)],
+            argv=["node", str(static_client_script(root))],
             cwd=root,
             ready_port=cfg.client_port,
         ),
-        ServiceSpec(
-            name="server",
-            argv=backend_argv,
-            cwd=server_dir,
-            ready_port=cfg.backend_port,
-        ),
+        build_backend_spec(cfg, host=backend_host, root=root),
     ]
     if not temporal_running:
         specs.extend(temporal_specs(root, cfg))
@@ -121,8 +119,7 @@ def _build_specs(root: Path, cfg, *, temporal_running: bool) -> list[ServiceSpec
 
 
 def start_command() -> None:
-    root = project_root()
-    cfg = load_config()
+    cfg, root = preflight()
     os.environ.setdefault("PYTHONUTF8", "1")
 
     validate_build(root, require_client_dist=True)
@@ -133,8 +130,7 @@ def start_command() -> None:
         console.print("[dim]Temporal already running, skipping[/]")
 
     console.log("Freeing ports...")
-    for port in cfg.all_ports:
-        kill_port(port)
+    free_all_ports(cfg)
     console.log("Ports ready")
 
     version = _read_version(root)

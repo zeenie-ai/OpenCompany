@@ -1,8 +1,14 @@
 """Build-environment helpers shared by ``start`` / ``dev`` / ``daemon``.
 
-Three commands had near-duplicate copies of "find the venv python" and
-"the build artifacts must exist or refuse to start". Lifted here so a
-new launcher gets both for free.
+``validate_build`` refuses to launch when ``machina build`` hasn't been
+run. Layout knowledge lives in :mod:`cli.platform_` -- this file only
+composes the documented prefixes (workspace venv, node_modules, client
+dist) into a boolean check.
+
+Subprocess callers (start / dev / daemon / temporal specs) build their
+argv via :func:`cli.run.uv_run`, which runs the command inside the uv
+workspace ``.venv`` per https://docs.astral.sh/uv/reference/cli/#uv-run.
+There is no path-to-interpreter logic on the CLI side -- uv owns that.
 """
 
 from __future__ import annotations
@@ -12,21 +18,11 @@ from pathlib import Path
 import typer
 
 from cli.colors import console
-
-
-def venv_python(root: Path) -> Path | None:
-    """Return the project's venv python path, or ``None`` if absent.
-
-    Tries the Windows layout first (``Scripts/python.exe``) then POSIX
-    (``bin/python``); the first existing path wins.
-    """
-    for candidate in (
-        root / "server" / ".venv" / "Scripts" / "python.exe",
-        root / "server" / ".venv" / "bin" / "python",
-    ):
-        if candidate.exists():
-            return candidate
-    return None
+from cli.platform_ import (
+    client_dist_entry,
+    node_modules_dir,
+    server_venv,
+)
 
 
 def validate_build(root: Path, *, require_client_dist: bool = False) -> None:
@@ -36,9 +32,9 @@ def validate_build(root: Path, *, require_client_dist: bool = False) -> None:
     missing ``client/dist`` (Vite serves the source); ``start`` opts in
     via ``require_client_dist=True``.
     """
-    if not (root / "node_modules").exists() or not (root / "server" / ".venv").exists():
+    if not node_modules_dir(root).exists() or not server_venv(root).exists():
         console.print('[red]Error: Project not built. Run "machina build" first.[/]')
         raise typer.Exit(code=1)
-    if require_client_dist and not (root / "client" / "dist" / "index.html").exists():
+    if require_client_dist and not client_dist_entry(root).exists():
         console.print('[red]Error: Client not built. Run "machina build" first.[/]')
         raise typer.Exit(code=1)

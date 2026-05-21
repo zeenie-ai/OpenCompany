@@ -8,6 +8,13 @@ dependencies = [
     "rich>=13",
     "anyio>=4",
     "psutil>=6",
+    # OS-native user data / cache / config / log dirs. Soft dependency
+    # in the CLI (``cli/platform_.py`` imports it inside a try/except
+    # and falls back to a stdlib implementation if the wheel isn't
+    # available) so ``machina clean`` / ``machina build`` still work
+    # immediately after a wipe, before ``pip install`` has had a
+    # chance to materialise it.
+    "platformdirs>=4.0",
     # Required on Windows for the supervisor's Job Object (cli/tree.py).
     # Without it, child processes survive abnormal supervisor exit
     # (SIGKILL, BSOD, console close) and accumulate as orphans across
@@ -25,3 +32,17 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["cli"]
+
+[dependency-groups]
+dev = []
+
+# ``machinaos-cli`` is a standalone Python CLI package -- installable
+# via ``pipx install .`` / ``pip install .`` against any Python >=3.12
+# without involving uv. It depends on nothing from ``server/``. The
+# server has its own uv-managed venv at ``server/.venv``; the CLI
+# invokes server-side commands by shelling out via ``cli.run.uv_run``
+# (which runs ``uv run --no-sync ...`` with ``cwd=server/`` so uv
+# discovers ``server/pyproject.toml`` and activates ``server/.venv``).
+# Keeping the CLI independent of the uv workspace means contributors
+# can install / run / debug ``machina`` on whatever interpreter is on
+# PATH -- no per-checkout venv activation required.

@@ -1,9 +1,9 @@
 """Generic bridge: run any ``BaseSupervisor`` singleton from a CLI.
 
-The Manager supervisor in ``machina/supervisor.py`` schedules
+The CLI's ``Manager`` supervisor (``cli/supervisor.py``) schedules
 ``ServiceSpec`` entries by spawning a subprocess and supervising it.
 ``BaseSupervisor``-managed runtimes (pgserver, Temporal binary) don't
-ship a CLI of their own — they're Python singletons started via
+ship a CLI of their own -- they're Python singletons started via
 ``await runtime.start()``.
 
 This shim bridges the two: import a runtime factory by dotted path,
@@ -11,12 +11,19 @@ call it, ``await singleton.start()``, then block on a shutdown signal.
 ``Manager`` sends SIGTERM during graceful shutdown; we catch it,
 ``await singleton.stop()``, then exit cleanly.
 
-Usage (inside ``ServiceSpec.argv``):
+Module location: this lives inside the ``server`` package because the
+factory targets it resolves (``services.temporal._runtime:get_postgres
+_runtime`` etc.) are server-side singletons. Hosting the shim here
+keeps the CLI free of server-side imports and lets a single ``uv run
+python -m services.temporal._supervised_runtime <factory>`` invocation
+work against the workspace ``.venv`` -- no PYTHONPATH composition, no
+cross-venv plumbing.
 
-    [
-        "python", "-m", "cli.commands._supervised_runtime",
-        "services.temporal._runtime:get_postgres_runtime",
-    ]
+Invocation (inside ``ServiceSpec.argv``, built via ``cli.run.uv_run``):
+
+    uv_run("python", "-m",
+           "services.temporal._supervised_runtime",
+           "services.temporal._runtime:get_postgres_runtime")
 
 Equivalent to (Python idiom):
 
@@ -62,7 +69,7 @@ async def _run(factory_dotted: str) -> int:
         except NotImplementedError:
             # Windows: add_signal_handler raises for SIGTERM. The
             # Manager supervisor's tree-kill semantics (psutil-based)
-            # work regardless — we just lose the graceful path on Win.
+            # work regardless -- we just lose the graceful path on Win.
             pass
 
     print(f"[supervised_runtime] starting {factory_dotted}", flush=True)
@@ -79,7 +86,7 @@ async def _run(factory_dotted: str) -> int:
 def main() -> int:
     if len(sys.argv) != 2:
         print(
-            "usage: python -m cli.commands._supervised_runtime "
+            "usage: python -m services.temporal._supervised_runtime "
             "<module.path:factory>",
             file=sys.stderr,
         )
