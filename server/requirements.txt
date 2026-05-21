@@ -51,7 +51,7 @@ langchain-cerebras>=0.1.0
 # DeepAgents - LocalShellBackend + validate_path + ExecuteResponse for the
 # filesystem/shell plugins (nodes/filesystem/_backend.py). Not used as the
 # agent harness itself (the deep_agent plugin was removed in 5335188).
-deepagents>=0.4.12
+deepagents>=0.6.3
 
 # Temporal - Durable workflow execution (optional, requires TEMPORAL_ENABLED=true)
 temporalio>=1.21.1
