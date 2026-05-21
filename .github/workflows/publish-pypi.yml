@@ -131,7 +131,7 @@ jobs:
         # `print-hash: true` writes the SHA-256 of each artifact to the
         # job log so reviewers can cross-check what landed on PyPI
         # against what the build job produced.
-        uses: pypa/gh-action-pypi-publish@6733eb7d741f0b11ec6a39b58540dab7590f9b7d # v1.14.0
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
         with:
           packages-dir: dist/
           print-hash: true
