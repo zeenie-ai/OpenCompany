@@ -45,10 +45,19 @@ runs:
         python-version-file: .python-version
 
     # setup-uv v8 — the canonical uv installer (pdm, prefect, uv itself
-    # all use it). Replaces the older "pip install uv" pattern; v8
-    # adds automatic UV_CACHE_DIR setup + lockfile caching.
+    # all use it). ``enable-cache: false`` because v8's default cache
+    # behaviour fails the post-job step with a ``Path Validation Error``
+    # whenever the resolved ``UV_CACHE_DIR`` doesn't exist on disk
+    # (e.g., when ``uv sync`` ran in a working-directory other than
+    # the cached one, or another concurrent job already pruned the
+    # cache). The save failure marks every dependent job red even
+    # though the actual test step passed. Re-enable here once
+    # ``astral-sh/setup-uv`` 8.2+ ships the ``ignore-nothing-to-cache``
+    # flag.
     - name: Install uv
       uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      with:
+        enable-cache: false
 
     # The supervisor CLI lives at <repo>/cli/ and is invoked by pnpm
     # scripts as `python -m cli ...` from the runner's system Python.
