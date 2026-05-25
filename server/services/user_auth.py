@@ -41,9 +41,7 @@ class UserAuthService:
     async def get_user_by_email(self, email: str) -> Optional[User]:
         """Get user by email address."""
         async with self.database.get_session() as session:
-            result = await session.execute(
-                select(User).where(User.email == email.lower().strip())
-            )
+            result = await session.execute(select(User).where(User.email == email.lower().strip()))
             return result.scalars().first()
 
     async def get_user_by_id(self, user_id: int) -> Optional[User]:
@@ -60,9 +58,7 @@ class UserAuthService:
         count = await self.get_user_count()
         return count == 0
 
-    async def register(
-        self, email: str, password: str, display_name: str
-    ) -> tuple[Optional[User], Optional[str]]:
+    async def register(self, email: str, password: str, display_name: str) -> tuple[Optional[User], Optional[str]]:
         """
         Register a new user.
         Returns (user, None) on success, (None, error_message) on failure.
@@ -83,9 +79,7 @@ class UserAuthService:
             return None, "Password must be at least 8 characters"
 
         # Determine if this is the owner (first user in single-owner mode)
-        is_owner = (
-            self.settings.auth_mode == "single" and await self.get_user_count() == 0
-        )
+        is_owner = self.settings.auth_mode == "single" and await self.get_user_count() == 0
 
         # Create user
         user = User.create(
@@ -104,9 +98,7 @@ class UserAuthService:
 
         return user, None
 
-    async def login(
-        self, email: str, password: str
-    ) -> tuple[Optional[User], Optional[str]]:
+    async def login(self, email: str, password: str) -> tuple[Optional[User], Optional[str]]:
         """
         Authenticate user and return user object.
         Returns (user, None) on success, (None, error_message) on failure.
@@ -138,9 +130,7 @@ class UserAuthService:
 
     def create_access_token(self, user: User) -> str:
         """Create JWT access token for user."""
-        expire = datetime.now(timezone.utc) + timedelta(
-            minutes=self.settings.jwt_expire_minutes
-        )
+        expire = datetime.now(timezone.utc) + timedelta(minutes=self.settings.jwt_expire_minutes)
         payload = {
             "sub": str(user.id),
             "email": user.email,
@@ -149,9 +139,7 @@ class UserAuthService:
             "exp": expire,
             "iat": datetime.now(timezone.utc),
         }
-        return jwt.encode(
-            payload, self.settings.jwt_secret_key, algorithm=self._algorithm
-        )
+        return jwt.encode(payload, self.settings.jwt_secret_key, algorithm=self._algorithm)
 
     def verify_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
@@ -159,9 +147,7 @@ class UserAuthService:
         Returns None if token is invalid or expired.
         """
         try:
-            payload = jwt.decode(
-                token, self.settings.jwt_secret_key, algorithms=[self._algorithm]
-            )
+            payload = jwt.decode(token, self.settings.jwt_secret_key, algorithms=[self._algorithm])
             return payload
         except JWTError as e:
             logger.debug(f"Token verification failed: {e}")

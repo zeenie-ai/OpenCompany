@@ -17,7 +17,7 @@ class NodeJSClient:
             base_url: Base URL of Node.js server (e.g., http://127.0.0.1:3020)
             timeout: Default request timeout in seconds
         """
-        self._base_url = base_url.rstrip('/')
+        self._base_url = base_url.rstrip("/")
         self._timeout = aiohttp.ClientTimeout(total=timeout)
 
     async def health_check(self) -> Dict[str, Any]:
@@ -31,11 +31,7 @@ class NodeJSClient:
                 return await response.json()
 
     async def execute(
-        self,
-        code: str,
-        input_data: Optional[Dict[str, Any]] = None,
-        timeout: Optional[int] = None,
-        language: str = "javascript"
+        self, code: str, input_data: Optional[Dict[str, Any]] = None, timeout: Optional[int] = None, language: str = "javascript"
     ) -> Dict[str, Any]:
         """Execute JavaScript/TypeScript code.
 
@@ -57,10 +53,7 @@ class NodeJSClient:
             payload["timeout"] = timeout
 
         async with aiohttp.ClientSession(timeout=self._timeout) as session:
-            async with session.post(
-                f"{self._base_url}/execute",
-                json=payload
-            ) as response:
+            async with session.post(f"{self._base_url}/execute", json=payload) as response:
                 return await response.json()
 
     async def install_packages(self, packages: List[str]) -> Dict[str, Any]:
@@ -73,10 +66,7 @@ class NodeJSClient:
             Result with success and message
         """
         async with aiohttp.ClientSession(timeout=self._timeout) as session:
-            async with session.post(
-                f"{self._base_url}/packages/install",
-                json={"packages": packages}
-            ) as response:
+            async with session.post(f"{self._base_url}/packages/install", json={"packages": packages}) as response:
                 return await response.json()
 
     async def list_packages(self) -> Dict[str, Any]:

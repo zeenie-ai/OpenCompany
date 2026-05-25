@@ -15,6 +15,7 @@ Error codes:
 - -32002: Pairing failed
 - -32003: Relay error
 """
+
 import asyncio
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional
@@ -23,6 +24,7 @@ from enum import Enum
 
 class RPCErrorCode(Enum):
     """JSON-RPC 2.0 error codes"""
+
     INVALID_REQUEST = -32600
     METHOD_NOT_FOUND = -32601
     INVALID_PARAMS = -32602
@@ -34,6 +36,7 @@ class RPCErrorCode(Enum):
 @dataclass
 class RPCRequest:
     """JSON-RPC 2.0 request"""
+
     method: str
     params: Dict[str, Any] = field(default_factory=dict)
     id: Optional[int] = None
@@ -52,6 +55,7 @@ class RPCRequest:
 @dataclass
 class RPCResponse:
     """JSON-RPC 2.0 response"""
+
     id: int
     result: Optional[Any] = None
     error: Optional[Dict[str, Any]] = None
@@ -72,6 +76,7 @@ class RPCResponse:
 @dataclass
 class RPCEvent:
     """JSON-RPC 2.0 server event (notification without id)"""
+
     method: str
     params: Dict[str, Any] = field(default_factory=dict)
 
@@ -142,6 +147,7 @@ class RPCRequestTracker:
 
 class RPCError(Exception):
     """JSON-RPC error"""
+
     def __init__(self, message: str, code: int = None):
         super().__init__(message)
         self.code = code

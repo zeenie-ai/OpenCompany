@@ -35,9 +35,7 @@ async def test_resolves_whole_value_template_and_preserves_type():
     resolver = _make_resolver({"trigger_1": {"count": 5}})
     nodes = [{"id": "trigger_1", "type": "chatTrigger", "data": {"label": "Trigger"}}]
     edges = []
-    resolved = await resolver.resolve(
-        {"count": "{{trigger.count}}"}, "target", nodes, edges, "s1"
-    )
+    resolved = await resolver.resolve({"count": "{{trigger.count}}"}, "target", nodes, edges, "s1")
     # Whole-value template preserves native type (int, not str).
     assert resolved["count"] == 5
 
@@ -45,18 +43,14 @@ async def test_resolves_whole_value_template_and_preserves_type():
 async def test_resolves_interpolated_template_to_string():
     resolver = _make_resolver({"trigger_1": {"name": "world"}})
     nodes = [{"id": "trigger_1", "type": "chatTrigger", "data": {"label": "Trigger"}}]
-    resolved = await resolver.resolve(
-        {"greeting": "hello {{trigger.name}}!"}, "target", nodes, [], "s1"
-    )
+    resolved = await resolver.resolve({"greeting": "hello {{trigger.name}}!"}, "target", nodes, [], "s1")
     assert resolved["greeting"] == "hello world!"
 
 
 async def test_missing_key_replaces_with_empty_string():
     resolver = _make_resolver({"trigger_1": {"text": "ok"}})
     nodes = [{"id": "trigger_1", "type": "chatTrigger", "data": {"label": "Trigger"}}]
-    resolved = await resolver.resolve(
-        {"value": "{{trigger.bogus}}"}, "target", nodes, [], "s1"
-    )
+    resolved = await resolver.resolve({"value": "{{trigger.bogus}}"}, "target", nodes, [], "s1")
     assert resolved["value"] == ""
 
 
@@ -68,20 +62,20 @@ async def test_structlog_isEnabledFor_regression():
     resolver = _make_resolver({"trigger_1": {"text": "hi"}})
     nodes = [{"id": "trigger_1", "type": "chatTrigger", "data": {"label": "Trigger"}}]
     # Forces entry into _resolve_templates with at least one {{}} param.
-    resolved = await resolver.resolve(
-        {"msg": "{{trigger.text}}"}, "target", nodes, [], "s1"
-    )
+    resolved = await resolver.resolve({"msg": "{{trigger.text}}"}, "target", nodes, [], "s1")
     assert resolved["msg"] == "hi"
 
 
 async def test_nested_navigation_with_array_index():
-    resolver = _make_resolver({"upstream_1": {
-        "messages": [{"text": "first"}, {"text": "second"}],
-    }})
-    nodes = [{"id": "upstream_1", "type": "httpRequest", "data": {"label": "Upstream"}}]
-    resolved = await resolver.resolve(
-        {"pick": "{{upstream.messages[1].text}}"}, "target", nodes, [], "s1"
+    resolver = _make_resolver(
+        {
+            "upstream_1": {
+                "messages": [{"text": "first"}, {"text": "second"}],
+            }
+        }
     )
+    nodes = [{"id": "upstream_1", "type": "httpRequest", "data": {"label": "Upstream"}}]
+    resolved = await resolver.resolve({"pick": "{{upstream.messages[1].text}}"}, "target", nodes, [], "s1")
     assert resolved["pick"] == "second"
 
 
@@ -89,7 +83,10 @@ async def test_no_template_values_pass_through_unchanged():
     resolver = _make_resolver({})
     resolved = await resolver.resolve(
         {"literal": "items.0.text", "flag": True, "n": 3},
-        "target", [], [], "s1",
+        "target",
+        [],
+        [],
+        "s1",
     )
     # No '{{' in value ⇒ resolver must not touch it.
     assert resolved == {"literal": "items.0.text", "flag": True, "n": 3}
@@ -103,7 +100,10 @@ async def test_nested_dict_and_list_params_recurse():
             "config": {"greet": "hi {{src.name}}"},
             "people": ["{{src.name}}", "static"],
         },
-        "target", nodes, [], "s1",
+        "target",
+        nodes,
+        [],
+        "s1",
     )
     assert resolved["config"]["greet"] == "hi Alice"
     assert resolved["people"] == ["Alice", "static"]

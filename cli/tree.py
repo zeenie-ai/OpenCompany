@@ -41,6 +41,7 @@ import psutil
 
 # ---------------------------------------------------------------- POSIX / Windows spawn kwargs
 
+
 def new_session_kwargs() -> dict:
     """``Popen``/``open_process`` kwargs to spawn the child in its own group.
 
@@ -70,6 +71,7 @@ def signal_group(pid: int, sig: signal.Signals = signal.SIGTERM) -> None:
 
 
 # ---------------------------------------------------------------- Windows Job Object
+
 
 class _JobObject:
     """Lazy-imported wrapper around a Windows Job Object.
@@ -177,6 +179,7 @@ def add_to_job(pid: int) -> bool:
 
 
 # --------------------------------------------------------------- Tree kill
+
 
 def kill_tree(pid: int) -> None:
     """Cross-platform tree-kill via psutil. Defensive against races."""

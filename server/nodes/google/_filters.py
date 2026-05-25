@@ -13,11 +13,11 @@ from typing import Callable, Dict
 
 def build_gmail_filter(params: Dict) -> Callable[[Dict], bool]:
     """Build filter function for Gmail email events."""
-    label_filter = params.get('label_filter', 'INBOX')
+    label_filter = params.get("label_filter", "INBOX")
 
     def matches(data: Dict) -> bool:
-        if label_filter and label_filter != 'all':
-            labels = data.get('labels', [])
+        if label_filter and label_filter != "all":
+            labels = data.get("labels", [])
             if label_filter not in labels:
                 return False
         return True

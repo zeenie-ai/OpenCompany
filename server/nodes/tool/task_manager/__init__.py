@@ -49,10 +49,8 @@ class TaskManagerNode(ToolNode):
     tool_name = "task_manager"
     tool_description = "Track delegated sub-agent tasks. Operations: list_tasks (see all tasks), get_task (check specific task status/result), mark_done (cleanup completed tasks)."
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-tool", "kind": "output", "position": "top",
-         "label": "Tool", "role": "tools"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-tool", "kind": "output", "position": "top", "label": "Tool", "role": "tools"},
     )
     ui_hints = {"isToolPanel": True, "hideRunButton": True}
     annotations = {"destructive": True, "readonly": False, "open_world": False}
@@ -64,7 +62,8 @@ class TaskManagerNode(ToolNode):
     @Operation("manage")
     async def manage(self, ctx: NodeContext, params: TaskManagerParams) -> Any:
         return await _execute_task_manager(
-            params.model_dump(), {"node_id": ctx.node_id, "workspace_dir": ctx.workspace_dir or ""},
+            params.model_dump(),
+            {"node_id": ctx.node_id, "workspace_dir": ctx.workspace_dir or ""},
         )
 
 
@@ -98,9 +97,7 @@ async def _execute_task_manager(
     status_filter = tool_args.get("status_filter") or params.get("status_filter")
     database = config.get("database")
 
-    logger.debug(
-        f"[TaskManager] Operation: {operation}, task_id: {task_id}, filter: {status_filter}"
-    )
+    logger.debug(f"[TaskManager] Operation: {operation}, task_id: {task_id}, filter: {status_filter}")
 
     if operation == "list_tasks":
         tasks = []
@@ -125,13 +122,15 @@ async def _execute_task_manager(
         # Completed tasks from in-memory cache.
         for tid, result in _delegation_results.items():
             if tid not in [t["task_id"] for t in tasks]:
-                tasks.append({
-                    "task_id": tid,
-                    "status": result.get("status", "completed"),
-                    "agent_name": result.get("agent_name"),
-                    "result_summary": str(result.get("result", ""))[:200],
-                    "active": False,
-                })
+                tasks.append(
+                    {
+                        "task_id": tid,
+                        "status": result.get("status", "completed"),
+                        "agent_name": result.get("agent_name"),
+                        "result_summary": str(result.get("result", ""))[:200],
+                        "active": False,
+                    }
+                )
 
         if status_filter:
             tasks = [t for t in tasks if t.get("status") == status_filter]
@@ -190,9 +189,7 @@ async def _execute_task_manager(
             "task_id": task_id,
             "removed": removed,
             "message": (
-                f"Task {task_id} marked as done and removed from tracking"
-                if removed
-                else f"Task {task_id} was not in active tracking"
+                f"Task {task_id} marked as done and removed from tracking" if removed else f"Task {task_id} was not in active tracking"
             ),
         }
 

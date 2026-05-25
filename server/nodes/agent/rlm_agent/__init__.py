@@ -12,7 +12,8 @@ from typing import Any
 from core.logging import get_logger
 from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
 from services.plugin.edge_walker import (
-    collect_agent_connections, format_task_context,
+    collect_agent_connections,
+    format_task_context,
 )
 
 from .._handles import STD_AGENT_HINTS, std_agent_handles
@@ -50,42 +51,41 @@ class RLMAgentNode(ActionNode):
 
         # 1. Edge-walk for memory / skill / tool / input / task connections.
         memory_data, skill_data, tool_data, input_data, task_data = await collect_agent_connections(
-            node_id, ctx.raw, database, log_prefix="[RLM Agent]",
+            node_id,
+            ctx.raw,
+            database,
+            log_prefix="[RLM Agent]",
         )
 
         # 2. Inject task-completion context into the prompt.
         if task_data:
             payload = {
                 **payload,
-                'prompt': f"{format_task_context(task_data)}\n\n{payload.get('prompt', '')}",
+                "prompt": f"{format_task_context(task_data)}\n\n{payload.get('prompt', '')}",
             }
             logger.info(
                 "[RLM Agent] Task context injected for task_id=%s",
-                task_data.get('task_id'),
+                task_data.get("task_id"),
             )
             # 3. Strip tools when the agent is being asked to react to a
             # completed/errored task — there's nothing to invoke.
-            if task_data.get('status') in ('completed', 'error') and tool_data:
+            if task_data.get("status") in ("completed", "error") and tool_data:
                 tool_data = []
                 logger.info("[RLM Agent] Stripped tools for task completion handling")
 
         # 4. Auto-prompt fallback: if no prompt + an input is connected,
         # use the input's text-shaped field.
-        if not payload.get('prompt') and input_data:
+        if not payload.get("prompt") and input_data:
             payload = {
                 **payload,
-                'prompt': (
-                    input_data.get('message')
-                    or input_data.get('text')
-                    or input_data.get('content')
-                    or str(input_data)
-                ),
+                "prompt": (input_data.get("message") or input_data.get("text") or input_data.get("content") or str(input_data)),
             }
             logger.info("[RLM Agent] Auto-using input as prompt")
 
         # 5. Delegate to the RLM service.
         response = await ai_service.rlm_service.execute(
-            node_id, payload,
+            node_id,
+            payload,
             memory_data=memory_data,
             skill_data=skill_data if skill_data else None,
             tool_data=tool_data if tool_data else None,

@@ -21,12 +21,23 @@ class WhatsAppDbParams(BaseModel):
     """
 
     operation: Literal[
-        "chat_history", "search_groups", "get_group_info",
-        "get_contact_info", "list_contacts", "check_contacts",
-        "list_channels", "get_channel_info", "channel_messages",
-        "channel_stats", "channel_follow", "channel_unfollow",
-        "channel_create", "channel_mute", "channel_mark_viewed",
-        "newsletter_react", "newsletter_live_updates",
+        "chat_history",
+        "search_groups",
+        "get_group_info",
+        "get_contact_info",
+        "list_contacts",
+        "check_contacts",
+        "list_channels",
+        "get_channel_info",
+        "channel_messages",
+        "channel_stats",
+        "channel_follow",
+        "channel_unfollow",
+        "channel_create",
+        "channel_mute",
+        "channel_mark_viewed",
+        "newsletter_react",
+        "newsletter_live_updates",
         "contact_profile_pic",
     ] = Field(default="chat_history", description="Operation to perform")
 
@@ -42,9 +53,12 @@ class WhatsAppDbParams(BaseModel):
         default="",
         description="Contact phone number (no + prefix)",
         json_schema_extra={
-            "displayOptions": {"show": {
-                "operation": ["chat_history"], "chat_type": ["individual"],
-            }},
+            "displayOptions": {
+                "show": {
+                    "operation": ["chat_history"],
+                    "chat_type": ["individual"],
+                }
+            },
         },
     )
     group_id: str = Field(
@@ -52,30 +66,37 @@ class WhatsAppDbParams(BaseModel):
         description="Group JID (format: 123456789@g.us)",
         json_schema_extra={
             "component": "GroupIdSelector",
-            "displayOptions": {"show": {
-                "operation": ["chat_history", "get_group_info"],
-                "chat_type": ["group"],
-            }},
+            "displayOptions": {
+                "show": {
+                    "operation": ["chat_history", "get_group_info"],
+                    "chat_type": ["group"],
+                }
+            },
         },
     )
     group_filter: Literal["all", "contact"] = Field(
         default="all",
         description="Filter messages in group",
         json_schema_extra={
-            "displayOptions": {"show": {
-                "operation": ["chat_history"], "chat_type": ["group"],
-            }},
+            "displayOptions": {
+                "show": {
+                    "operation": ["chat_history"],
+                    "chat_type": ["group"],
+                }
+            },
         },
     )
     sender_phone: str = Field(
         default="",
         description="Filter to messages from specific group member",
         json_schema_extra={
-            "displayOptions": {"show": {
-                "operation": ["chat_history"],
-                "chat_type": ["group"],
-                "group_filter": ["contact"],
-            }},
+            "displayOptions": {
+                "show": {
+                    "operation": ["chat_history"],
+                    "chat_type": ["group"],
+                    "group_filter": ["contact"],
+                }
+            },
         },
     )
     message_filter: Literal["all", "text_only"] = Field(
@@ -86,14 +107,17 @@ class WhatsAppDbParams(BaseModel):
         },
     )
     limit: int = Field(
-        default=50, ge=1, le=500,
+        default=50,
+        ge=1,
+        le=500,
         description="Maximum number of messages (1-500)",
         json_schema_extra={
             "displayOptions": {"show": {"operation": ["chat_history"]}},
         },
     )
     offset: int = Field(
-        default=0, ge=0,
+        default=0,
+        ge=0,
         description="Number of messages to skip",
         json_schema_extra={
             "displayOptions": {"show": {"operation": ["chat_history"]}},
@@ -105,9 +129,11 @@ class WhatsAppDbParams(BaseModel):
         default=False,
         description="Download base64 media data (may be slow for many messages)",
         json_schema_extra={
-            "displayOptions": {"show": {
-                "operation": ["chat_history", "channel_messages"],
-            }},
+            "displayOptions": {
+                "show": {
+                    "operation": ["chat_history", "channel_messages"],
+                }
+            },
         },
     )
 
@@ -116,9 +142,11 @@ class WhatsAppDbParams(BaseModel):
         default="",
         description="Search query (leave empty for all)",
         json_schema_extra={
-            "displayOptions": {"show": {
-                "operation": ["search_groups", "list_contacts"],
-            }},
+            "displayOptions": {
+                "show": {
+                    "operation": ["search_groups", "list_contacts"],
+                }
+            },
         },
     )
 
@@ -155,42 +183,67 @@ class WhatsAppDbParams(BaseModel):
         description="Newsletter JID or invite link",
         json_schema_extra={
             "component": "ChannelJidSelector",
-            "displayOptions": {"show": {"operation": [
-                "get_channel_info", "channel_messages", "channel_stats",
-                "channel_follow", "channel_unfollow", "channel_mute",
-                "channel_mark_viewed", "newsletter_react", "newsletter_live_updates",
-            ]}},
+            "displayOptions": {
+                "show": {
+                    "operation": [
+                        "get_channel_info",
+                        "channel_messages",
+                        "channel_stats",
+                        "channel_follow",
+                        "channel_unfollow",
+                        "channel_mute",
+                        "channel_mark_viewed",
+                        "newsletter_react",
+                        "newsletter_live_updates",
+                    ]
+                }
+            },
         },
     )
     refresh: bool = Field(
         default=False,
         description="Bypass 24h cache and fetch fresh data",
         json_schema_extra={
-            "displayOptions": {"show": {"operation": [
-                "list_channels", "get_channel_info", "channel_messages",
-            ]}},
+            "displayOptions": {
+                "show": {
+                    "operation": [
+                        "list_channels",
+                        "get_channel_info",
+                        "channel_messages",
+                    ]
+                }
+            },
         },
     )
 
     # ===== CHANNEL MESSAGES / STATS =====
     channel_count: int = Field(
-        default=10, ge=1, le=100,
+        default=10,
+        ge=1,
+        le=100,
         description="Number of messages to retrieve (1-100)",
         json_schema_extra={
-            "displayOptions": {"show": {"operation": [
-                "channel_messages", "channel_stats",
-            ]}},
+            "displayOptions": {
+                "show": {
+                    "operation": [
+                        "channel_messages",
+                        "channel_stats",
+                    ]
+                }
+            },
         },
     )
     before_server_id: int = Field(
-        default=0, ge=0,
+        default=0,
+        ge=0,
         description="Pagination: get messages before this server ID (0 = latest)",
         json_schema_extra={
             "displayOptions": {"show": {"operation": ["channel_messages"]}},
         },
     )
     message_offset: int = Field(
-        default=0, ge=0,
+        default=0,
+        ge=0,
         description="Skip this many messages",
         json_schema_extra={
             "displayOptions": {"show": {"operation": ["channel_messages"]}},
@@ -264,15 +317,21 @@ class WhatsAppDbParams(BaseModel):
         default="",
         description="Comma-separated message server IDs",
         json_schema_extra={
-            "displayOptions": {"show": {"operation": [
-                "channel_mark_viewed", "newsletter_live_updates",
-            ]}},
+            "displayOptions": {
+                "show": {
+                    "operation": [
+                        "channel_mark_viewed",
+                        "newsletter_live_updates",
+                    ]
+                }
+            },
         },
     )
 
     # ===== NEWSLETTER REACT =====
     react_server_id: int = Field(
-        default=0, ge=0,
+        default=0,
+        ge=0,
         description="Server ID of the message to react to",
         json_schema_extra={
             "displayOptions": {"show": {"operation": ["newsletter_react"]}},
@@ -326,10 +385,8 @@ class WhatsAppDbNode(ActionNode):
     tool_name = "whatsapp_db"
     tool_description = "Query WhatsApp database - list contacts, search groups, get contact/group info, retrieve chat history."
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
     annotations = {"destructive": False, "readonly": True, "open_world": True}
     task_queue = TaskQueue.MESSAGING
@@ -341,9 +398,12 @@ class WhatsAppDbNode(ActionNode):
     @Operation("query", cost={"service": "whatsapp", "action": "db_query", "count": 1})
     async def query(self, ctx: NodeContext, params: WhatsAppDbParams) -> Any:
         from ._base import handle_whatsapp_db
+
         response = await handle_whatsapp_db(
-            node_id=ctx.node_id, node_type=self.type,
-            parameters=params.model_dump(), context=ctx.raw,
+            node_id=ctx.node_id,
+            node_type=self.type,
+            parameters=params.model_dump(),
+            context=ctx.raw,
         )
         if response.get("success"):
             return response.get("result") or response

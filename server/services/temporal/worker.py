@@ -319,10 +319,7 @@ class TemporalWorkerPool:
             task = asyncio.create_task(worker.run(), name=f"worker-{queue}")
             self._workers.append(worker)
             self._tasks.append(task)
-            logger.info(
-                f"[Pool] Started worker queue={queue!r} "
-                f"activities={len(activities)} concurrency={concurrency}"
-            )
+            logger.info(f"[Pool] Started worker queue={queue!r} " f"activities={len(activities)} concurrency={concurrency}")
 
     async def stop(self) -> None:
         for task in self._tasks:

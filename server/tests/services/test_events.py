@@ -28,6 +28,7 @@ def _run(coro):
 class TestWorkflowEvent:
     def test_required_fields(self):
         from services.events import WorkflowEvent
+
         ev = WorkflowEvent(source="stripe://acct_1", type="stripe.charge.succeeded")
         assert ev.specversion == "1.0"
         assert ev.id  # uuid default
@@ -35,8 +36,11 @@ class TestWorkflowEvent:
 
     def test_round_trip_json(self):
         from services.events import WorkflowEvent
+
         ev = WorkflowEvent(
-            source="stripe://acct_1", type="stripe.charge.succeeded", data={"amount": 1000},
+            source="stripe://acct_1",
+            type="stripe.charge.succeeded",
+            data={"amount": 1000},
         )
         restored = WorkflowEvent.model_validate(json.loads(ev.model_dump_json()))
         assert restored.type == ev.type
@@ -45,6 +49,7 @@ class TestWorkflowEvent:
 
     def test_matches_type_glob(self):
         from services.events import WorkflowEvent
+
         ev = WorkflowEvent(source="stripe://x", type="stripe.charge.succeeded")
         assert ev.matches_type("all") is True
         assert ev.matches_type("") is True
@@ -55,6 +60,7 @@ class TestWorkflowEvent:
 
     def test_from_legacy(self):
         from services.events import WorkflowEvent
+
         ev = WorkflowEvent.from_legacy("whatsapp_message_received", {"text": "hi"})
         assert ev.type == "whatsapp_message_received"
         assert ev.data == {"text": "hi"}
@@ -77,11 +83,13 @@ class TestStripeVerifier:
 
     def test_valid_signature_passes(self):
         from services.events import StripeVerifier
+
         body = b'{"id":"evt_1"}'
         StripeVerifier.verify(self._sign(body), body, self.SECRET)
 
     def test_tampered_body_rejected(self):
         from services.events import StripeVerifier
+
         body = b'{"id":"evt_1"}'
         headers = self._sign(body)
         with pytest.raises(ValueError):
@@ -89,18 +97,21 @@ class TestStripeVerifier:
 
     def test_missing_header_rejected(self):
         from services.events import StripeVerifier
+
         with pytest.raises(ValueError, match="missing"):
-            StripeVerifier.verify({}, b'{}', self.SECRET)
+            StripeVerifier.verify({}, b"{}", self.SECRET)
 
     def test_malformed_header_rejected(self):
         from services.events import StripeVerifier
+
         with pytest.raises(ValueError):
-            StripeVerifier.verify({"Stripe-Signature": "garbage"}, b'{}', self.SECRET)
+            StripeVerifier.verify({"Stripe-Signature": "garbage"}, b"{}", self.SECRET)
 
 
 class TestGitHubVerifier:
     def test_round_trip(self):
         from services.events import GitHubVerifier
+
         secret = "shh"
         body = b'{"action":"opened"}'
         sig = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
@@ -108,13 +119,15 @@ class TestGitHubVerifier:
 
     def test_tampered_rejected(self):
         from services.events import GitHubVerifier
+
         with pytest.raises(ValueError):
-            GitHubVerifier.verify({"X-Hub-Signature-256": "sha256=deadbeef"}, b'{}', "shh")
+            GitHubVerifier.verify({"X-Hub-Signature-256": "sha256=deadbeef"}, b"{}", "shh")
 
 
 class TestStandardWebhooksVerifier:
     def test_round_trip(self):
         from services.events import StandardWebhooksVerifier
+
         secret_raw = b"super-secret-key-bytes"
         secret = "whsec_" + base64.b64encode(secret_raw).decode()
         body = b'{"foo":"bar"}'
@@ -131,16 +144,19 @@ class TestStandardWebhooksVerifier:
 
     def test_tampered_rejected(self):
         from services.events import StandardWebhooksVerifier
+
         with pytest.raises(ValueError):
             StandardWebhooksVerifier.verify(
                 {"webhook-id": "1", "webhook-timestamp": "1", "webhook-signature": "v1,bad"},
-                b'{}', "whsec_AAAA",
+                b"{}",
+                "whsec_AAAA",
             )
 
 
 class TestHmacVerifier:
     def test_round_trip(self):
         from services.events import HmacVerifier
+
         secret = "shh"
         body = b'{"x":1}'
         sig = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
@@ -240,6 +256,7 @@ class TestWebhookSourceHandle:
 
     def test_tampered_signature_raises_400(self):
         from fastapi import HTTPException
+
         src = self._build_source(secret_value="whsec_test")
         body = b'{"event":"payload"}'
         req = self._signed_request(body, "whsec_other")  # signed with different secret
@@ -285,8 +302,10 @@ class TestDaemonEventSource:
                 return None
 
         async def go():
-            with patch("services.events.daemon.shutil.which", return_value="/usr/bin/echo"), \
-                 patch("services.events.daemon.get_process_service") as get_ps:
+            with (
+                patch("services.events.daemon.shutil.which", return_value="/usr/bin/echo"),
+                patch("services.events.daemon.get_process_service") as get_ps,
+            ):
                 ps = get_ps.return_value
 
                 async def fake_start(**kwargs):

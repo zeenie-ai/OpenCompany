@@ -60,10 +60,7 @@ async def _customer_mode_handler(
 
     overrides: Dict[str, Any] = {"customer_id": customer_id}
     if redirect_after:
-        overrides["redirect_after"] = (
-            f"{redirect_after}?google_connected=true"
-            f"&customer={customer_id}&email={email}"
-        )
+        overrides["redirect_after"] = f"{redirect_after}?google_connected=true" f"&customer={customer_id}&email={email}"
     return overrides
 
 
@@ -82,7 +79,9 @@ router: APIRouter = make_oauth_callback_router(
 
 @router.post("/customer-auth-url")
 async def generate_customer_auth_url(
-    request: Request, customer_id: str, redirect_after: Optional[str] = None,
+    request: Request,
+    customer_id: str,
+    redirect_after: Optional[str] = None,
 ):
     """Generate OAuth URL for a customer to connect their Google account."""
     from services.oauth_utils import get_redirect_uri

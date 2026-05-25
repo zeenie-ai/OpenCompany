@@ -46,10 +46,8 @@ class StripeActionNode(ActionNode):
     tool_name = "stripe_action"
     tool_description = "Run any Stripe CLI command and return the parsed JSON response. Pass a 'command' field exactly as you would type after 'stripe ' (e.g. 'customers create --email a@b.com', 'charges list --limit 10', 'payment_intents create --amount 2000 --currency usd', 'refunds create --payment-intent pi_xxx', 'trigger charge.succeeded'). Covers every Stripe resource: customers, charges, payment_intents, refunds, invoices, products, prices, subscriptions, payment_methods, setup_intents, transfers, payouts, plus 'trigger <event>' for synthetic test events."
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
     annotations = {"destructive": False, "readonly": False, "open_world": True}
     credentials = (StripeCredential,)

@@ -89,15 +89,13 @@ class StripeListenSource(DaemonEventSource):
 
         port = int(Settings().port)
         binary = shlex.quote(str(stripe_cli_path() or "stripe"))
-        return (
-            f"{binary} listen --forward-to http://localhost:{port}/webhook/stripe "
-            f"--print-secret"
-        )
+        return f"{binary} listen --forward-to http://localhost:{port}/webhook/stripe " f"--print-secret"
 
     async def start(self) -> Dict[str, Any]:
         """Ensure the CLI binary is downloaded before delegating to the
         framework's daemon-start path (which calls ``build_command``)."""
         from ._install import ensure_stripe_cli
+
         try:
             path = await ensure_stripe_cli()
             logger.info("[Stripe] daemon start: CLI binary resolved at %s", path)
@@ -121,10 +119,12 @@ class StripeListenSource(DaemonEventSource):
     async def _persist_secret(self, secret: str) -> None:
         try:
             from services.plugin.deps import get_auth_service
+
             await get_auth_service().store_api_key(_SECRET_FIELD, secret, models=[])
             logger.info(
                 "[Stripe] webhook signing secret persisted (key=%s, len=%d)",
-                _SECRET_FIELD, len(secret),
+                _SECRET_FIELD,
+                len(secret),
             )
         except Exception as e:
             logger.warning("[Stripe] persist secret failed: %s", e)

@@ -21,11 +21,23 @@ class WhatsAppReceiveParams(BaseModel):
     """
 
     message_type_filter: Literal[
-        "all", "text", "image", "video", "audio",
-        "document", "location", "contact",
+        "all",
+        "text",
+        "image",
+        "video",
+        "audio",
+        "document",
+        "location",
+        "contact",
     ] = Field(default="all")
     filter: Literal[
-        "all", "self", "any_contact", "contact", "group", "channel", "keywords",
+        "all",
+        "self",
+        "any_contact",
+        "contact",
+        "group",
+        "channel",
+        "keywords",
     ] = "all"
     phone_number: str = Field(
         default="",
@@ -66,9 +78,18 @@ class WhatsAppReceiveParams(BaseModel):
     ignore_own_messages: bool = Field(
         default=True,
         json_schema_extra={
-            "displayOptions": {"show": {"filter": [
-                "all", "any_contact", "contact", "group", "channel", "keywords",
-            ]}},
+            "displayOptions": {
+                "show": {
+                    "filter": [
+                        "all",
+                        "any_contact",
+                        "contact",
+                        "group",
+                        "channel",
+                        "keywords",
+                    ]
+                }
+            },
         },
     )
     include_media_data: bool = Field(default=False)
@@ -99,10 +120,7 @@ class WhatsAppReceiveNode(TriggerNode):
     group = ("whatsapp", "trigger")
     description = "Trigger workflow when WhatsApp message is received"
     component_kind = "trigger"
-    handles = (
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
-    )
+    handles = ({"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},)
     task_queue = TaskQueue.TRIGGERS_EVENT
     mode = "event"
     event_type = "whatsapp_message_received"
@@ -112,10 +130,9 @@ class WhatsAppReceiveNode(TriggerNode):
 
     def build_filter(self, params: WhatsAppReceiveParams) -> Callable[[Dict[str, Any]], bool]:
         from services.event_waiter import build_whatsapp_filter
+
         return build_whatsapp_filter(params.model_dump())
 
     @Operation("wait")
     async def wait(self, ctx: NodeContext, params: WhatsAppReceiveParams) -> WhatsAppReceiveOutput:
-        raise NotImplementedError(
-            "Event triggers return via TriggerNode.execute, not the op body"
-        )
+        raise NotImplementedError("Event triggers return via TriggerNode.execute, not the op body")

@@ -5,6 +5,7 @@ extraction, credential cross-check, name conflict) lives in
 ``services.workflow_import`` and is shared with the WS ``import_workflow``
 handler. This module is the first-launch-only convenience wrapper.
 """
+
 import json
 import logging
 from typing import List, Dict, Any
@@ -75,20 +76,23 @@ async def import_examples_for_user(database) -> int:
         # of empty dicts.
         try:
             report = await validate_workflow(
-                nodes=nodes, edges=edges,
+                nodes=nodes,
+                edges=edges,
                 parameters_by_id=node_parameters,
             )
         except Exception as exc:
             logger.warning(
                 "Skipping example %r: validator raised %s",
-                example.get("name"), exc,
+                example.get("name"),
+                exc,
             )
             continue
 
         if report["errors"]:
             logger.warning(
                 "Skipping example %r: %d validation errors %s",
-                example.get("name"), len(report["errors"]),
+                example.get("name"),
+                len(report["errors"]),
                 [iss.get("code") for iss in report["errors"]],
             )
             continue
@@ -96,7 +100,8 @@ async def import_examples_for_user(database) -> int:
             # Expected on first launch — credentials not yet configured.
             logger.info(
                 "Example %r has %d warnings (likely first-launch credential gaps)",
-                example.get("name"), len(report["warnings"]),
+                example.get("name"),
+                len(report["warnings"]),
             )
 
         # Reuse existing save_workflow method

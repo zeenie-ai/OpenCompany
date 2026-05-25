@@ -17,7 +17,13 @@ from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
 
 class FileHandlerParams(BaseModel):
     file_type: Literal[
-        "generic", "markdown", "text", "json", "csv", "html", "xml",
+        "generic",
+        "markdown",
+        "text",
+        "json",
+        "csv",
+        "html",
+        "xml",
     ] = Field(
         default="generic",
         description="Content type tag used for downstream processing hints.",

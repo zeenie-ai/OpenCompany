@@ -34,6 +34,7 @@ def test_kill_pid_force_kills_on_timeout():
 def test_kill_port_excludes_self():
     """The function must never kill its own PID."""
     import os
+
     my_pid = os.getpid()
     with patch.object(ports, "find_pids_by_port", side_effect=[{my_pid}, set()]):
         result = ports.kill_port(9999)

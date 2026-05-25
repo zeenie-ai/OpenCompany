@@ -70,11 +70,7 @@ def whatsapp_connection_status(
     FE can route per-device updates."""
     return WorkflowEvent(
         source="machinaos://nodes/whatsapp",
-        type=(
-            "com.machinaos.whatsapp.connection.opened"
-            if connected
-            else "com.machinaos.whatsapp.connection.closed"
-        ),
+        type=("com.machinaos.whatsapp.connection.opened" if connected else "com.machinaos.whatsapp.connection.closed"),
         subject=device_id,
         data={
             "connected": connected,
@@ -94,11 +90,7 @@ def whatsapp_message_event(
     """Message envelope (sent or received). Subject auto-extracted
     from the params payload (chat_id / sender / from)."""
     payload = dict(params)
-    subject = (
-        payload.get("chat_id")
-        or payload.get("sender")
-        or payload.get("from")
-    )
+    subject = payload.get("chat_id") or payload.get("sender") or payload.get("from")
     return WorkflowEvent(
         source="machinaos://nodes/whatsapp",
         type=f"com.machinaos.whatsapp.message.{direction}",
@@ -178,10 +170,12 @@ async def broadcast_whatsapp_status(
         device_id=device_id,
         qr=qr,
     )
-    await broadcaster.broadcast({
-        "type": _STATUS_TYPED_WIRE_KEY,
-        "data": event.model_dump(mode="json"),
-    })
+    await broadcaster.broadcast(
+        {
+            "type": _STATUS_TYPED_WIRE_KEY,
+            "data": event.model_dump(mode="json"),
+        }
+    )
 
 
 async def broadcast_whatsapp_message(
@@ -213,20 +207,24 @@ async def broadcast_whatsapp_message(
         # migrates to envelope-shape (Wave 12 D4 follow-up).
         from services.events.dispatch import emit
 
-        await broadcaster.broadcast({
-            "type": _MESSAGE_RECEIVED_WIRE_KEY,
-            "data": payload,
-        })
+        await broadcaster.broadcast(
+            {
+                "type": _MESSAGE_RECEIVED_WIRE_KEY,
+                "data": payload,
+            }
+        )
         await emit(
             whatsapp_message_event("received", payload),
             wire_routing_key=_MESSAGE_RECEIVED_WIRE_KEY,
         )
     else:
         # Outbound observation only — direct legacy raw broadcast.
-        await broadcaster.broadcast({
-            "type": _MESSAGE_SENT_WIRE_KEY,
-            "data": payload,
-        })
+        await broadcaster.broadcast(
+            {
+                "type": _MESSAGE_SENT_WIRE_KEY,
+                "data": payload,
+            }
+        )
 
 
 async def broadcast_whatsapp_newsletter(
@@ -243,10 +241,12 @@ async def broadcast_whatsapp_newsletter(
     from services.status_broadcaster import get_status_broadcaster
 
     broadcaster = get_status_broadcaster()
-    await broadcaster.broadcast({
-        "type": _NEWSLETTER_WIRE_KEYS[verb],
-        "data": dict(params),
-    })
+    await broadcaster.broadcast(
+        {
+            "type": _NEWSLETTER_WIRE_KEYS[verb],
+            "data": dict(params),
+        }
+    )
 
 
 async def broadcast_whatsapp_history_synced(params: Mapping[str, Any]) -> None:
@@ -257,10 +257,12 @@ async def broadcast_whatsapp_history_synced(params: Mapping[str, Any]) -> None:
     from services.status_broadcaster import get_status_broadcaster
 
     broadcaster = get_status_broadcaster()
-    await broadcaster.broadcast({
-        "type": _HISTORY_SYNCED_WIRE_KEY,
-        "data": dict(params),
-    })
+    await broadcaster.broadcast(
+        {
+            "type": _HISTORY_SYNCED_WIRE_KEY,
+            "data": dict(params),
+        }
+    )
 
 
 __all__ = [

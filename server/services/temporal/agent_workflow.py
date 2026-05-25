@@ -179,10 +179,12 @@ class AgentWorkflow:
         # current markdown content seeds the conversation here.
         memory_markdown = payload.get("memory_content") or ""
         if memory_markdown:
-            messages.append({
-                "type": "system",
-                "data": {"content": f"## Prior conversation:\n{memory_markdown}"},
-            })
+            messages.append(
+                {
+                    "type": "system",
+                    "data": {"content": f"## Prior conversation:\n{memory_markdown}"},
+                }
+            )
 
         user_prompt = payload.get("user_prompt") or ""
         if user_prompt:
@@ -192,9 +194,7 @@ class AgentWorkflow:
         # parameters} so the workflow can schedule the right activity
         # when the LLM emits a tool_call.
         tools = payload.get("tools") or []
-        tool_index: Dict[str, Dict[str, Any]] = {
-            t["name"]: t for t in tools
-        }
+        tool_index: Dict[str, Dict[str, Any]] = {t["name"]: t for t in tools}
 
         max_iterations = int(payload.get("max_iterations") or DEFAULT_MAX_ITERATIONS)
         token_total = 0
@@ -212,23 +212,27 @@ class AgentWorkflow:
         # canvas glow). Mirrors what F4.A's _node_activity wrapper
         # does for non-agent plugins.
         await self._emit_phase(
-            agent_node_id, agent_workflow_id, 0, max_iterations,
-            phase="starting", status="executing",
+            agent_node_id,
+            agent_workflow_id,
+            0,
+            max_iterations,
+            phase="starting",
+            status="executing",
         )
 
         # ---- Main loop --------------------------------------------------
         for iteration in range(max_iterations):
-            workflow.logger.info(
-                f"AgentWorkflow iteration {iteration} "
-                f"(messages={len(messages)} tools={len(tools)})"
-            )
+            workflow.logger.info(f"AgentWorkflow iteration {iteration} " f"(messages={len(messages)} tools={len(tools)})")
 
             # CloudEvents-shaped agent_progress per LLM turn. Mirrors the
             # the in-process agent loop's per-turn broadcast (RFC §6.4).
             # FE consumes the typed envelope and updates the canvas
             # node's "N / max" iteration badge live.
             await self._emit_phase(
-                agent_node_id, agent_workflow_id, iteration, max_iterations,
+                agent_node_id,
+                agent_workflow_id,
+                iteration,
+                max_iterations,
                 phase="llm_step",
             )
 
@@ -264,10 +268,7 @@ class AgentWorkflow:
                     usage_total[k] = usage_total.get(k, 0) + v
             if step_result.get("thinking"):
                 if thinking_accumulated:
-                    thinking_accumulated += (
-                        f"\n\n--- Iteration {iteration + 1} ---\n"
-                        + step_result["thinking"]
-                    )
+                    thinking_accumulated += f"\n\n--- Iteration {iteration + 1} ---\n" + step_result["thinking"]
                 else:
                     thinking_accumulated = step_result["thinking"]
 
@@ -284,15 +285,11 @@ class AgentWorkflow:
 
             if kind == "final":
                 final_content = step_result.get("content", "")
-                await self._persist_turn(
-                    payload, human_text=user_prompt, assistant_text=final_content
-                )
+                await self._persist_turn(payload, human_text=user_prompt, assistant_text=final_content)
                 break
 
             if kind != "tool_calls":
-                workflow.logger.error(
-                    f"AgentWorkflow: unexpected LLM step kind={kind!r}"
-                )
+                workflow.logger.error(f"AgentWorkflow: unexpected LLM step kind={kind!r}")
                 break
 
             # ---- Schedule tool activities -------------------------------
@@ -302,21 +299,17 @@ class AgentWorkflow:
             for call in calls:
                 tool_info = tool_index.get(call.get("name", ""))
                 if tool_info is None:
-                    workflow.logger.warning(
-                        f"AgentWorkflow: LLM called unknown tool {call.get('name')!r}; "
-                        "returning error to model"
+                    workflow.logger.warning(f"AgentWorkflow: LLM called unknown tool {call.get('name')!r}; " "returning error to model")
+                    messages.append(
+                        {
+                            "type": "tool",
+                            "data": {
+                                "content": (f"Error: tool {call.get('name')!r} is not " "connected to this agent."),
+                                "tool_call_id": call.get("id", ""),
+                                "name": call.get("name", ""),
+                            },
+                        }
                     )
-                    messages.append({
-                        "type": "tool",
-                        "data": {
-                            "content": (
-                                f"Error: tool {call.get('name')!r} is not "
-                                "connected to this agent."
-                            ),
-                            "tool_call_id": call.get("id", ""),
-                            "name": call.get("name", ""),
-                        },
-                    })
                     continue
 
                 # Delegation tools (``delegate_to_<child>``) need different
@@ -358,7 +351,7 @@ class AgentWorkflow:
                         **(tool_info.get("parameters") or {}),
                         **call_args,
                     }
-                    child_nodes = []   # regular tool activity doesn't need full canvas
+                    child_nodes = []  # regular tool activity doesn't need full canvas
                     child_edges = []
 
                 tool_payload = {
@@ -372,12 +365,13 @@ class AgentWorkflow:
                     "edges": child_edges,
                 }
 
-                tool_activity_name = (
-                    f"node.{tool_info['node_type']}.v{tool_info['version']}"
-                )
+                tool_activity_name = f"node.{tool_info['node_type']}.v{tool_info['version']}"
 
                 await self._emit_phase(
-                    agent_node_id, agent_workflow_id, iteration, max_iterations,
+                    agent_node_id,
+                    agent_workflow_id,
+                    iteration,
+                    max_iterations,
                     phase="executing_tool",
                     extra={"tool_name": call.get("name", ""), "tool_node_id": tool_info["tool_node_id"]},
                 )
@@ -391,7 +385,10 @@ class AgentWorkflow:
                     )
                     tool_content = _serialise_tool_result(tool_result)
                     await self._emit_phase(
-                        agent_node_id, agent_workflow_id, iteration, max_iterations,
+                        agent_node_id,
+                        agent_workflow_id,
+                        iteration,
+                        max_iterations,
                         phase="tool_completed",
                         extra={"tool_name": call.get("name", "")},
                     )
@@ -399,21 +396,19 @@ class AgentWorkflow:
                     # After all retries exhausted, surface the error to
                     # the LLM (per user decision: LLM sees error and
                     # continues — matches the in-process agent loop).
-                    workflow.logger.warning(
-                        f"AgentWorkflow tool {tool_info['node_type']!r} failed: {e}"
-                    )
-                    tool_content = (
-                        f'{{"error": "{type(e).__name__}: {e}"}}'
-                    )
+                    workflow.logger.warning(f"AgentWorkflow tool {tool_info['node_type']!r} failed: {e}")
+                    tool_content = f'{{"error": "{type(e).__name__}: {e}"}}'
 
-                messages.append({
-                    "type": "tool",
-                    "data": {
-                        "content": tool_content,
-                        "tool_call_id": call.get("id", ""),
-                        "name": call.get("name", ""),
-                    },
-                })
+                messages.append(
+                    {
+                        "type": "tool",
+                        "data": {
+                            "content": tool_content,
+                            "tool_call_id": call.get("id", ""),
+                            "name": call.get("name", ""),
+                        },
+                    }
+                )
 
             # ---- Persist this turn (append-per-turn) -------------------
             # Snapshot the most recent user/assistant pair into memory.
@@ -425,28 +420,21 @@ class AgentWorkflow:
             )
 
             # ---- Compaction check --------------------------------------
-            token_total = sum(
-                v for k, v in usage_total.items()
-                if k in ("input_tokens", "output_tokens")
-            )
-            if (
-                compaction_threshold
-                and token_total >= compaction_threshold
-                and memory_markdown
-            ):
-                workflow.logger.info(
-                    f"AgentWorkflow compaction triggered: {token_total} tokens"
-                )
+            token_total = sum(v for k, v in usage_total.items() if k in ("input_tokens", "output_tokens"))
+            if compaction_threshold and token_total >= compaction_threshold and memory_markdown:
+                workflow.logger.info(f"AgentWorkflow compaction triggered: {token_total} tokens")
                 compact_result = await workflow.execute_activity(
                     "agent.compact_memory.v1",
-                    args=[{
-                        "session_id": payload.get("session_id", "default"),
-                        "node_id": payload["node_id"],
-                        "memory_content": memory_markdown,
-                        "provider": payload["provider"],
-                        "api_key": payload["api_key"],
-                        "model": payload["model"],
-                    }],
+                    args=[
+                        {
+                            "session_id": payload.get("session_id", "default"),
+                            "node_id": payload["node_id"],
+                            "memory_content": memory_markdown,
+                            "provider": payload["provider"],
+                            "api_key": payload["api_key"],
+                            "model": payload["model"],
+                        }
+                    ],
                     start_to_close_timeout=COMPACT_MEMORY_TIMEOUT,
                     retry_policy=AGENT_ACTIVITY_RETRY,
                 )
@@ -457,8 +445,7 @@ class AgentWorkflow:
                 # workflow crash.
                 if not compact_result.get("success"):
                     workflow.logger.warning(
-                        "AgentWorkflow compaction failed (%s); continuing "
-                        "with un-compacted history",
+                        "AgentWorkflow compaction failed (%s); continuing " "with un-compacted history",
                         compact_result.get("error", "no error reported"),
                     )
                 else:
@@ -477,12 +464,9 @@ class AgentWorkflow:
 
         else:
             # Loop exited without break -- hit max_iterations.
-            workflow.logger.warning(
-                f"AgentWorkflow hit max_iterations={max_iterations}; truncating"
-            )
+            workflow.logger.warning(f"AgentWorkflow hit max_iterations={max_iterations}; truncating")
             final_content = final_content or (
-                "[AgentWorkflow truncated after max_iterations; "
-                "the model did not produce a final response]"
+                "[AgentWorkflow truncated after max_iterations; " "the model did not produce a final response]"
             )
 
         result_payload = {
@@ -500,11 +484,13 @@ class AgentWorkflow:
         # bypass NodeExecutor entirely.
         await workflow.execute_activity(
             "agent.store_output.v1",
-            args=[{
-                "node_id": agent_node_id,
-                "session_id": payload.get("session_id", "default"),
-                "result": result_payload,
-            }],
+            args=[
+                {
+                    "node_id": agent_node_id,
+                    "session_id": payload.get("session_id", "default"),
+                    "result": result_payload,
+                }
+            ],
             start_to_close_timeout=PERSIST_TURN_TIMEOUT,
             retry_policy=AGENT_ACTIVITY_RETRY,
         )
@@ -512,8 +498,12 @@ class AgentWorkflow:
         # Final lifecycle broadcast — canvas glow goes green + FE
         # consumers of com.machinaos.agent.progress see phase="completed".
         await self._emit_phase(
-            agent_node_id, agent_workflow_id, max_iterations, max_iterations,
-            phase="completed", status="success",
+            agent_node_id,
+            agent_workflow_id,
+            max_iterations,
+            max_iterations,
+            phase="completed",
+            status="success",
         )
 
         return {"success": True, "result": result_payload}
@@ -537,15 +527,17 @@ class AgentWorkflow:
         glows accordingly (executing / success / error)."""
         await workflow.execute_activity(
             "agent.broadcast_progress.v1",
-            args=[{
-                "node_id": node_id,
-                "workflow_id": workflow_id,
-                "iteration": iteration,
-                "max_iterations": max_iterations,
-                "phase": phase,
-                **({"status": status} if status else {}),
-                **(extra or {}),
-            }],
+            args=[
+                {
+                    "node_id": node_id,
+                    "workflow_id": workflow_id,
+                    "iteration": iteration,
+                    "max_iterations": max_iterations,
+                    "phase": phase,
+                    **({"status": status} if status else {}),
+                    **(extra or {}),
+                }
+            ],
             start_to_close_timeout=PERSIST_TURN_TIMEOUT,
             retry_policy=AGENT_ACTIVITY_RETRY,
         )
@@ -572,12 +564,14 @@ class AgentWorkflow:
             return
         await workflow.execute_activity(
             "agent.persist_turn.v1",
-            args=[{
-                "memory_node_id": memory_node_id,
-                "human_text": human_text,
-                "assistant_text": assistant_text,
-                "window_size": int(payload.get("memory_window_size") or 10),
-            }],
+            args=[
+                {
+                    "memory_node_id": memory_node_id,
+                    "human_text": human_text,
+                    "assistant_text": assistant_text,
+                    "window_size": int(payload.get("memory_window_size") or 10),
+                }
+            ],
             start_to_close_timeout=PERSIST_TURN_TIMEOUT,
             retry_policy=AGENT_ACTIVITY_RETRY,
         )

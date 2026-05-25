@@ -45,8 +45,7 @@ class TestChatTriggerProducerCanaryEmit:
         from nodes.trigger.chat_trigger._events import dispatch_chat_message_received
 
         assert inspect.iscoroutinefunction(dispatch_chat_message_received), (
-            "dispatch_chat_message_received must be async — it awaits "
-            "services.events.dispatch.emit."
+            "dispatch_chat_message_received must be async — it awaits " "services.events.dispatch.emit."
         )
 
     def test_dispatcher_uses_canary_path_only(self):
@@ -84,11 +83,13 @@ class TestChatTriggerProducerCanaryEmit:
 
         monkeypatch.setattr(dispatch_mod, "emit", fake_emit)
 
-        result = await _events.dispatch_chat_message_received({
-            "message": "hello",
-            "session_id": "sess-1",
-            "timestamp": "2026-05-14T00:00:00",
-        })
+        result = await _events.dispatch_chat_message_received(
+            {
+                "message": "hello",
+                "session_id": "sess-1",
+                "timestamp": "2026-05-14T00:00:00",
+            }
+        )
 
         # No return value — canary-only emit doesn't carry a waiter count.
         assert result is None

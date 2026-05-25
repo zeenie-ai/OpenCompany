@@ -86,10 +86,8 @@ class SheetsNode(ActionNode):
     tool_name = "google_sheets"
     tool_description = "Read and write Google Sheets data. Operations: read (get range), write (set range), append (add rows)."
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
     annotations = {"destructive": False, "readonly": False, "open_world": True}
     credentials = (GoogleCredential,)
@@ -111,21 +109,23 @@ class SheetsNode(ActionNode):
         op = params.operation
 
         if op == "read":
-            result = await run_sync(lambda: values_svc.get(
-                spreadsheetId=params.spreadsheet_id,
-                range=params.range,
-                valueRenderOption=params.value_render_option,
-                majorDimension=params.major_dimension,
-            ).execute())
-            rows = result.get('values', [])
+            result = await run_sync(
+                lambda: values_svc.get(
+                    spreadsheetId=params.spreadsheet_id,
+                    range=params.range,
+                    valueRenderOption=params.value_render_option,
+                    majorDimension=params.major_dimension,
+                ).execute()
+            )
+            rows = result.get("values", [])
             await track_google_usage("google_sheets", ctx.node_id, "read", len(rows), ctx.raw)
             return SheetsOutput(
                 operation="read",
                 values=rows,
-                range=result.get('range'),
+                range=result.get("range"),
                 rows=len(rows),
                 columns=len(rows[0]) if rows else 0,
-                major_dimension=result.get('majorDimension'),
+                major_dimension=result.get("majorDimension"),
             )
 
         if op in ("write", "append"):
@@ -134,43 +134,53 @@ class SheetsNode(ActionNode):
                 raise RuntimeError("Values are required")
 
             if op == "write":
-                result = await run_sync(lambda: values_svc.update(
-                    spreadsheetId=params.spreadsheet_id,
-                    range=params.range,
-                    valueInputOption=params.value_input_option,
-                    body={'values': values},
-                ).execute())
+                result = await run_sync(
+                    lambda: values_svc.update(
+                        spreadsheetId=params.spreadsheet_id,
+                        range=params.range,
+                        valueInputOption=params.value_input_option,
+                        body={"values": values},
+                    ).execute()
+                )
                 await track_google_usage(
-                    "google_sheets", ctx.node_id, "write",
-                    result.get('updatedCells', 0), ctx.raw,
+                    "google_sheets",
+                    ctx.node_id,
+                    "write",
+                    result.get("updatedCells", 0),
+                    ctx.raw,
                 )
                 return SheetsOutput(
                     operation="write",
-                    updated_range=result.get('updatedRange'),
-                    updated_rows=result.get('updatedRows'),
-                    updated_columns=result.get('updatedColumns'),
-                    updated_cells=result.get('updatedCells'),
+                    updated_range=result.get("updatedRange"),
+                    updated_rows=result.get("updatedRows"),
+                    updated_columns=result.get("updatedColumns"),
+                    updated_cells=result.get("updatedCells"),
                 )
 
-            result = await run_sync(lambda: values_svc.append(
-                spreadsheetId=params.spreadsheet_id,
-                range=params.range,
-                valueInputOption=params.value_input_option,
-                insertDataOption=params.insert_data_option,
-                body={'values': values},
-            ).execute())
-            updates = result.get('updates', {})
+            result = await run_sync(
+                lambda: values_svc.append(
+                    spreadsheetId=params.spreadsheet_id,
+                    range=params.range,
+                    valueInputOption=params.value_input_option,
+                    insertDataOption=params.insert_data_option,
+                    body={"values": values},
+                ).execute()
+            )
+            updates = result.get("updates", {})
             await track_google_usage(
-                "google_sheets", ctx.node_id, "append",
-                updates.get('updatedCells', 0), ctx.raw,
+                "google_sheets",
+                ctx.node_id,
+                "append",
+                updates.get("updatedCells", 0),
+                ctx.raw,
             )
             return SheetsOutput(
                 operation="append",
-                updated_range=updates.get('updatedRange'),
-                updated_rows=updates.get('updatedRows'),
-                updated_columns=updates.get('updatedColumns'),
-                updated_cells=updates.get('updatedCells'),
-                table_range=result.get('tableRange'),
+                updated_range=updates.get("updatedRange"),
+                updated_rows=updates.get("updatedRows"),
+                updated_columns=updates.get("updatedColumns"),
+                updated_cells=updates.get("updatedCells"),
+                table_range=result.get("tableRange"),
             )
 
         raise RuntimeError(f"Unknown Sheets operation: {op}. Supported: read, write, append")

@@ -45,10 +45,7 @@ class WhatsAppSendParams(BaseModel):
     )
     channel_jid: str = Field(
         default="",
-        description=(
-            "Newsletter channel JID (format: 120363...@newsletter). "
-            "Admin/owner role required to send."
-        ),
+        description=("Newsletter channel JID (format: 120363...@newsletter). " "Admin/owner role required to send."),
         json_schema_extra={
             "component": "ChannelJidSelector",
             "loadOptionsMethod": "whatsappChannels",
@@ -58,13 +55,17 @@ class WhatsAppSendParams(BaseModel):
 
     # ===== MESSAGE TYPE =====
     message_type: Literal[
-        "text", "image", "video", "audio", "document",
-        "sticker", "location", "contact",
+        "text",
+        "image",
+        "video",
+        "audio",
+        "document",
+        "sticker",
+        "location",
+        "contact",
     ] = Field(
         default="text",
-        description=(
-            "Type of message. Channels only support: text, image, video, audio, document."
-        ),
+        description=("Type of message. Channels only support: text, image, video, audio, document."),
     )
 
     # ===== TEXT =====
@@ -78,9 +79,7 @@ class WhatsAppSendParams(BaseModel):
     )
     format_markdown: bool = Field(
         default=True,
-        description=(
-            "Convert LLM markdown (bold, italic, code, lists) to WhatsApp-native formatting"
-        ),
+        description=("Convert LLM markdown (bold, italic, code, lists) to WhatsApp-native formatting"),
         json_schema_extra={
             "displayOptions": {"show": {"message_type": ["text"]}},
         },
@@ -91,9 +90,17 @@ class WhatsAppSendParams(BaseModel):
         default="base64",
         description="Source of media data",
         json_schema_extra={
-            "displayOptions": {"show": {"message_type": [
-                "image", "video", "audio", "document", "sticker",
-            ]}},
+            "displayOptions": {
+                "show": {
+                    "message_type": [
+                        "image",
+                        "video",
+                        "audio",
+                        "document",
+                        "sticker",
+                    ]
+                }
+            },
         },
     )
     media_data: str = Field(
@@ -101,10 +108,12 @@ class WhatsAppSendParams(BaseModel):
         description="Base64-encoded media data",
         json_schema_extra={
             "rows": 3,
-            "displayOptions": {"show": {
-                "message_type": ["image", "video", "audio", "document", "sticker"],
-                "media_source": ["base64"],
-            }},
+            "displayOptions": {
+                "show": {
+                    "message_type": ["image", "video", "audio", "document", "sticker"],
+                    "media_source": ["base64"],
+                }
+            },
         },
     )
     file_path: str = Field(
@@ -113,29 +122,41 @@ class WhatsAppSendParams(BaseModel):
         json_schema_extra={
             "widget": "file",
             "accept": "*/*",
-            "displayOptions": {"show": {
-                "message_type": ["image", "video", "audio", "document", "sticker"],
-                "media_source": ["file"],
-            }},
+            "displayOptions": {
+                "show": {
+                    "message_type": ["image", "video", "audio", "document", "sticker"],
+                    "media_source": ["file"],
+                }
+            },
         },
     )
     media_url: str = Field(
         default="",
         description="HTTPS URL to download media from",
         json_schema_extra={
-            "displayOptions": {"show": {
-                "message_type": ["image", "video", "audio", "document", "sticker"],
-                "media_source": ["url"],
-            }},
+            "displayOptions": {
+                "show": {
+                    "message_type": ["image", "video", "audio", "document", "sticker"],
+                    "media_source": ["url"],
+                }
+            },
         },
     )
     mime_type: str = Field(
         default="",
         description="MIME type (auto-detected if empty). e.g. image/jpeg, video/mp4",
         json_schema_extra={
-            "displayOptions": {"show": {"message_type": [
-                "image", "video", "audio", "document", "sticker",
-            ]}},
+            "displayOptions": {
+                "show": {
+                    "message_type": [
+                        "image",
+                        "video",
+                        "audio",
+                        "document",
+                        "sticker",
+                    ]
+                }
+            },
         },
     )
     caption: str = Field(
@@ -247,10 +268,8 @@ class WhatsAppSendNode(ActionNode):
     component_kind = "square"
     tool_name = "whatsapp_send"
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
     annotations = {"destructive": False, "readonly": False, "open_world": True}
     task_queue = TaskQueue.MESSAGING
@@ -262,9 +281,12 @@ class WhatsAppSendNode(ActionNode):
     @Operation("send", cost={"service": "whatsapp", "action": "send", "count": 1})
     async def send(self, ctx: NodeContext, params: WhatsAppSendParams) -> Any:
         from ._base import handle_whatsapp_send
+
         response = await handle_whatsapp_send(
-            node_id=ctx.node_id, node_type=self.type,
-            parameters=params.model_dump(by_alias=False), context=ctx.raw,
+            node_id=ctx.node_id,
+            node_type=self.type,
+            parameters=params.model_dump(by_alias=False),
+            context=ctx.raw,
         )
         if response.get("success"):
             return response.get("result") or response

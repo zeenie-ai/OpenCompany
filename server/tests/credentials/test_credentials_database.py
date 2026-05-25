@@ -51,9 +51,7 @@ class TestApiKeyCrud:
         assert deleted is True
         assert await credentials_db.get_api_key("openai") is None
 
-    async def test_delete_nonexistent_returns_false(
-        self, credentials_db: CredentialsDatabase
-    ):
+    async def test_delete_nonexistent_returns_false(self, credentials_db: CredentialsDatabase):
         assert await credentials_db.delete_api_key("nonexistent") is False
 
     async def test_session_isolation(self, credentials_db: CredentialsDatabase):
@@ -63,9 +61,7 @@ class TestApiKeyCrud:
         assert await credentials_db.get_api_key("openai", "default") == "sk-default"
         assert await credentials_db.get_api_key("openai", "bob") == "sk-bob"
 
-    async def test_list_api_keys_returns_providers_only_for_session(
-        self, credentials_db: CredentialsDatabase
-    ):
+    async def test_list_api_keys_returns_providers_only_for_session(self, credentials_db: CredentialsDatabase):
         await credentials_db.save_api_key("openai", "k1")
         await credentials_db.save_api_key("anthropic", "k2")
         await credentials_db.save_api_key("openai", "k3", session_id="other")
@@ -73,12 +69,8 @@ class TestApiKeyCrud:
         listed = await credentials_db.list_api_keys()
         assert sorted(listed) == ["anthropic", "openai"]
 
-    async def test_get_api_key_info_does_not_decrypt(
-        self, credentials_db: CredentialsDatabase
-    ):
-        await credentials_db.save_api_key(
-            "openai", "sk-secret", models=["gpt-4", "gpt-3.5"]
-        )
+    async def test_get_api_key_info_does_not_decrypt(self, credentials_db: CredentialsDatabase):
+        await credentials_db.save_api_key("openai", "sk-secret", models=["gpt-4", "gpt-3.5"])
         info = await credentials_db.get_api_key_info("openai")
         assert info is not None
         assert info["provider"] == "openai"
@@ -115,19 +107,13 @@ class TestOAuthCrud:
         )
 
         async with credentials_db.get_session() as session:
-            result = await session.execute(
-                select(EncryptedOAuthToken).where(
-                    EncryptedOAuthToken.provider == "twitter"
-                )
-            )
+            result = await session.execute(select(EncryptedOAuthToken).where(EncryptedOAuthToken.provider == "twitter"))
             row = result.scalars().first()
             assert row is not None
             assert "plaintext-access" not in row.access_token_encrypted
             assert "plaintext-refresh" not in row.refresh_token_encrypted
 
-    async def test_save_overwrites_existing_for_provider(
-        self, credentials_db: CredentialsDatabase
-    ):
+    async def test_save_overwrites_existing_for_provider(self, credentials_db: CredentialsDatabase):
         await credentials_db.save_oauth_tokens("google", "a1", "r1", email="old@x.com")
         await credentials_db.save_oauth_tokens("google", "a2", "r2", email="new@x.com")
 
@@ -141,18 +127,12 @@ class TestOAuthCrud:
         assert await credentials_db.delete_oauth_tokens("google") is True
         assert await credentials_db.get_oauth_tokens("google") is None
 
-    async def test_delete_nonexistent_returns_false(
-        self, credentials_db: CredentialsDatabase
-    ):
+    async def test_delete_nonexistent_returns_false(self, credentials_db: CredentialsDatabase):
         assert await credentials_db.delete_oauth_tokens("nonexistent") is False
 
     async def test_customer_id_isolation(self, credentials_db: CredentialsDatabase):
-        await credentials_db.save_oauth_tokens(
-            "google", "a-owner", "r-owner", customer_id="owner"
-        )
-        await credentials_db.save_oauth_tokens(
-            "google", "a-cust", "r-cust", customer_id="cust-1"
-        )
+        await credentials_db.save_oauth_tokens("google", "a-owner", "r-owner", customer_id="owner")
+        await credentials_db.save_oauth_tokens("google", "a-cust", "r-cust", customer_id="cust-1")
 
         owner = await credentials_db.get_oauth_tokens("google", "owner")
         cust = await credentials_db.get_oauth_tokens("google", "cust-1")
@@ -170,24 +150,18 @@ class TestOAuthCrud:
 class TestTwoTableSeparation:
     """Invariants 3 and 8 -- the two storage systems must not bleed into each other."""
 
-    async def test_oauth_tokens_invisible_via_get_api_key(
-        self, credentials_db: CredentialsDatabase
-    ):
+    async def test_oauth_tokens_invisible_via_get_api_key(self, credentials_db: CredentialsDatabase):
         await credentials_db.save_oauth_tokens("google", "access", "refresh")
         # An API-key lookup for the same provider name finds nothing
         assert await credentials_db.get_api_key("google") is None
 
-    async def test_api_key_invisible_via_get_oauth_tokens(
-        self, credentials_db: CredentialsDatabase
-    ):
+    async def test_api_key_invisible_via_get_oauth_tokens(self, credentials_db: CredentialsDatabase):
         # google_client_id is stored as an API key (Pattern C)
         await credentials_db.save_api_key("google_client_id", "client-abc")
         # Looking it up as an OAuth token finds nothing
         assert await credentials_db.get_oauth_tokens("google_client_id") is None
 
-    async def test_provider_can_have_both_api_key_and_oauth_tokens(
-        self, credentials_db: CredentialsDatabase
-    ):
+    async def test_provider_can_have_both_api_key_and_oauth_tokens(self, credentials_db: CredentialsDatabase):
         # Real-world: google_client_id (API key) AND google OAuth tokens coexist
         await credentials_db.save_api_key("google_client_id", "client-id")
         await credentials_db.save_api_key("google_client_secret", "client-sec")

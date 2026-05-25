@@ -46,10 +46,8 @@ class GmapsCreateNode(ActionNode):
     description = "Google Maps creation with center, zoom, and map type"
     component_kind = "square"
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
     ui_hints = {"showLocationPanel": True}
     annotations = {"destructive": False, "readonly": True, "open_world": False}
@@ -65,7 +63,9 @@ class GmapsCreateNode(ActionNode):
 
         maps_service = get_maps_service()
         response = await maps_service.create_map(
-            ctx.node_id, params.model_dump(), ctx.raw,
+            ctx.node_id,
+            params.model_dump(),
+            ctx.raw,
         )
         if response.get("success"):
             return response.get("result") or response

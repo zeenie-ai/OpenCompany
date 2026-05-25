@@ -124,26 +124,31 @@ class AICliService:
                     )
 
         tool_names = [t.get("node_type") for t in (connected_tools or [])]
-        memory_node = (
-            connected_memory.get("node_id") if connected_memory else None
-        )
+        memory_node = connected_memory.get("node_id") if connected_memory else None
         logger.info(
-            "[CC-Agent run_batch] enter provider=%s node=%s wf=%s tasks=%d "
-            "skills=%s tools=%s creds=%s memory=%s workspace=%s",
-            provider_name, node_id, workflow_id, len(task_list),
-            connected_skill_names or [], tool_names,
-            allowed_credentials or [], memory_node, workspace_dir,
+            "[CC-Agent run_batch] enter provider=%s node=%s wf=%s tasks=%d " "skills=%s tools=%s creds=%s memory=%s workspace=%s",
+            provider_name,
+            node_id,
+            workflow_id,
+            len(task_list),
+            connected_skill_names or [],
+            tool_names,
+            allowed_credentials or [],
+            memory_node,
+            workspace_dir,
         )
 
         # Verify the working directory is under a git repo.
         resolved_repo_root = await self._resolve_repo_root(
-            workspace_dir=workspace_dir, override=repo_root,
+            workspace_dir=workspace_dir,
+            override=repo_root,
         )
         if resolved_repo_root is None:
             logger.warning(
                 "[CC-Agent run_batch] aborting: workspace=%s is not inside a git "
                 "repo (run `git init` there or set `working_directory` to "
-                "an existing repo).", workspace_dir,
+                "an existing repo).",
+                workspace_dir,
             )
             return self._abort_not_git_repo(
                 provider_name=provider_name,
@@ -151,7 +156,8 @@ class AICliService:
             )
         logger.info(
             "[CC-Agent run_batch] resolved repo_root=%s for workspace=%s",
-            resolved_repo_root, workspace_dir,
+            resolved_repo_root,
+            workspace_dir,
         )
 
         # Per-batch bearer token + MCP context
@@ -175,7 +181,8 @@ class AICliService:
         async with self._lock:
             if key in self._active_sessions:
                 logger.warning(
-                    "[CC-Agent service] replacing stale session list for %s", key,
+                    "[CC-Agent service] replacing stale session list for %s",
+                    key,
                 )
                 # Cancel anything previously left dangling.
                 for sess in self._active_sessions[key]:
@@ -186,27 +193,35 @@ class AICliService:
             self._active_sessions[key] = []
 
         start = time.monotonic()
-        await self._broadcast_phase(broadcaster, node_id, workflow_id, "batch_started", {
-            "provider": provider_name,
-            "n_tasks": len(task_list),
-            "max_parallel": max_parallel,
-            "isolation": "worktree",
-        })
+        await self._broadcast_phase(
+            broadcaster,
+            node_id,
+            workflow_id,
+            "batch_started",
+            {
+                "provider": provider_name,
+                "n_tasks": len(task_list),
+                "max_parallel": max_parallel,
+                "isolation": "worktree",
+            },
+        )
 
         sem = asyncio.Semaphore(max(1, int(max_parallel)))
 
         async def run_one(task: BaseAICliTaskSpec) -> SessionResult:
             async with sem:
                 session = AICliSession(
-                    provider=provider, task=task,
-                    repo_root=resolved_repo_root, workspace_dir=workspace_dir,
-                    node_id=node_id, workflow_id=workflow_id,
-                    broadcaster=broadcaster, defaults=defaults,
-                    mcp_port=port, batch_token=token,
-                    connected_tool_names=[
-                        t.get("node_type") for t in (connected_tools or [])
-                        if t.get("node_type")
-                    ],
+                    provider=provider,
+                    task=task,
+                    repo_root=resolved_repo_root,
+                    workspace_dir=workspace_dir,
+                    node_id=node_id,
+                    workflow_id=workflow_id,
+                    broadcaster=broadcaster,
+                    defaults=defaults,
+                    mcp_port=port,
+                    batch_token=token,
+                    connected_tool_names=[t.get("node_type") for t in (connected_tools or []) if t.get("node_type")],
                     connected_skill_names=list(connected_skill_names or []),
                     memory_bound=bool(connected_memory),
                 )
@@ -216,16 +231,13 @@ class AICliService:
                     try:
                         await session.start()
                     except FileNotFoundError as exc:
-                        return self._fail_result(provider_name, task, session.task_id,
-                                                 f"cli_not_installed: {exc}")
+                        return self._fail_result(provider_name, task, session.task_id, f"cli_not_installed: {exc}")
                     except RuntimeError as exc:
                         # `_pre_spawn` raises on git-worktree failure.
-                        return self._fail_result(provider_name, task, session.task_id,
-                                                 f"worktree_setup_failed: {exc}")
+                        return self._fail_result(provider_name, task, session.task_id, f"worktree_setup_failed: {exc}")
                     except Exception as exc:
                         logger.exception("[CC-Agent service] start failed")
-                        return self._fail_result(provider_name, task, session.task_id,
-                                                 f"start_failed: {exc}")
+                        return self._fail_result(provider_name, task, session.task_id, f"start_failed: {exc}")
                     return await session.wait_for_completion(task.timeout_seconds)
                 finally:
                     try:
@@ -246,26 +258,24 @@ class AICliService:
         # owns the PTY lifetime; the bearer token stays embedded in the
         # spawned claude's argv across batches (CLI handles its own MCP
         # auth — we don't issue/unregister per turn).
-        use_pool = (
-            bool(connected_memory)
-            and provider_name == "claude"
-            and len(task_list) == 1
-        )
+        use_pool = bool(connected_memory) and provider_name == "claude" and len(task_list) == 1
         results: List[SessionResult]
         try:
             if use_pool:
-                results = [await self._run_pooled_turn(
-                    task=task_list[0],
-                    memory_node_id=connected_memory["node_id"],
-                    cwd=resolved_repo_root,
-                    workspace_dir=Path(workspace_dir).resolve(),
-                    defaults=defaults,
-                    mcp_port=port,
-                    mcp_bearer_token=token,
-                    connected_tools=connected_tools or [],
-                    connected_skill_names=list(connected_skill_names or []),
-                    workflow_id=workflow_id,
-                )]
+                results = [
+                    await self._run_pooled_turn(
+                        task=task_list[0],
+                        memory_node_id=connected_memory["node_id"],
+                        cwd=resolved_repo_root,
+                        workspace_dir=Path(workspace_dir).resolve(),
+                        defaults=defaults,
+                        mcp_port=port,
+                        mcp_bearer_token=token,
+                        connected_tools=connected_tools or [],
+                        connected_skill_names=list(connected_skill_names or []),
+                        workflow_id=workflow_id,
+                    )
+                ]
             else:
                 results = await asyncio.gather(
                     *(run_one(t) for t in task_list),
@@ -300,7 +310,9 @@ class AICliService:
         if connected_memory:
             try:
                 await self._persist_memory(
-                    connected_memory, results, broadcaster=broadcaster,
+                    connected_memory,
+                    results,
+                    broadcaster=broadcaster,
                 )
             except Exception as exc:  # pragma: no cover — best-effort
                 logger.warning(
@@ -324,9 +336,7 @@ class AICliService:
                     r.cost_usd = derived
 
         costs = [r.cost_usd for r in results]
-        total_cost = (
-            None if any(c is None for c in costs) else round(sum(c or 0 for c in costs), 6)
-        )
+        total_cost = None if any(c is None for c in costs) else round(sum(c or 0 for c in costs), 6)
 
         result = BatchResult(
             tasks=results,
@@ -340,13 +350,19 @@ class AICliService:
             timestamp=datetime.now(timezone.utc).isoformat(),
         )
 
-        await self._broadcast_phase(broadcaster, node_id, workflow_id, "batch_complete", {
-            "provider": provider_name,
-            "n_succeeded": n_succeeded,
-            "n_failed": n_failed,
-            "total_cost_usd": total_cost,
-            "wall_clock_ms": elapsed_ms,
-        })
+        await self._broadcast_phase(
+            broadcaster,
+            node_id,
+            workflow_id,
+            "batch_complete",
+            {
+                "provider": provider_name,
+                "n_succeeded": n_succeeded,
+                "n_failed": n_failed,
+                "total_cost_usd": total_cost,
+                "wall_clock_ms": elapsed_ms,
+            },
+        )
         return result
 
     async def cancel_workflow(self, workflow_id: str) -> int:
@@ -415,10 +431,7 @@ class AICliService:
         from services.cli_agent.factory import get_session_pool
 
         if not isinstance(task, ClaudeTaskSpec):
-            raise TypeError(
-                "Pooled turns require ClaudeTaskSpec, got "
-                f"{type(task).__name__}"
-            )
+            raise TypeError("Pooled turns require ClaudeTaskSpec, got " f"{type(task).__name__}")
 
         pool = get_session_pool("claude")
         if pool is None:
@@ -430,22 +443,16 @@ class AICliService:
             )
         await pool.start_reaper()
 
-        mcp_endpoint_url = (
-            f"http://127.0.0.1:{mcp_port}/mcp/ide/mcp"
-        )
-        tool_names = [
-            t.get("node_type") for t in (connected_tools or [])
-            if t.get("node_type")
-        ]
+        mcp_endpoint_url = f"http://127.0.0.1:{mcp_port}/mcp/ide/mcp"
+        tool_names = [t.get("node_type") for t in (connected_tools or []) if t.get("node_type")]
 
         env = {**os.environ, "PYTHONUNBUFFERED": "1"}
         # Project-local claude auth dir — same as ``AICliSession.env``.
         from nodes.agent.claude_code_agent._oauth import MACHINA_CLAUDE_DIR
+
         env["CLAUDE_CONFIG_DIR"] = str(MACHINA_CLAUDE_DIR)
         # Composio-style parent-run-ID for MCP correlation.
-        env["MACHINA_PARENT_RUN_ID"] = (
-            f"{workflow_id}:{memory_node_id}:{mcp_bearer_token[:8]}"
-        )
+        env["MACHINA_PARENT_RUN_ID"] = f"{workflow_id}:{memory_node_id}:{mcp_bearer_token[:8]}"
 
         pooled = await pool.acquire(
             memory_node_id,
@@ -462,7 +469,8 @@ class AICliService:
         )
         try:
             return await pool.send_turn(
-                pooled, task.prompt,
+                pooled,
+                task.prompt,
                 timeout_seconds=task.timeout_seconds,
                 workflow_id=workflow_id,
             )
@@ -495,7 +503,8 @@ class AICliService:
             "[CC-Agent _persist_memory] cleared stale last_session_id=%s "
             "from memory_node=%s; next run will spawn a fresh claude "
             "session and persist its new UUID.",
-            prior, memory_node_id,
+            prior,
+            memory_node_id,
         )
 
     @staticmethod
@@ -512,8 +521,7 @@ class AICliService:
         """
         successful = [r for r in results if r.success]
         logger.info(
-            "[CC-Agent _persist_memory] memory_node=%s results=%d "
-            "successful=%d session_ids=%s",
+            "[CC-Agent _persist_memory] memory_node=%s results=%d " "successful=%d session_ids=%s",
             connected_memory.get("node_id"),
             len(results),
             len(successful),
@@ -521,14 +529,9 @@ class AICliService:
         )
         if not successful:
             logger.warning(
-                "[CC-Agent _persist_memory] no successful runs; skipping "
-                "save (memory_node=%s). Per-result: %s",
+                "[CC-Agent _persist_memory] no successful runs; skipping " "save (memory_node=%s). Per-result: %s",
                 connected_memory.get("node_id"),
-                [
-                    {"success": r.success, "session_id": r.session_id,
-                     "error": (r.error or "")[:80]}
-                    for r in results
-                ],
+                [{"success": r.success, "session_id": r.session_id, "error": (r.error or "")[:80]} for r in results],
             )
             # Auto-recovery: claude returns
             # ``No conversation found with session ID: <UUID>`` when the
@@ -539,10 +542,7 @@ class AICliService:
             # would re-fire on every retry and lock the user out
             # forever. The next run after this point will spawn a
             # fresh session and `_persist_memory` will save its UUID.
-            stale = any(
-                r.error and "No conversation found with session ID" in r.error
-                for r in results
-            )
+            stale = any(r.error and "No conversation found with session ID" in r.error for r in results)
             if stale:
                 await AICliService._clear_stale_session_id(connected_memory)
             return
@@ -565,13 +565,13 @@ class AICliService:
             params["last_session_id"] = last_run.session_id
 
         # 2. Update the user-visible markdown mirror.
-        content = params.get("memory_content") or (
-            "# Conversation History\n\n*No messages yet.*\n"
-        )
+        content = params.get("memory_content") or ("# Conversation History\n\n*No messages yet.*\n")
         for r in successful:
             content = append_to_memory_markdown(content, "human", r.prompt)
             content = append_to_memory_markdown(
-                content, "ai", r.response or "",
+                content,
+                "ai",
+                r.response or "",
             )
 
         window = int(connected_memory.get("window_size") or 100)
@@ -583,8 +583,11 @@ class AICliService:
             "[CC-Agent _persist_memory] saved memory_node=%s "
             "last_session_id=%s appended_turns=%d archived_blocks=%d "
             "content_length=%d",
-            memory_node_id, params.get("last_session_id"),
-            len(successful), len(removed_texts), len(content),
+            memory_node_id,
+            params.get("last_session_id"),
+            len(successful),
+            len(removed_texts),
+            len(content),
         )
 
         # Broadcast `node_parameters_updated` so the simpleMemory's
@@ -602,7 +605,8 @@ class AICliService:
                 )
             except Exception as exc:
                 logger.warning(
-                    "[CC-Agent _persist_memory] broadcast failed: %s", exc,
+                    "[CC-Agent _persist_memory] broadcast failed: %s",
+                    exc,
                 )
 
         if connected_memory.get("long_term_enabled") and removed_texts:
@@ -670,6 +674,7 @@ class AICliService:
 
         try:
             from services.pricing import get_pricing_service
+
             pricing = get_pricing_service()
             breakdown = pricing.calculate_cost(
                 provider=result.provider,

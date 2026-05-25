@@ -96,7 +96,9 @@ class BaseProcessSupervisor(BaseSupervisor):
         self._proc = await anyio.open_process(argv, **kwargs)
         self._logger.info(
             "[%s] spawned pid=%s binary=%s",
-            self.label, self._proc.pid, binary,
+            self.label,
+            self._proc.pid,
+            binary,
         )
 
         if self.pipe_streams:

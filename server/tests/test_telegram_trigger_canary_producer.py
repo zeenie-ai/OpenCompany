@@ -76,12 +76,14 @@ class TestTelegramProducerCanaryEmit:
 
         monkeypatch.setattr(dispatch_mod, "emit", fake_emit)
 
-        result = await _events.dispatch_telegram_message_received({
-            "chat_id": 12345,
-            "text": "hello bot",
-            "from_id": 999,
-            "timestamp": "2026-05-14T00:00:00",
-        })
+        result = await _events.dispatch_telegram_message_received(
+            {
+                "chat_id": 12345,
+                "text": "hello bot",
+                "from_id": 999,
+                "timestamp": "2026-05-14T00:00:00",
+            }
+        )
 
         assert result is None
 

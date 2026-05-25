@@ -22,7 +22,9 @@ from ._oauth import GoogleOAuth
 
 
 async def _google_oauth_factory(
-    *, redirect_uri: Optional[str] = None, **_kwargs,
+    *,
+    redirect_uri: Optional[str] = None,
+    **_kwargs,
 ) -> GoogleOAuth:
     """Build a :class:`GoogleOAuth` from stored client credentials."""
     from services.plugin.deps import get_auth_service

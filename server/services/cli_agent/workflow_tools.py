@@ -63,9 +63,9 @@ def expose_workflow_tools(connected_tools: List[Dict[str, Any]]) -> None:
         try:
             handler = _build_handler(node_type, cls.Params)
             mcp.add_tool(
-                handler, name=node_type,
-                description=(getattr(cls, "description", None)
-                             or f"MachinaOs workflow tool: {node_type}"),
+                handler,
+                name=node_type,
+                description=(getattr(cls, "description", None) or f"MachinaOs workflow tool: {node_type}"),
             )
             logger.info("[CC-Agent MCP] exposed mcp__machinaos__%s", node_type)
         except Exception as exc:  # pragma: no cover
@@ -99,9 +99,11 @@ def unexpose_workflow_tools(connected_tools: List[Dict[str, Any]]) -> None:
 # Internals
 # ---------------------------------------------------------------------------
 
+
 def _get_mcp() -> Optional[Any]:
     """Late import to avoid a circular import with ``mcp_server``."""
     from services.cli_agent import mcp_server
+
     return mcp_server._mcp_singleton
 
 
@@ -130,10 +132,7 @@ def _schedule_list_changed_notify() -> None:
 
     async def _do_notify() -> None:
         try:
-            session = (
-                getattr(mcp, "session", None)
-                or getattr(getattr(mcp, "_mcp_server", None), "session", None)
-            )
+            session = getattr(mcp, "session", None) or getattr(getattr(mcp, "_mcp_server", None), "session", None)
             if session is not None and hasattr(session, "send_tool_list_changed"):
                 await session.send_tool_list_changed()
         except Exception as exc:
@@ -168,13 +167,18 @@ def _build_handler(node_type: str, params_cls: type):
             default = None
         else:
             default = finfo.default
-        parameters.append(inspect.Parameter(
-            fname, inspect.Parameter.KEYWORD_ONLY,
-            annotation=finfo.annotation, default=default,
-        ))
+        parameters.append(
+            inspect.Parameter(
+                fname,
+                inspect.Parameter.KEYWORD_ONLY,
+                annotation=finfo.annotation,
+                default=default,
+            )
+        )
 
     async def _handler(**kwargs: Any) -> Dict[str, Any]:
         from services.cli_agent.mcp_server import _require_batch
+
         ctx = _require_batch()
         entry = next(
             (t for t in ctx.connected_tools if t.get("node_type") == node_type),
@@ -195,9 +199,13 @@ def _build_handler(node_type: str, params_cls: type):
             args = dict(kwargs)
         logger.info(
             "[CC-Agent MCP %s] node=%s wf=%s args_keys=%s",
-            node_type, ctx.node_id, ctx.workflow_id, list(args.keys()),
+            node_type,
+            ctx.node_id,
+            ctx.workflow_id,
+            list(args.keys()),
         )
         from services.handlers.tools import execute_tool
+
         config: Dict[str, Any] = {
             "node_type": node_type,
             "node_id": entry.get("node_id"),
@@ -211,19 +219,24 @@ def _build_handler(node_type: str, params_cls: type):
         if "error" in result:
             logger.warning(
                 "[CC-Agent MCP %s] node=%s ERROR: %s",
-                node_type, entry.get("node_id"), result.get("error"),
+                node_type,
+                entry.get("node_id"),
+                result.get("error"),
             )
         else:
             logger.info(
                 "[CC-Agent MCP %s] node=%s OK (result_keys=%s)",
-                node_type, entry.get("node_id"), list(result.keys())[:8],
+                node_type,
+                entry.get("node_id"),
+                list(result.keys())[:8],
             )
         return result
 
     _handler.__name__ = node_type
     _handler.__annotations__ = annotations
     _handler.__signature__ = inspect.Signature(  # type: ignore[attr-defined]
-        parameters, return_annotation=Dict[str, Any],
+        parameters,
+        return_annotation=Dict[str, Any],
     )
     return _handler
 

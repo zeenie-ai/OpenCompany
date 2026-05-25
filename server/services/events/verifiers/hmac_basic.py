@@ -26,7 +26,7 @@ class HmacVerifier(WebhookVerifier):
             raise ValueError(f"{cls.header_name} header missing")
         if cls.signature_prefix and not sig.startswith(cls.signature_prefix):
             raise ValueError(f"{cls.header_name} missing prefix {cls.signature_prefix!r}")
-        provided = sig[len(cls.signature_prefix):]
+        provided = sig[len(cls.signature_prefix) :]
         expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
         if not hmac.compare_digest(expected, provided):
             raise ValueError(f"{cls.header_name} mismatch")

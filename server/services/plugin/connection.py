@@ -106,16 +106,21 @@ class Connection:
         if _retry_on_auth and response.status_code in (401, 403):
             logger.debug(
                 "[Connection] auth retry for %s (%s) status=%s",
-                self.credential_id, method, response.status_code,
+                self.credential_id,
+                method,
+                response.status_code,
             )
             await self.refresh()
             secrets = await self.credentials()
-            req_retry = self._cred_cls.inject(secrets, {
-                "headers": dict(headers or {}),
-                "params": dict(params or {}),
-                **({"json": json} if json is not None else {}),
-                **({"data": data} if data is not None else {}),
-            })
+            req_retry = self._cred_cls.inject(
+                secrets,
+                {
+                    "headers": dict(headers or {}),
+                    "params": dict(params or {}),
+                    **({"json": json} if json is not None else {}),
+                    **({"data": data} if data is not None else {}),
+                },
+            )
             response = await client.request(method, url, **req_retry)
 
         return response

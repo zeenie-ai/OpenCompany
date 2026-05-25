@@ -25,8 +25,16 @@ class SocialSendParams(BaseModel):
 
     # ===== CHANNEL / PLATFORM =====
     channel: Literal[
-        "whatsapp", "telegram", "discord", "slack", "signal",
-        "sms", "webchat", "email", "matrix", "teams",
+        "whatsapp",
+        "telegram",
+        "discord",
+        "slack",
+        "signal",
+        "sms",
+        "webchat",
+        "email",
+        "matrix",
+        "teams",
     ] = Field(
         default="whatsapp",
         description="Target chat platform",
@@ -79,8 +87,17 @@ class SocialSendParams(BaseModel):
 
     # ===== MESSAGE TYPE =====
     message_type: Literal[
-        "text", "image", "video", "audio", "document",
-        "sticker", "location", "contact", "poll", "buttons", "list",
+        "text",
+        "image",
+        "video",
+        "audio",
+        "document",
+        "sticker",
+        "location",
+        "contact",
+        "poll",
+        "buttons",
+        "list",
     ] = Field(default="text")
 
     # ===== TEXT =====
@@ -105,19 +122,29 @@ class SocialSendParams(BaseModel):
         default="url",
         description="Source of media data",
         json_schema_extra={
-            "displayOptions": {"show": {"message_type": [
-                "image", "video", "audio", "document", "sticker",
-            ]}},
+            "displayOptions": {
+                "show": {
+                    "message_type": [
+                        "image",
+                        "video",
+                        "audio",
+                        "document",
+                        "sticker",
+                    ]
+                }
+            },
         },
     )
     media_url: str = Field(
         default="",
         description="URL to download media from",
         json_schema_extra={
-            "displayOptions": {"show": {
-                "message_type": ["image", "video", "audio", "document", "sticker"],
-                "media_source": ["url"],
-            }},
+            "displayOptions": {
+                "show": {
+                    "message_type": ["image", "video", "audio", "document", "sticker"],
+                    "media_source": ["url"],
+                }
+            },
         },
     )
     media_data: str = Field(
@@ -125,29 +152,41 @@ class SocialSendParams(BaseModel):
         description="Base64-encoded media data",
         json_schema_extra={
             "rows": 3,
-            "displayOptions": {"show": {
-                "message_type": ["image", "video", "audio", "document", "sticker"],
-                "media_source": ["base64"],
-            }},
+            "displayOptions": {
+                "show": {
+                    "message_type": ["image", "video", "audio", "document", "sticker"],
+                    "media_source": ["base64"],
+                }
+            },
         },
     )
     file_path: str = Field(
         default="",
         description="Server file path",
         json_schema_extra={
-            "displayOptions": {"show": {
-                "message_type": ["image", "video", "audio", "document", "sticker"],
-                "media_source": ["file"],
-            }},
+            "displayOptions": {
+                "show": {
+                    "message_type": ["image", "video", "audio", "document", "sticker"],
+                    "media_source": ["file"],
+                }
+            },
         },
     )
     mime_type: str = Field(
         default="",
         description="MIME type (auto-detected if empty)",
         json_schema_extra={
-            "displayOptions": {"show": {"message_type": [
-                "image", "video", "audio", "document", "sticker",
-            ]}},
+            "displayOptions": {
+                "show": {
+                    "message_type": [
+                        "image",
+                        "video",
+                        "audio",
+                        "document",
+                        "sticker",
+                    ]
+                }
+            },
         },
     )
     caption: str = Field(
@@ -344,11 +383,11 @@ class SocialSendNode(ActionNode):
     subtitle = "Send Message"
     group = ("social", "tool")
     description = "Unified send action for any social platform"
-    component_kind = "agent"   # multi-handle layout uses AIAgentNode component
+    component_kind = "agent"  # multi-handle layout uses AIAgentNode component
     handles = (
-        {"name": "input-message",  "kind": "input", "position": "left", "offset": "15%", "label": "Message",  "role": "main"},
-        {"name": "input-media",    "kind": "input", "position": "left", "offset": "35%", "label": "Media",    "role": "main"},
-        {"name": "input-contact",  "kind": "input", "position": "left", "offset": "55%", "label": "Contact",  "role": "main"},
+        {"name": "input-message", "kind": "input", "position": "left", "offset": "15%", "label": "Message", "role": "main"},
+        {"name": "input-media", "kind": "input", "position": "left", "offset": "35%", "label": "Media", "role": "main"},
+        {"name": "input-contact", "kind": "input", "position": "left", "offset": "55%", "label": "Contact", "role": "main"},
         {"name": "input-metadata", "kind": "input", "position": "left", "offset": "75%", "label": "Metadata", "role": "main"},
     )
     ui_hints = _SOCIAL_SIZE
@@ -362,9 +401,12 @@ class SocialSendNode(ActionNode):
     @Operation("send", cost={"service": "social", "action": "send", "count": 1})
     async def send(self, ctx: NodeContext, params: SocialSendParams) -> Any:
         from .._base import handle_social_send
+
         response = await handle_social_send(
-            node_id=ctx.node_id, node_type=self.type,
-            parameters=params.model_dump(), context=ctx.raw,
+            node_id=ctx.node_id,
+            node_type=self.type,
+            parameters=params.model_dump(),
+            context=ctx.raw,
         )
         if response.get("success"):
             return response.get("result") or response

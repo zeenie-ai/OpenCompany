@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 # Compiled regex for template matching
-TEMPLATE_PATTERN = re.compile(r'\{\{([^}]+)\}\}')
+TEMPLATE_PATTERN = re.compile(r"\{\{([^}]+)\}\}")
 
 
 class ParameterResolver:
@@ -31,12 +31,7 @@ class ParameterResolver:
         self.get_output = get_output_fn
 
     async def resolve(
-        self,
-        parameters: Dict[str, Any],
-        node_id: str,
-        nodes: List[Dict],
-        edges: List[Dict],
-        session_id: str
+        self, parameters: Dict[str, Any], node_id: str, nodes: List[Dict], edges: List[Dict], session_id: str
     ) -> Dict[str, Any]:
         """Resolve all template variables in parameters."""
         # Build connected data map from upstream nodes
@@ -45,13 +40,7 @@ class ParameterResolver:
         # Resolve templates
         return self._resolve_templates(parameters, connected_data)
 
-    async def _gather_connected_outputs(
-        self,
-        node_id: str,
-        nodes: List[Dict],
-        edges: List[Dict],
-        session_id: str
-    ) -> Dict[str, Any]:
+    async def _gather_connected_outputs(self, node_id: str, nodes: List[Dict], edges: List[Dict], session_id: str) -> Dict[str, Any]:
         """Gather outputs from all nodes in the workflow that have executed.
 
         n8n pattern: Template variables can reference ANY node's output in the workflow,
@@ -66,26 +55,30 @@ class ParameterResolver:
         # Gather outputs from ALL nodes (not just directly connected)
         # This allows {{nodeName.field}} to reference any previously executed node
         for source_node in nodes:
-            source_id = source_node.get('id')
+            source_id = source_node.get("id")
             if source_id == node_id:
                 continue  # Skip self
 
-            node_type = source_node.get('type', '')
-            node_label = source_node.get('data', {}).get('label', 'NO_LABEL')
+            node_type = source_node.get("type", "")
+            node_label = source_node.get("data", {}).get("label", "NO_LABEL")
             node_key = self._get_template_key(source_node)
 
             logger.debug(f"[ParameterResolver] Processing node: id={source_id}, type={node_type}, label={node_label}, key={node_key}")
 
             # Special handling for start nodes
-            if node_type == 'start':
+            if node_type == "start":
                 data = await self._get_start_node_data(source_id)
             else:
                 data = await self.get_output(session_id, source_id, "output_0")
-                logger.debug(f"[ParameterResolver] Output lookup: session={session_id}, node={source_id}, result={'FOUND' if data else 'NOT_FOUND'}")
+                logger.debug(
+                    f"[ParameterResolver] Output lookup: session={session_id}, node={source_id}, result={'FOUND' if data else 'NOT_FOUND'}"
+                )
 
             if data:
                 connected[node_key] = data
-                logger.debug(f"[ParameterResolver] Stored output for key '{node_key}' (type={node_type}): keys={list(data.keys()) if isinstance(data, dict) else type(data)}")
+                logger.debug(
+                    f"[ParameterResolver] Stored output for key '{node_key}' (type={node_type}): keys={list(data.keys()) if isinstance(data, dict) else type(data)}"
+                )
 
         logger.debug(f"[ParameterResolver] Available data keys for resolution: {list(connected.keys())}")
         return connected
@@ -93,11 +86,12 @@ class ParameterResolver:
     async def _get_start_node_data(self, node_id: str) -> Optional[Dict]:
         """Get initial data from start node parameters."""
         import json
+
         params = await self.database.get_node_parameters(node_id)
-        if not params or 'initial_data' not in params:
+        if not params or "initial_data" not in params:
             return {}
 
-        initial_data = params.get('initial_data', '{}')
+        initial_data = params.get("initial_data", "{}")
         try:
             return json.loads(initial_data) if isinstance(initial_data, str) else initial_data
         except Exception:
@@ -113,22 +107,22 @@ class ParameterResolver:
         4. node.id (fallback)
         """
         # Priority 1: User-defined label
-        label = node.get('data', {}).get('label')
+        label = node.get("data", {}).get("label")
         if label:
-            return re.sub(r'\s+', '', label.lower())
+            return re.sub(r"\s+", "", label.lower())
 
         # Priority 2: displayName from node definition (passed in node.data)
-        display_name = node.get('data', {}).get('displayName')
+        display_name = node.get("data", {}).get("displayName")
         if display_name:
-            return re.sub(r'\s+', '', display_name.lower())
+            return re.sub(r"\s+", "", display_name.lower())
 
         # Priority 3: node type
-        node_type = node.get('type', '')
+        node_type = node.get("type", "")
         if node_type:
             return node_type.lower()
 
         # Priority 4: node id
-        return node.get('id', 'unknown').lower()
+        return node.get("id", "unknown").lower()
 
     def _resolve_templates(self, parameters: Dict[str, Any], connected_data: Dict[str, Any]) -> Dict[str, Any]:
         """Resolve {{variable}} templates in parameters recursively."""
@@ -142,9 +136,7 @@ class ParameterResolver:
         # resolution with AttributeError (bubbled up as a node execution
         # failure), which is how any node with a dynamic parameter
         # started returning null-ish envelopes.
-        template_params = {
-            k: v for k, v in parameters.items() if isinstance(v, str) and '{{' in v
-        }
+        template_params = {k: v for k, v in parameters.items() if isinstance(v, str) and "{{" in v}
         if template_params:
             logger.debug(
                 "[ParameterResolver] Resolving templates",
@@ -152,7 +144,7 @@ class ParameterResolver:
             )
 
         def resolve(value: Any) -> Any:
-            if isinstance(value, str) and '{{' in value:
+            if isinstance(value, str) and "{{" in value:
                 return self._resolve_string(value, data_lower)
             if isinstance(value, dict):
                 return {k: resolve(v) for k, v in value.items()}
@@ -168,14 +160,16 @@ class ParameterResolver:
 
         for match in TEMPLATE_PATTERN.finditer(value):
             full_match = match.group(0)
-            path = match.group(1).split('.')
+            path = match.group(1).split(".")
             node_name = path[0].lower()
             property_path = path[1:]
 
             node_data = data.get(node_name)
             resolved_value = self._navigate_path(node_data, property_path)
 
-            logger.debug(f"[ParameterResolver] Resolving '{full_match}': node_name={node_name}, path={property_path}, found_data={node_data is not None}, resolved={resolved_value is not None}")
+            logger.debug(
+                f"[ParameterResolver] Resolving '{full_match}': node_name={node_name}, path={property_path}, found_data={node_data is not None}, resolved={resolved_value is not None}"
+            )
 
             if resolved_value is not None:
                 # If entire value is just the template, preserve type
@@ -185,7 +179,7 @@ class ParameterResolver:
             else:
                 # Log missing resolution for debugging
                 logger.debug(f"[ParameterResolver] Could not resolve '{full_match}': available keys={list(data.keys())}")
-                result = result.replace(full_match, '')
+                result = result.replace(full_match, "")
 
         return result
 
@@ -203,7 +197,7 @@ class ParameterResolver:
                 return None
 
             # Check for array index notation: field[index]
-            bracket_match = re.match(r'^(\w+)\[(\d+)\]$', part)
+            bracket_match = re.match(r"^(\w+)\[(\d+)\]$", part)
             if bracket_match:
                 field_name = bracket_match.group(1)
                 index = int(bracket_match.group(2))

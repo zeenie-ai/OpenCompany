@@ -26,7 +26,14 @@ class CalculatorParams(BaseModel):
     the function-calling model reads these."""
 
     operation: Literal[
-        "add", "subtract", "multiply", "divide", "power", "sqrt", "mod", "abs",
+        "add",
+        "subtract",
+        "multiply",
+        "divide",
+        "power",
+        "sqrt",
+        "mod",
+        "abs",
     ] = Field(..., description="Math operation to perform.")
     a: float = Field(..., description="First operand (or the sole input for sqrt/abs).")
     b: Optional[float] = Field(
@@ -64,10 +71,8 @@ class CalculatorToolNode(ToolNode):
     tool_name = "calculator"
     tool_description = "Perform mathematical calculations. Operations: add, subtract, multiply, divide, power, sqrt, mod, abs"
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-tool", "kind": "output", "position": "top",
-         "label": "Tool", "role": "tools"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-tool", "kind": "output", "position": "top", "label": "Tool", "role": "tools"},
     )
     ui_hints = {"isToolPanel": True, "hideRunButton": True}
     annotations = {"destructive": False, "readonly": True, "open_world": False}
@@ -77,11 +82,16 @@ class CalculatorToolNode(ToolNode):
 
     @Operation("calculate")
     async def calculate(
-        self, ctx: NodeContext, params: CalculatorParams,
+        self,
+        ctx: NodeContext,
+        params: CalculatorParams,
     ) -> CalculatorOutput:
         fn = _OPERATIONS[params.operation]
         b_value = params.b if params.b is not None else 0.0
         result = fn(params.a, b_value)
         return CalculatorOutput(
-            operation=params.operation, a=params.a, b=params.b, result=result,
+            operation=params.operation,
+            a=params.a,
+            b=params.b,
+            result=result,
         )

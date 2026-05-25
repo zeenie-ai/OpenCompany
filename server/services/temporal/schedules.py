@@ -122,20 +122,22 @@ async def create_cron_schedule(
     # ``search_attributes`` is a ``client.create_schedule`` kwarg, not
     # a field on the ``Schedule`` dataclass itself (per the Temporal
     # SDK API).
-    schedule_search_attributes = TypedSearchAttributes([
-        SearchAttributePair(
-            SearchAttributeKey.for_keyword("EventWorkflowId"),
-            deployment_workflow_id,
-        ),
-        SearchAttributePair(
-            SearchAttributeKey.for_keyword("TriggerNodeId"),
-            node_id,
-        ),
-        SearchAttributePair(
-            SearchAttributeKey.for_keyword("EventTriggerKind"),
-            "cron",
-        ),
-    ])
+    schedule_search_attributes = TypedSearchAttributes(
+        [
+            SearchAttributePair(
+                SearchAttributeKey.for_keyword("EventWorkflowId"),
+                deployment_workflow_id,
+            ),
+            SearchAttributePair(
+                SearchAttributeKey.for_keyword("TriggerNodeId"),
+                node_id,
+            ),
+            SearchAttributePair(
+                SearchAttributeKey.for_keyword("EventTriggerKind"),
+                "cron",
+            ),
+        ]
+    )
 
     try:
         await client.create_schedule(
@@ -173,10 +175,7 @@ async def delete_cron_schedules_for_deployment(
 
     Returns count of Schedules deleted.
     """
-    query = (
-        f"EventWorkflowId='{deployment_workflow_id}' "
-        f"AND EventTriggerKind='cron'"
-    )
+    query = f"EventWorkflowId='{deployment_workflow_id}' " f"AND EventTriggerKind='cron'"
 
     deleted = 0
     try:
@@ -201,8 +200,7 @@ async def delete_cron_schedules_for_deployment(
                 )
     except Exception as exc:  # noqa: BLE001
         logger.warning(
-            f"Visibility query for cron Schedules failed: {exc} "
-            f"(query={query!r})",
+            f"Visibility query for cron Schedules failed: {exc} " f"(query={query!r})",
             deployment_workflow_id=deployment_workflow_id,
         )
 

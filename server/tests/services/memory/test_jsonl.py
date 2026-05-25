@@ -32,10 +32,7 @@ def test_parse_jsonl_empty_input_returns_empty_list():
 
 
 def test_parse_jsonl_basic_user_assistant_pair():
-    text = (
-        '{"role": "user", "content": "hi"}\n'
-        '{"role": "assistant", "content": "hello"}\n'
-    )
+    text = '{"role": "user", "content": "hi"}\n' '{"role": "assistant", "content": "hello"}\n'
     msgs = parse_jsonl(text)
     assert len(msgs) == 2
     assert isinstance(msgs[0], HumanMessage) and msgs[0].content == "hi"
@@ -43,11 +40,7 @@ def test_parse_jsonl_basic_user_assistant_pair():
 
 
 def test_parse_jsonl_skips_unparseable_lines_forward_compat():
-    text = (
-        '{"role": "user", "content": "ok"}\n'
-        "this is not json\n"
-        '{"role": "assistant", "content": "still ok"}\n'
-    )
+    text = '{"role": "user", "content": "ok"}\n' "this is not json\n" '{"role": "assistant", "content": "still ok"}\n'
     msgs = parse_jsonl(text)
     assert [m.content for m in msgs] == ["ok", "still ok"]
 
@@ -63,27 +56,37 @@ def test_parse_jsonl_skips_unknown_roles():
 
 
 def test_parse_jsonl_collapses_content_blocks_to_text():
-    text = json.dumps({
-        "role": "assistant",
-        "content": [
-            {"type": "text", "text": "Got it"},
-            {"type": "tool_use", "id": "tu_1", "name": "search", "input": {}},
-            {"type": "text", "text": "blue."},
-        ],
-    }) + "\n"
+    text = (
+        json.dumps(
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "Got it"},
+                    {"type": "tool_use", "id": "tu_1", "name": "search", "input": {}},
+                    {"type": "text", "text": "blue."},
+                ],
+            }
+        )
+        + "\n"
+    )
     msgs = parse_jsonl(text)
     assert len(msgs) == 1
     assert msgs[0].content == "Got it blue."  # text blocks joined; tool_use dropped
 
 
 def test_parse_jsonl_metadata_keys_are_ignored():
-    text = json.dumps({
-        "role": "user",
-        "content": "hi",
-        "timestamp": "2026-05-10T00:00:00Z",
-        "session_id": "abc-123",
-        "model": "claude",
-    }) + "\n"
+    text = (
+        json.dumps(
+            {
+                "role": "user",
+                "content": "hi",
+                "timestamp": "2026-05-10T00:00:00Z",
+                "session_id": "abc-123",
+                "model": "claude",
+            }
+        )
+        + "\n"
+    )
     msgs = parse_jsonl(text)
     assert len(msgs) == 1 and msgs[0].content == "hi"
 
@@ -117,7 +120,9 @@ def test_append_message_normalises_missing_trailing_newline():
 
 def test_append_message_metadata_round_trips_via_parse_jsonl():
     text = append_message(
-        "", "assistant", "blue.",
+        "",
+        "assistant",
+        "blue.",
         timestamp="2026-05-10T12:34:56+00:00",
         session_id="abc-123",
         model="claude",

@@ -86,9 +86,7 @@ class TestBrowser:
 
     async def test_snapshot_uses_i_flag_and_session_fallback(self, harness):
         # Empty session -> handler must derive machina_<execution_id>.
-        fake = _FakeBrowserService(
-            canned={"success": True, "nodes": [{"ref": "@e1", "role": "button"}]}
-        )
+        fake = _FakeBrowserService(canned={"success": True, "nodes": [{"ref": "@e1", "role": "button"}]})
 
         with _patch_browser_service(fake):
             result = await harness.execute(
@@ -139,9 +137,7 @@ class TestBrowser:
         assert fake.calls == []
 
     async def test_service_not_installed(self, harness):
-        with patch(
-            "nodes.browser._service.get_browser_service", return_value=None
-        ):
+        with patch("nodes.browser._service.get_browser_service", return_value=None):
             result = await harness.execute("browser", {"operation": "navigate", "url": "https://x"})
 
         harness.assert_envelope(result, success=False)
@@ -151,9 +147,7 @@ class TestBrowser:
         fake = _FakeBrowserService(error=RuntimeError("agent-browser returned empty output"))
 
         with _patch_browser_service(fake):
-            result = await harness.execute(
-                "browser", {"operation": "navigate", "url": "https://x"}
-            )
+            result = await harness.execute("browser", {"operation": "navigate", "url": "https://x"})
 
         harness.assert_envelope(result, success=False)
         assert "empty output" in result["error"].lower()
@@ -201,12 +195,10 @@ class _FakeCrawler:
 class TestCrawleeScraper:
     async def test_beautifulsoup_single_happy_path(self, harness):
         fake_cls = _FakeCrawler  # class is instantiated inside the handler
-        with patch(
-            "crawlee.crawlers.BeautifulSoupCrawler", fake_cls
-        ), patch(
-            "crawlee.storage_clients.MemoryStorageClient", MagicMock()
-        ), patch(
-            "crawlee.ConcurrencySettings", MagicMock()
+        with (
+            patch("crawlee.crawlers.BeautifulSoupCrawler", fake_cls),
+            patch("crawlee.storage_clients.MemoryStorageClient", MagicMock()),
+            patch("crawlee.ConcurrencySettings", MagicMock()),
         ):
             result = await harness.execute(
                 "crawleeScraper",
@@ -218,9 +210,7 @@ class TestCrawleeScraper:
             )
 
         harness.assert_envelope(result, success=True)
-        harness.assert_output_shape(
-            result, ["pages", "page_count", "crawler_type", "mode", "proxied"]
-        )
+        harness.assert_output_shape(result, ["pages", "page_count", "crawler_type", "mode", "proxied"])
         payload = result["result"]
         assert payload["crawler_type"] == "beautifulsoup"
         assert payload["mode"] == "single"
@@ -232,9 +222,7 @@ class TestCrawleeScraper:
         assert "hello" in page["content"]
 
     async def test_missing_url_returns_validation_error(self, harness):
-        result = await harness.execute(
-            "crawleeScraper", {"url": "", "crawler_type": "beautifulsoup"}
-        )
+        result = await harness.execute("crawleeScraper", {"url": "", "crawler_type": "beautifulsoup"})
 
         harness.assert_envelope(result, success=False)
         assert "url is required" in result["error"].lower()
@@ -271,12 +259,10 @@ class TestCrawleeScraper:
             async def run(self, urls):
                 raise RuntimeError("crawler blew up")
 
-        with patch(
-            "crawlee.crawlers.BeautifulSoupCrawler", BrokenCrawler
-        ), patch(
-            "crawlee.storage_clients.MemoryStorageClient", MagicMock()
-        ), patch(
-            "crawlee.ConcurrencySettings", MagicMock()
+        with (
+            patch("crawlee.crawlers.BeautifulSoupCrawler", BrokenCrawler),
+            patch("crawlee.storage_clients.MemoryStorageClient", MagicMock()),
+            patch("crawlee.ConcurrencySettings", MagicMock()),
         ):
             result = await harness.execute(
                 "crawleeScraper",
@@ -330,9 +316,7 @@ class TestApifyActor:
         items = [{"url": "https://a.example"}, {"url": "https://b.example"}]
         fake_client = _make_fake_apify_client(run_info=run_info, items=items)
 
-        with patched_container(auth_api_keys={"apify": "tk_apify"}), patch(
-            "apify_client.ApifyClientAsync", return_value=fake_client
-        ):
+        with patched_container(auth_api_keys={"apify": "tk_apify"}), patch("apify_client.ApifyClientAsync", return_value=fake_client):
             result = await harness.execute(
                 "apifyActor",
                 {
@@ -391,9 +375,7 @@ class TestApifyActor:
     async def test_missing_actor_id_returns_validation_error(self, harness):
         fake_client = _make_fake_apify_client(run_info={})
 
-        with patched_container(auth_api_keys={"apify": "tk"}), patch(
-            "apify_client.ApifyClientAsync", return_value=fake_client
-        ):
+        with patched_container(auth_api_keys={"apify": "tk"}), patch("apify_client.ApifyClientAsync", return_value=fake_client):
             result = await harness.execute("apifyActor", {"actor_id": ""})
 
         harness.assert_envelope(result, success=False)
@@ -408,27 +390,17 @@ class TestApifyActor:
         }
         fake_client = _make_fake_apify_client(run_info=run_info, items=[])
 
-        with patched_container(auth_api_keys={"apify": "tk"}), patch(
-            "apify_client.ApifyClientAsync", return_value=fake_client
-        ):
-            result = await harness.execute(
-                "apifyActor", {"actor_id": "apify/instagram-scraper"}
-            )
+        with patched_container(auth_api_keys={"apify": "tk"}), patch("apify_client.ApifyClientAsync", return_value=fake_client):
+            result = await harness.execute("apifyActor", {"actor_id": "apify/instagram-scraper"})
 
         harness.assert_envelope(result, success=False)
         assert "actor crashed at step 3" in result["error"].lower()
 
     async def test_unauthorized_exception_rewritten(self, harness):
-        fake_client = _make_fake_apify_client(
-            call_exc=RuntimeError("Request failed: 401 Unauthorized")
-        )
+        fake_client = _make_fake_apify_client(call_exc=RuntimeError("Request failed: 401 Unauthorized"))
 
-        with patched_container(auth_api_keys={"apify": "tk"}), patch(
-            "apify_client.ApifyClientAsync", return_value=fake_client
-        ):
-            result = await harness.execute(
-                "apifyActor", {"actor_id": "apify/instagram-scraper"}
-            )
+        with patched_container(auth_api_keys={"apify": "tk"}), patch("apify_client.ApifyClientAsync", return_value=fake_client):
+            result = await harness.execute("apifyActor", {"actor_id": "apify/instagram-scraper"})
 
         harness.assert_envelope(result, success=False)
         assert "401" in result["error"].lower() or "unauthorized" in result["error"].lower()
@@ -444,9 +416,7 @@ class TestApifyActor:
         }
         fake_client = _make_fake_apify_client(run_info=run_info, items=[])
 
-        with patched_container(auth_api_keys={"apify": "tk"}), patch(
-            "apify_client.ApifyClientAsync", return_value=fake_client
-        ):
+        with patched_container(auth_api_keys={"apify": "tk"}), patch("apify_client.ApifyClientAsync", return_value=fake_client):
             result = await harness.execute(
                 "apifyActor",
                 {

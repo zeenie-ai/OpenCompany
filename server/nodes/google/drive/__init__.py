@@ -86,10 +86,10 @@ class DriveOutput(BaseModel):
 
 
 _FILE_TYPE_QUERY = {
-    'folder': "mimeType = 'application/vnd.google-apps.folder'",
-    'document': "mimeType = 'application/vnd.google-apps.document'",
-    'spreadsheet': "mimeType = 'application/vnd.google-apps.spreadsheet'",
-    'image': "mimeType contains 'image/'",
+    "folder": "mimeType = 'application/vnd.google-apps.folder'",
+    "document": "mimeType = 'application/vnd.google-apps.document'",
+    "spreadsheet": "mimeType = 'application/vnd.google-apps.spreadsheet'",
+    "image": "mimeType contains 'image/'",
 }
 
 
@@ -103,10 +103,8 @@ class DriveNode(ActionNode):
     tool_name = "google_drive"
     tool_description = "Manage Google Drive files. Operations: upload (add file from URL), download (get file by ID), list (find files), share (share with user)."
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
     annotations = {"destructive": False, "readonly": False, "open_world": True}
     credentials = (GoogleCredential,)
@@ -128,11 +126,11 @@ class DriveNode(ActionNode):
             if not params.file_url and not params.file_content:
                 raise RuntimeError("Either file_url or file_content is required")
 
-            metadata = {'name': params.filename}
+            metadata = {"name": params.filename}
             if params.folder_id:
-                metadata['parents'] = [params.folder_id]
+                metadata["parents"] = [params.folder_id]
             if params.description:
-                metadata['description'] = params.description
+                metadata["description"] = params.description
 
             mime_type = params.mime_type
             if params.file_url:
@@ -140,47 +138,52 @@ class DriveNode(ActionNode):
                     resp = await client.get(params.file_url, timeout=60.0)
                     resp.raise_for_status()
                     file_bytes = resp.content
-                    if mime_type == 'application/octet-stream' and 'content-type' in resp.headers:
-                        mime_type = resp.headers['content-type'].split(';')[0]
+                    if mime_type == "application/octet-stream" and "content-type" in resp.headers:
+                        mime_type = resp.headers["content-type"].split(";")[0]
             else:
                 file_bytes = base64.b64decode(params.file_content)
 
             media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mime_type, resumable=True)
-            result = await run_sync(lambda: files_svc.create(
-                body=metadata, media_body=media,
-                fields='id, name, mimeType, size, webViewLink, webContentLink, createdTime',
-            ).execute())
+            result = await run_sync(
+                lambda: files_svc.create(
+                    body=metadata,
+                    media_body=media,
+                    fields="id, name, mimeType, size, webViewLink, webContentLink, createdTime",
+                ).execute()
+            )
             await track_google_usage("google_drive", ctx.node_id, "upload", 1, ctx.raw)
             return DriveOutput(
                 operation="upload",
-                file_id=result.get('id'),
-                name=result.get('name'),
-                mime_type=result.get('mimeType'),
-                size=int(result.get('size')) if result.get('size') else None,
-                web_link=result.get('webViewLink'),
-                download_link=result.get('webContentLink'),
-                created_time=result.get('createdTime'),
+                file_id=result.get("id"),
+                name=result.get("name"),
+                mime_type=result.get("mimeType"),
+                size=int(result.get("size")) if result.get("size") else None,
+                web_link=result.get("webViewLink"),
+                download_link=result.get("webContentLink"),
+                created_time=result.get("createdTime"),
             )
 
         if op == "download":
             if not params.file_id:
                 raise RuntimeError("File ID is required")
 
-            metadata = await run_sync(lambda: files_svc.get(
-                fileId=params.file_id,
-                fields='id, name, mimeType, size, webViewLink, webContentLink',
-            ).execute())
+            metadata = await run_sync(
+                lambda: files_svc.get(
+                    fileId=params.file_id,
+                    fields="id, name, mimeType, size, webViewLink, webContentLink",
+                ).execute()
+            )
 
             if params.output_format == "url":
                 await track_google_usage("google_drive", ctx.node_id, "download", 1, ctx.raw)
                 return DriveOutput(
                     operation="download",
-                    file_id=metadata.get('id'),
-                    name=metadata.get('name'),
-                    mime_type=metadata.get('mimeType'),
-                    size=int(metadata.get('size')) if metadata.get('size') else None,
-                    download_url=metadata.get('webContentLink'),
-                    web_link=metadata.get('webViewLink'),
+                    file_id=metadata.get("id"),
+                    name=metadata.get("name"),
+                    mime_type=metadata.get("mimeType"),
+                    size=int(metadata.get("size")) if metadata.get("size") else None,
+                    download_url=metadata.get("webContentLink"),
+                    web_link=metadata.get("webViewLink"),
                 )
 
             def _download():
@@ -196,11 +199,11 @@ class DriveNode(ActionNode):
             await track_google_usage("google_drive", ctx.node_id, "download", 1, ctx.raw)
             return DriveOutput(
                 operation="download",
-                file_id=metadata.get('id'),
-                name=metadata.get('name'),
-                mime_type=metadata.get('mimeType'),
+                file_id=metadata.get("id"),
+                name=metadata.get("name"),
+                mime_type=metadata.get("mimeType"),
                 size=len(file_bytes),
-                content_base64=base64.b64encode(file_bytes).decode('utf-8'),
+                content_base64=base64.b64encode(file_bytes).decode("utf-8"),
             )
 
         if op == "list":
@@ -212,36 +215,39 @@ class DriveNode(ActionNode):
             if params.file_types in _FILE_TYPE_QUERY:
                 query_parts.append(_FILE_TYPE_QUERY[params.file_types])
             query_parts.append("trashed = false")
-            full_query = ' and '.join(query_parts)
+            full_query = " and ".join(query_parts)
 
             list_kwargs = {
-                'pageSize': min(params.max_results, 1000),
-                'fields': 'nextPageToken, files(id, name, mimeType, size, webViewLink, webContentLink, createdTime, modifiedTime, parents, owners)',
-                'orderBy': params.order_by,
+                "pageSize": min(params.max_results, 1000),
+                "fields": "nextPageToken, files(id, name, mimeType, size, webViewLink, webContentLink, createdTime, modifiedTime, parents, owners)",
+                "orderBy": params.order_by,
             }
             if full_query:
-                list_kwargs['q'] = full_query
+                list_kwargs["q"] = full_query
 
             result = await run_sync(lambda: files_svc.list(**list_kwargs).execute())
-            raw = result.get('files', [])
-            formatted = [{
-                "file_id": f.get('id'),
-                "name": f.get('name'),
-                "mime_type": f.get('mimeType'),
-                "size": f.get('size'),
-                "web_link": f.get('webViewLink'),
-                "download_link": f.get('webContentLink'),
-                "created_time": f.get('createdTime'),
-                "modified_time": f.get('modifiedTime'),
-                "parent_ids": f.get('parents', []),
-                "owner": f.get('owners', [{}])[0].get('emailAddress') if f.get('owners') else None,
-            } for f in raw]
+            raw = result.get("files", [])
+            formatted = [
+                {
+                    "file_id": f.get("id"),
+                    "name": f.get("name"),
+                    "mime_type": f.get("mimeType"),
+                    "size": f.get("size"),
+                    "web_link": f.get("webViewLink"),
+                    "download_link": f.get("webContentLink"),
+                    "created_time": f.get("createdTime"),
+                    "modified_time": f.get("modifiedTime"),
+                    "parent_ids": f.get("parents", []),
+                    "owner": f.get("owners", [{}])[0].get("emailAddress") if f.get("owners") else None,
+                }
+                for f in raw
+            ]
             await track_google_usage("google_drive", ctx.node_id, "list", len(formatted), ctx.raw)
             return DriveOutput(
                 operation="list",
                 files=formatted,
                 count=len(formatted),
-                next_page_token=result.get('nextPageToken'),
+                next_page_token=result.get("nextPageToken"),
             )
 
         if op == "share":
@@ -250,25 +256,32 @@ class DriveNode(ActionNode):
             if not params.email:
                 raise RuntimeError("Email address is required")
 
-            perm = await run_sync(lambda: svc.permissions().create(
-                fileId=params.file_id,
-                body={'type': 'user', 'role': params.role, 'emailAddress': params.email},
-                sendNotificationEmail=params.send_notification,
-                emailMessage=params.message or None,
-                fields='id, type, role, emailAddress',
-            ).execute())
-            file_info = await run_sync(lambda: files_svc.get(
-                fileId=params.file_id, fields='id, name, webViewLink',
-            ).execute())
+            perm = await run_sync(
+                lambda: svc.permissions()
+                .create(
+                    fileId=params.file_id,
+                    body={"type": "user", "role": params.role, "emailAddress": params.email},
+                    sendNotificationEmail=params.send_notification,
+                    emailMessage=params.message or None,
+                    fields="id, type, role, emailAddress",
+                )
+                .execute()
+            )
+            file_info = await run_sync(
+                lambda: files_svc.get(
+                    fileId=params.file_id,
+                    fields="id, name, webViewLink",
+                ).execute()
+            )
             await track_google_usage("google_drive", ctx.node_id, "share", 1, ctx.raw)
             return DriveOutput(
                 operation="share",
-                permission_id=perm.get('id'),
+                permission_id=perm.get("id"),
                 file_id=params.file_id,
-                file_name=file_info.get('name'),
+                file_name=file_info.get("name"),
                 shared_with=params.email,
                 role=params.role,
-                web_link=file_info.get('webViewLink'),
+                web_link=file_info.get("webViewLink"),
             )
 
         raise RuntimeError(f"Unknown Drive operation: {op}")

@@ -50,26 +50,16 @@ def _make_telegram_service(*, connected: bool = True, owner_chat_id=None):
             "text": "hi",
         }
     )
-    svc.send_photo = AsyncMock(
-        return_value={"message_id": 43, "chat_id": 111, "date": "2026-04-15T00:00:00"}
-    )
-    svc.send_document = AsyncMock(
-        return_value={"message_id": 44, "chat_id": 111, "date": "2026-04-15T00:00:00"}
-    )
-    svc.send_location = AsyncMock(
-        return_value={"message_id": 45, "chat_id": 111, "date": "2026-04-15T00:00:00"}
-    )
-    svc.send_contact = AsyncMock(
-        return_value={"message_id": 46, "chat_id": 111, "date": "2026-04-15T00:00:00"}
-    )
+    svc.send_photo = AsyncMock(return_value={"message_id": 43, "chat_id": 111, "date": "2026-04-15T00:00:00"})
+    svc.send_document = AsyncMock(return_value={"message_id": 44, "chat_id": 111, "date": "2026-04-15T00:00:00"})
+    svc.send_location = AsyncMock(return_value={"message_id": 45, "chat_id": 111, "date": "2026-04-15T00:00:00"})
+    svc.send_contact = AsyncMock(return_value={"message_id": 46, "chat_id": 111, "date": "2026-04-15T00:00:00"})
     return svc
 
 
 def _patch_telegram_service(svc):
     """Patch the get_telegram_service accessor at its canonical path."""
-    return patch(
-        "nodes.telegram._service.get_telegram_service", return_value=svc
-    )
+    return patch("nodes.telegram._service.get_telegram_service", return_value=svc)
 
 
 # ============================================================================
@@ -114,9 +104,7 @@ class TestTelegramSend:
         # Service has no owner in memory, but credentials DB has one saved.
         svc = _make_telegram_service(connected=True, owner_chat_id=None)
 
-        with _patch_telegram_service(svc), patched_container(
-            auth_api_keys={"telegram_owner_chat_id": "7777"}
-        ):
+        with _patch_telegram_service(svc), patched_container(auth_api_keys={"telegram_owner_chat_id": "7777"}):
             result = await harness.execute(
                 "telegramSend",
                 {"recipient_type": "self", "message_type": "text", "text": "hi"},
@@ -295,9 +283,7 @@ class TestTelegramReceive:
         svc = _make_telegram_service(connected=True, owner_chat_id=42)
         waiter = _make_waiter_stub(canned_event=self.CANNED)
 
-        with _patch_telegram_service(svc), patched_broadcaster(), patch(
-            "services.event_waiter", waiter
-        ):
+        with _patch_telegram_service(svc), patched_broadcaster(), patch("services.event_waiter", waiter):
             result = await harness.execute(
                 "telegramReceive",
                 {"sender_filter": "all", "content_type_filter": "all"},
@@ -313,9 +299,7 @@ class TestTelegramReceive:
         svc = _make_telegram_service(connected=False)
         waiter = _make_waiter_stub(canned_event=self.CANNED)
 
-        with _patch_telegram_service(svc), patched_broadcaster(), patch(
-            "services.event_waiter", waiter
-        ):
+        with _patch_telegram_service(svc), patched_broadcaster(), patch("services.event_waiter", waiter):
             result = await harness.execute(
                 "telegramReceive",
                 {"sender_filter": "all"},
@@ -332,9 +316,7 @@ class TestTelegramReceive:
         svc = _make_telegram_service(connected=True, owner_chat_id=1)
         waiter = _make_waiter_stub(wait_side_effect=asyncio.CancelledError())
 
-        with _patch_telegram_service(svc), patched_broadcaster(), patch(
-            "services.event_waiter", waiter
-        ):
+        with _patch_telegram_service(svc), patched_broadcaster(), patch("services.event_waiter", waiter):
             result = await harness.execute(
                 "telegramReceive",
                 {"sender_filter": "all"},
@@ -351,9 +333,7 @@ class TestTelegramReceive:
 
 class TestSocialSend:
     async def test_whatsapp_text_happy_path(self, harness):
-        whatsapp_send = AsyncMock(
-            return_value={"success": True, "message_id": "wamid.xyz"}
-        )
+        whatsapp_send = AsyncMock(return_value={"success": True, "message_id": "wamid.xyz"})
 
         # The social node resolves the platform handler via the
         # social_provider_registry (Wave 11.I plugin self-registration).
@@ -426,13 +406,15 @@ class TestSocialSend:
             )
 
         harness.assert_envelope(result, success=False)
-        assert "discord" in result["error"].lower() or "not yet implemented" in result["error"].lower() or "not supported" in result["error"].lower()
+        assert (
+            "discord" in result["error"].lower()
+            or "not yet implemented" in result["error"].lower()
+            or "not supported" in result["error"].lower()
+        )
         whatsapp_send.assert_not_awaited()
 
     async def test_whatsapp_failure_becomes_error_envelope(self, harness):
-        whatsapp_send = AsyncMock(
-            return_value={"success": False, "error": "rpc boom"}
-        )
+        whatsapp_send = AsyncMock(return_value={"success": False, "error": "rpc boom"})
 
         # See test_whatsapp_text_happy_path: patch the registry lookup,
         # not the module attribute the registry already captured.

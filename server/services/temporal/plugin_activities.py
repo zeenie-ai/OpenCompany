@@ -69,7 +69,9 @@ def collect_plugin_activities(
             activity_fn = cls.as_activity()
         except Exception as e:
             logger.warning(
-                "Failed to build activity for %s: %s", node_type, e,
+                "Failed to build activity for %s: %s",
+                node_type,
+                e,
             )
             continue
         activities.append(activity_fn)
@@ -111,7 +113,9 @@ def collect_polling_activities() -> List[Callable]:
             activities.append(cls.as_poll_activity())
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "Failed to build poll activity for %s: %s", node_type, exc,
+                "Failed to build poll activity for %s: %s",
+                node_type,
+                exc,
             )
 
     logger.info("Collected %d polling activities", len(activities))

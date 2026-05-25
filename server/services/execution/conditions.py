@@ -54,7 +54,7 @@ def get_nested_value(data: Dict[str, Any], field_path: str) -> Any:
     if not data or not field_path:
         return None
 
-    parts = field_path.split('.')
+    parts = field_path.split(".")
     current = data
 
     for part in parts:
@@ -102,21 +102,14 @@ def evaluate_condition(condition: ConditionDict, output: Dict[str, Any]) -> bool
     # Get the actual value from output
     actual_value = get_nested_value(output, field)
 
-    logger.debug("Evaluating condition",
-                field=field,
-                operator=operator,
-                target=target_value,
-                actual=actual_value)
+    logger.debug("Evaluating condition", field=field, operator=operator, target=target_value, actual=actual_value)
 
     try:
         result = _evaluate_operator(operator, actual_value, target_value)
         logger.debug("Condition result", result=result)
         return result
     except Exception as e:
-        logger.warning("Condition evaluation error",
-                      field=field,
-                      operator=operator,
-                      error=str(e))
+        logger.warning("Condition evaluation error", field=field, operator=operator, error=str(e))
         return False
 
 
@@ -269,8 +262,7 @@ def _safe_compare(actual: Any, target: Any, comparator) -> bool:
         return False
 
 
-def evaluate_conditions(conditions: List[ConditionDict], output: Dict[str, Any],
-                        logic: str = "and") -> bool:
+def evaluate_conditions(conditions: List[ConditionDict], output: Dict[str, Any], logic: str = "and") -> bool:
     """Evaluate multiple conditions with AND/OR logic.
 
     Args:
@@ -292,8 +284,7 @@ def evaluate_conditions(conditions: List[ConditionDict], output: Dict[str, Any],
         return all(results)
 
 
-def decide_next_edges(edges: List[Dict[str, Any]], source_node_id: str,
-                      output: Dict[str, Any]) -> List[str]:
+def decide_next_edges(edges: List[Dict[str, Any]], source_node_id: str, output: Dict[str, Any]) -> List[str]:
     """Determine which edges to follow based on conditions.
 
     Args:
@@ -325,15 +316,11 @@ def decide_next_edges(edges: List[Dict[str, Any]], source_node_id: str,
             condition = edge.get("data", {}).get("condition")
             if evaluate_condition(condition, output):
                 next_nodes.append(edge["target"])
-                logger.info("Conditional edge matched",
-                           source=source_node_id,
-                           target=edge["target"],
-                           condition=condition)
+                logger.info("Conditional edge matched", source=source_node_id, target=edge["target"], condition=condition)
 
         # If no conditional edges matched, fall through to unconditional
         if not next_nodes and unconditional_edges:
-            logger.info("No conditional edges matched, using unconditional",
-                       source=source_node_id)
+            logger.info("No conditional edges matched, using unconditional", source=source_node_id)
             for edge in unconditional_edges:
                 next_nodes.append(edge["target"])
     else:

@@ -65,6 +65,7 @@ def free_all_ports(cfg: Config) -> list[KillResult]:
     recovery verb ``machina clean``.
     """
     from cli.ports import kill_port
+
     return [kill_port(port) for port in cfg.all_ports]
 
 
@@ -87,13 +88,18 @@ def build_backend_spec(
     """
     from cli.run import uv_run
     from cli.supervisor import ServiceSpec
+
     return ServiceSpec(
         name="server",
         argv=uv_run(
-            "uvicorn", "main:app",
-            "--host", host,
-            "--port", str(cfg.backend_port),
-            "--log-level", "warning",
+            "uvicorn",
+            "main:app",
+            "--host",
+            host,
+            "--port",
+            str(cfg.backend_port),
+            "--log-level",
+            "warning",
         ),
         cwd=server_dir(root),
         ready_port=cfg.backend_port,
@@ -110,6 +116,7 @@ def error_block(title: str, lines: list[str]) -> None:
     interprets.
     """
     from cli.colors import console
+
     console.print(f"[red]Error: {title}[/]")
     for line in lines:
         console.print(f"  {line}")

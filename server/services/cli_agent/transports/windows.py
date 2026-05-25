@@ -71,18 +71,16 @@ class WindowsPtyHandle:
         try:
             text = data.decode("utf-8")
         except UnicodeDecodeError as exc:
-            raise ConnectionError(
-                f"PTY write failed (pid={self.pid}): non-UTF-8 payload: {exc}"
-            ) from exc
+            raise ConnectionError(f"PTY write failed (pid={self.pid}): non-UTF-8 payload: {exc}") from exc
         loop = asyncio.get_running_loop()
         try:
             await loop.run_in_executor(
-                None, self._proc.write, text,  # type: ignore[attr-defined]
+                None,
+                self._proc.write,
+                text,  # type: ignore[attr-defined]
             )
         except OSError as exc:
-            raise ConnectionError(
-                f"PTY write failed (pid={self.pid}): {exc}"
-            ) from exc
+            raise ConnectionError(f"PTY write failed (pid={self.pid}): {exc}") from exc
 
     async def kill(self, signal_: int = signal.SIGTERM) -> None:
         """First-stage WM_CLOSE / SIGTERM equivalent, wait briefly,
@@ -101,7 +99,9 @@ class WindowsPtyHandle:
 
         try:
             await loop.run_in_executor(
-                None, self._proc.kill, signal_,  # type: ignore[attr-defined]
+                None,
+                self._proc.kill,
+                signal_,  # type: ignore[attr-defined]
             )
         except (ProcessLookupError, OSError) as exc:
             logger.debug("ConPTY first-stage signal raced exit: %s", exc)
@@ -182,6 +182,8 @@ class WindowsPtyTransport(PtyTransport):
         )
         logger.info(
             "[PtyTransport windows] spawned pid=%s cwd=%s argv0=%s",
-            getattr(proc, "pid", "?"), cwd, binary,
+            getattr(proc, "pid", "?"),
+            cwd,
+            binary,
         )
         return WindowsPtyHandle(proc)

@@ -61,9 +61,7 @@ class TestAuthorizationUrl:
         assert params["code_challenge_method"] == ["S256"]
         assert params["response_type"] == ["code"]
         assert params["client_id"] == ["test-client-id"]
-        assert (
-            params["redirect_uri"] == ["http://localhost:3010/api/twitter/callback"]
-        )
+        assert params["redirect_uri"] == ["http://localhost:3010/api/twitter/callback"]
         assert "code_challenge" in params
         assert "state" in params
 

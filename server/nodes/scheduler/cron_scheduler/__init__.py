@@ -39,9 +39,7 @@ from ._workflow import CronTriggerWorkflow
 
 logger = get_logger(__name__)
 
-register_temporal_plugin(
-    SimplePlugin(name="cron-scheduler", workflows=[CronTriggerWorkflow])
-)
+register_temporal_plugin(SimplePlugin(name="cron-scheduler", workflows=[CronTriggerWorkflow]))
 register_canary_trigger_type("cronScheduler", "com.machinaos.cron.tick")
 
 
@@ -104,30 +102,45 @@ def _get_schedule_description(p: Dict[str, Any]) -> str:
 
 
 class CronSchedulerParams(BaseModel):
-    frequency: Literal[
-        "seconds", "minutes", "hours", "days", "weeks", "months", "once"
-    ] = Field(
+    frequency: Literal["seconds", "minutes", "hours", "days", "weeks", "months", "once"] = Field(
         default="minutes",
         description="How often the schedule fires",
     )
     interval: int = Field(
-        default=30, ge=5, le=59,
+        default=30,
+        ge=5,
+        le=59,
         description="Seconds between fires (5-59)",
         json_schema_extra={"displayOptions": {"show": {"frequency": ["seconds"]}}},
     )
     interval_minutes: int = Field(
-        default=5, ge=1, le=59,
+        default=5,
+        ge=1,
+        le=59,
         description="Minutes between fires (1-59)",
         json_schema_extra={"displayOptions": {"show": {"frequency": ["minutes"]}}},
     )
     interval_hours: int = Field(
-        default=1, ge=1, le=23,
+        default=1,
+        ge=1,
+        le=23,
         description="Hours between fires (1-23)",
         json_schema_extra={"displayOptions": {"show": {"frequency": ["hours"]}}},
     )
     daily_time: Literal[
-        "00:00", "02:00", "04:00", "06:00", "08:00", "09:00",
-        "10:00", "12:00", "14:00", "16:00", "18:00", "20:00", "22:00",
+        "00:00",
+        "02:00",
+        "04:00",
+        "06:00",
+        "08:00",
+        "09:00",
+        "10:00",
+        "12:00",
+        "14:00",
+        "16:00",
+        "18:00",
+        "20:00",
+        "22:00",
     ] = Field(
         default="09:00",
         description="Time of day (HH:MM) for daily schedule",
@@ -139,17 +152,54 @@ class CronSchedulerParams(BaseModel):
         json_schema_extra={"displayOptions": {"show": {"frequency": ["weeks"]}}},
     )
     weekly_time: Literal[
-        "00:00", "02:00", "04:00", "06:00", "08:00", "09:00",
-        "10:00", "12:00", "14:00", "16:00", "18:00", "20:00", "22:00",
+        "00:00",
+        "02:00",
+        "04:00",
+        "06:00",
+        "08:00",
+        "09:00",
+        "10:00",
+        "12:00",
+        "14:00",
+        "16:00",
+        "18:00",
+        "20:00",
+        "22:00",
     ] = Field(
         default="09:00",
         description="Time of day for weekly schedule",
         json_schema_extra={"displayOptions": {"show": {"frequency": ["weeks"]}}},
     )
     month_day: Literal[
-        "1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
-        "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
-        "21", "22", "23", "24", "25", "26", "27", "28", "L",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+        "11",
+        "12",
+        "13",
+        "14",
+        "15",
+        "16",
+        "17",
+        "18",
+        "19",
+        "20",
+        "21",
+        "22",
+        "23",
+        "24",
+        "25",
+        "26",
+        "27",
+        "28",
+        "L",
     ] = Field(
         default="1",
         description="Day of month (1-28, or 'L' for last day)",
@@ -198,10 +248,7 @@ class CronSchedulerNode(ActionNode):
     component_kind = "trigger"
     tool_name = "cron_scheduler"
     tool_description = "Schedule a delayed or recurring execution. Supports seconds, minutes, hours, daily, weekly, monthly frequencies with timezone. Use frequency to set schedule type, then set the relevant interval/time parameters."
-    handles = (
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
-    )
+    handles = ({"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},)
     annotations = {"destructive": False, "readonly": True, "open_world": False}
     task_queue = TaskQueue.TRIGGERS_POLL
     usable_as_tool = True
@@ -225,7 +272,8 @@ class CronSchedulerNode(ActionNode):
         trigger_time = now + timedelta(seconds=wait_seconds)
 
         await get_status_broadcaster().update_node_status(
-            ctx.node_id, "waiting",
+            ctx.node_id,
+            "waiting",
             {
                 "message": f"Waiting {schedule_desc}...",
                 "trigger_time": trigger_time.isoformat(),
@@ -236,7 +284,8 @@ class CronSchedulerNode(ActionNode):
 
         logger.info(
             f"[CronScheduler] Waiting {wait_seconds}s for trigger",
-            node_id=ctx.node_id, trigger_time=trigger_time.isoformat(),
+            node_id=ctx.node_id,
+            trigger_time=trigger_time.isoformat(),
         )
 
         try:
@@ -259,8 +308,5 @@ class CronSchedulerNode(ActionNode):
             output.message = f"Triggered after waiting {_format_wait_time(wait_seconds)}"
         else:
             output.next_run = schedule_desc
-            output.message = (
-                f"Triggered after {_format_wait_time(wait_seconds)}, "
-                f"will repeat: {schedule_desc}"
-            )
+            output.message = f"Triggered after {_format_wait_time(wait_seconds)}, " f"will repeat: {schedule_desc}"
         return output

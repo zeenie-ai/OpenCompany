@@ -7,7 +7,9 @@ import socket
 import time
 
 
-async def probe_tcp_port(port: int, host: str = "127.0.0.1", *, timeout: float = 0.5) -> bool:
+async def probe_tcp_port(
+    port: int, host: str = "127.0.0.1", *, timeout: float = 0.5
+) -> bool:
     """Return True iff a TCP connection to ``host:port`` succeeds within ``timeout``."""
     try:
         _, writer = await asyncio.wait_for(
@@ -39,7 +41,9 @@ async def wait_for_tcp_port(
     return False
 
 
-def probe_tcp_port_sync(port: int, host: str = "127.0.0.1", *, timeout: float = 0.5) -> bool:
+def probe_tcp_port_sync(
+    port: int, host: str = "127.0.0.1", *, timeout: float = 0.5
+) -> bool:
     """Synchronous variant for places that aren't already in an event loop."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(timeout)

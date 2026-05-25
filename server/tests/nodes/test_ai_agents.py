@@ -82,7 +82,7 @@ class TestAIAgent:
 
         harness.database.get_node_parameters = AsyncMock(
             return_value={
-                "session_id": "",           # triggers auto-derivation
+                "session_id": "",  # triggers auto-derivation
                 "window_size": 7,
                 "memory_content": "# Conversation History\n\n### **Human** (t)\nhi\n",
                 "long_term_enabled": True,
@@ -106,7 +106,7 @@ class TestAIAgent:
         mem = kwargs["memory_data"]
         assert mem is not None
         assert mem["node_id"] == mem_id
-        assert mem["session_id"] == agent_id          # auto-derived
+        assert mem["session_id"] == agent_id  # auto-derived
         assert mem["window_size"] == 7
         assert mem["long_term_enabled"] is True
         assert mem["retrieval_count"] == 5
@@ -123,8 +123,11 @@ class TestAIAgent:
         edges = [_edge(mem_id, agent_id, "input-memory")]
 
         await harness.execute(
-            "aiAgent", {"prompt": "p"},
-            node_id=agent_id, nodes=nodes, edges=edges,
+            "aiAgent",
+            {"prompt": "p"},
+            node_id=agent_id,
+            nodes=nodes,
+            edges=edges,
         )
 
         _, kwargs = harness.ai_service.execute_agent.call_args
@@ -135,9 +138,7 @@ class TestAIAgent:
         agent_id = "agent-2"
         tool_id = "calc-1"
 
-        harness.database.get_node_parameters = AsyncMock(
-            return_value={"tool_name": "calculator"}
-        )
+        harness.database.get_node_parameters = AsyncMock(return_value={"tool_name": "calculator"})
 
         nodes = [_node(agent_id, "aiAgent"), _node(tool_id, "calculatorTool", "Calc")]
         edges = [_edge(tool_id, agent_id, "input-tools")]
@@ -145,7 +146,9 @@ class TestAIAgent:
         await harness.execute(
             "aiAgent",
             {"prompt": "compute", "model": "m"},
-            node_id=agent_id, nodes=nodes, edges=edges,
+            node_id=agent_id,
+            nodes=nodes,
+            edges=edges,
         )
 
         _, kwargs = harness.ai_service.execute_agent.call_args
@@ -183,14 +186,17 @@ class TestAIAgent:
 
         with patch.dict(sys.modules, {"services.skill_loader": fake_loader_mod}):
             await harness.execute(
-                "aiAgent", {"prompt": "p"},
-                node_id=agent_id, nodes=nodes, edges=edges,
+                "aiAgent",
+                {"prompt": "p"},
+                node_id=agent_id,
+                nodes=nodes,
+                edges=edges,
             )
 
         _, kwargs = harness.ai_service.execute_agent.call_args
         skill_data = kwargs["skill_data"]
         assert skill_data is not None
-        assert len(skill_data) == 1                 # shell-skill disabled -> skipped
+        assert len(skill_data) == 1  # shell-skill disabled -> skipped
         assert skill_data[0]["skill_name"] == "python-skill"
         assert skill_data[0]["parameters"]["instructions"] == "Use python."
 
@@ -251,12 +257,11 @@ class TestAIAgent:
 
     async def test_service_error_propagates_through_envelope(self, harness):
         """execute_agent can return a failure envelope; handler must pass it through."""
-        harness.ai_service.execute_agent = AsyncMock(
-            return_value={"success": False, "error": "provider 429"}
-        )
+        harness.ai_service.execute_agent = AsyncMock(return_value={"success": False, "error": "provider 429"})
 
         result = await harness.execute(
-            "aiAgent", {"prompt": "x", "model": "m"},
+            "aiAgent",
+            {"prompt": "x", "model": "m"},
         )
 
         harness.assert_envelope(result, success=False)
@@ -312,9 +317,7 @@ class TestChatAgent:
 
         ctx = harness.build_context(nodes=nodes, edges=edges)
         # All three present - message must win
-        ctx["outputs"] = {
-            up_id: {"message": "via-message", "text": "via-text", "content": "via-content"}
-        }
+        ctx["outputs"] = {up_id: {"message": "via-message", "text": "via-text", "content": "via-content"}}
 
         await harness.executor.execute(
             node_id=chat_id,
@@ -337,7 +340,8 @@ class TestChatAgent:
         ctx["outputs"] = {up_id: {"message": "should-not-leak"}}
 
         await harness.executor.execute(
-            node_id=chat_id, node_type="chatAgent",
+            node_id=chat_id,
+            node_type="chatAgent",
             parameters={"prompt": "explicit"},
             context=ctx,
         )
@@ -366,7 +370,9 @@ class TestChatAgent:
         await harness.execute(
             "orchestrator_agent",
             {"prompt": "do a thing", "model": "m"},
-            node_id=lead_id, nodes=nodes, edges=edges,
+            node_id=lead_id,
+            nodes=nodes,
+            edges=edges,
         )
 
         _, kwargs = harness.ai_service.execute_chat_agent.call_args
@@ -399,12 +405,11 @@ class TestChatAgent:
         ]
 
         ctx = harness.build_context(nodes=nodes, edges=edges)
-        ctx["outputs"] = {
-            trig_id: {"task_id": "x", "status": "error", "error": "boom", "agent_name": "web_agent"}
-        }
+        ctx["outputs"] = {trig_id: {"task_id": "x", "status": "error", "error": "boom", "agent_name": "web_agent"}}
 
         await harness.executor.execute(
-            node_id=chat_id, node_type="chatAgent",
+            node_id=chat_id,
+            node_type="chatAgent",
             parameters={"prompt": "p", "model": "m"},
             context=ctx,
         )

@@ -15,9 +15,13 @@ def ai_service():
 
     # Stub all modules that ai.py imports at top level
     _stubs = [
-        "core.config", "core.container",
-        "services.model_registry", "services.compaction", "services.pricing",
-        "services.auth", "services.status_broadcaster",
+        "core.config",
+        "core.container",
+        "services.model_registry",
+        "services.compaction",
+        "services.pricing",
+        "services.auth",
+        "services.status_broadcaster",
         "constants",
     ]
     for mod in _stubs:
@@ -47,11 +51,12 @@ async def test_execute_chat_uses_native_openai(ai_service):
         finish_reason="stop",
     )
 
-    with patch("services.ai.create_provider") as mock_factory, \
-         patch("services.ai.native_resolve_max_tokens", return_value=4096), \
-         patch("services.ai.native_resolve_temperature", return_value=0.7), \
-         patch("services.ai.is_native_provider", return_value=True):
-
+    with (
+        patch("services.ai.create_provider") as mock_factory,
+        patch("services.ai.native_resolve_max_tokens", return_value=4096),
+        patch("services.ai.native_resolve_temperature", return_value=0.7),
+        patch("services.ai.is_native_provider", return_value=True),
+    ):
         mock_provider = AsyncMock()
         mock_provider.chat = AsyncMock(return_value=fake_resp)
         mock_factory.return_value = mock_provider
@@ -75,12 +80,13 @@ async def test_execute_chat_uses_langchain_for_groq(ai_service):
     mock_response = MagicMock()
     mock_response.content = "Hello from groq"
 
-    with patch("services.ai.is_native_provider", return_value=False), \
-         patch.object(ai_service, "create_model", return_value=MagicMock(invoke=MagicMock(return_value=mock_response))), \
-         patch("services.ai.extract_thinking_from_response", return_value=("Hello from groq", None)), \
-         patch("services.ai._resolve_max_tokens", return_value=4096), \
-         patch("services.ai._resolve_temperature", return_value=0.7):
-
+    with (
+        patch("services.ai.is_native_provider", return_value=False),
+        patch.object(ai_service, "create_model", return_value=MagicMock(invoke=MagicMock(return_value=mock_response))),
+        patch("services.ai.extract_thinking_from_response", return_value=("Hello from groq", None)),
+        patch("services.ai._resolve_max_tokens", return_value=4096),
+        patch("services.ai._resolve_temperature", return_value=0.7),
+    ):
         result = await ai_service.execute_chat(
             node_id="test-2",
             node_type="groqChatModel",
@@ -97,9 +103,7 @@ async def test_fetch_models_uses_native_for_anthropic(ai_service):
     """fetch_models for anthropic delegates to native provider."""
     expected_models = ["claude-sonnet-4-6", "claude-opus-4-6"]
 
-    with patch("services.ai.is_native_provider", return_value=True), \
-         patch("services.ai.create_provider") as mock_factory:
-
+    with patch("services.ai.is_native_provider", return_value=True), patch("services.ai.create_provider") as mock_factory:
         mock_provider = AsyncMock()
         mock_provider.fetch_models = AsyncMock(return_value=expected_models)
         mock_factory.return_value = mock_provider
@@ -125,11 +129,12 @@ async def test_execute_chat_native_with_thinking(ai_service):
         finish_reason="stop",
     )
 
-    with patch("services.ai.create_provider") as mock_factory, \
-         patch("services.ai.native_resolve_max_tokens", return_value=4096), \
-         patch("services.ai.native_resolve_temperature", return_value=1.0), \
-         patch("services.ai.is_native_provider", return_value=True):
-
+    with (
+        patch("services.ai.create_provider") as mock_factory,
+        patch("services.ai.native_resolve_max_tokens", return_value=4096),
+        patch("services.ai.native_resolve_temperature", return_value=1.0),
+        patch("services.ai.is_native_provider", return_value=True),
+    ):
         mock_provider = AsyncMock()
         mock_provider.chat = AsyncMock(return_value=fake_resp)
         mock_factory.return_value = mock_provider

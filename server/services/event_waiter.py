@@ -7,6 +7,7 @@ Architecture:
 - Redis mode: Events stored in Redis Streams, waiters poll streams with blocking XREAD
 - Memory mode: Events dispatched to in-memory asyncio.Future waiters
 """
+
 import asyncio
 import json
 import uuid
@@ -74,9 +75,11 @@ def is_redis_mode() -> bool:
 # TRIGGER CONFIGURATION REGISTRY
 # =============================================================================
 
+
 @dataclass
 class TriggerConfig:
     """Configuration for a trigger node type."""
+
     node_type: str
     event_type: str  # Event to wait for (e.g., 'whatsapp_message_received')
     display_name: str
@@ -86,26 +89,10 @@ class TriggerConfig:
 # Note: cronScheduler is NOT an event-based trigger - it uses APScheduler directly
 TRIGGER_REGISTRY: Dict[str, TriggerConfig] = {
     # Framework-level triggers — not owned by any plugin domain.
-    'start': TriggerConfig(
-        node_type='start',
-        event_type='deploy_triggered',
-        display_name='Deploy Start'
-    ),
-    'webhookTrigger': TriggerConfig(
-        node_type='webhookTrigger',
-        event_type='webhook_received',
-        display_name='Webhook Request'
-    ),
-    'chatTrigger': TriggerConfig(
-        node_type='chatTrigger',
-        event_type='chat_message_received',
-        display_name='Chat Message'
-    ),
-    'taskTrigger': TriggerConfig(
-        node_type='taskTrigger',
-        event_type='task_completed',
-        display_name='Task Completed'
-    ),
+    "start": TriggerConfig(node_type="start", event_type="deploy_triggered", display_name="Deploy Start"),
+    "webhookTrigger": TriggerConfig(node_type="webhookTrigger", event_type="webhook_received", display_name="Webhook Request"),
+    "chatTrigger": TriggerConfig(node_type="chatTrigger", event_type="chat_message_received", display_name="Chat Message"),
+    "taskTrigger": TriggerConfig(node_type="taskTrigger", event_type="task_completed", display_name="Task Completed"),
     # Plugin-owned trigger entries (whatsappReceive, twitterReceive,
     # telegramReceive, emailReceive, googleGmailReceive) live in their
     # plugin folders' ``_filters.py`` and are backfilled here from each
@@ -175,6 +162,7 @@ def is_trigger_node(node_type: str) -> bool:
     This includes all trigger types: start, cronScheduler, and event-based triggers.
     """
     from constants import WORKFLOW_TRIGGER_TYPES
+
     return node_type in WORKFLOW_TRIGGER_TYPES
 
 
@@ -199,6 +187,7 @@ def get_trigger_config(node_type: str) -> Optional[TriggerConfig]:
 # FILTER BUILDERS - One per trigger type
 # =============================================================================
 
+
 def build_webhook_filter(params: Dict) -> Callable[[Dict], bool]:
     """Build filter function for webhook requests.
 
@@ -210,10 +199,10 @@ def build_webhook_filter(params: Dict) -> Callable[[Dict], bool]:
     Returns:
         Filter function that checks if event path matches
     """
-    webhook_path = params.get('path', '')
+    webhook_path = params.get("path", "")
 
     def matches(data: Dict) -> bool:
-        event_path = data.get('path', '')
+        event_path = data.get("path", "")
         if webhook_path and event_path != webhook_path:
             return False
         return True
@@ -231,11 +220,11 @@ def build_chat_filter(params: Dict) -> Callable[[Dict], bool]:
     Returns:
         Filter function that checks if event session_id matches
     """
-    session_id = params.get('session_id', 'default')
+    session_id = params.get("session_id", "default")
 
     def matches(data: Dict) -> bool:
-        event_session = data.get('session_id', 'default')
-        if session_id != 'default' and event_session != session_id:
+        event_session = data.get("session_id", "default")
+        if session_id != "default" and event_session != session_id:
             return False
         return True
 
@@ -257,33 +246,33 @@ def build_task_completed_filter(params: Dict) -> Callable[[Dict], bool]:
     Returns:
         Filter function that checks if event matches criteria
     """
-    task_id_filter = params.get('task_id', '')
-    agent_name_filter = params.get('agent_name', '')
-    status_filter = params.get('status_filter', 'all')  # all, completed, error
-    parent_node_id = params.get('parent_node_id', '')
+    task_id_filter = params.get("task_id", "")
+    agent_name_filter = params.get("agent_name", "")
+    status_filter = params.get("status_filter", "all")  # all, completed, error
+    parent_node_id = params.get("parent_node_id", "")
 
     def matches(data: Dict) -> bool:
         # Task ID filter (exact match if specified)
         if task_id_filter:
-            if data.get('task_id') != task_id_filter:
+            if data.get("task_id") != task_id_filter:
                 return False
 
         # Agent name filter (contains match)
         if agent_name_filter:
-            event_agent = data.get('agent_name', '')
+            event_agent = data.get("agent_name", "")
             if agent_name_filter.lower() not in event_agent.lower():
                 return False
 
         # Status filter
-        event_status = data.get('status', '')
-        if status_filter == 'completed' and event_status != 'completed':
+        event_status = data.get("status", "")
+        if status_filter == "completed" and event_status != "completed":
             return False
-        if status_filter == 'error' and event_status != 'error':
+        if status_filter == "error" and event_status != "error":
             return False
 
         # Parent node filter (for scoping to specific parent agent)
         if parent_node_id:
-            if data.get('parent_node_id') != parent_node_id:
+            if data.get("parent_node_id") != parent_node_id:
                 return False
 
         return True
@@ -301,17 +290,17 @@ def build_task_completed_filter(params: Dict) -> Callable[[Dict], bool]:
 # googleGmailReceive, emailReceive) live in their plugin folders'
 # ``_filters.py`` and self-register at import time.
 FILTER_BUILDERS: Dict[str, Callable[[Dict], Callable[[Dict], bool]]] = {
-    'webhookTrigger': build_webhook_filter,
-    'chatTrigger': build_chat_filter,
-    'taskTrigger': build_task_completed_filter,
+    "webhookTrigger": build_webhook_filter,
+    "chatTrigger": build_chat_filter,
+    "taskTrigger": build_task_completed_filter,
 }
 
 from services.plugin.registry import IdempotentRegistry as _IdempotentRegistry  # noqa: E402
 
 # Backed by the module-level FILTER_BUILDERS dict so existing readers
 # (e.g. build_filter, _ensure_populated, tests) keep working.
-_FILTER_REGISTRY: _IdempotentRegistry[str, Callable[[Dict], Callable[[Dict], bool]]] = (
-    _IdempotentRegistry("filter_builder", items=FILTER_BUILDERS)
+_FILTER_REGISTRY: _IdempotentRegistry[str, Callable[[Dict], Callable[[Dict], bool]]] = _IdempotentRegistry(
+    "filter_builder", items=FILTER_BUILDERS
 )
 
 
@@ -361,9 +350,7 @@ import inspect as _inspect
 
 _TriggerPrecheck = Callable[[Dict[str, Any]], Any]
 _TRIGGER_PRECHECKS: Dict[str, _TriggerPrecheck] = {}
-_TRIGGER_PRECHECK_REGISTRY: _IdempotentRegistry[str, _TriggerPrecheck] = (
-    _IdempotentRegistry("trigger_precheck", items=_TRIGGER_PRECHECKS)
-)
+_TRIGGER_PRECHECK_REGISTRY: _IdempotentRegistry[str, _TriggerPrecheck] = _IdempotentRegistry("trigger_precheck", items=_TRIGGER_PRECHECKS)
 
 
 def register_trigger_precheck(node_type: str, fn: _TriggerPrecheck) -> None:
@@ -394,6 +381,7 @@ async def run_trigger_precheck(node_type: str, parameters: Dict) -> Any:
 # WAITER DATA STRUCTURES
 # =============================================================================
 
+
 @dataclass
 class Waiter:
     """Single event waiter.
@@ -401,6 +389,7 @@ class Waiter:
     In memory mode: uses asyncio.Future
     In Redis mode: uses stream polling with stored metadata
     """
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     node_id: str = ""
     node_type: str = ""
@@ -432,6 +421,7 @@ def _get_stream_name(event_type: str) -> str:
 # =============================================================================
 # WAITER REGISTRATION
 # =============================================================================
+
 
 async def register(node_type: str, node_id: str, params: Dict) -> Waiter:
     """Register a waiter for a trigger node.
@@ -480,7 +470,7 @@ async def register(node_type: str, node_id: str, params: Dict) -> Waiter:
         # Create unique consumer group for this waiter
         # start_id='$' means only new messages from this point forward
         stream_name = _get_stream_name(config.event_type)
-        await cache.stream_create_group(stream_name, consumer_group, start_id='$')
+        await cache.stream_create_group(stream_name, consumer_group, start_id="$")
 
         logger.debug(f"[EventWaiter] Registered {node_type} waiter {waiter.id} (Redis)")
     else:
@@ -560,9 +550,9 @@ async def _wait_redis(waiter: Waiter, timeout: Optional[float]) -> Dict:
             result = await cache.stream_read_group(
                 consumer_group,  # Each waiter has its own group
                 consumer_name,
-                {stream_name: '>'},  # '>' = new messages for this consumer
+                {stream_name: ">"},  # '>' = new messages for this consumer
                 count=10,
-                block=block_ms
+                block=block_ms,
             )
 
             if not result:
@@ -616,6 +606,7 @@ def _cleanup_waiter(waiter_id: str) -> None:
 # EVENT DISPATCH
 # =============================================================================
 
+
 def _unpack_event(
     event: "Any",
     data: Optional[Dict] = None,
@@ -638,10 +629,7 @@ def _unpack_event(
         return event.type, event.data if isinstance(event.data, dict) else {"data": event.data}
     if isinstance(event, str):
         return event, data or {}
-    raise TypeError(
-        f"dispatch expects a WorkflowEvent or (event_type: str, data: Dict); "
-        f"got {type(event).__name__}"
-    )
+    raise TypeError(f"dispatch expects a WorkflowEvent or (event_type: str, data: Dict); " f"got {type(event).__name__}")
 
 
 async def dispatch_async(
@@ -713,14 +701,17 @@ def dispatch(
     resolved = 0
     to_remove = []
 
-    matching_waiters = [(wid, w) for wid, w in _waiters.items()
-                        if w.event_type == event_type and w.future and not w.future.done()]
+    matching_waiters = [(wid, w) for wid, w in _waiters.items() if w.event_type == event_type and w.future and not w.future.done()]
 
     if not matching_waiters:
         logger.debug(f"[EventWaiter] No active waiters for {event_type} (total waiters: {len(_waiters)})")
     else:
-        logger.info(f"[EventWaiter] Dispatching {event_type} to {len(matching_waiters)} waiter(s)",
-                    event_type=event_type, from_id=data.get('from_id'), text=str(data.get('text', ''))[:50])
+        logger.info(
+            f"[EventWaiter] Dispatching {event_type} to {len(matching_waiters)} waiter(s)",
+            event_type=event_type,
+            from_id=data.get("from_id"),
+            text=str(data.get("text", ""))[:50],
+        )
 
     for wid, w in matching_waiters:
         try:
@@ -743,6 +734,7 @@ def dispatch(
 # =============================================================================
 # WAITER CANCELLATION
 # =============================================================================
+
 
 def cancel(waiter_id: str) -> bool:
     """Cancel a waiter by ID."""
@@ -775,6 +767,7 @@ def cancel_for_node(node_id: str) -> int:
 # =============================================================================
 # UTILITY FUNCTIONS
 # =============================================================================
+
 
 def get_active_waiters() -> List[Dict[str, Any]]:
     """Get info about active waiters (for debugging/UI)."""

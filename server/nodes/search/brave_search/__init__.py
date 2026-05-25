@@ -68,9 +68,7 @@ class BraveSearchParams(BaseModel):
     max_results: int = Field(default=10, ge=1, le=20)
     country: str = Field(default="", description="ISO country code (e.g. US, GB)")
     search_lang: str = Field(default="en")
-    safe_search: Literal["off", "moderate", "strict"] = Field(
-        default="moderate"
-    )
+    safe_search: Literal["off", "moderate", "strict"] = Field(default="moderate")
 
     model_config = {"extra": "ignore"}
 
@@ -125,5 +123,7 @@ class BraveSearchNode(ActionNode):
             for item in web_results[: params.max_results]
         ]
         return BraveSearchOutput(
-            query=params.query, results=items, result_count=len(items),
+            query=params.query,
+            results=items,
+            result_count=len(items),
         )

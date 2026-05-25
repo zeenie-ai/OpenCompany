@@ -64,7 +64,8 @@ def ws_response(handler: WSHandlerFn) -> WSHandlerFn:
 
     @wraps(handler)
     async def wrapper(
-        data: Dict[str, Any], websocket: WebSocket,
+        data: Dict[str, Any],
+        websocket: WebSocket,
     ) -> Dict[str, Any]:
         try:
             return await handler(data, websocket)

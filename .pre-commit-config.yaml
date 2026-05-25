@@ -39,16 +39,16 @@ repos:
         args: ['--maxkb=500']  # generous cap; binaries should live elsewhere
       - id: detect-private-key
 
-  # ---------------------------------------------------------------- Python: ruff
-  # Format + lint in one pass. Matches server/pyproject.toml's
-  # [tool.ruff] config (line-length=140, ignores E402/E701).
+  # ---------------------------------------------------------------- Python: ruff-format
+  # Format only. The ruff lint pass (F401 unused-imports, F821, F841
+  # etc.) was producing noise on legitimate ``__getattr__``-driven
+  # lazy-module patterns and on temporary scaffolding -- kept out of
+  # the gate. Run ``ruff check`` ad hoc when you actually want lint
+  # signal.
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.8.4
     hooks:
       - id: ruff-format
-        types_or: [python, pyi]
-      - id: ruff
-        args: ['--fix', '--exit-non-zero-on-fix']
         types_or: [python, pyi]
 
   # ---------------------------------------------------------------- JS/TS: prettier

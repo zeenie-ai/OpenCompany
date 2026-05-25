@@ -67,7 +67,8 @@ class BrowserService:
         """
         argv = [
             *self._prefix,
-            "--session", session,
+            "--session",
+            session,
             "--json",
         ]
         if headed:

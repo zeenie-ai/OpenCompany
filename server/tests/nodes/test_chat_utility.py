@@ -324,6 +324,7 @@ class TestTextGenerator:
         harness.text_service = TextService()
         # Rebuild the executor with the new service instance.
         from services.node_executor import NodeExecutor
+
         harness.executor = NodeExecutor(
             database=harness.database,
             ai_service=harness.ai_service,
@@ -450,8 +451,7 @@ class TestGmapsCreate:
                     "mapTypeId": "ROADMAP",
                 },
                 "static_map_url": (
-                    "https://maps.googleapis.com/maps/api/staticmap?"
-                    "center=37.7,-122.4&zoom=12&size=600x400&maptype=roadmap&key=tk"
+                    "https://maps.googleapis.com/maps/api/staticmap?" "center=37.7,-122.4&zoom=12&size=600x400&maptype=roadmap&key=tk"
                 ),
                 "status": "OK",
             },

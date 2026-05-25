@@ -158,20 +158,32 @@ class TestEventFrameworkEnabledDefault:
 
     def test_event_framework_enabled_defaults_true(self):
         """The ``Field(default=True, env="EVENT_FRAMEWORK_ENABLED")`` line
-        in core/config.py is the canary flag's production default."""
+        in core/config.py is the canary flag's production default.
+
+        Regex-based so the assertion tolerates ruff format's choice of
+        single-line vs. multi-line ``Field(...)`` — both shapes are
+        semantically equivalent.
+        """
+        import re
         from pathlib import Path
 
         config_src = (Path(__file__).parent.parent / "core" / "config.py").read_text(encoding="utf-8")
-        # The default-True declaration MUST be present.
-        assert 'default=True, env="EVENT_FRAMEWORK_ENABLED"' in config_src, (
+        default_true = re.compile(
+            r"default=True[\s,]+env=\"EVENT_FRAMEWORK_ENABLED\"",
+            re.DOTALL,
+        )
+        default_false = re.compile(
+            r"default=False[\s,]+env=\"EVENT_FRAMEWORK_ENABLED\"",
+            re.DOTALL,
+        )
+        assert default_true.search(config_src) is not None, (
             "event_framework_enabled default flipped to True in Wave 12 "
             "(2026-05-15). The declaration "
             '``Field(default=True, env="EVENT_FRAMEWORK_ENABLED")`` is '
             "missing from core/config.py. Use EVENT_FRAMEWORK_ENABLED=false "
             "in .env to opt out — not by reverting the default."
         )
-        # And the legacy default-False must not be reintroduced.
-        assert 'default=False, env="EVENT_FRAMEWORK_ENABLED"' not in config_src, (
+        assert default_false.search(config_src) is None, (
             "event_framework_enabled reverted to default=False. Wave 12 "
             "flipped the default to True on 2026-05-15. Use the env var "
             "(EVENT_FRAMEWORK_ENABLED=false) for opt-out, not a code revert."
@@ -195,18 +207,20 @@ class TestCanaryRegistryCoverage:
         import nodes  # noqa: F401
         from services.deployment.canary_registry import canary_trigger_types
 
-        expected = frozenset({
-            # Push triggers (Wave 12 C1)
-            "webhookTrigger",
-            "chatTrigger",
-            "taskTrigger",
-            "telegramReceive",
-            "whatsappReceive",
-            # Polling trigger (Wave 12 C2)
-            "googleGmailReceive",
-            # Cron trigger (Wave 12 C3)
-            "cronScheduler",
-        })
+        expected = frozenset(
+            {
+                # Push triggers (Wave 12 C1)
+                "webhookTrigger",
+                "chatTrigger",
+                "taskTrigger",
+                "telegramReceive",
+                "whatsappReceive",
+                # Polling trigger (Wave 12 C2)
+                "googleGmailReceive",
+                # Cron trigger (Wave 12 C3)
+                "cronScheduler",
+            }
+        )
         actual = canary_trigger_types()
         missing = expected - actual
         assert not missing, (
@@ -321,22 +335,16 @@ class TestA7MachinaWorkflowSignalHandler:
         from services.temporal.workflow import MachinaWorkflow
 
         wf = MachinaWorkflow()
-        wf._matched_events.append(
-            {"id": "e1", "type": "com.machinaos.whatsapp.message.received"}
-        )
+        wf._matched_events.append({"id": "e1", "type": "com.machinaos.whatsapp.message.received"})
 
         # No-predicate: any queued event matches.
         assert wf._has_event_matching() is True
 
         # Truthy predicate matches.
-        assert wf._has_event_matching(
-            lambda e: e["type"].endswith("message.received")
-        ) is True
+        assert wf._has_event_matching(lambda e: e["type"].endswith("message.received")) is True
 
         # Falsy predicate doesn't match.
-        assert wf._has_event_matching(
-            lambda e: e["type"].endswith(".nope")
-        ) is False
+        assert wf._has_event_matching(lambda e: e["type"].endswith(".nope")) is False
 
     def test_pop_matching_event_empty_returns_none(self):
         from services.temporal.workflow import MachinaWorkflow
@@ -366,9 +374,7 @@ class TestA7MachinaWorkflowSignalHandler:
         third = {"id": "e3", "type": "com.machinaos.x.delivered"}
         wf._matched_events.extend([first, second, third])
 
-        popped = wf._pop_matching_event(
-            lambda e: e["type"].startswith("com.machinaos.y")
-        )
+        popped = wf._pop_matching_event(lambda e: e["type"].startswith("com.machinaos.y"))
         assert popped is second
         # Order preserved for non-matching siblings.
         assert wf._matched_events == [first, third]
@@ -377,9 +383,7 @@ class TestA7MachinaWorkflowSignalHandler:
         from services.temporal.workflow import MachinaWorkflow
 
         wf = MachinaWorkflow()
-        wf._matched_events.append(
-            {"id": "e1", "type": "com.machinaos.x.received"}
-        )
+        wf._matched_events.append({"id": "e1", "type": "com.machinaos.x.received"})
         result = wf._pop_matching_event(lambda e: e["type"].endswith(".nope"))
         assert result is None
         # Queue untouched on miss.
@@ -449,8 +453,7 @@ class TestTriggerOutputPersistenceForTemplateResolution:
         from services.temporal.activities import store_node_output_activity
 
         assert inspect.iscoroutinefunction(store_node_output_activity), (
-            "store_node_output_activity must be async — workflow.execute_activity "
-            "awaits it."
+            "store_node_output_activity must be async — workflow.execute_activity " "awaits it."
         )
 
     def test_machina_workflow_calls_persist_activity_for_pre_executed(self):
@@ -493,25 +496,30 @@ class TestTriggerOutputPersistenceForTemplateResolution:
 
         class _StubWorkflowService:
             async def store_node_output(self, session_id, node_id, output_name, data):
-                calls.append({
-                    "session_id": session_id,
-                    "node_id": node_id,
-                    "output_name": output_name,
-                    "data": data,
-                })
+                calls.append(
+                    {
+                        "session_id": session_id,
+                        "node_id": node_id,
+                        "output_name": output_name,
+                        "data": data,
+                    }
+                )
 
         class _StubContainer:
             def workflow_service(self):
                 return _StubWorkflowService()
 
         from core import container as container_mod
+
         monkeypatch.setattr(container_mod, "container", _StubContainer())
 
-        await store_node_output_activity({
-            "node_id": "trig-1",
-            "session_id": "sess-1",
-            "result": {"message": "hello", "session_id": "sess-1"},
-        })
+        await store_node_output_activity(
+            {
+                "node_id": "trig-1",
+                "session_id": "sess-1",
+                "result": {"message": "hello", "session_id": "sess-1"},
+            }
+        )
 
         # All three standard handles get the data — same write pattern
         # NodeExecutor uses for non-pre-executed nodes.

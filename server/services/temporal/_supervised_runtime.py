@@ -33,6 +33,7 @@ Equivalent to (Python idiom):
     await runtime.start()
     await asyncio.Event().wait()  # block on signal
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -87,8 +88,7 @@ async def _run(factory_dotted: str) -> int:
 def main() -> int:
     if len(sys.argv) != 2:
         print(
-            "usage: python -m services.temporal._supervised_runtime "
-            "<module.path:factory>",
+            "usage: python -m services.temporal._supervised_runtime " "<module.path:factory>",
             file=sys.stderr,
         )
         return 2

@@ -80,6 +80,7 @@ async def handle_whatsapp_chat_history(data: Dict[str, Any], websocket: WebSocke
 
 # ---- Rate-limit RPC passthroughs ----
 
+
 async def handle_whatsapp_rate_limit_get(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Get rate-limit config and current stats."""
     return await _wa_rpc_call("rate_limit_get", {})
@@ -101,6 +102,7 @@ async def handle_whatsapp_rate_limit_unpause(data: Dict[str, Any], websocket: We
 
 
 # ---- Lightweight RPC passthroughs ----
+
 
 async def handle_whatsapp_mark_read(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Mark messages as read. Schema: mark_read({message_ids, chat_jid, sender_jid?})."""

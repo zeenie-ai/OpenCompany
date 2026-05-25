@@ -61,6 +61,7 @@ async def handle_save_user_settings(data: Dict[str, Any], websocket: WebSocket) 
     if success:
         if "max_processes" in settings_data:
             from services.process_service import get_process_service
+
             get_process_service().max_processes = int(settings_data["max_processes"])
 
         settings = await database.get_user_settings(user_id)
@@ -117,7 +118,8 @@ async def handle_save_provider_defaults(data: Dict[str, Any], websocket: WebSock
 
 @ws_handler()
 async def handle_get_validated_ai_providers(
-    data: Dict[str, Any], websocket: WebSocket,
+    data: Dict[str, Any],
+    websocket: WebSocket,
 ) -> Dict[str, Any]:
     """Get all AI providers with stored API keys and their popular models.
 
@@ -133,6 +135,7 @@ async def handle_get_validated_ai_providers(
     database = container.database()
 
     from services.ai import PROVIDER_CONFIGS
+
     AI_PROVIDERS = list(PROVIDER_CONFIGS.keys())
 
     defaults_path = Path(__file__).parent.parent.parent / "config" / "llm_defaults.json"
@@ -152,21 +155,20 @@ async def handle_get_validated_ai_providers(
 
         provider_config = llm_defaults.get("providers", {}).get(provider, {})
         default_model = provider_config.get("default_model", "")
-        popular_models = [
-            m for m in provider_config.get("max_output_tokens", {}).keys()
-            if m != "_default"
-        ]
+        popular_models = [m for m in provider_config.get("max_output_tokens", {}).keys() if m != "_default"]
 
         provider_defaults = await database.get_provider_defaults(provider)
         if provider_defaults and provider_defaults.get("default_model"):
             default_model = provider_defaults["default_model"]
 
-        providers.append({
-            "provider": provider,
-            "models": stored_models or [],
-            "popular_models": popular_models,
-            "default_model": default_model,
-        })
+        providers.append(
+            {
+                "provider": provider,
+                "models": stored_models or [],
+                "popular_models": popular_models,
+                "default_model": default_model,
+            }
+        )
 
     user_id = data.get("user_id", "default")
     settings = await database.get_user_settings(user_id)
@@ -190,10 +192,13 @@ async def handle_save_global_model(data: Dict[str, Any], websocket: WebSocket) -
     model = data.get("model", "")
     user_id = data.get("user_id", "default")
 
-    success = await database.save_user_settings({
-        "default_llm_provider": provider,
-        "default_llm_model": model,
-    }, user_id)
+    success = await database.save_user_settings(
+        {
+            "default_llm_provider": provider,
+            "default_llm_model": model,
+        },
+        user_id,
+    )
 
     return {"success": success, "provider": provider, "model": model}
 

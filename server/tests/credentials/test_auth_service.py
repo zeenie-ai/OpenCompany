@@ -28,9 +28,7 @@ class TestApiKeyOps:
 
     async def test_store_with_empty_models_for_non_llm_keys(self, auth_service):
         # Pattern C: save-only API keys (telegram, android_remote, etc.)
-        ok = await auth_service.store_api_key(
-            "telegram", "123:abc", models=[]
-        )
+        ok = await auth_service.store_api_key("telegram", "123:abc", models=[])
         assert ok is True
         assert await auth_service.get_api_key("telegram") == "123:abc"
         assert await auth_service.get_stored_models("telegram") == []
@@ -53,12 +51,8 @@ class TestApiKeyOps:
         assert await auth_service.has_valid_key("openai") is True
 
     async def test_session_isolation(self, auth_service):
-        await auth_service.store_api_key(
-            "openai", "sk-default", models=[], session_id="default"
-        )
-        await auth_service.store_api_key(
-            "openai", "sk-other", models=[], session_id="other"
-        )
+        await auth_service.store_api_key("openai", "sk-default", models=[], session_id="default")
+        await auth_service.store_api_key("openai", "sk-other", models=[], session_id="other")
         assert await auth_service.get_api_key("openai", "default") == "sk-default"
         assert await auth_service.get_api_key("openai", "other") == "sk-other"
 
@@ -87,9 +81,7 @@ class TestMemoryCache:
         await auth_service.get_api_key("openai")
         assert call_count["n"] == 0
 
-    async def test_get_falls_back_to_db_when_cache_missing(
-        self, auth_service, monkeypatch
-    ):
+    async def test_get_falls_back_to_db_when_cache_missing(self, auth_service, monkeypatch):
         await auth_service.store_api_key("openai", "sk-foo", models=[])
 
         # Wipe memory cache to simulate fresh process
@@ -156,9 +148,7 @@ class TestOAuthOps:
 
         # The refresh token is reachable through the dedicated helper
         # that always reads from the encrypted DB (no in-memory cache).
-        assert (
-            await auth_service.get_oauth_refresh_token("google") == "refresh-1"
-        )
+        assert await auth_service.get_oauth_refresh_token("google") == "refresh-1"
 
     async def test_remove_oauth_tokens(self, auth_service):
         await auth_service.store_oauth_tokens("google", "a", "r")
@@ -169,9 +159,7 @@ class TestOAuthOps:
     async def test_oauth_cache_isolated_from_api_key_cache(self, auth_service):
         # Invariants 3 and 8: same provider name in both caches must not collide
         await auth_service.store_api_key("google", "api-key-value", models=[])
-        await auth_service.store_oauth_tokens(
-            "google", "oauth-access", "oauth-refresh"
-        )
+        await auth_service.store_oauth_tokens("google", "oauth-access", "oauth-refresh")
 
         assert await auth_service.get_api_key("google") == "api-key-value"
 

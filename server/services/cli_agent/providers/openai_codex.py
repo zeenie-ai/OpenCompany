@@ -46,9 +46,15 @@ NAME = "codex"
 
 # Best-effort markers for Codex's "stream-end" / "task complete" event.
 # Update if/when OpenAI publishes a stable schema.
-_FINAL_EVENT_TYPES = frozenset({
-    "complete", "task_complete", "done", "finished", "result",
-})
+_FINAL_EVENT_TYPES = frozenset(
+    {
+        "complete",
+        "task_complete",
+        "done",
+        "finished",
+        "result",
+    }
+)
 
 _AUTH_ERROR_MARKERS = (
     "OPENAI_API_KEY not set",
@@ -68,9 +74,7 @@ class OpenAICodexProvider:
     def __init__(self) -> None:
         cfg = get_provider_config(NAME)
         if cfg is None:
-            raise RuntimeError(
-                f"Provider config missing for {NAME!r}. Check ai_cli_providers.json."
-            )
+            raise RuntimeError(f"Provider config missing for {NAME!r}. Check ai_cli_providers.json.")
         self.name = NAME
         self.package_name = cfg.package_name
         self.binary_name = cfg.binary_name
@@ -93,8 +97,7 @@ class OpenAICodexProvider:
             return Path(npx)
 
         raise FileNotFoundError(
-            f"Neither {self.binary_name!r} nor 'npx' found in PATH. "
-            f"Install with: npm install -g {self.package_name}"
+            f"Neither {self.binary_name!r} nor 'npx' found in PATH. " f"Install with: npm install -g {self.package_name}"
         )
 
     def interactive_argv(
@@ -116,10 +119,7 @@ class OpenAICodexProvider:
         session pool can spawn without an initial prompt."""
         _ = (mcp_endpoint_url, mcp_bearer_token, connected_tool_names)
         if not isinstance(task, CodexTaskSpec):
-            raise TypeError(
-                "OpenAICodexProvider.interactive_argv requires CodexTaskSpec, "
-                f"got {type(task).__name__}"
-            )
+            raise TypeError("OpenAICodexProvider.interactive_argv requires CodexTaskSpec, " f"got {type(task).__name__}")
 
         which_codex = shutil.which(self.binary_name)
         if which_codex:
@@ -127,18 +127,12 @@ class OpenAICodexProvider:
         else:
             npx = shutil.which("npx")
             if not npx:
-                raise FileNotFoundError(
-                    f"Neither {self.binary_name!r} nor 'npx' found in PATH"
-                )
+                raise FileNotFoundError(f"Neither {self.binary_name!r} nor 'npx' found in PATH")
             argv = [npx, "--yes", self.package_name]
 
         argv += ["exec", "--json"]
 
-        model = (
-            task.model
-            or defaults.get("default_model")
-            or self._defaults.get("default_model", "gpt-5.2-codex")
-        )
+        model = task.model or defaults.get("default_model") or self._defaults.get("default_model", "gpt-5.2-codex")
         argv += ["--model", model]
 
         sandbox = task.sandbox or defaults.get(
@@ -207,10 +201,7 @@ class OpenAICodexProvider:
         response = self._extract_response(events)
         provider_data = self._extract_provider_data(events)
 
-        tool_calls = sum(
-            1 for e in events
-            if e.get("type") in ("tool_call", "tool_use", "function_call")
-        )
+        tool_calls = sum(1 for e in events if e.get("type") in ("tool_call", "tool_use", "function_call"))
 
         success = exit_code == 0
         error: Optional[str] = None
@@ -252,10 +243,7 @@ class OpenAICodexProvider:
     def canonical_usage(self, events: List[Dict[str, Any]]) -> CanonicalUsage:
         # Codex doesn't expose token counts in `--json` output. Return zeros.
         # If a future Codex schema adds usage, extract here.
-        request_count = sum(
-            1 for e in events
-            if e.get("type") in ("assistant", "message", "response")
-        )
+        request_count = sum(1 for e in events if e.get("type") in ("assistant", "message", "response"))
         return CanonicalUsage(request_count=request_count)
 
     # ---- feature gating --------------------------------------------------

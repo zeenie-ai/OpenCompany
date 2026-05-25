@@ -65,8 +65,7 @@ def _classify_http_error(provider: str, base_url: str, exc: BaseException) -> Tu
         return ("timeout", f"Request to {base_url} timed out — server may be overloaded or unreachable")
 
     if isinstance(exc, httpx.ConnectError):
-        return ("connect-refused",
-                f"Could not reach {display} at {base_url}. Is the server running?")
+        return ("connect-refused", f"Could not reach {display} at {base_url}. Is the server running?")
 
     if isinstance(exc, httpx.HTTPStatusError):
         status = exc.response.status_code
@@ -106,12 +105,19 @@ async def _fail(
     the "Base URL required" early-exit today).
     """
     await get_status_broadcaster().update_api_key_status(
-        provider=provider, valid=False, message=message,
-        has_key=has_key, models=[],
+        provider=provider,
+        valid=False,
+        message=message,
+        has_key=has_key,
+        models=[],
     )
     return {
-        "provider": provider, "success": True, "valid": False,
-        "message": message, "models": [], "timestamp": time.time(),
+        "provider": provider,
+        "success": True,
+        "valid": False,
+        "message": message,
+        "models": [],
+        "timestamp": time.time(),
     }
 
 
@@ -203,8 +209,7 @@ async def _fetch_lmstudio_models(base_url: str) -> List[Dict[str, Any]]:
             try:
                 info = await handle.get_info()
             except Exception as e:
-                logger.info("[lmstudio] get_info skipped for %s: %s",
-                            getattr(handle, "identifier", "<unknown>"), type(e).__name__)
+                logger.info("[lmstudio] get_info skipped for %s: %s", getattr(handle, "identifier", "<unknown>"), type(e).__name__)
                 continue
             mid = info.identifier or info.model_key
             if not mid:
@@ -277,8 +282,7 @@ async def validate_local_llm(data: Dict[str, Any]) -> Dict[str, Any]:
         return await _fail(provider, user_msg, has_key=True)
     except Exception as e:
         log_summary, user_msg = _classify_http_error(provider, base_url, e)
-        logger.warning("[%s] model probe unexpected error (%s) at %s: %s",
-                       provider, log_summary, base_url, e)
+        logger.warning("[%s] model probe unexpected error (%s) at %s: %s", provider, log_summary, base_url, e)
         return await _fail(provider, user_msg, has_key=True)
 
     if not entries:
@@ -299,9 +303,7 @@ async def validate_local_llm(data: Dict[str, Any]) -> Dict[str, Any]:
     # consumes these directly to populate ``ModelInfo``.
     models = [e["id"] for e in entries]
     model_params: Dict[str, Dict[str, Any]] = {
-        e["id"]: {k: v for k, v in e.items() if k != "id"}
-        for e in entries
-        if any(k != "id" for k in e)
+        e["id"]: {k: v for k, v in e.items() if k != "id"} for e in entries if any(k != "id" for k in e)
     }
 
     # Store placeholder api_key + the real model list + per-model params.
@@ -323,23 +325,25 @@ async def validate_local_llm(data: Dict[str, Any]) -> Dict[str, Any]:
     # call. Also keeps the runtime path branchless — local and cloud
     # models share the same ``provider/model_id`` registry key.
     from services.model_registry import get_model_registry
+
     registry = get_model_registry()
     for mid, params in model_params.items():
         registry.register_local_model(provider, mid, params)
 
     await get_status_broadcaster().update_api_key_status(
-        provider=provider, valid=True,
+        provider=provider,
+        valid=True,
         message=f"{len(models)} model(s) discovered at {base_url}",
-        has_key=True, models=models,
+        has_key=True,
+        models=models,
     )
-    ctx_summary = ", ".join(
-        f"{mid}={p['context_length']}"
-        for mid, p in model_params.items()
-    ) or "no per-model context info"
-    logger.info("[%s] discovered %d model(s) at %s (%s)",
-                provider, len(models), base_url, ctx_summary)
+    ctx_summary = ", ".join(f"{mid}={p['context_length']}" for mid, p in model_params.items()) or "no per-model context info"
+    logger.info("[%s] discovered %d model(s) at %s (%s)", provider, len(models), base_url, ctx_summary)
     return {
-        "provider": provider, "success": True, "valid": True,
-        "models": models, "message": f"Connected to {provider} at {base_url}",
+        "provider": provider,
+        "success": True,
+        "valid": True,
+        "models": models,
+        "message": f"Connected to {provider} at {base_url}",
         "timestamp": time.time(),
     }

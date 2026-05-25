@@ -46,15 +46,11 @@ class TestRoundTrip:
 
 
 class TestErrorPaths:
-    def test_uninitialized_encrypt_raises_runtime_error(
-        self, uninitialized_encryption: EncryptionService
-    ):
+    def test_uninitialized_encrypt_raises_runtime_error(self, uninitialized_encryption: EncryptionService):
         with pytest.raises(RuntimeError, match="not initialized"):
             uninitialized_encryption.encrypt("data")
 
-    def test_uninitialized_decrypt_raises_runtime_error(
-        self, uninitialized_encryption: EncryptionService
-    ):
+    def test_uninitialized_decrypt_raises_runtime_error(self, uninitialized_encryption: EncryptionService):
         with pytest.raises(RuntimeError, match="not initialized"):
             uninitialized_encryption.decrypt("anything")
 
@@ -92,9 +88,7 @@ class TestSalt:
 
 
 class TestState:
-    def test_is_initialized_false_before_initialize(
-        self, uninitialized_encryption: EncryptionService
-    ):
+    def test_is_initialized_false_before_initialize(self, uninitialized_encryption: EncryptionService):
         assert uninitialized_encryption.is_initialized() is False
 
     def test_is_initialized_true_after_initialize(self, encryption: EncryptionService):

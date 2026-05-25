@@ -34,6 +34,7 @@ from services.cli_agent.protocol import AICliProvider, CanonicalUsage
 # Factory contract
 # ---------------------------------------------------------------------------
 
+
 class TestFactory:
     def test_claude_creates_provider(self):
         p = create_cli_provider("claude")
@@ -63,6 +64,7 @@ class TestFactory:
 # ---------------------------------------------------------------------------
 # Claude provider
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def claude_provider():
@@ -130,13 +132,18 @@ class TestClaudeArgv:
         allowlist = argv[allowed_idx + 1]
         entries = [e.strip() for e in allowlist.split(",")]
         builtins = {
-            "Read", "Edit", "Bash", "Glob", "Grep", "Write",
-            "Skill", "WebSearch", "WebFetch",
+            "Read",
+            "Edit",
+            "Bash",
+            "Glob",
+            "Grep",
+            "Write",
+            "Skill",
+            "WebSearch",
+            "WebFetch",
         }
         for entry in entries:
-            assert entry not in builtins, (
-                f"claude built-in {entry!r} leaked into default allowlist"
-            )
+            assert entry not in builtins, f"claude built-in {entry!r} leaked into default allowlist"
         # MachinaOs MCP infrastructure must still be present so the
         # agent can read the workspace + invoke connected skills.
         assert "mcp__machinaos__getWorkspaceFiles" in entries
@@ -164,9 +171,7 @@ class TestClaudeArgv:
         # No skills wired → Skill stays out.
         argv_no_skills = claude_provider.interactive_argv(task, defaults={})
         allowed_idx = argv_no_skills.index("--allowedTools")
-        entries_no_skills = [
-            e.strip() for e in argv_no_skills[allowed_idx + 1].split(",")
-        ]
+        entries_no_skills = [e.strip() for e in argv_no_skills[allowed_idx + 1].split(",")]
         assert "Skill" not in entries_no_skills
 
         # Skills wired → Skill enters the allowlist.
@@ -176,16 +181,20 @@ class TestClaudeArgv:
             connected_skill_names=["humanify-skill", "memory-skill"],
         )
         allowed_idx = argv_with_skills.index("--allowedTools")
-        entries_with_skills = [
-            e.strip() for e in argv_with_skills[allowed_idx + 1].split(",")
-        ]
+        entries_with_skills = [e.strip() for e in argv_with_skills[allowed_idx + 1].split(",")]
         assert "Skill" in entries_with_skills
         # Other built-ins still stay out — only Skill is conditionally
         # enabled. The rest (Read, Edit, Bash, etc.) are never
         # auto-added by the allowlist builder.
         for forbidden in (
-            "Read", "Edit", "Bash", "Glob", "Grep", "Write",
-            "WebSearch", "WebFetch",
+            "Read",
+            "Edit",
+            "Bash",
+            "Glob",
+            "Grep",
+            "Write",
+            "WebSearch",
+            "WebFetch",
         ):
             assert forbidden not in entries_with_skills
 
@@ -257,10 +266,14 @@ class TestClaudeArgv:
         same argv shape: no ``--`` separator, no positional prompt."""
         task = ClaudeTaskSpec(prompt="will-be-piped-via-stdin")
         argv_true = claude_provider.interactive_argv(
-            task, defaults={}, include_prompt=True,
+            task,
+            defaults={},
+            include_prompt=True,
         )
         argv_false = claude_provider.interactive_argv(
-            task, defaults={}, include_prompt=False,
+            task,
+            defaults={},
+            include_prompt=False,
         )
         for argv in (argv_true, argv_false):
             assert "--" not in argv
@@ -369,7 +382,9 @@ class TestClaudeEventToSessionResult:
 
     def test_failure_on_non_zero_exit(self, claude_provider, fixture_events):
         result = claude_provider.event_to_session_result(
-            fixture_events, "exploded", 1,
+            fixture_events,
+            "exploded",
+            1,
         )
         assert result["success"] is False
         assert "exploded" in (result["error"] or "")
@@ -386,24 +401,37 @@ class TestClaudeEventToSessionResult:
 
 class TestClaudeAuthDetection:
     def test_logged_out_marker(self, claude_provider):
-        assert claude_provider.detect_auth_error(
-            "Please run 'claude login' first.", 1,
-        ) is True
+        assert (
+            claude_provider.detect_auth_error(
+                "Please run 'claude login' first.",
+                1,
+            )
+            is True
+        )
 
     def test_clean_run_not_auth_error(self, claude_provider):
         assert claude_provider.detect_auth_error("", 0) is False
 
     def test_unrelated_stderr_not_auth_error(self, claude_provider):
-        assert claude_provider.detect_auth_error(
-            "git: pathspec 'x' did not match any files\n", 1,
-        ) is False
+        assert (
+            claude_provider.detect_auth_error(
+                "git: pathspec 'x' did not match any files\n",
+                1,
+            )
+            is False
+        )
 
 
 class TestClaudeSupports:
     def test_supports_full_feature_set(self, claude_provider):
         for feature in (
-            "max_budget", "max_turns", "session_id", "resume",
-            "mcp_runtime", "json_cost", "ide_lockfile",
+            "max_budget",
+            "max_turns",
+            "session_id",
+            "resume",
+            "mcp_runtime",
+            "json_cost",
+            "ide_lockfile",
         ):
             assert claude_provider.supports(feature), feature
 
@@ -414,6 +442,7 @@ class TestClaudeSupports:
 # ---------------------------------------------------------------------------
 # Codex provider
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def codex_provider():
@@ -492,9 +521,13 @@ class TestCodexEventReconstruction:
 
 class TestCodexAuthDetection:
     def test_openai_api_key_missing(self, codex_provider):
-        assert codex_provider.detect_auth_error(
-            "Error: OPENAI_API_KEY not set.\n", 1,
-        ) is True
+        assert (
+            codex_provider.detect_auth_error(
+                "Error: OPENAI_API_KEY not set.\n",
+                1,
+            )
+            is True
+        )
 
     def test_401_marker(self, codex_provider):
         assert codex_provider.detect_auth_error("HTTP 401 Unauthorized\n", 1) is True
@@ -504,7 +537,11 @@ class TestCodexSupports:
     def test_supports_only_sandbox(self, codex_provider):
         assert codex_provider.supports("sandbox") is True
         for feature in (
-            "max_budget", "max_turns", "session_id", "resume",
-            "json_cost", "ide_lockfile",
+            "max_budget",
+            "max_turns",
+            "session_id",
+            "resume",
+            "json_cost",
+            "ide_lockfile",
         ):
             assert codex_provider.supports(feature) is False, feature

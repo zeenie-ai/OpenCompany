@@ -70,18 +70,11 @@ async def refresh_telegram_status(broadcaster: "StatusBroadcaster") -> None:
                 span.set_attribute("reconnect_ok", ok)
                 if ok:
                     bot_username = broadcaster._status["telegram"].get("bot_username")
-                    logger.info(
-                        f"[StatusBroadcaster] Telegram auto-reconnected: @{bot_username}"
-                    )
+                    logger.info(f"[StatusBroadcaster] Telegram auto-reconnected: @{bot_username}")
                 else:
-                    logger.warning(
-                        f"[StatusBroadcaster] Telegram auto-reconnect failed: "
-                        f"{result.get('error')}"
-                    )
+                    logger.warning(f"[StatusBroadcaster] Telegram auto-reconnect failed: " f"{result.get('error')}")
 
-            span.set_attribute(
-                "connected", bool(broadcaster._status["telegram"]["connected"])
-            )
+            span.set_attribute("connected", bool(broadcaster._status["telegram"]["connected"]))
         except Exception as e:
             span.record_exception(e)
             logger.debug(f"[StatusBroadcaster] Could not refresh Telegram status: {e}")
@@ -99,9 +92,5 @@ async def precheck_telegram_trigger(parameters: Dict) -> str | None:
     if not service.connected:
         return "Telegram bot not connected. Add bot token in Credentials."
     sender_filter = parameters.get("sender_filter", "all")
-    logger.info(
-        "[TelegramTrigger] starting "
-        f"sender_filter={sender_filter} "
-        f"owner_detected={service.owner_chat_id is not None}"
-    )
+    logger.info("[TelegramTrigger] starting " f"sender_filter={sender_filter} " f"owner_detected={service.owner_chat_id is not None}")
     return None

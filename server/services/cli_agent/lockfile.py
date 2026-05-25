@@ -25,7 +25,11 @@ logger = logging.getLogger(__name__)
 
 
 def _lockfile_path(
-    *, ide_lockfile_dir: Path, pid: int, port: int, ide_name: str,
+    *,
+    ide_lockfile_dir: Path,
+    pid: int,
+    port: int,
+    ide_name: str,
 ) -> Path:
     if ide_name == "gemini":
         return ide_lockfile_dir / f"gemini-ide-server-{pid}-{port}.json"
@@ -51,7 +55,10 @@ def write_ide_lockfile(
     """Write a VSCode-style IDE lockfile (mode 0600 on POSIX)."""
     ide_lockfile_dir.mkdir(parents=True, exist_ok=True)
     path = _lockfile_path(
-        ide_lockfile_dir=ide_lockfile_dir, pid=pid, port=port, ide_name=ide_name,
+        ide_lockfile_dir=ide_lockfile_dir,
+        pid=pid,
+        port=port,
+        ide_name=ide_name,
     )
 
     # FastMCP's ``streamable_http_app()`` registers the JSON-RPC route at

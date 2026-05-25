@@ -53,15 +53,9 @@ def test_legacy_tool_dicts_removed():
         "Wave 12 D5 migrated this data to per-plugin ClassVars; the legacy "
         "compat fallback was deleted."
     )
-    assert "_LEGACY_TOOL_DESCRIPTIONS = {" not in source, (
-        "_LEGACY_TOOL_DESCRIPTIONS dict reintroduced into services/ai.py."
-    )
-    assert "DEFAULT_TOOL_NAMES = {" not in source, (
-        "Pre-D5 DEFAULT_TOOL_NAMES dict reintroduced into services/ai.py."
-    )
-    assert "DEFAULT_TOOL_DESCRIPTIONS = {" not in source, (
-        "Pre-D5 DEFAULT_TOOL_DESCRIPTIONS dict reintroduced into services/ai.py."
-    )
+    assert "_LEGACY_TOOL_DESCRIPTIONS = {" not in source, "_LEGACY_TOOL_DESCRIPTIONS dict reintroduced into services/ai.py."
+    assert "DEFAULT_TOOL_NAMES = {" not in source, "Pre-D5 DEFAULT_TOOL_NAMES dict reintroduced into services/ai.py."
+    assert "DEFAULT_TOOL_DESCRIPTIONS = {" not in source, "Pre-D5 DEFAULT_TOOL_DESCRIPTIONS dict reintroduced into services/ai.py."
 
 
 def test_pseudo_tool_fallback_has_two_entries():
@@ -73,14 +67,15 @@ def test_pseudo_tool_fallback_has_two_entries():
         delegation-tracking surface in ``services/handlers/tools.py``.
       - ``androidTool`` — toolkit aggregator that fans out to connected
         android service plugins at LLM-tool call time.
+
+    Quote-agnostic so ruff format's choice of single vs. double quotes
+    doesn't trip the substring check.
     """
     source = _ai_source()
-    assert "'_builtin_check_delegated_tasks'" in source, (
-        "_builtin_check_delegated_tasks missing from _PSEUDO_TOOL_FALLBACK"
-    )
-    assert "'androidTool'" in source, (
-        "androidTool missing from _PSEUDO_TOOL_FALLBACK"
-    )
+    assert (
+        "'_builtin_check_delegated_tasks'" in source or '"_builtin_check_delegated_tasks"' in source
+    ), "_builtin_check_delegated_tasks missing from _PSEUDO_TOOL_FALLBACK"
+    assert "'androidTool'" in source or '"androidTool"' in source, "androidTool missing from _PSEUDO_TOOL_FALLBACK"
 
 
 @pytest.mark.parametrize("node_type,expected_tool_name", list(_load_snapshot().items()))

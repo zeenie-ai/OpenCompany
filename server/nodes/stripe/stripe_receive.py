@@ -43,10 +43,7 @@ class StripeReceiveNode(WebhookTriggerNode):
     group = ("payments", "trigger")
     description = "Trigger workflow when Stripe webhook event arrives"
     component_kind = "trigger"
-    handles = (
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
-    )
+    handles = ({"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},)
     credentials = (StripeCredential,)
     webhook_source = StripeWebhookSource
     event_type_prefix = _PREFIX
@@ -54,7 +51,8 @@ class StripeReceiveNode(WebhookTriggerNode):
     Output = StripeReceiveOutput
 
     def _extra_filter(
-        self, params: StripeReceiveParams,
+        self,
+        params: StripeReceiveParams,
     ) -> Optional[Callable[[WorkflowEvent], bool]]:
         if params.livemode_filter == "all":
             return None
@@ -68,13 +66,14 @@ class StripeReceiveNode(WebhookTriggerNode):
 
     async def _check_precondition(self) -> Optional[str]:
         from ._source import get_listen_source
+
         if not get_listen_source()._started:
             return "Stripe daemon not running. Add Stripe API key in Credentials and connect."
         return None
 
     def shape_output(self, event: WorkflowEvent) -> Dict:
         payload = event.data if isinstance(event.data, dict) else {}
-        stripe_type = event.type[len(_PREFIX):] if event.type.startswith(_PREFIX) else event.type
+        stripe_type = event.type[len(_PREFIX) :] if event.type.startswith(_PREFIX) else event.type
         request = payload.get("request")
         request_id = request.get("id") if isinstance(request, dict) else request
         nested = payload.get("data")
@@ -85,8 +84,6 @@ class StripeReceiveNode(WebhookTriggerNode):
             "livemode": payload.get("livemode"),
             "api_version": payload.get("api_version"),
             "request_id": request_id,
-            "account": payload.get("account") or (
-                event.source.split("://", 1)[1] if "://" in event.source else None
-            ),
+            "account": payload.get("account") or (event.source.split("://", 1)[1] if "://" in event.source else None),
             "data": nested if isinstance(nested, dict) else payload,
         }

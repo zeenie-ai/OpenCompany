@@ -39,11 +39,11 @@ async def get_google_credentials(
     """
     from services.plugin.deps import get_auth_service, get_database
 
-    account_mode = parameters.get('account_mode', 'owner')
+    account_mode = parameters.get("account_mode", "owner")
     customer_id = "owner"
 
-    if account_mode == 'customer':
-        customer_id = parameters.get('customer_id')
+    if account_mode == "customer":
+        customer_id = parameters.get("customer_id")
         if not customer_id:
             raise ValueError("customer_id required for customer mode")
 
@@ -65,15 +65,11 @@ async def get_google_credentials(
         tokens = await auth_service.get_oauth_tokens("google", customer_id="owner")
 
         if not tokens or not tokens.get("access_token"):
-            raise ValueError(
-                "Google Workspace not connected. Please authenticate via Credentials."
-            )
+            raise ValueError("Google Workspace not connected. Please authenticate via Credentials.")
 
         access_token = tokens["access_token"]
         # refresh_token is read from DB directly (RFC 9700; not cached).
-        refresh_token = await auth_service.get_oauth_refresh_token(
-            "google", customer_id="owner"
-        )
+        refresh_token = await auth_service.get_oauth_refresh_token("google", customer_id="owner")
 
     auth_service = get_auth_service()
     client_id = await auth_service.get_api_key("google_client_id") or ""
@@ -94,9 +90,7 @@ async def get_google_credentials(
     # best-effort optimization that persists the new token to the DB.
     if refresh_token and client_id and client_secret:
         try:
-            await _try_refresh_and_persist(
-                creds, auth_service, customer_id, account_mode
-            )
+            await _try_refresh_and_persist(creds, auth_service, customer_id, account_mode)
         except Exception as e:
             # Non-fatal: the Credentials object will auto-refresh on 401 anyway
             logger.debug(f"Proactive token refresh skipped: {e}")
@@ -132,7 +126,7 @@ async def _try_refresh_and_persist(
         return
 
     # Persist refreshed token back to the correct store
-    if account_mode == 'owner':
+    if account_mode == "owner":
         tokens = await auth_service.get_oauth_tokens("google", customer_id="owner")
         await auth_service.store_oauth_tokens(
             provider="google",

@@ -102,13 +102,15 @@ class CronTriggerWorkflow:
 
         await workflow.start_child_workflow(
             "MachinaWorkflow",
-            args=[{
-                "nodes": filtered_nodes,
-                "edges": filtered_edges,
-                "session_id": session_id,
-                "workflow_id": deployment_workflow_id,
-                "tenant_id": tenant_id,
-            }],
+            args=[
+                {
+                    "nodes": filtered_nodes,
+                    "edges": filtered_edges,
+                    "session_id": session_id,
+                    "workflow_id": deployment_workflow_id,
+                    "tenant_id": tenant_id,
+                }
+            ],
             id=child_id,
             parent_close_policy=ParentClosePolicy.ABANDON,
             id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE_FAILED_ONLY,
@@ -116,10 +118,7 @@ class CronTriggerWorkflow:
             run_timeout=timedelta(hours=1),
         )
 
-        workflow.logger.info(
-            f"CronTriggerWorkflow spawned child run: child_id={child_id} "
-            f"timestamp={firing_iso}"
-        )
+        workflow.logger.info(f"CronTriggerWorkflow spawned child run: child_id={child_id} " f"timestamp={firing_iso}")
 
         return {
             "spawned_child_id": child_id,

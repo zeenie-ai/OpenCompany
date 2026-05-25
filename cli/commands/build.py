@@ -44,6 +44,7 @@ COMPILEALL_SOURCE_DIRS: tuple[str, ...] = (
 
 # ---------------------------------------------------------------- helpers
 
+
 def _which_python() -> str | None:
     """Prefer ``python3`` so we don't pick up Python 2.x on POSIX distros."""
     for cmd in ("python3", "python"):
@@ -91,6 +92,7 @@ def _ensure_uv(python_cmd: str) -> str:
 
 
 # ---------------------------------------------------------------- build
+
 
 def build_command() -> None:
     root = project_root()
@@ -179,7 +181,9 @@ def build_command() -> None:
     # template files inside packages like crawlee that aren't real Python.
     console.log("[5/6] Compiling Python bytecode...")
     run(
-        uv_run("python", "-O", "-m", "compileall", "-q", "-j", "0", *COMPILEALL_SOURCE_DIRS),
+        uv_run(
+            "python", "-O", "-m", "compileall", "-q", "-j", "0", *COMPILEALL_SOURCE_DIRS
+        ),
         cwd=server_cwd,
         check=False,  # missing pyc is non-fatal — runtime regenerates as needed
     )

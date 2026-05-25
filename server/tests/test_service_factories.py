@@ -143,10 +143,13 @@ class TestContainerHasNoCrossPluginServiceImports:
 class TestPluginSelfRegistration:
     """Smoke: importing each plugin populates the registry."""
 
-    @pytest.mark.parametrize("plugin_module,expected_name", [
-        ("nodes.location", "maps"),
-        ("nodes.android", "android"),
-    ])
+    @pytest.mark.parametrize(
+        "plugin_module,expected_name",
+        [
+            ("nodes.location", "maps"),
+            ("nodes.android", "android"),
+        ],
+    )
     def test_plugin_import_registers_its_factory(self, plugin_module, expected_name):
         from services.plugin import service_factories as sf
 

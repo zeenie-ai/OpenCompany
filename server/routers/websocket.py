@@ -27,6 +27,7 @@ def get_auth_service():
     """Get auth service from DI container."""
     return container.auth_service()
 
+
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["websocket"])
@@ -77,13 +78,16 @@ def ws_handler(*required_fields: str):
             except Exception as e:
                 logger.error(f"Handler error: {e}", exc_info=True)
                 return {"success": False, "error": str(e)}
+
         return wrapper
+
     return decorator
 
 
 # ============================================================================
 # Message Handlers
 # ============================================================================
+
 
 async def handle_ping(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Handle ping request."""
@@ -123,6 +127,7 @@ async def handle_get_variable(data: Dict[str, Any], websocket: WebSocket) -> Dic
 # Node Parameters Handlers
 # ============================================================================
 
+
 @ws_handler("node_id")
 async def handle_get_node_parameters(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Get parameters for a specific node."""
@@ -154,13 +159,17 @@ async def handle_save_node_parameters(data: Dict[str, Any], websocket: WebSocket
     broadcaster = get_status_broadcaster()
     node_id, parameters = data["node_id"], data.get("parameters", {})
 
-    logger.debug(f"[SAVE_PARAMS] Node ID: {node_id}, has_code: {'code' in parameters}, code_len: {len(parameters.get('code', '')) if 'code' in parameters else 0}")
+    logger.debug(
+        f"[SAVE_PARAMS] Node ID: {node_id}, has_code: {'code' in parameters}, code_len: {len(parameters.get('code', '')) if 'code' in parameters else 0}"
+    )
     await database.save_node_parameters(node_id, parameters)
     # CloudEvents v1.0 envelope (RFC §6.4) — type is
     # ``com.machinaos.node.parameters.updated``; ``source_hint="user"``
     # because this handler fires from the parameter-panel save flow.
     await broadcaster.broadcast_node_parameters_updated(
-        node_id, parameters=parameters, source_hint="user",
+        node_id,
+        parameters=parameters,
+        source_hint="user",
     )
     return {"node_id": node_id, "parameters": parameters, "version": 1, "timestamp": time.time()}
 
@@ -176,6 +185,7 @@ async def handle_delete_node_parameters(data: Dict[str, Any], websocket: WebSock
 # ============================================================================
 # Tool Schema Handlers (Source of truth for tool node configurations)
 # ============================================================================
+
 
 @ws_handler("node_id")
 async def handle_get_tool_schema(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
@@ -202,23 +212,14 @@ async def handle_save_tool_schema(data: Dict[str, Any], websocket: WebSocket) ->
         tool_name=tool_name,
         tool_description=tool_description,
         schema_config=schema_config,
-        connected_services=connected_services
+        connected_services=connected_services,
     )
 
     if success:
         # Broadcast schema update to all clients
-        await broadcaster.broadcast({
-            "type": "tool_schema_updated",
-            "node_id": node_id,
-            "tool_name": tool_name,
-            "timestamp": time.time()
-        })
+        await broadcaster.broadcast({"type": "tool_schema_updated", "node_id": node_id, "tool_name": tool_name, "timestamp": time.time()})
 
-    return {
-        "node_id": node_id,
-        "tool_name": tool_name,
-        "saved": success
-    }
+    return {"node_id": node_id, "tool_name": tool_name, "saved": success}
 
 
 @ws_handler("node_id")
@@ -244,9 +245,7 @@ async def handle_get_all_tool_schemas(data: Dict[str, Any], websocket: WebSocket
 
 
 @ws_handler("node_type")
-async def handle_get_node_output_schema(
-    data: Dict[str, Any], websocket: WebSocket
-) -> Dict[str, Any]:
+async def handle_get_node_output_schema(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Return the JSON Schema for a node type's runtime output, or
     ``{schema: null}`` when no schema is declared. Frontend caches the
     result per node type in-memory (mirrors n8n's schemaPreview.store)."""
@@ -257,9 +256,7 @@ async def handle_get_node_output_schema(
 
 
 @ws_handler("node_type")
-async def handle_get_node_spec(
-    data: Dict[str, Any], websocket: WebSocket
-) -> Dict[str, Any]:
+async def handle_get_node_spec(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Return the unified NodeSpec (input schema + output schema +
     display metadata) for a node type, or ``{spec: null}`` when the
     type is unknown. Wave 6 Phase 2 WS mirror of the REST endpoint
@@ -271,9 +268,7 @@ async def handle_get_node_spec(
 
 
 @ws_handler()
-async def handle_list_node_specs(
-    data: Dict[str, Any], websocket: WebSocket
-) -> Dict[str, Any]:
+async def handle_list_node_specs(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Return the sorted list of node types that have a NodeSpec, plus
     a content-hash revision the editor uses to invalidate its persisted
     spec cache when the backend catalogue changes between deploys."""
@@ -286,9 +281,7 @@ async def handle_list_node_specs(
 
 
 @ws_handler("method")
-async def handle_load_options(
-    data: Dict[str, Any], websocket: WebSocket
-) -> Dict[str, Any]:
+async def handle_load_options(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Wave 6 Phase 4: unified loadOptionsMethod dispatcher.
 
     Replaces the per-method WS handlers (whatsapp_groups, whatsapp_newsletters,
@@ -306,9 +299,7 @@ async def handle_load_options(
 
 
 @ws_handler()
-async def handle_list_load_options_methods(
-    data: Dict[str, Any], websocket: WebSocket
-) -> Dict[str, Any]:
+async def handle_list_load_options_methods(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Return registered loadOptionsMethod names. Editor uses this to
     know which dynamic-option loaders are wired."""
     from services.ws_handler_registry import list_load_options_methods
@@ -317,9 +308,7 @@ async def handle_list_load_options_methods(
 
 
 @ws_handler()
-async def handle_get_node_groups(
-    data: Dict[str, Any], websocket: WebSocket
-) -> Dict[str, Any]:
+async def handle_get_node_groups(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Wave 6 Phase 5: {group_name: [node_type, ...]} index derived from
     every NodeSpec's ``group`` array. Replaces the 34 hand-rolled
     ``*_NODE_TYPES`` arrays scattered across the frontend."""
@@ -331,6 +320,7 @@ async def handle_get_node_groups(
 # ============================================================================
 # Credential Registry Handler (Nango-style bulk fetch for 20 -> 5000 providers)
 # ============================================================================
+
 
 @ws_handler()
 async def handle_get_credential_catalogue(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
@@ -405,6 +395,7 @@ async def handle_get_credential_catalogue(data: Dict[str, Any], websocket: WebSo
 # Node Execution Handlers
 # ============================================================================
 
+
 @ws_handler("node_id", "node_type")
 async def handle_execute_node(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Execute a workflow node with per-workflow status scoping (n8n pattern).
@@ -423,7 +414,10 @@ async def handle_execute_node(data: Dict[str, Any], websocket: WebSocket) -> Dic
     execution_id = uuid.uuid4().hex
 
     await broadcaster.update_node_status(
-        node_id, "executing", {"execution_id": execution_id}, workflow_id=workflow_id,
+        node_id,
+        "executing",
+        {"execution_id": execution_id},
+        workflow_id=workflow_id,
     )
     # Mark this workflow active so the toolbar Start->Stop reflects ad-hoc runs.
     # finally: ensures the counter rolls back even on crash.
@@ -431,9 +425,11 @@ async def handle_execute_node(data: Dict[str, Any], websocket: WebSocket) -> Dic
     result: Dict[str, Any]
     try:
         result = await workflow_service.execute_node(
-            node_id=node_id, node_type=node_type,
+            node_id=node_id,
+            node_type=node_type,
             parameters=data.get("parameters", {}),
-            nodes=data.get("nodes", []), edges=data.get("edges", []),
+            nodes=data.get("nodes", []),
+            edges=data.get("edges", []),
             session_id=data.get("session_id", "default"),
             workflow_id=workflow_id,
             outputs=data.get("outputs", {}),  # Upstream node outputs for data flow
@@ -446,16 +442,23 @@ async def handle_execute_node(data: Dict[str, Any], websocket: WebSocket) -> Dic
         elif result.get("error") == "Cancelled by user":
             # Cancelled trigger nodes go back to idle, not error
             await broadcaster.update_node_status(
-                node_id, "idle", {"message": "Cancelled", "execution_id": execution_id}, workflow_id=workflow_id,
+                node_id,
+                "idle",
+                {"message": "Cancelled", "execution_id": execution_id},
+                workflow_id=workflow_id,
             )
         else:
             await broadcaster.update_node_status(
-                node_id, "error", {"error": result.get("error"), "execution_id": execution_id}, workflow_id=workflow_id,
+                node_id,
+                "error",
+                {"error": result.get("error"), "execution_id": execution_id},
+                workflow_id=workflow_id,
             )
     except Exception:
         # Mark the node as errored so the UI doesn't keep glowing on crash
         await broadcaster.update_node_status(
-            node_id, "error",
+            node_id,
+            "error",
             {"error": "execution crashed", "execution_id": execution_id},
             workflow_id=workflow_id,
         )
@@ -471,11 +474,13 @@ async def handle_execute_node(data: Dict[str, Any], websocket: WebSocket) -> Dic
         "result": result.get("result"),
         "error": result.get("error"),
         "execution_time": result.get("execution_time"),
-        "timestamp": time.time()
+        "timestamp": time.time(),
     }
     # Debug: Log what we're returning to WebSocket
     result_data = result.get("result")
-    logger.debug(f"[WS execute_node] Returning: success={ws_result['success']}, result.response={repr(result_data.get('response', 'MISSING')[:100] if result_data and result_data.get('response') else 'None')}")
+    logger.debug(
+        f"[WS execute_node] Returning: success={ws_result['success']}, result.response={repr(result_data.get('response', 'MISSING')[:100] if result_data and result_data.get('response') else 'None')}"
+    )
     return ws_result
 
 
@@ -509,7 +514,8 @@ async def handle_cancel_execution(data: Dict[str, Any], websocket: WebSocket) ->
         # indicator go quiet. (Default sweep on run-end skips `waiting` to
         # protect deployment trigger listeners.)
         cleared = await broadcaster._clear_stuck_node_statuses(
-            workflow_id, include_waiting=True,
+            workflow_id,
+            include_waiting=True,
         )
 
     return {
@@ -560,12 +566,14 @@ async def handle_cancel_event_wait(data: Dict[str, Any], websocket: WebSocket) -
 async def handle_get_active_waiters(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Get list of active event waiters (for debugging/UI)."""
     from services import event_waiter
+
     return {"waiters": event_waiter.get_active_waiters()}
 
 
 # ============================================================================
 # Dead Letter Queue (DLQ) Handlers
 # ============================================================================
+
 
 @ws_handler()
 async def handle_get_dlq_entries(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
@@ -580,20 +588,15 @@ async def handle_get_dlq_entries(data: Dict[str, Any], websocket: WebSocket) -> 
         List of DLQ entries
     """
     from services.execution import ExecutionCache
+
     cache_service = container.cache()
     execution_cache = ExecutionCache(cache_service)
 
     entries = await execution_cache.get_dlq_entries(
-        workflow_id=data.get("workflow_id"),
-        node_type=data.get("node_type"),
-        limit=data.get("limit", 100)
+        workflow_id=data.get("workflow_id"), node_type=data.get("node_type"), limit=data.get("limit", 100)
     )
 
-    return {
-        "entries": [entry.to_dict() for entry in entries],
-        "count": len(entries),
-        "timestamp": time.time()
-    }
+    return {"entries": [entry.to_dict() for entry in entries], "count": len(entries), "timestamp": time.time()}
 
 
 @ws_handler("entry_id")
@@ -607,6 +610,7 @@ async def handle_get_dlq_entry(data: Dict[str, Any], websocket: WebSocket) -> Di
         DLQ entry details
     """
     from services.execution import ExecutionCache
+
     cache_service = container.cache()
     execution_cache = ExecutionCache(cache_service)
 
@@ -626,6 +630,7 @@ async def handle_get_dlq_stats(data: Dict[str, Any], websocket: WebSocket) -> Di
         Total count, breakdown by node type and workflow
     """
     from services.execution import ExecutionCache
+
     cache_service = container.cache()
     execution_cache = ExecutionCache(cache_service)
 
@@ -646,6 +651,7 @@ async def handle_replay_dlq_entry(data: Dict[str, Any], websocket: WebSocket) ->
         Replay execution result
     """
     from services.execution import ExecutionCache, WorkflowExecutor
+
     cache_service = container.cache()
     execution_cache = ExecutionCache(cache_service)
     workflow_service = container.workflow_service()
@@ -661,9 +667,7 @@ async def handle_replay_dlq_entry(data: Dict[str, Any], websocket: WebSocket) ->
         return {"success": False, "error": "DLQ entry not found"}
 
     # Update status
-    await broadcaster.update_node_status(entry.node_id, "executing", {
-        "message": "Replaying from DLQ"
-    })
+    await broadcaster.update_node_status(entry.node_id, "executing", {"message": "Replaying from DLQ"})
 
     # Create executor with node adapter
     async def node_executor(node_id: str, node_type: str, params: dict, context: dict) -> dict:
@@ -674,7 +678,7 @@ async def handle_replay_dlq_entry(data: Dict[str, Any], websocket: WebSocket) ->
             nodes=context.get("nodes", []),
             edges=context.get("edges", []),
             session_id=context.get("session_id", "dlq_replay"),
-            execution_id=context.get("execution_id")
+            execution_id=context.get("execution_id"),
         )
 
     async def status_callback(node_id: str, status: str, status_data: dict):
@@ -683,10 +687,7 @@ async def handle_replay_dlq_entry(data: Dict[str, Any], websocket: WebSocket) ->
     # DLQ replay needs DLQ enabled to re-add on failure
     settings = container.settings()
     executor = WorkflowExecutor(
-        cache=execution_cache,
-        node_executor=node_executor,
-        status_callback=status_callback,
-        dlq_enabled=settings.dlq_enabled
+        cache=execution_cache, node_executor=node_executor, status_callback=status_callback, dlq_enabled=settings.dlq_enabled
     )
 
     result = await executor.replay_dlq_entry(entry_id, nodes, edges)
@@ -711,6 +712,7 @@ async def handle_remove_dlq_entry(data: Dict[str, Any], websocket: WebSocket) ->
         Success status
     """
     from services.execution import ExecutionCache
+
     cache_service = container.cache()
     execution_cache = ExecutionCache(cache_service)
 
@@ -731,6 +733,7 @@ async def handle_purge_dlq(data: Dict[str, Any], websocket: WebSocket) -> Dict[s
         Number of entries purged
     """
     from services.execution import ExecutionCache
+
     cache_service = container.cache()
     execution_cache = ExecutionCache(cache_service)
 
@@ -738,11 +741,7 @@ async def handle_purge_dlq(data: Dict[str, Any], websocket: WebSocket) -> Dict[s
     if data.get("older_than_hours"):
         older_than = time.time() - (data["older_than_hours"] * 3600)
 
-    purged = await execution_cache.purge_dlq(
-        workflow_id=data.get("workflow_id"),
-        node_type=data.get("node_type"),
-        older_than=older_than
-    )
+    purged = await execution_cache.purge_dlq(workflow_id=data.get("workflow_id"), node_type=data.get("node_type"), older_than=older_than)
 
     return {"purged": purged, "timestamp": time.time()}
 
@@ -778,11 +777,21 @@ async def handle_clear_node_output(data: Dict[str, Any], websocket: WebSocket) -
     # Clear from broadcaster's status cache (prevents reload from showing old data)
     broadcaster_cleared = await broadcaster.clear_node_status(node_id)
 
-    logger.info("Cleared node output", node_id=node_id, memory_cleared=memory_cleared,
-                db_cleared=db_cleared, broadcaster_cleared=broadcaster_cleared)
+    logger.info(
+        "Cleared node output",
+        node_id=node_id,
+        memory_cleared=memory_cleared,
+        db_cleared=db_cleared,
+        broadcaster_cleared=broadcaster_cleared,
+    )
 
-    return {"node_id": node_id, "cleared": True, "memory_cleared": memory_cleared,
-            "db_cleared": db_cleared, "broadcaster_cleared": broadcaster_cleared}
+    return {
+        "node_id": node_id,
+        "cleared": True,
+        "memory_cleared": memory_cleared,
+        "db_cleared": db_cleared,
+        "broadcaster_cleared": broadcaster_cleared,
+    }
 
 
 @ws_handler()
@@ -803,6 +812,7 @@ async def handle_validate_workflow(data: Dict[str, Any], websocket: WebSocket) -
         ``{"success": True, "report": {"errors": [...], "warnings": [...]}}``.
     """
     from services.workflow_validator import validate_workflow
+
     report = await validate_workflow(
         nodes=data.get("nodes", []),
         edges=data.get("edges", []),
@@ -843,8 +853,10 @@ async def handle_execute_workflow(data: Dict[str, Any], websocket: WebSocket) ->
     # "Run anyway" UX in Windmill); warnings never block.
     if not force:
         from services.workflow_validator import validate_workflow
+
         report = await validate_workflow(
-            nodes=nodes, edges=edges,
+            nodes=nodes,
+            edges=edges,
             parameters_by_id=data.get("parameters_by_id"),
         )
         if report["errors"]:
@@ -894,7 +906,7 @@ async def handle_execute_workflow(data: Dict[str, Any], websocket: WebSocket) ->
         "total_nodes": result.get("total_nodes", 0),
         "completed_nodes": result.get("completed_nodes", 0),
         "execution_time": result.get("execution_time", 0),
-        "timestamp": time.time()
+        "timestamp": time.time(),
     }
 
 
@@ -910,6 +922,7 @@ async def handle_execute_workflow(data: Dict[str, Any], websocket: WebSocket) ->
 # AI Handlers
 # ============================================================================
 
+
 @ws_handler("node_id", "node_type")
 async def handle_execute_ai_node(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Execute an AI node (chat model or agent)."""
@@ -923,9 +936,11 @@ async def handle_execute_ai_node(data: Dict[str, Any], websocket: WebSocket) -> 
     result: Dict[str, Any]
     try:
         result = await workflow_service.execute_node(
-            node_id=node_id, node_type=node_type,
+            node_id=node_id,
+            node_type=node_type,
             parameters=data.get("parameters", {}),
-            nodes=data.get("nodes", []), edges=data.get("edges", []),
+            nodes=data.get("nodes", []),
+            edges=data.get("edges", []),
             session_id=data.get("session_id", "default"),
             workflow_id=workflow_id,
         )
@@ -941,8 +956,14 @@ async def handle_execute_ai_node(data: Dict[str, Any], websocket: WebSocket) -> 
     finally:
         await broadcaster.workflow_run_ended(workflow_id)
 
-    return {"success": result.get("success", False), "node_id": node_id, "result": result.get("result"), "error": result.get("error"),
-            "execution_time": result.get("execution_time"), "timestamp": time.time()}
+    return {
+        "success": result.get("success", False),
+        "node_id": node_id,
+        "result": result.get("result"),
+        "error": result.get("error"),
+        "execution_time": result.get("execution_time"),
+        "timestamp": time.time(),
+    }
 
 
 @ws_handler("provider", "api_key")
@@ -972,6 +993,7 @@ async def handle_get_ai_models(data: Dict[str, Any], websocket: WebSocket) -> Di
 # Chat Message Handler (for chatTrigger nodes)
 # ============================================================================
 
+
 @ws_handler("message")
 async def handle_send_chat_message(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Handle chat message from console panel - dispatches to chatTrigger nodes.
@@ -995,11 +1017,7 @@ async def handle_send_chat_message(data: Dict[str, Any], websocket: WebSocket) -
     await database.add_chat_message(session_id, role, message)
 
     # Build event data matching chatTrigger output schema
-    event_data = {
-        "message": message,
-        "timestamp": timestamp,
-        "session_id": session_id
-    }
+    event_data = {"message": message, "timestamp": timestamp, "session_id": session_id}
 
     # Dispatch via canary CloudEvents path — Visibility-query Signal
     # fan-out to running TriggerListenerWorkflow consumers + in-process
@@ -1008,11 +1026,7 @@ async def handle_send_chat_message(data: Dict[str, Any], websocket: WebSocket) -
 
     logger.info(f"[ChatMessage] Dispatched canary event for session={session_id}")
 
-    return {
-        "success": True,
-        "message": "Chat message sent",
-        "timestamp": timestamp
-    }
+    return {"success": True, "message": "Chat message sent", "timestamp": timestamp}
 
 
 @ws_handler()
@@ -1024,11 +1038,7 @@ async def handle_get_chat_messages(data: Dict[str, Any], websocket: WebSocket) -
     database = container.database()
     messages = await database.get_chat_messages(session_id, limit)
 
-    return {
-        "success": True,
-        "messages": messages,
-        "session_id": session_id
-    }
+    return {"success": True, "messages": messages, "session_id": session_id}
 
 
 @ws_handler()
@@ -1039,11 +1049,7 @@ async def handle_clear_chat_messages(data: Dict[str, Any], websocket: WebSocket)
     database = container.database()
     count = await database.clear_chat_messages(session_id)
 
-    return {
-        "success": True,
-        "message": f"Cleared {count} chat messages",
-        "cleared_count": count
-    }
+    return {"success": True, "message": f"Cleared {count} chat messages", "cleared_count": count}
 
 
 @ws_handler()
@@ -1082,17 +1088,18 @@ async def handle_clear_console_logs(data: Dict[str, Any], websocket: WebSocket) 
     if "console_logs" in broadcaster._status:
         if workflow_id:
             broadcaster._status["console_logs"] = [
-                log for log in broadcaster._status["console_logs"]
-                if log.get("workflow_id") != workflow_id
+                log for log in broadcaster._status["console_logs"] if log.get("workflow_id") != workflow_id
             ]
         else:
             broadcaster._status["console_logs"] = []
 
     # Tell connected clients to drop their local copy for this scope.
-    await broadcaster.broadcast({
-        "type": "console_logs_cleared",
-        "workflow_id": workflow_id,
-    })
+    await broadcaster.broadcast(
+        {
+            "type": "console_logs_cleared",
+            "workflow_id": workflow_id,
+        }
+    )
 
     return {
         "success": True,
@@ -1112,10 +1119,7 @@ async def handle_save_chat_message(data: Dict[str, Any], websocket: WebSocket) -
     database = container.database()
     success = await database.add_chat_message(session_id, role, message)
 
-    return {
-        "success": success,
-        "message": "Chat message saved" if success else "Failed to save chat message"
-    }
+    return {"success": success, "message": "Chat message saved" if success else "Failed to save chat message"}
 
 
 @ws_handler()
@@ -1124,15 +1128,13 @@ async def handle_get_chat_sessions(data: Dict[str, Any], websocket: WebSocket) -
     database = container.database()
     sessions = await database.get_chat_sessions()
 
-    return {
-        "success": True,
-        "sessions": sessions
-    }
+    return {"success": True, "sessions": sessions}
 
 
 # ============================================================================
 # Terminal Logs Handlers
 # ============================================================================
+
 
 @ws_handler()
 async def handle_get_terminal_logs(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
@@ -1154,10 +1156,12 @@ async def handle_clear_terminal_logs(data: Dict[str, Any], websocket: WebSocket)
 # Process Manager Handlers
 # =============================================================================
 
+
 @ws_handler()
 async def handle_process_list(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """List running processes."""
     from services.process_service import get_process_service
+
     svc = get_process_service()
     workflow_id = data.get("workflow_id", "default")
     return {"success": True, "processes": svc.list_processes(workflow_id), "max_processes": svc.max_processes}
@@ -1167,6 +1171,7 @@ async def handle_process_list(data: Dict[str, Any], websocket: WebSocket) -> Dic
 async def handle_process_get_output(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Get output from a process's log file."""
     from services.process_service import get_process_service
+
     name = data["name"]
     workflow_id = data.get("workflow_id", "default")
     stream = data.get("stream", "stdout")
@@ -1179,6 +1184,7 @@ async def handle_process_get_output(data: Dict[str, Any], websocket: WebSocket) 
 async def handle_process_send_input(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Send stdin text to a running process."""
     from services.process_service import get_process_service
+
     name = data["name"]
     text = data["text"]
     workflow_id = data.get("workflow_id", "default")
@@ -1217,6 +1223,7 @@ async def handle_process_send_input(data: Dict[str, Any], websocket: WebSocket) 
 async def handle_get_node_allowlist(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Return the node allowlist that controls which nodes appear in the palette."""
     from services.node_allowlist import get_node_allowlist_service
+
     return get_node_allowlist_service().get_config()
 
 
@@ -1240,10 +1247,12 @@ async def handle_get_node_allowlist(data: Dict[str, Any], websocket: WebSocket) 
 # Model Registry Handlers
 # ============================================================================
 
+
 @ws_handler()
 async def handle_get_model_constraints(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Get model constraints (max_output_tokens, temperature range, thinking support, etc.)."""
     from services.model_registry import get_model_registry
+
     registry = get_model_registry()
     model = data.get("model", "")
     provider = data.get("provider", "")
@@ -1257,6 +1266,7 @@ async def handle_get_model_constraints(data: Dict[str, Any], websocket: WebSocke
 async def handle_refresh_model_registry(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Force refresh model registry from OpenRouter."""
     from services.model_registry import get_model_registry
+
     registry = get_model_registry()
     try:
         count = await registry.refresh()
@@ -1297,19 +1307,16 @@ MESSAGE_HANDLERS: Dict[str, MessageHandler] = {
     # get_android_status moved to nodes/android/_handlers.py (Wave 13.9)
     "get_node_status": handle_get_node_status,
     "get_variable": handle_get_variable,
-
     # Node parameters
     "get_node_parameters": handle_get_node_parameters,
     "get_all_node_parameters": handle_get_all_node_parameters,
     "save_node_parameters": handle_save_node_parameters,
     "delete_node_parameters": handle_delete_node_parameters,
-
     # Tool schemas (source of truth for tool configurations)
     "get_tool_schema": handle_get_tool_schema,
     "save_tool_schema": handle_save_tool_schema,
     "delete_tool_schema": handle_delete_tool_schema,
     "get_all_tool_schemas": handle_get_all_tool_schemas,
-
     # Node output schemas (Pydantic-backed registry; see
     # docs-internal/schema_source_of_truth_rfc.md).
     "get_node_output_schema": handle_get_node_output_schema,
@@ -1321,10 +1328,8 @@ MESSAGE_HANDLERS: Dict[str, MessageHandler] = {
     "list_load_options_methods": handle_list_load_options_methods,
     # Wave 6 Phase 5: node-groups index (replaces *_NODE_TYPES helpers).
     "get_node_groups": handle_get_node_groups,
-
     # Credential registry (Nango-style bulk catalogue for credentials panel)
     "get_credential_catalogue": handle_get_credential_catalogue,
-
     # Node execution
     "execute_node": handle_execute_node,
     "execute_workflow": handle_execute_workflow,
@@ -1333,11 +1338,9 @@ MESSAGE_HANDLERS: Dict[str, MessageHandler] = {
     "get_workflow_status": handle_get_workflow_status,
     "get_node_output": handle_get_node_output,
     "clear_node_output": handle_clear_node_output,
-
     # Trigger/event waiting
     "cancel_event_wait": handle_cancel_event_wait,
     "get_active_waiters": handle_get_active_waiters,
-
     # Dead Letter Queue (DLQ) operations
     "get_dlq_entries": handle_get_dlq_entries,
     "get_dlq_entry": handle_get_dlq_entry,
@@ -1345,17 +1348,13 @@ MESSAGE_HANDLERS: Dict[str, MessageHandler] = {
     "replay_dlq_entry": handle_replay_dlq_entry,
     "remove_dlq_entry": handle_remove_dlq_entry,
     "purge_dlq": handle_purge_dlq,
-
     # Deployment operations — extracted to services/deployment/handlers.py
     # (Wave 13.2); registered via ws_handler_registry on package import.
-
     # AI operations
     "execute_ai_node": handle_execute_ai_node,
     "get_ai_models": handle_get_ai_models,
-
     # API key operations — extracted to services/credentials/handlers.py
     # (Wave 13.5); registered via ws_handler_registry on package import.
-
     # Claude/Codex login handlers live in the plugin folders + framework:
     # - ``claude_code_login`` / ``claude_code_logout`` registered by
     #   ``nodes/agent/claude_code_agent/__init__.py``.
@@ -1363,88 +1362,61 @@ MESSAGE_HANDLERS: Dict[str, MessageHandler] = {
     #   ``services/cli_agent/__init__.py``.
     # Both go through ``services.ws_handler_registry``; nothing to
     # mount in MESSAGE_HANDLERS here.
-
     # Twitter OAuth operations
-
     # Google Workspace OAuth operations
-
     # Android operations
-
     # Maps + Apify validation now flow through ``handle_validate_api_key``
     # (which dispatches via ``CREDENTIAL_REGISTRY`` to
     # ``GoogleMapsCredential._probe`` / ``ApifyCredential._probe``).
     # The legacy ``validate_maps_key`` / ``validate_apify_key`` WS message
     # types are no longer needed — the frontend already uses
     # ``validate_api_key`` for all providers.
-
     # WhatsApp operations
-
     # Telegram operations live in nodes/telegram/_handlers.py and
     # self-register via services.ws_handler_registry. Dispatch hits them
     # via _resolve_handler() defined above.
-
     # Workflow storage operations — extracted to services/workflow_storage/handlers.py
     # (Wave 13.7); registered via ws_handler_registry on package import.
-
     # Chat message (for chatTrigger nodes)
     "send_chat_message": handle_send_chat_message,
     "get_chat_messages": handle_get_chat_messages,
     "clear_chat_messages": handle_clear_chat_messages,
     "save_chat_message": handle_save_chat_message,
-
     # Console logs (for Console nodes)
     "get_console_logs": handle_get_console_logs,
     "clear_console_logs": handle_clear_console_logs,
-
     # Terminal logs
     "get_terminal_logs": handle_get_terminal_logs,
     "clear_terminal_logs": handle_clear_terminal_logs,
-
     # Process Manager
     "process_list": handle_process_list,
     "process_get_output": handle_process_get_output,
     "process_send_input": handle_process_send_input,
-
     # User Skills + Built-in Skill Content + Memory/Reset — extracted to
     # services/skills/handlers.py (Wave 13.1); register via the shared
     # ws_handler_registry on package import. No entries below.
-
     # User Settings + Provider Defaults + Compaction + Provider Usage Summary
     # — extracted to services/settings/handlers.py (Wave 13.3); register
     # via ws_handler_registry on package import.
-
     # Pricing Config — extracted to services/pricing_handlers.py (Wave 13.8);
     # registered via ws_handler_registry on package import.
-
     # Node Allowlist (UI palette filter)
     "get_node_allowlist": handle_get_node_allowlist,
-
     # Model Registry
     "get_model_constraints": handle_get_model_constraints,
     "refresh_model_registry": handle_refresh_model_registry,
-
     # Agent Teams — extracted to services/agent_teams/handlers.py (Wave 13.4);
     # registered via ws_handler_registry on package import.
 }
 
 
-async def _execute_handler(
-    handler: MessageHandler,
-    data: Dict[str, Any],
-    websocket: WebSocket,
-    msg_type: str,
-    request_id: Optional[str]
-):
+async def _execute_handler(handler: MessageHandler, data: Dict[str, Any], websocket: WebSocket, msg_type: str, request_id: Optional[str]):
     """Execute handler and send response using safe send."""
     try:
         result = await handler(data, websocket)
 
         if request_id:
-            await _safe_send(websocket, {
-                "type": f"{msg_type}_result",
-                "request_id": request_id,
-                **result
-            })
+            await _safe_send(websocket, {"type": f"{msg_type}_result", "request_id": request_id, **result})
         else:
             await _safe_send(websocket, result)
 
@@ -1455,12 +1427,7 @@ async def _execute_handler(
     except Exception as e:
         logger.error("Handler error", msg_type=msg_type, error=str(e))
         if request_id:
-            await _safe_send(websocket, {
-                "type": f"{msg_type}_result",
-                "request_id": request_id,
-                "success": False,
-                "error": str(e)
-            })
+            await _safe_send(websocket, {"type": f"{msg_type}_result", "request_id": request_id, "success": False, "error": str(e)})
 
 
 @router.websocket("/ws/status")
@@ -1482,7 +1449,7 @@ async def websocket_status_endpoint(websocket: WebSocket):
     settings = container.settings()
 
     # Check if auth is disabled (VITE_AUTH_ENABLED=false)
-    auth_disabled = settings.vite_auth_enabled and settings.vite_auth_enabled.lower() == 'false'
+    auth_disabled = settings.vite_auth_enabled and settings.vite_auth_enabled.lower() == "false"
 
     if not auth_disabled:
         # Auth enabled - verify token
@@ -1546,20 +1513,21 @@ async def websocket_status_endpoint(websocket: WebSocket):
             if handler:
                 # Run handler as task so it doesn't block queue processing
                 # This allows cancel_event_wait to be processed while execute_node is waiting
-                task = asyncio.create_task(
-                    _execute_handler(handler, data, websocket, msg_type, request_id)
-                )
+                task = asyncio.create_task(_execute_handler(handler, data, websocket, msg_type, request_id))
                 handler_tasks.add(task)
                 task.add_done_callback(handler_tasks.discard)
             else:
                 logger.warning("Unknown message type", msg_type=msg_type)
                 if request_id:
-                    await _safe_send(websocket, {
-                        "type": "error",
-                        "request_id": request_id,
-                        "code": "UNKNOWN_MESSAGE_TYPE",
-                        "message": f"Unknown message type: {msg_type}"
-                    })
+                    await _safe_send(
+                        websocket,
+                        {
+                            "type": "error",
+                            "request_id": request_id,
+                            "code": "UNKNOWN_MESSAGE_TYPE",
+                            "message": f"Unknown message type: {msg_type}",
+                        },
+                    )
 
     try:
         # Run receive and process loops concurrently using TaskGroup (Python 3.11+)
@@ -1642,20 +1610,21 @@ async def websocket_internal_endpoint(websocket: WebSocket):
             handler = _resolve_handler(msg_type)
 
             if handler:
-                task = asyncio.create_task(
-                    _execute_handler(handler, data, websocket, msg_type, request_id)
-                )
+                task = asyncio.create_task(_execute_handler(handler, data, websocket, msg_type, request_id))
                 handler_tasks.add(task)
                 task.add_done_callback(handler_tasks.discard)
             else:
                 logger.warning(f"[WebSocket Internal] Unknown message type: {msg_type}")
                 if request_id:
-                    await _safe_send(websocket, {
-                        "type": "error",
-                        "request_id": request_id,
-                        "code": "UNKNOWN_MESSAGE_TYPE",
-                        "message": f"Unknown message type: {msg_type}"
-                    })
+                    await _safe_send(
+                        websocket,
+                        {
+                            "type": "error",
+                            "request_id": request_id,
+                            "code": "UNKNOWN_MESSAGE_TYPE",
+                            "message": f"Unknown message type: {msg_type}",
+                        },
+                    )
 
     try:
         async with asyncio.TaskGroup() as tg:
@@ -1689,7 +1658,5 @@ async def websocket_info():
         "endpoint": "/ws/status",
         "connected_clients": broadcaster.connection_count,
         "current_status": broadcaster.get_status(),
-        "supported_message_types": sorted(
-            set(MESSAGE_HANDLERS.keys()) | set(get_ws_handlers().keys())
-        ),
+        "supported_message_types": sorted(set(MESSAGE_HANDLERS.keys()) | set(get_ws_handlers().keys())),
     }

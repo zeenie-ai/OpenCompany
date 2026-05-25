@@ -44,53 +44,22 @@ class StatusBroadcaster:
                 "connected_devices": [],
                 "connection_type": None,
                 "qr_data": None,
-                "session_token": None
+                "session_token": None,
             },
-            "whatsapp": {
-                "connected": False,
-                "has_session": False,
-                "running": False,
-                "pairing": False,
-                "device_id": None,
-                "qr": None
-            },
-            "twitter": {
-                "connected": False,
-                "username": None,
-                "user_id": None,
-                "name": None,
-                "profile_image_url": None
-            },
+            "whatsapp": {"connected": False, "has_session": False, "running": False, "pairing": False, "device_id": None, "qr": None},
+            "twitter": {"connected": False, "username": None, "user_id": None, "name": None, "profile_image_url": None},
             "google": {
                 "connected": False,
                 "email": None,
                 "name": None,
             },
-            "telegram": {
-                "connected": False,
-                "bot_id": None,
-                "bot_username": None,
-                "bot_name": None
-            },
+            "telegram": {"connected": False, "bot_id": None, "bot_username": None, "bot_name": None},
             "api_keys": {},  # provider -> validation status
             "nodes": {},  # node_id -> node status
             "variables": {},  # variable_name -> value
-            "workflow": {
-                "executing": False,
-                "current_node": None
-            },
-            "workflow_lock": {
-                "locked": False,
-                "workflow_id": None,
-                "locked_at": None,
-                "reason": None
-            },
-            "deployment": {
-                "isRunning": False,
-                "activeRuns": 0,
-                "status": "idle",
-                "workflow_id": None
-            }
+            "workflow": {"executing": False, "current_node": None},
+            "workflow_lock": {"locked": False, "workflow_id": None, "locked_at": None, "reason": None},
+            "deployment": {"isRunning": False, "activeRuns": 0, "status": "idle", "workflow_id": None},
         }
 
     async def connect(self, websocket: WebSocket):
@@ -113,10 +82,7 @@ class StatusBroadcaster:
         logger.info(f"[StatusBroadcaster] Client connected. Total: {len(self._connections)}")
 
         try:
-            await websocket.send_json({
-                "type": "initial_status",
-                "data": self._status
-            })
+            await websocket.send_json({"type": "initial_status", "data": self._status})
         except Exception as e:
             logger.error(f"[StatusBroadcaster] Failed to send initial status: {e}")
 
@@ -155,10 +121,12 @@ class StatusBroadcaster:
             return
 
         event = WorkflowEvent.deployment_snapshot(running_ids)
-        await websocket.send_json({
-            "type": "deployment_snapshot",
-            "data": event.model_dump(mode="json"),
-        })
+        await websocket.send_json(
+            {
+                "type": "deployment_snapshot",
+                "data": event.model_dump(mode="json"),
+            }
+        )
 
     async def disconnect(self, websocket: WebSocket):
         """Remove a WebSocket connection."""
@@ -244,12 +212,7 @@ class StatusBroadcaster:
     # =========================================================================
 
     async def update_api_key_status(
-        self,
-        provider: str,
-        valid: bool,
-        message: Optional[str] = None,
-        has_key: bool = True,
-        models: Optional[List[str]] = None
+        self, provider: str, valid: bool, message: Optional[str] = None, has_key: bool = True, models: Optional[List[str]] = None
     ):
         """Update API key validation status and broadcast."""
         self._status["api_keys"][provider] = {
@@ -257,14 +220,10 @@ class StatusBroadcaster:
             "hasKey": has_key,
             "message": message,
             "models": models or [],
-            "timestamp": asyncio.get_event_loop().time()
+            "timestamp": asyncio.get_event_loop().time(),
         }
 
-        await self.broadcast({
-            "type": "api_key_status",
-            "provider": provider,
-            "data": self._status["api_keys"][provider]
-        })
+        await self.broadcast({"type": "api_key_status", "provider": provider, "data": self._status["api_keys"][provider]})
 
     def get_api_key_status(self, provider: str) -> Optional[Dict[str, Any]]:
         """Get API key validation status for a provider."""
@@ -323,10 +282,12 @@ class StatusBroadcaster:
             },
         )
 
-        await self.broadcast({
-            "type": "credential_catalogue_updated",
-            "data": event.model_dump(mode="json"),
-        })
+        await self.broadcast(
+            {
+                "type": "credential_catalogue_updated",
+                "data": event.model_dump(mode="json"),
+            }
+        )
 
     async def broadcast_workflow_lifecycle(
         self,
@@ -351,10 +312,12 @@ class StatusBroadcaster:
             workflow_id=workflow_id,
             data=data_extra or None,
         )
-        await self.broadcast({
-            "type": "workflow_lifecycle",
-            "data": event.model_dump(mode="json"),
-        })
+        await self.broadcast(
+            {
+                "type": "workflow_lifecycle",
+                "data": event.model_dump(mode="json"),
+            }
+        )
 
     async def broadcast_node_parameters_updated(
         self,
@@ -391,10 +354,12 @@ class StatusBroadcaster:
             version=version,
             source_hint=source_hint,
         )
-        await self.broadcast({
-            "type": "node_parameters_updated",
-            "data": event.model_dump(mode="json"),
-        })
+        await self.broadcast(
+            {
+                "type": "node_parameters_updated",
+                "data": event.model_dump(mode="json"),
+            }
+        )
 
     async def broadcast_agent_progress(
         self,
@@ -424,10 +389,12 @@ class StatusBroadcaster:
             phase=phase,
         )
 
-        await self.broadcast({
-            "type": "agent_progress",
-            "data": event.model_dump(mode="json"),
-        })
+        await self.broadcast(
+            {
+                "type": "agent_progress",
+                "data": event.model_dump(mode="json"),
+            }
+        )
 
     async def broadcast_claude_session_spawned(
         self,
@@ -449,10 +416,12 @@ class StatusBroadcaster:
             pid=pid,
             workflow_id=workflow_id,
         )
-        await self.broadcast({
-            "type": "claude_session_event",
-            "data": event.model_dump(mode="json"),
-        })
+        await self.broadcast(
+            {
+                "type": "claude_session_event",
+                "data": event.model_dump(mode="json"),
+            }
+        )
 
     async def broadcast_claude_session_cleared(
         self,
@@ -473,10 +442,12 @@ class StatusBroadcaster:
             new_session_uuid=new_session_uuid,
             workflow_id=workflow_id,
         )
-        await self.broadcast({
-            "type": "claude_session_event",
-            "data": event.model_dump(mode="json"),
-        })
+        await self.broadcast(
+            {
+                "type": "claude_session_event",
+                "data": event.model_dump(mode="json"),
+            }
+        )
 
     async def broadcast_claude_session_terminated(
         self,
@@ -498,10 +469,12 @@ class StatusBroadcaster:
             session_uuid=session_uuid,
             workflow_id=workflow_id,
         )
-        await self.broadcast({
-            "type": "claude_session_event",
-            "data": event.model_dump(mode="json"),
-        })
+        await self.broadcast(
+            {
+                "type": "claude_session_event",
+                "data": event.model_dump(mode="json"),
+            }
+        )
 
     async def broadcast_claude_session_usage(
         self,
@@ -535,10 +508,12 @@ class StatusBroadcaster:
             num_turns=num_turns,
             workflow_id=workflow_id,
         )
-        await self.broadcast({
-            "type": "claude_session_usage",
-            "data": event.model_dump(mode="json"),
-        })
+        await self.broadcast(
+            {
+                "type": "claude_session_usage",
+                "data": event.model_dump(mode="json"),
+            }
+        )
 
     # =========================================================================
     # Android Status Updates
@@ -586,7 +561,7 @@ class StatusBroadcaster:
         node_id: str,
         status: str,  # "idle", "executing", "waiting", "success", "error"
         data: Optional[Dict[str, Any]] = None,
-        workflow_id: Optional[str] = None
+        workflow_id: Optional[str] = None,
     ):
         """Update a specific node's status and broadcast.
 
@@ -596,27 +571,21 @@ class StatusBroadcaster:
             data: Optional status data
             workflow_id: Optional workflow ID to scope the status update (n8n pattern)
         """
-        logger.debug(f"[BROADCAST] update_node_status: node={node_id}, status={status}, workflow={workflow_id}, connections={len(self._connections)}")
+        logger.debug(
+            f"[BROADCAST] update_node_status: node={node_id}, status={status}, workflow={workflow_id}, connections={len(self._connections)}"
+        )
         self._status["nodes"][node_id] = {
             "status": status,
             "data": data or {},
             "timestamp": asyncio.get_event_loop().time(),
-            "workflow_id": workflow_id
+            "workflow_id": workflow_id,
         }
 
-        await self.broadcast({
-            "type": "node_status",
-            "node_id": node_id,
-            "workflow_id": workflow_id,
-            "data": self._status["nodes"][node_id]
-        })
+        await self.broadcast(
+            {"type": "node_status", "node_id": node_id, "workflow_id": workflow_id, "data": self._status["nodes"][node_id]}
+        )
 
-    async def update_node_output(
-        self,
-        node_id: str,
-        output: Any,
-        workflow_id: Optional[str] = None
-    ):
+    async def update_node_output(self, node_id: str, output: Any, workflow_id: Optional[str] = None):
         """Update a node's output data and broadcast."""
         if node_id not in self._status["nodes"]:
             self._status["nodes"][node_id] = {"status": "idle", "data": {}}
@@ -625,12 +594,7 @@ class StatusBroadcaster:
         if workflow_id:
             self._status["nodes"][node_id]["workflow_id"] = workflow_id
 
-        await self.broadcast({
-            "type": "node_output",
-            "node_id": node_id,
-            "workflow_id": workflow_id,
-            "output": output
-        })
+        await self.broadcast({"type": "node_output", "node_id": node_id, "workflow_id": workflow_id, "output": output})
 
     # =========================================================================
     # Variable Updates
@@ -640,20 +604,13 @@ class StatusBroadcaster:
         """Update a workflow variable and broadcast."""
         self._status["variables"][name] = value
 
-        await self.broadcast({
-            "type": "variable_update",
-            "name": name,
-            "value": value
-        })
+        await self.broadcast({"type": "variable_update", "name": name, "value": value})
 
     async def update_variables(self, variables: Dict[str, Any]):
         """Update multiple variables at once and broadcast."""
         self._status["variables"].update(variables)
 
-        await self.broadcast({
-            "type": "variables_update",
-            "variables": variables
-        })
+        await self.broadcast({"type": "variables_update", "variables": variables})
 
     # =========================================================================
     # Workflow Status Updates
@@ -692,11 +649,13 @@ class StatusBroadcaster:
                 "progress": progress,
             }
 
-        await self.broadcast({
-            "type": "workflow_status",
-            "workflow_id": workflow_id,
-            "data": payload,
-        })
+        await self.broadcast(
+            {
+                "type": "workflow_status",
+                "workflow_id": workflow_id,
+                "data": payload,
+            }
+        )
 
     async def workflow_run_started(self, workflow_id: Optional[str]) -> bool:
         """Mark a new active run for `workflow_id`.
@@ -714,7 +673,8 @@ class StatusBroadcaster:
             went_active = prev == 0
         if went_active:
             await self.update_workflow_status(
-                executing=True, workflow_id=workflow_id,
+                executing=True,
+                workflow_id=workflow_id,
             )
         return went_active
 
@@ -751,7 +711,8 @@ class StatusBroadcaster:
             went_idle = prev > 0 and new_count == 0
         if went_idle:
             await self.update_workflow_status(
-                executing=False, workflow_id=workflow_id,
+                executing=False,
+                workflow_id=workflow_id,
             )
             if clear_stuck_nodes:
                 # include_waiting=False (default) -- don't touch deployment
@@ -791,10 +752,9 @@ class StatusBroadcaster:
 
         statuses = ("executing", "waiting") if include_waiting else ("executing",)
         stuck = [
-            (nid, info) for nid, info in self._status["nodes"].items()
-            if info.get("workflow_id") == workflow_id
-            and info.get("status") in statuses
-            and not is_node_in_active_delegation(nid)
+            (nid, info)
+            for nid, info in self._status["nodes"].items()
+            if info.get("workflow_id") == workflow_id and info.get("status") in statuses and not is_node_in_active_delegation(nid)
         ]
         for node_id, _info in stuck:
             try:
@@ -802,7 +762,8 @@ class StatusBroadcaster:
             except Exception as e:
                 logger.warning(
                     "[StatusBroadcaster] Failed to clear stuck node %s: %s",
-                    node_id, e,
+                    node_id,
+                    e,
                 )
         return len(stuck)
 
@@ -825,7 +786,7 @@ class StatusBroadcaster:
         active_runs: int = 0,
         workflow_id: Optional[str] = None,
         data: Optional[Dict[str, Any]] = None,
-        error: Optional[str] = None
+        error: Optional[str] = None,
     ):
         """Update deployment status and broadcast.
 
@@ -840,31 +801,16 @@ class StatusBroadcaster:
             data: Optional additional data (e.g., run_id, trigger info)
             error: Optional error message if status is 'error'
         """
-        self._status["deployment"] = {
-            "isRunning": is_running,
-            "activeRuns": active_runs,
-            "status": status,
-            "workflow_id": workflow_id
-        }
+        self._status["deployment"] = {"isRunning": is_running, "activeRuns": active_runs, "status": status, "workflow_id": workflow_id}
 
         # Broadcast deployment_status message (matches frontend handler)
-        await self.broadcast({
-            "type": "deployment_status",
-            "status": status,
-            "workflow_id": workflow_id,
-            "data": data,
-            "error": error
-        })
+        await self.broadcast({"type": "deployment_status", "status": status, "workflow_id": workflow_id, "data": data, "error": error})
 
     # =========================================================================
     # Workflow Lock Management (Per-Workflow Locks - n8n pattern)
     # =========================================================================
 
-    async def lock_workflow(
-        self,
-        workflow_id: str,
-        reason: str = "deployment"
-    ) -> bool:
+    async def lock_workflow(self, workflow_id: str, reason: str = "deployment") -> bool:
         """Lock a specific workflow to prevent concurrent modifications.
 
         Per-workflow locking (n8n pattern): Each workflow has its own independent lock.
@@ -887,29 +833,17 @@ class StatusBroadcaster:
         if workflow_id in self._status["workflow_locks"]:
             existing_lock = self._status["workflow_locks"][workflow_id]
             if existing_lock.get("locked"):
-                logger.warning(
-                    f"[WorkflowLock] Workflow {workflow_id} is already locked "
-                    f"for {existing_lock.get('reason')}"
-                )
+                logger.warning(f"[WorkflowLock] Workflow {workflow_id} is already locked " f"for {existing_lock.get('reason')}")
                 return False
 
         # Lock this specific workflow
-        lock_info = {
-            "locked": True,
-            "workflow_id": workflow_id,
-            "locked_at": time.time(),
-            "reason": reason
-        }
+        lock_info = {"locked": True, "workflow_id": workflow_id, "locked_at": time.time(), "reason": reason}
         self._status["workflow_locks"][workflow_id] = lock_info
 
         # Also update legacy single lock for backward compatibility
         self._status["workflow_lock"] = lock_info.copy()
 
-        await self.broadcast({
-            "type": "workflow_lock",
-            "workflow_id": workflow_id,
-            "data": lock_info
-        })
+        await self.broadcast({"type": "workflow_lock", "workflow_id": workflow_id, "data": lock_info})
 
         logger.info(f"[WorkflowLock] Locked workflow {workflow_id} for {reason}")
         return True
@@ -942,23 +876,15 @@ class StatusBroadcaster:
 
         # Update legacy single lock if it was for this workflow
         if self._status["workflow_lock"].get("workflow_id") == workflow_id:
-            self._status["workflow_lock"] = {
-                "locked": False,
-                "workflow_id": None,
-                "locked_at": None,
-                "reason": None
-            }
+            self._status["workflow_lock"] = {"locked": False, "workflow_id": None, "locked_at": None, "reason": None}
 
-        await self.broadcast({
-            "type": "workflow_lock",
-            "workflow_id": workflow_id,
-            "data": {
-                "locked": False,
+        await self.broadcast(
+            {
+                "type": "workflow_lock",
                 "workflow_id": workflow_id,
-                "locked_at": None,
-                "reason": None
+                "data": {"locked": False, "workflow_id": workflow_id, "locked_at": None, "reason": None},
             }
-        })
+        )
 
         logger.info(f"[WorkflowLock] Unlocked workflow {workflow_id}")
         return True
@@ -978,10 +904,7 @@ class StatusBroadcaster:
 
         if workflow_id is None:
             # Check if ANY workflow is locked
-            return any(
-                lock.get("locked", False)
-                for lock in self._status["workflow_locks"].values()
-            )
+            return any(lock.get("locked", False) for lock in self._status["workflow_locks"].values())
 
         # Check specific workflow
         lock = self._status["workflow_locks"].get(workflow_id, {})
@@ -1006,7 +929,7 @@ class StatusBroadcaster:
                 "locked": lock.get("locked", False),
                 "workflow_id": workflow_id,
                 "locked_at": lock.get("locked_at"),
-                "reason": lock.get("reason")
+                "reason": lock.get("reason"),
             }
 
         # Return legacy single lock for backward compatibility
@@ -1016,11 +939,7 @@ class StatusBroadcaster:
         """Get all active workflow locks."""
         if "workflow_locks" not in self._status:
             return {}
-        return {
-            wid: lock.copy()
-            for wid, lock in self._status["workflow_locks"].items()
-            if lock.get("locked")
-        }
+        return {wid: lock.copy() for wid, lock in self._status["workflow_locks"].items() if lock.get("locked")}
 
     # =========================================================================
     # Console Log Updates
@@ -1053,16 +972,14 @@ class StatusBroadcaster:
         # Save to database for persistence
         try:
             from core.container import container
+
             database = container.database()
             await database.add_console_log(log_data)
         except Exception as e:
             logger.warning(f"[StatusBroadcaster] Failed to persist console log: {e}")
 
         # Broadcast to all clients
-        await self.broadcast({
-            "type": "console_log",
-            "data": log_data
-        })
+        await self.broadcast({"type": "console_log", "data": log_data})
 
         logger.debug(f"[StatusBroadcaster] Console log broadcast: label={log_data.get('label')}")
 
@@ -1072,10 +989,7 @@ class StatusBroadcaster:
             return []
 
         if workflow_id:
-            return [
-                log for log in self._status["console_logs"]
-                if log.get("workflow_id") == workflow_id
-            ]
+            return [log for log in self._status["console_logs"] if log.get("workflow_id") == workflow_id]
         return list(self._status["console_logs"])
 
     async def clear_console_logs(self, workflow_id: Optional[str] = None):
@@ -1085,17 +999,11 @@ class StatusBroadcaster:
             return
 
         if workflow_id:
-            self._status["console_logs"] = [
-                log for log in self._status["console_logs"]
-                if log.get("workflow_id") != workflow_id
-            ]
+            self._status["console_logs"] = [log for log in self._status["console_logs"] if log.get("workflow_id") != workflow_id]
         else:
             self._status["console_logs"] = []
 
-        await self.broadcast({
-            "type": "console_logs_cleared",
-            "workflow_id": workflow_id
-        })
+        await self.broadcast({"type": "console_logs_cleared", "workflow_id": workflow_id})
 
     # =========================================================================
     # Terminal Log Updates
@@ -1124,10 +1032,7 @@ class StatusBroadcaster:
             self._status["terminal_logs"] = self._status["terminal_logs"][-200:]
 
         # Broadcast to all clients
-        await self.broadcast({
-            "type": "terminal_log",
-            "data": log_data
-        })
+        await self.broadcast({"type": "terminal_log", "data": log_data})
 
     def get_terminal_logs(self) -> List[Dict[str, Any]]:
         """Get terminal log history."""
@@ -1138,9 +1043,7 @@ class StatusBroadcaster:
     async def clear_terminal_logs(self):
         """Clear terminal log history."""
         self._status["terminal_logs"] = []
-        await self.broadcast({
-            "type": "terminal_logs_cleared"
-        })
+        await self.broadcast({"type": "terminal_logs_cleared"})
 
     # =========================================================================
     # Agent Team Updates
@@ -1154,12 +1057,7 @@ class StatusBroadcaster:
             event_type: Event type (team_created, task_added, task_claimed, etc.)
             data: Event data
         """
-        await self.broadcast({
-            "type": "team_event",
-            "team_id": team_id,
-            "event_type": event_type,
-            "data": data
-        })
+        await self.broadcast({"type": "team_event", "team_id": team_id, "event_type": event_type, "data": data})
 
     # =========================================================================
     # Generic Updates
@@ -1173,15 +1071,13 @@ class StatusBroadcaster:
         See DESIGN.md section "Cross-Thread Event Dispatch" for pattern details.
         """
         # Broadcast to all WebSocket clients
-        await self.broadcast({
-            "type": event_type,
-            "data": data
-        })
+        await self.broadcast({"type": event_type, "data": data})
 
         # Dispatch to event waiters (for trigger nodes)
         # Use dispatch_async directly - we're in async context
         try:
             from services import event_waiter
+
             event_data = data if isinstance(data, dict) else {"data": data}
             resolved_count = await event_waiter.dispatch_async(event_type, event_data)
             if resolved_count > 0:
@@ -1217,9 +1113,7 @@ class StatusBroadcaster:
         clearing the visible state.
         """
         had_status = node_id in self._status["nodes"]
-        previous_workflow = (
-            self._status["nodes"][node_id].get("workflow_id") if had_status else None
-        )
+        previous_workflow = self._status["nodes"][node_id].get("workflow_id") if had_status else None
         self._status["nodes"][node_id] = {
             "status": "idle",
             "data": {},
@@ -1228,11 +1122,13 @@ class StatusBroadcaster:
             "cleared": True,
         }
         logger.info(f"[StatusBroadcaster] Reset node status to idle: {node_id}")
-        await self.broadcast({
-            "type": "node_status_cleared",
-            "node_id": node_id,
-            "workflow_id": previous_workflow,
-        })
+        await self.broadcast(
+            {
+                "type": "node_status_cleared",
+                "node_id": node_id,
+                "workflow_id": previous_workflow,
+            }
+        )
         return had_status
 
     def get_variable(self, name: str) -> Any:
@@ -1256,9 +1152,7 @@ class StatusBroadcaster:
 
 import typing as _typing  # local alias to avoid shadowing module-level name
 
-_ServiceRefreshCallback = _typing.Callable[
-    ["StatusBroadcaster"], _typing.Awaitable[None]
-]
+_ServiceRefreshCallback = _typing.Callable[["StatusBroadcaster"], _typing.Awaitable[None]]
 _SERVICE_REFRESH_CALLBACKS: _typing.List[_ServiceRefreshCallback] = []
 
 from services.plugin.registry import IdempotentList as _IdempotentList  # noqa: E402
@@ -1266,9 +1160,7 @@ from services.plugin.registry import IdempotentList as _IdempotentList  # noqa: 
 # Backed by the module-level _SERVICE_REFRESH_CALLBACKS list so the
 # existing iterator at line 153 (``for callback in list(_SERVICE_REFRESH_CALLBACKS)``)
 # keeps working unchanged.
-_SERVICE_REFRESH_FANOUT: _IdempotentList[_ServiceRefreshCallback] = _IdempotentList(
-    "service_refresh", items=_SERVICE_REFRESH_CALLBACKS
-)
+_SERVICE_REFRESH_FANOUT: _IdempotentList[_ServiceRefreshCallback] = _IdempotentList("service_refresh", items=_SERVICE_REFRESH_CALLBACKS)
 
 
 def register_service_refresh(callback: _ServiceRefreshCallback) -> None:

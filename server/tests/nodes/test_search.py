@@ -149,9 +149,7 @@ class TestSerperSearch:
             )
 
         harness.assert_envelope(result, success=True)
-        harness.assert_output_shape(
-            result, ["query", "results", "result_count", "search_type", "provider", "knowledge_graph"]
-        )
+        harness.assert_output_shape(result, ["query", "results", "result_count", "search_type", "provider", "knowledge_graph"])
         payload = result["result"]
         assert payload["search_type"] == "search"
         assert payload["results"][0]["url"] == "https://a.example"
@@ -195,14 +193,10 @@ class TestSerperSearch:
     @respx.mock
     async def test_unknown_search_type_falls_back_to_web_endpoint_but_returns_empty_results(self, harness):
         # Post-refactor: Params tightens search_type with Literal[...]; unknown value rejected.
-        respx.post(f"{self.BASE}/search").mock(
-            return_value=httpx.Response(200, json={"organic": [{"title": "x", "link": "y"}]})
-        )
+        respx.post(f"{self.BASE}/search").mock(return_value=httpx.Response(200, json={"organic": [{"title": "x", "link": "y"}]}))
 
         with patched_container(auth_api_keys={"serper": "tk"}), patched_pricing():
-            result = await harness.execute(
-                "serperSearch", {"query": "x", "search_type": "nonsense"}
-            )
+            result = await harness.execute("serperSearch", {"query": "x", "search_type": "nonsense"})
 
         harness.assert_envelope(result, success=False)
         assert "invalid parameters" in result["error"].lower()

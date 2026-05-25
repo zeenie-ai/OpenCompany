@@ -17,7 +17,6 @@ canary agent migration lands. This file locks the static contracts:
 from __future__ import annotations
 
 
-
 class TestAgentWorkflowDefinition:
     """``AgentWorkflow`` must be a valid Temporal workflow definition
     so workers can register it."""
@@ -37,10 +36,7 @@ class TestAgentWorkflowDefinition:
         from services.temporal.agent_workflow import AgentWorkflow
 
         defn = getattr(AgentWorkflow, "__temporal_workflow_definition")
-        assert defn.sandboxed is False, (
-            "AgentWorkflow must be sandboxed=False so it can read "
-            "services.node_registry deterministically"
-        )
+        assert defn.sandboxed is False, "AgentWorkflow must be sandboxed=False so it can read " "services.node_registry deterministically"
 
 
 class TestAgentActivities:
@@ -74,9 +70,7 @@ class TestAgentActivities:
         from services.temporal.agent_activities import collect_agent_activities
 
         activities = collect_agent_activities()
-        names = sorted(
-            getattr(a, "__temporal_activity_definition").name for a in activities
-        )
+        names = sorted(getattr(a, "__temporal_activity_definition").name for a in activities)
         assert names == [
             "agent.broadcast_progress.v1",
             "agent.compact_memory.v1",

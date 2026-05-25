@@ -103,9 +103,13 @@ class TestRegistryContract:
         for p in ("whatsapp", "telegram", "slack"):
             fresh_registry.register_social_send_handler(p, h)
 
-        assert fresh_registry.registered_platforms() == frozenset({
-            "whatsapp", "telegram", "slack",
-        })
+        assert fresh_registry.registered_platforms() == frozenset(
+            {
+                "whatsapp",
+                "telegram",
+                "slack",
+            }
+        )
 
 
 class TestNoCrossPluginReachInSocialBase:

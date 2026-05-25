@@ -87,8 +87,8 @@ EMOJI_TO_LUCIDE: dict[str, str] = {
     "🔄": "RotateCw",
     "🔀": "Shuffle",
     "📜": "Scroll",
-    "🐧": "Terminal",   # bash skill (Linux penguin -> terminal)
-    "🐍": "Code2",      # python skill default; ASSET_OVERRIDES wins
+    "🐧": "Terminal",  # bash skill (Linux penguin -> terminal)
+    "🐍": "Code2",  # python skill default; ASSET_OVERRIDES wins
     "📅": "Calendar",
     # User-typed library identifier without the prefix:
     "brain": "Brain",
@@ -159,10 +159,7 @@ def main() -> int:
                 decoded = m.group("value")
             if decoded.startswith(("asset:", "lobehub:", "lucide:")):
                 continue
-            if (
-                f.parent.name not in ASSET_OVERRIDES
-                and decoded not in EMOJI_TO_LUCIDE
-            ):
+            if f.parent.name not in ASSET_OVERRIDES and decoded not in EMOJI_TO_LUCIDE:
                 unmapped.append((f, decoded))
 
         changed, used = migrate_file(f)
@@ -173,7 +170,9 @@ def main() -> int:
         else:
             skipped += 1
 
-    print(f"\n  {migrated} files migrated, {skipped} skipped (no emoji icon to migrate).")
+    print(
+        f"\n  {migrated} files migrated, {skipped} skipped (no emoji icon to migrate)."
+    )
     if unmapped:
         print("\nUNMAPPED (please add to mapping):")
         for f, val in unmapped:

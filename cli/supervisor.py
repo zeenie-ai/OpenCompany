@@ -38,8 +38,8 @@ from cli.tree import add_to_job, kill_tree, new_session_kwargs
 
 class RestartPolicy(enum.Enum):
     NEVER = "never"
-    ON_CRASH = "on_crash"   # restart only on non-healthy exit
-    ALWAYS = "always"       # restart on any exit
+    ON_CRASH = "on_crash"  # restart only on non-healthy exit
+    ALWAYS = "always"  # restart on any exit
 
 
 @dataclass
@@ -363,7 +363,9 @@ class Manager:
             spec.ready_port,  # type: ignore[arg-type]
             timeout=spec.ready_timeout,
         )
-        msg = f"ready on port {spec.ready_port}" if ok else f"timed out waiting for port {spec.ready_port}"
+        msg = (
+            f"ready on port {spec.ready_port}"
+            if ok
+            else f"timed out waiting for port {spec.ready_port}"
+        )
         emit(spec.name, spec.color or "white", msg)
-
-

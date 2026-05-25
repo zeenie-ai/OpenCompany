@@ -85,9 +85,10 @@ async def _broadcast(workflow_id: Optional[str], caller_id: str, ops: List[Dict[
             operations=ops,
         )
         logger.info(
-            "[agentBuilder] broadcast workflow_ops_apply: workflow_id=%s "
-            "caller=%s ops=%s",
-            workflow_id, caller_id, [op.get("type") for op in ops],
+            "[agentBuilder] broadcast workflow_ops_apply: workflow_id=%s " "caller=%s ops=%s",
+            workflow_id,
+            caller_id,
+            [op.get("type") for op in ops],
         )
     except Exception as exc:
         logger.warning(f"[agentBuilder] broadcast failed: {exc}", exc_info=True)
@@ -96,17 +97,14 @@ async def _broadcast(workflow_id: Optional[str], caller_id: str, ops: List[Dict[
 def _allowed_tool_types() -> set[str]:
     """Tool nodes the LLM may spawn -- excludes the builder + masterSkill."""
     return {
-        ntype for ntype, cls in registered_node_classes().items()
-        if getattr(cls, "component_kind", "") == "tool"
-        and ntype not in _DENIED_TOOL_TYPES
+        ntype
+        for ntype, cls in registered_node_classes().items()
+        if getattr(cls, "component_kind", "") == "tool" and ntype not in _DENIED_TOOL_TYPES
     }
 
 
 def _allowed_subagent_types() -> set[str]:
-    return {
-        ntype for ntype, cls in registered_node_classes().items()
-        if getattr(cls, "component_kind", "") == "agent"
-    }
+    return {ntype for ntype, cls in registered_node_classes().items() if getattr(cls, "component_kind", "") == "agent"}
 
 
 def _is_team_lead(node_type: str) -> bool:
@@ -154,21 +152,20 @@ def _resolve_caller(ctx: NodeContext) -> str:
     """
     self_id = ctx.node_id
     for edge in ctx.edges or []:
-        if (
-            edge.get("source") == self_id
-            and edge.get("targetHandle") == _TOOL_HANDLE
-        ):
+        if edge.get("source") == self_id and edge.get("targetHandle") == _TOOL_HANDLE:
             target = edge.get("target")
             if target:
                 logger.info(
-                    "[agentBuilder] caller resolved via input-tools edge: "
-                    "self=%s -> agent=%s", self_id, target,
+                    "[agentBuilder] caller resolved via input-tools edge: " "self=%s -> agent=%s",
+                    self_id,
+                    target,
                 )
                 return target
     logger.info(
-        "[agentBuilder] no input-tools edge found from %s; "
-        "falling back to self as caller (canvas: %d nodes, %d edges)",
-        self_id, len(ctx.nodes or []), len(ctx.edges or []),
+        "[agentBuilder] no input-tools edge found from %s; " "falling back to self as caller (canvas: %d nodes, %d edges)",
+        self_id,
+        len(ctx.nodes or []),
+        len(ctx.edges or []),
     )
     return self_id
 
@@ -183,10 +180,12 @@ def _log_op_entry(op: str, ctx: NodeContext, **fields: Any) -> None:
     edges = ctx.edges or []
     extra = " ".join(f"{k}={v!r}" for k, v in fields.items() if v not in (None, ""))
     logger.info(
-        "[agentBuilder.%s] workflow_id=%s self=%s nodes=%d edges=%d "
-        "raw_keys=%s%s",
-        op, ctx.workflow_id, ctx.node_id,
-        len(nodes), len(edges),
+        "[agentBuilder.%s] workflow_id=%s self=%s nodes=%d edges=%d " "raw_keys=%s%s",
+        op,
+        ctx.workflow_id,
+        ctx.node_id,
+        len(nodes),
+        len(edges),
         sorted((ctx.raw or {}).keys()),
         f" {extra}" if extra else "",
     )
@@ -231,10 +230,7 @@ class AgentBuilderParams(BaseModel):
     # add_skill
     skill_folder: str = Field(
         default="",
-        description=(
-            "For add_skill: skill folder name under server/skills/** "
-            "(e.g. 'http-request-skill', 'memory-skill')."
-        ),
+        description=("For add_skill: skill folder name under server/skills/** " "(e.g. 'http-request-skill', 'memory-skill')."),
         json_schema_extra={"displayOptions": {"show": {"operation": ["add_skill"]}}},
     )
 
@@ -303,10 +299,8 @@ class AgentBuilderNode(ToolNode):
     tool_name = "agent_builder"
     tool_description = "Inspect and modify the workflow canvas at runtime. Operations: inspect_canvas (read current nodes/edges), spawn_tool (add a tool node + wire it), enable_skill (add a skill folder to a connected masterSkill), add_delegate_agent (add a specialized agent), create_workflow (spawn a brand-new workflow)."
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-tool", "kind": "output", "position": "top",
-         "label": "Tool", "role": "tools"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-tool", "kind": "output", "position": "top", "label": "Tool", "role": "tools"},
     )
     ui_hints = {"isToolPanel": True, "hideRunButton": True}
     annotations = {"destructive": False, "readonly": False, "open_world": True}
@@ -319,7 +313,9 @@ class AgentBuilderNode(ToolNode):
 
     @Operation("inspect_canvas")
     async def inspect_canvas(
-        self, ctx: NodeContext, params: AgentBuilderParams,
+        self,
+        ctx: NodeContext,
+        params: AgentBuilderParams,
     ) -> AgentBuilderOutput:
         _log_op_entry("inspect_canvas", ctx)
         nodes = list(ctx.nodes or [])
@@ -351,7 +347,8 @@ class AgentBuilderNode(ToolNode):
                 "source_type": type_by_id.get(e.get("source")),
                 "target_handle": e.get("targetHandle"),
             }
-            for e in edges if e.get("target") == caller_id
+            for e in edges
+            if e.get("target") == caller_id
         ]
         outgoing = [
             {
@@ -359,7 +356,8 @@ class AgentBuilderNode(ToolNode):
                 "target_type": type_by_id.get(e.get("target")),
                 "source_handle": e.get("sourceHandle"),
             }
-            for e in edges if e.get("source") == caller_id
+            for e in edges
+            if e.get("source") == caller_id
         ]
 
         tools = [c for c in incoming if c["target_handle"] == _TOOL_HANDLE]
@@ -386,7 +384,9 @@ class AgentBuilderNode(ToolNode):
 
     @Operation("add_tool")
     async def add_tool(
-        self, ctx: NodeContext, params: AgentBuilderParams,
+        self,
+        ctx: NodeContext,
+        params: AgentBuilderParams,
     ) -> AgentBuilderOutput:
         _log_op_entry("add_tool", ctx, node_type=params.node_type)
         node_type = (params.node_type or "").strip()
@@ -401,10 +401,7 @@ class AgentBuilderNode(ToolNode):
             sample = ", ".join(sorted(allowed)[:10])
             return AgentBuilderOutput(
                 operation="add_tool",
-                summary=(
-                    f"add_tool: '{node_type}' is not an allowed tool type. "
-                    f"Examples of allowed types: {sample}..."
-                ),
+                summary=(f"add_tool: '{node_type}' is not an allowed tool type. " f"Examples of allowed types: {sample}..."),
                 operations=[],
             )
 
@@ -412,13 +409,17 @@ class AgentBuilderNode(ToolNode):
         client_ref = f"new_{node_type}"
         ops = [
             workflow_ops.add_node(
-                client_ref, node_type, {},
+                client_ref,
+                node_type,
+                {},
                 label=node_type,
                 position=workflow_ops.anchored(caller_id, offset_x=200, offset_y=80),
             ),
             workflow_ops.add_edge(
-                {"client_ref": client_ref}, caller_id,
-                source_handle=_TOOL_OUTPUT_HANDLE, target_handle=_TOOL_HANDLE,
+                {"client_ref": client_ref},
+                caller_id,
+                source_handle=_TOOL_OUTPUT_HANDLE,
+                target_handle=_TOOL_HANDLE,
             ),
         ]
         await _broadcast(ctx.workflow_id, caller_id, ops)
@@ -432,7 +433,9 @@ class AgentBuilderNode(ToolNode):
 
     @Operation("add_skill")
     async def add_skill(
-        self, ctx: NodeContext, params: AgentBuilderParams,
+        self,
+        ctx: NodeContext,
+        params: AgentBuilderParams,
     ) -> AgentBuilderOutput:
         _log_op_entry("add_skill", ctx, skill_folder=params.skill_folder)
         skill = (params.skill_folder or "").strip()
@@ -454,27 +457,25 @@ class AgentBuilderNode(ToolNode):
         caller_id = _resolve_caller(ctx)
 
         skill_edge = next(
-            (e for e in edges if e.get("target") == caller_id
-             and e.get("targetHandle") == _SKILL_HANDLE),
+            (e for e in edges if e.get("target") == caller_id and e.get("targetHandle") == _SKILL_HANDLE),
             None,
         )
         master_skill = None
         if skill_edge:
             master_skill = next(
-                (n for n in nodes if n.get("id") == skill_edge.get("source")
-                 and n.get("type") == _MASTER_SKILL_TYPE),
+                (n for n in nodes if n.get("id") == skill_edge.get("source") and n.get("type") == _MASTER_SKILL_TYPE),
                 None,
             )
 
         if master_skill:
-            existing = (
-                ((master_skill.get("data") or {}).get("parameters") or {})
-                .get("skills_config") or {}
-            )
+            existing = ((master_skill.get("data") or {}).get("parameters") or {}).get("skills_config") or {}
             new_config = _toggle_skill(existing, skill, True)
-            ops = [workflow_ops.set_node_parameters(
-                master_skill["id"], {"skills_config": new_config},
-            )]
+            ops = [
+                workflow_ops.set_node_parameters(
+                    master_skill["id"],
+                    {"skills_config": new_config},
+                )
+            ]
             await _broadcast(ctx.workflow_id, caller_id, ops)
             return AgentBuilderOutput(
                 operation="add_skill",
@@ -486,23 +487,23 @@ class AgentBuilderNode(ToolNode):
         client_ref = "new_master_skill"
         ops = [
             workflow_ops.add_node(
-                client_ref, _MASTER_SKILL_TYPE,
+                client_ref,
+                _MASTER_SKILL_TYPE,
                 {"skills_config": new_config},
                 label=_MASTER_SKILL_LABEL,
                 position=workflow_ops.anchored(caller_id, offset_x=-60, offset_y=220),
             ),
             workflow_ops.add_edge(
-                {"client_ref": client_ref}, caller_id,
-                source_handle=_SKILL_OUTPUT_HANDLE, target_handle=_SKILL_HANDLE,
+                {"client_ref": client_ref},
+                caller_id,
+                source_handle=_SKILL_OUTPUT_HANDLE,
+                target_handle=_SKILL_HANDLE,
             ),
         ]
         await _broadcast(ctx.workflow_id, caller_id, ops)
         return AgentBuilderOutput(
             operation="add_skill",
-            summary=(
-                f"Created Master Skill node and enabled '{skill}'. "
-                "Available on your next turn."
-            ),
+            summary=(f"Created Master Skill node and enabled '{skill}'. " "Available on your next turn."),
             operations=ops,
         )
 
@@ -510,7 +511,9 @@ class AgentBuilderNode(ToolNode):
 
     @Operation("add_subagent")
     async def add_subagent(
-        self, ctx: NodeContext, params: AgentBuilderParams,
+        self,
+        ctx: NodeContext,
+        params: AgentBuilderParams,
     ) -> AgentBuilderOutput:
         _log_op_entry("add_subagent", ctx, agent_type=params.agent_type)
         agent_type = (params.agent_type or "").strip()
@@ -530,10 +533,7 @@ class AgentBuilderNode(ToolNode):
             leads = ", ".join(sorted(_TEAM_LEAD_TYPES))
             return AgentBuilderOutput(
                 operation="add_subagent",
-                summary=(
-                    f"add_subagent: only team-lead agents ({leads}) can spawn "
-                    f"delegates. This agent is '{caller_type}'."
-                ),
+                summary=(f"add_subagent: only team-lead agents ({leads}) can spawn " f"delegates. This agent is '{caller_type}'."),
                 operations=[],
             )
         allowed = _allowed_subagent_types()
@@ -541,41 +541,36 @@ class AgentBuilderNode(ToolNode):
             sample = ", ".join(sorted(allowed)[:10])
             return AgentBuilderOutput(
                 operation="add_subagent",
-                summary=(
-                    f"add_subagent: '{agent_type}' is not an allowed agent "
-                    f"type. Examples: {sample}..."
-                ),
+                summary=(f"add_subagent: '{agent_type}' is not an allowed agent " f"type. Examples: {sample}..."),
                 operations=[],
             )
         if _is_team_lead(agent_type):
             return AgentBuilderOutput(
                 operation="add_subagent",
-                summary=(
-                    f"add_subagent: cannot spawn another team-lead "
-                    f"('{agent_type}'); pick a specialized agent instead."
-                ),
+                summary=(f"add_subagent: cannot spawn another team-lead " f"('{agent_type}'); pick a specialized agent instead."),
                 operations=[],
             )
 
         client_ref = f"new_{agent_type}"
         ops = [
             workflow_ops.add_node(
-                client_ref, agent_type, {},
+                client_ref,
+                agent_type,
+                {},
                 label=agent_type,
                 position=workflow_ops.anchored(caller_id, offset_x=300, offset_y=200),
             ),
             workflow_ops.add_edge(
-                {"client_ref": client_ref}, caller_id,
-                source_handle=_TEAMMATES_OUTPUT_HANDLE, target_handle=_TEAMMATES_HANDLE,
+                {"client_ref": client_ref},
+                caller_id,
+                source_handle=_TEAMMATES_OUTPUT_HANDLE,
+                target_handle=_TEAMMATES_HANDLE,
             ),
         ]
         await _broadcast(ctx.workflow_id, caller_id, ops)
         return AgentBuilderOutput(
             operation="add_subagent",
-            summary=(
-                f"Added '{agent_type}' as a teammate. Available on your "
-                "next turn (configure provider/model first)."
-            ),
+            summary=(f"Added '{agent_type}' as a teammate. Available on your " "next turn (configure provider/model first)."),
             operations=ops,
         )
 
@@ -583,10 +578,13 @@ class AgentBuilderNode(ToolNode):
 
     @Operation("create_workflow")
     async def create_workflow(
-        self, ctx: NodeContext, params: AgentBuilderParams,
+        self,
+        ctx: NodeContext,
+        params: AgentBuilderParams,
     ) -> AgentBuilderOutput:
         _log_op_entry(
-            "create_workflow", ctx,
+            "create_workflow",
+            ctx,
             workflow_name=params.workflow_name,
             workflow_description=params.workflow_description,
         )
@@ -617,9 +615,13 @@ class AgentBuilderNode(ToolNode):
         }
 
         from services.plugin.deps import get_database
+
         database = get_database()
         ok = await database.save_workflow(
-            workflow_id, name, workflow_data, description=description or None,
+            workflow_id,
+            name,
+            workflow_data,
+            description=description or None,
         )
         if not ok:
             return AgentBuilderOutput(
@@ -628,9 +630,6 @@ class AgentBuilderNode(ToolNode):
             )
         return AgentBuilderOutput(
             operation="create_workflow",
-            summary=(
-                f"Created workflow '{name}' (id: {workflow_id}). "
-                "User can switch to it from the toast notification."
-            ),
+            summary=(f"Created workflow '{name}' (id: {workflow_id}). " "User can switch to it from the toast notification."),
             workflow_id=workflow_id,
         )

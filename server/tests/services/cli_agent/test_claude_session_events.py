@@ -39,7 +39,9 @@ class TestClaudeSessionSpawned:
 
     def test_matches_type_glob(self):
         event = WorkflowEvent.claude_session_spawned(
-            memory_node_id="m", session_uuid="u", pid=1,
+            memory_node_id="m",
+            session_uuid="u",
+            pid=1,
         )
         assert event.matches_type("claude.session.*")
         assert event.matches_type("claude.session.spawned")
@@ -136,18 +138,36 @@ class TestCloudEventInvariants:
     """Cross-cutting checks the four events all satisfy."""
 
     EVENTS = [
-        ("spawned", lambda: WorkflowEvent.claude_session_spawned(
-            memory_node_id="m", session_uuid="u", pid=1,
-        )),
-        ("cleared", lambda: WorkflowEvent.claude_session_cleared(
-            memory_node_id="m", old_session_uuid="a", new_session_uuid="b",
-        )),
-        ("terminated", lambda: WorkflowEvent.claude_session_terminated(
-            memory_node_id="m", reason="idle",
-        )),
-        ("usage", lambda: WorkflowEvent.claude_session_usage(
-            memory_node_id="m", session_uuid="u",
-        )),
+        (
+            "spawned",
+            lambda: WorkflowEvent.claude_session_spawned(
+                memory_node_id="m",
+                session_uuid="u",
+                pid=1,
+            ),
+        ),
+        (
+            "cleared",
+            lambda: WorkflowEvent.claude_session_cleared(
+                memory_node_id="m",
+                old_session_uuid="a",
+                new_session_uuid="b",
+            ),
+        ),
+        (
+            "terminated",
+            lambda: WorkflowEvent.claude_session_terminated(
+                memory_node_id="m",
+                reason="idle",
+            ),
+        ),
+        (
+            "usage",
+            lambda: WorkflowEvent.claude_session_usage(
+                memory_node_id="m",
+                session_uuid="u",
+            ),
+        ),
     ]
 
     def test_all_share_source_uri(self):
@@ -165,9 +185,7 @@ class TestCloudEventInvariants:
         for name, builder in self.EVENTS:
             event = builder()
             assert event.dataschema is not None
-            assert event.dataschema.startswith(
-                "machinaos://schemas/events/claude.session."
-            ), name
+            assert event.dataschema.startswith("machinaos://schemas/events/claude.session."), name
             assert event.dataschema.endswith(".json"), name
 
     def test_all_carry_specversion_1(self):

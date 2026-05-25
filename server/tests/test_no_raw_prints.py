@@ -31,9 +31,9 @@ SERVER_ROOT = Path(__file__).resolve().parents[1]
 # Directories whose ``print()`` calls are out of scope.
 _EXCLUDED_DIRS = {
     ".venv",
-    "tests",        # tests themselves can print freely
-    "scripts",      # CLI smoke tests are intentional stdout tools
-    "skills",       # SKILL.md markdown — not Python source
+    "tests",  # tests themselves can print freely
+    "scripts",  # CLI smoke tests are intentional stdout tools
+    "skills",  # SKILL.md markdown — not Python source
     "__pycache__",
 }
 
@@ -45,6 +45,14 @@ _SANCTIONED: List[Tuple[str, str]] = [
     ("main.py", "_startup_log"),
     ("core/container.py", "_clog"),
     ("nodes/code/python_executor/__init__.py", "captured_print"),
+    # Temporal CLI shims — supervised subprocess + build-time installer.
+    # These run BEFORE the structlog pipeline is configured in their own
+    # subprocess (same role as ``_startup_log`` / ``_clog`` for the main
+    # process). Stdout markers are consumed by the supervisor's
+    # line-prefixer (``cli/colors.py``), which adds the timestamp tag.
+    ("services/temporal/_supervised_runtime.py", "_run"),
+    ("services/temporal/_supervised_runtime.py", "main"),
+    ("services/temporal/_install.py", "_main"),
 ]
 
 
@@ -79,7 +87,11 @@ def _enclosing_function_name(tree: ast.AST, target: ast.AST) -> str:
 
 def test_no_raw_prints_in_server_code() -> None:
     """Every ``print(`` call in server runtime code is in an allow-listed body."""
-    sanctioned_map = {rel.replace("\\", "/"): fn for rel, fn in _SANCTIONED}
+    # Multimap: a single module may sanction multiple entry-point bodies
+    # (e.g. ``_supervised_runtime`` has both ``_run`` and ``main``).
+    sanctioned_map: dict[str, set[str]] = {}
+    for rel, fn in _SANCTIONED:
+        sanctioned_map.setdefault(rel.replace("\\", "/"), set()).add(fn)
     violations: List[str] = []
 
     for py in _iter_python_files():
@@ -102,8 +114,8 @@ def test_no_raw_prints_in_server_code() -> None:
                 continue
 
             enclosing = _enclosing_function_name(tree, node)
-            allowed_fn = sanctioned_map.get(rel)
-            if allowed_fn is not None and enclosing == allowed_fn:
+            allowed_fns = sanctioned_map.get(rel)
+            if allowed_fns is not None and enclosing in allowed_fns:
                 continue
 
             violations.append(
@@ -115,6 +127,5 @@ def test_no_raw_prints_in_server_code() -> None:
     assert not violations, (
         "Raw ``print()`` calls bypass the structlog pipeline (no level tag, "
         "no contextvars, no file handler, no WS Terminal panel). Convert "
-        "to ``logger.<level>(...)`` or move into a sanctioned helper:\n\n"
-        + "\n".join(violations)
+        "to ``logger.<level>(...)`` or move into a sanctioned helper:\n\n" + "\n".join(violations)
     )

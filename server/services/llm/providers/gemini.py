@@ -6,7 +6,12 @@ from typing import Any, Dict, List, Optional
 
 from core.logging import get_logger
 from services.llm.protocol import (
-    LLMResponse, Message, ThinkingConfig, ToolCall, ToolDef, Usage,
+    LLMResponse,
+    Message,
+    ThinkingConfig,
+    ToolCall,
+    ToolDef,
+    Usage,
 )
 
 logger = get_logger(__name__)
@@ -17,6 +22,7 @@ class GeminiProvider:
 
     def __init__(self, api_key: str, *, proxy_url: Optional[str] = None):
         from google import genai
+
         kwargs: Dict[str, Any] = {"api_key": api_key}
         if proxy_url:
             kwargs["http_options"] = {"base_url": proxy_url}
@@ -74,6 +80,7 @@ class GeminiProvider:
 
     async def fetch_models(self, api_key: str) -> List[str]:
         import httpx
+
         async with httpx.AsyncClient() as client:
             r = await client.get(
                 f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}",
@@ -103,13 +110,19 @@ class GeminiProvider:
                 continue
 
             if m.role == "tool":
-                contents.append({
-                    "role": "function",
-                    "parts": [{"function_response": {
-                        "name": m.name or "",
-                        "response": {"result": m.content},
-                    }}],
-                })
+                contents.append(
+                    {
+                        "role": "function",
+                        "parts": [
+                            {
+                                "function_response": {
+                                    "name": m.name or "",
+                                    "response": {"result": m.content},
+                                }
+                            }
+                        ],
+                    }
+                )
                 continue
 
             if m.role == "assistant" and m.tool_calls:
@@ -117,10 +130,14 @@ class GeminiProvider:
                 if m.content:
                     parts.append({"text": m.content})
                 for tc in m.tool_calls:
-                    parts.append({"function_call": {
-                        "name": tc.name,
-                        "args": tc.args,
-                    }})
+                    parts.append(
+                        {
+                            "function_call": {
+                                "name": tc.name,
+                                "args": tc.args,
+                            }
+                        }
+                    )
                 contents.append({"role": "model", "parts": parts})
                 continue
 
@@ -133,11 +150,13 @@ class GeminiProvider:
     @staticmethod
     def _to_api_tool(tool: ToolDef) -> Dict[str, Any]:
         return {
-            "function_declarations": [{
-                "name": tool.name,
-                "description": tool.description,
-                "parameters": tool.parameters,
-            }]
+            "function_declarations": [
+                {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.parameters,
+                }
+            ]
         }
 
     def _normalize(self, resp: Any, model: str) -> LLMResponse:
@@ -152,11 +171,13 @@ class GeminiProvider:
                 elif hasattr(part, "function_call") and part.function_call:
                     fc = part.function_call
                     args = dict(fc.args) if fc.args else {}
-                    tool_calls.append(ToolCall(
-                        id=fc.name,  # Gemini doesn't have separate IDs
-                        name=fc.name,
-                        args=args,
-                    ))
+                    tool_calls.append(
+                        ToolCall(
+                            id=fc.name,  # Gemini doesn't have separate IDs
+                            name=fc.name,
+                            args=args,
+                        )
+                    )
                 elif hasattr(part, "text") and part.text:
                     text_parts.append(part.text)
 

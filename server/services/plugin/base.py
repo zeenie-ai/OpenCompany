@@ -187,9 +187,7 @@ class BaseNode:
         #     the canvas.
         # Subclasses opt out by explicitly setting either flag to False
         # on the class.
-        is_tool_oriented = (
-            cls.usable_as_tool or cls.component_kind == "tool"
-        )
+        is_tool_oriented = cls.usable_as_tool or cls.component_kind == "tool"
         if is_tool_oriented:
             if "hide_input_handle" not in cls.__dict__:
                 cls.hide_input_handle = True
@@ -221,6 +219,7 @@ class BaseNode:
         # to visuals.json — defeating the per-plugin icon.svg endpoint
         # (RFC §6.5 / Phase 6).
         from services.node_registry import register_node, register_node_class
+
         register_node_class(cls)
         register_node(
             type=cls.type,
@@ -297,6 +296,7 @@ class BaseNode:
         (redundant — class is already the dispatch target) and route
         through :meth:`execute`.
         """
+
         async def _legacy(
             node_id: str,
             node_type: str,
@@ -311,7 +311,8 @@ class BaseNode:
                 connection_factory=_make_connection_factory(cls, context),
             )
             return await instance.execute(node_id, parameters, ctx)
-        _legacy.__node_class__ = cls       # type: ignore[attr-defined]
+
+        _legacy.__node_class__ = cls  # type: ignore[attr-defined]
         _legacy.__qualname__ = f"{cls.__qualname__}._legacy_handler"
         return _legacy
 
@@ -431,6 +432,7 @@ class BaseNode:
             if provider:
                 try:
                     from services.status_broadcaster import get_status_broadcaster
+
                     broadcaster = get_status_broadcaster()
                     await broadcaster.broadcast_credential_event(
                         event_type=f"credential.{auth_kind}.runtime_failed",
@@ -444,7 +446,9 @@ class BaseNode:
                     # Broadcast failure must never mask the original error.
                     logger.debug(
                         "[%s] failed to broadcast credential runtime failure for %s",
-                        self.type, provider, exc_info=True,
+                        self.type,
+                        provider,
+                        exc_info=True,
                     )
             extra: Optional[Dict[str, Any]] = None
             if provider:
@@ -467,9 +471,7 @@ class BaseNode:
             # LLM gets the message in the structured response and can
             # retry with corrected input.
             logger.warning("[%s] %s op %s: %s", self.type, op_name, type(e).__name__, e)
-            return self._wrap_error(
-                start_time=start_time, error=str(e), error_type="NodeUserError"
-            )
+            return self._wrap_error(start_time=start_time, error=str(e), error_type="NodeUserError")
         except Exception as e:
             logger.exception("[%s] operation %s failed", self.type, op_name)
             return self._wrap_error(start_time=start_time, error=str(e), error_type=type(e).__name__)
@@ -538,14 +540,15 @@ class BaseNode:
             # is expected to be empty.
             if not self.credentials:
                 raise RuntimeError(
-                    f"Node {self.type} op {spec.name} has routing but no "
-                    "credentials declared — routing needs a Connection."
+                    f"Node {self.type} op {spec.name} has routing but no " "credentials declared — routing needs a Connection."
                 )
             cred = self.credentials[0]
             conn = ctx.connection(cred.id)
             try:
                 return await execute_routing(
-                    spec.routing, params=params_obj.model_dump(), connection=conn,
+                    spec.routing,
+                    params=params_obj.model_dump(),
+                    connection=conn,
                 )
             finally:
                 await conn.aclose()
@@ -631,7 +634,10 @@ class BaseNode:
                     "timestamp": datetime.now().isoformat(),
                 }
                 await broadcaster.update_node_status(
-                    node_id, "success", result, workflow_id=workflow_id,
+                    node_id,
+                    "success",
+                    result,
+                    workflow_id=workflow_id,
                 )
                 return result
 
@@ -648,13 +654,19 @@ class BaseNode:
                     "timestamp": datetime.now().isoformat(),
                 }
                 await broadcaster.update_node_status(
-                    node_id, "skipped", {"disabled": True}, workflow_id=workflow_id,
+                    node_id,
+                    "skipped",
+                    {"disabled": True},
+                    workflow_id=workflow_id,
                 )
                 return result
 
             # Broadcast executing — UI cyan-glow.
             await broadcaster.update_node_status(
-                node_id, "executing", {"node_type": cls.type}, workflow_id=workflow_id,
+                node_id,
+                "executing",
+                {"node_type": cls.type},
+                workflow_id=workflow_id,
             )
 
             try:
@@ -685,18 +697,21 @@ class BaseNode:
                 if result.get("success"):
                     activity.logger.info(f"Node {node_id} succeeded")
                     await broadcaster.update_node_status(
-                        node_id, "success", result.get("result", {}),
+                        node_id,
+                        "success",
+                        result.get("result", {}),
                         workflow_id=workflow_id,
                     )
                     await broadcaster.update_node_output(
-                        node_id, result.get("result", {}), workflow_id=workflow_id,
+                        node_id,
+                        result.get("result", {}),
+                        workflow_id=workflow_id,
                     )
                 else:
-                    activity.logger.warning(
-                        f"Node {node_id} failed: {result.get('error')}"
-                    )
+                    activity.logger.warning(f"Node {node_id} failed: {result.get('error')}")
                     await broadcaster.update_node_status(
-                        node_id, "error",
+                        node_id,
+                        "error",
                         {"error": result.get("error")},
                         workflow_id=workflow_id,
                     )
@@ -708,7 +723,9 @@ class BaseNode:
                 error_msg = f"{type(e).__name__}: {e}"
                 activity.logger.error(f"Node {node_id} crashed: {error_msg}")
                 await broadcaster.update_node_status(
-                    node_id, "error", {"error": error_msg},
+                    node_id,
+                    "error",
+                    {"error": error_msg},
                     workflow_id=workflow_id,
                 )
                 raise
@@ -718,6 +735,7 @@ class BaseNode:
 
 # ---------------------------------------------------------------------------
 # Connection factory — avoids circular import with NodeContext.
+
 
 def _make_connection_factory(
     node_cls: Type[BaseNode],
@@ -737,7 +755,10 @@ def _make_connection_factory(
                 f"but tried to use it. Add it to the `credentials` class attribute."
             )
         return Connection(
-            cred_cls, user_id=user_id, session_id=session_id, node_id=node_id,
+            cred_cls,
+            user_id=user_id,
+            session_id=session_id,
+            node_id=node_id,
         )
 
     return factory

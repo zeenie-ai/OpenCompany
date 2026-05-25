@@ -49,10 +49,8 @@ class WriteTodosNode(ToolNode):
         "complex tasks into smaller steps."
     )
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-tool", "kind": "output", "position": "top",
-         "label": "Tool", "role": "tools"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-tool", "kind": "output", "position": "top", "label": "Tool", "role": "tools"},
     )
     ui_hints = {"isToolPanel": True, "hideRunButton": True}
     annotations = {"destructive": False, "readonly": False, "open_world": False}
@@ -75,13 +73,16 @@ class WriteTodosNode(ToolNode):
         broadcaster = ctx.raw.get("broadcaster")
         if broadcaster:
             await broadcaster.update_node_status(
-                ctx.node_id, "executing",
+                ctx.node_id,
+                "executing",
                 {"phase": "todo_update", "todos": stored},
                 workflow_id=ctx.workflow_id,
             )
 
         get_logger(__name__).info(
-            "[WriteTodos] Updated %d todos (session=%s)", len(stored), session_key,
+            "[WriteTodos] Updated %d todos (session=%s)",
+            len(stored),
+            session_key,
         )
         return {
             "message": f"Updated todo list ({len(stored)} items)",

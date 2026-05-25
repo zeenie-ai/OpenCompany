@@ -6,7 +6,10 @@ from typing import Any, Dict, List, Optional
 
 from core.logging import get_logger
 from services.llm.protocol import (
-    LLMResponse, Message, ThinkingConfig, ToolDef,
+    LLMResponse,
+    Message,
+    ThinkingConfig,
+    ToolDef,
 )
 from services.llm.providers.openai import OpenAIProvider
 
@@ -18,6 +21,7 @@ class OpenRouterProvider(OpenAIProvider):
 
     def __init__(self, api_key: str, *, proxy_url: Optional[str] = None):
         import openai
+
         kwargs: Dict[str, Any] = {
             "api_key": api_key,
             "base_url": proxy_url or "https://openrouter.ai/api/v1",
@@ -51,6 +55,7 @@ class OpenRouterProvider(OpenAIProvider):
 
     async def fetch_models(self, api_key: str) -> List[str]:
         import httpx
+
         async with httpx.AsyncClient() as client:
             r = await client.get(
                 "https://openrouter.ai/api/v1/models",

@@ -68,15 +68,9 @@ def init_tracing(service_name: str = "machinaos-backend") -> None:
     if _INITIALIZED:
         return
 
-    provider = TracerProvider(
-        resource=Resource.create({SERVICE_NAME: service_name})
-    )
+    provider = TracerProvider(resource=Resource.create({SERVICE_NAME: service_name}))
     # Compact one-line console output instead of the default 30-line
     # JSON dump per span — keeps interactive logs readable.
-    provider.add_span_processor(
-        BatchSpanProcessor(
-            ConsoleSpanExporter(formatter=_compact_span_formatter)
-        )
-    )
+    provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter(formatter=_compact_span_formatter)))
     trace.set_tracer_provider(provider)
     _INITIALIZED = True

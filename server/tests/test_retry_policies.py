@@ -122,11 +122,14 @@ class TestWorkflowsImportSharedConstant:
     """The three workflow files that execute activities must import the
     shared constant. Source-introspection only — no Temporal runtime."""
 
-    @pytest.mark.parametrize("module_path,expected_constant", [
-        ("services.temporal.workflow", "DEFAULT_ACTIVITY_RETRY"),
-        ("services.temporal.agent_workflow", "DEFAULT_ACTIVITY_RETRY"),
-        ("services.temporal.polling_trigger_workflow", "DEFAULT_ACTIVITY_RETRY"),
-    ])
+    @pytest.mark.parametrize(
+        "module_path,expected_constant",
+        [
+            ("services.temporal.workflow", "DEFAULT_ACTIVITY_RETRY"),
+            ("services.temporal.agent_workflow", "DEFAULT_ACTIVITY_RETRY"),
+            ("services.temporal.polling_trigger_workflow", "DEFAULT_ACTIVITY_RETRY"),
+        ],
+    )
     def test_imports_shared_constant(self, module_path, expected_constant):
         try:
             mod = __import__(module_path, fromlist=[expected_constant])

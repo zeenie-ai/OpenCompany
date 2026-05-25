@@ -52,8 +52,7 @@ def _list_categories(docs_dir: Path) -> list[str]:
     if not docs_dir.exists():
         return []
     return sorted(
-        d.name for d in docs_dir.iterdir()
-        if d.is_dir() and not d.name.startswith("_")
+        d.name for d in docs_dir.iterdir() if d.is_dir() and not d.name.startswith("_")
     )
 
 
@@ -65,11 +64,13 @@ def _list_docs(docs_dir: Path, category: str) -> list[dict]:
             continue
         if path.name.startswith("_") or path.name == "README.md":
             continue
-        out.append({
-            "rel_path": f"{category}/{path.name}",
-            "title": _read_h1(path),
-            "node_key": path.stem,
-        })
+        out.append(
+            {
+                "rel_path": f"{category}/{path.name}",
+                "title": _read_h1(path),
+                "node_key": path.stem,
+            }
+        )
     return out
 
 
@@ -141,7 +142,8 @@ def _check_completeness(root: Path) -> int:
 @app.command("nodes", help="Rebuild (or --check) the per-node documentation index.")
 def nodes(
     check: bool = typer.Option(
-        False, "--check",
+        False,
+        "--check",
         help="Instead of rewriting, exit 1 if any registered node lacks a doc.",
     ),
 ) -> None:

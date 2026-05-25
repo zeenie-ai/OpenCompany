@@ -53,10 +53,12 @@ class TestListCanaryListeners:
         wrapper = MagicMock()
         wrapper.client = None
         from core import container as container_mod
+
         monkeypatch.setattr(container_mod.container, "temporal_client", lambda: wrapper)
 
         result = await handle_list_canary_listeners(
-            {"workflow_id": "wf-1"}, MagicMock(),
+            {"workflow_id": "wf-1"},
+            MagicMock(),
         )
         assert result["success"] is True
         assert result["listeners"] == []
@@ -87,10 +89,12 @@ class TestListCanaryListeners:
         wrapper.client = client
 
         from core import container as container_mod
+
         monkeypatch.setattr(container_mod.container, "temporal_client", lambda: wrapper)
 
         result = await handle_list_canary_listeners(
-            {"workflow_id": "wf-1"}, MagicMock(),
+            {"workflow_id": "wf-1"},
+            MagicMock(),
         )
         assert result["success"] is True
         assert result["count"] == 1
@@ -118,10 +122,12 @@ class TestListCanaryListeners:
         wrapper.client = client
 
         from core import container as container_mod
+
         monkeypatch.setattr(container_mod.container, "temporal_client", lambda: wrapper)
 
         result = await handle_list_canary_listeners(
-            {"workflow_id": "wf-1"}, MagicMock(),
+            {"workflow_id": "wf-1"},
+            MagicMock(),
         )
         assert result["success"] is False
         assert "Visibility unavailable" in result["error"]
@@ -179,10 +185,12 @@ class TestListCanarySchedules:
         wrapper.client = client
 
         from core import container as container_mod
+
         monkeypatch.setattr(container_mod.container, "temporal_client", lambda: wrapper)
 
         result = await handle_list_canary_schedules(
-            {"workflow_id": "wf-1"}, MagicMock(),
+            {"workflow_id": "wf-1"},
+            MagicMock(),
         )
         assert result["success"] is True
         assert result["count"] == 2
@@ -242,10 +250,12 @@ class TestGetWorkflowFailureHistory:
         wrapper.client = None
 
         from core import container as container_mod
+
         monkeypatch.setattr(container_mod.container, "temporal_client", lambda: wrapper)
 
         result = await handle_get_workflow_failure_history(
-            {"workflow_id": "wf-1"}, MagicMock(),
+            {"workflow_id": "wf-1"},
+            MagicMock(),
         )
         assert result["success"] is False
 
@@ -295,10 +305,12 @@ class TestGetWorkflowFailureHistory:
         wrapper.client = client
 
         from core import container as container_mod
+
         monkeypatch.setattr(container_mod.container, "temporal_client", lambda: wrapper)
 
         result = await handle_get_workflow_failure_history(
-            {"workflow_id": "wf-temporal-1"}, MagicMock(),
+            {"workflow_id": "wf-temporal-1"},
+            MagicMock(),
         )
         assert result["success"] is True
         assert result["count"] == 1
@@ -337,14 +349,18 @@ class TestSearchAttributesDict:
             TypedSearchAttributes,
         )
 
-        typed = TypedSearchAttributes([
-            SearchAttributePair(
-                SearchAttributeKey.for_keyword("EventWorkflowId"), "wf-1",
-            ),
-            SearchAttributePair(
-                SearchAttributeKey.for_keyword("EventTriggerKind"), "cron",
-            ),
-        ])
+        typed = TypedSearchAttributes(
+            [
+                SearchAttributePair(
+                    SearchAttributeKey.for_keyword("EventWorkflowId"),
+                    "wf-1",
+                ),
+                SearchAttributePair(
+                    SearchAttributeKey.for_keyword("EventTriggerKind"),
+                    "cron",
+                ),
+            ]
+        )
         view = _search_attributes_dict(typed)
         assert view == {"EventWorkflowId": "wf-1", "EventTriggerKind": "cron"}
 

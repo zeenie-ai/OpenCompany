@@ -29,14 +29,12 @@ class StandardWebhooksVerifier(WebhookVerifier):
             raise ValueError("Standard Webhooks headers missing")
 
         if secret.startswith("whsec_"):
-            key = base64.b64decode(secret[len("whsec_"):])
+            key = base64.b64decode(secret[len("whsec_") :])
         else:
             key = secret.encode()
 
         signed = f"{msg_id}.{timestamp}.".encode() + body
-        expected = base64.b64encode(
-            hmac.new(key, signed, hashlib.sha256).digest()
-        ).decode()
+        expected = base64.b64encode(hmac.new(key, signed, hashlib.sha256).digest()).decode()
 
         candidates: list[str] = []
         for part in sig_header.split():

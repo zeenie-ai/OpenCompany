@@ -98,11 +98,7 @@ class OAuthStateStore:
     def cleanup_expired(self) -> int:
         """Remove states older than ``ttl_seconds``. Returns count removed."""
         now = time.time()
-        expired = [
-            state
-            for state, record in self._states.items()
-            if now - record.get("created_at", 0) > self.ttl_seconds
-        ]
+        expired = [state for state, record in self._states.items() if now - record.get("created_at", 0) > self.ttl_seconds]
         for state in expired:
             self._states.pop(state, None)
         if expired:
@@ -180,9 +176,7 @@ class OAuth2PKCEClient(ABC):
         scopes: Optional[List[str]] = None,
     ) -> None:
         if not self.provider:
-            raise ValueError(
-                f"{type(self).__name__} must set the ``provider`` ClassVar"
-            )
+            raise ValueError(f"{type(self).__name__} must set the ``provider`` ClassVar")
         self.client_id = client_id
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
@@ -207,11 +201,14 @@ class OAuth2PKCEClient(ABC):
         code_verifier = _generate_code_verifier()
         code_challenge = _generate_code_challenge(code_verifier)
 
-        self.state_store.put(state, {
-            "code_verifier": code_verifier,
-            "redirect_uri": self.redirect_uri,
-            "data": state_data or {},
-        })
+        self.state_store.put(
+            state,
+            {
+                "code_verifier": code_verifier,
+                "redirect_uri": self.redirect_uri,
+                "data": state_data or {},
+            },
+        )
 
         params = {
             "response_type": "code",
@@ -240,9 +237,7 @@ class OAuth2PKCEClient(ABC):
         in the header. Public clients put ``client_id`` in the body.
         """
         if self.client_secret:
-            credentials = base64.b64encode(
-                f"{self.client_id}:{self.client_secret}".encode()
-            ).decode()
+            credentials = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode()).decode()
             return {}, {"Authorization": f"Basic {credentials}"}
         return {"client_id": self.client_id}, {}
 
@@ -266,7 +261,9 @@ class OAuth2PKCEClient(ABC):
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    self.token_endpoint, data=body, headers=headers,
+                    self.token_endpoint,
+                    data=body,
+                    headers=headers,
                 )
         except httpx.HTTPError as exc:
             logger.error(f"[{self.provider}] HTTP error during token exchange: {exc}")
@@ -276,7 +273,8 @@ class OAuth2PKCEClient(ABC):
             error_data = response.json() if response.text else {}
             logger.error(
                 f"[{self.provider}] Token exchange failed",
-                status=response.status_code, error=error_data,
+                status=response.status_code,
+                error=error_data,
             )
             return {
                 "success": False,
@@ -306,7 +304,9 @@ class OAuth2PKCEClient(ABC):
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    self.token_endpoint, data=body, headers=headers,
+                    self.token_endpoint,
+                    data=body,
+                    headers=headers,
                 )
         except httpx.HTTPError as exc:
             logger.error(f"[{self.provider}] HTTP error during token refresh: {exc}")
@@ -329,7 +329,9 @@ class OAuth2PKCEClient(ABC):
         }
 
     async def revoke_token(
-        self, token: str, token_type: str = "access_token",
+        self,
+        token: str,
+        token_type: str = "access_token",
     ) -> Dict[str, Any]:
         """Revoke an access or refresh token (best-effort).
 
@@ -348,7 +350,9 @@ class OAuth2PKCEClient(ABC):
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    self.revocation_endpoint, data=body, headers=headers,
+                    self.revocation_endpoint,
+                    data=body,
+                    headers=headers,
                 )
         except httpx.HTTPError as exc:
             logger.error(f"[{self.provider}] HTTP error during token revoke: {exc}")

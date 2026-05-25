@@ -96,15 +96,24 @@ class ProcessService:
         # Block destructive commands -- file ops should use the sandboxed shell node
         cmd_lower = command.lower().strip()
         blocked = (
-            "rm ", "rm\t", "rmdir", "del ", "rd ", "remove-item",
-            "format ", "mkfs", "dd if=", "shred",
-            "> /dev/", "chmod 777", "chmod -r",
+            "rm ",
+            "rm\t",
+            "rmdir",
+            "del ",
+            "rd ",
+            "remove-item",
+            "format ",
+            "mkfs",
+            "dd if=",
+            "shred",
+            "> /dev/",
+            "chmod 777",
+            "chmod -r",
         )
         if any(cmd_lower.startswith(b) or f" {b}" in f" {cmd_lower}" for b in blocked):
             return {
                 "success": False,
-                "error": "Destructive commands blocked in process_manager. "
-                         "Use shell_execute for file operations (sandboxed, no PATH).",
+                "error": "Destructive commands blocked in process_manager. " "Use shell_execute for file operations (sandboxed, no PATH).",
             }
 
         name = name or f"proc_{id(command) % 100000}"
@@ -132,18 +141,16 @@ class ProcessService:
         if resolved is None:
             return {
                 "success": False,
-                "error": (
-                    f"Command not found: '{argv[0] if argv else ''}'. "
-                    "Check spelling or ensure the binary is on PATH."
-                ),
+                "error": (f"Command not found: '{argv[0] if argv else ''}'. " "Check spelling or ensure the binary is on PATH."),
             }
         argv[0] = resolved
         env = {**os.environ, "PYTHONUNBUFFERED": "1"}
         from core.config import Settings
+
         workspace_base = Path(Settings().workspace_base_resolved).resolve()
 
         if not working_directory:
-            working_directory = str(workspace_base / 'default')
+            working_directory = str(workspace_base / "default")
             os.makedirs(working_directory, exist_ok=True)
         cwd = working_directory
 
@@ -232,9 +239,7 @@ class ProcessService:
         result = self._info(managed)
 
         # Schedule cleanup after 60s to allow output reading
-        asyncio.get_event_loop().call_later(
-            60, lambda: self._cleanup_completed(workflow_id, name)
-        )
+        asyncio.get_event_loop().call_later(60, lambda: self._cleanup_completed(workflow_id, name))
 
         return {"success": True, "result": result}
 
@@ -272,11 +277,7 @@ class ProcessService:
 
     def list_processes(self, workflow_id: str = "default") -> List[Dict[str, Any]]:
         """List all processes for a workflow."""
-        return [
-            self._info(m)
-            for (wid, _), m in self._processes.items()
-            if wid == workflow_id
-        ]
+        return [self._info(m) for (wid, _), m in self._processes.items() if wid == workflow_id]
 
     def get_output(
         self,
@@ -378,9 +379,7 @@ class ProcessService:
                 shutil.rmtree(managed.log_dir, ignore_errors=True)
         self._processes.clear()
 
-    async def _read_stream(
-        self, managed: ManagedProcess, stream: asyncio.StreamReader, stream_name: str
-    ) -> None:
+    async def _read_stream(self, managed: ManagedProcess, stream: asyncio.StreamReader, stream_name: str) -> None:
         """Background task: read lines, write to log file, broadcast to Terminal."""
         level = "info" if stream_name == "stdout" else "error"
         source = f"process:{managed.name}"
@@ -405,12 +404,14 @@ class ProcessService:
 
                     # Broadcast to Terminal tab
                     if self._broadcaster:
-                        await self._broadcaster.broadcast_terminal_log({
-                            "timestamp": datetime.now().isoformat(),
-                            "level": level,
-                            "message": text,
-                            "source": source,
-                        })
+                        await self._broadcaster.broadcast_terminal_log(
+                            {
+                                "timestamp": datetime.now().isoformat(),
+                                "level": level,
+                                "message": text,
+                                "source": source,
+                            }
+                        )
 
                     # Optional framework-level subscriber.
                     if managed.line_handler is not None:
@@ -419,7 +420,9 @@ class ProcessService:
                         except Exception as cb_err:
                             logger.debug(
                                 "[Process] line_handler %s/%s raised: %s",
-                                managed.name, stream_name, cb_err,
+                                managed.name,
+                                stream_name,
+                                cb_err,
                             )
         except asyncio.CancelledError:
             pass
@@ -436,9 +439,7 @@ class ProcessService:
             logger.info("[Process] Exited: %s (exit=%s)", managed.name, managed.exit_code)
 
             # Schedule auto-cleanup of log files and process entry after delay
-            asyncio.get_event_loop().call_later(
-                60, lambda: self._cleanup_completed(managed.workflow_id, managed.name)
-            )
+            asyncio.get_event_loop().call_later(60, lambda: self._cleanup_completed(managed.workflow_id, managed.name))
 
     @staticmethod
     def _info(m: ManagedProcess) -> Dict[str, Any]:

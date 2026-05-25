@@ -37,10 +37,7 @@ class MasterSkillNode(ActionNode):
     group = ("tool",)
     description = "Aggregate multiple skills with enable/disable toggles"
     component_kind = "tool"
-    handles = (
-        {"name": "output-skill", "kind": "output", "position": "top",
-         "label": "Skill", "role": "skill"},
-    )
+    handles = ({"name": "output-skill", "kind": "output", "position": "top", "label": "Skill", "role": "skill"},)
     ui_hints = {
         "isToolPanel": True,
         "isMasterSkillEditor": True,
@@ -57,8 +54,5 @@ class MasterSkillNode(ActionNode):
     @Operation("noop")
     async def noop(self, ctx: NodeContext, params: MasterSkillParams) -> MasterSkillOutput:
         # Passive node — agent reads skillsConfig during execution.
-        active = sum(
-            1 for cfg in (params.skills_config or {}).values()
-            if isinstance(cfg, dict) and cfg.get("enabled")
-        )
+        active = sum(1 for cfg in (params.skills_config or {}).values() if isinstance(cfg, dict) and cfg.get("enabled"))
         return MasterSkillOutput(skills_active=active)

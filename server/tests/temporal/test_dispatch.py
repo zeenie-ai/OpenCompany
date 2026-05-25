@@ -99,6 +99,7 @@ class TestResolveActivityFlagOn:
         assert name.startswith("node.coding_agent.v")
         # Extract version; should match the class's declared version.
         from services.node_registry import get_node_class
+
         cls = get_node_class("coding_agent")
         assert name == f"node.coding_agent.v{cls.version}"
 
@@ -136,9 +137,7 @@ class TestAgentWorkflowDispatch:
         for t in ("coding_agent", "web_agent", "orchestrator_agent", "ai_employee"):
             with self._set_flags(per_type=True, agent_wf=True):
                 dispatch = workflow_instance._resolve_dispatch(t)
-            assert dispatch["kind"] == "child_workflow", (
-                f"{t} should route to AgentWorkflow when F4.B is on"
-            )
+            assert dispatch["kind"] == "child_workflow", f"{t} should route to AgentWorkflow when F4.B is on"
 
     def test_excluded_agents_stay_on_activity_path(self, workflow_instance):
         """rlm_agent / claude_code_agent are NOT migrated (externalised
@@ -147,9 +146,7 @@ class TestAgentWorkflowDispatch:
         for t in ("rlm_agent", "claude_code_agent"):
             with self._set_flags(per_type=True, agent_wf=True):
                 dispatch = workflow_instance._resolve_dispatch(t)
-            assert dispatch["kind"] == "activity", (
-                f"{t} must NOT migrate to AgentWorkflow (externalised session)"
-            )
+            assert dispatch["kind"] == "activity", f"{t} must NOT migrate to AgentWorkflow (externalised session)"
             assert dispatch["name"] == f"node.{t}.v1"
 
     def test_agent_workflow_flag_off_falls_back_to_activity(self, workflow_instance):
@@ -164,9 +161,7 @@ class TestAgentWorkflowDispatch:
         for t in ("pythonExecutor", "calculatorTool", "openaiChatModel"):
             with self._set_flags(per_type=True, agent_wf=True):
                 dispatch = workflow_instance._resolve_dispatch(t)
-            assert dispatch["kind"] == "activity", (
-                f"{t} is not an agent type; must NOT route to AgentWorkflow"
-            )
+            assert dispatch["kind"] == "activity", f"{t} is not an agent type; must NOT route to AgentWorkflow"
 
 
 class TestPerNodeTypeIconResolution:
@@ -176,18 +171,21 @@ class TestPerNodeTypeIconResolution:
 
     def test_whatsapp_send_resolves_per_node_icon(self):
         from nodes._visuals import get_plugin_icon_path
+
         path = get_plugin_icon_path("whatsappSend")
         assert path is not None
         assert path.name == "icon_whatsappSend.svg"
 
     def test_whatsapp_receive_resolves_per_node_icon(self):
         from nodes._visuals import get_plugin_icon_path
+
         path = get_plugin_icon_path("whatsappReceive")
         assert path is not None
         assert path.name == "icon_whatsappReceive.svg"
 
     def test_whatsapp_db_resolves_per_node_icon(self):
         from nodes._visuals import get_plugin_icon_path
+
         path = get_plugin_icon_path("whatsappDb")
         assert path is not None
         assert path.name == "icon_whatsappDb.svg"
@@ -197,6 +195,7 @@ class TestPerNodeTypeIconResolution:
         per-node icons aren't required when the brand mark is the
         same for both."""
         from nodes._visuals import get_plugin_icon_path
+
         path = get_plugin_icon_path("telegramSend")
         assert path is not None
         assert path.name == "icon.svg"

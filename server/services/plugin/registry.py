@@ -102,8 +102,7 @@ class IdempotentRegistry(Generic[K, V]):
         existing = self._items.get(key)
         if existing is not None and not self._values_equivalent(existing, value):
             raise ValueError(
-                f"{self._name}: {key!r} is already registered by "
-                f"{_qual(existing)}; refusing to overwrite with {_qual(value)}"
+                f"{self._name}: {key!r} is already registered by " f"{_qual(existing)}; refusing to overwrite with {_qual(value)}"
             )
         self._items[key] = value
         if self._on_register is not None:

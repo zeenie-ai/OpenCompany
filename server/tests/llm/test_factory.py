@@ -9,9 +9,16 @@ from services.llm.protocol import LLMProvider
 
 def test_native_providers_set():
     assert NATIVE_PROVIDERS == {
-        "anthropic", "openai", "gemini", "openrouter", "xai",
-        "deepseek", "kimi", "mistral",
-        "ollama", "lmstudio",
+        "anthropic",
+        "openai",
+        "gemini",
+        "openrouter",
+        "xai",
+        "deepseek",
+        "kimi",
+        "mistral",
+        "ollama",
+        "lmstudio",
     }
 
 
@@ -58,6 +65,7 @@ def test_create_xai_uses_openai_with_base_url():
 
 def test_create_unknown_raises():
     import pytest
+
     with pytest.raises(ValueError, match="Unknown provider"):
         create_provider("nonexistent", "key")
 

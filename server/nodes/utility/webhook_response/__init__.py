@@ -68,15 +68,20 @@ class WebhookResponseNode(ActionNode):
 
         body_text = body if isinstance(body, str) else json_module.dumps(body, default=str)
         log.info(
-            "[Webhook Response] Sending", node_id=ctx.node_id,
-            status_code=params.status_code, content_type=params.content_type,
+            "[Webhook Response] Sending",
+            node_id=ctx.node_id,
+            status_code=params.status_code,
+            content_type=params.content_type,
             body_length=len(body_text),
         )
-        resolve_webhook_response(ctx.node_id, {
-            "statusCode": params.status_code,
-            "body": body_text,
-            "contentType": params.content_type,
-        })
+        resolve_webhook_response(
+            ctx.node_id,
+            {
+                "statusCode": params.status_code,
+                "body": body_text,
+                "contentType": params.content_type,
+            },
+        )
         return {
             "sent": True,
             "statusCode": params.status_code,

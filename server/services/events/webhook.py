@@ -37,9 +37,7 @@ def register_webhook_source(source: "WebhookSource") -> None:
     """Idempotent: same instance for the same path is a no-op; conflicts raise."""
     existing = WEBHOOK_SOURCES.get(source.path)
     if existing is not None and existing is not source:
-        raise ValueError(
-            f"Webhook path {source.path!r} already registered to {type(existing).__name__}"
-        )
+        raise ValueError(f"Webhook path {source.path!r} already registered to {type(existing).__name__}")
     WEBHOOK_SOURCES[source.path] = source
 
 
@@ -101,5 +99,6 @@ class WebhookSource(PushEventSource):
         await self.receive(event)
 
         from services import event_waiter
+
         event_waiter.dispatch(self.type, event)
         return event

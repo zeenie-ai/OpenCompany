@@ -79,6 +79,7 @@ _MARKER_TOKEN = "cli-managed"
 
 async def _mark_logged_in() -> None:
     from services.plugin.deps import get_auth_service
+
     await get_auth_service().store_oauth_tokens(
         provider="stripe",
         access_token=_MARKER_TOKEN,
@@ -88,6 +89,7 @@ async def _mark_logged_in() -> None:
 
 async def _mark_logged_out() -> None:
     from services.plugin.deps import get_auth_service
+
     await get_auth_service().remove_oauth_tokens("stripe")
 
 
@@ -102,8 +104,10 @@ async def _broadcast_credential_event(event_type: str) -> None:
     helper's outer wire-format type) and invalidates the catalogue query.
     """
     from services.status_broadcaster import get_status_broadcaster
+
     await get_status_broadcaster().broadcast_credential_event(
-        event_type, provider="stripe",
+        event_type,
+        provider="stripe",
     )
 
 
@@ -130,12 +134,15 @@ async def handle_stripe_login(data: Dict[str, Any], websocket: WebSocket) -> Dic
         }
     logger.info("[Stripe] using binary: %s", binary)
     result = await run_cli_command(
-        binary=binary, argv=["login", "--non-interactive"], timeout=10.0,
+        binary=binary,
+        argv=["login", "--non-interactive"],
+        timeout=10.0,
     )
     if not result["success"]:
         logger.warning(
             "[Stripe] login step 1 CLI failure: %s | stderr=%r",
-            result.get("error"), (result.get("stderr") or "")[:300],
+            result.get("error"),
+            (result.get("stderr") or "")[:300],
         )
         return result
     try:
@@ -171,7 +178,8 @@ async def handle_stripe_login(data: Dict[str, Any], websocket: WebSocket) -> Dic
     logger.info(
         "[Stripe] login step 1 ok: code=%s, browser_url issued — opening on frontend; "
         "spawning step 2 (--complete) in background (timeout=%ss)",
-        info.get("verification_code"), _LOGIN_TIMEOUT_SECONDS,
+        info.get("verification_code"),
+        _LOGIN_TIMEOUT_SECONDS,
     )
     asyncio.create_task(_complete_login(binary, complete_url))
     return {
@@ -190,7 +198,8 @@ async def _complete_login(binary: str, next_step: str) -> None:
     logger.info("[Stripe] login step 2/2 polling for browser confirmation")
     try:
         result = await run_cli_command(
-            binary=binary, argv=["login", "--complete", next_step],
+            binary=binary,
+            argv=["login", "--complete", next_step],
             timeout=_LOGIN_TIMEOUT_SECONDS,
         )
     except Exception as e:
@@ -202,7 +211,8 @@ async def _complete_login(binary: str, next_step: str) -> None:
     if not result.get("success"):
         logger.warning(
             "[Stripe] login step 2 CLI failure: %s | stderr=%r",
-            result.get("error"), (result.get("stderr") or "")[:300],
+            result.get("error"),
+            (result.get("stderr") or "")[:300],
         )
 
     if not is_logged_in():
@@ -245,7 +255,8 @@ async def handle_stripe_logout(data: Dict[str, Any], websocket: WebSocket) -> Di
         result = await run_cli_command(binary=str(cached), argv=["logout", "--all"], timeout=10.0)
         logger.info(
             "[Stripe] logout CLI result: success=%s err=%s",
-            result.get("success"), result.get("error"),
+            result.get("success"),
+            result.get("error"),
         )
     await _mark_logged_out()
     await _broadcast_credential_event("credential.oauth.disconnected")

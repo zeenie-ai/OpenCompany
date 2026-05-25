@@ -30,8 +30,7 @@ def register_supervisor(supervisor: BaseSupervisor) -> None:
         return
     if existing is not None:
         raise ValueError(
-            f"Supervisor label '{label}' already registered "
-            f"({existing.__class__.__name__} vs {supervisor.__class__.__name__})"
+            f"Supervisor label '{label}' already registered " f"({existing.__class__.__name__} vs {supervisor.__class__.__name__})"
         )
     _SUPERVISORS[label] = supervisor
 
@@ -54,7 +53,8 @@ async def shutdown_all_supervisors() -> None:
         except Exception as exc:
             logger.warning(
                 "[supervisor] %s shutdown failed: %s",
-                supervisor.label, exc,
+                supervisor.label,
+                exc,
             )
 
 

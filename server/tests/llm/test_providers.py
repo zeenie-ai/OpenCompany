@@ -15,12 +15,13 @@ from services.llm.protocol import Message, ThinkingConfig, ToolCall, ToolDef
 # Anthropic: message formatting + response normalization
 # ---------------------------------------------------------------------------
 
-class TestAnthropicProvider:
 
+class TestAnthropicProvider:
     @pytest.fixture
     def provider(self):
         with patch("anthropic.AsyncAnthropic"):
             from services.llm.providers.anthropic import AnthropicProvider
+
             return AnthropicProvider("sk-test")
 
     def test_system_extracted_from_messages(self, provider):
@@ -49,8 +50,7 @@ class TestAnthropicProvider:
     def test_normalize_text_response(self, provider):
         resp = MagicMock()
         resp.content = [MagicMock(type="text", text="Hello")]
-        resp.usage = MagicMock(input_tokens=10, output_tokens=5,
-                               cache_creation_input_tokens=0, cache_read_input_tokens=0)
+        resp.usage = MagicMock(input_tokens=10, output_tokens=5, cache_creation_input_tokens=0, cache_read_input_tokens=0)
         resp.stop_reason = "end_turn"
 
         result = provider._normalize(resp, "claude-sonnet-4-6")
@@ -63,8 +63,7 @@ class TestAnthropicProvider:
         thinking_block = MagicMock(type="thinking", thinking="Let me think...")
         text_block = MagicMock(type="text", text="Answer")
         resp.content = [thinking_block, text_block]
-        resp.usage = MagicMock(input_tokens=50, output_tokens=30,
-                               cache_creation_input_tokens=0, cache_read_input_tokens=0)
+        resp.usage = MagicMock(input_tokens=50, output_tokens=30, cache_creation_input_tokens=0, cache_read_input_tokens=0)
         resp.stop_reason = "end_turn"
 
         result = provider._normalize(resp, "claude-sonnet-4-6")
@@ -76,15 +75,15 @@ class TestAnthropicProvider:
         """When thinking enabled, budget_tokens and temperature=1 are set."""
         mock_resp = MagicMock()
         mock_resp.content = [MagicMock(type="text", text="ok")]
-        mock_resp.usage = MagicMock(input_tokens=5, output_tokens=2,
-                                    cache_creation_input_tokens=0, cache_read_input_tokens=0)
+        mock_resp.usage = MagicMock(input_tokens=5, output_tokens=2, cache_creation_input_tokens=0, cache_read_input_tokens=0)
         mock_resp.stop_reason = "end_turn"
         provider._client.messages.create = AsyncMock(return_value=mock_resp)
 
         thinking = ThinkingConfig(enabled=True, budget=4096)
         await provider.chat(
             [Message(role="user", content="test")],
-            model="claude-sonnet-4-6", thinking=thinking,
+            model="claude-sonnet-4-6",
+            thinking=thinking,
         )
 
         call_kwargs = provider._client.messages.create.call_args[1]
@@ -96,12 +95,13 @@ class TestAnthropicProvider:
 # OpenAI: message formatting + response normalization
 # ---------------------------------------------------------------------------
 
-class TestOpenAIProvider:
 
+class TestOpenAIProvider:
     @pytest.fixture
     def provider(self):
         with patch("openai.AsyncOpenAI"):
             from services.llm.providers.openai import OpenAIProvider
+
             return OpenAIProvider("sk-test")
 
     def test_user_message_format(self, provider):
@@ -133,8 +133,7 @@ class TestOpenAIProvider:
 
         resp = MagicMock()
         resp.choices = [choice]
-        resp.usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15,
-                               completion_tokens_details=None)
+        resp.usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15, completion_tokens_details=None)
 
         result = provider._normalize(resp, "gpt-5.2")
         assert result.content == "Hello"
@@ -150,8 +149,9 @@ class TestOpenAIProvider:
 
         resp = MagicMock()
         resp.choices = [choice]
-        resp.usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15,
-                               completion_tokens_details=MagicMock(reasoning_tokens=20))
+        resp.usage = MagicMock(
+            prompt_tokens=10, completion_tokens=5, total_tokens=15, completion_tokens_details=MagicMock(reasoning_tokens=20)
+        )
 
         result = provider._normalize(resp, "o3-mini")
         assert result.thinking == "Thinking..."
@@ -160,12 +160,8 @@ class TestOpenAIProvider:
     @pytest.mark.asyncio
     async def test_chat_reasoning_model_uses_max_completion_tokens(self, provider):
         mock_resp = MagicMock()
-        mock_resp.choices = [MagicMock(
-            message=MagicMock(content="ok", reasoning_content=None, tool_calls=None),
-            finish_reason="stop"
-        )]
-        mock_resp.usage = MagicMock(prompt_tokens=5, completion_tokens=2, total_tokens=7,
-                                    completion_tokens_details=None)
+        mock_resp.choices = [MagicMock(message=MagicMock(content="ok", reasoning_content=None, tool_calls=None), finish_reason="stop")]
+        mock_resp.usage = MagicMock(prompt_tokens=5, completion_tokens=2, total_tokens=7, completion_tokens_details=None)
         provider._client.chat.completions.create = AsyncMock(return_value=mock_resp)
 
         await provider.chat(
@@ -182,12 +178,13 @@ class TestOpenAIProvider:
 # Gemini: message formatting + thinking config
 # ---------------------------------------------------------------------------
 
-class TestGeminiProvider:
 
+class TestGeminiProvider:
     @pytest.fixture
     def provider(self):
         with patch("google.genai.Client"):
             from services.llm.providers.gemini import GeminiProvider
+
             return GeminiProvider("key")
 
     def test_split_system_and_contents(self, provider):
@@ -218,9 +215,7 @@ class TestGeminiProvider:
 
         resp = MagicMock()
         resp.candidates = [candidate]
-        resp.usage_metadata = MagicMock(
-            prompt_token_count=10, candidates_token_count=5, total_token_count=15
-        )
+        resp.usage_metadata = MagicMock(prompt_token_count=10, candidates_token_count=5, total_token_count=15)
 
         result = provider._normalize(resp, "gemini-2.5-flash")
         assert result.content == "Hello"
@@ -255,7 +250,8 @@ class TestGeminiProvider:
             thinking = ThinkingConfig(enabled=True, budget=4096, level="high")
             await provider.chat(
                 [Message(role="user", content="test")],
-                model="gemini-2.5-flash", thinking=thinking,
+                model="gemini-2.5-flash",
+                thinking=thinking,
             )
 
         call_kwargs = mock_types.ThinkingConfig.call_args[1]
@@ -284,23 +280,20 @@ class TestGeminiProvider:
 # OpenRouter: [FREE] prefix handling
 # ---------------------------------------------------------------------------
 
-class TestOpenRouterProvider:
 
+class TestOpenRouterProvider:
     @pytest.fixture
     def provider(self):
         with patch("openai.AsyncOpenAI"):
             from services.llm.providers.openrouter import OpenRouterProvider
+
             return OpenRouterProvider("or-key")
 
     @pytest.mark.asyncio
     async def test_strips_free_prefix(self, provider):
         mock_resp = MagicMock()
-        mock_resp.choices = [MagicMock(
-            message=MagicMock(content="ok", reasoning_content=None, tool_calls=None),
-            finish_reason="stop"
-        )]
-        mock_resp.usage = MagicMock(prompt_tokens=5, completion_tokens=2, total_tokens=7,
-                                    completion_tokens_details=None)
+        mock_resp.choices = [MagicMock(message=MagicMock(content="ok", reasoning_content=None, tool_calls=None), finish_reason="stop")]
+        mock_resp.usage = MagicMock(prompt_tokens=5, completion_tokens=2, total_tokens=7, completion_tokens_details=None)
         provider._client.chat.completions.create = AsyncMock(return_value=mock_resp)
 
         await provider.chat(

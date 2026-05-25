@@ -35,12 +35,12 @@ _RELEASE_BASE = f"https://github.com/stripe/stripe-cli/releases/download/v{_VERS
 
 # (system, machine) → (asset filename, archive type, member name to extract)
 _ASSETS: dict[Tuple[str, str], Tuple[str, str, str]] = {
-    ("Windows", "AMD64"):  (f"stripe_{_VERSION}_windows_x86_64.zip", "zip", "stripe.exe"),
-    ("Linux",   "x86_64"): (f"stripe_{_VERSION}_linux_x86_64.tar.gz", "tar", "stripe"),
-    ("Linux",   "aarch64"): (f"stripe_{_VERSION}_linux_arm64.tar.gz", "tar", "stripe"),
-    ("Linux",   "arm64"):  (f"stripe_{_VERSION}_linux_arm64.tar.gz", "tar", "stripe"),
-    ("Darwin",  "x86_64"): (f"stripe_{_VERSION}_mac-os_x86_64.tar.gz", "tar", "stripe"),
-    ("Darwin",  "arm64"):  (f"stripe_{_VERSION}_mac-os_arm64.tar.gz", "tar", "stripe"),
+    ("Windows", "AMD64"): (f"stripe_{_VERSION}_windows_x86_64.zip", "zip", "stripe.exe"),
+    ("Linux", "x86_64"): (f"stripe_{_VERSION}_linux_x86_64.tar.gz", "tar", "stripe"),
+    ("Linux", "aarch64"): (f"stripe_{_VERSION}_linux_arm64.tar.gz", "tar", "stripe"),
+    ("Linux", "arm64"): (f"stripe_{_VERSION}_linux_arm64.tar.gz", "tar", "stripe"),
+    ("Darwin", "x86_64"): (f"stripe_{_VERSION}_mac-os_x86_64.tar.gz", "tar", "stripe"),
+    ("Darwin", "arm64"): (f"stripe_{_VERSION}_mac-os_arm64.tar.gz", "tar", "stripe"),
 }
 
 
@@ -50,6 +50,7 @@ _install_lock = asyncio.Lock()
 
 def _bin_dir() -> Path:
     from core.paths import package_dir
+
     p = package_dir("stripe") / "bin"
     p.mkdir(parents=True, exist_ok=True)
     return p
@@ -100,10 +101,7 @@ async def _download_release(target: Path) -> None:
     key = (platform.system(), platform.machine())
     asset = _ASSETS.get(key)
     if asset is None:
-        raise RuntimeError(
-            f"No prebuilt Stripe CLI for {key}. Install manually from "
-            "https://stripe.com/docs/stripe-cli#install"
-        )
+        raise RuntimeError(f"No prebuilt Stripe CLI for {key}. Install manually from " "https://stripe.com/docs/stripe-cli#install")
     asset_name, kind, member = asset
     url = f"{_RELEASE_BASE}/{asset_name}"
     logger.info("[Stripe] downloading CLI v%s from %s", _VERSION, url)

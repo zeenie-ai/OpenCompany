@@ -78,8 +78,7 @@ async def emit(
     """
     if not Settings().event_framework_enabled:
         logger.debug(
-            f"event-framework disabled — emit no-op for event.id={event.id} "
-            f"type={event.type}",
+            f"event-framework disabled — emit no-op for event.id={event.id} " f"type={event.type}",
         )
         return event
 
@@ -113,8 +112,7 @@ async def _signal_running_consumers(event: WorkflowEvent) -> None:
 
     if wrapper is None or wrapper.client is None:
         logger.debug(
-            f"emit: Temporal not connected — skipping consumer fan-out for "
-            f"event.id={event.id}",
+            f"emit: Temporal not connected — skipping consumer fan-out for " f"event.id={event.id}",
         )
         return
 
@@ -126,15 +124,12 @@ async def _signal_running_consumers(event: WorkflowEvent) -> None:
         async for wf in client.list_workflows(query=query):
             consumers.append(wf)
     except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            f"emit: Visibility query failed (query={query!r}): {exc}"
-        )
+        logger.warning(f"emit: Visibility query failed (query={query!r}): {exc}")
         return
 
     if not consumers:
         logger.debug(
-            f"emit: 0 consumers for event.type={event.type!r} "
-            f"(event.id={event.id})",
+            f"emit: 0 consumers for event.type={event.type!r} " f"(event.id={event.id})",
         )
         return
 
@@ -142,18 +137,14 @@ async def _signal_running_consumers(event: WorkflowEvent) -> None:
     # block other consumers (return_exceptions=True surfaces failures
     # as exceptions in the result list).
     signal_results = await asyncio.gather(
-        *[
-            _signal_one(client, wf.id, event)
-            for wf in consumers
-        ],
+        *[_signal_one(client, wf.id, event) for wf in consumers],
         return_exceptions=True,
     )
 
     delivered = sum(1 for r in signal_results if not isinstance(r, Exception))
     failed = len(signal_results) - delivered
     logger.info(
-        f"emit: signalled {delivered}/{len(consumers)} consumers for "
-        f"event.type={event.type!r} (failed={failed}, event.id={event.id})",
+        f"emit: signalled {delivered}/{len(consumers)} consumers for " f"event.type={event.type!r} (failed={failed}, event.id={event.id})",
     )
 
 
@@ -184,14 +175,14 @@ async def _broadcast_in_process(event: WorkflowEvent, wire_routing_key: str) -> 
         return
 
     try:
-        await broadcaster.broadcast({
-            "type": wire_routing_key,
-            "data": event.model_dump(mode="json"),
-        })
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            f"emit: WS broadcast failed (wire_key={wire_routing_key!r}): {exc}"
+        await broadcaster.broadcast(
+            {
+                "type": wire_routing_key,
+                "data": event.model_dump(mode="json"),
+            }
         )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"emit: WS broadcast failed (wire_key={wire_routing_key!r}): {exc}")
 
 
 __all__ = ["emit"]

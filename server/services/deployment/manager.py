@@ -81,11 +81,7 @@ class DeploymentManager:
         self._cron_iterations: Dict[str, int] = {}  # node_id -> iteration count
         self._main_loop: Optional[asyncio.AbstractEventLoop] = None
 
-        self._settings = {
-            "stop_on_error": False,
-            "max_concurrent_runs": 100,
-            "use_parallel_executor": True
-        }
+        self._settings = {"stop_on_error": False, "max_concurrent_runs": 100, "use_parallel_executor": True}
 
     @property
     def is_running(self) -> bool:
@@ -132,7 +128,7 @@ class DeploymentManager:
                 "success": False,
                 "error": f"Workflow {workflow_id} is already deployed",
                 "workflow_id": workflow_id,
-                "deployment_id": self._deployments[workflow_id].deployment_id
+                "deployment_id": self._deployments[workflow_id].deployment_id,
             }
 
         # Setup
@@ -163,7 +159,7 @@ class DeploymentManager:
             nodes=nodes,
             edges=edges,
             session_id=session_id,
-            settings=self._settings.copy()
+            settings=self._settings.copy(),
         )
 
         logger.info("Deployment starting", deployment_id=deployment_id, workflow_id=workflow_id, nodes=len(nodes))
@@ -190,18 +186,16 @@ class DeploymentManager:
                 triggers_setup.append(info.to_dict())
 
             # Notify started
-            await self._notify("started", {
-                "deployment_id": deployment_id,
-                "workflow_id": workflow_id,
-                "triggers": triggers_setup
-            }, workflow_id)
+            await self._notify(
+                "started", {"deployment_id": deployment_id, "workflow_id": workflow_id, "triggers": triggers_setup}, workflow_id
+            )
 
             return {
                 "success": True,
                 "deployment_id": deployment_id,
                 "workflow_id": workflow_id,
                 "message": "Workflow deployed",
-                "triggers_setup": triggers_setup
+                "triggers_setup": triggers_setup,
             }
 
         except Exception as e:
@@ -271,7 +265,7 @@ class DeploymentManager:
         # Cancel event waiters for nodes in this workflow
         waiter_count = 0
         for node in state.nodes:
-            waiter_count += event_waiter.cancel_for_node(node['id'])
+            waiter_count += event_waiter.cancel_for_node(node["id"])
 
         # Wave 12 C1 canary: cancel Temporal-durable listeners for this
         # deployment. Visibility-query-based; no local handle dict.
@@ -294,7 +288,8 @@ class DeploymentManager:
         # delegation guard inside ``_clear_stuck_node_statuses`` still
         # protects in-flight fire-and-forget child agents.
         await self._broadcaster._clear_stuck_node_statuses(
-            workflow_id, include_waiting=True,
+            workflow_id,
+            include_waiting=True,
         )
 
         # And broadcast a final ``executing=False`` for the deployment
@@ -305,7 +300,8 @@ class DeploymentManager:
         # the terminal state directly to avoid a stuck ``executing=True``
         # on the FE toolbar.
         await self._broadcaster.update_workflow_status(
-            executing=False, workflow_id=workflow_id,
+            executing=False,
+            workflow_id=workflow_id,
         )
 
         # Clear cron iteration counters for this workflow's cron nodes
@@ -329,7 +325,7 @@ class DeploymentManager:
             "waiters_cancelled": waiter_count,
             "canary_listeners_cancelled": canary_count,
             "canary_cron_schedules_cancelled": cron_schedule_count,
-            "cancelled_listener_node_ids": listener_nodes
+            "cancelled_listener_node_ids": listener_nodes,
         }
 
     def get_status(self, workflow_id: Optional[str] = None) -> Dict[str, Any]:
@@ -353,7 +349,7 @@ class DeploymentManager:
                 "active_runs": len(execution_runs),
                 "active_listeners": len(workflow_runs) - len(execution_runs),
                 "run_counter": self._run_counters.get(workflow_id, 0),
-                "deployed_at": state.deployed_at
+                "deployed_at": state.deployed_at,
             }
 
         # Global status (backward compatibility)
@@ -380,7 +376,7 @@ class DeploymentManager:
             "deployed_workflows": deployed_workflows,
             "active_runs": total_runs,
             "active_listeners": total_listeners,
-            "run_counter": total_run_counter
+            "run_counter": total_run_counter,
         }
 
     # =========================================================================
@@ -401,31 +397,38 @@ class DeploymentManager:
            in-process tick callback. Dies on process restart — kept as
            the default while the canary stabilises.
         """
-        node_id = node['id']
-        node_type = node.get('type', 'cronScheduler')
+        node_id = node["id"]
+        node_type = node.get("type", "cronScheduler")
         params = await self.database.get_node_parameters(node_id) or {}
 
         cron_expr = TriggerManager.build_cron_expression(params)
-        timezone = params.get('timezone', 'UTC')
-        frequency = params.get('frequency', 'minutes')
+        timezone = params.get("timezone", "UTC")
+        frequency = params.get("frequency", "minutes")
         schedule_desc = self._get_schedule_description(params)
 
         # Path 1: Wave 12 C3 canary — Temporal Schedule.
         if await self._canary_listener_enabled_for(node_type):
             schedule_id = await self._start_canary_cron_schedule(
-                node, workflow_id, params,
+                node,
+                workflow_id,
+                params,
                 cron_expr=cron_expr,
                 timezone=timezone,
                 frequency=frequency,
                 schedule_desc=schedule_desc,
             )
             if schedule_id is not None:
-                await self._broadcaster.update_node_status(node_id, "waiting", {
-                    "message": f"Waiting for schedule: {cron_expr} (Temporal-durable)",
-                    "cron_expression": cron_expr,
-                    "timezone": timezone,
-                    "schedule_id": schedule_id,
-                }, workflow_id=workflow_id)
+                await self._broadcaster.update_node_status(
+                    node_id,
+                    "waiting",
+                    {
+                        "message": f"Waiting for schedule: {cron_expr} (Temporal-durable)",
+                        "cron_expression": cron_expr,
+                        "timezone": timezone,
+                        "schedule_id": schedule_id,
+                    },
+                    workflow_id=workflow_id,
+                )
                 return TriggerInfo(node_id, "cron", job_id=schedule_id)
             # Fall through to legacy path if Temporal unavailable
             # (already logged inside _start_canary_cron_schedule).
@@ -440,22 +443,19 @@ class DeploymentManager:
                 iteration = self._cron_iterations[node_id]
 
                 trigger_data = {
-                    'node_id': node_id,
-                    'timestamp': datetime.now().isoformat(),
-                    'trigger_type': 'cron',
-                    'event_data': {
-                        'timestamp': datetime.now().isoformat(),
-                        'iteration': iteration,
-                        'frequency': frequency,
-                        'timezone': timezone,
-                        'schedule': schedule_desc,
-                        'cron_expression': cron_expr
-                    }
+                    "node_id": node_id,
+                    "timestamp": datetime.now().isoformat(),
+                    "trigger_type": "cron",
+                    "event_data": {
+                        "timestamp": datetime.now().isoformat(),
+                        "iteration": iteration,
+                        "frequency": frequency,
+                        "timezone": timezone,
+                        "schedule": schedule_desc,
+                        "cron_expression": cron_expr,
+                    },
                 }
-                asyncio.run_coroutine_threadsafe(
-                    self._spawn_run(node_id, trigger_data, workflow_id=workflow_id),
-                    self._main_loop
-                )
+                asyncio.run_coroutine_threadsafe(self._spawn_run(node_id, trigger_data, workflow_id=workflow_id), self._main_loop)
 
         trigger_manager = self._trigger_managers.get(workflow_id)
         if not trigger_manager:
@@ -464,32 +464,27 @@ class DeploymentManager:
         job_id = trigger_manager.setup_cron(node_id, cron_expr, timezone, on_tick)
 
         # Broadcast waiting status for cron trigger (like event triggers do)
-        await self._broadcaster.update_node_status(node_id, "waiting", {
-            "message": f"Waiting for schedule: {cron_expr}",
-            "cron_expression": cron_expr,
-            "timezone": timezone,
-            "job_id": job_id
-        }, workflow_id=workflow_id)
+        await self._broadcaster.update_node_status(
+            node_id,
+            "waiting",
+            {"message": f"Waiting for schedule: {cron_expr}", "cron_expression": cron_expr, "timezone": timezone, "job_id": job_id},
+            workflow_id=workflow_id,
+        )
 
         return TriggerInfo(node_id, "cron", job_id=job_id)
 
     async def _fire_start_trigger(self, node: Dict, workflow_id: str) -> TriggerInfo:
         """Fire a start trigger immediately."""
-        node_id = node['id']
+        node_id = node["id"]
         params = await self.database.get_node_parameters(node_id) or {}
 
-        initial_data_str = params.get('initial_data', '{}')
+        initial_data_str = params.get("initial_data", "{}")
         try:
             initial_data = json.loads(initial_data_str) if initial_data_str else {}
         except json.JSONDecodeError:
             initial_data = {}
 
-        trigger_data = {
-            'node_id': node_id,
-            'timestamp': datetime.now().isoformat(),
-            'trigger_type': 'start',
-            'event_data': initial_data
-        }
+        trigger_data = {"node_id": node_id, "timestamp": datetime.now().isoformat(), "trigger_type": "start", "event_data": initial_data}
 
         await self._spawn_run(node_id, trigger_data, workflow_id=workflow_id)
         return TriggerInfo(node_id, "start", fired=True)
@@ -514,8 +509,8 @@ class DeploymentManager:
            restart — pre-Wave-12 behaviour, kept for triggers not yet
            on the canary list.
         """
-        node_id = node['id']
-        node_type = node.get('type', '')
+        node_id = node["id"]
+        node_type = node.get("type", "")
         params = await self.database.get_node_parameters(node_id) or {}
 
         # Path 1: Wave 12 C1 canary — Temporal-durable listener.
@@ -528,10 +523,10 @@ class DeploymentManager:
 
         async def on_event(event_data: Dict):
             trigger_data = {
-                'node_id': node_id,
-                'timestamp': datetime.now().isoformat(),
-                'trigger_type': node_type,
-                'event_data': event_data
+                "node_id": node_id,
+                "timestamp": datetime.now().isoformat(),
+                "trigger_type": node_type,
+                "event_data": event_data,
             }
             await self._spawn_run(node_id, trigger_data, wait=True, workflow_id=workflow_id)
 
@@ -552,17 +547,13 @@ class DeploymentManager:
             if factory is not None:
                 poll_coroutine = factory(node_id, params)
                 await trigger_manager.setup_polling_trigger(
-                    node_id, node_type, params, poll_coroutine, on_event,
-                    self._broadcaster, workflow_id=workflow_id
+                    node_id, node_type, params, poll_coroutine, on_event, self._broadcaster, workflow_id=workflow_id
                 )
                 return TriggerInfo(node_id, node_type)
             # Fall through to event_waiter if no polling factory registered
             logger.warning("No polling factory registered for trigger", node_type=node_type)
 
-        await trigger_manager.setup_event_trigger(
-            node_id, node_type, params, on_event, self._broadcaster,
-            workflow_id=workflow_id
-        )
+        await trigger_manager.setup_event_trigger(node_id, node_type, params, on_event, self._broadcaster, workflow_id=workflow_id)
         return TriggerInfo(node_id, node_type)
 
     # =========================================================================
@@ -690,9 +681,10 @@ class DeploymentManager:
         wrapper = container.temporal_client()
         if wrapper is None or wrapper.client is None:
             logger.warning(
-                "Canary listener requested but Temporal not connected; "
-                "falling back to legacy collector/processor path",
-                node_id=node_id, workflow_id=workflow_id, node_type=node_type,
+                "Canary listener requested but Temporal not connected; " "falling back to legacy collector/processor path",
+                node_id=node_id,
+                workflow_id=workflow_id,
+                node_type=node_type,
             )
             return None
 
@@ -727,7 +719,9 @@ class DeploymentManager:
                 "falling back to legacy event_type for EventType SA. This will "
                 "silently fail dispatch.emit fan-out — register cloudevent_type "
                 "in the plugin's __init__.py.",
-                node_id=node_id, workflow_id=workflow_id, node_type=node_type,
+                node_id=node_id,
+                workflow_id=workflow_id,
+                node_type=node_type,
             )
             cloudevent_type = event_type
 
@@ -735,10 +729,7 @@ class DeploymentManager:
         # the "polling" classification for ops dashboards independent
         # of the per-plugin kind (gmail / twitter / ...).
         is_polling = self._is_polling_trigger_class(node_type)
-        workflow_type_name = (
-            _POLLING_LISTENER_WORKFLOW_TYPE if is_polling
-            else _PUSH_LISTENER_WORKFLOW_TYPE
-        )
+        workflow_type_name = _POLLING_LISTENER_WORKFLOW_TYPE if is_polling else _PUSH_LISTENER_WORKFLOW_TYPE
         trigger_kind = "polling" if is_polling else self._trigger_kind_for(node_type)
 
         listener_id = self._listener_workflow_id(workflow_id, node_id)
@@ -782,20 +773,23 @@ class DeploymentManager:
             id=listener_id,
             task_queue="machina-tasks",
             id_conflict_policy=WorkflowIDConflictPolicy.USE_EXISTING,
-            search_attributes=TypedSearchAttributes([
-                # MUST be the CloudEvents type the producer emits on
-                # outgoing envelopes — dispatch.emit's Visibility query
-                # substitutes ``event.type`` into the EventType filter.
-                SearchAttributePair(event_type_key, cloudevent_type),
-                SearchAttributePair(trigger_node_id_key, node_id),
-                SearchAttributePair(event_workflow_id_key, workflow_id),
-                SearchAttributePair(event_trigger_kind_key, trigger_kind),
-            ]),
+            search_attributes=TypedSearchAttributes(
+                [
+                    # MUST be the CloudEvents type the producer emits on
+                    # outgoing envelopes — dispatch.emit's Visibility query
+                    # substitutes ``event.type`` into the EventType filter.
+                    SearchAttributePair(event_type_key, cloudevent_type),
+                    SearchAttributePair(trigger_node_id_key, node_id),
+                    SearchAttributePair(event_workflow_id_key, workflow_id),
+                    SearchAttributePair(event_trigger_kind_key, trigger_kind),
+                ]
+            ),
         )
 
         # Broadcast waiting status (parity with legacy path).
         await self._broadcaster.update_node_status(
-            node_id, "waiting",
+            node_id,
+            "waiting",
             {
                 "message": f"Waiting for {config.display_name if config else node_type} (Temporal-durable)...",
                 "event_type": event_type,
@@ -832,7 +826,8 @@ class DeploymentManager:
             return 0
 
         return await delete_cron_schedules_for_deployment(
-            wrapper.client, workflow_id,
+            wrapper.client,
+            workflow_id,
         )
 
     async def _start_canary_cron_schedule(
@@ -864,9 +859,9 @@ class DeploymentManager:
         wrapper = container.temporal_client()
         if wrapper is None or wrapper.client is None:
             logger.warning(
-                "Canary cron Schedule requested but Temporal not connected; "
-                "falling back to APScheduler",
-                node_id=node_id, workflow_id=workflow_id,
+                "Canary cron Schedule requested but Temporal not connected; " "falling back to APScheduler",
+                node_id=node_id,
+                workflow_id=workflow_id,
             )
             return None
 
@@ -931,11 +926,7 @@ class DeploymentManager:
         # (TriggerListenerWorkflow) and polling (PollingTriggerWorkflow)
         # listeners drain in one sweep.
         wf_types_in = ", ".join(f"'{t}'" for t in _LISTENER_WORKFLOW_TYPES)
-        query = (
-            f"EventWorkflowId='{workflow_id}' "
-            f"AND WorkflowType IN ({wf_types_in}) "
-            f"AND ExecutionStatus='Running'"
-        )
+        query = f"EventWorkflowId='{workflow_id}' " f"AND WorkflowType IN ({wf_types_in}) " f"AND ExecutionStatus='Running'"
 
         cancelled = 0
         try:
@@ -951,8 +942,7 @@ class DeploymentManager:
                     )
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                f"Visibility query for canary listeners failed: {exc} "
-                f"(query={query!r})",
+                f"Visibility query for canary listeners failed: {exc} " f"(query={query!r})",
                 workflow_id=workflow_id,
             )
 
@@ -969,17 +959,13 @@ class DeploymentManager:
     # =========================================================================
 
     async def _spawn_run(
-        self,
-        trigger_node_id: str,
-        trigger_data: Dict[str, Any],
-        wait: bool = False,
-        workflow_id: Optional[str] = None
+        self, trigger_node_id: str, trigger_data: Dict[str, Any], wait: bool = False, workflow_id: Optional[str] = None
     ) -> Optional[asyncio.Task]:
         """Spawn a new execution run for a specific workflow."""
         if not workflow_id:
             # Backward compatibility: find workflow for this trigger node
             for wid, state in self._deployments.items():
-                if state.is_running and any(n['id'] == trigger_node_id for n in state.nodes):
+                if state.is_running and any(n["id"] == trigger_node_id for n in state.nodes):
                     workflow_id = wid
                     break
 
@@ -1000,24 +986,25 @@ class DeploymentManager:
         self._run_counters[workflow_id] = self._run_counters.get(workflow_id, 0) + 1
         run_id = f"run_{state.deployment_id}_{self._run_counters[workflow_id]}"
 
-        await self._notify("run_started", {
-            "run_id": run_id,
-            "workflow_id": workflow_id,
-            "trigger_node_id": trigger_node_id,
-            "active_runs": active_count + 1
-        }, workflow_id)
+        await self._notify(
+            "run_started",
+            {"run_id": run_id, "workflow_id": workflow_id, "trigger_node_id": trigger_node_id, "active_runs": active_count + 1},
+            workflow_id,
+        )
 
         async def execute():
             try:
-                result = await self._execute_from_trigger(
-                    run_id, trigger_node_id, trigger_data, workflow_id
+                result = await self._execute_from_trigger(run_id, trigger_node_id, trigger_data, workflow_id)
+                await self._notify(
+                    "run_completed",
+                    {
+                        "run_id": run_id,
+                        "workflow_id": workflow_id,
+                        "success": result.get("success", False),
+                        "execution_time": result.get("execution_time"),
+                    },
+                    workflow_id,
                 )
-                await self._notify("run_completed", {
-                    "run_id": run_id,
-                    "workflow_id": workflow_id,
-                    "success": result.get("success", False),
-                    "execution_time": result.get("execution_time")
-                }, workflow_id)
             except asyncio.CancelledError:
                 logger.debug("Run cancelled", run_id=run_id, workflow_id=workflow_id)
             except Exception as e:
@@ -1042,11 +1029,7 @@ class DeploymentManager:
         return task
 
     async def _execute_from_trigger(
-        self,
-        run_id: str,
-        trigger_node_id: str,
-        trigger_data: Dict[str, Any],
-        workflow_id: str
+        self, run_id: str, trigger_node_id: str, trigger_data: Dict[str, Any], workflow_id: str
     ) -> Dict[str, Any]:
         """Execute workflow from a trigger node."""
         state = self._deployments.get(workflow_id)
@@ -1057,15 +1040,11 @@ class DeploymentManager:
         run_session_id = f"{state.session_id}_{run_id}"
 
         # Store trigger output
-        trigger_output = trigger_data.get('event_data', trigger_data)
+        trigger_output = trigger_data.get("event_data", trigger_data)
         await self._store_output(run_session_id, trigger_node_id, "output_0", trigger_output)
 
         # Get downstream nodes
-        downstream = self._get_downstream_nodes(
-            trigger_node_id,
-            state.nodes,
-            state.edges
-        )
+        downstream = self._get_downstream_nodes(trigger_node_id, state.nodes, state.edges)
 
         if not downstream:
             return {
@@ -1074,33 +1053,30 @@ class DeploymentManager:
                 "workflow_id": workflow_id,
                 "nodes_executed": [trigger_node_id],
                 "execution_time": time.time() - start_time,
-                "message": "No downstream nodes"
+                "message": "No downstream nodes",
             }
 
         # Build filtered graph
-        run_filter = {trigger_node_id} | {n['id'] for n in downstream}
+        run_filter = {trigger_node_id} | {n["id"] for n in downstream}
         logger.debug(f"[Run] run_filter has {len(run_filter)} nodes")
 
         filtered_nodes = []
         for node in state.nodes:
-            if node['id'] not in run_filter:
+            if node["id"] not in run_filter:
                 continue
             node_copy = node.copy()
-            node_type = node.get('type', '')
-            if node['id'] == trigger_node_id:
-                node_copy['_pre_executed'] = True
-                node_copy['_trigger_output'] = trigger_output
+            node_type = node.get("type", "")
+            if node["id"] == trigger_node_id:
+                node_copy["_pre_executed"] = True
+                node_copy["_trigger_output"] = trigger_output
             elif node_type in WORKFLOW_TRIGGER_TYPES:
                 # Non-firing triggers: pre-execute to prevent blocking as event waiters
-                node_copy['_pre_executed'] = True
-                node_copy['_trigger_output'] = {'not_triggered': True}
+                node_copy["_pre_executed"] = True
+                node_copy["_trigger_output"] = {"not_triggered": True}
                 logger.debug(f"[Run] Marking non-firing trigger as pre-executed: {node['id']} ({node_type})")
             filtered_nodes.append(node_copy)
 
-        filtered_edges = [
-            e for e in state.edges
-            if e.get('source') in run_filter and e.get('target') in run_filter
-        ]
+        filtered_edges = [e for e in state.edges if e.get("source") in run_filter and e.get("target") in run_filter]
         logger.debug(f"[Run] filtered_edges: {len(filtered_edges)} edges")
 
         # Execute filtered graph with deployment's workflow_id for scoped status
@@ -1121,26 +1097,21 @@ class DeploymentManager:
         result["trigger_node_id"] = trigger_node_id
         return result
 
-    def _get_downstream_nodes(
-        self,
-        node_id: str,
-        nodes: List[Dict],
-        edges: List[Dict]
-    ) -> List[Dict]:
+    def _get_downstream_nodes(self, node_id: str, nodes: List[Dict], edges: List[Dict]) -> List[Dict]:
         """Get all downstream nodes from a trigger."""
         downstream_ids = set()
-        node_types = {n['id']: n.get('type', '') for n in nodes}
-        nodes_with_inputs = {e.get('target') for e in edges if e.get('target')}
+        node_types = {n["id"]: n.get("type", "") for n in nodes}
+        nodes_with_inputs = {e.get("target") for e in edges if e.get("target")}
 
         def collect(current_id: str):
             for edge in edges:
-                if edge.get('source') != current_id:
+                if edge.get("source") != current_id:
                     continue
-                target_id = edge.get('target')
+                target_id = edge.get("target")
                 if not target_id or target_id in downstream_ids:
                     continue
 
-                target_type = node_types.get(target_id, '')
+                target_type = node_types.get(target_id, "")
                 is_trigger = target_type in WORKFLOW_TRIGGER_TYPES
 
                 # Stop at trigger nodes — they are independent event listeners,
@@ -1156,15 +1127,15 @@ class DeploymentManager:
 
         # Include config nodes connected to downstream nodes
         for edge in edges:
-            target = edge.get('target')
-            source = edge.get('source')
-            handle = edge.get('targetHandle', '')
+            target = edge.get("target")
+            source = edge.get("source")
+            handle = edge.get("targetHandle", "")
 
-            is_config = handle and handle.startswith('input-') and handle != 'input-main'
+            is_config = handle and handle.startswith("input-") and handle != "input-main"
             if is_config and target in downstream_ids and source not in downstream_ids:
                 # Never include trigger nodes as config dependencies -
                 # they are event listeners, not configuration providers
-                source_type = node_types.get(source, '')
+                source_type = node_types.get(source, "")
                 if source_type in WORKFLOW_TRIGGER_TYPES:
                     continue
                 downstream_ids.add(source)
@@ -1174,10 +1145,10 @@ class DeploymentManager:
         # handle) and need to be included so the toolkit can discover
         # them. ``TOOLKIT_NODE_TYPES`` is the canonical set; today only
         # ``androidTool`` is in it.
-        toolkit_node_ids = {n['id'] for n in nodes if n.get('type') in TOOLKIT_NODE_TYPES and n['id'] in downstream_ids}
+        toolkit_node_ids = {n["id"] for n in nodes if n.get("type") in TOOLKIT_NODE_TYPES and n["id"] in downstream_ids}
         for edge in edges:
-            target = edge.get('target')
-            source = edge.get('source')
+            target = edge.get("target")
+            source = edge.get("source")
             # Include nodes that connect to toolkit nodes
             if target in toolkit_node_ids and source not in downstream_ids:
                 downstream_ids.add(source)
@@ -1187,17 +1158,18 @@ class DeploymentManager:
         # When a child agent is included, we need its connected tools so the parent
         # can discover what capabilities the child has
         from constants import AI_AGENT_TYPES
-        agent_node_ids = {n['id'] for n in nodes if n.get('type') in AI_AGENT_TYPES and n['id'] in downstream_ids}
+
+        agent_node_ids = {n["id"] for n in nodes if n.get("type") in AI_AGENT_TYPES and n["id"] in downstream_ids}
         for edge in edges:
-            target = edge.get('target')
-            source = edge.get('source')
-            target_handle = edge.get('targetHandle', '')
+            target = edge.get("target")
+            source = edge.get("source")
+            target_handle = edge.get("targetHandle", "")
             # Include tool nodes connected to agent's input-tools handle
-            if target in agent_node_ids and target_handle == 'input-tools' and source not in downstream_ids:
+            if target in agent_node_ids and target_handle == "input-tools" and source not in downstream_ids:
                 downstream_ids.add(source)
                 logger.debug(f"[Deployment] Including tool node {source} connected to agent {target}")
 
-        return [n for n in nodes if n['id'] in downstream_ids]
+        return [n for n in nodes if n["id"] in downstream_ids]
 
     # =========================================================================
     # HELPERS
@@ -1219,11 +1191,13 @@ class DeploymentManager:
         try:
             db_settings = await self.database.get_deployment_settings()
             if db_settings:
-                self._settings.update({
-                    "stop_on_error": db_settings.get("stop_on_error", False),
-                    "max_concurrent_runs": db_settings.get("max_concurrent_runs", 100),
-                    "use_parallel_executor": db_settings.get("use_parallel_executor", True)
-                })
+                self._settings.update(
+                    {
+                        "stop_on_error": db_settings.get("stop_on_error", False),
+                        "max_concurrent_runs": db_settings.get("max_concurrent_runs", 100),
+                        "use_parallel_executor": db_settings.get("use_parallel_executor", True),
+                    }
+                )
         except Exception:
             pass
 
@@ -1243,43 +1217,39 @@ class DeploymentManager:
             return
 
         try:
-            await status_callback("__deployment__", event, {
-                **data,
-                "workflow_id": workflow_id,
-                "timestamp": datetime.now().isoformat()
-            })
+            await status_callback("__deployment__", event, {**data, "workflow_id": workflow_id, "timestamp": datetime.now().isoformat()})
         except Exception as e:
             logger.warning("Status callback failed", workflow_id=workflow_id, error=str(e))
 
     @staticmethod
     def _get_schedule_description(params: Dict[str, Any]) -> str:
         """Get human-readable schedule description from parameters."""
-        frequency = params.get('frequency', 'minutes')
+        frequency = params.get("frequency", "minutes")
 
         match frequency:
-            case 'seconds':
-                interval = params.get('interval', 30)
+            case "seconds":
+                interval = params.get("interval", 30)
                 return f"Every {interval} seconds"
-            case 'minutes':
-                interval = params.get('interval_minutes', 5)
+            case "minutes":
+                interval = params.get("interval_minutes", 5)
                 return f"Every {interval} minutes"
-            case 'hours':
-                interval = params.get('interval_hours', 1)
+            case "hours":
+                interval = params.get("interval_hours", 1)
                 return f"Every {interval} hours"
-            case 'days':
-                time_str = params.get('daily_time', '09:00')
+            case "days":
+                time_str = params.get("daily_time", "09:00")
                 return f"Daily at {time_str}"
-            case 'weeks':
-                weekday = params.get('weekday', '1')
-                time_str = params.get('weekly_time', '09:00')
-                days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+            case "weeks":
+                weekday = params.get("weekday", "1")
+                time_str = params.get("weekly_time", "09:00")
+                days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
                 day_name = days[int(weekday)] if str(weekday).isdigit() else weekday
                 return f"Weekly on {day_name} at {time_str}"
-            case 'months':
-                day = params.get('month_day', '1')
-                time_str = params.get('monthly_time', '09:00')
+            case "months":
+                day = params.get("month_day", "1")
+                time_str = params.get("monthly_time", "09:00")
                 return f"Monthly on day {day} at {time_str}"
-            case 'once':
+            case "once":
                 return "Once (no repeat)"
             case _:
                 return "Unknown schedule"

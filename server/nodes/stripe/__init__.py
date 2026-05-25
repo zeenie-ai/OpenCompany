@@ -29,9 +29,13 @@ from .stripe_receive import StripeReceiveNode, StripeReceiveOutput
 
 register_ws_handlers(WS_HANDLERS)
 register_webhook_source(get_webhook_source())
-register_service_refresh(make_status_refresh(
-    get_listen_source(), status_key="stripe", broadcast_type="stripe_status",
-))
+register_service_refresh(
+    make_status_refresh(
+        get_listen_source(),
+        status_key="stripe",
+        broadcast_type="stripe_status",
+    )
+)
 register_output_schema("stripeReceive", StripeReceiveOutput)
 register_output_schema("stripeAction", StripeActionOutput)
 

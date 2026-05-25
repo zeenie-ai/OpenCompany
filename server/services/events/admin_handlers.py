@@ -51,7 +51,8 @@ _LISTENER_WORKFLOW_TYPES: tuple[str, ...] = (
 
 @ws_response
 async def handle_list_canary_listeners(
-    data: Dict[str, Any], websocket: WebSocket,
+    data: Dict[str, Any],
+    websocket: WebSocket,
 ) -> Dict[str, Any]:
     """List Temporal-durable canary listener workflows.
 
@@ -82,15 +83,10 @@ async def handle_list_canary_listeners(
 
     wrapper = container.temporal_client()
     if wrapper is None or wrapper.client is None:
-        return {"success": True, "listeners": [], "count": 0,
-                "note": "Temporal not connected"}
+        return {"success": True, "listeners": [], "count": 0, "note": "Temporal not connected"}
 
     wf_types_in = ", ".join(f"'{t}'" for t in _LISTENER_WORKFLOW_TYPES)
-    query = (
-        f"EventWorkflowId='{workflow_id}' "
-        f"AND WorkflowType IN ({wf_types_in}) "
-        f"AND ExecutionStatus='Running'"
-    )
+    query = f"EventWorkflowId='{workflow_id}' " f"AND WorkflowType IN ({wf_types_in}) " f"AND ExecutionStatus='Running'"
 
     listeners: List[Dict[str, Any]] = []
     try:
@@ -98,8 +94,7 @@ async def handle_list_canary_listeners(
             listeners.append(_describe_workflow(wf))
     except Exception as exc:  # noqa: BLE001
         logger.warning(
-            f"list_canary_listeners Visibility query failed: {exc} "
-            f"(query={query!r})",
+            f"list_canary_listeners Visibility query failed: {exc} " f"(query={query!r})",
             workflow_id=workflow_id,
         )
         return {"success": False, "error": str(exc), "query": query}
@@ -109,7 +104,8 @@ async def handle_list_canary_listeners(
 
 @ws_response
 async def handle_list_canary_schedules(
-    data: Dict[str, Any], websocket: WebSocket,
+    data: Dict[str, Any],
+    websocket: WebSocket,
 ) -> Dict[str, Any]:
     """List Temporal Schedules created by this deployment's cron triggers.
 
@@ -136,13 +132,9 @@ async def handle_list_canary_schedules(
 
     wrapper = container.temporal_client()
     if wrapper is None or wrapper.client is None:
-        return {"success": True, "schedules": [], "count": 0,
-                "note": "Temporal not connected"}
+        return {"success": True, "schedules": [], "count": 0, "note": "Temporal not connected"}
 
-    query = (
-        f"EventWorkflowId='{workflow_id}' "
-        f"AND EventTriggerKind='cron'"
-    )
+    query = f"EventWorkflowId='{workflow_id}' " f"AND EventTriggerKind='cron'"
 
     schedules: List[Dict[str, Any]] = []
     try:
@@ -155,8 +147,7 @@ async def handle_list_canary_schedules(
             schedules.append(_describe_schedule(desc))
     except Exception as exc:  # noqa: BLE001
         logger.warning(
-            f"list_canary_schedules Visibility query failed: {exc} "
-            f"(query={query!r})",
+            f"list_canary_schedules Visibility query failed: {exc} " f"(query={query!r})",
             workflow_id=workflow_id,
         )
         return {"success": False, "error": str(exc), "query": query}
@@ -166,7 +157,8 @@ async def handle_list_canary_schedules(
 
 @ws_response
 async def handle_get_workflow_failure_history(
-    data: Dict[str, Any], websocket: WebSocket,
+    data: Dict[str, Any],
+    websocket: WebSocket,
 ) -> Dict[str, Any]:
     """Return ActivityTaskFailed events from a workflow's Event History.
 
@@ -210,7 +202,8 @@ async def handle_get_workflow_failure_history(
     run_id: Optional[str] = data.get("run_id")
     try:
         handle = wrapper.client.get_workflow_handle(
-            target_workflow_id, run_id=run_id,
+            target_workflow_id,
+            run_id=run_id,
         )
     except Exception as exc:  # noqa: BLE001
         return {"success": False, "error": f"workflow lookup failed: {exc}"}
@@ -329,10 +322,7 @@ def _search_attributes_dict(raw: Any) -> Dict[str, Any]:
             return result
     if isinstance(raw, dict):
         # Untyped search-attribute map from older SDK: name -> [value, ...]
-        return {
-            k: (v[0] if isinstance(v, list) and v else v)
-            for k, v in raw.items()
-        }
+        return {k: (v[0] if isinstance(v, list) and v else v) for k, v in raw.items()}
     return {}
 
 

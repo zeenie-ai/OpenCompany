@@ -71,6 +71,7 @@ class DaemonEventSource(EventSource):
 
     def workdir(self) -> Path:
         from core.config import Settings
+
         cwd = Path(Settings().workspace_base_resolved).resolve() / self.workflow_namespace
         cwd.mkdir(parents=True, exist_ok=True)
         return cwd
@@ -140,7 +141,8 @@ class DaemonEventSource(EventSource):
         async with self._lock:
             self._stopped = True
             await get_process_service().stop(
-                name=self.process_name, workflow_id=self.workflow_namespace,
+                name=self.process_name,
+                workflow_id=self.workflow_namespace,
             )
             self._started = False
             self._pid = None

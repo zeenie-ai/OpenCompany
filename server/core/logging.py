@@ -49,24 +49,23 @@ from core.config import Settings
 _LOG_SOURCE_TAGS: Dict[str, str] = {
     # Cross-cutting service short tags. Longer prefixes must precede
     # shorter parents — Python ≥3.7 preserves dict-insertion order.
-    'services.workflow_validator': 'validator',
-    'services.workflow_import': 'wf_import',
-    'services.parameter_resolver': 'params',
-    'services.node_executor': 'executor',
-    'services.status_broadcaster': 'broadcaster',
-    'services.ws_handler_registry': 'ws_registry',
-    'services.credential_registry': 'credentials',
-    'services.user_auth': 'auth',
-    'services.model_registry': 'models',
-    'services.node_output_schemas': 'schemas',
-    'services.markdown_formatter': 'markdown',
-    'services.example_loader': 'examples',
-    'services.skill_loader': 'skills',
-    'services.event_waiter': 'waiter',
-
+    "services.workflow_validator": "validator",
+    "services.workflow_import": "wf_import",
+    "services.parameter_resolver": "params",
+    "services.node_executor": "executor",
+    "services.status_broadcaster": "broadcaster",
+    "services.ws_handler_registry": "ws_registry",
+    "services.credential_registry": "credentials",
+    "services.user_auth": "auth",
+    "services.model_registry": "models",
+    "services.node_output_schemas": "schemas",
+    "services.markdown_formatter": "markdown",
+    "services.example_loader": "examples",
+    "services.skill_loader": "skills",
+    "services.event_waiter": "waiter",
     # Core-infra short tags.
-    'core.credentials_database': 'credentials',
-    'core.credential_backends': 'credentials',
+    "core.credentials_database": "credentials",
+    "core.credential_backends": "credentials",
 }
 
 
@@ -126,7 +125,7 @@ class WebSocketLogHandler(logging.Handler):
     A background thread processes the queue and uses asyncio to broadcast.
     """
 
-    _instance: Optional['WebSocketLogHandler'] = None
+    _instance: Optional["WebSocketLogHandler"] = None
 
     def __init__(self, level: int = logging.INFO):
         super().__init__(level)
@@ -136,7 +135,7 @@ class WebSocketLogHandler(logging.Handler):
         self._loop: Optional[asyncio.AbstractEventLoop] = None
 
     @classmethod
-    def get_instance(cls) -> Optional['WebSocketLogHandler']:
+    def get_instance(cls) -> Optional["WebSocketLogHandler"]:
         """Get the singleton instance."""
         return cls._instance
 
@@ -156,29 +155,48 @@ class WebSocketLogHandler(logging.Handler):
 
             # Extract structured key-value pairs from structlog
             details = None
-            if hasattr(record, '_logger') or hasattr(record, 'positional_args'):
+            if hasattr(record, "_logger") or hasattr(record, "positional_args"):
                 # Try to get extra kwargs from structlog
                 extra_keys = set(record.__dict__.keys()) - {
-                    'name', 'msg', 'args', 'created', 'filename', 'funcName',
-                    'levelname', 'levelno', 'lineno', 'module', 'msecs',
-                    'pathname', 'process', 'processName', 'relativeCreated',
-                    'stack_info', 'exc_info', 'exc_text', 'thread', 'threadName',
-                    'message', 'asctime', 'positional_args', '_logger'
+                    "name",
+                    "msg",
+                    "args",
+                    "created",
+                    "filename",
+                    "funcName",
+                    "levelname",
+                    "levelno",
+                    "lineno",
+                    "module",
+                    "msecs",
+                    "pathname",
+                    "process",
+                    "processName",
+                    "relativeCreated",
+                    "stack_info",
+                    "exc_info",
+                    "exc_text",
+                    "thread",
+                    "threadName",
+                    "message",
+                    "asctime",
+                    "positional_args",
+                    "_logger",
                 }
                 if extra_keys:
-                    details = {k: record.__dict__[k] for k in extra_keys if not k.startswith('_')}
+                    details = {k: record.__dict__[k] for k in extra_keys if not k.startswith("_")}
 
             # Create log entry
             log_data = {
-                'timestamp': datetime.now().isoformat(),
-                'level': record.levelname.lower(),
-                'message': message,
-                'source': source,
+                "timestamp": datetime.now().isoformat(),
+                "level": record.levelname.lower(),
+                "message": message,
+                "source": source,
             }
 
             # Add details if present
             if details:
-                log_data['details'] = details
+                log_data["details"] = details
 
             # Non-blocking put - drop if queue is full
             try:
@@ -219,10 +237,7 @@ class WebSocketLogHandler(logging.Handler):
 
                 # Schedule async broadcast on the event loop
                 if self._loop and self._running:
-                    asyncio.run_coroutine_threadsafe(
-                        self._broadcast(log_data),
-                        self._loop
-                    )
+                    asyncio.run_coroutine_threadsafe(self._broadcast(log_data), self._loop)
 
             except Exception:
                 pass  # Never fail in background thread
@@ -231,6 +246,7 @@ class WebSocketLogHandler(logging.Handler):
         """Broadcast log to WebSocket clients."""
         try:
             from services.status_broadcaster import get_status_broadcaster
+
             broadcaster = get_status_broadcaster()
             await broadcaster.broadcast_terminal_log(log_data)
         except Exception:
@@ -272,11 +288,7 @@ def configure_logging(settings: Settings) -> None:
         console_handler.setLevel(log_level_value)
 
         # Configure root logger
-        logging.basicConfig(
-            level=log_level_value,
-            handlers=[console_handler, file_handler],
-            format="%(message)s"
-        )
+        logging.basicConfig(level=log_level_value, handlers=[console_handler, file_handler], format="%(message)s")
     else:
         # Console only
         logging.basicConfig(
@@ -310,11 +322,13 @@ def configure_logging(settings: Settings) -> None:
         processors.insert(0, structlog.stdlib.add_logger_name)
         processors.append(structlog.processors.JSONRenderer())
     else:
-        processors.append(structlog.dev.ConsoleRenderer(
-            colors=False,  # No ANSI colors for cleaner output
-            pad_event=35,
-            exception_formatter=structlog.dev.plain_traceback
-        ))
+        processors.append(
+            structlog.dev.ConsoleRenderer(
+                colors=False,  # No ANSI colors for cleaner output
+                pad_event=35,
+                exception_formatter=structlog.dev.plain_traceback,
+            )
+        )
 
     structlog.configure(
         processors=processors,
@@ -379,39 +393,20 @@ def log_context_sync(**fields: Any) -> Iterator[None]:
         structlog.contextvars.unbind_contextvars(*fields.keys())
 
 
-def log_execution_time(logger: structlog.BoundLogger, operation: str,
-                      start_time: float, end_time: float, **kwargs) -> None:
+def log_execution_time(logger: structlog.BoundLogger, operation: str, start_time: float, end_time: float, **kwargs) -> None:
     """Log execution time with additional context."""
     execution_time = end_time - start_time
-    logger.info(
-        "Operation completed",
-        operation=operation,
-        execution_time_seconds=round(execution_time, 4),
-        **kwargs
-    )
+    logger.info("Operation completed", operation=operation, execution_time_seconds=round(execution_time, 4), **kwargs)
 
 
-def log_api_call(logger: structlog.BoundLogger, provider: str, model: str,
-                operation: str, success: bool, **kwargs) -> None:
+def log_api_call(logger: structlog.BoundLogger, provider: str, model: str, operation: str, success: bool, **kwargs) -> None:
     """Log API calls with standardized format."""
-    logger.info(
-        "API call completed",
-        provider=provider,
-        model=model,
-        operation=operation,
-        success=success,
-        **kwargs
-    )
+    logger.info("API call completed", provider=provider, model=model, operation=operation, success=success, **kwargs)
 
 
-def log_cache_operation(logger: structlog.BoundLogger, operation: str,
-                       key: str, hit: bool = None, **kwargs) -> None:
+def log_cache_operation(logger: structlog.BoundLogger, operation: str, key: str, hit: bool = None, **kwargs) -> None:
     """Log cache operations."""
-    log_data = {
-        "operation": operation,
-        "cache_key": key,
-        **kwargs
-    }
+    log_data = {"operation": operation, "cache_key": key, **kwargs}
 
     if hit is not None:
         log_data["cache_hit"] = hit

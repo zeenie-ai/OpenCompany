@@ -45,9 +45,7 @@ class TestHttpScraper:
           <a href="/not-a-pdf.html">Skip</a>
         </body></html>
         """
-        respx.get("https://example.com/list").mock(
-            return_value=httpx.Response(200, text=html)
-        )
+        respx.get("https://example.com/list").mock(return_value=httpx.Response(200, text=html))
 
         result = await harness.execute(
             "httpScraper",
@@ -75,9 +73,7 @@ class TestHttpScraper:
     async def test_per_url_http_error_collected_in_errors(self, harness):
         # Page iteration mode fetches two URLs; one 404s, the other succeeds.
         respx.get("https://example.com/p1").mock(return_value=httpx.Response(404))
-        respx.get("https://example.com/p2").mock(
-            return_value=httpx.Response(200, text='<a href="ok.pdf">OK</a>')
-        )
+        respx.get("https://example.com/p2").mock(return_value=httpx.Response(200, text='<a href="ok.pdf">OK</a>'))
 
         result = await harness.execute(
             "httpScraper",
@@ -99,9 +95,7 @@ class TestHttpScraper:
 
     @respx.mock
     async def test_date_mode_expands_range(self, harness):
-        respx.get(url__regex=r"https://example\.com/\?d=\d{4}-\d{2}-\d{2}").mock(
-            return_value=httpx.Response(200, text="<html></html>")
-        )
+        respx.get(url__regex=r"https://example\.com/\?d=\d{4}-\d{2}-\d{2}").mock(return_value=httpx.Response(200, text="<html></html>"))
 
         result = await harness.execute(
             "httpScraper",
@@ -127,12 +121,8 @@ class TestHttpScraper:
 class TestFileDownloader:
     @respx.mock
     async def test_happy_path_downloads_files(self, harness, tmp_path):
-        respx.get("https://example.com/a.pdf").mock(
-            return_value=httpx.Response(200, content=b"AAA")
-        )
-        respx.get("https://example.com/b.pdf").mock(
-            return_value=httpx.Response(200, content=b"BBBB")
-        )
+        respx.get("https://example.com/a.pdf").mock(return_value=httpx.Response(200, content=b"AAA"))
+        respx.get("https://example.com/b.pdf").mock(return_value=httpx.Response(200, content=b"BBBB"))
 
         result = await harness.execute(
             "fileDownloader",
@@ -147,9 +137,7 @@ class TestFileDownloader:
         )
 
         harness.assert_envelope(result, success=True)
-        harness.assert_output_shape(
-            result, ["downloaded", "skipped", "failed", "files", "output_dir"]
-        )
+        harness.assert_output_shape(result, ["downloaded", "skipped", "failed", "files", "output_dir"])
         payload = result["result"]
         assert payload["downloaded"] == 2
         assert payload["failed"] == 0
@@ -160,12 +148,16 @@ class TestFileDownloader:
         result = await harness.execute("fileDownloader", {"items": []})
         harness.assert_envelope(result, success=True)
         payload = result["result"]
-        assert payload == {
-            "downloaded": 0,
-            "skipped": 0,
-            "failed": 0,
-            "files": [],
-        } or payload["downloaded"] == 0
+        assert (
+            payload
+            == {
+                "downloaded": 0,
+                "skipped": 0,
+                "failed": 0,
+                "files": [],
+            }
+            or payload["downloaded"] == 0
+        )
 
     @respx.mock
     async def test_skip_existing_does_not_refetch(self, harness, tmp_path):
@@ -190,9 +182,7 @@ class TestFileDownloader:
 
     @respx.mock
     async def test_http_error_counted_as_failed(self, harness, tmp_path):
-        respx.get("https://example.com/bad.pdf").mock(
-            return_value=httpx.Response(500, text="boom")
-        )
+        respx.get("https://example.com/bad.pdf").mock(return_value=httpx.Response(500, text="boom"))
 
         result = await harness.execute(
             "fileDownloader",
@@ -214,13 +204,7 @@ class TestFileDownloader:
 
 class TestDocumentParser:
     async def test_beautifulsoup_parses_html_file(self, harness, tmp_path):
-        html = (
-            "<html><body>"
-            "<script>alert(1)</script>"
-            "<style>.x {color:red}</style>"
-            "<p>Hello <b>World</b></p>"
-            "</body></html>"
-        )
+        html = "<html><body>" "<script>alert(1)</script>" "<style>.x {color:red}</style>" "<p>Hello <b>World</b></p>" "</body></html>"
         f = tmp_path / "page.html"
         f.write_text(html, encoding="utf-8")
 
@@ -242,9 +226,7 @@ class TestDocumentParser:
         assert "Hello" in doc["content"] and "World" in doc["content"]
 
     async def test_no_files_returns_empty_documents(self, harness):
-        result = await harness.execute(
-            "documentParser", {"files": [], "inputDir": ""}
-        )
+        result = await harness.execute("documentParser", {"files": [], "inputDir": ""})
         harness.assert_envelope(result, success=True)
         assert result["result"]["documents"] == []
         assert result["result"]["parsed_count"] == 0
@@ -360,9 +342,7 @@ class TestEmbeddingGenerator:
     async def test_huggingface_happy_path_with_patched_embedder(self, harness):
         # Patch langchain_huggingface at its lazy import site.
         fake_embedder = MagicMock()
-        fake_embedder.embed_documents = MagicMock(
-            return_value=[[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
-        )
+        fake_embedder.embed_documents = MagicMock(return_value=[[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
 
         fake_hf_mod = MagicMock()
         fake_hf_mod.HuggingFaceEmbeddings = MagicMock(return_value=fake_embedder)
@@ -395,9 +375,7 @@ class TestEmbeddingGenerator:
         assert kwargs.get("model_name") == "BAAI/bge-small-en-v1.5"
 
     async def test_empty_chunks_short_circuits(self, harness):
-        result = await harness.execute(
-            "embeddingGenerator", {"chunks": [], "provider": "huggingface"}
-        )
+        result = await harness.execute("embeddingGenerator", {"chunks": [], "provider": "huggingface"})
         harness.assert_envelope(result, success=True)
         payload = result["result"]
         assert payload["embedding_count"] == 0
@@ -449,8 +427,7 @@ class _FakeChromaCollection:
         self._count = 0
 
     def add(self, ids, embeddings, documents, metadatas):
-        self.added.append({"ids": ids, "embeddings": embeddings,
-                           "documents": documents, "metadatas": metadatas})
+        self.added.append({"ids": ids, "embeddings": embeddings, "documents": documents, "metadatas": metadatas})
         self._count += len(ids)
 
     def count(self):

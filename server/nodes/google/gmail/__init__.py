@@ -51,7 +51,9 @@ class GmailParams(BaseModel):
         },
     )
     max_results: int = Field(
-        default=10, ge=1, le=100,
+        default=10,
+        ge=1,
+        le=100,
         json_schema_extra={"displayOptions": {"show": {"operation": ["search"]}}},
     )
     include_body: bool = Field(
@@ -100,12 +102,12 @@ class GmailNode(ActionNode):
     description = "Google Gmail send / search / read (dual-purpose workflow + AI tool)"
     component_kind = "square"
     tool_name = "google_gmail"
-    tool_description = "Send, search, and read emails via Gmail. Operations: send (compose email), search (find emails by query), read (get email by ID)."
+    tool_description = (
+        "Send, search, and read emails via Gmail. Operations: send (compose email), search (find emails by query), read (get email by ID)."
+    )
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
     credentials = (GoogleCredential,)
     annotations = {"destructive": False, "readonly": False, "open_world": True}
@@ -117,7 +119,10 @@ class GmailNode(ActionNode):
 
     async def _service(self, ctx: NodeContext, params: GmailParams):
         return await build_google_service(
-            "gmail", "v1", params.model_dump(), ctx.raw,
+            "gmail",
+            "v1",
+            params.model_dump(),
+            ctx.raw,
         )
 
     @Operation("send", cost={"service": "gmail", "action": "send", "count": 1})
@@ -130,28 +135,34 @@ class GmailNode(ActionNode):
             raise RuntimeError("Email body is required")
 
         if params.body_type == "html":
-            message = MIMEMultipart('alternative')
-            message.attach(MIMEText(params.body, 'html'))
+            message = MIMEMultipart("alternative")
+            message.attach(MIMEText(params.body, "html"))
         else:
-            message = MIMEText(params.body, 'plain')
-        message['to'] = params.to
-        message['subject'] = params.subject
+            message = MIMEText(params.body, "plain")
+        message["to"] = params.to
+        message["subject"] = params.subject
         if params.cc:
-            message['cc'] = params.cc
+            message["cc"] = params.cc
         if params.bcc:
-            message['bcc'] = params.bcc
+            message["bcc"] = params.bcc
 
-        raw = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
+        raw = base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8")
         svc = await self._service(ctx, params)
-        result = await run_sync(lambda: svc.users().messages().send(
-            userId='me', body={'raw': raw},
-        ).execute())
+        result = await run_sync(
+            lambda: svc.users()
+            .messages()
+            .send(
+                userId="me",
+                body={"raw": raw},
+            )
+            .execute()
+        )
         await track_google_usage("gmail", ctx.node_id, "send", 1, ctx.raw)
         return GmailOutput(
             operation="send",
-            message_id=result.get('id'),
-            thread_id=result.get('threadId'),
-            label_ids=result.get('labelIds', []),
+            message_id=result.get("id"),
+            thread_id=result.get("threadId"),
+            label_ids=result.get("labelIds", []),
             to=params.to,
             subject=params.subject,
         )
@@ -161,19 +172,33 @@ class GmailNode(ActionNode):
         if not params.query:
             raise RuntimeError("Search query is required")
         svc = await self._service(ctx, params)
-        listing = await run_sync(lambda: svc.users().messages().list(
-            userId='me', q=params.query, maxResults=min(params.max_results, 100),
-        ).execute())
+        listing = await run_sync(
+            lambda: svc.users()
+            .messages()
+            .list(
+                userId="me",
+                q=params.query,
+                maxResults=min(params.max_results, 100),
+            )
+            .execute()
+        )
 
-        messages = listing.get('messages', [])
+        messages = listing.get("messages", [])
         formatted = []
-        fmt = 'full' if params.include_body else 'metadata'
+        fmt = "full" if params.include_body else "metadata"
         for msg in messages:
-            mid = msg.get('id')
-            detail = await run_sync(lambda m=mid: svc.users().messages().get(
-                userId='me', id=m, format=fmt,
-                metadataHeaders=['From', 'To', 'Subject', 'Date'],
-            ).execute())
+            mid = msg.get("id")
+            detail = await run_sync(
+                lambda m=mid: svc.users()
+                .messages()
+                .get(
+                    userId="me",
+                    id=m,
+                    format=fmt,
+                    metadataHeaders=["From", "To", "Subject", "Date"],
+                )
+                .execute()
+            )
             formatted.append(format_message(detail, include_body=params.include_body))
 
         await track_google_usage("gmail", ctx.node_id, "search", len(formatted), ctx.raw)
@@ -182,7 +207,7 @@ class GmailNode(ActionNode):
             messages=formatted,
             count=len(formatted),
             query=params.query,
-            result_size_estimate=listing.get('resultSizeEstimate', 0),
+            result_size_estimate=listing.get("resultSizeEstimate", 0),
         )
 
     @Operation("read", cost={"service": "gmail", "action": "read", "count": 1})
@@ -190,9 +215,16 @@ class GmailNode(ActionNode):
         if not params.message_id:
             raise RuntimeError("message_id is required")
         svc = await self._service(ctx, params)
-        result = await run_sync(lambda: svc.users().messages().get(
-            userId='me', id=params.message_id, format=params.format,
-        ).execute())
+        result = await run_sync(
+            lambda: svc.users()
+            .messages()
+            .get(
+                userId="me",
+                id=params.message_id,
+                format=params.format,
+            )
+            .execute()
+        )
         await track_google_usage("gmail", ctx.node_id, "read", 1, ctx.raw)
-        formatted = format_message(result, include_body=(params.format == 'full'))
-        return GmailOutput(operation="read", **{k: v for k, v in formatted.items() if k != 'size_estimate'})
+        formatted = format_message(result, include_body=(params.format == "full"))
+        return GmailOutput(operation="read", **{k: v for k, v in formatted.items() if k != "size_estimate"})

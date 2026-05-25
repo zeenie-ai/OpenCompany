@@ -107,9 +107,7 @@ async def materialise_skills(
         bookkeeping.
     """
     new_set: FrozenSet[str] = frozenset(s for s in skill_names if s)
-    prev_set: FrozenSet[str] = frozenset(
-        s for s in (previous_skill_names or ()) if s
-    )
+    prev_set: FrozenSet[str] = frozenset(s for s in (previous_skill_names or ()) if s)
 
     added = new_set - prev_set
     removed = prev_set - new_set
@@ -123,7 +121,9 @@ async def materialise_skills(
     except OSError as exc:
         logger.warning(
             "[%s] cannot create skills dir %s: %s — skipping all changes",
-            log_label, skills_dir, exc,
+            log_label,
+            skills_dir,
+            exc,
         )
         return (0, 0)
 
@@ -139,12 +139,18 @@ async def materialise_skills(
             await asyncio.to_thread(shutil.rmtree, dest, ignore_errors=False)
             removed_count += 1
             logger.info(
-                "[%s] removed skill %r from %s", log_label, name, dest,
+                "[%s] removed skill %r from %s",
+                log_label,
+                name,
+                dest,
             )
         except OSError as exc:
             logger.warning(
                 "[%s] failed to remove skill %r at %s: %s — leaving",
-                log_label, name, dest, exc,
+                log_label,
+                name,
+                dest,
+                exc,
             )
 
     if not added:
@@ -185,13 +191,16 @@ async def _materialise_one(
     except Exception as exc:
         logger.warning(
             "[%s] load_skill_async(%r) failed: %s — skipping",
-            log_label, name, exc,
+            log_label,
+            name,
+            exc,
         )
         return False
     if skill is None:
         logger.warning(
             "[%s] skill %r not found in registry — skipping materialisation",
-            log_label, name,
+            log_label,
+            name,
         )
         return False
 
@@ -202,7 +211,9 @@ async def _materialise_one(
             # scripts/ + references/ + templates/ atomically.
             await asyncio.to_thread(
                 shutil.copytree,
-                skill.metadata.path, dest, dirs_exist_ok=True,
+                skill.metadata.path,
+                dest,
+                dirs_exist_ok=True,
             )
         else:
             # DB skill: reconstruct frontmatter from metadata
@@ -215,20 +226,20 @@ async def _materialise_one(
                 "allowed-tools": " ".join(skill.metadata.allowed_tools),
                 "metadata": skill.metadata.metadata,
             }
-            body = (
-                f"---\n"
-                f"{yaml.safe_dump(frontmatter, sort_keys=False)}"
-                f"---\n\n"
-                f"{skill.instructions}"
-            )
+            body = f"---\n" f"{yaml.safe_dump(frontmatter, sort_keys=False)}" f"---\n\n" f"{skill.instructions}"
             await asyncio.to_thread(
-                (dest / "SKILL.md").write_text, body, encoding="utf-8",
+                (dest / "SKILL.md").write_text,
+                body,
+                encoding="utf-8",
             )
         logger.info("[%s] materialised skill %r -> %s", log_label, name, dest)
         return True
     except OSError as exc:
         logger.warning(
             "[%s] failed to materialise skill %r at %s: %s",
-            log_label, name, dest, exc,
+            log_label,
+            name,
+            dest,
+            exc,
         )
         return False

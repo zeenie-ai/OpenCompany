@@ -81,8 +81,7 @@ class ProxyRequestNode(ActionNode):
         svc = get_proxy_service()
         if not svc or not svc.is_enabled():
             raise NodeUserError(
-                "Proxy service not initialized. Use proxy_config tool to add a "
-                "provider first.",
+                "Proxy service not initialized. Use proxy_config tool to add a " "provider first.",
             )
 
         raw = params.model_dump()
@@ -118,15 +117,21 @@ class ProxyRequestNode(ActionNode):
                 latency_ms = (time.monotonic() - req_start) * 1000
                 bytes_transferred = len(response.content) if response.content else 0
 
-                svc.report_result(provider_name, ProxyResult(
-                    success=response.status_code < 400,
-                    latency_ms=latency_ms,
-                    bytes_transferred=bytes_transferred,
-                    status_code=response.status_code,
-                ))
+                svc.report_result(
+                    provider_name,
+                    ProxyResult(
+                        success=response.status_code < 400,
+                        latency_ms=latency_ms,
+                        bytes_transferred=bytes_transferred,
+                        status_code=response.status_code,
+                    ),
+                )
                 await track_proxy_usage(
-                    ctx.node_id, provider_name, bytes_transferred,
-                    workflow_id=ctx.workflow_id, session_id=ctx.session_id,
+                    ctx.node_id,
+                    provider_name,
+                    bytes_transferred,
+                    workflow_id=ctx.workflow_id,
+                    session_id=ctx.session_id,
                 )
                 try:
                     response_data = response.json()
@@ -150,13 +155,20 @@ class ProxyRequestNode(ActionNode):
             except Exception as e:
                 latency_ms = (time.monotonic() - req_start) * 1000
                 last_error = str(e)
-                svc.report_result(provider_name, ProxyResult(
-                    success=False, latency_ms=latency_ms, error=last_error,
-                ))
+                svc.report_result(
+                    provider_name,
+                    ProxyResult(
+                        success=False,
+                        latency_ms=latency_ms,
+                        error=last_error,
+                    ),
+                )
                 log.warning(
                     "Proxy request attempt failed",
-                    node_id=ctx.node_id, attempt=attempt + 1,
-                    max_retries=max_retries, error=last_error,
+                    node_id=ctx.node_id,
+                    attempt=attempt + 1,
+                    max_retries=max_retries,
+                    error=last_error,
                 )
                 if not failover or attempt >= max_retries:
                     break

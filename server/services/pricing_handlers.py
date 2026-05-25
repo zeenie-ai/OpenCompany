@@ -32,7 +32,8 @@ logger = get_logger(__name__)
 
 @ws_handler()
 async def handle_get_pricing_config(
-    data: Dict[str, Any], websocket: WebSocket,
+    data: Dict[str, Any],
+    websocket: WebSocket,
 ) -> Dict[str, Any]:
     """Get full pricing configuration for display/editing."""
     from services.pricing import get_pricing_service
@@ -43,7 +44,8 @@ async def handle_get_pricing_config(
 
 @ws_handler()
 async def handle_save_pricing_config(
-    data: Dict[str, Any], websocket: WebSocket,
+    data: Dict[str, Any],
+    websocket: WebSocket,
 ) -> Dict[str, Any]:
     """Save updated pricing configuration."""
     from services.pricing import get_pricing_service
@@ -59,7 +61,8 @@ async def handle_save_pricing_config(
 
 @ws_handler()
 async def handle_get_api_usage_summary(
-    data: Dict[str, Any], websocket: WebSocket,
+    data: Dict[str, Any],
+    websocket: WebSocket,
 ) -> Dict[str, Any]:
     """Get aggregated API usage and cost by service (Twitter, Maps, etc.)."""
     database = container.database()

@@ -16,13 +16,7 @@ logger = structlog.get_logger()
 
 
 async def send_chat_message(
-    host: str,
-    port: int,
-    session_id: str,
-    api_key: str,
-    content: str,
-    metadata: Optional[Dict[str, Any]] = None,
-    timeout: float = 10.0
+    host: str, port: int, session_id: str, api_key: str, content: str, metadata: Optional[Dict[str, Any]] = None, timeout: float = 10.0
 ) -> Dict[str, Any]:
     """Send a chat message via JSON-RPC 2.0 WebSocket.
 
@@ -41,12 +35,7 @@ async def send_chat_message(
     url = f"ws://{host}:{port}/ws/{session_id}?api_key={api_key}&client_type=web"
     request_id = str(uuid.uuid4())
 
-    request = {
-        "jsonrpc": "2.0",
-        "method": "chat.sendMessage",
-        "params": {"content": content, **(metadata or {})},
-        "id": request_id
-    }
+    request = {"jsonrpc": "2.0", "method": "chat.sendMessage", "params": {"content": content, **(metadata or {})}, "id": request_id}
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -74,14 +63,7 @@ async def send_chat_message(
         return {"success": False, "error": str(e)}
 
 
-async def get_chat_history(
-    host: str,
-    port: int,
-    session_id: str,
-    api_key: str,
-    limit: int = 50,
-    timeout: float = 10.0
-) -> Dict[str, Any]:
+async def get_chat_history(host: str, port: int, session_id: str, api_key: str, limit: int = 50, timeout: float = 10.0) -> Dict[str, Any]:
     """Get chat history via JSON-RPC 2.0 WebSocket.
 
     Args:
@@ -98,12 +80,7 @@ async def get_chat_history(
     url = f"ws://{host}:{port}/ws/{session_id}?api_key={api_key}&client_type=web"
     request_id = str(uuid.uuid4())
 
-    request = {
-        "jsonrpc": "2.0",
-        "method": "chat.getHistory",
-        "params": {"limit": limit},
-        "id": request_id
-    }
+    request = {"jsonrpc": "2.0", "method": "chat.getHistory", "params": {"limit": limit}, "id": request_id}
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -130,13 +107,7 @@ async def get_chat_history(
         return {"success": False, "error": str(e)}
 
 
-async def ping_chat_server(
-    host: str,
-    port: int,
-    session_id: str,
-    api_key: str,
-    timeout: float = 5.0
-) -> bool:
+async def ping_chat_server(host: str, port: int, session_id: str, api_key: str, timeout: float = 5.0) -> bool:
     """Ping chat server to check connectivity."""
     url = f"ws://{host}:{port}/ws/{session_id}?api_key={api_key}&client_type=web"
     request_id = str(uuid.uuid4())

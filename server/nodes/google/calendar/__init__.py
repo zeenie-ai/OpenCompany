@@ -47,7 +47,8 @@ class CalendarParams(BaseModel):
 
     # Update + delete
     send_updates: Literal["all", "externalOnly", "none"] = Field(
-        default="all", json_schema_extra=_UPDATE_OR_DELETE,
+        default="all",
+        json_schema_extra=_UPDATE_OR_DELETE,
     )
 
     # Update-only fields
@@ -81,7 +82,11 @@ class CalendarOutput(BaseModel):
 def _iso_or_shortcut(value: Optional[str], default_offset_days: int = 0) -> str:
     now = datetime.utcnow()
     if not value or value.lower() == "today":
-        base = now.replace(hour=0, minute=0, second=0, microsecond=0) if default_offset_days == 0 else now + timedelta(days=default_offset_days)
+        base = (
+            now.replace(hour=0, minute=0, second=0, microsecond=0)
+            if default_offset_days == 0
+            else now + timedelta(days=default_offset_days)
+        )
         return base.isoformat() + "Z"
     if value.startswith("today+"):
         days = int(value.replace("today+", "").replace("d", ""))
@@ -99,10 +104,8 @@ class CalendarNode(ActionNode):
     tool_name = "google_calendar"
     tool_description = "Manage Google Calendar events. Operations: create (new event), list (events in date range), update (modify event), delete (remove event)."
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
     annotations = {"destructive": False, "readonly": False, "open_world": True}
     credentials = (GoogleCredential,)
@@ -126,37 +129,41 @@ class CalendarNode(ActionNode):
                 raise RuntimeError("Start time and end time are required")
 
             event = {
-                'summary': params.title,
-                'start': {'dateTime': params.start_time, 'timeZone': params.timezone},
-                'end': {'dateTime': params.end_time, 'timeZone': params.timezone},
+                "summary": params.title,
+                "start": {"dateTime": params.start_time, "timeZone": params.timezone},
+                "end": {"dateTime": params.end_time, "timeZone": params.timezone},
             }
             if params.description:
-                event['description'] = params.description
+                event["description"] = params.description
             if params.location:
-                event['location'] = params.location
+                event["location"] = params.location
             if params.attendees:
-                att = [{'email': e.strip()} for e in params.attendees.split(',') if e.strip()]
+                att = [{"email": e.strip()} for e in params.attendees.split(",") if e.strip()]
                 if att:
-                    event['attendees'] = att
+                    event["attendees"] = att
             if params.reminder_minutes:
-                event['reminders'] = {
-                    'useDefault': False,
-                    'overrides': [{'method': 'popup', 'minutes': int(params.reminder_minutes)}],
+                event["reminders"] = {
+                    "useDefault": False,
+                    "overrides": [{"method": "popup", "minutes": int(params.reminder_minutes)}],
                 }
 
-            result = await run_sync(lambda: events_svc.insert(
-                calendarId=cal_id, body=event, sendUpdates=params.send_updates,
-            ).execute())
+            result = await run_sync(
+                lambda: events_svc.insert(
+                    calendarId=cal_id,
+                    body=event,
+                    sendUpdates=params.send_updates,
+                ).execute()
+            )
             await track_google_usage("google_calendar", ctx.node_id, "create", 1, ctx.raw)
             return CalendarOutput(
                 operation="create",
-                event_id=result.get('id'),
-                title=result.get('summary'),
-                start=result.get('start', {}).get('dateTime'),
-                end=result.get('end', {}).get('dateTime'),
-                html_link=result.get('htmlLink'),
-                status=result.get('status'),
-                created=result.get('created'),
+                event_id=result.get("id"),
+                title=result.get("summary"),
+                start=result.get("start", {}).get("dateTime"),
+                end=result.get("end", {}).get("dateTime"),
+                html_link=result.get("htmlLink"),
+                status=result.get("status"),
+                created=result.get("created"),
             )
 
         if op == "list":
@@ -164,25 +171,31 @@ class CalendarNode(ActionNode):
             time_max = _iso_or_shortcut(params.end_date, default_offset_days=7)
             single = params.single_events
             kwargs = dict(
-                calendarId=cal_id, timeMin=time_min, timeMax=time_max,
-                maxResults=min(params.max_results, 250), singleEvents=single,
+                calendarId=cal_id,
+                timeMin=time_min,
+                timeMax=time_max,
+                maxResults=min(params.max_results, 250),
+                singleEvents=single,
             )
             if single:
-                kwargs['orderBy'] = params.order_by
+                kwargs["orderBy"] = params.order_by
 
             result = await run_sync(lambda: events_svc.list(**kwargs).execute())
-            raw = result.get('items', [])
-            formatted = [{
-                "event_id": e.get('id'),
-                "title": e.get('summary', 'No Title'),
-                "start": e.get('start', {}).get('dateTime', e.get('start', {}).get('date')),
-                "end": e.get('end', {}).get('dateTime', e.get('end', {}).get('date')),
-                "description": e.get('description', ''),
-                "location": e.get('location', ''),
-                "status": e.get('status'),
-                "html_link": e.get('htmlLink'),
-                "attendees": [a.get('email') for a in e.get('attendees', [])],
-            } for e in raw]
+            raw = result.get("items", [])
+            formatted = [
+                {
+                    "event_id": e.get("id"),
+                    "title": e.get("summary", "No Title"),
+                    "start": e.get("start", {}).get("dateTime", e.get("start", {}).get("date")),
+                    "end": e.get("end", {}).get("dateTime", e.get("end", {}).get("date")),
+                    "description": e.get("description", ""),
+                    "location": e.get("location", ""),
+                    "status": e.get("status"),
+                    "html_link": e.get("htmlLink"),
+                    "attendees": [a.get("email") for a in e.get("attendees", [])],
+                }
+                for e in raw
+            ]
             await track_google_usage("google_calendar", ctx.node_id, "list", len(formatted), ctx.raw)
             return CalendarOutput(
                 operation="list",
@@ -196,9 +209,13 @@ class CalendarNode(ActionNode):
                 raise RuntimeError("Event ID is required")
 
             if op == "delete":
-                await run_sync(lambda: events_svc.delete(
-                    calendarId=cal_id, eventId=params.event_id, sendUpdates=params.send_updates,
-                ).execute())
+                await run_sync(
+                    lambda: events_svc.delete(
+                        calendarId=cal_id,
+                        eventId=params.event_id,
+                        sendUpdates=params.send_updates,
+                    ).execute()
+                )
                 await track_google_usage("google_calendar", ctx.node_id, "delete", 1, ctx.raw)
                 return CalendarOutput(operation="delete", deleted=True, event_id=params.event_id)
 
@@ -210,31 +227,35 @@ class CalendarNode(ActionNode):
             loc = params.update_location if params.update_location is not None else params.location
 
             if title:
-                event['summary'] = title
+                event["summary"] = title
             if start:
-                tz = event.get('start', {}).get('timeZone', 'UTC')
-                event['start'] = {'dateTime': start, 'timeZone': tz}
+                tz = event.get("start", {}).get("timeZone", "UTC")
+                event["start"] = {"dateTime": start, "timeZone": tz}
             if end:
-                tz = event.get('end', {}).get('timeZone', 'UTC')
-                event['end'] = {'dateTime': end, 'timeZone': tz}
+                tz = event.get("end", {}).get("timeZone", "UTC")
+                event["end"] = {"dateTime": end, "timeZone": tz}
             if desc is not None:
-                event['description'] = desc
+                event["description"] = desc
             if loc is not None:
-                event['location'] = loc
+                event["location"] = loc
 
-            result = await run_sync(lambda: events_svc.update(
-                calendarId=cal_id, eventId=params.event_id, body=event,
-                sendUpdates=params.send_updates,
-            ).execute())
+            result = await run_sync(
+                lambda: events_svc.update(
+                    calendarId=cal_id,
+                    eventId=params.event_id,
+                    body=event,
+                    sendUpdates=params.send_updates,
+                ).execute()
+            )
             await track_google_usage("google_calendar", ctx.node_id, "update", 1, ctx.raw)
             return CalendarOutput(
                 operation="update",
-                event_id=result.get('id'),
-                title=result.get('summary'),
-                start=result.get('start', {}).get('dateTime'),
-                end=result.get('end', {}).get('dateTime'),
-                updated=result.get('updated'),
-                html_link=result.get('htmlLink'),
+                event_id=result.get("id"),
+                title=result.get("summary"),
+                start=result.get("start", {}).get("dateTime"),
+                end=result.get("end", {}).get("dateTime"),
+                updated=result.get("updated"),
+                html_link=result.get("htmlLink"),
             )
 
         raise RuntimeError(f"Unknown Calendar operation: {op}")

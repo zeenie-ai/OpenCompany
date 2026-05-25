@@ -40,6 +40,7 @@ logger = get_logger(__name__)
 @dataclass
 class ExecutionResult:
     """Standardized execution result."""
+
     success: bool
     node_id: str
     node_type: str
@@ -98,6 +99,7 @@ class NodeExecutor:
         is needed here.
         """
         from services.node_registry import _HANDLER_REGISTRY as _PLUGIN_HANDLERS
+
         registry = {
             # Workflow control
             # start / cronScheduler / timer — migrated to nodes/{workflow,scheduler}/*.py (Wave 11.C).
@@ -133,17 +135,19 @@ class NodeExecutor:
     ) -> Dict[str, Any]:
         """Execute a single workflow node."""
         start_time = time.time()
-        session_id = context.get('session_id', 'default')
-        execution_id = context.get('execution_id') or str(uuid.uuid4())[:8]
+        session_id = context.get("session_id", "default")
+        execution_id = context.get("execution_id") or str(uuid.uuid4())[:8]
 
         try:
             # Load, validate, enhance parameters
             params = await self._prepare_parameters(node_id, node_type, parameters, session_id)
 
             # Resolve templates if resolver provided
-            nodes = context.get('nodes')
-            edges = context.get('edges')
-            logger.debug(f"[NodeExecutor] Template resolution check: resolve_fn={resolve_params_fn is not None}, nodes={len(nodes) if nodes else 'None'}, edges={len(edges) if edges else 'None'}")
+            nodes = context.get("nodes")
+            edges = context.get("edges")
+            logger.debug(
+                f"[NodeExecutor] Template resolution check: resolve_fn={resolve_params_fn is not None}, nodes={len(nodes) if nodes else 'None'}, edges={len(edges) if edges else 'None'}"
+            )
 
             if resolve_params_fn and nodes is not None and edges is not None:
                 logger.debug(f"[NodeExecutor] Before resolution: params={list(params.keys())}")
@@ -156,21 +160,21 @@ class NodeExecutor:
                 "start_time": start_time,
                 "execution_id": execution_id,
             }
-            logger.info("NodeExecutor context", node_id=node_id, workflow_id=context.get('workflow_id'))
+            logger.info("NodeExecutor context", node_id=node_id, workflow_id=context.get("workflow_id"))
 
             # Execute via registry or special handlers
             result = await self._dispatch(node_id, node_type, params, handler_ctx)
-            result['execution_id'] = execution_id
+            result["execution_id"] = execution_id
 
             # Store output if successful
-            if result.get('success') and self._output_store:
-                output_data = result.get('result', {})
+            if result.get("success") and self._output_store:
+                output_data = result.get("result", {})
 
                 # For Android service nodes, extract the nested 'data' field for cleaner template access
                 # This allows {{batterymonitor.battery_level}} instead of {{batterymonitor.data.battery_level}}
                 if node_type in ANDROID_SERVICE_NODE_TYPES and isinstance(output_data, dict):
                     # Flatten: promote 'data' contents to top level while preserving metadata
-                    nested_data = output_data.get('data', {})
+                    nested_data = output_data.get("data", {})
                     if isinstance(nested_data, dict):
                         # Merge nested data with metadata (service_id, action, timestamp, etc.)
                         output_data = {**output_data, **nested_data}
@@ -181,11 +185,11 @@ class NodeExecutor:
                 # - output_media: Media data
                 # - output_contact: Sender/contact info
                 # - output_metadata: Message metadata
-                if node_type == 'socialReceive' and isinstance(output_data, dict):
-                    await self._output_store(session_id, node_id, "output_message", output_data.get('message', ''))
-                    await self._output_store(session_id, node_id, "output_media", output_data.get('media', {}))
-                    await self._output_store(session_id, node_id, "output_contact", output_data.get('contact', {}))
-                    await self._output_store(session_id, node_id, "output_metadata", output_data.get('metadata', {}))
+                if node_type == "socialReceive" and isinstance(output_data, dict):
+                    await self._output_store(session_id, node_id, "output_message", output_data.get("message", ""))
+                    await self._output_store(session_id, node_id, "output_media", output_data.get("media", {}))
+                    await self._output_store(session_id, node_id, "output_contact", output_data.get("contact", {}))
+                    await self._output_store(session_id, node_id, "output_metadata", output_data.get("metadata", {}))
 
                 # Store with multiple keys for different handle IDs used by frontend components:
                 # - output_main: SquareNode, GenericNode, TriggerNode, StartNode
@@ -198,12 +202,14 @@ class NodeExecutor:
             return result
 
         except asyncio.CancelledError:
-            return ExecutionResult(False, node_id, node_type, error="Cancelled",
-                                   execution_id=execution_id, execution_time=time.time()-start_time).to_dict()
+            return ExecutionResult(
+                False, node_id, node_type, error="Cancelled", execution_id=execution_id, execution_time=time.time() - start_time
+            ).to_dict()
         except Exception as e:
             logger.error("Node execution error", node_id=node_id, error=str(e))
-            return ExecutionResult(False, node_id, node_type, error=str(e),
-                                   execution_id=execution_id, execution_time=time.time()-start_time).to_dict()
+            return ExecutionResult(
+                False, node_id, node_type, error=str(e), execution_id=execution_id, execution_time=time.time() - start_time
+            ).to_dict()
 
     async def _prepare_parameters(self, node_id: str, node_type: str, params: Dict, session_id: str) -> Dict:
         """Load from DB, validate, inject API keys."""
@@ -230,23 +236,23 @@ class NodeExecutor:
 
         if node_type in AI_MODEL_TYPES:
             provider = detect_ai_provider(node_type, params)
-            if not result.get('api_key'):
+            if not result.get("api_key"):
                 key = await self.ai_service.auth.get_api_key(provider, "default")
                 if key:
-                    result['api_key'] = key
-            if not result.get('model'):
+                    result["api_key"] = key
+            if not result.get("model"):
                 models = await self.ai_service.auth.get_stored_models(provider, "default")
                 if models:
-                    result['model'] = models[0]
+                    result["model"] = models[0]
 
         elif node_type in GOOGLE_MAPS_TYPES:
-            if not result.get('api_key'):
+            if not result.get("api_key"):
                 # Try database first, then fall back to environment variable
                 key = await self.ai_service.auth.get_api_key("google_maps", "default")
                 if key:
-                    result['api_key'] = key
+                    result["api_key"] = key
                 elif self.settings.google_maps_api_key:
-                    result['api_key'] = self.settings.google_maps_api_key
+                    result["api_key"] = self.settings.google_maps_api_key
 
         return result
 
@@ -254,10 +260,16 @@ class NodeExecutor:
     # Computed once so plugin handlers (registered via @register_node)
     # can read context['connected_outputs'] / context['source_nodes']
     # without re-implementing the graph walk.
-    _NEEDS_CONNECTED_OUTPUTS = frozenset({
-        'pythonExecutor', 'javascriptExecutor', 'typescriptExecutor',
-        'webhookResponse', 'console', 'socialReceive',
-    })
+    _NEEDS_CONNECTED_OUTPUTS = frozenset(
+        {
+            "pythonExecutor",
+            "javascriptExecutor",
+            "typescriptExecutor",
+            "webhookResponse",
+            "console",
+            "socialReceive",
+        }
+    )
 
     async def _dispatch(self, node_id: str, node_type: str, params: Dict, context: Dict) -> Dict:
         """Dispatch to handler from registry or special handlers."""
@@ -266,7 +278,7 @@ class NodeExecutor:
         # Both plugin handlers and legacy handlers can read these keys.
         if node_type in self._NEEDS_CONNECTED_OUTPUTS:
             outputs, source_nodes = await self._get_connected_outputs_with_info(context, node_id)
-            context = {**context, 'connected_outputs': outputs, 'source_nodes': source_nodes}
+            context = {**context, "connected_outputs": outputs, "source_nodes": source_nodes}
 
         # Check registry first (plugin handlers win — they were merged in
         # via _build_handler_registry's registry.update(_PLUGIN_HANDLERS)).
@@ -284,29 +296,29 @@ class NodeExecutor:
             "node_id": node_id,
             "node_type": node_type,
             "result": {"message": f"Node {node_id} executed", "parameters": params},
-            "execution_time": time.time() - context.get('start_time', time.time()),
-            "timestamp": datetime.now().isoformat()
+            "execution_time": time.time() - context.get("start_time", time.time()),
+            "timestamp": datetime.now().isoformat(),
         }
 
     async def _get_connected_outputs(self, context: Dict, node_id: str) -> Dict[str, Any]:
         """Get outputs from connected upstream nodes with handle-aware routing."""
-        get_output = context.get('get_output_fn')
+        get_output = context.get("get_output_fn")
         if not get_output:
             return {}
 
-        nodes = context.get('nodes', [])
-        edges = context.get('edges', [])
-        session_id = context.get('session_id', 'default')
+        nodes = context.get("nodes", [])
+        edges = context.get("edges", [])
+        session_id = context.get("session_id", "default")
         result = {}
 
         for edge in edges:
-            if edge.get('target') == node_id:
-                source_id = edge.get('source')
-                source_handle = edge.get('sourceHandle')
+            if edge.get("target") == node_id:
+                source_id = edge.get("source")
+                source_handle = edge.get("sourceHandle")
 
                 # Map sourceHandle to output key
-                if source_handle and source_handle.startswith('output-'):
-                    handle_name = source_handle.replace('output-', '')
+                if source_handle and source_handle.startswith("output-"):
+                    handle_name = source_handle.replace("output-", "")
                     output_key = f"output_{handle_name}"
                 else:
                     output_key = "output_0"
@@ -318,8 +330,8 @@ class NodeExecutor:
                     output = await get_output(session_id, source_id, "output_0")
 
                 if output:
-                    source = next((n for n in nodes if n.get('id') == source_id), {})
-                    result[source.get('type', 'unknown')] = output
+                    source = next((n for n in nodes if n.get("id") == source_id), {})
+                    result[source.get("type", "unknown")] = output
 
         return result
 
@@ -329,22 +341,18 @@ class NodeExecutor:
         This is used for display purposes (e.g., showing source in Console panel).
         Does NOT filter by output availability - just returns edge source info.
         """
-        nodes = context.get('nodes', [])
-        edges = context.get('edges', [])
+        nodes = context.get("nodes", [])
+        edges = context.get("edges", [])
         source_nodes = []
 
         for edge in edges:
-            if edge.get('target') == node_id:
-                source_id = edge.get('source')
-                source = next((n for n in nodes if n.get('id') == source_id), {})
-                source_type = source.get('type', 'unknown')
-                source_data = source.get('data', {})
-                source_label = source_data.get('label') or source_type
-                source_nodes.append({
-                    'id': source_id,
-                    'type': source_type,
-                    'label': source_label
-                })
+            if edge.get("target") == node_id:
+                source_id = edge.get("source")
+                source = next((n for n in nodes if n.get("id") == source_id), {})
+                source_type = source.get("type", "unknown")
+                source_data = source.get("data", {})
+                source_label = source_data.get("label") or source_type
+                source_nodes.append({"id": source_id, "type": source_type, "label": source_label})
 
         return source_nodes
 
@@ -354,34 +362,38 @@ class NodeExecutor:
         Returns:
             Tuple of (outputs dict, source_nodes list with id/type/label info)
         """
-        get_output = context.get('get_output_fn')
+        get_output = context.get("get_output_fn")
         if not get_output:
             logger.warning(f"[_get_connected_outputs_with_info] No get_output_fn in context for {node_id}")
             return {}, []
 
-        nodes = context.get('nodes', [])
-        edges = context.get('edges', [])
-        session_id = context.get('session_id', 'default')
+        nodes = context.get("nodes", [])
+        edges = context.get("edges", [])
+        session_id = context.get("session_id", "default")
         outputs = {}
         source_nodes = []
 
         logger.debug(f"[_get_connected_outputs_with_info] node_id={node_id}, edges={len(edges)}, session={session_id}")
 
         for edge in edges:
-            logger.debug(f"[_get_connected_outputs_with_info] Checking edge: source={edge.get('source')}, target={edge.get('target')}, sourceHandle={edge.get('sourceHandle')}, targetHandle={edge.get('targetHandle')}")
-            if edge.get('target') == node_id:
-                source_id = edge.get('source')
-                source_handle = edge.get('sourceHandle')
+            logger.debug(
+                f"[_get_connected_outputs_with_info] Checking edge: source={edge.get('source')}, target={edge.get('target')}, sourceHandle={edge.get('sourceHandle')}, targetHandle={edge.get('targetHandle')}"
+            )
+            if edge.get("target") == node_id:
+                source_id = edge.get("source")
+                source_handle = edge.get("sourceHandle")
 
                 # Map sourceHandle to output key
                 # Frontend uses "output-<name>", backend stores as "output_<name>"
-                if source_handle and source_handle.startswith('output-'):
-                    handle_name = source_handle.replace('output-', '')
+                if source_handle and source_handle.startswith("output-"):
+                    handle_name = source_handle.replace("output-", "")
                     output_key = f"output_{handle_name}"
                 else:
                     output_key = "output_0"
 
-                logger.debug(f"[_get_connected_outputs_with_info] Found edge from {source_id} to {node_id}, sourceHandle={source_handle}, using output_key={output_key}")
+                logger.debug(
+                    f"[_get_connected_outputs_with_info] Found edge from {source_id} to {node_id}, sourceHandle={source_handle}, using output_key={output_key}"
+                )
                 output = await get_output(session_id, source_id, output_key)
                 logger.debug(f"[_get_connected_outputs_with_info] First lookup (key={output_key}): {'FOUND' if output else 'NOT_FOUND'}")
 
@@ -393,17 +405,13 @@ class NodeExecutor:
 
                 logger.debug(f"[_get_connected_outputs_with_info] Final output from {source_id}: {'FOUND' if output else 'NOT FOUND'}")
                 if output:
-                    source = next((n for n in nodes if n.get('id') == source_id), {})
-                    source_type = source.get('type', 'unknown')
+                    source = next((n for n in nodes if n.get("id") == source_id), {})
+                    source_type = source.get("type", "unknown")
                     outputs[source_type] = output
                     # Get label from node data if available
-                    source_data = source.get('data', {})
-                    source_label = source_data.get('label') or source_type
-                    source_nodes.append({
-                        'id': source_id,
-                        'type': source_type,
-                        'label': source_label
-                    })
+                    source_data = source.get("data", {})
+                    source_label = source_data.get("label") or source_type
+                    source_nodes.append({"id": source_id, "type": source_type, "label": source_label})
 
         logger.debug(f"[_get_connected_outputs_with_info] Returning {len(outputs)} outputs, {len(source_nodes)} source_nodes")
         return outputs, source_nodes

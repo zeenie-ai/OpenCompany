@@ -42,7 +42,9 @@ class ChatModelParams(BaseModel):
     # default=None so an unset value falls through to ``agent.default_temperature``
     # in server/config/llm_defaults.json (resolved by _resolve_temperature).
     temperature: Optional[float] = Field(
-        default=None, ge=0.0, le=2.0,
+        default=None,
+        ge=0.0,
+        le=2.0,
         json_schema_extra={"numberStepSize": 0.1},
     )
     # default=None so an unset value is absent from the dumped dict and the
@@ -58,7 +60,9 @@ class ChatModelParams(BaseModel):
         json_schema_extra={"password": True},
     )
     top_p: Optional[float] = Field(
-        default=1.0, ge=0.0, le=1.0,
+        default=1.0,
+        ge=0.0,
+        le=1.0,
         json_schema_extra={"numberStepSize": 0.1},
     )
     thinking_enabled: bool = Field(default=False)
@@ -85,10 +89,7 @@ class ChatModelBase(ActionNode, abstract=True):
     Override Params to add provider-specific tuning fields."""
 
     component_kind = "model"
-    handles = (
-        {"name": "output-model", "kind": "output", "position": "right",
-         "label": "Model", "role": "model"},
-    )
+    handles = ({"name": "output-model", "kind": "output", "position": "right", "label": "Model", "role": "model"},)
     annotations = {"destructive": False, "readonly": False, "open_world": True}
     task_queue = TaskQueue.AI_HEAVY
 
@@ -106,7 +107,9 @@ class ChatModelBase(ActionNode, abstract=True):
         # ``RuntimeError`` here only fires for "success=False" responses
         # that aren't typed SDK errors (real bugs worth a stacktrace).
         response = await ai_service.execute_chat(
-            ctx.node_id, self.type, params.model_dump(),
+            ctx.node_id,
+            self.type,
+            params.model_dump(),
         )
         if response.get("success"):
             return response.get("result") or response

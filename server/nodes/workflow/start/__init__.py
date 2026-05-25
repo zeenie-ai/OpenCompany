@@ -34,10 +34,7 @@ class StartNode(ActionNode):
     group = ("workflow",)
     description = "Starting point for workflow execution. Provides initial data to connected nodes."
     component_kind = "start"
-    handles = (
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
-    )
+    handles = ({"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},)
     ui_hints = {
         "hideInputSection": True,
         "hideOutputSection": True,

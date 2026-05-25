@@ -50,9 +50,7 @@ class EncryptedAPIKey(SQLModel, table=True):
     key_hash: str = Field(max_length=64, index=True)  # SHA256[:16] for lookup
     models: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     is_valid: bool = Field(default=True)
-    last_validated: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    last_validated: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -162,18 +160,14 @@ class CredentialsDatabase:
     async def _get_metadata(self, key: str) -> Optional[str]:
         """Get metadata value by key."""
         async with self.get_session() as session:
-            result = await session.execute(
-                select(CredentialsMetadata).where(CredentialsMetadata.key == key)
-            )
+            result = await session.execute(select(CredentialsMetadata).where(CredentialsMetadata.key == key))
             row = result.scalars().first()
             return row.value if row else None
 
     async def _set_metadata(self, key: str, value: str) -> None:
         """Set metadata value."""
         async with self.get_session() as session:
-            existing = await session.execute(
-                select(CredentialsMetadata).where(CredentialsMetadata.key == key)
-            )
+            existing = await session.execute(select(CredentialsMetadata).where(CredentialsMetadata.key == key))
             row = existing.scalars().first()
             if row:
                 row.value = value
@@ -244,9 +238,7 @@ class CredentialsDatabase:
             await session.commit()
             logger.debug(f"Saved encrypted API key for provider: {provider}")
 
-    async def get_api_key_model_params(
-        self, provider: str, session_id: str = "default"
-    ) -> Dict[str, Dict[str, Any]]:
+    async def get_api_key_model_params(self, provider: str, session_id: str = "default") -> Dict[str, Dict[str, Any]]:
         """Return the per-model param map stored alongside the model list.
 
         Empty dict if the provider has no entry, no params were stored,
@@ -263,9 +255,7 @@ class CredentialsDatabase:
             params = row.models.get("model_params") or {}
             return params if isinstance(params, dict) else {}
 
-    async def get_api_key(
-        self, provider: str, session_id: str = "default"
-    ) -> Optional[str]:
+    async def get_api_key(self, provider: str, session_id: str = "default") -> Optional[str]:
         """
         Get decrypted API key.
 
@@ -287,9 +277,7 @@ class CredentialsDatabase:
                 logger.error(f"Failed to decrypt API key for {provider}: {e}")
                 return None
 
-    async def get_api_key_info(
-        self, provider: str, session_id: str = "default"
-    ) -> Optional[Dict[str, Any]]:
+    async def get_api_key_info(self, provider: str, session_id: str = "default") -> Optional[Dict[str, Any]]:
         """
         Get API key metadata (without decrypting the key).
 
@@ -312,9 +300,7 @@ class CredentialsDatabase:
                 "last_validated": row.last_validated,
             }
 
-    async def delete_api_key(
-        self, provider: str, session_id: str = "default"
-    ) -> bool:
+    async def delete_api_key(self, provider: str, session_id: str = "default") -> bool:
         """
         Delete API key.
 
@@ -346,16 +332,10 @@ class CredentialsDatabase:
             List of provider names
         """
         async with self.get_session() as session:
-            result = await session.execute(
-                select(EncryptedAPIKey.provider).where(
-                    EncryptedAPIKey.session_id == session_id
-                )
-            )
+            result = await session.execute(select(EncryptedAPIKey.provider).where(EncryptedAPIKey.session_id == session_id))
             return [row[0] for row in result.all()]
 
-    async def get_api_key_models(
-        self, provider: str, session_id: str = "default"
-    ) -> List[str]:
+    async def get_api_key_models(self, provider: str, session_id: str = "default") -> List[str]:
         """
         Get stored models for an API key.
 
@@ -436,9 +416,7 @@ class CredentialsDatabase:
             await session.commit()
             logger.debug(f"Saved encrypted OAuth tokens for provider: {provider}")
 
-    async def get_oauth_tokens(
-        self, provider: str, customer_id: str = "owner"
-    ) -> Optional[Dict[str, Any]]:
+    async def get_oauth_tokens(self, provider: str, customer_id: str = "owner") -> Optional[Dict[str, Any]]:
         """
         Get decrypted OAuth tokens.
 
@@ -464,9 +442,7 @@ class CredentialsDatabase:
             try:
                 return {
                     "access_token": self.encryption.decrypt(row.access_token_encrypted),
-                    "refresh_token": self.encryption.decrypt(
-                        row.refresh_token_encrypted
-                    ),
+                    "refresh_token": self.encryption.decrypt(row.refresh_token_encrypted),
                     "email": row.email,
                     "name": row.name,
                     "token_expiry": row.token_expiry,
@@ -476,9 +452,7 @@ class CredentialsDatabase:
                 logger.error(f"Failed to decrypt OAuth tokens for {provider}: {e}")
                 return None
 
-    async def delete_oauth_tokens(
-        self, provider: str, customer_id: str = "owner"
-    ) -> bool:
+    async def delete_oauth_tokens(self, provider: str, customer_id: str = "owner") -> bool:
         """
         Delete OAuth tokens.
 
@@ -515,9 +489,5 @@ class CredentialsDatabase:
             List of provider names
         """
         async with self.get_session() as session:
-            result = await session.execute(
-                select(EncryptedOAuthToken.provider).where(
-                    EncryptedOAuthToken.customer_id == customer_id
-                )
-            )
+            result = await session.execute(select(EncryptedOAuthToken.provider).where(EncryptedOAuthToken.customer_id == customer_id))
             return [row[0] for row in result.all()]

@@ -3,6 +3,7 @@
 Uses standard Python data structures with LangChain message compatibility.
 No deprecated APIs - follows LangChain 0.3+ recommendations.
 """
+
 from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -14,6 +15,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Message:
     """Single conversation message."""
+
     role: str  # 'human' or 'ai'
     content: str
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
@@ -22,6 +24,7 @@ class Message:
 @dataclass
 class ConversationSession:
     """Conversation session with message history."""
+
     session_id: str
     messages: List[Message] = field(default_factory=list)
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
@@ -76,14 +79,7 @@ def delete_session(session_id: str) -> bool:
 
 def get_all_sessions() -> List[Dict]:
     """Get info about all sessions."""
-    return [
-        {
-            "session_id": s.session_id,
-            "message_count": len(s.messages),
-            "created_at": s.created_at
-        }
-        for s in _sessions.values()
-    ]
+    return [{"session_id": s.session_id, "message_count": len(s.messages), "created_at": s.created_at} for s in _sessions.values()]
 
 
 def get_langchain_messages(session_id: str, window_size: Optional[int] = None):
@@ -96,8 +92,8 @@ def get_langchain_messages(session_id: str, window_size: Optional[int] = None):
     messages = get_messages(session_id, window_size)
     lc_messages = []
     for m in messages:
-        if m['role'] == 'human':
-            lc_messages.append(HumanMessage(content=m['content']))
-        elif m['role'] == 'ai':
-            lc_messages.append(AIMessage(content=m['content']))
+        if m["role"] == "human":
+            lc_messages.append(HumanMessage(content=m["content"]))
+        elif m["role"] == "ai":
+            lc_messages.append(AIMessage(content=m["content"]))
     return lc_messages

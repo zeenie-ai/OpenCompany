@@ -86,10 +86,8 @@ class PerplexitySearchNode(ActionNode):
     tool_name = "perplexity_search"
     tool_description = "Search the web using Perplexity Sonar AI. Returns an AI-generated answer with citations and source URLs."
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
     credentials = (PerplexityCredential,)
     annotations = {"destructive": False, "readonly": True, "open_world": True}

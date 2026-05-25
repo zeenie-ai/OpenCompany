@@ -158,6 +158,7 @@ class KeyringBackend(CredentialBackend):
         self._available = False
         try:
             import keyring
+
             self._keyring = keyring
             # Test if keyring is working
             self._keyring.get_password(self.SERVICE_NAME, "__test__")
@@ -177,11 +178,7 @@ class KeyringBackend(CredentialBackend):
             self._keyring.set_password(self.SERVICE_NAME, key, value)
             # Store metadata separately if provided
             if metadata:
-                self._keyring.set_password(
-                    self.SERVICE_NAME,
-                    f"{key}__metadata",
-                    json.dumps(metadata)
-                )
+                self._keyring.set_password(self.SERVICE_NAME, f"{key}__metadata", json.dumps(metadata))
             return True
         except Exception as e:
             logger.error(f"KeyringBackend store failed: {e}")
@@ -243,6 +240,7 @@ class AWSSecretsBackend(CredentialBackend):
 
         try:
             import boto3
+
             self._client = boto3.client("secretsmanager", region_name=self._region)
             # Test connection
             self._client.describe_secret(SecretId=self._secret_arn)
@@ -267,10 +265,7 @@ class AWSSecretsBackend(CredentialBackend):
                 current[f"{key}__metadata"] = json.dumps(metadata)
 
             # Put updated secret
-            self._client.put_secret_value(
-                SecretId=self._secret_arn,
-                SecretString=json.dumps(current)
-            )
+            self._client.put_secret_value(SecretId=self._secret_arn, SecretString=json.dumps(current))
 
             # Update cache
             self._cache[key] = value
@@ -310,10 +305,7 @@ class AWSSecretsBackend(CredentialBackend):
             current.pop(f"{key}__metadata", None)
 
             # Put updated secret
-            self._client.put_secret_value(
-                SecretId=self._secret_arn,
-                SecretString=json.dumps(current)
-            )
+            self._client.put_secret_value(SecretId=self._secret_arn, SecretString=json.dumps(current))
 
             # Update cache
             self._cache.pop(key, None)

@@ -11,11 +11,7 @@ def is_valid_message_content(content: Any) -> bool:
     if content is None:
         return False
     if isinstance(content, list):
-        return any(
-            (isinstance(b, dict) and b.get("text", "").strip())
-            or (isinstance(b, str) and b.strip())
-            for b in content
-        )
+        return any((isinstance(b, dict) and b.get("text", "").strip()) or (isinstance(b, str) and b.strip()) for b in content)
     if isinstance(content, str):
         return bool(content.strip())
     return bool(content)

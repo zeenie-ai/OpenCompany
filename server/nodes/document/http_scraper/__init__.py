@@ -58,17 +58,21 @@ class HttpScraperParams(BaseModel):
 
     # Page-mode fields
     start_page: int = Field(
-        default=1, ge=1,
+        default=1,
+        ge=1,
         description="First page number.",
         json_schema_extra={"displayOptions": {"show": {"iteration_mode": ["page"]}}},
     )
     end_page: int = Field(
-        default=10, ge=1,
+        default=10,
+        ge=1,
         description="Last page number (inclusive).",
         json_schema_extra={"displayOptions": {"show": {"iteration_mode": ["page"]}}},
     )
     max_pages: int = Field(
-        default=10, ge=1, le=1000,
+        default=10,
+        ge=1,
+        le=1000,
         description="Safety cap on pages fetched.",
     )
 
@@ -92,7 +96,8 @@ class HttpScraperParams(BaseModel):
         json_schema_extra={"displayOptions": {"show": {"use_proxy": [True]}}},
     )
     sticky_duration: int = Field(
-        default=600, ge=1,
+        default=600,
+        ge=1,
         json_schema_extra={
             "displayOptions": {"show": {"use_proxy": [True], "session_type": ["sticky"]}},
         },
@@ -134,26 +139,28 @@ class HttpScraperNode(ActionNode):
 
         iteration_mode = params.iteration_mode
         link_selector = params.link_selector or 'a[href$=".pdf"]'
-        headers_str = params.headers or '{}'
+        headers_str = params.headers or "{}"
         headers = json.loads(headers_str) if isinstance(headers_str, str) and headers_str else {}
 
         urls_to_fetch = []
-        if iteration_mode == 'date':
+        if iteration_mode == "date":
             if not params.start_date or not params.end_date:
                 raise NodeUserError("start_date/end_date required for date mode")
-            placeholder = params.date_placeholder or '{date}'
+            placeholder = params.date_placeholder or "{date}"
             start = datetime.strptime(params.start_date, "%Y-%m-%d")
             end = datetime.strptime(params.end_date, "%Y-%m-%d")
             current = start
             while current <= end:
-                urls_to_fetch.append((
-                    url.replace(placeholder, current.strftime("%Y-%m-%d")),
-                    {'date': current.isoformat()},
-                ))
+                urls_to_fetch.append(
+                    (
+                        url.replace(placeholder, current.strftime("%Y-%m-%d")),
+                        {"date": current.isoformat()},
+                    )
+                )
                 current += timedelta(days=1)
-        elif iteration_mode == 'page':
+        elif iteration_mode == "page":
             for page in range(params.start_page, params.end_page + 1):
-                urls_to_fetch.append((url.replace('{page}', str(page)), {'page': page}))
+                urls_to_fetch.append((url.replace("{page}", str(page)), {"page": page}))
         else:
             urls_to_fetch.append((url, {}))
 
@@ -161,6 +168,7 @@ class HttpScraperNode(ActionNode):
         if params.use_proxy:
             try:
                 from services.proxy.service import get_proxy_service
+
                 proxy_svc = get_proxy_service()
                 if proxy_svc and proxy_svc.is_enabled():
                     proxy_url = await proxy_svc.get_proxy_url(url, params.model_dump())
@@ -177,16 +185,18 @@ class HttpScraperNode(ActionNode):
                 try:
                     response = await client.get(fetch_url, headers=headers)
                     response.raise_for_status()
-                    soup = BeautifulSoup(response.text, 'html.parser')
+                    soup = BeautifulSoup(response.text, "html.parser")
                     for el in soup.select(link_selector):
-                        href = el.get('href', '')
+                        href = el.get("href", "")
                         if href:
-                            items.append({
-                                'url': urljoin(fetch_url, href),
-                                'text': el.get_text(strip=True),
-                                'source_url': fetch_url,
-                                **meta,
-                            })
+                            items.append(
+                                {
+                                    "url": urljoin(fetch_url, href),
+                                    "text": el.get_text(strip=True),
+                                    "source_url": fetch_url,
+                                    **meta,
+                                }
+                            )
                 except Exception as e:
                     errors.append(f"{fetch_url}: {e}")
 

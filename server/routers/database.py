@@ -25,10 +25,7 @@ class WorkflowSaveRequest(BaseModel):
 
 
 @router.post("/node-parameters")
-async def save_node_parameters(
-    request: NodeParameterRequest,
-    database: Database = Depends(lambda: container.database())
-):
+async def save_node_parameters(request: NodeParameterRequest, database: Database = Depends(lambda: container.database())):
     """Save node parameters (replaces frontend Dexie)."""
     try:
         success = await database.save_node_parameters(request.node_id, request.parameters)
@@ -39,10 +36,7 @@ async def save_node_parameters(
 
 
 @router.get("/node-parameters/{node_id}")
-async def get_node_parameters(
-    node_id: str,
-    database: Database = Depends(lambda: container.database())
-):
+async def get_node_parameters(node_id: str, database: Database = Depends(lambda: container.database())):
     """Get node parameters (replaces frontend Dexie)."""
     try:
         parameters = await database.get_node_parameters(node_id)
@@ -53,10 +47,7 @@ async def get_node_parameters(
 
 
 @router.delete("/node-parameters/{node_id}")
-async def delete_node_parameters(
-    node_id: str,
-    database: Database = Depends(lambda: container.database())
-):
+async def delete_node_parameters(node_id: str, database: Database = Depends(lambda: container.database())):
     """Delete node parameters (replaces frontend Dexie)."""
     try:
         success = await database.delete_node_parameters(node_id)
@@ -70,18 +61,12 @@ async def delete_node_parameters(
 # Workflow Operations
 # ============================================================================
 
+
 @router.post("/workflows")
-async def save_workflow(
-    request: WorkflowSaveRequest,
-    database: Database = Depends(lambda: container.database())
-):
+async def save_workflow(request: WorkflowSaveRequest, database: Database = Depends(lambda: container.database())):
     """Save workflow to database."""
     try:
-        success = await database.save_workflow(
-            workflow_id=request.workflow_id,
-            name=request.name,
-            data=request.data
-        )
+        success = await database.save_workflow(workflow_id=request.workflow_id, name=request.name, data=request.data)
         return {"success": success, "workflow_id": request.workflow_id}
     except Exception as e:
         logger.error("Failed to save workflow", error=str(e))
@@ -89,9 +74,7 @@ async def save_workflow(
 
 
 @router.get("/workflows")
-async def get_all_workflows(
-    database: Database = Depends(lambda: container.database())
-):
+async def get_all_workflows(database: Database = Depends(lambda: container.database())):
     """Get all workflows."""
     try:
         # Auto-load example workflows on first fetch
@@ -118,10 +101,10 @@ async def get_all_workflows(
                     "name": w.name,
                     "nodeCount": len(w.data.get("nodes", [])) if w.data else 0,
                     "createdAt": w.created_at.isoformat() if w.created_at else None,
-                    "lastModified": w.updated_at.isoformat() if w.updated_at else None
+                    "lastModified": w.updated_at.isoformat() if w.updated_at else None,
                 }
                 for w in workflows
-            ]
+            ],
         }
     except Exception as e:
         logger.error("Failed to get workflows", error=str(e))
@@ -129,10 +112,7 @@ async def get_all_workflows(
 
 
 @router.get("/workflows/{workflow_id}")
-async def get_workflow(
-    workflow_id: str,
-    database: Database = Depends(lambda: container.database())
-):
+async def get_workflow(workflow_id: str, database: Database = Depends(lambda: container.database())):
     """Get workflow by ID."""
     try:
         workflow = await database.get_workflow(workflow_id)
@@ -144,8 +124,8 @@ async def get_workflow(
                     "name": workflow.name,
                     "data": workflow.data,
                     "createdAt": workflow.created_at.isoformat() if workflow.created_at else None,
-                    "lastModified": workflow.updated_at.isoformat() if workflow.updated_at else None
-                }
+                    "lastModified": workflow.updated_at.isoformat() if workflow.updated_at else None,
+                },
             }
         return {"success": False, "error": "Workflow not found"}
     except Exception as e:
@@ -154,10 +134,7 @@ async def get_workflow(
 
 
 @router.delete("/workflows/{workflow_id}")
-async def delete_workflow(
-    workflow_id: str,
-    database: Database = Depends(lambda: container.database())
-):
+async def delete_workflow(workflow_id: str, database: Database = Depends(lambda: container.database())):
     """Delete workflow."""
     try:
         success = await database.delete_workflow(workflow_id)

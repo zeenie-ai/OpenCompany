@@ -124,8 +124,7 @@ class ClaudeCodeAgentParams(BaseModel):
     # --- Hidden: advanced multi-task batch ---
     tasks: List[ClaudeTaskSpec] = Field(
         default_factory=list,
-        description="Advanced: list of Claude tasks to run in parallel "
-                    "(max 5 concurrent). Use ``prompt`` for the common case.",
+        description="Advanced: list of Claude tasks to run in parallel " "(max 5 concurrent). Use ``prompt`` for the common case.",
         json_schema_extra={"hidden": True, "rows": 1},
     )
 
@@ -149,7 +148,9 @@ class ClaudeCodeAgentParams(BaseModel):
         json_schema_extra={"hidden": True},
     )
     max_parallel: int = Field(
-        default=5, ge=1, le=20,
+        default=5,
+        ge=1,
+        le=20,
         description="Concurrency cap.",
         json_schema_extra={"hidden": True},
     )
@@ -163,17 +164,13 @@ class ClaudeCodeAgentParams(BaseModel):
     effort: Optional[ClaudeCodeEffort] = Field(
         default=None,
         description=(
-            "Reasoning-effort level passed via ``--effort``. Applies to "
-            "thinking-capable models (Opus / Sonnet); ignored by Haiku."
+            "Reasoning-effort level passed via ``--effort``. Applies to " "thinking-capable models (Opus / Sonnet); ignored by Haiku."
         ),
         json_schema_extra={"hidden": True},
     )
     fallback_model: Optional[ClaudeCodeModel] = Field(
         default=None,
-        description=(
-            "Model to fall back to when the primary is overloaded. "
-            "Passed via ``--fallback-model``."
-        ),
+        description=("Model to fall back to when the primary is overloaded. " "Passed via ``--fallback-model``."),
         json_schema_extra={"hidden": True},
     )
 
@@ -211,6 +208,7 @@ class ClaudeCodeAgentParams(BaseModel):
 
 class ClaudeCodeAgentOutput(BaseModel):
     """Aggregated batch output."""
+
     success: bool = True
     n_tasks: int = 0
     n_succeeded: int = 0
@@ -235,10 +233,7 @@ class ClaudeCodeAgentNode(ActionNode):
     display_name = "Claude Code"
     subtitle = "Agentic Coding"
     group = ("agent",)
-    description = (
-        "Run N parallel Claude Code CLI sessions over a list of tasks. "
-        "Each task is isolated in its own git worktree."
-    )
+    description = "Run N parallel Claude Code CLI sessions over a list of tasks. " "Each task is isolated in its own git worktree."
     component_kind = "agent"
     tool_description = "ONE-SHOT delegation to Claude Code Agent. Call ONCE per task, returns task_id. Agentic coding with file reading, editing, and command execution - do NOT re-call."
     handles = std_agent_handles()
@@ -254,7 +249,9 @@ class ClaudeCodeAgentNode(ActionNode):
         cost={"service": "claude_code_agent", "action": "run", "count": 1},
     )
     async def execute_op(
-        self, ctx: NodeContext, params: ClaudeCodeAgentParams,
+        self,
+        ctx: NodeContext,
+        params: ClaudeCodeAgentParams,
     ) -> Any:
         from services.cli_agent.service import get_ai_cli_service
         from services.cli_agent.types import session_result_to_model
@@ -267,7 +264,8 @@ class ClaudeCodeAgentNode(ActionNode):
         node_id = ctx.node_id
 
         await broadcaster.update_node_status(
-            node_id, "executing",
+            node_id,
+            "executing",
             {"message": "Starting Claude Code batch..."},
             workflow_id=workflow_id,
         )
@@ -278,16 +276,13 @@ class ClaudeCodeAgentNode(ActionNode):
         # read from `input_data` exactly the way `nodes/agent/_inline.py`
         # does for the standard agent path.
         database = get_database()
-        memory_data, skill_data, tool_data, input_data, _ = (
-            await collect_agent_connections(
-                node_id, ctx.raw, database, log_prefix="[Claude Code]",
-            )
+        memory_data, skill_data, tool_data, input_data, _ = await collect_agent_connections(
+            node_id,
+            ctx.raw,
+            database,
+            log_prefix="[Claude Code]",
         )
-        connected_skills = [
-            s.get("skill_name") or s.get("label")
-            for s in skill_data
-            if s.get("skill_name") or s.get("label")
-        ]
+        connected_skills = [s.get("skill_name") or s.get("label") for s in skill_data if s.get("skill_name") or s.get("label")]
 
         # Memory bridge: claude maintains its own session JSONL on disk
         # under `<CLAUDE_CONFIG_DIR>/projects/<cwd-encoded>/<UUID>.jsonl`.
@@ -312,8 +307,7 @@ class ClaudeCodeAgentNode(ActionNode):
         continue_session = bool(memory_data)
         if memory_data:
             logger.info(
-                "[Claude Code memory] memory_node=%s -> --continue "
-                "(claude auto-finds latest session under cwd)",
+                "[Claude Code memory] memory_node=%s -> --continue " "(claude auto-finds latest session under cwd)",
                 memory_data.get("node_id"),
             )
 
@@ -361,11 +355,7 @@ class ClaudeCodeAgentNode(ActionNode):
                     changed["fallback_model"] = params.fallback_model
                 # Only auto-enable --continue when memory is wired AND
                 # the task didn't explicitly opt in/out or pick a UUID.
-                if (
-                    continue_session
-                    and not t.continue_session
-                    and not t.resume_session_id
-                ):
+                if continue_session and not t.continue_session and not t.resume_session_id:
                     changed["continue_session"] = True
                 if changed:
                     tasks[i] = t.model_copy(update=changed)
@@ -374,23 +364,18 @@ class ClaudeCodeAgentNode(ActionNode):
         # `--resume` against one session JSONL would corrupt it.
         if memory_data and len(tasks) > 1:
             raise NodeUserError(
-                "Memory-bound batches must run one task at a time. "
-                "Reduce Tasks to a single entry, or disconnect the "
-                "memory node."
+                "Memory-bound batches must run one task at a time. " "Reduce Tasks to a single entry, or disconnect the " "memory node."
             )
 
         # Workspace dir — workflow.py injects this into context
         workspace_dir = ctx.raw.get("workspace_dir") or params.working_directory
         if workspace_dir is None:
             from core.config import Settings
-            workspace_dir = Path(Settings().workspace_base_resolved) / (
-                workflow_id or "default"
-            )
+
+            workspace_dir = Path(Settings().workspace_base_resolved) / (workflow_id or "default")
         workspace_dir = Path(workspace_dir)
 
-        repo_root = (
-            Path(params.working_directory) if params.working_directory else None
-        )
+        repo_root = Path(params.working_directory) if params.working_directory else None
 
         svc = get_ai_cli_service()
         result = await svc.run_batch(
@@ -411,16 +396,18 @@ class ClaudeCodeAgentNode(ActionNode):
         elapsed = time.time() - start_time
         logger.debug(
             "[claude_code_agent] node=%s tasks=%d ok=%d fail=%d elapsed=%.2fs",
-            node_id, result.n_tasks, result.n_succeeded, result.n_failed, elapsed,
+            node_id,
+            result.n_tasks,
+            result.n_succeeded,
+            result.n_failed,
+            elapsed,
         )
 
         await broadcaster.update_node_status(
-            node_id, "success" if result.n_failed == 0 else "warning",
+            node_id,
+            "success" if result.n_failed == 0 else "warning",
             {
-                "message": (
-                    f"Batch complete: {result.n_succeeded}/{result.n_tasks} "
-                    f"succeeded"
-                ),
+                "message": (f"Batch complete: {result.n_succeeded}/{result.n_tasks} " f"succeeded"),
                 "n_tasks": result.n_tasks,
                 "n_succeeded": result.n_succeeded,
                 "n_failed": result.n_failed,
@@ -453,4 +440,3 @@ class ClaudeCodeAgentNode(ActionNode):
             "session_id": legacy_session_id,
             "cost_usd": legacy_cost,
         }
-

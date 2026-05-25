@@ -59,13 +59,15 @@ async def expand_master_skill(
             except Exception as exc:  # noqa: BLE001 -- log + skip
                 logger.warning(f"[MasterSkill] Failed to load skill {skill_key}: {exc}")
 
-        entries.append({
-            "node_id": f"{source_node_id}_{skill_key}",
-            "node_type": "masterSkill",
-            "skill_name": skill_key,
-            "parameters": {"instructions": instructions, "skillName": skill_key},
-            "label": skill_key,
-        })
+        entries.append(
+            {
+                "node_id": f"{source_node_id}_{skill_key}",
+                "node_type": "masterSkill",
+                "skill_name": skill_key,
+                "parameters": {"instructions": instructions, "skillName": skill_key},
+                "label": skill_key,
+            }
+        )
 
     return entries
 

@@ -2,6 +2,7 @@
 Cron Scheduler Service using APScheduler.
 Manages scheduled jobs for workflow automation.
 """
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.jobstores.base import JobLookupError
@@ -37,13 +38,7 @@ def shutdown_scheduler():
         logger.info("[Scheduler] Shutdown")
 
 
-def register_cron_job(
-    job_id: str,
-    cron_expression: str,
-    callback: Callable,
-    timezone: str = "UTC",
-    **kwargs
-) -> str:
+def register_cron_job(job_id: str, cron_expression: str, callback: Callable, timezone: str = "UTC", **kwargs) -> str:
     """
     Register a cron job with the scheduler.
 
@@ -66,35 +61,17 @@ def register_cron_job(
     if len(parts) >= 6:
         # 6-field format: second minute hour day month weekday
         trigger = CronTrigger(
-            second=parts[0],
-            minute=parts[1],
-            hour=parts[2],
-            day=parts[3],
-            month=parts[4],
-            day_of_week=parts[5],
-            timezone=timezone
+            second=parts[0], minute=parts[1], hour=parts[2], day=parts[3], month=parts[4], day_of_week=parts[5], timezone=timezone
         )
     else:
         # 5-field format: minute hour day month weekday (default second=0)
         if len(parts) < 5:
-            parts.extend(['*'] * (5 - len(parts)))
+            parts.extend(["*"] * (5 - len(parts)))
         trigger = CronTrigger(
-            second='0',
-            minute=parts[0],
-            hour=parts[1],
-            day=parts[2],
-            month=parts[3],
-            day_of_week=parts[4],
-            timezone=timezone
+            second="0", minute=parts[0], hour=parts[1], day=parts[2], month=parts[3], day_of_week=parts[4], timezone=timezone
         )
 
-    scheduler.add_job(
-        callback,
-        trigger=trigger,
-        id=job_id,
-        replace_existing=True,
-        kwargs=kwargs
-    )
+    scheduler.add_job(callback, trigger=trigger, id=job_id, replace_existing=True, kwargs=kwargs)
 
     logger.info(f"[Scheduler] Registered cron job: {job_id} with expression: {cron_expression}")
     return job_id
@@ -133,11 +110,7 @@ def get_job_info(job_id: str) -> Optional[Dict]:
     scheduler = get_scheduler()
     job = scheduler.get_job(job_id)
     if job:
-        return {
-            "id": job.id,
-            "next_run_time": job.next_run_time.isoformat() if job.next_run_time else None,
-            "trigger": str(job.trigger)
-        }
+        return {"id": job.id, "next_run_time": job.next_run_time.isoformat() if job.next_run_time else None, "trigger": str(job.trigger)}
     return None
 
 
@@ -146,10 +119,6 @@ def get_all_jobs() -> list:
     scheduler = get_scheduler()
     jobs = scheduler.get_jobs()
     return [
-        {
-            "id": job.id,
-            "next_run_time": job.next_run_time.isoformat() if job.next_run_time else None,
-            "trigger": str(job.trigger)
-        }
+        {"id": job.id, "next_run_time": job.next_run_time.isoformat() if job.next_run_time else None, "trigger": str(job.trigger)}
         for job in jobs
     ]

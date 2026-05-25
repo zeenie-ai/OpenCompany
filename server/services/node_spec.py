@@ -84,8 +84,7 @@ def get_node_spec(node_type: str) -> Optional[dict[str, Any]]:
 
     # Wave 10.A — full visual contract. Only emit fields when seeded so the
     # wire format stays compact and unseeded types keep the pre-10 shape.
-    for key in ("color", "componentKind", "handles", "credentials",
-                "hideOutputHandle", "hideInputHandle", "visibility"):
+    for key in ("color", "componentKind", "handles", "credentials", "hideOutputHandle", "hideInputHandle", "visibility"):
         if key in meta:
             spec[key] = meta[key]
 
@@ -101,11 +100,8 @@ def list_node_types_with_spec() -> list[str]:
     but no Pydantic schemas)."""
 
     from models.node_metadata import NODE_METADATA
-    return sorted(
-        set(NODE_INPUT_MODELS.keys())
-        | set(NODE_OUTPUT_SCHEMAS.keys())
-        | set(NODE_METADATA.keys())
-    )
+
+    return sorted(set(NODE_INPUT_MODELS.keys()) | set(NODE_OUTPUT_SCHEMAS.keys()) | set(NODE_METADATA.keys()))
 
 
 def node_spec_revision() -> str:

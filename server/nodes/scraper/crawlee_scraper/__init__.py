@@ -24,15 +24,17 @@ _MAX_CONTENT_LENGTH = 100_000
 
 async def _get_proxy_config(parameters: Dict[str, Any], url: str):
     """Bridge MachinaOs ProxyService to Crawlee ProxyConfiguration."""
-    if not parameters.get('use_proxy', False):
+    if not parameters.get("use_proxy", False):
         return None
     try:
         from services.proxy import get_proxy_service
+
         proxy_svc = get_proxy_service()
         proxy_url = await proxy_svc.get_proxy_url(url, parameters)
         if not proxy_url:
             return None
         from crawlee.proxy_configuration import ProxyConfiguration
+
         return ProxyConfiguration(proxy_urls=[proxy_url])
     except Exception as e:
         logger.warning(f"[Crawlee] Proxy setup failed, proceeding without: {e}")
@@ -41,19 +43,20 @@ async def _get_proxy_config(parameters: Dict[str, Any], url: str):
 
 def _extract_text(soup, css_selector: str, output_format: str) -> str:
     target = soup.select(css_selector) if css_selector else [soup]
-    if output_format == 'html':
+    if output_format == "html":
         parts = [str(el) for el in target]
     else:
-        parts = [el.get_text(separator='\n', strip=True) for el in target]
-    text = '\n\n'.join(parts)
-    if output_format == 'markdown':
+        parts = [el.get_text(separator="\n", strip=True) for el in target]
+    text = "\n\n".join(parts)
+    if output_format == "markdown":
         try:
             import html2text
+
             h = html2text.HTML2Text()
             h.ignore_links = False
             h.ignore_images = False
             h.body_width = 0
-            raw_html = '\n\n'.join(str(el) for el in target)
+            raw_html = "\n\n".join(str(el) for el in target)
             text = h.handle(raw_html)
         except ImportError:
             pass
@@ -61,19 +64,19 @@ def _extract_text(soup, css_selector: str, output_format: str) -> str:
 
 
 def _extract_links(soup, base_url: str) -> List[str]:
-    return [urljoin(base_url, a['href']) for a in soup.find_all('a', href=True)]
+    return [urljoin(base_url, a["href"]) for a in soup.find_all("a", href=True)]
 
 
-async def _run_beautifulsoup(url, pages, p, proxy_config, css_selector, extract_links,
-                             output_format, mode, max_pages, max_depth,
-                             max_concurrency, timeout_secs):
+async def _run_beautifulsoup(
+    url, pages, p, proxy_config, css_selector, extract_links, output_format, mode, max_pages, max_depth, max_concurrency, timeout_secs
+):
     from crawlee import ConcurrencySettings
     from crawlee.crawlers import BeautifulSoupCrawler, BeautifulSoupCrawlingContext
     from crawlee.storage_clients import MemoryStorageClient
 
     crawler = BeautifulSoupCrawler(
         max_requests_per_crawl=max_pages,
-        max_crawl_depth=max_depth if mode == 'crawl' else 0,
+        max_crawl_depth=max_depth if mode == "crawl" else 0,
         request_handler_timeout=timedelta(seconds=timeout_secs),
         concurrency_settings=ConcurrencySettings(
             max_concurrency=max_concurrency,
@@ -83,47 +86,51 @@ async def _run_beautifulsoup(url, pages, p, proxy_config, css_selector, extract_
         proxy_configuration=proxy_config,
         configure_logging=False,
     )
-    link_selector = p.get('link_selector', '') or 'a[href]'
-    url_pattern = p.get('url_pattern', '')
+    link_selector = p.get("link_selector", "") or "a[href]"
+    url_pattern = p.get("url_pattern", "")
 
     @crawler.router.default_handler
     async def handler(ctx: BeautifulSoupCrawlingContext) -> None:
-        title = ctx.soup.title.string if ctx.soup.title else ''
+        title = ctx.soup.title.string if ctx.soup.title else ""
         content = _extract_text(ctx.soup, css_selector, output_format)
         page_data: Dict[str, Any] = {
-            'url': ctx.request.url, 'title': title, 'content': content,
+            "url": ctx.request.url,
+            "title": title,
+            "content": content,
         }
         if extract_links:
-            page_data['links'] = _extract_links(ctx.soup, ctx.request.url)
+            page_data["links"] = _extract_links(ctx.soup, ctx.request.url)
         pages.append(page_data)
 
-        if mode == 'crawl':
-            kwargs: Dict[str, Any] = {'selector': link_selector}
+        if mode == "crawl":
+            kwargs: Dict[str, Any] = {"selector": link_selector}
             if url_pattern:
                 import re
                 from fnmatch import translate
-                kwargs['include'] = [re.compile(translate(url_pattern))]
+
+                kwargs["include"] = [re.compile(translate(url_pattern))]
             await ctx.enqueue_links(**kwargs)
 
     await asyncio.wait_for(crawler.run([url]), timeout=timeout_secs)
 
 
-async def _run_playwright(url, pages, p, proxy_config, css_selector, extract_links,
-                          output_format, mode, max_pages, max_depth,
-                          max_concurrency, timeout_secs):
+async def _run_playwright(
+    url, pages, p, proxy_config, css_selector, extract_links, output_format, mode, max_pages, max_depth, max_concurrency, timeout_secs
+):
     from crawlee import ConcurrencySettings
     from crawlee.crawlers import PlaywrightCrawler, PlaywrightCrawlingContext
     from crawlee.storage_clients import MemoryStorageClient
 
-    browser_type = p.get('browser_type', 'chromium')
-    wait_for_selector = p.get('wait_for_selector', '')
-    wait_timeout = p.get('wait_timeout', 30000)
-    take_screenshot = p.get('screenshot', False) or p.get('take_screenshot', False)
+    browser_type = p.get("browser_type", "chromium")
+    wait_for_selector = p.get("wait_for_selector", "")
+    wait_timeout = p.get("wait_timeout", 30000)
+    take_screenshot = p.get("screenshot", False) or p.get("take_screenshot", False)
 
     crawler = PlaywrightCrawler(
-        browser_type=browser_type, headless=True,
+        browser_type=browser_type,
+        headless=True,
         max_requests_per_crawl=max_pages,
-        max_crawl_depth=max_depth if mode == 'crawl' else 0,
+        max_crawl_depth=max_depth if mode == "crawl" else 0,
         request_handler_timeout=timedelta(seconds=timeout_secs),
         concurrency_settings=ConcurrencySettings(
             max_concurrency=max_concurrency,
@@ -133,8 +140,8 @@ async def _run_playwright(url, pages, p, proxy_config, css_selector, extract_lin
         proxy_configuration=proxy_config,
         configure_logging=False,
     )
-    link_selector = p.get('link_selector', '') or 'a[href]'
-    url_pattern = p.get('url_pattern', '')
+    link_selector = p.get("link_selector", "") or "a[href]"
+    url_pattern = p.get("url_pattern", "")
 
     @crawler.router.default_handler
     async def handler(ctx: PlaywrightCrawlingContext) -> None:
@@ -144,25 +151,30 @@ async def _run_playwright(url, pages, p, proxy_config, css_selector, extract_lin
         title = await page.title()
         html = await page.content()
         from bs4 import BeautifulSoup
-        soup = BeautifulSoup(html, 'html.parser')
+
+        soup = BeautifulSoup(html, "html.parser")
         content = _extract_text(soup, css_selector, output_format)
         page_data: Dict[str, Any] = {
-            'url': ctx.request.url, 'title': title, 'content': content,
+            "url": ctx.request.url,
+            "title": title,
+            "content": content,
         }
         if extract_links:
-            page_data['links'] = _extract_links(soup, ctx.request.url)
+            page_data["links"] = _extract_links(soup, ctx.request.url)
         if take_screenshot:
             import base64
-            screenshot_bytes = await page.screenshot(type='png')
-            page_data['screenshot'] = base64.b64encode(screenshot_bytes).decode()
+
+            screenshot_bytes = await page.screenshot(type="png")
+            page_data["screenshot"] = base64.b64encode(screenshot_bytes).decode()
         pages.append(page_data)
 
-        if mode == 'crawl':
-            kwargs: Dict[str, Any] = {'selector': link_selector}
+        if mode == "crawl":
+            kwargs: Dict[str, Any] = {"selector": link_selector}
             if url_pattern:
                 import re
                 from fnmatch import translate
-                kwargs['include'] = [re.compile(translate(url_pattern))]
+
+                kwargs["include"] = [re.compile(translate(url_pattern))]
             await ctx.enqueue_links(**kwargs)
 
     await asyncio.wait_for(crawler.run([url]), timeout=timeout_secs)
@@ -209,7 +221,9 @@ class CrawleeScraperParams(BaseModel):
         json_schema_extra={"displayOptions": {"show": {"mode": ["crawl"]}}},
     )
     max_depth: int = Field(
-        default=2, ge=0, le=50,
+        default=2,
+        ge=0,
+        le=50,
         description="Max link-following depth.",
         json_schema_extra={"displayOptions": {"show": {"mode": ["crawl"]}}},
     )
@@ -225,7 +239,9 @@ class CrawleeScraperParams(BaseModel):
         json_schema_extra={"displayOptions": {"show": {"crawler_type": ["playwright"]}}},
     )
     wait_timeout: int = Field(
-        default=30000, ge=0, le=600000,
+        default=30000,
+        ge=0,
+        le=600000,
         description="Wait-for-selector timeout in milliseconds.",
         json_schema_extra={"displayOptions": {"show": {"crawler_type": ["playwright"]}}},
     )
@@ -255,7 +271,8 @@ class CrawleeScraperParams(BaseModel):
         json_schema_extra={"displayOptions": {"show": {"use_proxy": [True]}}},
     )
     sticky_duration: int = Field(
-        default=600, ge=1,
+        default=600,
+        ge=1,
         json_schema_extra={
             "displayOptions": {"show": {"use_proxy": [True], "session_type": ["sticky"]}},
         },
@@ -305,8 +322,8 @@ class CrawleeScraperNode(ActionNode):
         css_selector = params.css_selector
         extract_links = params.extract_links
         output_format = params.output_format
-        max_pages = params.max_pages if mode == 'crawl' else 1
-        max_depth = params.max_depth if mode == 'crawl' else 0
+        max_pages = params.max_pages if mode == "crawl" else 1
+        max_depth = params.max_depth if mode == "crawl" else 0
         max_concurrency = params.max_concurrency
         timeout_secs = params.timeout
 
@@ -315,28 +332,45 @@ class CrawleeScraperNode(ActionNode):
         proxy_config = await _get_proxy_config(p, url)
 
         try:
-            if crawler_type in ('beautifulsoup', 'adaptive'):
+            if crawler_type in ("beautifulsoup", "adaptive"):
                 await _run_beautifulsoup(
-                    url, pages, p, proxy_config, css_selector, extract_links,
-                    output_format, mode, max_pages, max_depth,
-                    max_concurrency, timeout_secs,
+                    url,
+                    pages,
+                    p,
+                    proxy_config,
+                    css_selector,
+                    extract_links,
+                    output_format,
+                    mode,
+                    max_pages,
+                    max_depth,
+                    max_concurrency,
+                    timeout_secs,
                 )
-            elif crawler_type == 'playwright':
+            elif crawler_type == "playwright":
                 await _run_playwright(
-                    url, pages, p, proxy_config, css_selector, extract_links,
-                    output_format, mode, max_pages, max_depth,
-                    max_concurrency, timeout_secs,
+                    url,
+                    pages,
+                    p,
+                    proxy_config,
+                    css_selector,
+                    extract_links,
+                    output_format,
+                    mode,
+                    max_pages,
+                    max_depth,
+                    max_concurrency,
+                    timeout_secs,
                 )
             else:
                 raise NodeUserError(f"Unknown crawler type: {crawler_type}")
         except ImportError as e:
             msg = str(e).lower()
-            if 'playwright' in msg:
+            if "playwright" in msg:
                 raise NodeUserError(
-                    "Playwright not installed. Run: "
-                    "pip install 'crawlee[playwright]' && playwright install chromium",
+                    "Playwright not installed. Run: " "pip install 'crawlee[playwright]' && playwright install chromium",
                 )
-            if 'crawlee' in msg:
+            if "crawlee" in msg:
                 raise NodeUserError(
                     "Crawlee not installed. Run: pip install 'crawlee[beautifulsoup]'",
                 )
@@ -344,6 +378,9 @@ class CrawleeScraperNode(ActionNode):
 
         logger.info(f"[Crawlee] Scraped {len(pages)} page(s) from {url}")
         return CrawleeScraperOutput(
-            pages=pages, page_count=len(pages),
-            crawler_type=crawler_type, mode=mode, proxied=proxy_config is not None,
+            pages=pages,
+            page_count=len(pages),
+            crawler_type=crawler_type,
+            mode=mode,
+            proxied=proxy_config is not None,
         )

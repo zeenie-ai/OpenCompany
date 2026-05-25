@@ -11,14 +11,22 @@ from typing import Any, Dict, Literal, Optional, Set
 from pydantic import BaseModel, ConfigDict, Field
 
 from services.plugin import (
-    NodeContext, Operation, PollingTriggerNode, TaskQueue,
+    NodeContext,
+    Operation,
+    PollingTriggerNode,
+    TaskQueue,
 )
 
 
 class EmailReceiveParams(BaseModel):
     provider: Literal[
-        "gmail", "outlook", "yahoo", "icloud",
-        "protonmail", "fastmail", "custom",
+        "gmail",
+        "outlook",
+        "yahoo",
+        "icloud",
+        "protonmail",
+        "fastmail",
+        "custom",
     ] = "gmail"
     folder: str = Field(default="INBOX")
     poll_interval: int = Field(default=60, ge=30, le=3600)
@@ -48,10 +56,7 @@ class EmailReceiveNode(PollingTriggerNode):
     # ``event_waiter._auto_populate_from_plugins`` backfill
     # TRIGGER_REGISTRY without a hardcoded entry in event_waiter.
     event_type = "email_received"
-    handles = (
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
-    )
+    handles = ({"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},)
     task_queue = TaskQueue.TRIGGERS_POLL
     # Email keeps its 30s lower bound (legacy floor in
     # config/email_providers.json). Gmail uses the default (10, 3600).
@@ -81,22 +86,22 @@ class EmailReceiveNode(PollingTriggerNode):
         svc, creds, folder, _mark = service
         return await svc.poll_ids(creds, folder)
 
-    async def fetch_detail(
-        self, service: Any, msg_id: str, params: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def fetch_detail(self, service: Any, msg_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
         svc, creds, folder, _mark = service
         return await svc.fetch_detail(creds, msg_id, folder)
 
-    async def post_emit(
-        self, service: Any, msg_id: str, params: Dict[str, Any]
-    ) -> None:
+    async def post_emit(self, service: Any, msg_id: str, params: Dict[str, Any]) -> None:
         svc, creds, folder, mark = service
         if not mark:
             return
         try:
             d = svc.defaults
             await svc.himalaya.flag_message(
-                creds, msg_id, d.get("flag"), d.get("flag_action"), folder,
+                creds,
+                msg_id,
+                d.get("flag"),
+                d.get("flag_action"),
+                folder,
             )
         except Exception:
             pass
@@ -128,7 +133,8 @@ class EmailReceiveNode(PollingTriggerNode):
             poll = svc.resolve_poll_params(raw_params)
 
             await get_status_broadcaster().update_node_status(
-                node_id, "waiting",
+                node_id,
+                "waiting",
                 {
                     "message": f"Waiting for email (every {poll['interval']}s)...",
                     "event_type": "email_received",
@@ -138,6 +144,7 @@ class EmailReceiveNode(PollingTriggerNode):
 
             seen = await svc.poll_ids(creds, poll["folder"])
             from core.logging import get_logger
+
             get_logger(__name__).info(
                 f"[EmailReceive] Baseline: {len(seen)} emails in {poll['folder']}",
             )
@@ -155,7 +162,10 @@ class EmailReceiveNode(PollingTriggerNode):
                 if poll["mark_as_read"]:
                     d = svc.defaults
                     await svc.himalaya.flag_message(
-                        creds, msg_id, d.get("flag"), d.get("flag_action"),
+                        creds,
+                        msg_id,
+                        d.get("flag"),
+                        d.get("flag_action"),
                         poll["folder"],
                     )
 
@@ -167,7 +177,9 @@ class EmailReceiveNode(PollingTriggerNode):
 
                 await dispatch_email_received(email_data)
                 return {
-                    "success": True, "node_id": node_id, "node_type": self.type,
+                    "success": True,
+                    "node_id": node_id,
+                    "node_type": self.type,
                     "result": email_data,
                     "execution_time": time.time() - start_time,
                     "timestamp": datetime.now().isoformat(),
@@ -175,16 +187,21 @@ class EmailReceiveNode(PollingTriggerNode):
 
         except asyncio.CancelledError:
             return {
-                "success": False, "node_id": node_id, "node_type": self.type,
+                "success": False,
+                "node_id": node_id,
+                "node_type": self.type,
                 "error": "Cancelled by user",
                 "execution_time": time.time() - start_time,
                 "timestamp": datetime.now().isoformat(),
             }
         except Exception as e:
             from core.logging import get_logger
+
             get_logger(__name__).error(f"[EmailReceive] {e}")
             return {
-                "success": False, "node_id": node_id, "node_type": self.type,
+                "success": False,
+                "node_id": node_id,
+                "node_type": self.type,
                 "error": str(e),
                 "execution_time": time.time() - start_time,
                 "timestamp": datetime.now().isoformat(),

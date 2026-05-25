@@ -2,11 +2,13 @@
 
 Provides uptime tracking and comprehensive health status for /health endpoint.
 """
+
 import time
 from typing import Dict, Any, TYPE_CHECKING
 
 try:
     import psutil
+
     PSUTIL_AVAILABLE = True
 except ImportError:
     PSUTIL_AVAILABLE = False
@@ -66,6 +68,7 @@ async def check_database(database: "Database") -> bool:
     try:
         async with database.get_session() as session:
             from sqlalchemy import text
+
             await session.execute(text("SELECT 1"))
         return True
     except Exception:
@@ -84,11 +87,7 @@ async def check_cache(cache: "CacheService") -> bool:
         return False
 
 
-async def get_health_status(
-    database: "Database",
-    cache: "CacheService",
-    settings: "Settings"
-) -> Dict[str, Any]:
+async def get_health_status(database: "Database", cache: "CacheService", settings: "Settings") -> Dict[str, Any]:
     """Get comprehensive health status for /health endpoint.
 
     Returns:

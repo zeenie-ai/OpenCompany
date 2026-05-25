@@ -94,11 +94,14 @@ async def test_pre_spawn_runs_before_binary_existence_check(tmp_path):
     fake_proc.returncode = None
     # ``_do_stop`` tree-kills the pid via psutil; bypass that for the
     # fake pid so test teardown doesn't reach the real OS process table.
-    with patch(
-        "services._supervisor.process.anyio.open_process",
-        new=AsyncMock(return_value=fake_proc),
-    ), patch(
-        "services._supervisor.util.kill_tree",
+    with (
+        patch(
+            "services._supervisor.process.anyio.open_process",
+            new=AsyncMock(return_value=fake_proc),
+        ),
+        patch(
+            "services._supervisor.util.kill_tree",
+        ),
     ):
         await sub.start()
 

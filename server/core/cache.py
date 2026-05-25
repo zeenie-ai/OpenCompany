@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional, List, TYPE_CHECKING
 
 try:
     import redis.asyncio as redis
+
     REDIS_AVAILABLE = True
 except ImportError:
     redis = None
@@ -51,7 +52,7 @@ class CacheService:
                     decode_responses=True,
                     socket_timeout=5,
                     socket_connect_timeout=5,
-                    retry_on_timeout=True
+                    retry_on_timeout=True,
                 )
 
                 # Test connection
@@ -73,9 +74,7 @@ class CacheService:
             if self.use_sqlite:
                 logger.info("Using SQLite cache (n8n pattern - no Redis required for single-process)")
             else:
-                logger.info("Using in-memory cache",
-                           redis_enabled=self.settings.redis_enabled,
-                           redis_available=REDIS_AVAILABLE)
+                logger.info("Using in-memory cache", redis_enabled=self.settings.redis_enabled, redis_available=REDIS_AVAILABLE)
 
     async def _check_streams_support(self):
         """Check if Redis supports Streams (XADD/XREAD commands).
@@ -273,8 +272,7 @@ class CacheService:
     async def cache_models(self, provider: str, models: List[str]) -> bool:
         """Cache available models for provider."""
         cache_key = f"models:{provider}"
-        return await self.set(cache_key, {"models": models, "cached_at": "now"},
-                            ttl=3600)  # 1 hour
+        return await self.set(cache_key, {"models": models, "cached_at": "now"}, ttl=3600)  # 1 hour
 
     async def get_cached_models(self, provider: str) -> Optional[List[str]]:
         """Get cached models for provider."""
@@ -313,12 +311,7 @@ class CacheService:
             logger.error(f"Stream add failed: {stream}", error=str(e))
             return None
 
-    async def stream_read(
-        self,
-        streams: Dict[str, str],
-        count: int = 1,
-        block: Optional[int] = None
-    ) -> Optional[List[Any]]:
+    async def stream_read(self, streams: Dict[str, str], count: int = 1, block: Optional[int] = None) -> Optional[List[Any]]:
         """Read from Redis Streams.
 
         Args:
@@ -338,12 +331,7 @@ class CacheService:
             logger.error(f"Stream read failed: {streams.keys()}", error=str(e))
             return None
 
-    async def stream_create_group(
-        self,
-        stream: str,
-        group: str,
-        start_id: str = '$'
-    ) -> bool:
+    async def stream_create_group(self, stream: str, group: str, start_id: str = "$") -> bool:
         """Create consumer group for stream.
 
         Args:
@@ -371,12 +359,7 @@ class CacheService:
             return False
 
     async def stream_read_group(
-        self,
-        group: str,
-        consumer: str,
-        streams: Dict[str, str],
-        count: int = 1,
-        block: Optional[int] = None
+        self, group: str, consumer: str, streams: Dict[str, str], count: int = 1, block: Optional[int] = None
     ) -> Optional[List[Any]]:
         """Read from streams using consumer group.
 
@@ -392,10 +375,7 @@ class CacheService:
         """
         try:
             if self.use_redis and self.redis and self._streams_available:
-                result = await self.redis.xreadgroup(
-                    group, consumer, streams,
-                    count=count, block=block
-                )
+                result = await self.redis.xreadgroup(group, consumer, streams, count=count, block=block)
                 return result
             return None
         except Exception as e:

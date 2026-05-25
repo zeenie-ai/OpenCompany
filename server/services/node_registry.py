@@ -73,8 +73,10 @@ def register_node(
     # is the whole point of the strangler-fig migration, so caches must
     # re-compute.
     from services.node_spec import _spec_cache  # local import to avoid cycle
+
     _spec_cache.pop(type, None)
     from services.node_input_schemas import _schema_cache  # local import
+
     _schema_cache.pop(type, None)
 
 
@@ -148,10 +150,7 @@ def iter_tool_node_classes():
         ui_hints = getattr(node_cls, "ui_hints", {}) or {}
         if ui_hints.get("isMasterSkillEditor") is True:
             continue
-        if (
-            component_kind in ("tool", "agent")
-            or getattr(node_cls, "usable_as_tool", False)
-        ):
+        if component_kind in ("tool", "agent") or getattr(node_cls, "usable_as_tool", False):
             yield node_type, node_cls
 
 

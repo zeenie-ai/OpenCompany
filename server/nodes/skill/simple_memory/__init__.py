@@ -29,10 +29,7 @@ class SimpleMemoryParams(BaseModel):
     session_id: str = Field(
         default="",
         title="Session ID (Override)",
-        description=(
-            "Leave empty to auto-use connected agent ID. "
-            "Set manually to share memory across agents."
-        ),
+        description=("Leave empty to auto-use connected agent ID. " "Set manually to share memory across agents."),
         json_schema_extra={"placeholder": "Auto (uses agent ID)"},
     )
     window_size: int = Field(
@@ -40,10 +37,7 @@ class SimpleMemoryParams(BaseModel):
         ge=1,
         le=100,
         title="Window Size",
-        description=(
-            "Number of message pairs to keep in short-term memory "
-            "(uses global default from Settings)"
-        ),
+        description=("Number of message pairs to keep in short-term memory " "(uses global default from Settings)"),
     )
     memory_content: str = Field(
         default="# Conversation History\n\n*No messages yet.*\n",
@@ -102,10 +96,7 @@ class SimpleMemoryNode(ActionNode):
     group = ("tool", "memory")
     description = "Markdown-based conversation memory with optional vector DB"
     component_kind = "model"
-    handles = (
-        {"name": "output-memory", "kind": "output", "position": "top",
-         "label": "Memory", "role": "memory"},
-    )
+    handles = ({"name": "output-memory", "kind": "output", "position": "top", "label": "Memory", "role": "memory"},)
     ui_hints = {"isMemoryPanel": True, "hasCodeEditor": True, "hideRunButton": True}
     annotations = {"destructive": False, "readonly": True, "open_world": False}
     task_queue = TaskQueue.DEFAULT

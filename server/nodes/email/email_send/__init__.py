@@ -11,8 +11,13 @@ from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
 
 class EmailSendParams(BaseModel):
     provider: Literal[
-        "gmail", "outlook", "yahoo", "icloud",
-        "protonmail", "fastmail", "custom",
+        "gmail",
+        "outlook",
+        "yahoo",
+        "icloud",
+        "protonmail",
+        "fastmail",
+        "custom",
     ] = "gmail"
     to: str = Field(...)
     subject: str = Field(...)
@@ -41,10 +46,8 @@ class EmailSendNode(ActionNode):
     tool_name = "email_send"
     tool_description = "Send email via SMTP. Specify to, subject, body. Optional: cc, bcc, body_type (text/html)."
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
     annotations = {"destructive": False, "readonly": False, "open_world": True}
     task_queue = TaskQueue.MESSAGING
@@ -57,4 +60,5 @@ class EmailSendNode(ActionNode):
     async def send(self, ctx: NodeContext, params: EmailSendParams) -> Any:
         # Body inlined from handlers/email.py (Wave 11.D.1).
         from .._service import get_email_service
+
         return await get_email_service().send(params.model_dump(by_alias=False))

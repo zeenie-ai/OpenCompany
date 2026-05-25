@@ -68,10 +68,7 @@ def register_master_skill_expander(fn: MasterSkillExpander) -> None:
     """
     global _MASTER_SKILL_EXPANDER
     if _MASTER_SKILL_EXPANDER is not None and _MASTER_SKILL_EXPANDER != fn:
-        raise ValueError(
-            "register_master_skill_expander: callback already registered "
-            "by a different callable; refusing to overwrite"
-        )
+        raise ValueError("register_master_skill_expander: callback already registered " "by a different callable; refusing to overwrite")
     _MASTER_SKILL_EXPANDER = fn
 
 
@@ -88,11 +85,11 @@ async def collect_agent_connections(
     database: "Database",
     log_prefix: str = "[Agent]",
 ) -> Tuple[
-    Optional[Dict[str, Any]],     # memory_data
-    List[Dict[str, Any]],          # skill_data
-    List[Dict[str, Any]],          # tool_data
-    Optional[Dict[str, Any]],     # input_data
-    Optional[Dict[str, Any]],     # task_data
+    Optional[Dict[str, Any]],  # memory_data
+    List[Dict[str, Any]],  # skill_data
+    List[Dict[str, Any]],  # tool_data
+    Optional[Dict[str, Any]],  # input_data
+    Optional[Dict[str, Any]],  # task_data
 ]:
     """Walk edges targeting ``node_id`` and collect everything an agent
     needs from its connected nodes.
@@ -126,10 +123,7 @@ async def collect_agent_connections(
         edge_targets = set(e.get("target") for e in edges)
         logger.debug(f"{log_prefix} All edge targets in graph: {edge_targets}")
     for e in incoming_edges:
-        logger.debug(
-            f"{log_prefix} Edge: source={e.get('source')}, "
-            f"targetHandle={e.get('targetHandle')}"
-        )
+        logger.debug(f"{log_prefix} Edge: source={e.get('source')}, " f"targetHandle={e.get('targetHandle')}")
 
     tool_incoming = [e for e in incoming_edges if e.get("targetHandle") == "input-tools"]
     logger.info(f"{log_prefix} Tool edges (input-tools handle): {len(tool_incoming)}")
@@ -147,18 +141,30 @@ async def collect_agent_connections(
         if target_handle == "input-memory":
             if source_node.get("type") == "simpleMemory":
                 memory_data = await _build_memory_entry(
-                    node_id, source_node_id, database, log_prefix,
+                    node_id,
+                    source_node_id,
+                    database,
+                    log_prefix,
                 )
 
         elif target_handle == "input-skill":
             await _append_skill_entries(
-                source_node, source_node_id, database, skill_data, log_prefix,
+                source_node,
+                source_node_id,
+                database,
+                skill_data,
+                log_prefix,
             )
 
         elif target_handle == "input-tools":
             await _append_tool_entry(
-                source_node, source_node_id, edges, nodes, database,
-                tool_data, log_prefix,
+                source_node,
+                source_node_id,
+                edges,
+                nodes,
+                database,
+                tool_data,
+                log_prefix,
             )
 
         elif target_handle in ("input-main", "input-chat") or target_handle is None:
@@ -172,7 +178,10 @@ async def collect_agent_connections(
 
         elif target_handle == "input-task":
             task_data = await _resolve_task_payload(
-                source_node_id, source_node, context, log_prefix,
+                source_node_id,
+                source_node,
+                context,
+                log_prefix,
             )
 
     logger.info(
@@ -210,7 +219,8 @@ async def _build_memory_entry(
         "session_id": session_id,
         "window_size": int(memory_params.get("window_size", 10)),
         "memory_content": memory_params.get(
-            "memory_content", "# Conversation History\n\n*No messages yet.*\n",
+            "memory_content",
+            "# Conversation History\n\n*No messages yet.*\n",
         ),
         "long_term_enabled": memory_params.get("long_term_enabled", False),
         "retrieval_count": int(memory_params.get("retrieval_count", 3)),
@@ -221,9 +231,10 @@ async def _build_memory_entry(
         "last_session_id": memory_params.get("last_session_id"),
     }
     logger.info(
-        "%s Connected memory node: node=%s session=%s (auto=%s) "
-        "content_length=%d last_session_id=%s",
-        log_prefix, memory_node_id, session_id,
+        "%s Connected memory node: node=%s session=%s (auto=%s) " "content_length=%d last_session_id=%s",
+        log_prefix,
+        memory_node_id,
+        session_id,
         not configured_session or configured_session == "default",
         len(entry["memory_content"]),
         entry["last_session_id"],
@@ -252,21 +263,21 @@ async def _append_skill_entries(
             return
 
         skills_config = skill_params.get("skills_config", {})
-        logger.debug(
-            f"{log_prefix} Master Skill found with {len(skills_config)} configured skills"
-        )
+        logger.debug(f"{log_prefix} Master Skill found with {len(skills_config)} configured skills")
         entries = await expander(source_node_id, skills_config)
         skill_data.extend(entries)
         for entry in entries:
             logger.debug(f"{log_prefix} Master Skill enabled: {entry['skill_name']}")
     else:
-        skill_data.append({
-            "node_id": source_node_id,
-            "node_type": skill_type,
-            "skill_name": skill_params.get("skill_name", skill_type),
-            "parameters": skill_params,
-            "label": source_node.get("data", {}).get("label", skill_type),
-        })
+        skill_data.append(
+            {
+                "node_id": source_node_id,
+                "node_type": skill_type,
+                "skill_name": skill_params.get("skill_name", skill_type),
+                "parameters": skill_params,
+                "label": source_node.get("data", {}).get("label", skill_type),
+            }
+        )
         logger.debug(f"{log_prefix} Connected skill: {skill_type}")
 
 
@@ -297,27 +308,23 @@ async def _append_tool_entry(
                 continue
             service_target_handle = service_edge.get("targetHandle")
             if service_target_handle is not None and service_target_handle != "input-main":
-                logger.debug(
-                    f"{log_prefix} Android Toolkit: Skipping edge with "
-                    f"targetHandle: {service_target_handle}"
-                )
+                logger.debug(f"{log_prefix} Android Toolkit: Skipping edge with " f"targetHandle: {service_target_handle}")
                 continue
             android_node_id = service_edge.get("source")
             android_node = next((n for n in nodes if n.get("id") == android_node_id), None)
             if android_node and android_node.get("type") in ANDROID_SERVICE_NODE_TYPES:
                 android_params = await database.get_node_parameters(android_node_id) or {}
-                connected_services.append({
-                    "node_id": android_node_id,
-                    "node_type": android_node.get("type"),
-                    "service_id": android_params.get("service_id"),
-                    "action": android_params.get("action"),
-                    "parameters": android_params,
-                    "label": android_node.get("data", {}).get("label", android_node.get("type")),
-                })
-                logger.debug(
-                    f"{log_prefix} Android toolkit connected service: "
-                    f"{android_params.get('service_id')}"
+                connected_services.append(
+                    {
+                        "node_id": android_node_id,
+                        "node_type": android_node.get("type"),
+                        "service_id": android_params.get("service_id"),
+                        "action": android_params.get("action"),
+                        "parameters": android_params,
+                        "label": android_node.get("data", {}).get("label", android_node.get("type")),
+                    }
                 )
+                logger.debug(f"{log_prefix} Android toolkit connected service: " f"{android_params.get('service_id')}")
         tool_entry["connected_services"] = connected_services
         logger.debug(f"{log_prefix} Android toolkit has {len(connected_services)} connected services")
 
@@ -341,8 +348,7 @@ async def _append_tool_entry(
             child_tool_id = child_edge.get("source")
             child_tool_node = next((n for n in nodes if n.get("id") == child_tool_id), None)
             logger.debug(
-                f"{log_prefix} Child agent {source_node_id}: "
-                f"tool edge from {child_tool_id}, node found: {child_tool_node is not None}"
+                f"{log_prefix} Child agent {source_node_id}: " f"tool edge from {child_tool_id}, node found: {child_tool_node is not None}"
             )
             if child_tool_node:
                 child_tool_type = child_tool_node.get("type", "")
@@ -350,10 +356,7 @@ async def _append_tool_entry(
                 child_tools.append({"node_type": child_tool_type, "label": child_tool_label})
         if child_tools:
             tool_entry["child_tools"] = child_tools
-            logger.debug(
-                f"{log_prefix} Child agent {source_node_id} has tools: "
-                f"{[t['label'] for t in child_tools]}"
-            )
+            logger.debug(f"{log_prefix} Child agent {source_node_id} has tools: " f"{[t['label'] for t in child_tools]}")
 
     tool_data.append(tool_entry)
     logger.debug(f"{log_prefix} Connected tool: {tool_type}")
@@ -368,9 +371,7 @@ async def _resolve_task_payload(
     logger.info(f"{log_prefix} Found input-task edge from {source_node_id} (type={source_node.get('type')})")
 
     source_output = context.get("outputs", {}).get(source_node_id)
-    logger.info(
-        f"{log_prefix} Context outputs check for {source_node_id}: {source_output is not None}"
-    )
+    logger.info(f"{log_prefix} Context outputs check for {source_node_id}: {source_output is not None}")
 
     if not source_output:
         get_output_fn = context.get("get_output_fn")
@@ -382,9 +383,7 @@ async def _resolve_task_payload(
             except Exception as e:
                 logger.warning(f"{log_prefix} Failed to get output from DB: {e}")
         else:
-            logger.warning(
-                f"{log_prefix} No get_output_fn in context, cannot retrieve task output"
-            )
+            logger.warning(f"{log_prefix} No get_output_fn in context, cannot retrieve task output")
 
     logger.info(
         f"{log_prefix} Source output for {source_node_id}: {source_output is not None}, "
@@ -393,11 +392,7 @@ async def _resolve_task_payload(
     if not source_output:
         return None
 
-    if (
-        isinstance(source_output, dict)
-        and "result" in source_output
-        and isinstance(source_output.get("result"), dict)
-    ):
+    if isinstance(source_output, dict) and "result" in source_output and isinstance(source_output.get("result"), dict):
         task_data = source_output.get("result")
         logger.info(f"{log_prefix} Extracted nested task_data from result key")
     else:
@@ -434,12 +429,14 @@ async def collect_teammate_connections(
         if node_type not in AI_AGENT_TYPES:
             continue
         params = await database.get_node_parameters(source_id) or {}
-        teammates.append({
-            "node_id": source_id,
-            "node_type": node_type,
-            "label": source_node.get("data", {}).get("label", node_type),
-            "parameters": params,
-        })
+        teammates.append(
+            {
+                "node_id": source_id,
+                "node_type": node_type,
+                "label": source_node.get("data", {}).get("label", node_type),
+                "parameters": params,
+            }
+        )
         logger.debug(f"[Teams] Found teammate: {node_type} ({source_id})")
 
     return teammates
@@ -479,10 +476,4 @@ def format_task_context(task_data: Dict[str, Any]) -> str:
             "Report this error to the user and suggest next steps if appropriate."
         )
 
-    return (
-        f"Task update received:\n"
-        f"- Agent: {agent_name}\n"
-        f"- Task ID: {task_id}\n"
-        f"- Status: {status}\n"
-        f"- Data: {task_data}"
-    )
+    return f"Task update received:\n" f"- Agent: {agent_name}\n" f"- Task ID: {task_id}\n" f"- Status: {status}\n" f"- Data: {task_data}"

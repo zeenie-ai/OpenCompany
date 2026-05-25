@@ -56,6 +56,8 @@ def _stub_log_execution_time(*_args, **_kwargs):
 # real submodule attributes so imports resolve without touching the real
 # heavy deps (dependency_injector, cryptography, ...).
 _core_pkg = _make_package("core")
+
+
 def _stub_log_context(**_fields):
     """Stub for ``core.logging.log_context`` (async ctx manager) and
     ``log_context_sync``. Both are no-ops under test."""
@@ -102,19 +104,23 @@ _make_submodule("core", "cache", {"CacheService": MagicMock})
 # locally; the stub just keeps import-time ``MACHINA_CLAUDE_DIR =
 # claude_config_dir()`` calls from blowing up.
 _TEST_MACHINA_ROOT = Path(__file__).parent / "_test_machina_root"
-_make_submodule("core", "paths", {
-    "project_root": lambda: _TEST_MACHINA_ROOT.parent,
-    "machina_root": lambda: _TEST_MACHINA_ROOT,
-    "packages_dir": lambda: _TEST_MACHINA_ROOT / "packages",
-    "package_dir": lambda name: _TEST_MACHINA_ROOT / "packages" / name,
-    "claude_config_dir": lambda: _TEST_MACHINA_ROOT / "claude",
-    "claude_npm_dir": lambda: _TEST_MACHINA_ROOT / "claude" / "npm",
-    "workspaces_dir": lambda: _TEST_MACHINA_ROOT / "workspaces",
-    "workspace_dir": lambda wf: _TEST_MACHINA_ROOT / "workspaces" / wf,
-    "example_workflows_dir": lambda: _TEST_MACHINA_ROOT / "workflows",
-    "whatsapp_dir": lambda: _TEST_MACHINA_ROOT / "whatsapp",
-    "credentials_db_path": lambda: _TEST_MACHINA_ROOT / "credentials.db",
-})
+_make_submodule(
+    "core",
+    "paths",
+    {
+        "project_root": lambda: _TEST_MACHINA_ROOT.parent,
+        "machina_root": lambda: _TEST_MACHINA_ROOT,
+        "packages_dir": lambda: _TEST_MACHINA_ROOT / "packages",
+        "package_dir": lambda name: _TEST_MACHINA_ROOT / "packages" / name,
+        "claude_config_dir": lambda: _TEST_MACHINA_ROOT / "claude",
+        "claude_npm_dir": lambda: _TEST_MACHINA_ROOT / "claude" / "npm",
+        "workspaces_dir": lambda: _TEST_MACHINA_ROOT / "workspaces",
+        "workspace_dir": lambda wf: _TEST_MACHINA_ROOT / "workspaces" / wf,
+        "example_workflows_dir": lambda: _TEST_MACHINA_ROOT / "workflows",
+        "whatsapp_dir": lambda: _TEST_MACHINA_ROOT / "whatsapp",
+        "credentials_db_path": lambda: _TEST_MACHINA_ROOT / "credentials.db",
+    },
+)
 
 
 # services.pricing -- pre-stub the singleton so handler modules that do
@@ -123,9 +129,7 @@ _make_submodule("core", "paths", {
 # config/pricing.json and is irrelevant to handler contract tests).
 def _make_pricing_stub():
     pricing = MagicMock(name="StubPricingService")
-    pricing.calculate_api_cost = MagicMock(
-        return_value={"operation": "stub", "total_cost": 0.0}
-    )
+    pricing.calculate_api_cost = MagicMock(return_value={"operation": "stub", "total_cost": 0.0})
     pricing.calculate_cost = MagicMock(
         return_value={
             "input_cost": 0.0,

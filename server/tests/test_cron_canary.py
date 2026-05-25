@@ -96,7 +96,8 @@ class TestPluginRegistryContract:
         fresh_plugin_registry.register_temporal_plugin(p1)
         fresh_plugin_registry.register_temporal_plugin(p2)
         assert {p.name() for p in fresh_plugin_registry.temporal_plugins()} == {
-            "plugin-1", "plugin-2",
+            "plugin-1",
+            "plugin-2",
         }
 
 
@@ -117,7 +118,8 @@ class TestScheduleIdDerivation:
         from services.temporal.schedules import cron_schedule_id
 
         assert cron_schedule_id("wf-1", "cron-a") != cron_schedule_id(
-            "wf-1", "cron-b",
+            "wf-1",
+            "cron-b",
         )
 
 
@@ -237,7 +239,8 @@ class TestDeleteCronSchedulesForDeployment:
 
         assert count == 2
         assert sorted(deleted_ids) == [
-            "cron-schedule-wf-1-a", "cron-schedule-wf-1-b",
+            "cron-schedule-wf-1-a",
+            "cron-schedule-wf-1-b",
         ]
         # Filter on both deployment workflow_id AND the cron kind tag.
         assert len(recorded_queries) == 1
@@ -259,12 +262,16 @@ class TestDeleteCronSchedulesForDeployment:
         def fake_get_handle(sid):
             handle = MagicMock()
             if "bad" in sid:
+
                 async def boom():
                     raise RuntimeError("simulated delete failure")
+
                 handle.delete = boom
             else:
+
                 async def ok():
                     return None
+
                 handle.delete = ok
             return handle
 
@@ -355,24 +362,27 @@ class TestDeploymentCronCanaryRouting:
 
         recorded: List[Dict[str, Any]] = []
 
-        async def fake_create(client, *, deployment_workflow_id, node_id,
-                              cron_expression, timezone, listener_data, **kw):
-            recorded.append({
-                "deployment_workflow_id": deployment_workflow_id,
-                "node_id": node_id,
-                "cron_expression": cron_expression,
-                "timezone": timezone,
-                "listener_data": listener_data,
-            })
+        async def fake_create(client, *, deployment_workflow_id, node_id, cron_expression, timezone, listener_data, **kw):
+            recorded.append(
+                {
+                    "deployment_workflow_id": deployment_workflow_id,
+                    "node_id": node_id,
+                    "cron_expression": cron_expression,
+                    "timezone": timezone,
+                    "listener_data": listener_data,
+                }
+            )
             return f"cron-schedule-{deployment_workflow_id}-{node_id}"
 
         from services.temporal import schedules
+
         monkeypatch.setattr(schedules, "create_cron_schedule", fake_create)
 
         wrapper = MagicMock()
         wrapper.client = MagicMock()
 
         from core import container as container_mod
+
         monkeypatch.setattr(container_mod.container, "temporal_client", lambda: wrapper)
 
         result = await mgr._start_canary_cron_schedule(
@@ -409,6 +419,7 @@ class TestDeploymentCronCanaryRouting:
         wrapper.client = None
 
         from core import container as container_mod
+
         monkeypatch.setattr(container_mod.container, "temporal_client", lambda: wrapper)
 
         result = await mgr._start_canary_cron_schedule(
@@ -434,6 +445,7 @@ class TestDeploymentCronCanaryRouting:
             return 3
 
         from services.temporal import schedules
+
         monkeypatch.setattr(
             schedules,
             "delete_cron_schedules_for_deployment",
@@ -444,6 +456,7 @@ class TestDeploymentCronCanaryRouting:
         wrapper.client = MagicMock()
 
         from core import container as container_mod
+
         monkeypatch.setattr(container_mod.container, "temporal_client", lambda: wrapper)
 
         count = await mgr._cancel_canary_cron_schedules("wf-1")
@@ -458,6 +471,7 @@ class TestDeploymentCronCanaryRouting:
         wrapper.client = None
 
         from core import container as container_mod
+
         monkeypatch.setattr(container_mod.container, "temporal_client", lambda: wrapper)
 
         assert await mgr._cancel_canary_cron_schedules("wf-1") == 0
@@ -493,6 +507,5 @@ class TestCronPluginSelfRegisters:
         from services.deployment import canary_registry
 
         assert canary_registry.is_canary_trigger_type("cronScheduler"), (
-            "Importing nodes.scheduler.cron_scheduler should call "
-            "register_canary_trigger_type('cronScheduler')."
+            "Importing nodes.scheduler.cron_scheduler should call " "register_canary_trigger_type('cronScheduler')."
         )

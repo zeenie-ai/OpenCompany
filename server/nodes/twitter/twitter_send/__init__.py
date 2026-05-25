@@ -12,7 +12,10 @@ from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
 from .._credentials import TwitterCredential
 
 from .._base import (
-    call_with_retry, format_response, get_my_user_id, track_twitter_usage,
+    call_with_retry,
+    format_response,
+    get_my_user_id,
+    track_twitter_usage,
 )
 
 
@@ -21,8 +24,15 @@ class TwitterSendParams(BaseModel):
     no aliases. ``reply`` action uses ``tweet_id`` as the target (unified
     with other id-based actions) — baseline behaviour.
     """
+
     action: Literal[
-        "tweet", "reply", "retweet", "quote", "like", "unlike", "delete",
+        "tweet",
+        "reply",
+        "retweet",
+        "quote",
+        "like",
+        "unlike",
+        "delete",
     ] = Field(default="tweet", description="Action to perform")
     text: str = Field(
         default="",
@@ -36,9 +46,18 @@ class TwitterSendParams(BaseModel):
         default="",
         description="Target tweet ID (for reply/retweet/quote/like/unlike/delete)",
         json_schema_extra={
-            "displayOptions": {"show": {"action": [
-                "reply", "retweet", "quote", "like", "unlike", "delete",
-            ]}},
+            "displayOptions": {
+                "show": {
+                    "action": [
+                        "reply",
+                        "retweet",
+                        "quote",
+                        "like",
+                        "unlike",
+                        "delete",
+                    ]
+                }
+            },
         },
     )
     include_media: bool = Field(
@@ -52,10 +71,12 @@ class TwitterSendParams(BaseModel):
         default="",
         description="Comma-separated URLs; max 4 images or 1 video",
         json_schema_extra={
-            "displayOptions": {"show": {
-                "action": ["tweet", "reply", "quote"],
-                "include_media": [True],
-            }},
+            "displayOptions": {
+                "show": {
+                    "action": ["tweet", "reply", "quote"],
+                    "include_media": [True],
+                }
+            },
         },
     )
     include_poll: bool = Field(
@@ -69,20 +90,26 @@ class TwitterSendParams(BaseModel):
         default="",
         description="Comma-separated options (2-4 items, 25 chars each)",
         json_schema_extra={
-            "displayOptions": {"show": {
-                "action": ["tweet"],
-                "include_poll": [True],
-            }},
+            "displayOptions": {
+                "show": {
+                    "action": ["tweet"],
+                    "include_poll": [True],
+                }
+            },
         },
     )
     poll_duration: int = Field(
-        default=1440, ge=5, le=10080,
+        default=1440,
+        ge=5,
+        le=10080,
         description="Poll duration in minutes (5 min - 7 days)",
         json_schema_extra={
-            "displayOptions": {"show": {
-                "action": ["tweet"],
-                "include_poll": [True],
-            }},
+            "displayOptions": {
+                "show": {
+                    "action": ["tweet"],
+                    "include_poll": [True],
+                }
+            },
         },
     )
 
@@ -136,7 +163,9 @@ async def _do_send(client, action: str, p: dict, node_id: str, ctx_raw: dict) ->
     if action == "retweet":
         user_id = await get_my_user_id(client)
         result = await asyncio.to_thread(
-            client.users.repost_post, user_id, body={"tweet_id": tweet_id},
+            client.users.repost_post,
+            user_id,
+            body={"tweet_id": tweet_id},
         )
         await track_twitter_usage(node_id, "retweet", 1, ctx_raw)
         return TwitterSendOutput(action="retweeted", data=format_response(result))
@@ -144,7 +173,9 @@ async def _do_send(client, action: str, p: dict, node_id: str, ctx_raw: dict) ->
     if action == "like":
         user_id = await get_my_user_id(client)
         result = await asyncio.to_thread(
-            client.users.like_post, user_id, body={"tweet_id": tweet_id},
+            client.users.like_post,
+            user_id,
+            body={"tweet_id": tweet_id},
         )
         await track_twitter_usage(node_id, "like", 1, ctx_raw)
         return TwitterSendOutput(action="liked", data=format_response(result))
@@ -152,7 +183,9 @@ async def _do_send(client, action: str, p: dict, node_id: str, ctx_raw: dict) ->
     if action == "unlike":
         user_id = await get_my_user_id(client)
         result = await asyncio.to_thread(
-            client.users.unlike_post, user_id, tweet_id=tweet_id,
+            client.users.unlike_post,
+            user_id,
+            tweet_id=tweet_id,
         )
         await track_twitter_usage(node_id, "unlike", 1, ctx_raw)
         return TwitterSendOutput(action="unliked", data=format_response(result))
@@ -175,10 +208,8 @@ class TwitterSendNode(ActionNode):
     tool_name = "twitter_send"
     tool_description = "Post, reply, retweet, like, unlike, or delete tweets on Twitter/X. Actions: tweet, reply, retweet, like, unlike, delete. Specify text (280 char max), tweet_id, reply_to_id as needed."
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
     annotations = {"destructive": False, "readonly": False, "open_world": True}
     credentials = (TwitterCredential,)

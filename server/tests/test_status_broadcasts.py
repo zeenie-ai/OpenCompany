@@ -53,40 +53,44 @@ import pytest
 # with ``credential_catalogue_updated`` in the credential mutation
 # path) so frontend listeners always have a typed channel available
 # for state changes.
-_TELEMETRY_CARVE_OUT: FrozenSet[str] = frozenset({
-    "update_api_key_status",     # paired-wire with credential_catalogue_updated
-    "update_node_status",        # ~hundreds per workflow run
-    "update_node_output",        # paired with update_node_status
-    "update_variable",           # per-write
-    "update_variables",          # batch per-write
-    "update_workflow_status",    # lifecycle ticks
-    "update_deployment_status",  # lifecycle ticks
-    "broadcast_console_log",     # log stream
-    "broadcast_terminal_log",    # log stream
-    # Pure dispatcher -- iterates plugin-registered callbacks via
-    # TaskGroup, does not emit any broadcast itself. Per-plugin
-    # refresh callbacks live in nodes/<plugin>/_refresh.py and are
-    # subject to their own typed-envelope migration tracked outside
-    # the StatusBroadcaster class.
-    "_refresh_all_services",
-})
+_TELEMETRY_CARVE_OUT: FrozenSet[str] = frozenset(
+    {
+        "update_api_key_status",  # paired-wire with credential_catalogue_updated
+        "update_node_status",  # ~hundreds per workflow run
+        "update_node_output",  # paired with update_node_status
+        "update_variable",  # per-write
+        "update_variables",  # batch per-write
+        "update_workflow_status",  # lifecycle ticks
+        "update_deployment_status",  # lifecycle ticks
+        "broadcast_console_log",  # log stream
+        "broadcast_terminal_log",  # log stream
+        # Pure dispatcher -- iterates plugin-registered callbacks via
+        # TaskGroup, does not emit any broadcast itself. Per-plugin
+        # refresh callbacks live in nodes/<plugin>/_refresh.py and are
+        # subject to their own typed-envelope migration tracked outside
+        # the StatusBroadcaster class.
+        "_refresh_all_services",
+    }
+)
 
 # Plugin status updates that still emit raw ``{type: 'X_status', data:
 # {...}}`` frames. The frontend's per-plugin status panels listen for
 # these wire-frames directly today; switching to a CloudEvents-typed
 # envelope is a frontend change too. Migration is per-plugin, not
 # included in milestone U scope.
-_LEGACY_RAW_DICT_BROADCASTS: FrozenSet[str] = frozenset({
-    # Wave 12 B1: ``update_android_status`` retired; moved to
-    # ``nodes/android/_events.py:broadcast_android_status``.
-    # Wave 12 B2: ``update_whatsapp_status`` retired; moved to
-    # ``nodes/whatsapp/_events.py:broadcast_whatsapp_status``.
-    # Wave 12 B3: ``update_telegram_status`` retired; moved to
-    # ``nodes/telegram/_events.py:broadcast_telegram_status``. The
-    # shared ``_emit_connection_typed`` helper retired alongside (no
-    # remaining callers). Allowlist now empty — all three plugin-named
-    # broadcast methods live in their plugin folders.
-})
+_LEGACY_RAW_DICT_BROADCASTS: FrozenSet[str] = frozenset(
+    {
+        # Wave 12 B1: ``update_android_status`` retired; moved to
+        # ``nodes/android/_events.py:broadcast_android_status``.
+        # Wave 12 B2: ``update_whatsapp_status`` retired; moved to
+        # ``nodes/whatsapp/_events.py:broadcast_whatsapp_status``.
+        # Wave 12 B3: ``update_telegram_status`` retired; moved to
+        # ``nodes/telegram/_events.py:broadcast_telegram_status``. The
+        # shared ``_emit_connection_typed`` helper retired alongside (no
+        # remaining callers). Allowlist now empty — all three plugin-named
+        # broadcast methods live in their plugin folders.
+    }
+)
 
 # ``send_custom_event`` callers that still pass raw dicts. Each entry
 # documents WHY. Per-plugin migration unlocks each one.
@@ -202,23 +206,18 @@ class TestEventWaiterDispatchAcceptsEnvelope:
 
     def test_unpack_event_present(self, event_waiter_module):
         assert hasattr(event_waiter_module, "_unpack_event"), (
-            "event_waiter must expose _unpack_event -- the normalisation "
-            "helper that lets dispatch() accept a WorkflowEvent directly."
+            "event_waiter must expose _unpack_event -- the normalisation " "helper that lets dispatch() accept a WorkflowEvent directly."
         )
 
     def test_dispatch_calls_unpack_event(self, event_waiter_module):
         src = inspect.getsource(event_waiter_module.dispatch)
         assert "_unpack_event" in src, (
-            "dispatch() must route through _unpack_event() so a "
-            "WorkflowEvent argument is normalised before the dispatch loop."
+            "dispatch() must route through _unpack_event() so a " "WorkflowEvent argument is normalised before the dispatch loop."
         )
 
     def test_dispatch_async_calls_unpack_event(self, event_waiter_module):
         src = inspect.getsource(event_waiter_module.dispatch_async)
-        assert "_unpack_event" in src, (
-            "dispatch_async() must route through _unpack_event() for the "
-            "same reason as dispatch()."
-        )
+        assert "_unpack_event" in src, "dispatch_async() must route through _unpack_event() for the " "same reason as dispatch()."
 
     def test_unpack_event_handles_workflow_event(self, event_waiter_module):
         """Functional check: a WorkflowEvent input round-trips to
@@ -238,7 +237,8 @@ class TestEventWaiterDispatchAcceptsEnvelope:
 
     def test_unpack_event_handles_legacy_tuple_form(self, event_waiter_module):
         event_type, data = event_waiter_module._unpack_event(
-            "legacy.event.type", {"k": "v"},
+            "legacy.event.type",
+            {"k": "v"},
         )
         assert event_type == "legacy.event.type"
         assert data == {"k": "v"}
@@ -275,13 +275,11 @@ class TestStatusBroadcastsUseTypedBuilder:
         legacy-grandfathered. If it appears in both, one of the two
         lists is wrong."""
         overlap = _TELEMETRY_CARVE_OUT & _LEGACY_RAW_DICT_BROADCASTS
-        assert not overlap, (
-            f"Methods in both _TELEMETRY_CARVE_OUT and "
-            f"_LEGACY_RAW_DICT_BROADCASTS: {sorted(overlap)}. Pick one."
-        )
+        assert not overlap, f"Methods in both _TELEMETRY_CARVE_OUT and " f"_LEGACY_RAW_DICT_BROADCASTS: {sorted(overlap)}. Pick one."
 
     def test_status_methods_use_typed_builder_or_listed(
-        self, broadcaster_methods,
+        self,
+        broadcaster_methods,
     ):
         offenders = []
         for name, body in broadcaster_methods.items():
@@ -358,7 +356,10 @@ class TestStatusBroadcastsAlsoEmitTypedEnvelope:
         ids=[row[0] for row in _PLUGIN_WRAPPERS],
     )
     def test_plugin_wrapper_emits_typed_only(
-        self, plugin: str, module_path: str, wrapper_name: str,
+        self,
+        plugin: str,
+        module_path: str,
+        wrapper_name: str,
         retired_legacy_key: str,
     ):
         """Each plugin's broadcaster wrapper emits ONLY the typed
@@ -379,8 +380,7 @@ class TestStatusBroadcastsAlsoEmitTypedEnvelope:
         mod_src = inspect.getsource(mod)
         # Positive: typed envelope channel still emitted.
         assert "plugin_connection_status" in mod_src, (
-            f"{module_path} must emit a typed CloudEvents envelope on "
-            f"``plugin_connection_status`` (the cross-plugin typed channel)."
+            f"{module_path} must emit a typed CloudEvents envelope on " f"``plugin_connection_status`` (the cross-plugin typed channel)."
         )
         # Negative: legacy raw wire key retired in D4.
         legacy_double = f'"{retired_legacy_key}"'
@@ -456,10 +456,7 @@ class TestSendCustomEventPayload:
         comment explaining why typed-envelope migration is deferred.
         """
         # The status broadcaster file owns the definition; not a "caller".
-        callers = {
-            f for f in callsite_files
-            if not f.endswith("status_broadcaster.py")
-        }
+        callers = {f for f in callsite_files if not f.endswith("status_broadcaster.py")}
         unknown = callers - _LEGACY_RAW_DICT_CALLSITES
         # New callers must EITHER appear in the allowlist OR pass a
         # WorkflowEvent -- the next test verifies the envelope
@@ -527,8 +524,10 @@ class TestServiceRefreshCallbackSignature:
                 continue
 
             params = [
-                p for p in sig.parameters.values()
-                if p.kind in (
+                p
+                for p in sig.parameters.values()
+                if p.kind
+                in (
                     inspect.Parameter.POSITIONAL_ONLY,
                     inspect.Parameter.POSITIONAL_OR_KEYWORD,
                 )
@@ -536,21 +535,13 @@ class TestServiceRefreshCallbackSignature:
             required = [p for p in params if p.default is inspect.Parameter.empty]
             # Must accept at least one positional arg (the broadcaster);
             # additional defaults are fine, varargs (*args) is fine.
-            accepts_one_positional = (
-                any(
-                    p.kind == inspect.Parameter.VAR_POSITIONAL
-                    for p in sig.parameters.values()
-                )
-                or len(params) >= 1
-            )
+            accepts_one_positional = any(p.kind == inspect.Parameter.VAR_POSITIONAL for p in sig.parameters.values()) or len(params) >= 1
             # Must NOT require MORE than one positional — the framework
             # only supplies the broadcaster, nothing else.
             too_many_required = len(required) > 1
 
             if not accepts_one_positional or too_many_required:
-                offenders.append(
-                    f"{cb.__module__}.{cb.__qualname__}{sig}"
-                )
+                offenders.append(f"{cb.__module__}.{cb.__qualname__}{sig}")
 
         assert not offenders, (
             f"register_service_refresh callbacks must accept the "

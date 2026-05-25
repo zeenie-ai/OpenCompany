@@ -40,6 +40,8 @@ def get_pty_transport() -> PtyTransport:
     """
     if sys.platform == "win32":
         from .windows import WindowsPtyTransport
+
         return WindowsPtyTransport()
     from .posix import PosixPtyTransport
+
     return PosixPtyTransport()

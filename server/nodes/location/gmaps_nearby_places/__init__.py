@@ -38,10 +38,8 @@ class GmapsNearbyPlacesNode(ActionNode):
     tool_name = "nearby_places"
     tool_description = "Search for nearby places (restaurants, hospitals, banks, etc.) using Google Maps Places API."
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
     annotations = {"destructive": False, "readonly": True, "open_world": True}
     credentials = (GoogleMapsCredential,)
@@ -57,7 +55,9 @@ class GmapsNearbyPlacesNode(ActionNode):
 
         maps_service = get_maps_service()
         response = await maps_service.find_nearby_places(
-            ctx.node_id, params.model_dump(), ctx.raw,
+            ctx.node_id,
+            params.model_dump(),
+            ctx.raw,
         )
         if response.get("success"):
             return response.get("result") or response

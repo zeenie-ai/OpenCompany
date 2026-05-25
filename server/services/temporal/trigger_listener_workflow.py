@@ -73,14 +73,10 @@ class TriggerListenerWorkflow:
         """
         event_id = event_payload.get("id")
         if not event_id:
-            workflow.logger.warning(
-                "TriggerListener.on_event: skipping malformed envelope without 'id'"
-            )
+            workflow.logger.warning("TriggerListener.on_event: skipping malformed envelope without 'id'")
             return
         if event_id in self._seen_event_ids:
-            workflow.logger.debug(
-                f"TriggerListener.on_event: dedup hit for event.id={event_id}"
-            )
+            workflow.logger.debug(f"TriggerListener.on_event: dedup hit for event.id={event_id}")
             return
         self._seen_event_ids.add(event_id)
         self._matched_events.append(event_payload)
@@ -126,15 +122,11 @@ class TriggerListenerWorkflow:
                 # "seen" so a producer retry with the same id won't
                 # re-fire (correct: server-side dedup applies even on
                 # downstream failure).
-                workflow.logger.error(
-                    f"TriggerListener spawn failed for event.id={event.get('id')}: {exc}"
-                )
+                workflow.logger.error(f"TriggerListener spawn failed for event.id={event.get('id')}: {exc}")
 
             self._processed_count += 1
             if self._processed_count >= _MAX_EVENTS_BEFORE_CONTINUE_AS_NEW:
-                workflow.logger.info(
-                    f"TriggerListener continue_as_new: processed={self._processed_count}"
-                )
+                workflow.logger.info(f"TriggerListener continue_as_new: processed={self._processed_count}")
                 workflow.continue_as_new(args=[listener_data])
 
     async def _spawn_child_run(
@@ -195,13 +187,15 @@ class TriggerListenerWorkflow:
 
         await workflow.start_child_workflow(
             "MachinaWorkflow",
-            args=[{
-                "nodes": filtered_nodes,
-                "edges": filtered_edges,
-                "session_id": session_id,
-                "workflow_id": workflow_id,
-                "tenant_id": tenant_id,
-            }],
+            args=[
+                {
+                    "nodes": filtered_nodes,
+                    "edges": filtered_edges,
+                    "session_id": session_id,
+                    "workflow_id": workflow_id,
+                    "tenant_id": tenant_id,
+                }
+            ],
             id=child_id,
             parent_close_policy=ParentClosePolicy.ABANDON,
             id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE_FAILED_ONLY,
@@ -210,8 +204,7 @@ class TriggerListenerWorkflow:
         )
 
         workflow.logger.info(
-            f"TriggerListener spawned child run: child_id={child_id} "
-            f"event.id={event.get('id')} event.type={event.get('type')}"
+            f"TriggerListener spawned child run: child_id={child_id} " f"event.id={event.get('id')} event.type={event.get('type')}"
         )
 
         await _broadcast_trigger_waiting(
@@ -347,10 +340,7 @@ def _build_run_graph(
             downstream_ids.add(source)
 
     # Sub-nodes connected to toolkit nodes (n8n Sub-Node pattern).
-    toolkit_ids = {
-        n["id"] for n in nodes
-        if n.get("type") in TOOLKIT_NODE_TYPES and n["id"] in downstream_ids
-    }
+    toolkit_ids = {n["id"] for n in nodes if n.get("type") in TOOLKIT_NODE_TYPES and n["id"] in downstream_ids}
     for edge in edges:
         target = edge.get("target")
         source = edge.get("source")
@@ -358,18 +348,11 @@ def _build_run_graph(
             downstream_ids.add(source)
 
     # Tool nodes connected to AI Agent's input-tools handle.
-    agent_ids = {
-        n["id"] for n in nodes
-        if n.get("type") in AI_AGENT_TYPES and n["id"] in downstream_ids
-    }
+    agent_ids = {n["id"] for n in nodes if n.get("type") in AI_AGENT_TYPES and n["id"] in downstream_ids}
     for edge in edges:
         target = edge.get("target")
         source = edge.get("source")
-        if (
-            target in agent_ids
-            and edge.get("targetHandle", "") == "input-tools"
-            and source not in downstream_ids
-        ):
+        if target in agent_ids and edge.get("targetHandle", "") == "input-tools" and source not in downstream_ids:
             downstream_ids.add(source)
 
     run_filter = {trigger_node_id} | downstream_ids
@@ -387,10 +370,7 @@ def _build_run_graph(
             node_copy["_trigger_output"] = {"not_triggered": True}
         filtered_nodes.append(node_copy)
 
-    filtered_edges = [
-        e for e in edges
-        if e.get("source") in run_filter and e.get("target") in run_filter
-    ]
+    filtered_edges = [e for e in edges if e.get("source") in run_filter and e.get("target") in run_filter]
 
     return filtered_nodes, filtered_edges
 

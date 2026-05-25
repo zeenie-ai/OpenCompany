@@ -76,9 +76,7 @@ def patched_container(
 
     auth_service = MagicMock(name="AuthService")
     auth_service.get_api_key = AsyncMock(side_effect=lambda provider, *a, **kw: api_keys.get(provider))
-    auth_service.get_oauth_tokens = AsyncMock(
-        side_effect=lambda provider, *a, **kw: oauth_tokens.get(provider)
-    )
+    auth_service.get_oauth_tokens = AsyncMock(side_effect=lambda provider, *a, **kw: oauth_tokens.get(provider))
     auth_service.get_stored_models = AsyncMock(return_value=[])
     # Awaitable async writes (handlers like Twitter call these in refresh paths)
     auth_service.store_api_key = AsyncMock(return_value=True)
@@ -133,9 +131,7 @@ def patched_container(
 def patched_pricing(total_cost: float = 0.001) -> Iterator[MagicMock]:
     """Patch `services.pricing.get_pricing_service` to return canned cost data."""
     pricing = MagicMock(name="PricingService")
-    pricing.calculate_api_cost = MagicMock(
-        return_value={"operation": "test", "total_cost": total_cost}
-    )
+    pricing.calculate_api_cost = MagicMock(return_value={"operation": "test", "total_cost": total_cost})
     pricing.calculate_cost = MagicMock(
         return_value={
             "input_cost": 0.0,

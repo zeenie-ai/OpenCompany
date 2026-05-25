@@ -20,18 +20,18 @@ class NodeHandle(TypedDict, total=False):
     frontend-hardcoded `AGENT_CONFIGS` handle topology.
     """
 
-    name: str                                            # "input-skill", "output-top", ...
+    name: str  # "input-skill", "output-top", ...
     kind: Literal["input", "output"]
     position: Literal["top", "bottom", "left", "right"]
-    offset: str                                          # CSS % e.g. "25%"; optional
-    label: str                                           # tooltip
-    role: str                                            # "main" / "skill" / "tools" / "memory" / "task" / "teammates" / "model"
+    offset: str  # CSS % e.g. "25%"; optional
+    label: str  # tooltip
+    role: str  # "main" / "skill" / "tools" / "memory" / "task" / "teammates" / "model"
 
 
 class NodeMetadata(TypedDict, total=False):
     # Existing (Wave 6):
     displayName: str
-    icon: str                                            # emoji | "asset:<key>" | SVG data URI
+    icon: str  # emoji | "asset:<key>" | SVG data URI
     group: list[str]
     subtitle: str
     description: str
@@ -41,16 +41,23 @@ class NodeMetadata(TypedDict, total=False):
     uiHints: dict[str, object]
 
     # Wave 10.A — full visual contract:
-    color: str                                           # hex or dracula token e.g. "#bd93f9"
-    componentKind: Literal[                              # frontend component dispatch key
-        "square", "circle", "trigger", "start",
-        "agent", "chat", "tool", "model", "generic",
+    color: str  # hex or dracula token e.g. "#bd93f9"
+    componentKind: Literal[  # frontend component dispatch key
+        "square",
+        "circle",
+        "trigger",
+        "start",
+        "agent",
+        "chat",
+        "tool",
+        "model",
+        "generic",
     ]
-    handles: list[NodeHandle]                            # replaces AGENT_CONFIGS topology
-    credentials: list[str]                               # provider keys
-    hideOutputHandle: bool                               # replaces NO_OUTPUT_NODE_TYPES
-    hideInputHandle: bool                                # auto-derived for usable_as_tool=True nodes
-    visibility: Literal["all", "normal", "dev"]          # replaces SIMPLE_MODE_CATEGORIES
+    handles: list[NodeHandle]  # replaces AGENT_CONFIGS topology
+    credentials: list[str]  # provider keys
+    hideOutputHandle: bool  # replaces NO_OUTPUT_NODE_TYPES
+    hideInputHandle: bool  # auto-derived for usable_as_tool=True nodes
+    visibility: Literal["all", "normal", "dev"]  # replaces SIMPLE_MODE_CATEGORIES
 
 
 # Seeded incrementally per Wave 6 Phase 3 sub-commit. Sub-commit 3a
@@ -75,9 +82,9 @@ class GroupMetadata(TypedDict, total=False):
     `/api/schemas/nodes/groups`.
     """
 
-    label: str                                           # e.g. "AI Agents"
-    icon: str                                            # emoji | "asset:<key>"
-    color: str                                           # hex / dracula token
+    label: str  # e.g. "AI Agents"
+    icon: str  # emoji | "asset:<key>"
+    color: str  # hex / dracula token
     visibility: Literal["all", "normal", "dev"]
 
 

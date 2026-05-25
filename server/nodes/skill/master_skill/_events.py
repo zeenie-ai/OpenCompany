@@ -69,10 +69,12 @@ async def broadcast_skill_lifecycle(
 
     broadcaster = get_status_broadcaster()
     event = skill_lifecycle_event(stage, name=name, data=data_extra or None)
-    await broadcaster.broadcast({
-        "type": _WIRE_KEY,
-        "data": event.model_dump(mode="json"),
-    })
+    await broadcaster.broadcast(
+        {
+            "type": _WIRE_KEY,
+            "data": event.model_dump(mode="json"),
+        }
+    )
 
 
 __all__ = [

@@ -35,9 +35,7 @@ from services.plugin.registry import IdempotentRegistry
 SocialSendHandler = Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]
 
 
-_REGISTRY: IdempotentRegistry[str, SocialSendHandler] = IdempotentRegistry(
-    "social_send_handler"
-)
+_REGISTRY: IdempotentRegistry[str, SocialSendHandler] = IdempotentRegistry("social_send_handler")
 
 
 def register_social_send_handler(platform: str, handler: SocialSendHandler) -> None:

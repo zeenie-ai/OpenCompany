@@ -37,14 +37,10 @@ PollCoroutine = Callable[[asyncio.Queue, Callable[[], bool]], Awaitable[None]]
 PollCoroutineFactory = Callable[[str, Dict[str, Any]], PollCoroutine]
 
 
-_REGISTRY: IdempotentRegistry[str, PollCoroutineFactory] = IdempotentRegistry(
-    "poll_coroutine_factory"
-)
+_REGISTRY: IdempotentRegistry[str, PollCoroutineFactory] = IdempotentRegistry("poll_coroutine_factory")
 
 
-def register_poll_coroutine_factory(
-    node_type: str, factory: PollCoroutineFactory
-) -> None:
+def register_poll_coroutine_factory(node_type: str, factory: PollCoroutineFactory) -> None:
     """Publish a polling-coroutine factory for a trigger node type.
 
     Idempotent on re-import (same callable for the same key is a

@@ -28,21 +28,43 @@ class SocialReceiveParams(BaseModel):
     """
 
     channel_filter: Literal[
-        "all", "whatsapp", "telegram", "discord", "slack", "signal",
-        "sms", "webchat", "email", "matrix", "teams",
+        "all",
+        "whatsapp",
+        "telegram",
+        "discord",
+        "slack",
+        "signal",
+        "sms",
+        "webchat",
+        "email",
+        "matrix",
+        "teams",
     ] = Field(
         default="all",
         description="Filter by source platform",
     )
     message_type_filter: Literal[
-        "all", "text", "image", "video", "audio", "document",
-        "sticker", "location", "contact", "poll", "reaction",
+        "all",
+        "text",
+        "image",
+        "video",
+        "audio",
+        "document",
+        "sticker",
+        "location",
+        "contact",
+        "poll",
+        "reaction",
     ] = Field(
         default="all",
         description="Filter by content type",
     )
     sender_filter: Literal[
-        "all", "any_contact", "contact", "group", "keywords",
+        "all",
+        "any_contact",
+        "contact",
+        "group",
+        "keywords",
     ] = Field(
         default="all",
         description="Filter which messages pass through",
@@ -99,11 +121,11 @@ class SocialReceiveNode(ActionNode):
     subtitle = "Normalize Message"
     group = ("social",)
     description = "Normalizes messages from platform triggers into unified format"
-    component_kind = "agent"   # multi-handle layout uses AIAgentNode
+    component_kind = "agent"  # multi-handle layout uses AIAgentNode
     handles = (
-        {"name": "output-message",  "kind": "output", "position": "right", "offset": "20%", "label": "Message",  "role": "main"},
-        {"name": "output-media",    "kind": "output", "position": "right", "offset": "40%", "label": "Media",    "role": "main"},
-        {"name": "output-contact",  "kind": "output", "position": "right", "offset": "60%", "label": "Contact",  "role": "main"},
+        {"name": "output-message", "kind": "output", "position": "right", "offset": "20%", "label": "Message", "role": "main"},
+        {"name": "output-media", "kind": "output", "position": "right", "offset": "40%", "label": "Media", "role": "main"},
+        {"name": "output-contact", "kind": "output", "position": "right", "offset": "60%", "label": "Contact", "role": "main"},
         {"name": "output-metadata", "kind": "output", "position": "right", "offset": "80%", "label": "Metadata", "role": "main"},
     )
     ui_hints = _SOCIAL_SIZE
@@ -138,9 +160,12 @@ class SocialReceiveNode(ActionNode):
         outputs = context.raw.get("connected_outputs") or {}
         source_nodes = context.raw.get("source_nodes") or []
         response = await handle_social_receive(
-            node_id=node_id, node_type=self.type,
-            parameters=params_obj.model_dump(), context=context.raw,
-            outputs=outputs, source_nodes=source_nodes,
+            node_id=node_id,
+            node_type=self.type,
+            parameters=params_obj.model_dump(),
+            context=context.raw,
+            outputs=outputs,
+            source_nodes=source_nodes,
         )
         return response
 

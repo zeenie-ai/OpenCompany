@@ -46,9 +46,7 @@ ShutdownHook = Callable[[], Awaitable[None]]
 # (CPython 3.7+ dict ordering guarantee) which gives deterministic
 # shutdown ordering. Plugins that need ordering invariants should
 # document them via their label naming.
-_REGISTRY: IdempotentRegistry[str, ShutdownHook] = IdempotentRegistry(
-    "plugin_shutdown_hook"
-)
+_REGISTRY: IdempotentRegistry[str, ShutdownHook] = IdempotentRegistry("plugin_shutdown_hook")
 
 
 def register_shutdown_hook(label: str, hook: ShutdownHook) -> None:
@@ -86,8 +84,7 @@ async def run_shutdown_hooks() -> None:
     if not hooks:
         return
 
-    logger.info(f"Running {len(hooks)} plugin shutdown hook(s): "
-                f"{[label for label, _ in hooks]}")
+    logger.info(f"Running {len(hooks)} plugin shutdown hook(s): " f"{[label for label, _ in hooks]}")
     for label, hook in hooks:
         try:
             await hook()

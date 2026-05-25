@@ -45,6 +45,7 @@ def _find_browser_via_registry(exe_name: str) -> Optional[str]:
     """
     try:
         import winreg
+
         for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
             try:
                 key = winreg.OpenKey(
@@ -152,15 +153,24 @@ class BrowserParams(BaseModel):
     """
 
     operation: Literal[
-        "navigate", "click", "type", "fill", "screenshot", "snapshot",
-        "get_text", "get_html", "eval", "wait", "scroll", "select",
-        "console", "errors", "batch",
+        "navigate",
+        "click",
+        "type",
+        "fill",
+        "screenshot",
+        "snapshot",
+        "get_text",
+        "get_html",
+        "eval",
+        "wait",
+        "scroll",
+        "select",
+        "console",
+        "errors",
+        "batch",
     ] = Field(
         default="navigate",
-        description=(
-            "Browser operation. Typical flow: navigate -> snapshot -> "
-            "interact using @eN refs -> snapshot."
-        ),
+        description=("Browser operation. Typical flow: navigate -> snapshot -> " "interact using @eN refs -> snapshot."),
     )
 
     # Operation-scoped fields
@@ -173,9 +183,19 @@ class BrowserParams(BaseModel):
         default="",
         description="CSS selector or @eN ref from snapshot.",
         json_schema_extra={
-            "displayOptions": {"show": {"operation": [
-                "click", "type", "fill", "get_text", "get_html", "wait", "select",
-            ]}},
+            "displayOptions": {
+                "show": {
+                    "operation": [
+                        "click",
+                        "type",
+                        "fill",
+                        "get_text",
+                        "get_html",
+                        "wait",
+                        "select",
+                    ]
+                }
+            },
         },
     )
     text: str = Field(
@@ -201,7 +221,9 @@ class BrowserParams(BaseModel):
         json_schema_extra={"displayOptions": {"show": {"operation": ["scroll"]}}},
     )
     amount: int = Field(
-        default=500, ge=1, le=20000,
+        default=500,
+        ge=1,
+        le=20000,
         description="Pixels to scroll.",
         json_schema_extra={"displayOptions": {"show": {"operation": ["scroll"]}}},
     )
@@ -230,12 +252,17 @@ class BrowserParams(BaseModel):
         json_schema_extra={"displayOptions": {"show": {"operation": ["screenshot"]}}},
     )
     screenshot_quality: int = Field(
-        default=85, ge=1, le=100,
+        default=85,
+        ge=1,
+        le=100,
         description="JPEG quality (1-100).",
         json_schema_extra={
-            "displayOptions": {"show": {
-                "operation": ["screenshot"], "screenshot_format": ["jpeg"],
-            }},
+            "displayOptions": {
+                "show": {
+                    "operation": ["screenshot"],
+                    "screenshot_format": ["jpeg"],
+                }
+            },
         },
     )
 
@@ -279,11 +306,15 @@ class BrowserParams(BaseModel):
         description="Proxy URL (e.g. http://user:pass@host:port).",
     )
     action_delay: int = Field(
-        default=0, ge=0, le=60000,
+        default=0,
+        ge=0,
+        le=60000,
         description="Delay before each action in milliseconds (for stealth).",
     )
     timeout: int = Field(
-        default=30, ge=1, le=600,
+        default=30,
+        ge=1,
+        le=600,
         description="Per-action timeout in seconds.",
     )
 
@@ -329,10 +360,7 @@ class BrowserNode(ActionNode):
             )
 
         op = params.operation
-        session = (
-            params.session.strip()
-            or f"machina_{ctx.raw.get('execution_id', 'default')}"
-        )
+        session = params.session.strip() or f"machina_{ctx.raw.get('execution_id', 'default')}"
         timeout = params.timeout
         browser_sel = params.browser or "chrome"
         if browser_sel == "bundled":
@@ -357,7 +385,9 @@ class BrowserNode(ActionNode):
         if op == "batch":
             cmds = json.loads(params.commands or "[]")
             data = await svc.run(
-                ["batch", "--json"], session, timeout,
+                ["batch", "--json"],
+                session,
+                timeout,
                 stdin=json.dumps(cmds).encode(),
                 **run_kw,
             )

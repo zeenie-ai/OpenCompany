@@ -14,7 +14,7 @@ from .._base import build_google_service, run_sync, track_google_usage
 
 
 def _ensure_rfc3339(due: str) -> str:
-    return due if 'T' in due else f"{due}T00:00:00.000Z"
+    return due if "T" in due else f"{due}T00:00:00.000Z"
 
 
 _CREATE = {"displayOptions": {"show": {"operation": ["create"]}}}
@@ -77,10 +77,8 @@ class TasksNode(ActionNode):
     tool_name = "google_tasks"
     tool_description = "Manage Google Tasks. Operations: create (new task), list (find tasks), complete (mark done), update (modify task), delete (remove task)."
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
     annotations = {"destructive": False, "readonly": False, "open_world": True}
     credentials = (GoogleCredential,)
@@ -100,36 +98,45 @@ class TasksNode(ActionNode):
         if op == "create":
             if not params.title:
                 raise RuntimeError("Task title is required")
-            body = {'title': params.title}
+            body = {"title": params.title}
             if params.notes:
-                body['notes'] = params.notes
+                body["notes"] = params.notes
             if params.due_date:
-                body['due'] = _ensure_rfc3339(params.due_date)
+                body["due"] = _ensure_rfc3339(params.due_date)
             result = await run_sync(lambda: tasks_svc.insert(tasklist=tasklist, body=body).execute())
             await track_google_usage("google_tasks", ctx.node_id, "create", 1, ctx.raw)
             return TasksOutput(
                 operation="create",
-                task_id=result.get('id'),
-                title=result.get('title'),
-                notes=result.get('notes'),
-                due=result.get('due'),
-                status=result.get('status'),
-                self_link=result.get('selfLink'),
+                task_id=result.get("id"),
+                title=result.get("title"),
+                notes=result.get("notes"),
+                due=result.get("due"),
+                status=result.get("status"),
+                self_link=result.get("selfLink"),
             )
 
         if op == "list":
-            result = await run_sync(lambda: tasks_svc.list(
-                tasklist=tasklist,
-                showCompleted=params.show_completed,
-                showHidden=params.show_hidden,
-                maxResults=params.max_results,
-            ).execute())
-            items = result.get('items', [])
-            formatted = [{
-                'task_id': t.get('id'), 'title': t.get('title'), 'notes': t.get('notes'),
-                'due': t.get('due'), 'status': t.get('status'),
-                'completed': t.get('completed'), 'position': t.get('position'),
-            } for t in items]
+            result = await run_sync(
+                lambda: tasks_svc.list(
+                    tasklist=tasklist,
+                    showCompleted=params.show_completed,
+                    showHidden=params.show_hidden,
+                    maxResults=params.max_results,
+                ).execute()
+            )
+            items = result.get("items", [])
+            formatted = [
+                {
+                    "task_id": t.get("id"),
+                    "title": t.get("title"),
+                    "notes": t.get("notes"),
+                    "due": t.get("due"),
+                    "status": t.get("status"),
+                    "completed": t.get("completed"),
+                    "position": t.get("position"),
+                }
+                for t in items
+            ]
             await track_google_usage("google_tasks", ctx.node_id, "list", len(formatted), ctx.raw)
             return TasksOutput(operation="list", tasks=formatted, count=len(formatted))
 
@@ -145,33 +152,37 @@ class TasksNode(ActionNode):
             current = await run_sync(lambda: tasks_svc.get(tasklist=tasklist, task=params.task_id).execute())
 
             if op == "complete":
-                current['status'] = 'completed'
+                current["status"] = "completed"
             else:
                 title = params.update_title or params.title
                 notes = params.update_notes or params.notes
                 due = params.update_due_date or params.due_date
                 status = params.update_status or params.status
                 if title:
-                    current['title'] = title
+                    current["title"] = title
                 if notes:
-                    current['notes'] = notes
+                    current["notes"] = notes
                 if due:
-                    current['due'] = _ensure_rfc3339(due)
+                    current["due"] = _ensure_rfc3339(due)
                 if status:
-                    current['status'] = status
+                    current["status"] = status
 
-            result = await run_sync(lambda: tasks_svc.update(
-                tasklist=tasklist, task=params.task_id, body=current,
-            ).execute())
+            result = await run_sync(
+                lambda: tasks_svc.update(
+                    tasklist=tasklist,
+                    task=params.task_id,
+                    body=current,
+                ).execute()
+            )
             await track_google_usage("google_tasks", ctx.node_id, op, 1, ctx.raw)
             return TasksOutput(
                 operation=op,
-                task_id=result.get('id'),
-                title=result.get('title'),
-                notes=result.get('notes'),
-                due=result.get('due'),
-                status=result.get('status'),
-                completed=result.get('completed'),
+                task_id=result.get("id"),
+                title=result.get("title"),
+                notes=result.get("notes"),
+                due=result.get("due"),
+                status=result.get("status"),
+                completed=result.get("completed"),
             )
 
         raise RuntimeError(f"Unknown Tasks operation: {op}")

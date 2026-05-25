@@ -21,7 +21,9 @@ class EmbeddingGeneratorParams(BaseModel):
         description="Model name (provider-specific). HuggingFace: BAAI/bge-*. OpenAI: text-embedding-3-small.",
     )
     batch_size: int = Field(
-        default=32, ge=1, le=256,
+        default=32,
+        ge=1,
+        le=256,
         description="Number of texts per embedding batch.",
     )
     api_key: str = Field(
@@ -73,26 +75,31 @@ class EmbeddingGeneratorNode(ActionNode):
 
         if not chunks:
             return EmbeddingGeneratorOutput(
-                embeddings=[], embedding_count=0, dimensions=0, chunks=[],
-                provider=provider, model=model,
+                embeddings=[],
+                embedding_count=0,
+                dimensions=0,
+                chunks=[],
+                provider=provider,
+                model=model,
             )
 
-        texts = [c.get('content', '') if isinstance(c, dict) else str(c) for c in chunks]
+        texts = [c.get("content", "") if isinstance(c, dict) else str(c) for c in chunks]
 
-        if provider == 'huggingface':
+        if provider == "huggingface":
             try:
                 from langchain_huggingface import HuggingFaceEmbeddings
             except ImportError:
                 raise NodeUserError(
-                    "HuggingFace embeddings unavailable. "
-                    "pip install langchain-huggingface sentence-transformers",
+                    "HuggingFace embeddings unavailable. " "pip install langchain-huggingface sentence-transformers",
                 )
             embedder = HuggingFaceEmbeddings(model_name=model)
-        elif provider == 'openai':
+        elif provider == "openai":
             from langchain_openai import OpenAIEmbeddings
+
             embedder = OpenAIEmbeddings(model=model, api_key=api_key)
-        elif provider == 'ollama':
+        elif provider == "ollama":
             from langchain_ollama import OllamaEmbeddings
+
             embedder = OllamaEmbeddings(model=model)
         else:
             raise NodeUserError(f"Unknown provider: {provider}")

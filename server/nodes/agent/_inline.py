@@ -60,7 +60,10 @@ async def prepare_agent_call(
         parameters = {**parameters, "api_key": raw_params["api_key"]}
 
     memory_data, skill_data, tool_data, input_data, task_data = await collect_agent_connections(
-        node_id, context, database, log_prefix=log_prefix,
+        node_id,
+        context,
+        database,
+        log_prefix=log_prefix,
     )
 
     # Step 1: task-context injection + tool-strip.
@@ -76,8 +79,7 @@ async def prepare_agent_call(
             original_tool_count = len(tool_data)
             tool_data = []
             logger.info(
-                f"{log_prefix} Stripped ALL {original_tool_count} tools for "
-                "task completion handling",
+                f"{log_prefix} Stripped ALL {original_tool_count} tools for " "task completion handling",
             )
 
     # Step 2: auto-prompt fallback.
@@ -113,31 +115,34 @@ async def prepare_agent_call(
                 tm_id = tm["node_id"]
                 child_tools = []
                 for child_edge in all_edges:
-                    if (
-                        child_edge.get("target") != tm_id
-                        or child_edge.get("targetHandle") != "input-tools"
-                    ):
+                    if child_edge.get("target") != tm_id or child_edge.get("targetHandle") != "input-tools":
                         continue
                     child_id = child_edge.get("source")
                     child_node = next(
-                        (n for n in all_nodes if n.get("id") == child_id), None,
+                        (n for n in all_nodes if n.get("id") == child_id),
+                        None,
                     )
                     if not child_node:
                         continue
-                    child_tools.append({
-                        "node_id": child_id,
-                        "node_type": child_node.get("type"),
-                        "label": child_node.get("data", {}).get(
-                            "label", child_node.get("type"),
-                        ),
-                    })
-                tool_data.append({
-                    "node_id": tm_id,
-                    "node_type": tm["node_type"],
-                    "label": tm["label"],
-                    "parameters": tm.get("parameters", {}),
-                    "child_tools": child_tools,
-                })
+                    child_tools.append(
+                        {
+                            "node_id": child_id,
+                            "node_type": child_node.get("type"),
+                            "label": child_node.get("data", {}).get(
+                                "label",
+                                child_node.get("type"),
+                            ),
+                        }
+                    )
+                tool_data.append(
+                    {
+                        "node_id": tm_id,
+                        "node_type": tm["node_type"],
+                        "label": tm["label"],
+                        "parameters": tm.get("parameters", {}),
+                        "child_tools": child_tools,
+                    }
+                )
             logger.info(f"[Teams] Added {len(teammates)} teammates as delegation tools")
 
     from services.status_broadcaster import get_status_broadcaster
@@ -152,5 +157,3 @@ async def prepare_agent_call(
         "context": context,
         "database": database,
     }
-
-

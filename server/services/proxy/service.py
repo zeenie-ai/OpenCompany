@@ -85,10 +85,10 @@ class _ProviderRuntime:
         freshness_score = min(1.0, len(results) / 10)
 
         score = (
-            _WEIGHT_SUCCESS * success_rate +
-            _WEIGHT_LATENCY * latency_score +
-            _WEIGHT_COST * cost_score +
-            _WEIGHT_FRESHNESS * freshness_score
+            _WEIGHT_SUCCESS * success_rate
+            + _WEIGHT_LATENCY * latency_score
+            + _WEIGHT_COST * cost_score
+            + _WEIGHT_FRESHNESS * freshness_score
         )
         return round(max(0.0, min(1.0, score)), 4)
 
@@ -153,9 +153,7 @@ class ProxyService:
 
             self._initialized = True
             provider_names = [p.config.name for p in self._providers.values() if p.config.enabled]
-            logger.info("Proxy service started",
-                       providers=provider_names,
-                       rules=len(self._routing_rules))
+            logger.info("Proxy service started", providers=provider_names, rules=len(self._routing_rules))
 
         except Exception as e:
             logger.error("Failed to start proxy service", error=str(e))
@@ -228,9 +226,7 @@ class ProxyService:
         # None unless a caller hand-passes them via the same
         # snake_case convention as the rest of the schema.
         geo = GeoTarget(
-            country=parameters.get("proxy_country") or
-                    (rule.required_country if rule else None) or
-                    self._settings.proxy_default_country,
+            country=parameters.get("proxy_country") or (rule.required_country if rule else None) or self._settings.proxy_default_country,
             city=parameters.get("proxy_city"),
             state=parameters.get("proxy_state"),
         )
@@ -254,10 +250,7 @@ class ProxyService:
             session_id=session_id,
         )
 
-        logger.debug("Proxy URL generated",
-                     provider=runtime.config.name,
-                     domain=domain,
-                     country=geo.country)
+        logger.debug("Proxy URL generated", provider=runtime.config.name, domain=domain, country=geo.country)
 
         return proxy_url
 
@@ -278,7 +271,7 @@ class ProxyService:
 
         # Track daily spend
         if result.bytes_transferred > 0 and runtime.config.cost_per_gb > 0:
-            gb = result.bytes_transferred / (1024 ** 3)
+            gb = result.bytes_transferred / (1024**3)
             self._daily_spend_usd += gb * runtime.config.cost_per_gb
 
     def get_providers(self) -> List[ProviderStats]:
@@ -355,10 +348,7 @@ class ProxyService:
             "daily_budget_usd": self._settings.proxy_budget_daily_usd,
             "total_requests": sum(p.total_requests for p in self._providers.values()),
             "total_bytes": sum(p.total_bytes for p in self._providers.values()),
-            "providers": {
-                name: rt.to_stats().model_dump()
-                for name, rt in self._providers.items()
-            },
+            "providers": {name: rt.to_stats().model_dump() for name, rt in self._providers.items()},
         }
 
     def reset_daily_spend(self) -> None:
@@ -369,8 +359,7 @@ class ProxyService:
         """Reload provider configs from database (called after tool/UI changes)."""
         db_providers = await self._database.get_proxy_providers()
         await self._load_providers(db_providers)
-        logger.info("Proxy providers reloaded",
-                     count=len(self._providers))
+        logger.info("Proxy providers reloaded", count=len(self._providers))
 
     async def _load_providers(self, db_providers: list) -> None:
         """Build _ProviderRuntime instances from database rows."""
@@ -404,8 +393,7 @@ class ProxyService:
                 runtime.username = username
                 runtime.password = password
             else:
-                logger.warning("No credentials for proxy provider",
-                               name=config.name)
+                logger.warning("No credentials for proxy provider", name=config.name)
 
             self._providers[config.name] = runtime
 
@@ -440,10 +428,7 @@ class ProxyService:
 
     def _pick_best_provider(self) -> Optional[_ProviderRuntime]:
         """Pick the best healthy provider by composite score."""
-        candidates = [
-            rt for rt in self._providers.values()
-            if rt.config.enabled and rt.has_credentials and rt.is_healthy()
-        ]
+        candidates = [rt for rt in self._providers.values() if rt.config.enabled and rt.has_credentials and rt.is_healthy()]
 
         if not candidates:
             return None
@@ -457,18 +442,20 @@ class ProxyService:
         db_rules = await self._database.get_proxy_routing_rules()
         self._routing_rules = []
         for row in db_rules:
-            self._routing_rules.append(RoutingRule(
-                id=row.get("id"),
-                domain_pattern=row["domain_pattern"],
-                preferred_providers=json.loads(row.get("preferred_providers", "[]")),
-                required_country=row.get("required_country"),
-                session_type=SessionType(row.get("session_type", "rotating")),
-                sticky_duration_seconds=row.get("sticky_duration_seconds", 300),
-                max_retries=row.get("max_retries", 3),
-                failover=row.get("failover", True),
-                min_success_rate=row.get("min_success_rate", 0.7),
-                priority=row.get("priority", 0),
-            ))
+            self._routing_rules.append(
+                RoutingRule(
+                    id=row.get("id"),
+                    domain_pattern=row["domain_pattern"],
+                    preferred_providers=json.loads(row.get("preferred_providers", "[]")),
+                    required_country=row.get("required_country"),
+                    session_type=SessionType(row.get("session_type", "rotating")),
+                    sticky_duration_seconds=row.get("sticky_duration_seconds", 300),
+                    max_retries=row.get("max_retries", 3),
+                    failover=row.get("failover", True),
+                    min_success_rate=row.get("min_success_rate", 0.7),
+                    priority=row.get("priority", 0),
+                )
+            )
         self._routing_rules.sort(key=lambda r: r.priority)
 
 

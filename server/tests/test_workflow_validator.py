@@ -139,9 +139,9 @@ async def test_invalid_param_is_warning(monkeypatch):
     )
     codes = [iss["code"] for iss in report["warnings"]]
     assert "INVALID_PARAM" in codes
-    assert all(iss["code"] != "INVALID_PARAM" for iss in report["errors"]), (
-        "INVALID_PARAM must not block execution; only deploy-time errors block."
-    )
+    assert all(
+        iss["code"] != "INVALID_PARAM" for iss in report["errors"]
+    ), "INVALID_PARAM must not block execution; only deploy-time errors block."
 
 
 async def test_missing_credential_is_warning(monkeypatch):
@@ -268,12 +268,10 @@ class TestExecuteAndDeployHandlersGate:
 
         src = self._handler_source(ws_module.handle_execute_workflow)
         assert "validate_workflow" in src, (
-            "handle_execute_workflow must call validate_workflow so "
-            "broken workflows are blocked at the gate (force=true overrides)."
+            "handle_execute_workflow must call validate_workflow so " "broken workflows are blocked at the gate (force=true overrides)."
         )
         assert "force" in src, (
-            "handle_execute_workflow must support the force=true override "
-            "so 'Run anyway' can bypass warnings (Windmill pattern)."
+            "handle_execute_workflow must support the force=true override " "so 'Run anyway' can bypass warnings (Windmill pattern)."
         )
 
     def test_deploy_workflow_calls_validator_unconditionally(self):
@@ -292,8 +290,7 @@ class TestExecuteAndDeployHandlersGate:
         from routers import websocket as ws_module
 
         assert "validate_workflow" in ws_module.MESSAGE_HANDLERS, (
-            "validate_workflow message type must be in MESSAGE_HANDLERS "
-            "so the frontend live-lint and import dry-run paths can reach it."
+            "validate_workflow message type must be in MESSAGE_HANDLERS " "so the frontend live-lint and import dry-run paths can reach it."
         )
 
     def test_example_loader_calls_validator(self):
@@ -304,8 +301,7 @@ class TestExecuteAndDeployHandlersGate:
 
         src = inspect.getsource(example_loader.import_examples_for_user)
         assert "validate_workflow" in src, (
-            "import_examples_for_user must run validate_workflow before "
-            "save_workflow — broken examples shipped on disk are bugs."
+            "import_examples_for_user must run validate_workflow before " "save_workflow — broken examples shipped on disk are bugs."
         )
 
     def test_example_loader_remaps_node_ids(self):
@@ -319,8 +315,7 @@ class TestExecuteAndDeployHandlersGate:
 
         src = inspect.getsource(example_loader.import_examples_for_user)
         assert "remap_node_ids" in src, (
-            "import_examples_for_user must call workflow_import.remap_node_ids "
-            "before save_workflow / save_node_parameters."
+            "import_examples_for_user must call workflow_import.remap_node_ids " "before save_workflow / save_node_parameters."
         )
 
 
@@ -341,9 +336,7 @@ class TestRemapNodeIds:
 
         a_ids = {n["id"] for n in a_nodes}
         b_ids = {n["id"] for n in b_nodes}
-        assert a_ids.isdisjoint(b_ids), (
-            f"Remap must produce disjoint id sets, got overlap: {a_ids & b_ids}"
-        )
+        assert a_ids.isdisjoint(b_ids), f"Remap must produce disjoint id sets, got overlap: {a_ids & b_ids}"
 
     def test_remap_rewrites_edge_refs(self):
         """Edges must point at the new node ids; no dangling references."""
@@ -366,9 +359,7 @@ class TestRemapNodeIds:
         from services.workflow_import import remap_node_ids
 
         nodes = [{"id": "orig-1", "type": "telegramSend", "data": {}}]
-        new_nodes, _, new_params = remap_node_ids(
-            nodes, [], {"orig-1": {"text": "hello"}}
-        )
+        new_nodes, _, new_params = remap_node_ids(nodes, [], {"orig-1": {"text": "hello"}})
         assert "orig-1" not in new_params
         assert new_nodes[0]["id"] in new_params
         assert new_params[new_nodes[0]["id"]] == {"text": "hello"}
@@ -410,10 +401,7 @@ class TestRemapNodeIds:
                 all_ids[node["id"]].append(path)
 
         collisions = {k: v for k, v in all_ids.items() if len(v) > 1}
-        assert not collisions, (
-            f"Remap should produce disjoint ids across all example "
-            f"workflows; found collisions: {collisions}"
-        )
+        assert not collisions, f"Remap should produce disjoint ids across all example " f"workflows; found collisions: {collisions}"
 
 
 # ---------------------------------------------------------------------------
@@ -434,9 +422,7 @@ def _fake_database(existing_names: list[str] | None = None):
     saved_params: dict[str, dict] = {}
 
     db = MagicMock()
-    db.get_all_workflows = AsyncMock(
-        return_value=[_FakeWorkflow(n) for n in (existing_names or [])]
-    )
+    db.get_all_workflows = AsyncMock(return_value=[_FakeWorkflow(n) for n in (existing_names or [])])
 
     async def save_workflow(**kwargs):
         saved_workflows.append(kwargs)
@@ -610,19 +596,14 @@ class TestImportWorkflowOrchestrator:
             "nodeParameters": {"orig-1": {"x": 1}},
         }
         r1 = await import_workflow(payload, auth_service=auth, database=db)
-        r2 = await import_workflow(
-            {**payload, "name": "Remap B"}, auth_service=auth, database=db
-        )
+        r2 = await import_workflow({**payload, "name": "Remap B"}, auth_service=auth, database=db)
 
         # Saved node ids must differ across the two imports.
         saved_a_nodes = db._saved_workflows[0]["data"]["nodes"]
         saved_b_nodes = db._saved_workflows[1]["data"]["nodes"]
         a_ids = {n["id"] for n in saved_a_nodes}
         b_ids = {n["id"] for n in saved_b_nodes}
-        assert a_ids.isdisjoint(b_ids), (
-            f"Two imports of the same JSON must produce disjoint node ids; "
-            f"overlap: {a_ids & b_ids}"
-        )
+        assert a_ids.isdisjoint(b_ids), f"Two imports of the same JSON must produce disjoint node ids; " f"overlap: {a_ids & b_ids}"
         # Parameters saved under the NEW ids, not the original.
         assert "orig-1" not in db._saved_params
         assert len(db._saved_params) >= 2  # both r1 and r2 saved their params
@@ -649,10 +630,7 @@ class TestImportWorkflowOrchestrator:
             auth_service=auth,
             database=db,
         )
-        assert len(calls) == 1, (
-            "import_workflow save path must call broadcast_workflow_lifecycle "
-            "exactly once on success."
-        )
+        assert len(calls) == 1, "import_workflow save path must call broadcast_workflow_lifecycle " "exactly once on success."
         stage, kwargs = calls[0]
         assert stage == "imported"
         assert kwargs["workflow_id"].startswith("workflow-")
@@ -685,7 +663,8 @@ def _patch_broadcaster(monkeypatch):
 
     stub = _StubBroadcaster()
     monkeypatch.setattr(
-        "services.status_broadcaster.get_status_broadcaster", lambda: stub,
+        "services.status_broadcaster.get_status_broadcaster",
+        lambda: stub,
     )
     return stub, calls
 
@@ -707,10 +686,12 @@ class TestExtractRequirements:
             }.get(t),
         )
 
-        reqs = extract_requirements([
-            {"id": "n1", "type": "fakeNode"},
-            {"id": "n2", "type": "fakeNodeless"},
-        ])
+        reqs = extract_requirements(
+            [
+                {"id": "n1", "type": "fakeNode"},
+                {"id": "n2", "type": "fakeNodeless"},
+            ]
+        )
         cred_ids = [c["provider_id"] for c in reqs["credentials"]]
         types = [n["type"] for n in reqs["nodes"]]
         assert "fake_provider" in cred_ids
@@ -738,9 +719,7 @@ class TestCrossCheckCredentials:
         )
         auth = _fake_auth(has_valid_key_return=False)
 
-        missing = await cross_check_credentials(
-            {"credentials": [{"provider_id": "fake_provider"}]}, auth
-        )
+        missing = await cross_check_credentials({"credentials": [{"provider_id": "fake_provider"}]}, auth)
         assert len(missing) == 1
         assert missing[0]["provider_id"] == "fake_provider"
         assert "display_name" in missing[0]
@@ -750,9 +729,7 @@ class TestCrossCheckCredentials:
         from services.workflow_import import cross_check_credentials
 
         auth = _fake_auth(has_valid_key_return=True)
-        missing = await cross_check_credentials(
-            {"credentials": [{"provider_id": "x"}]}, auth
-        )
+        missing = await cross_check_credentials({"credentials": [{"provider_id": "x"}]}, auth)
         assert missing == []
 
 
@@ -797,8 +774,7 @@ class TestCloudEventsBroadcastShape:
             "are consistent with the rest of the CloudEvents surface."
         )
         assert '"workflow_lifecycle"' in src, (
-            "wire-format key must be 'workflow_lifecycle' so the frontend "
-            "WebSocketContext.tsx case statement routes correctly."
+            "wire-format key must be 'workflow_lifecycle' so the frontend " "WebSocketContext.tsx case statement routes correctly."
         )
 
     def test_import_workflow_emits_imported_lifecycle(self):
@@ -808,10 +784,8 @@ class TestCloudEventsBroadcastShape:
 
         src = inspect.getsource(workflow_import.import_workflow)
         assert "broadcast_workflow_lifecycle" in src, (
-            "import_workflow save path must broadcast via "
-            "broadcast_workflow_lifecycle so connected clients refresh."
+            "import_workflow save path must broadcast via " "broadcast_workflow_lifecycle so connected clients refresh."
         )
         assert '"imported"' in src, (
-            "import_workflow must use the 'imported' lifecycle stage "
-            "(matches WorkflowEvent.workflow_lifecycle Literal)."
+            "import_workflow must use the 'imported' lifecycle stage " "(matches WorkflowEvent.workflow_lifecycle Literal)."
         )

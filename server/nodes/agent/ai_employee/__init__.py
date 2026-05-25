@@ -9,4 +9,6 @@ class AIEmployeeNode(SpecializedAgentBase):
     group = ("agent",)
     description = "Team lead for multi-agent coordination"
     handles = team_lead_agent_handles()
-    tool_description = "ONE-SHOT delegation to AI Employee. Call ONCE per task, returns task_id. Coordinates multiple agents - do NOT re-call."
+    tool_description = (
+        "ONE-SHOT delegation to AI Employee. Call ONCE per task, returns task_id. Coordinates multiple agents - do NOT re-call."
+    )

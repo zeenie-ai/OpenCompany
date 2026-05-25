@@ -32,7 +32,7 @@ class OperationSpec:
     name: str
     method: Callable[..., Awaitable[Any]]
     routing: Optional[Routing] = None
-    cost: Optional[Dict[str, Any]] = None          # {"usage": "gmail_send", "count": 1}
+    cost: Optional[Dict[str, Any]] = None  # {"usage": "gmail_send", "count": 1}
     annotations: Dict[str, Any] = field(default_factory=dict)
 
 

@@ -88,15 +88,16 @@ def install_js_src(root: Path) -> str:
 # Node.js sidecar — package.json & .gitignore
 # ---------------------------------------------------------------------------
 
+
 def test_sidecar_start_runs_compiled_bundle(sidecar_pkg: dict):
     """``npm start`` runs the esbuild-bundled output, not interpreted
     TypeScript via tsx. tsx adds ~500ms-1s of interpreter startup that
     the bundle eliminates.
     """
     start = sidecar_pkg["scripts"]["start"]
-    assert start == "node dist/index.js", (
-        f"sidecar start must be `node dist/index.js`, got {start!r}"
-    )
+    assert (
+        start == "node dist/index.js"
+    ), f"sidecar start must be `node dist/index.js`, got {start!r}"
     assert "tsx" not in start
 
 
@@ -108,17 +109,22 @@ def test_sidecar_dev_keeps_tsx_for_hot_reload(sidecar_pkg: dict):
     assert "tsx" in dev and "watch" in dev
 
 
-@pytest.mark.parametrize("flag", [
-    "esbuild",
-    "src/index.ts",
-    "--bundle",
-    "--platform=node",
-    "--target=node22",
-    "--format=esm",
-    "--packages=external",
-    "--outfile=dist/index.js",
-])
-def test_sidecar_build_script_carries_required_esbuild_flag(sidecar_pkg: dict, flag: str):
+@pytest.mark.parametrize(
+    "flag",
+    [
+        "esbuild",
+        "src/index.ts",
+        "--bundle",
+        "--platform=node",
+        "--target=node22",
+        "--format=esm",
+        "--packages=external",
+        "--outfile=dist/index.js",
+    ],
+)
+def test_sidecar_build_script_carries_required_esbuild_flag(
+    sidecar_pkg: dict, flag: str
+):
     """Each esbuild flag in the sidecar build script is load-bearing.
 
     - ``--bundle`` — concat the executor's own TS into one file.
@@ -167,14 +173,16 @@ def test_sidecar_dist_is_gitignored(sidecar_dir: Path):
     """
     gitignore = (sidecar_dir / ".gitignore").read_text(encoding="utf-8")
     lines = {line.strip() for line in gitignore.splitlines()}
-    assert {"dist/", "dist"} & lines, (
-        f"sidecar .gitignore must list dist/, got:\n{gitignore}"
-    )
+    assert {
+        "dist/",
+        "dist",
+    } & lines, f"sidecar .gitignore must list dist/, got:\n{gitignore}"
 
 
 # ---------------------------------------------------------------------------
 # Client TypeScript / Vite
 # ---------------------------------------------------------------------------
+
 
 def test_client_typecheck_uses_tsgo(client_pkg: dict):
     """The fast type-check (``pnpm run typecheck``) goes through tsgo
@@ -183,9 +191,9 @@ def test_client_typecheck_uses_tsgo(client_pkg: dict):
     dev release.
     """
     scripts = client_pkg["scripts"]
-    assert scripts.get("typecheck") == "tsgo --noEmit", (
-        f"client typecheck must be tsgo, got {scripts.get('typecheck')!r}"
-    )
+    assert (
+        scripts.get("typecheck") == "tsgo --noEmit"
+    ), f"client typecheck must be tsgo, got {scripts.get('typecheck')!r}"
     assert scripts.get("typecheck:tsc") == "tsc --noEmit", (
         "tsc fallback (typecheck:tsc) must remain available so a tsgo "
         "regression has a one-line revert path"
@@ -198,22 +206,25 @@ def test_tsgo_devdependency_is_pinned_exactly(client_pkg: dict):
     install. Pin the exact version so upgrades are explicit.
     """
     version = client_pkg.get("devDependencies", {}).get("@typescript/native-preview")
-    assert version is not None, (
-        "@typescript/native-preview must be in client devDependencies"
-    )
-    assert not version.startswith(("^", "~", ">=", ">", "<")), (
-        f"tsgo must be pinned exactly (no range prefix), got {version!r}"
-    )
+    assert (
+        version is not None
+    ), "@typescript/native-preview must be in client devDependencies"
+    assert not version.startswith(
+        ("^", "~", ">=", ">", "<")
+    ), f"tsgo must be pinned exactly (no range prefix), got {version!r}"
 
 
-@pytest.mark.parametrize("chunk_name", [
-    "vendor-react",
-    "vendor-flow",
-    "vendor-radix",
-    "vendor-icons",
-    "vendor-query",
-    "vendor-markdown",
-])
+@pytest.mark.parametrize(
+    "chunk_name",
+    [
+        "vendor-react",
+        "vendor-flow",
+        "vendor-radix",
+        "vendor-icons",
+        "vendor-query",
+        "vendor-markdown",
+    ],
+)
 def test_vite_config_declares_required_vendor_chunk(client_dir: Path, chunk_name: str):
     """Vite must split the heavy npm libs into named vendor chunks so
     the main bundle stays lean and dep churn doesn't bust the user's
@@ -238,9 +249,9 @@ def test_vite_config_targets_es2022(client_dir: Path):
     Safari 15.4+ — within React 19 / Tailwind 4's baseline).
     """
     src = (client_dir / "vite.config.js").read_text(encoding="utf-8")
-    assert re.search(r"target:\s*['\"]es2022['\"]", src), (
-        "vite.config.js must declare `target: 'es2022'` in build options"
-    )
+    assert re.search(
+        r"target:\s*['\"]es2022['\"]", src
+    ), "vite.config.js must declare `target: 'es2022'` in build options"
 
 
 def test_vite_config_chunk_warning_below_one_megabyte(client_dir: Path):
@@ -272,9 +283,9 @@ def test_tsconfig_drops_baseurl_and_sets_typeroots(client_dir: Path):
         src,
     ), "typeRoots must point at ./node_modules/@types for tsgo + pnpm"
     # The path alias must survive the baseUrl removal.
-    assert re.search(r'"@/\*":\s*\["\./src/\*"\]', src), (
-        "the `@/*` -> `./src/*` alias must remain configured"
-    )
+    assert re.search(
+        r'"@/\*":\s*\["\./src/\*"\]', src
+    ), "the `@/*` -> `./src/*` alias must remain configured"
 
 
 def test_vite_env_dts_references_google_maps(client_dir: Path):
@@ -299,14 +310,15 @@ def test_test_setup_intersection_observer_has_scroll_margin(client_dir: Path):
     """
     src = (client_dir / "src" / "test" / "setup.ts").read_text(encoding="utf-8")
     assert "IntersectionObserverStub" in src
-    assert re.search(r"scrollMargin\s*=\s*['\"]['\"]", src), (
-        "IntersectionObserverStub must set scrollMargin to satisfy TS 7"
-    )
+    assert re.search(
+        r"scrollMargin\s*=\s*['\"]['\"]", src
+    ), "IntersectionObserverStub must set scrollMargin to satisfy TS 7"
 
 
 # ---------------------------------------------------------------------------
 # CI gate — predeploy.yml
 # ---------------------------------------------------------------------------
+
 
 def _step_by_name(job: dict, step_name: str) -> dict | None:
     for step in job.get("steps", []):
@@ -325,12 +337,12 @@ def test_predeploy_typecheck_step_routes_through_pnpm_script(predeploy_yml: dict
     step = _step_by_name(job, "TypeScript check")
     assert step is not None, "predeploy.yml must define a `TypeScript check` step"
     cmd = step.get("run", "")
-    assert "run typecheck" in cmd, (
-        f"predeploy.yml typecheck step must call `pnpm ... run typecheck`, got {cmd!r}"
-    )
-    assert CLIENT_PKG_NAME in cmd, (
-        f"predeploy.yml typecheck step must filter to {CLIENT_PKG_NAME}, got {cmd!r}"
-    )
+    assert (
+        "run typecheck" in cmd
+    ), f"predeploy.yml typecheck step must call `pnpm ... run typecheck`, got {cmd!r}"
+    assert (
+        CLIENT_PKG_NAME in cmd
+    ), f"predeploy.yml typecheck step must filter to {CLIENT_PKG_NAME}, got {cmd!r}"
     assert "tsc --noEmit" not in cmd, (
         "predeploy.yml still calls `tsc --noEmit` directly — switch to "
         "the typecheck script so tsgo is used"
@@ -355,9 +367,9 @@ def test_install_js_compileall_command_shape(install_js_src: str):
     ``uv run python -O -m compileall -q -j 0`` — so cold-start gains
     apply to the npm-tarball path too.
     """
-    assert _INSTALL_JS_COMPILEALL_RE.search(install_js_src) is not None, (
-        "install.js must run `uv run python -O -m compileall -q -j 0 ...`"
-    )
+    assert (
+        _INSTALL_JS_COMPILEALL_RE.search(install_js_src) is not None
+    ), "install.js must run `uv run python -O -m compileall -q -j 0 ...`"
 
 
 def test_install_js_compileall_paths_match_source_dirs_constant(install_js_src: str):

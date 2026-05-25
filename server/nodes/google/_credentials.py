@@ -38,6 +38,7 @@ class GoogleCredential(OAuth2Credential):
         """Return the live scope list (lazy import)."""
         if not cls.scopes:
             from nodes.google._oauth import GOOGLE_WORKSPACE_SCOPES
+
             cls.scopes = tuple(GOOGLE_WORKSPACE_SCOPES)
         return cls.scopes
 
@@ -57,4 +58,5 @@ class GoogleCredential(OAuth2Credential):
         policy.
         """
         from nodes.google._auth_helper import get_google_credentials
+
         return await get_google_credentials(parameters, context)

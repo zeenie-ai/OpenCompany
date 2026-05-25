@@ -24,11 +24,7 @@ async def execute_write_todos(
     (matches pre-refactor handler precedence).
     """
     config = config or {}
-    session_key = (
-        config.get("workflow_id")
-        or config.get("node_id")
-        or "default"
-    )
+    session_key = config.get("workflow_id") or config.get("node_id") or "default"
     todos = args.get("todos", [])
     service = get_todo_service()
     stored = service.write(session_key, todos)
@@ -37,7 +33,8 @@ async def execute_write_todos(
     node_id = config.get("node_id")
     if broadcaster and node_id:
         await broadcaster.update_node_status(
-            node_id, "executing",
+            node_id,
+            "executing",
             {"phase": "todo_update", "todos": stored},
             workflow_id=config.get("workflow_id"),
         )

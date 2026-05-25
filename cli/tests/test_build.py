@@ -13,6 +13,7 @@ from cli.commands import build
 
 # --- shared helpers in cli.run -----------------------------------------
 
+
 def test_capture_returns_none_when_command_missing():
     with patch.object(run_module.subprocess, "run", side_effect=FileNotFoundError):
         assert run_module.capture(["does-not-exist"]) is None
@@ -26,8 +27,10 @@ def test_capture_returns_stdout_when_present():
 
 def test_run_raises_typer_exit_on_nonzero_when_check():
     fake = MagicMock(returncode=1)
-    with patch.object(run_module.subprocess, "run", return_value=fake), \
-         pytest.raises(typer.Exit):
+    with (
+        patch.object(run_module.subprocess, "run", return_value=fake),
+        pytest.raises(typer.Exit),
+    ):
         run_module.run(["false"])
 
 
@@ -38,6 +41,7 @@ def test_run_returns_code_when_check_disabled():
 
 
 # --- build-specific helpers -------------------------------------------------
+
 
 def test_check_python_accepts_3_12_plus():
     with patch.object(build, "capture", return_value="Python 3.12.5"):

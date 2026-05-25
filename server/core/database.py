@@ -10,11 +10,28 @@ from contextlib import asynccontextmanager
 
 from core.config import Settings
 from models.database import (
-    NodeParameter, Workflow, Execution, APIKey, APIKeyValidation, NodeOutput,
-    ConversationMessage, ToolSchema, UserSkill, ChatMessage, UserSettings,
-    TokenUsageMetric, CompactionEvent, SessionTokenState, ProviderDefaults,
-    AgentTeam, TeamMember, TeamTask, AgentMessage, GoogleConnection,
-    ProxyProviderConfig, ProxyRoutingRule
+    NodeParameter,
+    Workflow,
+    Execution,
+    APIKey,
+    APIKeyValidation,
+    NodeOutput,
+    ConversationMessage,
+    ToolSchema,
+    UserSkill,
+    ChatMessage,
+    UserSettings,
+    TokenUsageMetric,
+    CompactionEvent,
+    SessionTokenState,
+    ProviderDefaults,
+    AgentTeam,
+    TeamMember,
+    TeamTask,
+    AgentMessage,
+    GoogleConnection,
+    ProxyProviderConfig,
+    ProxyRoutingRule,
 )
 from models.cache import CacheEntry  # SQLite-backed cache for Redis alternative
 from core.logging import get_logger
@@ -35,6 +52,7 @@ class Database:
         try:
             # Disable verbose database and asyncio logging
             import logging
+
             logging.getLogger("aiosqlite").setLevel(logging.WARNING)
             logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
             logging.getLogger("sqlalchemy.dialects").setLevel(logging.WARNING)
@@ -46,15 +64,11 @@ class Database:
                 echo=self.settings.database_echo,
                 pool_size=self.settings.database_pool_size,
                 max_overflow=self.settings.database_max_overflow,
-                future=True
+                future=True,
             )
 
             # Create session factory
-            self.async_session = async_sessionmaker(
-                bind=self.engine,
-                class_=AsyncSession,
-                expire_on_commit=False
-            )
+            self.async_session = async_sessionmaker(bind=self.engine, class_=AsyncSession, expire_on_commit=False)
 
             # Create tables
             async with self.engine.begin() as conn:
@@ -78,61 +92,41 @@ class Database:
                 columns = {row[1] for row in result.fetchall()}
 
                 if "console_panel_default_open" not in columns:
-                    await conn.execute(text(
-                        "ALTER TABLE user_settings ADD COLUMN console_panel_default_open BOOLEAN DEFAULT 0"
-                    ))
+                    await conn.execute(text("ALTER TABLE user_settings ADD COLUMN console_panel_default_open BOOLEAN DEFAULT 0"))
                     logger.info("Added console_panel_default_open column to user_settings")
 
                 if "examples_loaded" not in columns:
-                    await conn.execute(text(
-                        "ALTER TABLE user_settings ADD COLUMN examples_loaded BOOLEAN DEFAULT 0"
-                    ))
+                    await conn.execute(text("ALTER TABLE user_settings ADD COLUMN examples_loaded BOOLEAN DEFAULT 0"))
                     logger.info("Added examples_loaded column to user_settings")
 
                 if "onboarding_completed" not in columns:
-                    await conn.execute(text(
-                        "ALTER TABLE user_settings ADD COLUMN onboarding_completed BOOLEAN DEFAULT 0"
-                    ))
+                    await conn.execute(text("ALTER TABLE user_settings ADD COLUMN onboarding_completed BOOLEAN DEFAULT 0"))
                     # Existing users (examples_loaded=1) skip onboarding
-                    await conn.execute(text(
-                        "UPDATE user_settings SET onboarding_completed = 1 WHERE examples_loaded = 1"
-                    ))
+                    await conn.execute(text("UPDATE user_settings SET onboarding_completed = 1 WHERE examples_loaded = 1"))
                     logger.info("Added onboarding_completed column to user_settings")
 
                 if "onboarding_step" not in columns:
-                    await conn.execute(text(
-                        "ALTER TABLE user_settings ADD COLUMN onboarding_step INTEGER DEFAULT 0"
-                    ))
+                    await conn.execute(text("ALTER TABLE user_settings ADD COLUMN onboarding_step INTEGER DEFAULT 0"))
                     logger.info("Added onboarding_step column to user_settings")
 
                 if "memory_window_size" not in columns:
-                    await conn.execute(text(
-                        "ALTER TABLE user_settings ADD COLUMN memory_window_size INTEGER DEFAULT 100"
-                    ))
+                    await conn.execute(text("ALTER TABLE user_settings ADD COLUMN memory_window_size INTEGER DEFAULT 100"))
                     logger.info("Added memory_window_size column to user_settings")
 
                 if "compaction_ratio" not in columns:
-                    await conn.execute(text(
-                        "ALTER TABLE user_settings ADD COLUMN compaction_ratio REAL DEFAULT 0.5"
-                    ))
+                    await conn.execute(text("ALTER TABLE user_settings ADD COLUMN compaction_ratio REAL DEFAULT 0.5"))
                     logger.info("Added compaction_ratio column to user_settings")
 
                 if "default_llm_provider" not in columns:
-                    await conn.execute(text(
-                        "ALTER TABLE user_settings ADD COLUMN default_llm_provider VARCHAR(50)"
-                    ))
+                    await conn.execute(text("ALTER TABLE user_settings ADD COLUMN default_llm_provider VARCHAR(50)"))
                     logger.info("Added default_llm_provider column to user_settings")
 
                 if "default_llm_model" not in columns:
-                    await conn.execute(text(
-                        "ALTER TABLE user_settings ADD COLUMN default_llm_model VARCHAR(200)"
-                    ))
+                    await conn.execute(text("ALTER TABLE user_settings ADD COLUMN default_llm_model VARCHAR(200)"))
                     logger.info("Added default_llm_model column to user_settings")
 
                 if "auto_add_skill_for_tools" not in columns:
-                    await conn.execute(text(
-                        "ALTER TABLE user_settings ADD COLUMN auto_add_skill_for_tools BOOLEAN DEFAULT 1"
-                    ))
+                    await conn.execute(text("ALTER TABLE user_settings ADD COLUMN auto_add_skill_for_tools BOOLEAN DEFAULT 1"))
                     logger.info("Added auto_add_skill_for_tools column to user_settings")
 
                 # Migrate token_usage_metrics table - add cost columns
@@ -141,9 +135,7 @@ class Database:
 
                 for col in ["input_cost", "output_cost", "cache_cost", "total_cost"]:
                     if col not in columns:
-                        await conn.execute(text(
-                            f"ALTER TABLE token_usage_metrics ADD COLUMN {col} REAL DEFAULT 0.0"
-                        ))
+                        await conn.execute(text(f"ALTER TABLE token_usage_metrics ADD COLUMN {col} REAL DEFAULT 0.0"))
                         logger.info(f"Added {col} column to token_usage_metrics")
 
                 # Migrate session_token_states table - add cumulative cost columns
@@ -152,22 +144,19 @@ class Database:
 
                 for col in ["cumulative_input_cost", "cumulative_output_cost", "cumulative_total_cost"]:
                     if col not in columns:
-                        await conn.execute(text(
-                            f"ALTER TABLE session_token_states ADD COLUMN {col} REAL DEFAULT 0.0"
-                        ))
+                        await conn.execute(text(f"ALTER TABLE session_token_states ADD COLUMN {col} REAL DEFAULT 0.0"))
                         logger.info(f"Added {col} column to session_token_states")
 
                 # Migrate provider_defaults table - add default_model column
                 result = await conn.execute(text("PRAGMA table_info(provider_defaults)"))
                 columns = {row[1] for row in result.fetchall()}
                 if columns and "default_model" not in columns:
-                    await conn.execute(text(
-                        "ALTER TABLE provider_defaults ADD COLUMN default_model TEXT DEFAULT ''"
-                    ))
+                    await conn.execute(text("ALTER TABLE provider_defaults ADD COLUMN default_model TEXT DEFAULT ''"))
                     logger.info("Added default_model column to provider_defaults")
 
                 # Create api_usage_metrics table if not exists
-                await conn.execute(text("""
+                await conn.execute(
+                    text("""
                     CREATE TABLE IF NOT EXISTS api_usage_metrics (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -180,31 +169,22 @@ class Database:
                         resource_count INTEGER DEFAULT 1,
                         cost REAL DEFAULT 0.0
                     )
-                """))
-                await conn.execute(text(
-                    "CREATE INDEX IF NOT EXISTS idx_api_usage_session ON api_usage_metrics(session_id)"
-                ))
-                await conn.execute(text(
-                    "CREATE INDEX IF NOT EXISTS idx_api_usage_service ON api_usage_metrics(service)"
-                ))
+                """)
+                )
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_api_usage_session ON api_usage_metrics(session_id)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_api_usage_service ON api_usage_metrics(service)"))
                 logger.info("Ensured api_usage_metrics table exists")
 
                 # Migrate gmail_connections to google_connections
                 # Check if old table exists and new table doesn't
-                result = await conn.execute(text(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name='gmail_connections'"
-                ))
+                result = await conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='gmail_connections'"))
                 old_table_exists = result.fetchone() is not None
 
-                result = await conn.execute(text(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name='google_connections'"
-                ))
+                result = await conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='google_connections'"))
                 new_table_exists = result.fetchone() is not None
 
                 if old_table_exists and not new_table_exists:
-                    await conn.execute(text(
-                        "ALTER TABLE gmail_connections RENAME TO google_connections"
-                    ))
+                    await conn.execute(text("ALTER TABLE gmail_connections RENAME TO google_connections"))
                     logger.info("Migrated gmail_connections table to google_connections")
 
         except Exception as e:
@@ -247,10 +227,7 @@ class Database:
                 if existing:
                     existing.parameters = parameters
                 else:
-                    existing = NodeParameter(
-                        node_id=node_id,
-                        parameters=parameters
-                    )
+                    existing = NodeParameter(node_id=node_id, parameters=parameters)
                     session.add(existing)
 
                 await session.commit()
@@ -296,8 +273,7 @@ class Database:
     # Workflows
     # ============================================================================
 
-    async def save_workflow(self, workflow_id: str, name: str, data: Dict[str, Any],
-                          description: Optional[str] = None) -> bool:
+    async def save_workflow(self, workflow_id: str, name: str, data: Dict[str, Any], description: Optional[str] = None) -> bool:
         """Save or update workflow."""
         try:
             async with self.get_session() as session:
@@ -310,12 +286,7 @@ class Database:
                     existing.description = description
                     existing.data = data
                 else:
-                    existing = Workflow(
-                        id=workflow_id,
-                        name=name,
-                        description=description,
-                        data=data
-                    )
+                    existing = Workflow(id=workflow_id, name=name, description=description, data=data)
                     session.add(existing)
 
                 await session.commit()
@@ -371,9 +342,16 @@ class Database:
     # Executions
     # ============================================================================
 
-    async def save_execution(self, execution_id: str, workflow_id: str, node_id: str,
-                           status: str, result: Optional[Dict[str, Any]] = None,
-                           error: Optional[str] = None, execution_time: Optional[float] = None) -> bool:
+    async def save_execution(
+        self,
+        execution_id: str,
+        workflow_id: str,
+        node_id: str,
+        status: str,
+        result: Optional[Dict[str, Any]] = None,
+        error: Optional[str] = None,
+        execution_time: Optional[float] = None,
+    ) -> bool:
         """Save execution result."""
         try:
             async with self.get_session() as session:
@@ -384,7 +362,7 @@ class Database:
                     status=status,
                     result=result,
                     error=error,
-                    execution_time=execution_time
+                    execution_time=execution_time,
                 )
                 session.add(execution)
                 await session.commit()
@@ -410,9 +388,9 @@ class Database:
     # API Keys
     # ============================================================================
 
-    async def save_api_key(self, key_id: str, provider: str, session_id: str,
-                         key_encrypted: str, key_hash: str,
-                         models: Optional[List[str]] = None) -> bool:
+    async def save_api_key(
+        self, key_id: str, provider: str, session_id: str, key_encrypted: str, key_hash: str, models: Optional[List[str]] = None
+    ) -> bool:
         """Save encrypted API key."""
         logger.info(f"Database save_api_key called with key_id: {key_id}, provider: {provider}")
 
@@ -425,7 +403,7 @@ class Database:
                     key_encrypted=key_encrypted,
                     key_hash=key_hash,
                     models={"models": models} if models else None,
-                    last_validated=datetime.now(timezone.utc)
+                    last_validated=datetime.now(timezone.utc),
                 )
                 session.add(api_key)
                 await session.commit()
@@ -460,6 +438,7 @@ class Database:
         except Exception as e:
             logger.error("Failed to save API key", provider=provider, error=str(e))
             import traceback
+
             logger.error("Full traceback", traceback=traceback.format_exc())
             return False
 
@@ -479,11 +458,7 @@ class Database:
         """Get API key by provider and session."""
         try:
             async with self.get_session() as session:
-                stmt = select(APIKey).where(
-                    APIKey.provider == provider,
-                    APIKey.session_id == session_id,
-                    APIKey.is_valid
-                )
+                stmt = select(APIKey).where(APIKey.provider == provider, APIKey.session_id == session_id, APIKey.is_valid)
                 result = await session.execute(stmt)
                 return result.scalar_one_or_none()
 
@@ -495,10 +470,7 @@ class Database:
         """Delete API key."""
         try:
             async with self.get_session() as session:
-                stmt = select(APIKey).where(
-                    APIKey.provider == provider,
-                    APIKey.session_id == session_id
-                )
+                stmt = select(APIKey).where(APIKey.provider == provider, APIKey.session_id == session_id)
                 result = await session.execute(stmt)
                 api_key = result.scalar_one_or_none()
 
@@ -521,10 +493,7 @@ class Database:
         """Save API key validation status."""
         try:
             async with self.get_session() as session:
-                validation = APIKeyValidation(
-                    key_hash=key_hash,
-                    validated=True
-                )
+                validation = APIKeyValidation(key_hash=key_hash, validated=True)
                 session.add(validation)
                 await session.commit()
                 return True
@@ -563,16 +532,13 @@ class Database:
     # Node Outputs
     # ============================================================================
 
-    async def save_node_output(self, node_id: str, session_id: str, output_name: str,
-                               data: Dict[str, Any]) -> bool:
+    async def save_node_output(self, node_id: str, session_id: str, output_name: str, data: Dict[str, Any]) -> bool:
         """Save or update node output."""
         try:
             async with self.get_session() as session:
                 # Try to get existing output
                 stmt = select(NodeOutput).where(
-                    NodeOutput.node_id == node_id,
-                    NodeOutput.session_id == session_id,
-                    NodeOutput.output_name == output_name
+                    NodeOutput.node_id == node_id, NodeOutput.session_id == session_id, NodeOutput.output_name == output_name
                 )
                 result = await session.execute(stmt)
                 existing = result.scalar_one_or_none()
@@ -582,12 +548,7 @@ class Database:
                     existing.data = data
                 else:
                     action = "inserted"
-                    existing = NodeOutput(
-                        node_id=node_id,
-                        session_id=session_id,
-                        output_name=output_name,
-                        data=data
-                    )
+                    existing = NodeOutput(node_id=node_id, session_id=session_id, output_name=output_name, data=data)
                     session.add(existing)
 
                 await session.commit()
@@ -597,18 +558,16 @@ class Database:
         except Exception as e:
             logger.error("Failed to save node output", node_id=node_id, error=str(e))
             import traceback
+
             traceback.print_exc()
             return False
 
-    async def get_node_output(self, node_id: str, session_id: str = "default",
-                              output_name: str = "output_0") -> Optional[Dict[str, Any]]:
+    async def get_node_output(self, node_id: str, session_id: str = "default", output_name: str = "output_0") -> Optional[Dict[str, Any]]:
         """Get node output data."""
         try:
             async with self.get_session() as session:
                 stmt = select(NodeOutput).where(
-                    NodeOutput.node_id == node_id,
-                    NodeOutput.session_id == session_id,
-                    NodeOutput.output_name == output_name
+                    NodeOutput.node_id == node_id, NodeOutput.session_id == session_id, NodeOutput.output_name == output_name
                 )
                 result = await session.execute(stmt)
                 output = result.scalar_one_or_none()
@@ -619,18 +578,14 @@ class Database:
             logger.error("Failed to get node output", node_id=node_id, error=str(e))
             return None
 
-    async def get_node_output_by_session(self, session_id: str,
-                                          output_name: str = "output_0") -> Optional[Dict[str, Any]]:
+    async def get_node_output_by_session(self, session_id: str, output_name: str = "output_0") -> Optional[Dict[str, Any]]:
         """Get node output by session_id only (for delegation result lookup).
 
         Used when node_id is unknown but session_id encodes the lookup key.
         """
         try:
             async with self.get_session() as session:
-                stmt = select(NodeOutput).where(
-                    NodeOutput.session_id == session_id,
-                    NodeOutput.output_name == output_name
-                )
+                stmt = select(NodeOutput).where(NodeOutput.session_id == session_id, NodeOutput.output_name == output_name)
                 result = await session.execute(stmt)
                 output = result.scalar_one_or_none()
 
@@ -688,11 +643,7 @@ class Database:
         """Add a message to conversation history."""
         try:
             async with self.get_session() as session:
-                message = ConversationMessage(
-                    session_id=session_id,
-                    role=role,
-                    content=content
-                )
+                message = ConversationMessage(session_id=session_id, role=role, content=content)
                 session.add(message)
                 await session.commit()
                 logger.info(f"[Memory] Added {role} message to session '{session_id}'")
@@ -706,9 +657,11 @@ class Database:
         """Get conversation messages, optionally limited to last N."""
         try:
             async with self.get_session() as session:
-                stmt = select(ConversationMessage).where(
-                    ConversationMessage.session_id == session_id
-                ).order_by(ConversationMessage.created_at.asc())
+                stmt = (
+                    select(ConversationMessage)
+                    .where(ConversationMessage.session_id == session_id)
+                    .order_by(ConversationMessage.created_at.asc())
+                )
 
                 result = await session.execute(stmt)
                 messages = result.scalars().all()
@@ -717,14 +670,7 @@ class Database:
                 if window_size and window_size > 0:
                     messages = messages[-window_size:]
 
-                return [
-                    {
-                        "role": m.role,
-                        "content": m.content,
-                        "timestamp": m.created_at.isoformat()
-                    }
-                    for m in messages
-                ]
+                return [{"role": m.role, "content": m.content, "timestamp": m.created_at.isoformat()} for m in messages]
 
         except Exception as e:
             logger.error("Failed to get conversation messages", session_id=session_id, error=str(e))
@@ -734,9 +680,7 @@ class Database:
         """Clear all messages in a conversation session. Returns count deleted."""
         try:
             async with self.get_session() as session:
-                stmt = select(ConversationMessage).where(
-                    ConversationMessage.session_id == session_id
-                )
+                stmt = select(ConversationMessage).where(ConversationMessage.session_id == session_id)
                 result = await session.execute(stmt)
                 messages = result.scalars().all()
 
@@ -758,10 +702,11 @@ class Database:
             async with self.get_session() as session:
                 # Get distinct session IDs with message count
                 from sqlalchemy import func as sql_func
+
                 stmt = select(
                     ConversationMessage.session_id,
-                    sql_func.count(ConversationMessage.id).label('message_count'),
-                    sql_func.min(ConversationMessage.created_at).label('created_at')
+                    sql_func.count(ConversationMessage.id).label("message_count"),
+                    sql_func.min(ConversationMessage.created_at).label("created_at"),
                 ).group_by(ConversationMessage.session_id)
 
                 result = await session.execute(stmt)
@@ -771,7 +716,7 @@ class Database:
                     {
                         "session_id": row.session_id,
                         "message_count": row.message_count,
-                        "created_at": row.created_at.isoformat() if row.created_at else None
+                        "created_at": row.created_at.isoformat() if row.created_at else None,
                     }
                     for row in rows
                 ]
@@ -788,11 +733,7 @@ class Database:
         """Add a chat message to the console panel history."""
         try:
             async with self.get_session() as session:
-                chat_msg = ChatMessage(
-                    session_id=session_id,
-                    role=role,
-                    message=message
-                )
+                chat_msg = ChatMessage(session_id=session_id, role=role, message=message)
                 session.add(chat_msg)
                 await session.commit()
                 logger.debug(f"[Chat] Added {role} message to session '{session_id}'")
@@ -806,9 +747,7 @@ class Database:
         """Get chat messages for a session, optionally limited to last N."""
         try:
             async with self.get_session() as session:
-                stmt = select(ChatMessage).where(
-                    ChatMessage.session_id == session_id
-                ).order_by(ChatMessage.created_at.asc())
+                stmt = select(ChatMessage).where(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at.asc())
 
                 result = await session.execute(stmt)
                 messages = result.scalars().all()
@@ -817,14 +756,7 @@ class Database:
                 if limit and limit > 0:
                     messages = messages[-limit:]
 
-                return [
-                    {
-                        "role": m.role,
-                        "message": m.message,
-                        "timestamp": m.created_at.isoformat()
-                    }
-                    for m in messages
-                ]
+                return [{"role": m.role, "message": m.message, "timestamp": m.created_at.isoformat()} for m in messages]
 
         except Exception as e:
             logger.error("Failed to get chat messages", session_id=session_id, error=str(e))
@@ -834,9 +766,7 @@ class Database:
         """Clear all chat messages for a session. Returns count deleted."""
         try:
             async with self.get_session() as session:
-                stmt = select(ChatMessage).where(
-                    ChatMessage.session_id == session_id
-                )
+                stmt = select(ChatMessage).where(ChatMessage.session_id == session_id)
                 result = await session.execute(stmt)
                 messages = result.scalars().all()
 
@@ -857,11 +787,16 @@ class Database:
         try:
             async with self.get_session() as session:
                 from sqlalchemy import func as sa_func
-                stmt = select(
-                    ChatMessage.session_id,
-                    sa_func.count(ChatMessage.id).label('message_count'),
-                    sa_func.max(ChatMessage.created_at).label('last_message_at')
-                ).group_by(ChatMessage.session_id).order_by(sa_func.max(ChatMessage.created_at).desc())
+
+                stmt = (
+                    select(
+                        ChatMessage.session_id,
+                        sa_func.count(ChatMessage.id).label("message_count"),
+                        sa_func.max(ChatMessage.created_at).label("last_message_at"),
+                    )
+                    .group_by(ChatMessage.session_id)
+                    .order_by(sa_func.max(ChatMessage.created_at).desc())
+                )
 
                 result = await session.execute(stmt)
                 rows = result.all()
@@ -870,7 +805,7 @@ class Database:
                     {
                         "session_id": row.session_id,
                         "message_count": row.message_count,
-                        "last_message_at": row.last_message_at.isoformat() if row.last_message_at else None
+                        "last_message_at": row.last_message_at.isoformat() if row.last_message_at else None,
                     }
                     for row in rows
                 ]
@@ -910,9 +845,7 @@ class Database:
             logger.error("Failed to add console log", error=str(e))
             return False
 
-    async def get_console_logs(
-        self, limit: int = 100, workflow_id: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+    async def get_console_logs(self, limit: int = 100, workflow_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get console logs, optionally limited and scoped to a workflow.
 
         ``workflow_id=None`` returns the global stream (legacy behavior, used
@@ -976,10 +909,7 @@ class Database:
                     await session.delete(log)
 
                 await session.commit()
-                logger.info(
-                    f"[Console] Cleared {count} console logs"
-                    + (f" (workflow={workflow_id})" if workflow_id else " (all)")
-                )
+                logger.info(f"[Console] Cleared {count} console logs" + (f" (workflow={workflow_id})" if workflow_id else " (all)"))
                 return count
 
         except Exception as e:
@@ -1001,11 +931,7 @@ class Database:
                     return 0
 
                 # Get IDs of logs to keep (most recent)
-                keep_stmt = (
-                    select(ConsoleLog.id)
-                    .order_by(ConsoleLog.created_at.desc())
-                    .limit(keep)
-                )
+                keep_stmt = select(ConsoleLog.id).order_by(ConsoleLog.created_at.desc()).limit(keep)
                 keep_result = await session.execute(keep_stmt)
                 keep_ids = {row[0] for row in keep_result.fetchall()}
 
@@ -1034,6 +960,7 @@ class Database:
     async def get_cache_entry(self, key: str) -> Optional[str]:
         """Get cache value by key. Returns None if expired or not found."""
         import time
+
         try:
             async with self.get_session() as session:
                 stmt = select(CacheEntry).where(CacheEntry.key == key)
@@ -1059,6 +986,7 @@ class Database:
     async def set_cache_entry(self, key: str, value: str, ttl: Optional[int] = None) -> bool:
         """Set cache value with optional TTL in seconds."""
         import time
+
         try:
             expires_at = time.time() + ttl if ttl else None
 
@@ -1073,12 +1001,7 @@ class Database:
                     existing.expires_at = expires_at
                     existing.created_at = time.time()
                 else:
-                    entry = CacheEntry(
-                        key=key,
-                        value=value,
-                        expires_at=expires_at,
-                        created_at=time.time()
-                    )
+                    entry = CacheEntry(key=key, value=value, expires_at=expires_at, created_at=time.time())
                     session.add(entry)
 
                 await session.commit()
@@ -1132,12 +1055,10 @@ class Database:
     async def cleanup_expired_cache(self) -> int:
         """Remove all expired cache entries. Returns count deleted."""
         import time
+
         try:
             async with self.get_session() as session:
-                stmt = select(CacheEntry).where(
-                    CacheEntry.expires_at.isnot(None),
-                    CacheEntry.expires_at < time.time()
-                )
+                stmt = select(CacheEntry).where(CacheEntry.expires_at.isnot(None), CacheEntry.expires_at < time.time())
                 result = await session.execute(stmt)
                 entries = result.scalars().all()
 
@@ -1157,6 +1078,7 @@ class Database:
     async def cleanup_old_cache(self, max_age_hours: int = 24) -> int:
         """Remove cache entries older than max_age_hours. Returns count deleted."""
         import time
+
         try:
             async with self.get_session() as session:
                 cutoff_time = time.time() - (max_age_hours * 3600)
@@ -1180,6 +1102,7 @@ class Database:
     async def cache_exists(self, key: str) -> bool:
         """Check if cache key exists and is not expired."""
         import time
+
         try:
             async with self.get_session() as session:
                 stmt = select(CacheEntry).where(CacheEntry.key == key)
@@ -1203,9 +1126,14 @@ class Database:
     # Tool Schemas (Source of truth for tool node configurations)
     # ============================================================================
 
-    async def save_tool_schema(self, node_id: str, tool_name: str, tool_description: str,
-                               schema_config: Dict[str, Any],
-                               connected_services: Optional[Dict[str, Any]] = None) -> bool:
+    async def save_tool_schema(
+        self,
+        node_id: str,
+        tool_name: str,
+        tool_description: str,
+        schema_config: Dict[str, Any],
+        connected_services: Optional[Dict[str, Any]] = None,
+    ) -> bool:
         """Save or update tool schema for a node."""
         try:
             async with self.get_session() as session:
@@ -1227,7 +1155,7 @@ class Database:
                         tool_name=tool_name,
                         tool_description=tool_description,
                         schema_config=schema_config,
-                        connected_services=connected_services
+                        connected_services=connected_services,
                     )
                     session.add(existing)
 
@@ -1257,7 +1185,7 @@ class Database:
                     "schema_config": schema.schema_config,
                     "connected_services": schema.connected_services,
                     "created_at": schema.created_at.isoformat() if schema.created_at else None,
-                    "updated_at": schema.updated_at.isoformat() if schema.updated_at else None
+                    "updated_at": schema.updated_at.isoformat() if schema.updated_at else None,
                 }
 
         except Exception as e:
@@ -1298,7 +1226,7 @@ class Database:
                         "tool_description": s.tool_description,
                         "schema_config": s.schema_config,
                         "connected_services": s.connected_services,
-                        "updated_at": s.updated_at.isoformat() if s.updated_at else None
+                        "updated_at": s.updated_at.isoformat() if s.updated_at else None,
                     }
                     for s in schemas
                 ]
@@ -1312,12 +1240,7 @@ class Database:
     # ============================================================================
 
     async def save_android_relay_session(
-        self,
-        relay_url: str,
-        api_key: str,
-        device_id: str,
-        device_name: Optional[str] = None,
-        session_token: Optional[str] = None
+        self, relay_url: str, api_key: str, device_id: str, device_name: Optional[str] = None, session_token: Optional[str] = None
     ) -> bool:
         """Save Android relay pairing session for auto-reconnect on server restart.
 
@@ -1329,14 +1252,17 @@ class Database:
             session_token: Relay session token
         """
         import json
+
         try:
-            session_data = json.dumps({
-                "relay_url": relay_url,
-                "api_key": api_key,
-                "device_id": device_id,
-                "device_name": device_name,
-                "session_token": session_token
-            })
+            session_data = json.dumps(
+                {
+                    "relay_url": relay_url,
+                    "api_key": api_key,
+                    "device_id": device_id,
+                    "device_name": device_name,
+                    "session_token": session_token,
+                }
+            )
             # No TTL - session persists until explicitly cleared
             return await self.set_cache_entry("android_relay_session", session_data)
         except Exception as e:
@@ -1350,6 +1276,7 @@ class Database:
             Session data dict or None if not found
         """
         import json
+
         try:
             value = await self.get_cache_entry("android_relay_session")
             if value:
@@ -1382,7 +1309,7 @@ class Database:
         icon: str = "star",
         color: str = "#6366F1",
         metadata_json: Optional[Dict[str, Any]] = None,
-        created_by: Optional[int] = None
+        created_by: Optional[int] = None,
     ) -> Optional[Dict[str, Any]]:
         """Create a new user skill."""
         try:
@@ -1397,7 +1324,7 @@ class Database:
                     icon=icon,
                     color=color,
                     metadata_json=metadata_json,
-                    created_by=created_by
+                    created_by=created_by,
                 )
                 session.add(skill)
                 await session.commit()
@@ -1470,7 +1397,7 @@ class Database:
         icon: Optional[str] = None,
         color: Optional[str] = None,
         metadata_json: Optional[Dict[str, Any]] = None,
-        is_active: Optional[bool] = None
+        is_active: Optional[bool] = None,
     ) -> Optional[Dict[str, Any]]:
         """Update an existing user skill."""
         try:
@@ -1549,7 +1476,7 @@ class Database:
             "is_active": skill.is_active,
             "created_by": skill.created_by,
             "created_at": skill.created_at.isoformat() if skill.created_at else None,
-            "updated_at": skill.updated_at.isoformat() if skill.updated_at else None
+            "updated_at": skill.updated_at.isoformat() if skill.updated_at else None,
         }
 
     # ============================================================================
@@ -1583,7 +1510,7 @@ class Database:
                     "default_llm_model": settings.default_llm_model,
                     "auto_add_skill_for_tools": settings.auto_add_skill_for_tools,
                     "created_at": settings.created_at.isoformat() if settings.created_at else None,
-                    "updated_at": settings.updated_at.isoformat() if settings.updated_at else None
+                    "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
                 }
 
         except Exception as e:
@@ -1710,7 +1637,7 @@ class Database:
                         reasoning_effort=defaults.get("reasoning_effort", "medium"),
                         reasoning_format=defaults.get("reasoning_format", "parsed"),
                         created_at=now,
-                        updated_at=now
+                        updated_at=now,
                     )
                     session.add(record)
 
@@ -1749,7 +1676,7 @@ class Database:
                     input_cost=metric.get("input_cost", 0.0),
                     output_cost=metric.get("output_cost", 0.0),
                     cache_cost=metric.get("cache_cost", 0.0),
-                    total_cost=metric.get("total_cost", 0.0)
+                    total_cost=metric.get("total_cost", 0.0),
                 )
                 session.add(entry)
                 await session.commit()
@@ -1758,9 +1685,7 @@ class Database:
             logger.error("Failed to save token metric", error=str(e))
             return False
 
-    async def get_session_token_metrics(
-        self, session_id: str, limit: int = 100
-    ) -> List[Dict[str, Any]]:
+    async def get_session_token_metrics(self, session_id: str, limit: int = 100) -> List[Dict[str, Any]]:
         """Get token metrics for a session."""
         try:
             async with self.get_session() as session:
@@ -1787,7 +1712,7 @@ class Database:
                         "cache_read_tokens": m.cache_read_tokens,
                         "reasoning_tokens": m.reasoning_tokens,
                         "iteration": m.iteration,
-                        "created_at": m.created_at.isoformat() if m.created_at else None
+                        "created_at": m.created_at.isoformat() if m.created_at else None,
                     }
                     for m in metrics
                 ]
@@ -1825,7 +1750,7 @@ class Database:
                         func.sum(TokenUsageMetric.output_cost).label("output_cost"),
                         func.sum(TokenUsageMetric.cache_cost).label("cache_cost"),
                         func.sum(TokenUsageMetric.total_cost).label("total_cost"),
-                        func.count().label("execution_count")
+                        func.count().label("execution_count"),
                     )
                     .group_by(TokenUsageMetric.provider, TokenUsageMetric.model)
                     .order_by(TokenUsageMetric.provider, TokenUsageMetric.model)
@@ -1848,7 +1773,7 @@ class Database:
                             "total_cache_cost": 0.0,
                             "total_cost": 0.0,
                             "execution_count": 0,
-                            "models": []
+                            "models": [],
                         }
 
                     p = providers[provider]
@@ -1861,17 +1786,19 @@ class Database:
                     p["total_cost"] += float(row.total_cost or 0)
                     p["execution_count"] += row.execution_count or 0
 
-                    p["models"].append({
-                        "model": row.model,
-                        "input_tokens": row.input_tokens or 0,
-                        "output_tokens": row.output_tokens or 0,
-                        "total_tokens": row.total_tokens or 0,
-                        "input_cost": round(float(row.input_cost or 0), 6),
-                        "output_cost": round(float(row.output_cost or 0), 6),
-                        "cache_cost": round(float(row.cache_cost or 0), 6),
-                        "total_cost": round(float(row.total_cost or 0), 6),
-                        "execution_count": row.execution_count or 0
-                    })
+                    p["models"].append(
+                        {
+                            "model": row.model,
+                            "input_tokens": row.input_tokens or 0,
+                            "output_tokens": row.output_tokens or 0,
+                            "total_tokens": row.total_tokens or 0,
+                            "input_cost": round(float(row.input_cost or 0), 6),
+                            "output_cost": round(float(row.output_cost or 0), 6),
+                            "cache_cost": round(float(row.cache_cost or 0), 6),
+                            "total_cost": round(float(row.total_cost or 0), 6),
+                            "execution_count": row.execution_count or 0,
+                        }
+                    )
 
                 # Round provider totals
                 for p in providers.values():
@@ -1908,7 +1835,7 @@ class Database:
                     operation=metric.get("operation", ""),
                     endpoint=metric.get("endpoint", ""),
                     resource_count=metric.get("resource_count", 1),
-                    cost=metric.get("cost", 0.0)
+                    cost=metric.get("cost", 0.0),
                 )
                 session.add(entry)
                 await session.commit()
@@ -1941,7 +1868,7 @@ class Database:
                     APIUsageMetric.operation,
                     func.sum(APIUsageMetric.resource_count).label("resource_count"),
                     func.sum(APIUsageMetric.cost).label("cost"),
-                    func.count().label("execution_count")
+                    func.count().label("execution_count"),
                 ).group_by(APIUsageMetric.service, APIUsageMetric.operation)
 
                 if service:
@@ -1956,25 +1883,21 @@ class Database:
                 for row in rows:
                     svc = row.service or "unknown"
                     if svc not in services:
-                        services[svc] = {
-                            "service": svc,
-                            "total_resources": 0,
-                            "total_cost": 0.0,
-                            "execution_count": 0,
-                            "operations": []
-                        }
+                        services[svc] = {"service": svc, "total_resources": 0, "total_cost": 0.0, "execution_count": 0, "operations": []}
 
                     s = services[svc]
                     s["total_resources"] += row.resource_count or 0
                     s["total_cost"] += float(row.cost or 0)
                     s["execution_count"] += row.execution_count or 0
 
-                    s["operations"].append({
-                        "operation": row.operation,
-                        "resource_count": row.resource_count or 0,
-                        "total_cost": round(float(row.cost or 0), 6),
-                        "execution_count": row.execution_count or 0
-                    })
+                    s["operations"].append(
+                        {
+                            "operation": row.operation,
+                            "resource_count": row.resource_count or 0,
+                            "total_cost": round(float(row.cost or 0), 6),
+                            "execution_count": row.execution_count or 0,
+                        }
+                    )
 
                 # Round service totals
                 for s in services.values():
@@ -1990,27 +1913,20 @@ class Database:
     # Session Token State
     # ============================================================================
 
-    async def get_or_create_session_token_state(
-        self, session_id: str
-    ) -> Dict[str, Any]:
+    async def get_or_create_session_token_state(self, session_id: str) -> Dict[str, Any]:
         """Get or create token state for a session.
 
         Handles race conditions when multiple requests try to create the same session.
         """
         try:
             async with self.get_session() as session:
-                stmt = select(SessionTokenState).where(
-                    SessionTokenState.session_id == session_id
-                )
+                stmt = select(SessionTokenState).where(SessionTokenState.session_id == session_id)
                 result = await session.execute(stmt)
                 state = result.scalar_one_or_none()
 
                 if not state:
                     try:
-                        state = SessionTokenState(
-                            session_id=session_id,
-                            updated_at=datetime.now(timezone.utc)
-                        )
+                        state = SessionTokenState(session_id=session_id, updated_at=datetime.now(timezone.utc))
                         session.add(state)
                         await session.commit()
                         await session.refresh(state)
@@ -2032,7 +1948,7 @@ class Database:
                                 "last_compaction_at": None,
                                 "compaction_count": 0,
                                 "custom_threshold": None,
-                                "compaction_enabled": True
+                                "compaction_enabled": True,
                             }
 
                 return {
@@ -2045,25 +1961,17 @@ class Database:
                     "last_compaction_at": state.last_compaction_at.isoformat() if state.last_compaction_at else None,
                     "compaction_count": state.compaction_count,
                     "custom_threshold": state.custom_threshold,
-                    "compaction_enabled": state.compaction_enabled
+                    "compaction_enabled": state.compaction_enabled,
                 }
         except Exception as e:
             logger.error("Failed to get session token state", error=str(e))
-            return {
-                "session_id": session_id,
-                "cumulative_total": 0,
-                "compaction_enabled": True
-            }
+            return {"session_id": session_id, "cumulative_total": 0, "compaction_enabled": True}
 
-    async def update_session_token_state(
-        self, session_id: str, updates: Dict[str, Any]
-    ) -> bool:
+    async def update_session_token_state(self, session_id: str, updates: Dict[str, Any]) -> bool:
         """Update session token state."""
         try:
             async with self.get_session() as session:
-                stmt = select(SessionTokenState).where(
-                    SessionTokenState.session_id == session_id
-                )
+                stmt = select(SessionTokenState).where(SessionTokenState.session_id == session_id)
                 result = await session.execute(stmt)
                 state = result.scalar_one_or_none()
 
@@ -2084,14 +1992,17 @@ class Database:
 
     async def reset_session_token_state(self, session_id: str) -> bool:
         """Reset token state after compaction."""
-        return await self.update_session_token_state(session_id, {
-            "cumulative_input_tokens": 0,
-            "cumulative_output_tokens": 0,
-            "cumulative_cache_tokens": 0,
-            "cumulative_reasoning_tokens": 0,
-            "cumulative_total": 0,
-            "last_compaction_at": datetime.now(timezone.utc)
-        })
+        return await self.update_session_token_state(
+            session_id,
+            {
+                "cumulative_input_tokens": 0,
+                "cumulative_output_tokens": 0,
+                "cumulative_cache_tokens": 0,
+                "cumulative_reasoning_tokens": 0,
+                "cumulative_total": 0,
+                "last_compaction_at": datetime.now(timezone.utc),
+            },
+        )
 
     # ============================================================================
     # Compaction Events
@@ -2116,7 +2027,7 @@ class Database:
                     success=event.get("success", True),
                     error_message=event.get("error_message"),
                     summary_content=event.get("summary_content"),
-                    created_at=datetime.now(timezone.utc)
+                    created_at=datetime.now(timezone.utc),
                 )
                 session.add(entry)
                 await session.commit()
@@ -2125,9 +2036,7 @@ class Database:
             logger.error("Failed to save compaction event", error=str(e))
             return False
 
-    async def get_compaction_history(
-        self, session_id: str, limit: int = 50
-    ) -> List[Dict[str, Any]]:
+    async def get_compaction_history(self, session_id: str, limit: int = 50) -> List[Dict[str, Any]]:
         """Get compaction history for a session."""
         try:
             async with self.get_session() as session:
@@ -2152,7 +2061,7 @@ class Database:
                         "messages_after": e.messages_after,
                         "success": e.success,
                         "error_message": e.error_message,
-                        "created_at": e.created_at.isoformat() if e.created_at else None
+                        "created_at": e.created_at.isoformat() if e.created_at else None,
                     }
                     for e in events
                 ]
@@ -2164,14 +2073,18 @@ class Database:
     # Agent Teams - CRUD Operations
     # ============================================================================
 
-    async def create_team(self, team_id: str, workflow_id: str, team_lead_node_id: str,
-                          config: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    async def create_team(
+        self, team_id: str, workflow_id: str, team_lead_node_id: str, config: Optional[Dict[str, Any]] = None
+    ) -> Optional[Dict[str, Any]]:
         """Create a new agent team."""
         try:
             async with self.get_session() as session:
                 team = AgentTeam(
-                    id=team_id, workflow_id=workflow_id, team_lead_node_id=team_lead_node_id,
-                    config=config or {}, created_at=datetime.now(timezone.utc)
+                    id=team_id,
+                    workflow_id=workflow_id,
+                    team_lead_node_id=team_lead_node_id,
+                    config=config or {},
+                    created_at=datetime.now(timezone.utc),
                 )
                 session.add(team)
                 await session.commit()
@@ -2190,9 +2103,12 @@ class Database:
                 if not team:
                     return None
                 return {
-                    "id": team.id, "workflow_id": team.workflow_id, "team_lead_node_id": team.team_lead_node_id,
-                    "status": team.status, "config": team.config,
-                    "created_at": team.created_at.isoformat() if team.created_at else None
+                    "id": team.id,
+                    "workflow_id": team.workflow_id,
+                    "team_lead_node_id": team.team_lead_node_id,
+                    "status": team.status,
+                    "config": team.config,
+                    "created_at": team.created_at.isoformat() if team.created_at else None,
                 }
         except Exception as e:
             logger.error(f"Failed to get team: {e}")
@@ -2215,14 +2131,19 @@ class Database:
             logger.error(f"Failed to update team status: {e}")
             return False
 
-    async def add_team_member(self, team_id: str, agent_node_id: str, agent_type: str,
-                               role: str = "teammate", agent_label: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    async def add_team_member(
+        self, team_id: str, agent_node_id: str, agent_type: str, role: str = "teammate", agent_label: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
         """Add member to team."""
         try:
             async with self.get_session() as session:
                 member = TeamMember(
-                    team_id=team_id, agent_node_id=agent_node_id, agent_type=agent_type,
-                    agent_label=agent_label, role=role, joined_at=datetime.now(timezone.utc)
+                    team_id=team_id,
+                    agent_node_id=agent_node_id,
+                    agent_type=agent_type,
+                    agent_label=agent_label,
+                    role=role,
+                    joined_at=datetime.now(timezone.utc),
                 )
                 session.add(member)
                 await session.commit()
@@ -2235,12 +2156,16 @@ class Database:
         """Get all team members."""
         try:
             async with self.get_session() as session:
-                result = await session.execute(
-                    select(TeamMember).where(TeamMember.team_id == team_id)
-                )
+                result = await session.execute(select(TeamMember).where(TeamMember.team_id == team_id))
                 return [
-                    {"id": m.id, "agent_node_id": m.agent_node_id, "agent_type": m.agent_type,
-                     "agent_label": m.agent_label, "role": m.role, "status": m.status}
+                    {
+                        "id": m.id,
+                        "agent_node_id": m.agent_node_id,
+                        "agent_type": m.agent_type,
+                        "agent_label": m.agent_label,
+                        "role": m.role,
+                        "status": m.status,
+                    }
                     for m in result.scalars().all()
                 ]
         except Exception as e:
@@ -2252,9 +2177,7 @@ class Database:
         try:
             async with self.get_session() as session:
                 result = await session.execute(
-                    select(TeamMember).where(
-                        TeamMember.team_id == team_id, TeamMember.agent_node_id == agent_node_id
-                    )
+                    select(TeamMember).where(TeamMember.team_id == team_id, TeamMember.agent_node_id == agent_node_id)
                 )
                 member = result.scalar_one_or_none()
                 if not member:
@@ -2266,17 +2189,28 @@ class Database:
             logger.error(f"Failed to update member status: {e}")
             return False
 
-    async def add_team_task(self, task_id: str, team_id: str, title: str, created_by: str,
-                            description: Optional[str] = None, priority: int = 3,
-                            depends_on: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+    async def add_team_task(
+        self,
+        task_id: str,
+        team_id: str,
+        title: str,
+        created_by: str,
+        description: Optional[str] = None,
+        priority: int = 3,
+        depends_on: Optional[List[str]] = None,
+    ) -> Optional[Dict[str, Any]]:
         """Add task to team's shared list."""
         try:
             async with self.get_session() as session:
                 task = TeamTask(
-                    id=task_id, team_id=team_id, title=title, description=description,
-                    priority=priority, created_by=created_by,
+                    id=task_id,
+                    team_id=team_id,
+                    title=title,
+                    description=description,
+                    priority=priority,
+                    created_by=created_by,
                     depends_on={"task_ids": depends_on} if depends_on else None,
-                    created_at=datetime.now(timezone.utc)
+                    created_at=datetime.now(timezone.utc),
                 )
                 session.add(task)
                 await session.commit()
@@ -2295,9 +2229,16 @@ class Database:
                 query = query.order_by(TeamTask.priority.asc(), TeamTask.created_at.asc())
                 result = await session.execute(query)
                 return [
-                    {"id": t.id, "title": t.title, "description": t.description, "status": t.status,
-                     "priority": t.priority, "assigned_to": t.assigned_to, "progress": t.progress,
-                     "depends_on": t.depends_on.get("task_ids", []) if t.depends_on else []}
+                    {
+                        "id": t.id,
+                        "title": t.title,
+                        "description": t.description,
+                        "status": t.status,
+                        "priority": t.priority,
+                        "assigned_to": t.assigned_to,
+                        "progress": t.progress,
+                        "depends_on": t.depends_on.get("task_ids", []) if t.depends_on else [],
+                    }
                     for t in result.scalars().all()
                 ]
         except Exception as e:
@@ -2309,9 +2250,7 @@ class Database:
         try:
             async with self.get_session() as session:
                 result = await session.execute(
-                    select(TeamTask).where(
-                        TeamTask.id == task_id, TeamTask.status == "pending", TeamTask.assigned_to.is_(None)
-                    )
+                    select(TeamTask).where(TeamTask.id == task_id, TeamTask.status == "pending", TeamTask.assigned_to.is_(None))
                 )
                 task = result.scalar_one_or_none()
                 if not task:
@@ -2384,14 +2323,19 @@ class Database:
             logger.error(f"Failed to get claimable tasks: {e}")
             return []
 
-    async def add_agent_message(self, team_id: str, from_agent: str, content: str,
-                                 message_type: str = "direct", to_agent: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    async def add_agent_message(
+        self, team_id: str, from_agent: str, content: str, message_type: str = "direct", to_agent: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
         """Add message between agents."""
         try:
             async with self.get_session() as session:
                 msg = AgentMessage(
-                    team_id=team_id, from_agent=from_agent, to_agent=to_agent,
-                    message_type=message_type, content=content, created_at=datetime.now(timezone.utc)
+                    team_id=team_id,
+                    from_agent=from_agent,
+                    to_agent=to_agent,
+                    message_type=message_type,
+                    content=content,
+                    created_at=datetime.now(timezone.utc),
                 )
                 session.add(msg)
                 await session.commit()
@@ -2400,26 +2344,31 @@ class Database:
             logger.error(f"Failed to add agent message: {e}")
             return None
 
-    async def get_agent_messages(self, team_id: str, agent_node_id: Optional[str] = None,
-                                  unread_only: bool = False) -> List[Dict[str, Any]]:
+    async def get_agent_messages(
+        self, team_id: str, agent_node_id: Optional[str] = None, unread_only: bool = False
+    ) -> List[Dict[str, Any]]:
         """Get messages for team or specific agent."""
         try:
             async with self.get_session() as session:
                 from sqlalchemy import or_
+
                 query = select(AgentMessage).where(AgentMessage.team_id == team_id)
                 if agent_node_id:
-                    query = query.where(or_(
-                        AgentMessage.to_agent == agent_node_id,
-                        AgentMessage.to_agent.is_(None)
-                    ))
+                    query = query.where(or_(AgentMessage.to_agent == agent_node_id, AgentMessage.to_agent.is_(None)))
                 if unread_only:
                     query = query.where(not AgentMessage.read)
                 query = query.order_by(AgentMessage.created_at.asc()).limit(100)
                 result = await session.execute(query)
                 return [
-                    {"id": m.id, "from_agent": m.from_agent, "to_agent": m.to_agent,
-                     "message_type": m.message_type, "content": m.content, "read": m.read,
-                     "created_at": m.created_at.isoformat() if m.created_at else None}
+                    {
+                        "id": m.id,
+                        "from_agent": m.from_agent,
+                        "to_agent": m.to_agent,
+                        "message_type": m.message_type,
+                        "content": m.content,
+                        "read": m.read,
+                        "created_at": m.created_at.isoformat() if m.created_at else None,
+                    }
                     for m in result.scalars().all()
                 ]
         except Exception as e:
@@ -2431,11 +2380,12 @@ class Database:
         try:
             async with self.get_session() as session:
                 from sqlalchemy import or_
+
                 result = await session.execute(
                     select(AgentMessage).where(
                         AgentMessage.team_id == team_id,
                         not AgentMessage.read,
-                        or_(AgentMessage.to_agent == agent_node_id, AgentMessage.to_agent.is_(None))
+                        or_(AgentMessage.to_agent == agent_node_id, AgentMessage.to_agent.is_(None)),
                     )
                 )
                 messages = result.scalars().all()
@@ -2473,8 +2423,11 @@ class Database:
                     "task_completed": sum(1 for t in tasks if t.status == "completed"),
                     "task_failed": sum(1 for t in tasks if t.status == "failed"),
                     "members": [{"id": m.agent_node_id, "type": m.agent_type, "status": m.status} for m in members],
-                    "active_tasks": [{"id": t.id, "title": t.title, "assigned_to": t.assigned_to, "progress": t.progress}
-                                     for t in tasks if t.status == "in_progress"]
+                    "active_tasks": [
+                        {"id": t.id, "title": t.title, "assigned_to": t.assigned_to, "progress": t.progress}
+                        for t in tasks
+                        if t.status == "in_progress"
+                    ],
                 }
         except Exception as e:
             logger.error(f"Failed to get team stats: {e}")
@@ -2497,9 +2450,7 @@ class Database:
         try:
             async with self.get_session() as session:
                 # Check if connection exists
-                result = await session.execute(
-                    select(GoogleConnection).where(GoogleConnection.customer_id == customer_id)
-                )
+                result = await session.execute(select(GoogleConnection).where(GoogleConnection.customer_id == customer_id))
                 existing = result.scalar_one_or_none()
 
                 now = datetime.now(timezone.utc)
@@ -2539,10 +2490,7 @@ class Database:
         try:
             async with self.get_session() as session:
                 result = await session.execute(
-                    select(GoogleConnection).where(
-                        GoogleConnection.customer_id == customer_id,
-                        GoogleConnection.is_active
-                    )
+                    select(GoogleConnection).where(GoogleConnection.customer_id == customer_id, GoogleConnection.is_active)
                 )
                 return result.scalar_one_or_none()
         except Exception as e:
@@ -2553,9 +2501,7 @@ class Database:
         """Delete Google Workspace connection for a customer."""
         try:
             async with self.get_session() as session:
-                result = await session.execute(
-                    select(GoogleConnection).where(GoogleConnection.customer_id == customer_id)
-                )
+                result = await session.execute(select(GoogleConnection).where(GoogleConnection.customer_id == customer_id))
                 connection = result.scalar_one_or_none()
                 if connection:
                     await session.delete(connection)
@@ -2571,10 +2517,7 @@ class Database:
         try:
             async with self.get_session() as session:
                 result = await session.execute(
-                    select(GoogleConnection)
-                    .where(GoogleConnection.is_active)
-                    .order_by(GoogleConnection.connected_at.desc())
-                    .limit(limit)
+                    select(GoogleConnection).where(GoogleConnection.is_active).order_by(GoogleConnection.connected_at.desc()).limit(limit)
                 )
                 connections = result.scalars().all()
                 return [
@@ -2600,9 +2543,7 @@ class Database:
         """Update tokens for a Google Workspace connection (after refresh)."""
         try:
             async with self.get_session() as session:
-                result = await session.execute(
-                    select(GoogleConnection).where(GoogleConnection.customer_id == customer_id)
-                )
+                result = await session.execute(select(GoogleConnection).where(GoogleConnection.customer_id == customer_id))
                 connection = result.scalar_one_or_none()
                 if connection:
                     connection.access_token = access_token
@@ -2620,9 +2561,7 @@ class Database:
         """Update last_used_at timestamp for a Google Workspace connection."""
         try:
             async with self.get_session() as session:
-                result = await session.execute(
-                    select(GoogleConnection).where(GoogleConnection.customer_id == customer_id)
-                )
+                result = await session.execute(select(GoogleConnection).where(GoogleConnection.customer_id == customer_id))
                 connection = result.scalar_one_or_none()
                 if connection:
                     connection.last_used_at = datetime.now(timezone.utc)

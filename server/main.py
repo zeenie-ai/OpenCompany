@@ -20,6 +20,7 @@ def _startup_log(msg):
 # Performance: Install uvloop if available (Linux/macOS only)
 try:
     import uvloop
+
     uvloop.install()
 except ImportError:
     pass  # Windows - uvloop not available, use default asyncio
@@ -48,6 +49,7 @@ _startup_log("Importing settings + logging...")
 from core.config import Settings
 from core.logging import configure_logging, get_logger, setup_websocket_logging, shutdown_websocket_logging
 from core.tracing import init_tracing
+
 settings = Settings()
 configure_logging(settings)
 init_tracing()
@@ -55,12 +57,15 @@ logger = get_logger(__name__)
 
 _startup_log("Importing DI container + all services...")
 from core.container import container
+
 _startup_log("Importing routers...")
 from routers import workflow, database, nodejs_compat, websocket, webhook, auth, credentials, schemas
+
 _startup_log("All imports complete")
 
 # Suppress noisy loggers
 import logging
+
 logging.getLogger("apscheduler").setLevel(logging.WARNING)
 logging.getLogger("apscheduler.scheduler").setLevel(logging.WARNING)
 logging.getLogger("apscheduler.executors").setLevel(logging.WARNING)
@@ -115,15 +120,18 @@ async def lifespan(app: FastAPI):
     # get_api_usage_summary). Flat module (sibling to services/pricing.py)
     # to avoid renaming the existing `services.pricing` import path.
     import services.pricing_handlers  # noqa: F401
-    container.wire(modules=[
-        "routers.workflow",
-        "routers.database",
-        "routers.nodejs_compat",
-        "routers.websocket",
-        "routers.webhook",
-        "routers.auth",
-        "middleware.auth"
-    ])
+
+    container.wire(
+        modules=[
+            "routers.workflow",
+            "routers.database",
+            "routers.nodejs_compat",
+            "routers.websocket",
+            "routers.webhook",
+            "routers.auth",
+            "middleware.auth",
+        ]
+    )
 
     # Start services
     await container.database().startup()
@@ -145,10 +153,12 @@ async def lifespan(app: FastAPI):
 
     # Initialize event waiter with cache service for Redis Streams support
     from services import event_waiter
+
     event_waiter.set_cache_service(container.cache())
 
     # Start APScheduler for cron jobs
     from services.scheduler import start_scheduler, shutdown_scheduler
+
     start_scheduler()
 
     # Initialize execution engine recovery sweeper
@@ -157,6 +167,7 @@ async def lifespan(app: FastAPI):
         RecoverySweeper,
         set_recovery_sweeper,
     )
+
     execution_cache = ExecutionCache(container.cache())
     recovery_sweeper = RecoverySweeper(execution_cache)
     set_recovery_sweeper(recovery_sweeper)
@@ -165,9 +176,7 @@ async def lifespan(app: FastAPI):
     if settings.redis_enabled:
         incomplete = await recovery_sweeper.scan_on_startup()
         if incomplete:
-            logger.info("Found incomplete executions on startup",
-                       count=len(incomplete),
-                       execution_ids=incomplete)
+            logger.info("Found incomplete executions on startup", count=len(incomplete), execution_ids=incomplete)
 
         # Start background recovery sweeper
         await recovery_sweeper.start()
@@ -181,13 +190,10 @@ async def lifespan(app: FastAPI):
     # Start cleanup service for long-running daemon
     from core.cleanup import CleanupService
     from core.health import set_startup_time
+
     cleanup_service = None
     if settings.cleanup_enabled:
-        cleanup_service = CleanupService(
-            database=container.database(),
-            cache=container.cache(),
-            settings=settings
-        )
+        cleanup_service = CleanupService(database=container.database(), cache=container.cache(), settings=settings)
         await cleanup_service.start()
 
     # Initialize compaction service and wire AI service
@@ -198,27 +204,32 @@ async def lifespan(app: FastAPI):
 
     # Initialize model registry service
     from services.model_registry import get_model_registry
+
     model_registry = get_model_registry()
     model_registry.startup()
     logger.info("Model registry initialized")
 
     # Background refresh if cache is stale
     if model_registry.is_stale():
+
         async def _refresh_registry():
             try:
                 count = await model_registry.refresh()
                 logger.info(f"Model registry refreshed: {count} models")
             except Exception as e:
                 logger.warning(f"Model registry refresh failed (offline?): {e}")
+
         asyncio.create_task(_refresh_registry())
 
     # Initialize agent team service
     from services.agent_team import init_agent_team_service
     from services.status_broadcaster import get_status_broadcaster
+
     init_agent_team_service(container.database(), get_status_broadcaster())
 
     # Wire process service to broadcaster for Terminal tab streaming
     from services.process_service import get_process_service
+
     proc_svc = get_process_service()
     proc_svc.set_broadcaster(get_status_broadcaster())
     # Load max_processes from user settings if configured
@@ -232,6 +243,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize proxy service (loads providers from DB, reads credentials)
     from services.proxy.service import init_proxy_service
+
     proxy_svc = init_proxy_service(
         auth_service=container.auth_service(),
         database=container.database(),
@@ -301,8 +313,7 @@ async def lifespan(app: FastAPI):
                                 terminated = await temporal_client_wrapper.terminate_running_workflows()
                                 if terminated:
                                     _startup_log(
-                                        f"[Temporal] Terminated {terminated} running workflow(s) "
-                                        "at startup (history preserved)"
+                                        f"[Temporal] Terminated {terminated} running workflow(s) " "at startup (history preserved)"
                                     )
                             except Exception as term_exc:  # noqa: BLE001 — non-fatal
                                 logger.warning(
@@ -322,18 +333,14 @@ async def lifespan(app: FastAPI):
                         await worker_manager.start()
                         app.state.temporal_worker_manager = worker_manager
 
-                        _startup_log(
-                            f"[Temporal] Worker started, execution engine ready (attempt {attempt})"
-                        )
+                        _startup_log(f"[Temporal] Worker started, execution engine ready (attempt {attempt})")
                         logger.info(
                             "Temporal integration initialized successfully",
                             attempts=attempt,
                         )
                         return
                     except Exception as exc:
-                        _startup_log(
-                            f"[Temporal] Executor/worker setup failed (attempt {attempt}): {exc}; will retry"
-                        )
+                        _startup_log(f"[Temporal] Executor/worker setup failed (attempt {attempt}): {exc}; will retry")
                         logger.error(
                             "Temporal executor/worker setup failed; will retry",
                             error=str(exc),
@@ -342,9 +349,7 @@ async def lifespan(app: FastAPI):
                         await temporal_client_wrapper.disconnect()
                 await asyncio.sleep(3.0)
 
-        temporal_init_task = asyncio.create_task(
-            _init_temporal_background(), name="temporal-init"
-        )
+        temporal_init_task = asyncio.create_task(_init_temporal_background(), name="temporal-init")
     else:
         _startup_log("[Temporal] Disabled")
 
@@ -355,6 +360,7 @@ async def lifespan(app: FastAPI):
     cli_mcp_lifespan_ctx = None
     try:
         from services.cli_agent.mcp_server import get_mcp_app as _get_cli_mcp_app
+
         _cli_mcp_app = _get_cli_mcp_app()
         cli_mcp_lifespan_ctx = _cli_mcp_app.router.lifespan_context(_cli_mcp_app)
         await cli_mcp_lifespan_ctx.__aenter__()
@@ -413,6 +419,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown proxy service
     from services.proxy.service import get_proxy_service
+
     _proxy_svc = get_proxy_service()
     if _proxy_svc:
         await _proxy_svc.shutdown()
@@ -424,16 +431,19 @@ async def lifespan(app: FastAPI):
     # New plugins with cleanup needs register a hook from their
     # __init__.py — main.py never edits.
     from services.plugin.shutdown_hooks import run_shutdown_hooks
+
     await run_shutdown_hooks()
 
     # Kill all managed processes (process manager node)
     from services.process_service import shutdown_process_service
+
     await shutdown_process_service()
 
     # Stop every plugin supervisor that registered itself via
     # services._supervisor.register_supervisor() (currently: WhatsApp;
     # other plugins migrate in PR 2).
     from services._supervisor import shutdown_all_supervisors
+
     await shutdown_all_supervisors()
 
     # Stop cleanup service
@@ -473,33 +483,31 @@ from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+
 class CatchAllExceptionsMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         try:
             return await call_next(request)
         except Exception as e:
             import traceback
+
             traceback.print_exc()
             logger.error(f"Unhandled exception: {type(e).__name__}: {str(e)}", exc_info=True)
             return JSONResponse(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                content={
-                    "success": False,
-                    "error": f"{type(e).__name__}: {str(e)}",
-                    "detail": "Internal server error"
-                }
+                content={"success": False, "error": f"{type(e).__name__}: {str(e)}", "detail": "Internal server error"},
             )
+
 
 app.add_middleware(CatchAllExceptionsMiddleware)
 
 # Add Auth middleware (checks JWT cookie for protected routes)
 from middleware.auth import AuthMiddleware
+
 app.add_middleware(AuthMiddleware)
 
 # Add CORS middleware (must be AFTER exception middleware)
-logger.info("Configuring CORS middleware",
-           origins_count=len(settings.cors_origins),
-           origins=settings.cors_origins)
+logger.info("Configuring CORS middleware", origins_count=len(settings.cors_origins), origins=settings.cors_origins)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -536,6 +544,7 @@ app.include_router(webhook.router)
 # the node-discovery walk on app startup; iterating here picks up
 # anything that registered.
 from services.ws_handler_registry import get_routers as _get_plugin_routers
+
 for _plugin_router in _get_plugin_routers():
     app.include_router(_plugin_router)
 
@@ -550,6 +559,7 @@ for _plugin_router in _get_plugin_routers():
 # Bearer-token auth scoped per batch (see services/cli_agent/mcp_server.py).
 try:
     from services.cli_agent.mcp_server import get_mcp_app as _get_cli_mcp_app
+
     _cli_mcp_app = _get_cli_mcp_app()
     app.mount("/mcp/ide", _cli_mcp_app)
     logger.info("[main] mounted CLI agent MCP server at /mcp/ide")
@@ -565,6 +575,7 @@ async def _sweep_cli_lockfiles_on_startup() -> None:
         from services.cli_agent.config import list_provider_names
         from services.cli_agent.factory import create_cli_provider
         from services.cli_agent.lockfile import sweep_stale_lockfiles
+
         # Ask the provider class for its lockfile dir rather than the
         # raw JSON config — the provider is the source of truth (e.g.
         # the claude provider derives its dir from
@@ -592,11 +603,7 @@ async def health_check():
     sweeper = get_recovery_sweeper()
 
     # Get comprehensive health status
-    health = await get_health_status(
-        database=container.database(),
-        cache=container.cache(),
-        settings=settings
-    )
+    health = await get_health_status(database=container.database(), cache=container.cache(), settings=settings)
 
     # Check Temporal status
     temporal_status = {
@@ -633,14 +640,14 @@ async def health_check():
             "recovery_sweeper": sweeper is not None and sweeper._running,
         },
         "temporal": temporal_status,
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
     }
 
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info("Starting React Flow Python Services",
-               host=settings.host, port=settings.port, debug=settings.debug)
+
+    logger.info("Starting React Flow Python Services", host=settings.host, port=settings.port, debug=settings.debug)
     uvicorn.run(
         "main:app",
         host=settings.host,
@@ -648,5 +655,5 @@ if __name__ == "__main__":
         reload=settings.debug,
         reload_dirs=["."] if settings.debug else None,
         reload_excludes=["*.pyc", "__pycache__", "*.log", "*.db"] if settings.debug else None,
-        workers=1 if settings.debug else settings.workers
+        workers=1 if settings.debug else settings.workers,
     )

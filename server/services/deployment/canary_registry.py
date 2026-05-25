@@ -82,8 +82,7 @@ def register_canary_trigger_type(node_type: str, cloudevent_type: str) -> None:
     """
     if not isinstance(node_type, str) or not node_type:
         raise TypeError(
-            f"register_canary_trigger_type expected a non-empty str for "
-            f"node_type, got {type(node_type).__name__}: {node_type!r}"
+            f"register_canary_trigger_type expected a non-empty str for " f"node_type, got {type(node_type).__name__}: {node_type!r}"
         )
     if not isinstance(cloudevent_type, str) or not cloudevent_type:
         raise TypeError(

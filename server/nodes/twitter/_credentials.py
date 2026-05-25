@@ -25,9 +25,13 @@ class TwitterCredential(OAuth2Credential):
     client_id_api_key = "twitter_client_id"
     client_secret_api_key = "twitter_client_secret"
     scopes = (
-        "tweet.read", "tweet.write", "users.read",
-        "follows.read", "follows.write",
-        "like.read", "like.write",
+        "tweet.read",
+        "tweet.write",
+        "users.read",
+        "follows.read",
+        "follows.write",
+        "like.read",
+        "like.write",
         "offline.access",
     )
     docs_url = "https://developer.x.com/en/docs/authentication/oauth-2-0"

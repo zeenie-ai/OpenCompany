@@ -43,9 +43,7 @@ def test_add_node_with_label_and_parameters():
         label="Master Skill",
     )
     assert op["label"] == "Master Skill"
-    assert op["parameters"] == {
-        "skillsConfig": {"http-request-skill": {"enabled": True}}
-    }
+    assert op["parameters"] == {"skillsConfig": {"http-request-skill": {"enabled": True}}}
 
 
 def test_add_node_with_anchored_position():

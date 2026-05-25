@@ -66,7 +66,7 @@ class SerperSearchParams(BaseModel):
 
 _ENDPOINTS = {
     "search": "https://google.serper.dev/search",
-    "news":   "https://google.serper.dev/news",
+    "news": "https://google.serper.dev/news",
     "images": "https://google.serper.dev/images",
     "places": "https://google.serper.dev/places",
 }
@@ -82,10 +82,8 @@ class SerperSearchNode(ActionNode):
     tool_name = "serper_search"
     tool_description = "Search the web using Google via Serper API. Returns web results with titles, snippets, and URLs."
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
     credentials = (SerperCredential,)
     annotations = {"destructive": False, "readonly": True, "open_world": True}
@@ -115,31 +113,39 @@ class SerperSearchNode(ActionNode):
         results: List[SerperSearchResult] = []
         if params.search_type == "search":
             for item in (data.get("organic") or [])[: params.max_results]:
-                results.append(SerperSearchResult(
-                    title=item.get("title", ""),
-                    snippet=item.get("snippet", ""),
-                    url=item.get("link", ""),
-                    position=item.get("position"),
-                ))
+                results.append(
+                    SerperSearchResult(
+                        title=item.get("title", ""),
+                        snippet=item.get("snippet", ""),
+                        url=item.get("link", ""),
+                        position=item.get("position"),
+                    )
+                )
         elif params.search_type == "news":
             for item in (data.get("news") or [])[: params.max_results]:
-                results.append(SerperSearchResult(
-                    title=item.get("title", ""),
-                    snippet=item.get("snippet", ""),
-                    url=item.get("link", ""),
-                ))
+                results.append(
+                    SerperSearchResult(
+                        title=item.get("title", ""),
+                        snippet=item.get("snippet", ""),
+                        url=item.get("link", ""),
+                    )
+                )
         elif params.search_type == "images":
             for item in (data.get("images") or [])[: params.max_results]:
-                results.append(SerperSearchResult(
-                    title=item.get("title", ""),
-                    url=item.get("imageUrl") or item.get("link", ""),
-                ))
+                results.append(
+                    SerperSearchResult(
+                        title=item.get("title", ""),
+                        url=item.get("imageUrl") or item.get("link", ""),
+                    )
+                )
         elif params.search_type == "places":
             for item in (data.get("places") or [])[: params.max_results]:
-                results.append(SerperSearchResult(
-                    title=item.get("title", ""),
-                    url=item.get("website", ""),
-                ))
+                results.append(
+                    SerperSearchResult(
+                        title=item.get("title", ""),
+                        url=item.get("website", ""),
+                    )
+                )
         return SerperSearchOutput(
             query=params.query,
             results=results,

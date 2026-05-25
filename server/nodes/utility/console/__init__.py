@@ -72,14 +72,10 @@ def _format_console_output(data: Any, format_type: str) -> str:
             if isinstance(data, list) and data and isinstance(data[0], dict):
                 headers = list(data[0].keys())
                 rows = [[str(r.get(h, "")) for h in headers] for r in data]
-                widths = [max(len(h), max((len(r[i]) for r in rows), default=0))
-                          for i, h in enumerate(headers)]
+                widths = [max(len(h), max((len(r[i]) for r in rows), default=0)) for i, h in enumerate(headers)]
                 header_line = " | ".join(h.ljust(widths[i]) for i, h in enumerate(headers))
                 sep = "-+-".join("-" * w for w in widths)
-                body = ["\n" .join(
-                    " | ".join(r[i].ljust(widths[i]) for i in range(len(headers)))
-                    for r in rows
-                )]
+                body = ["\n".join(" | ".join(r[i].ljust(widths[i]) for i in range(len(headers))) for r in rows)]
                 return "\n".join([header_line, sep, *body])
             return json.dumps(data, indent=2, default=str, ensure_ascii=False)
         case _:
@@ -119,10 +115,7 @@ class ConsoleNode(ActionNode):
     group = ("utility",)
     description = "Log data to console panel for debugging during execution"
     component_kind = "square"
-    handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-    )
+    handles = ({"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},)
     hide_output_handle = True
     ui_hints = {"isConsoleSink": True}
     annotations = {"destructive": False, "readonly": True, "open_world": False}
@@ -183,18 +176,20 @@ class ConsoleNode(ActionNode):
 
         formatted_output = _format_console_output(log_value, format_type)
 
-        await get_status_broadcaster().broadcast_console_log({
-            "node_id": ctx.node_id,
-            "label": label or f"Console ({ctx.node_id[:8]})",
-            "timestamp": datetime.now().isoformat(),
-            "data": log_value,
-            "formatted": formatted_output,
-            "format": format_type,
-            "workflow_id": ctx.workflow_id,
-            "source_node_id": source_info.get("id") if source_info else None,
-            "source_node_type": source_info.get("type") if source_info else None,
-            "source_node_label": source_info.get("label") if source_info else None,
-        })
+        await get_status_broadcaster().broadcast_console_log(
+            {
+                "node_id": ctx.node_id,
+                "label": label or f"Console ({ctx.node_id[:8]})",
+                "timestamp": datetime.now().isoformat(),
+                "data": log_value,
+                "formatted": formatted_output,
+                "format": format_type,
+                "workflow_id": ctx.workflow_id,
+                "source_node_id": source_info.get("id") if source_info else None,
+                "source_node_type": source_info.get("type") if source_info else None,
+                "source_node_label": source_info.get("label") if source_info else None,
+            }
+        )
 
         # Pass through original input for downstream nodes; explicit keys
         # take precedence over upstream keys of the same name.

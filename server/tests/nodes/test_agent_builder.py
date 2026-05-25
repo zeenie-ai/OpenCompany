@@ -77,14 +77,18 @@ def _registry(**type_to_kind) -> dict:
 class TestRegistration:
     def test_node_is_registered(self):
         from services.node_registry import get_node_class
+
         cls = get_node_class("agentBuilder")
         assert cls is ab.AgentBuilderNode
 
     def test_has_five_operations(self):
         ops = set(ab.AgentBuilderNode._operations.keys())
         assert ops == {
-            "inspect_canvas", "add_tool", "add_skill",
-            "add_subagent", "create_workflow",
+            "inspect_canvas",
+            "add_tool",
+            "add_skill",
+            "add_subagent",
+            "create_workflow",
         }
 
     def test_default_operation_is_inspect_canvas(self):
@@ -97,6 +101,7 @@ class TestRegistration:
         contract for nodes that exist solely to be invoked by an LLM
         through an agent's input-tools handle."""
         from services.plugin import ToolNode
+
         assert issubclass(ab.AgentBuilderNode, ToolNode)
 
     def test_handle_topology_matches_canonical_tool_shape(self):
@@ -127,8 +132,7 @@ class TestInspectCanvas:
         nodes = [
             _agent_node("agent-1"),
             {"id": "ab-1", "type": "agentBuilder", "data": {"label": "AB"}},
-            {"id": "tool-1", "type": "httpRequest",
-             "data": {"label": "HTTP", "parameters": {"url": "https://x"}}},
+            {"id": "tool-1", "type": "httpRequest", "data": {"label": "HTTP", "parameters": {"url": "https://x"}}},
         ]
         edges = [
             _edge("ab-1", "agent-1", "input-tools"),
@@ -179,8 +183,7 @@ class TestAddTool:
         ctx = _make_ctx()
         params = ab.AgentBuilderParams(operation="add_tool", node_type="unknownTool")
 
-        with patch.object(ab, "registered_node_classes",
-                          return_value=_registry(httpRequest="tool")):
+        with patch.object(ab, "registered_node_classes", return_value=_registry(httpRequest="tool")):
             result = await node.add_tool(ctx, params)
 
         assert result.operations == []
@@ -190,10 +193,9 @@ class TestAddTool:
         node = ab.AgentBuilderNode()
         ctx = _make_ctx()
 
-        with patch.object(ab, "registered_node_classes",
-                          return_value=_registry(
-                              agentBuilder="tool", masterSkill="tool",
-                              httpRequest="tool")):
+        with patch.object(
+            ab, "registered_node_classes", return_value=_registry(agentBuilder="tool", masterSkill="tool", httpRequest="tool")
+        ):
             for forbidden in ("agentBuilder", "masterSkill"):
                 params = ab.AgentBuilderParams(operation="add_tool", node_type=forbidden)
                 result = await node.add_tool(ctx, params)
@@ -206,9 +208,10 @@ class TestAddTool:
         ctx = _make_ctx(edges=edges)
         params = ab.AgentBuilderParams(operation="add_tool", node_type="httpRequest")
 
-        with patch.object(ab, "registered_node_classes",
-                          return_value=_registry(httpRequest="tool")), \
-             patch.object(ab, "_broadcast", new_callable=AsyncMock) as mock_bcast:
+        with (
+            patch.object(ab, "registered_node_classes", return_value=_registry(httpRequest="tool")),
+            patch.object(ab, "_broadcast", new_callable=AsyncMock) as mock_bcast,
+        ):
             result = await node.add_tool(ctx, params)
 
         assert len(result.operations) == 2
@@ -241,7 +244,8 @@ class TestAddSkill:
         node = ab.AgentBuilderNode()
         ctx = _make_ctx()
         params = ab.AgentBuilderParams(
-            operation="add_skill", skill_folder="nonexistent-skill",
+            operation="add_skill",
+            skill_folder="nonexistent-skill",
         )
 
         with patch.object(ab, "_skill_folder_exists", return_value=False):
@@ -252,7 +256,8 @@ class TestAddSkill:
 
     async def test_toggles_on_existing_master_skill(self):
         master = {
-            "id": "ms-1", "type": "masterSkill",
+            "id": "ms-1",
+            "type": "masterSkill",
             "data": {"parameters": {"skills_config": {"old-skill": {"enabled": True}}}},
         }
         agent = _agent_node("agent-1")
@@ -263,11 +268,11 @@ class TestAddSkill:
         node = ab.AgentBuilderNode()
         ctx = _make_ctx(nodes=[agent, master], edges=edges)
         params = ab.AgentBuilderParams(
-            operation="add_skill", skill_folder="http-request-skill",
+            operation="add_skill",
+            skill_folder="http-request-skill",
         )
 
-        with patch.object(ab, "_skill_folder_exists", return_value=True), \
-             patch.object(ab, "_broadcast", new_callable=AsyncMock):
+        with patch.object(ab, "_skill_folder_exists", return_value=True), patch.object(ab, "_broadcast", new_callable=AsyncMock):
             result = await node.add_skill(ctx, params)
 
         assert len(result.operations) == 1
@@ -284,11 +289,11 @@ class TestAddSkill:
         node = ab.AgentBuilderNode()
         ctx = _make_ctx(nodes=[agent], edges=edges)
         params = ab.AgentBuilderParams(
-            operation="add_skill", skill_folder="memory-skill",
+            operation="add_skill",
+            skill_folder="memory-skill",
         )
 
-        with patch.object(ab, "_skill_folder_exists", return_value=True), \
-             patch.object(ab, "_broadcast", new_callable=AsyncMock):
+        with patch.object(ab, "_skill_folder_exists", return_value=True), patch.object(ab, "_broadcast", new_callable=AsyncMock):
             result = await node.add_skill(ctx, params)
 
         assert len(result.operations) == 2
@@ -321,11 +326,11 @@ class TestAddSubagent:
         node = ab.AgentBuilderNode()
         ctx = _make_ctx(nodes=[agent], edges=edges)
         params = ab.AgentBuilderParams(
-            operation="add_subagent", agent_type="coding_agent",
+            operation="add_subagent",
+            agent_type="coding_agent",
         )
 
-        with patch.object(ab, "registered_node_classes",
-                          return_value=_registry(coding_agent="agent")):
+        with patch.object(ab, "registered_node_classes", return_value=_registry(coding_agent="agent")):
             result = await node.add_subagent(ctx, params)
 
         assert result.operations == []
@@ -337,11 +342,11 @@ class TestAddSubagent:
         node = ab.AgentBuilderNode()
         ctx = _make_ctx(nodes=[agent], edges=edges)
         params = ab.AgentBuilderParams(
-            operation="add_subagent", agent_type="not_a_real_agent",
+            operation="add_subagent",
+            agent_type="not_a_real_agent",
         )
 
-        with patch.object(ab, "registered_node_classes",
-                          return_value=_registry(coding_agent="agent")):
+        with patch.object(ab, "registered_node_classes", return_value=_registry(coding_agent="agent")):
             result = await node.add_subagent(ctx, params)
 
         assert result.operations == []
@@ -353,11 +358,11 @@ class TestAddSubagent:
         node = ab.AgentBuilderNode()
         ctx = _make_ctx(nodes=[agent], edges=edges)
         params = ab.AgentBuilderParams(
-            operation="add_subagent", agent_type="ai_employee",
+            operation="add_subagent",
+            agent_type="ai_employee",
         )
 
-        with patch.object(ab, "registered_node_classes",
-                          return_value=_registry(ai_employee="agent")):
+        with patch.object(ab, "registered_node_classes", return_value=_registry(ai_employee="agent")):
             result = await node.add_subagent(ctx, params)
 
         assert result.operations == []
@@ -369,12 +374,14 @@ class TestAddSubagent:
         node = ab.AgentBuilderNode()
         ctx = _make_ctx(nodes=[agent], edges=edges)
         params = ab.AgentBuilderParams(
-            operation="add_subagent", agent_type="coding_agent",
+            operation="add_subagent",
+            agent_type="coding_agent",
         )
 
-        with patch.object(ab, "registered_node_classes",
-                          return_value=_registry(coding_agent="agent")), \
-             patch.object(ab, "_broadcast", new_callable=AsyncMock):
+        with (
+            patch.object(ab, "registered_node_classes", return_value=_registry(coding_agent="agent")),
+            patch.object(ab, "_broadcast", new_callable=AsyncMock),
+        ):
             result = await node.add_subagent(ctx, params)
 
         assert len(result.operations) == 2
@@ -424,7 +431,8 @@ class TestCreateWorkflow:
         node = ab.AgentBuilderNode()
         ctx = _make_ctx()
         params = ab.AgentBuilderParams(
-            operation="create_workflow", workflow_name="Doomed Workflow",
+            operation="create_workflow",
+            workflow_name="Doomed Workflow",
         )
 
         mock_db = MagicMock()

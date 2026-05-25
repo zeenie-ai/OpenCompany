@@ -59,7 +59,9 @@ class OAuthLike(Protocol):
     """
 
     def generate_authorization_url(
-        self, *, state_data: Optional[Dict[str, Any]] = None,
+        self,
+        *,
+        state_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, str]: ...
 
     async def exchange_code(self, code: str, state: str) -> Dict[str, Any]: ...
@@ -69,7 +71,9 @@ class OAuthLike(Protocol):
     async def refresh_access_token(self, refresh_token: str) -> Dict[str, Any]: ...
 
     async def revoke_token(
-        self, token: str, token_type: str = "access_token",
+        self,
+        token: str,
+        token_type: str = "access_token",
     ) -> Dict[str, Any]: ...
 
 
@@ -136,10 +140,7 @@ def make_oauth_lifecycle_handlers(
         if not client_id:
             return {
                 "success": False,
-                "error": (
-                    f"{provider.capitalize()} Client ID not configured. "
-                    f"Add your {provider.capitalize()} API credentials first."
-                ),
+                "error": (f"{provider.capitalize()} Client ID not configured. " f"Add your {provider.capitalize()} API credentials first."),
             }
 
         redirect_uri = get_redirect_uri(websocket, provider)
@@ -177,7 +178,8 @@ def make_oauth_lifecycle_handlers(
         # cached in memory; pull from DB on demand).
         if not user_info.get("success"):
             refresh_token = await auth_service.get_oauth_refresh_token(
-                provider, customer_id="owner",
+                provider,
+                customer_id="owner",
             )
             if refresh_token:
                 refresh = await oauth.refresh_access_token(refresh_token)
@@ -216,10 +218,7 @@ def make_oauth_lifecycle_handlers(
         auth_service = container.auth_service()
         tokens = await auth_service.get_oauth_tokens(provider, customer_id="owner")
         access_token = tokens.get("access_token") if tokens else None
-        refresh_token = (
-            await auth_service.get_oauth_refresh_token(provider, customer_id="owner")
-            if tokens else None
-        )
+        refresh_token = await auth_service.get_oauth_refresh_token(provider, customer_id="owner") if tokens else None
 
         if access_token or refresh_token:
             redirect_uri = get_redirect_uri(websocket, provider)
@@ -254,12 +253,14 @@ def make_oauth_lifecycle_handlers(
 
 
 async def _maybe_legacy_broadcast(
-    broadcast_type: Optional[str], payload: Dict[str, Any],
+    broadcast_type: Optional[str],
+    payload: Dict[str, Any],
 ) -> None:
     """Optional legacy status broadcast (Google's ``google_status`` frame)."""
     if not broadcast_type:
         return
     from services.status_broadcaster import get_status_broadcaster
+
     await get_status_broadcaster().broadcast({"type": broadcast_type, "data": payload})
 
 
@@ -333,8 +334,10 @@ def make_oauth_callback_router(
             logger.warning(f"{provider} OAuth denied: {error} - {error_description}")
             return HTMLResponse(
                 content=render_oauth_callback_html(
-                    provider, status="error",
-                    message=error_description or error, color_hex=color_hex,
+                    provider,
+                    status="error",
+                    message=error_description or error,
+                    color_hex=color_hex,
                 ),
                 status_code=200,
             )
@@ -342,7 +345,8 @@ def make_oauth_callback_router(
         if not code or not state:
             return HTMLResponse(
                 content=render_oauth_callback_html(
-                    provider, status="error",
+                    provider,
+                    status="error",
                     message="Missing authorization code or state parameter",
                     color_hex=color_hex,
                 ),
@@ -365,7 +369,8 @@ def make_oauth_callback_router(
         if not result.get("success"):
             return HTMLResponse(
                 content=render_oauth_callback_html(
-                    provider, status="error",
+                    provider,
+                    status="error",
                     message=result.get("error", "Token exchange failed"),
                     color_hex=color_hex,
                 ),
@@ -384,10 +389,13 @@ def make_oauth_callback_router(
         store_overrides: Dict[str, Any] = {}
         redirect_after: Optional[str] = None
         if extra_state_handler is not None:
-            override = await extra_state_handler({
-                "state_data": state_data, "user_info": user_info,
-                "tokens": result,
-            })
+            override = await extra_state_handler(
+                {
+                    "state_data": state_data,
+                    "user_info": user_info,
+                    "tokens": result,
+                }
+            )
             if override:
                 redirect_after = override.pop("redirect_after", None)
                 store_overrides.update(override)
@@ -411,13 +419,15 @@ def make_oauth_callback_router(
         from services.status_broadcaster import get_status_broadcaster
 
         broadcaster = get_status_broadcaster()
-        await broadcaster.broadcast({
-            "type": f"{provider}_oauth_complete",
-            "data": {
-                "success": True,
-                **{k: v for k, v in user_info.items() if k != "success"},
-            },
-        })
+        await broadcaster.broadcast(
+            {
+                "type": f"{provider}_oauth_complete",
+                "data": {
+                    "success": True,
+                    **{k: v for k, v in user_info.items() if k != "success"},
+                },
+            }
+        )
         await broadcaster.broadcast_credential_event(
             "credential.oauth.connected",
             provider=provider,
@@ -426,12 +436,15 @@ def make_oauth_callback_router(
 
         if redirect_after:
             from fastapi.responses import RedirectResponse
+
             return RedirectResponse(url=redirect_after, status_code=302)
 
         return HTMLResponse(
             content=render_oauth_callback_html(
-                provider, status="success",
-                message=f"Successfully connected as {email}!", color_hex=color_hex,
+                provider,
+                status="success",
+                message=f"Successfully connected as {email}!",
+                color_hex=color_hex,
             ),
             status_code=200,
         )
@@ -491,8 +504,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 </html>"""
 
 _SUCCESS_ICON = (
-    "<path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' "
-    "d='M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'/>"
+    "<path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' " "d='M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'/>"
 )
 _ERROR_ICON = (
     "<path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' "
@@ -501,7 +513,11 @@ _ERROR_ICON = (
 
 
 def render_oauth_callback_html(
-    provider: str, *, status: str, message: str, color_hex: str,
+    provider: str,
+    *,
+    status: str,
+    message: str,
+    color_hex: str,
 ) -> str:
     """Render the small auto-closing callback page.
 
@@ -510,10 +526,7 @@ def render_oauth_callback_html(
     popup's parent) and auto-closes after 2 seconds.
     """
     is_success = status == "success"
-    title = (
-        f"{provider.capitalize()} Connected" if is_success
-        else "Connection Failed"
-    )
+    title = f"{provider.capitalize()} Connected" if is_success else "Connection Failed"
     return _HTML_TEMPLATE.format(
         title=title,
         message=message,

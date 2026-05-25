@@ -30,10 +30,7 @@ class GoogleGeminiProvider:
     name = "gemini"
 
     def __init__(self) -> None:
-        raise NotImplementedError(
-            "GoogleGeminiProvider is a v2 stub. The factory raises "
-            "NotImplementedError for 'gemini' in v1."
-        )
+        raise NotImplementedError("GoogleGeminiProvider is a v2 stub. The factory raises " "NotImplementedError for 'gemini' in v1.")
 
     # The Protocol surface below is declared so static type-checkers see
     # the class as a complete `AICliProvider`. None of these are reachable

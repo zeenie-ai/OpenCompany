@@ -121,23 +121,32 @@ class TestPhase3aCoverage:
 
     PHASE_3A_TYPES = [
         # utility
-        "httpRequest", "webhookTrigger", "webhookResponse",
-        "chatTrigger", "console", "teamMonitor",
+        "httpRequest",
+        "webhookTrigger",
+        "webhookResponse",
+        "chatTrigger",
+        "console",
+        "teamMonitor",
         # code
-        "pythonExecutor", "javascriptExecutor", "typescriptExecutor",
+        "pythonExecutor",
+        "javascriptExecutor",
+        "typescriptExecutor",
         # process
         "processManager",
         # workflow
-        "start", "taskTrigger",
+        "start",
+        "taskTrigger",
     ]
 
     def test_all_have_input_schema(self):
         from services.node_input_schemas import get_node_input_schema
+
         missing = [t for t in self.PHASE_3A_TYPES if get_node_input_schema(t) is None]
         assert not missing, f"Phase 3a types missing input schema: {missing}"
 
     def test_all_have_metadata(self):
         from models.node_metadata import get_node_metadata
+
         missing = [t for t in self.PHASE_3A_TYPES if get_node_metadata(t) is None]
         assert not missing, f"Phase 3a types missing display metadata: {missing}"
 
@@ -166,19 +175,28 @@ class TestPhase3bCoverage:
     twitter, social) - 11 types."""
 
     PHASE_3B_TYPES = [
-        "whatsappSend", "whatsappReceive", "whatsappDb",
-        "telegramSend", "telegramReceive",
-        "twitterSend", "twitterReceive", "twitterSearch", "twitterUser",
-        "socialReceive", "socialSend",
+        "whatsappSend",
+        "whatsappReceive",
+        "whatsappDb",
+        "telegramSend",
+        "telegramReceive",
+        "twitterSend",
+        "twitterReceive",
+        "twitterSearch",
+        "twitterUser",
+        "socialReceive",
+        "socialSend",
     ]
 
     def test_all_have_input_schema(self):
         from services.node_input_schemas import get_node_input_schema
+
         missing = [t for t in self.PHASE_3B_TYPES if get_node_input_schema(t) is None]
         assert not missing, f"Phase 3b types missing input schema: {missing}"
 
     def test_all_have_metadata(self):
         from models.node_metadata import get_node_metadata
+
         missing = [t for t in self.PHASE_3B_TYPES if get_node_metadata(t) is None]
         assert not missing, f"Phase 3b types missing display metadata: {missing}"
 
@@ -193,7 +211,13 @@ class TestPhase3bCoverage:
         spec = get_node_spec("twitterSend")
         action = spec["inputs"]["properties"]["action"]
         assert set(action["enum"]) >= {
-            "tweet", "reply", "retweet", "quote", "like", "unlike", "delete",
+            "tweet",
+            "reply",
+            "retweet",
+            "quote",
+            "like",
+            "unlike",
+            "delete",
         }
 
     def test_telegram_send_parse_mode_enum(self):
@@ -218,21 +242,40 @@ class TestPhase3cCoverage:
 
     PHASE_3C_TYPES = [
         # Base agents
-        "aiAgent", "chatAgent", "simpleMemory",
+        "aiAgent",
+        "chatAgent",
+        "simpleMemory",
         # Specialized agents (16)
-        "android_agent", "coding_agent", "web_agent", "task_agent",
-        "social_agent", "travel_agent", "tool_agent", "productivity_agent",
-        "payments_agent", "consumer_agent", "autonomous_agent",
-        "orchestrator_agent", "ai_employee", "rlm_agent",
+        "android_agent",
+        "coding_agent",
+        "web_agent",
+        "task_agent",
+        "social_agent",
+        "travel_agent",
+        "tool_agent",
+        "productivity_agent",
+        "payments_agent",
+        "consumer_agent",
+        "autonomous_agent",
+        "orchestrator_agent",
+        "ai_employee",
+        "rlm_agent",
         "claude_code_agent",
         # Chat models (9)
-        "openaiChatModel", "anthropicChatModel", "geminiChatModel",
-        "openrouterChatModel", "groqChatModel", "cerebrasChatModel",
-        "deepseekChatModel", "kimiChatModel", "mistralChatModel",
+        "openaiChatModel",
+        "anthropicChatModel",
+        "geminiChatModel",
+        "openrouterChatModel",
+        "groqChatModel",
+        "cerebrasChatModel",
+        "deepseekChatModel",
+        "kimiChatModel",
+        "mistralChatModel",
     ]
 
     def test_all_have_metadata(self):
         from models.node_metadata import get_node_metadata
+
         missing = [t for t in self.PHASE_3C_TYPES if get_node_metadata(t) is None]
         assert not missing, f"Phase 3c types missing metadata: {missing}"
 
@@ -264,21 +307,40 @@ class TestPhase3dCoverage:
 
     PHASE_3D_TYPES = [
         # Location
-        "gmaps_create", "gmaps_locations", "gmaps_nearby_places",
+        "gmaps_create",
+        "gmaps_locations",
+        "gmaps_nearby_places",
         # Scheduler / triggers
-        "cronScheduler", "timer", "googleGmailReceive",
+        "cronScheduler",
+        "timer",
+        "googleGmailReceive",
         # Chat / text
-        "chatSend", "chatHistory", "textGenerator", "fileHandler",
+        "chatSend",
+        "chatHistory",
+        "textGenerator",
+        "fileHandler",
         # Android (16)
-        "batteryMonitor", "networkMonitor", "systemInfo", "location",
-        "appLauncher", "appList", "wifiAutomation", "bluetoothAutomation",
-        "audioAutomation", "deviceStateAutomation", "screenControlAutomation",
-        "airplaneModeControl", "motionDetection", "environmentalSensors",
-        "cameraControl", "mediaControl",
+        "batteryMonitor",
+        "networkMonitor",
+        "systemInfo",
+        "location",
+        "appLauncher",
+        "appList",
+        "wifiAutomation",
+        "bluetoothAutomation",
+        "audioAutomation",
+        "deviceStateAutomation",
+        "screenControlAutomation",
+        "airplaneModeControl",
+        "motionDetection",
+        "environmentalSensors",
+        "cameraControl",
+        "mediaControl",
     ]
 
     def test_all_have_metadata(self):
         from models.node_metadata import get_node_metadata
+
         missing = [t for t in self.PHASE_3D_TYPES if get_node_metadata(t) is None]
         assert not missing, f"Phase 3d.i types missing metadata: {missing}"
 
@@ -299,6 +361,7 @@ class TestPhase3dCoverage:
         display metadata. Phase 3d.i closes the input-model gap."""
         from services.node_input_schemas import NODE_INPUT_MODELS
         from models.node_metadata import NODE_METADATA
+
         unseeded = [t for t in NODE_INPUT_MODELS if t not in NODE_METADATA]
         assert not unseeded, f"Input-modeled types still missing metadata: {unseeded}"
 
@@ -311,29 +374,51 @@ class TestPhase3dIICoverage:
 
     PHASE_3D_II_TYPES = [
         # Search
-        "braveSearch", "serperSearch", "perplexitySearch",
+        "braveSearch",
+        "serperSearch",
+        "perplexitySearch",
         # Browser / scraping
-        "browser", "crawleeScraper", "httpScraper", "apifyActor",
+        "browser",
+        "crawleeScraper",
+        "httpScraper",
+        "apifyActor",
         # Email
-        "emailSend", "emailRead", "emailReceive",
+        "emailSend",
+        "emailRead",
+        "emailReceive",
         # Google Workspace
-        "googleGmail", "googleCalendar", "googleDrive", "googleSheets", "googleTasks", "googleContacts",
+        "googleGmail",
+        "googleCalendar",
+        "googleDrive",
+        "googleSheets",
+        "googleTasks",
+        "googleContacts",
         # Document / RAG
-        "documentParser", "textChunker", "embeddingGenerator",
-        "vectorStore", "fileDownloader",
+        "documentParser",
+        "textChunker",
+        "embeddingGenerator",
+        "vectorStore",
+        "fileDownloader",
         # Filesystem
-        "fileRead", "fileModify", "fsSearch", "shell",
+        "fileRead",
+        "fileModify",
+        "fsSearch",
+        "shell",
         # Proxy
-        "proxyRequest", "proxyConfig", "proxyStatus",
+        "proxyRequest",
+        "proxyConfig",
+        "proxyStatus",
     ]
 
     def test_all_have_input_schema(self):
         from services.node_input_schemas import get_node_input_schema
+
         missing = [t for t in self.PHASE_3D_II_TYPES if get_node_input_schema(t) is None]
         assert not missing, f"Phase 3d.ii types missing input schema: {missing}"
 
     def test_all_have_metadata(self):
         from models.node_metadata import get_node_metadata
+
         missing = [t for t in self.PHASE_3D_II_TYPES if get_node_metadata(t) is None]
         assert not missing, f"Phase 3d.ii types missing metadata: {missing}"
 
@@ -371,15 +456,18 @@ class TestWave6FullCoverage:
     def test_input_models_have_metadata(self):
         from services.node_input_schemas import NODE_INPUT_MODELS
         from models.node_metadata import NODE_METADATA
+
         gap = sorted(set(NODE_INPUT_MODELS.keys()) - set(NODE_METADATA.keys()))
         assert not gap, f"Input models without metadata: {gap}"
 
     def test_total_nodespec_count_at_least_110(self):
         from services.node_spec import list_node_types_with_spec
+
         assert len(list_node_types_with_spec()) >= 110
 
     def test_input_model_count_at_least_100(self):
         from services.node_input_schemas import NODE_INPUT_MODELS
+
         assert len(NODE_INPUT_MODELS) >= 100
 
 
@@ -388,18 +476,21 @@ class TestPhase4LoadOptions:
 
     def test_registry_has_whatsapp_methods(self):
         from services.ws_handler_registry import list_load_options_methods
+
         methods = list_load_options_methods()
         for method in ["whatsappGroups", "whatsappChannels", "whatsappGroupMembers"]:
             assert method in methods
 
     def test_registry_has_google_methods(self):
         from services.ws_handler_registry import list_load_options_methods
+
         methods = list_load_options_methods()
         for method in ["gmailLabels", "googleCalendarList", "googleDriveFolders", "googleTasklists"]:
             assert method in methods
 
     def test_list_methods_sorted(self):
         from services.ws_handler_registry import list_load_options_methods
+
         methods = list_load_options_methods()
         assert methods == sorted(methods)
         assert len(methods) >= 7
@@ -407,6 +498,7 @@ class TestPhase4LoadOptions:
     @pytest.mark.asyncio
     async def test_unknown_method_returns_empty(self):
         from services.ws_handler_registry import dispatch_load_options
+
         result = await dispatch_load_options("nonExistentMethodXyz", {})
         assert result == []
 
@@ -414,6 +506,7 @@ class TestPhase4LoadOptions:
     async def test_dispatch_passes_params(self):
         # Smoke test: unknown method tolerates arbitrary params, doesn't crash
         from services.ws_handler_registry import dispatch_load_options
+
         result = await dispatch_load_options("unknown", {"group_id": "abc"})
         assert result == []
 
@@ -424,30 +517,35 @@ class TestPhase5NodeGroups:
 
     def test_returns_dict(self):
         from services.node_spec import list_node_groups
+
         groups = list_node_groups()
         assert isinstance(groups, dict)
         assert len(groups) > 0
 
     def test_known_groups_present(self):
         from services.node_spec import list_node_groups
+
         groups = list_node_groups()
         for expected in ["agent", "trigger", "tool", "model", "android", "social"]:
             assert expected in groups, f"Missing group {expected!r}"
 
     def test_tool_group_includes_known_tools(self):
         from services.node_spec import list_node_groups
+
         tools = set(list_node_groups()["tool"]["types"])
         for expected in ["pythonExecutor", "javascriptExecutor", "httpRequest"]:
             assert expected in tools
 
     def test_trigger_group_includes_known_triggers(self):
         from services.node_spec import list_node_groups
+
         triggers = set(list_node_groups()["trigger"]["types"])
         for expected in ["webhookTrigger", "chatTrigger", "telegramReceive", "twitterReceive"]:
             assert expected in triggers
 
     def test_each_group_alphabetised(self):
         from services.node_spec import list_node_groups
+
         for group, entry in list_node_groups().items():
             types = entry["types"]
             assert types == sorted(types), f"Group {group!r} not sorted: {types}"
@@ -458,12 +556,11 @@ class TestPhase5NodeGroups:
         via ``register_group`` in ``server/nodes/groups.py``. Prevents
         a new group key silently rendering unlabelled in the palette."""
         from services.node_spec import list_node_groups
+
         for group, entry in list_node_groups().items():
             assert entry["label"], f"{group}: missing label"
             assert entry["icon"], f"{group}: missing icon"
-            assert entry["visibility"] in ("normal", "dev", "all"), (
-                f"{group}: visibility={entry['visibility']!r}"
-            )
+            assert entry["visibility"] in ("normal", "dev", "all"), f"{group}: visibility={entry['visibility']!r}"
 
 
 class TestDisplayOptionsEnrichment:
@@ -700,12 +797,14 @@ class TestNodeSpecContractInvariants:
 
     def _all_spec_types(self):
         from services.node_spec import list_node_types_with_spec
+
         return list_node_types_with_spec()
 
     def test_every_spec_has_required_wire_fields(self):
         """Every spec must have: type, displayName, group, version.
         Missing any of these would break the adapter's defaults()."""
         from services.node_spec import get_node_spec
+
         for t in self._all_spec_types():
             spec = get_node_spec(t)
             assert spec is not None, f"No spec for {t}"
@@ -719,6 +818,7 @@ class TestNodeSpecContractInvariants:
         object with properties dict. The adapter crashes if properties
         is missing."""
         from services.node_input_schemas import get_node_input_schema, NODE_INPUT_MODELS
+
         for t in NODE_INPUT_MODELS:
             schema = get_node_input_schema(t)
             assert schema is not None, f"Input schema None for {t}"
@@ -731,6 +831,7 @@ class TestNodeSpecContractInvariants:
         values are lists (the INodeProperties.displayOptions shape the
         frontend evaluator expects)."""
         from services.node_input_schemas import get_node_input_schema, NODE_INPUT_MODELS
+
         for t in NODE_INPUT_MODELS:
             schema = get_node_input_schema(t)
             for prop_name, prop in schema.get("properties", {}).items():
@@ -741,9 +842,7 @@ class TestNodeSpecContractInvariants:
                         continue
                     assert isinstance(rule, dict), f"{t}.{prop_name}.displayOptions.{key} not dict"
                     for ref_field, allowed in rule.items():
-                        assert isinstance(allowed, list), (
-                            f"{t}.{prop_name}.displayOptions.{key}[{ref_field!r}] must be list"
-                        )
+                        assert isinstance(allowed, list), f"{t}.{prop_name}.displayOptions.{key}[{ref_field!r}] must be list"
 
     def test_load_options_methods_are_registered(self):
         """Every Pydantic Field(loadOptionsMethod=X) must point at a
@@ -752,6 +851,7 @@ class TestNodeSpecContractInvariants:
         forgotten loader registrations."""
         from services.node_input_schemas import get_node_input_schema, NODE_INPUT_MODELS
         from services.ws_handler_registry import list_load_options_methods
+
         methods = set(list_load_options_methods())
         for t in NODE_INPUT_MODELS:
             schema = get_node_input_schema(t)
@@ -759,9 +859,7 @@ class TestNodeSpecContractInvariants:
                 method = prop.get("loadOptionsMethod")
                 if method is None:
                     continue
-                assert method in methods, (
-                    f"{t}.{prop_name} references unknown loadOptionsMethod {method!r}"
-                )
+                assert method in methods, f"{t}.{prop_name} references unknown loadOptionsMethod {method!r}"
 
     def test_every_enum_option_is_serialisable(self):
         """Frontend options are {name, value} where value is scalar.
@@ -769,6 +867,7 @@ class TestNodeSpecContractInvariants:
         non-serialisable types."""
         from services.node_input_schemas import get_node_input_schema, NODE_INPUT_MODELS
         import json
+
         for t in NODE_INPUT_MODELS:
             schema = get_node_input_schema(t)
             for prop_name, prop in schema.get("properties", {}).items():
@@ -777,23 +876,31 @@ class TestNodeSpecContractInvariants:
                     try:
                         json.dumps(val)
                     except (TypeError, ValueError) as e:
-                        raise AssertionError(
-                            f"{t}.{prop_name} enum value {val!r} not JSON-serialisable: {e}"
-                        )
+                        raise AssertionError(f"{t}.{prop_name} enum value {val!r} not JSON-serialisable: {e}")
 
     def test_ui_hints_only_carry_known_flags(self):
         """NODE_METADATA uiHints should only carry flags the frontend
         INodeUIHints knows about. New flag names without a frontend
         consumer are dead weight."""
         from models.node_metadata import NODE_METADATA
+
         known = {
-            "hideInputSection", "hideOutputSection", "hideRunButton",
-            "hasCodeEditor", "isMasterSkillEditor",
-            "isMemoryPanel", "isToolPanel", "isMonitorPanel",
-            "showLocationPanel", "isAndroidToolkit", "isChatTrigger",
-            "isConsoleSink", "hasSkills",
+            "hideInputSection",
+            "hideOutputSection",
+            "hideRunButton",
+            "hasCodeEditor",
+            "isMasterSkillEditor",
+            "isMemoryPanel",
+            "isToolPanel",
+            "isMonitorPanel",
+            "showLocationPanel",
+            "isAndroidToolkit",
+            "isChatTrigger",
+            "isConsoleSink",
+            "hasSkills",
             # Wave 10.A: size hints carried by plugin registrations
-            "width", "height",
+            "width",
+            "height",
             # Wave 10.G.5: start-node's user-authored JSON blob marker
             "hasInitialDataBlob",
             # Auto-derived from group membership ('memory' / 'tool') by
@@ -806,8 +913,7 @@ class TestNodeSpecContractInvariants:
             hints = meta.get("uiHints") or {}
             unknown = set(hints.keys()) - known
             assert not unknown, (
-                f"{node_type}: NODE_METADATA['uiHints'] has unknown flags {unknown}. "
-                "Add to INodeUIHints + to the `known` set here."
+                f"{node_type}: NODE_METADATA['uiHints'] has unknown flags {unknown}. " "Add to INodeUIHints + to the `known` set here."
             )
 
 
@@ -818,8 +924,15 @@ class TestPluginContractInvariants:
     """
 
     VALID_KINDS = {
-        "square", "circle", "trigger", "start",
-        "agent", "chat", "tool", "model", "generic",
+        "square",
+        "circle",
+        "trigger",
+        "start",
+        "agent",
+        "chat",
+        "tool",
+        "model",
+        "generic",
     }
     VALID_POSITIONS = {"top", "bottom", "left", "right"}
 
@@ -827,9 +940,11 @@ class TestPluginContractInvariants:
         # Types registered via services.node_registry.register_node (Wave 10.C).
         import nodes  # noqa: F401  — import trigger
         from services.node_registry import registered_node_types
+
         # Fall back to any metadata entry that carries componentKind, so the
         # test still passes for metadata-only registrations (no handler).
         from models.node_metadata import NODE_METADATA
+
         explicit = {t for t, m in NODE_METADATA.items() if "componentKind" in m}
         return registered_node_types() | explicit
 
@@ -837,9 +952,9 @@ class TestPluginContractInvariants:
         for t in self._plugin_types():
             spec = get_node_spec(t)
             assert spec is not None, f"{t}: no NodeSpec emitted"
-            assert spec.get("componentKind") in self.VALID_KINDS, (
-                f"{t}: componentKind={spec.get('componentKind')!r} not in {self.VALID_KINDS}"
-            )
+            assert (
+                spec.get("componentKind") in self.VALID_KINDS
+            ), f"{t}: componentKind={spec.get('componentKind')!r} not in {self.VALID_KINDS}"
 
     def test_every_plugin_node_has_color(self):
         # Color is the brand/accent each node owns. Without it the frontend
@@ -864,12 +979,8 @@ class TestPluginContractInvariants:
             spec = get_node_spec(t)
             for h in spec.get("handles") or []:
                 assert "name" in h, f"{t}: handle missing name: {h}"
-                assert h.get("kind") in {"input", "output"}, (
-                    f"{t}.{h.get('name')}: kind={h.get('kind')!r} not input/output"
-                )
-                assert h.get("position") in self.VALID_POSITIONS, (
-                    f"{t}.{h.get('name')}: position={h.get('position')!r} invalid"
-                )
+                assert h.get("kind") in {"input", "output"}, f"{t}.{h.get('name')}: kind={h.get('kind')!r} not input/output"
+                assert h.get("position") in self.VALID_POSITIONS, f"{t}.{h.get('name')}: position={h.get('position')!r} invalid"
 
     def test_agent_kind_has_skill_tool_memory_handles(self):
         # Contract: anything registered as an agent must accept skill,
@@ -886,9 +997,7 @@ class TestPluginContractInvariants:
                 continue
             names = {h.get("name") for h in spec.get("handles") or []}
             for required in ("input-skill", "input-tools", "input-memory", "input-task"):
-                assert required in names, (
-                    f"{t}: componentKind=agent missing handle {required!r}; got {sorted(names)}"
-                )
+                assert required in names, f"{t}: componentKind=agent missing handle {required!r}; got {sorted(names)}"
 
     def test_trigger_kind_emits_output(self):
         # Triggers without an output are useless — they emit events
@@ -916,20 +1025,16 @@ class TestPluginContractInvariants:
         # be consistent" — auto-derived is not author intent, so skip
         # those nodes.
         from services.node_registry import get_node_class
+
         for t in self._plugin_types():
             spec = get_node_spec(t)
             if not spec.get("hideOutputHandle"):
                 continue
             cls = get_node_class(t)
-            if cls is not None and (
-                getattr(cls, "usable_as_tool", False)
-                or getattr(cls, "component_kind", "") == "tool"
-            ):
+            if cls is not None and (getattr(cls, "usable_as_tool", False) or getattr(cls, "component_kind", "") == "tool"):
                 continue
             outs = [h for h in spec.get("handles") or [] if h.get("kind") == "output"]
-            assert not outs, (
-                f"{t}: hideOutputHandle=True but handles declares output(s) {outs}"
-            )
+            assert not outs, f"{t}: hideOutputHandle=True but handles declares output(s) {outs}"
 
 
 class TestWave10GContractInvariants:
@@ -944,6 +1049,7 @@ class TestWave10GContractInvariants:
         import nodes  # noqa: F401
         from services.node_registry import registered_node_types
         from models.node_metadata import NODE_METADATA
+
         explicit = {t for t, m in NODE_METADATA.items() if "componentKind" in m}
         return registered_node_types() | explicit
 
@@ -959,9 +1065,7 @@ class TestWave10GContractInvariants:
             if t in self.AGENT_EXEMPT:
                 continue
             hints = spec.get("uiHints") or {}
-            assert hints.get("hasSkills") is True, (
-                f"{t}: componentKind=agent must declare uiHints.hasSkills=True"
-            )
+            assert hints.get("hasSkills") is True, f"{t}: componentKind=agent must declare uiHints.hasSkills=True"
 
     def test_every_tool_kind_declares_isToolPanel(self):
         """Every dedicated tool node (componentKind='tool') must emit
@@ -975,9 +1079,7 @@ class TestWave10GContractInvariants:
             if spec.get("componentKind") != "tool":
                 continue
             hints = spec.get("uiHints") or {}
-            assert hints.get("isToolPanel") is True, (
-                f"{t}: componentKind=tool must declare uiHints.isToolPanel=True"
-            )
+            assert hints.get("isToolPanel") is True, f"{t}: componentKind=tool must declare uiHints.isToolPanel=True"
 
     def test_google_workspace_nodes_have_operation_gating(self):
         """Drive / Sheets / Tasks / Contacts / Gmail all have an
@@ -985,31 +1087,25 @@ class TestWave10GContractInvariants:
         behind `displayOptions.show.operation` so the panel isn't a
         flat dump of every op's fields."""
         from services.node_input_schemas import get_node_input_schema
+
         for t in ("googleGmail", "googleDrive", "googleSheets", "googleTasks", "googleContacts"):
             schema = get_node_input_schema(t)
             assert schema, f"{t}: no input schema"
             props = schema.get("properties") or {}
-            gated = [
-                name for name, p in props.items()
-                if (p.get("displayOptions") or {}).get("show", {}).get("operation")
-            ]
-            assert gated, (
-                f"{t}: no field declares displayOptions.show.operation; "
-                "every per-op field would render at once"
-            )
+            gated = [name for name, p in props.items() if (p.get("displayOptions") or {}).get("show", {}).get("operation")]
+            assert gated, f"{t}: no field declares displayOptions.show.operation; " "every per-op field would render at once"
 
     def test_code_executors_declare_code_editor(self):
         """The ParameterRenderer `case 'code'` widget only fires when
         the Pydantic field emits `editor: 'code'`. Without this the
         code executor falls back to a plain string input."""
         from services.node_input_schemas import get_node_input_schema
+
         for t in ("pythonExecutor", "javascriptExecutor", "typescriptExecutor"):
             schema = get_node_input_schema(t)
             code_field = (schema.get("properties") or {}).get("code")
             assert code_field, f"{t}: `code` field missing from input schema"
-            assert code_field.get("editor") == "code", (
-                f"{t}.code: expected `editor: 'code'`, got {code_field.get('editor')!r}"
-            )
+            assert code_field.get("editor") == "code", f"{t}.code: expected `editor: 'code'`, got {code_field.get('editor')!r}"
 
     def test_every_asset_icon_has_matching_svg(self):
         """Wave 10.B: every ``asset:<key>`` string emitted by a plugin
@@ -1036,8 +1132,7 @@ class TestWave10GContractInvariants:
             if m and m.group(1) not in svg_keys:
                 missing.append(f"{node_type}.icon={icon!r}")
         assert not missing, (
-            f"asset:<key> references with no matching SVG: {missing}. "
-            f"Drop the file at client/src/assets/icons/<folder>/<key>.svg."
+            f"asset:<key> references with no matching SVG: {missing}. " f"Drop the file at client/src/assets/icons/<folder>/<key>.svg."
         )
 
     def test_api_key_fields_are_password_masked(self):
@@ -1046,6 +1141,7 @@ class TestWave10GContractInvariants:
         Tribal risk: a new node author forgets the hint and the key
         renders in plaintext."""
         from services.node_input_schemas import NODE_INPUT_MODELS, get_node_input_schema
+
         offenders = []
         for t in NODE_INPUT_MODELS:
             schema = get_node_input_schema(t)
@@ -1054,7 +1150,4 @@ class TestWave10GContractInvariants:
             for name, prop in (schema.get("properties") or {}).items():
                 if name in ("api_key", "api_key") and prop.get("password") is not True:
                     offenders.append(f"{t}.{name}")
-        assert not offenders, (
-            "API-key fields missing password:True — they would render in "
-            f"plaintext: {offenders}"
-        )
+        assert not offenders, "API-key fields missing password:True — they would render in " f"plaintext: {offenders}"

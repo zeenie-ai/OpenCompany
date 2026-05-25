@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
 # Shared data types
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class CanonicalUsage:
     """Vendor-normalised token counts.
@@ -34,6 +35,7 @@ class CanonicalUsage:
     differently) maps into this so the existing `services/pricing.py`
     can compute USD without per-vendor branches.
     """
+
     input_tokens: int = 0
     output_tokens: int = 0
     cache_read: int = 0
@@ -48,6 +50,7 @@ class SessionResult:
 
     Shared keys are the schema; vendor extras live in `provider_data`.
     """
+
     task_id: str
     session_id: Optional[str] = None
     provider: str = ""
@@ -68,6 +71,7 @@ class SessionResult:
 @dataclass
 class BatchResult:
     """Aggregated result returned by `AICliService.run_batch()`."""
+
     tasks: List[SessionResult] = field(default_factory=list)
     n_tasks: int = 0
     n_succeeded: int = 0
@@ -83,6 +87,7 @@ class BatchResult:
 # Provider protocol (structural typing)
 # ---------------------------------------------------------------------------
 
+
 @runtime_checkable
 class AICliProvider(Protocol):
     """Structural Protocol for an AI CLI provider.
@@ -93,21 +98,23 @@ class AICliProvider(Protocol):
       - `providers.google_gemini.GoogleGeminiProvider` (v2 stub)
     """
 
-    name: str                          # "claude" | "codex" | "gemini"
-    package_name: str                  # npm package
-    binary_name: str                   # "claude" | "codex" | "gemini"
-    ide_lock_env_var: Optional[str]    # CLAUDE_IDE_LOCK | GEMINI_IDE_LOCK | None
-    ide_lockfile_dir: Optional[Path]   # <MACHINA_CLAUDE_DIR>/ide | <tmpdir>/gemini/ide
+    name: str  # "claude" | "codex" | "gemini"
+    package_name: str  # npm package
+    binary_name: str  # "claude" | "codex" | "gemini"
+    ide_lock_env_var: Optional[str]  # CLAUDE_IDE_LOCK | GEMINI_IDE_LOCK | None
+    ide_lockfile_dir: Optional[Path]  # <MACHINA_CLAUDE_DIR>/ide | <tmpdir>/gemini/ide
 
     # ---- spawn surface ---------------------------------------------------
 
-    def binary_path(self) -> Path: ...
+    def binary_path(self) -> Path:
+        ...
         # Resolve the CLI binary. Resolution chain (Composio pattern):
         #   1) shutil.which(<binary_name>)
         #   2) `npx --yes <package_name>` shim path
         # Raises FileNotFoundError if neither is available.
 
-    def interactive_argv(self, task: Any, *, defaults: Dict[str, Any]) -> List[str]: ...
+    def interactive_argv(self, task: Any, *, defaults: Dict[str, Any]) -> List[str]:
+        ...
         # Build the full argv (binary + flags) for spawning a session
         # over `task` (a `<Provider>TaskSpec` Pydantic model). For
         # Claude, this is the interactive-TUI shape (no `-p`, prompt as
@@ -117,17 +124,20 @@ class AICliProvider(Protocol):
 
     # ---- native auth (no token wrapping) --------------------------------
 
-    def login_argv(self) -> List[str]: ...
+    def login_argv(self) -> List[str]:
+        ...
         # CLI's own login command, e.g. ["claude", "login"]. Spawned
         # interactively from the Credentials Modal. CLI stores its own
         # credentials in `~/.claude/`, `~/.codex/`, `~/.gemini/`.
 
-    def auth_status_argv(self) -> Optional[List[str]]: ...
+    def auth_status_argv(self) -> Optional[List[str]]:
+        ...
         # No-op invocation to verify auth, e.g. ["claude", "--print", "-p", "ok"].
         # Returns None if no cheap probe exists; in that case the framework
         # infers from the first session's stderr.
 
-    def detect_auth_error(self, stderr: str, exit_code: int) -> bool: ...
+    def detect_auth_error(self, stderr: str, exit_code: int) -> bool:
+        ...
         # Match "not logged in" patterns:
         #   Claude: "Please run 'claude login'"
         #   Codex:  HTTP 401 / "OPENAI_API_KEY not set"
@@ -135,11 +145,13 @@ class AICliProvider(Protocol):
 
     # ---- streaming output parsing ---------------------------------------
 
-    def parse_event(self, line: str) -> Optional[Dict[str, Any]]: ...
+    def parse_event(self, line: str) -> Optional[Dict[str, Any]]:
+        ...
         # Parse a single NDJSON line from stdout. Return None for
         # un-parseable garbage.
 
-    def is_final_event(self, event: Dict[str, Any]) -> bool: ...
+    def is_final_event(self, event: Dict[str, Any]) -> bool:
+        ...
         # True if this event marks end-of-task. For Claude: `type=="result"`.
         # For Gemini: `type=="result"`. For Codex: `type=="complete"` or
         # heuristic fallback.
@@ -149,7 +161,8 @@ class AICliProvider(Protocol):
         events: List[Dict[str, Any]],
         stderr: str,
         exit_code: int,
-    ) -> Dict[str, Any]: ...
+    ) -> Dict[str, Any]:
+        ...
         # Reconstruct a partial dict of `SessionResult` fields from the
         # event stream. Returns:
         #   {
@@ -164,13 +177,15 @@ class AICliProvider(Protocol):
         # bloating the shared schema. Pattern from
         # Hermes agent/transports/types.py NormalizedResponse.
 
-    def canonical_usage(self, events: List[Dict[str, Any]]) -> CanonicalUsage: ...
+    def canonical_usage(self, events: List[Dict[str, Any]]) -> CanonicalUsage:
+        ...
         # Normalise vendor token-counting into the shared `CanonicalUsage`
         # shape. Pattern from Hermes agent/usage_pricing.py.
 
     # ---- feature gating --------------------------------------------------
 
-    def supports(self, feature: str) -> bool: ...
+    def supports(self, feature: str) -> bool:
+        ...
         # Feature flags consulted by the session/service layer.
         # Recognised: "max_budget", "max_turns", "session_id", "resume",
         # "mcp_runtime", "json_cost", "ide_lockfile", "sandbox".

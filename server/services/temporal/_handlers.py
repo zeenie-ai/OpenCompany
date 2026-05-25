@@ -11,6 +11,7 @@ All three share the snapshot shape from
 single source of truth for the ``{temporal}`` payload that the
 WS-connect refresh callback also emits.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -24,14 +25,16 @@ logger = get_logger(__name__)
 
 
 async def handle_temporal_status(
-    data: dict[str, Any], websocket: WebSocket,
+    data: dict[str, Any],
+    websocket: WebSocket,
 ) -> dict[str, Any]:
     """Return the status snapshot for the Temporal runtime."""
     return temporal_status_snapshot()
 
 
 async def handle_temporal_start(
-    data: dict[str, Any], websocket: WebSocket,
+    data: dict[str, Any],
+    websocket: WebSocket,
 ) -> dict[str, Any]:
     """Start Temporal. Idempotent — ``.start()`` returns immediately if
     the runtime is already running."""
@@ -42,7 +45,8 @@ async def handle_temporal_start(
 
 
 async def handle_temporal_stop(
-    data: dict[str, Any], websocket: WebSocket,
+    data: dict[str, Any],
+    websocket: WebSocket,
 ) -> dict[str, Any]:
     """Stop Temporal. Idempotent."""
     from services.temporal._runtime import get_temporal_server_runtime

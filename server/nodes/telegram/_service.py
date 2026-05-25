@@ -203,15 +203,12 @@ class TelegramService(ServiceSingleton):
             # tasks fired on overlapping WebSocket connects.
             if self._connected:
                 logger.debug(
-                    "[Telegram] connect() called while already connected to "
-                    f"@{self._bot_info.get('username')}, returning success",
+                    "[Telegram] connect() called while already connected to " f"@{self._bot_info.get('username')}, returning success",
                 )
                 return {
                     "success": True,
                     "bot": self._bot_info,
-                    "message": (
-                        f"Already connected to @{self._bot_info.get('username')}"
-                    ),
+                    "message": (f"Already connected to @{self._bot_info.get('username')}"),
                 }
 
             try:
@@ -240,9 +237,7 @@ class TelegramService(ServiceSingleton):
                 )
                 self._bot = self._application.bot
                 self._token = token
-                self._application.add_handler(
-                    MessageHandler(filters.ALL, self._on_message_received)
-                )
+                self._application.add_handler(MessageHandler(filters.ALL, self._on_message_received))
 
                 await self._application.initialize()
 
@@ -264,9 +259,7 @@ class TelegramService(ServiceSingleton):
                 saved_owner = secrets.get("telegram_owner_chat_id")
                 if saved_owner is None:
                     try:
-                        saved_owner = (await TelegramCredential.resolve()).get(
-                            "telegram_owner_chat_id"
-                        )
+                        saved_owner = (await TelegramCredential.resolve()).get("telegram_owner_chat_id")
                     except PermissionError:
                         saved_owner = None
                 if saved_owner:
@@ -410,6 +403,7 @@ class TelegramService(ServiceSingleton):
             captured_id = m.from_user.id
             try:
                 from services.plugin.deps import get_auth_service
+
                 await get_auth_service().store_api_key(
                     "telegram_owner_chat_id",
                     str(captured_id),
@@ -424,10 +418,7 @@ class TelegramService(ServiceSingleton):
                 )
                 return
             self._owner_chat_id = captured_id
-            logger.info(
-                f"[Telegram] Owner retroactively captured from pending "
-                f"updates: @{m.from_user.username} (ID: {captured_id})"
-            )
+            logger.info(f"[Telegram] Owner retroactively captured from pending " f"updates: @{m.from_user.username} (ID: {captured_id})")
             return
 
     async def _on_message_received(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -448,15 +439,12 @@ class TelegramService(ServiceSingleton):
             # what went wrong. The new order preserves the invariant
             # "in-memory has owner => DB has owner" so a restart can
             # always re-capture from the next inbound private message.
-            if (
-                self._owner_chat_id is None
-                and msg.chat.type == "private"
-                and msg.from_user
-            ):
+            if self._owner_chat_id is None and msg.chat.type == "private" and msg.from_user:
                 captured_id = msg.from_user.id
                 persist_ok = False
                 try:
                     from services.plugin.deps import get_auth_service
+
                     await get_auth_service().store_api_key(
                         "telegram_owner_chat_id",
                         str(captured_id),
@@ -480,10 +468,7 @@ class TelegramService(ServiceSingleton):
                     )
                 if persist_ok:
                     self._owner_chat_id = captured_id
-                    logger.info(
-                        f"[Telegram] Owner detected and persisted: "
-                        f"@{msg.from_user.username} (ID: {captured_id})"
-                    )
+                    logger.info(f"[Telegram] Owner detected and persisted: " f"@{msg.from_user.username} (ID: {captured_id})")
                     await self._broadcast_status()
 
             event_data = self._format_message(msg)
@@ -603,12 +588,11 @@ class TelegramService(ServiceSingleton):
         if not text:
             return text, "HTML"
         from services.markdown_formatter import to_telegram_html
+
         return to_telegram_html(text), "HTML"
 
     @classmethod
-    def _resolve_body(
-        cls, body: Optional[str], parse_mode: Optional[str]
-    ) -> tuple[Optional[str], Optional[str]]:
+    def _resolve_body(cls, body: Optional[str], parse_mode: Optional[str]) -> tuple[Optional[str], Optional[str]]:
         """Apply parse-mode preprocessing to a text/caption.  Returns
         ``(body, effective_parse_mode)``."""
         if parse_mode == "Auto":
@@ -638,10 +622,7 @@ class TelegramService(ServiceSingleton):
             )
         except BadRequest as e:
             if "can't parse entities" in str(e).lower() and effective_pm:
-                logger.warning(
-                    f"[Telegram] Parse mode {effective_pm} failed for "
-                    f"{method.__name__}, sending as plain text"
-                )
+                logger.warning(f"[Telegram] Parse mode {effective_pm} failed for " f"{method.__name__}, sending as plain text")
                 return await method(
                     **{body_kw: body},
                     parse_mode=None,
@@ -672,7 +653,8 @@ class TelegramService(ServiceSingleton):
         if len(chunks) > 1:
             logger.info(
                 "[Telegram] Splitting %d-char message into %d parts",
-                len(text), len(chunks),
+                len(text),
+                len(chunks),
             )
 
         first_msg: Any = None

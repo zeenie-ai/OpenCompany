@@ -51,7 +51,10 @@ def parse_jsonl(text: str) -> List[BaseMessage]:
 
 
 def append_message(
-    text: str, role: str, content: str, **metadata: Any,
+    text: str,
+    role: str,
+    content: str,
+    **metadata: Any,
 ) -> str:
     """Append one Anthropic Messages-format line to a JSONL string.
 
@@ -59,7 +62,8 @@ def append_message(
     a trailing newline so successive appends concatenate cleanly.
     """
     line = json.dumps(
-        {"role": role, "content": content, **metadata}, ensure_ascii=False,
+        {"role": role, "content": content, **metadata},
+        ensure_ascii=False,
     )
     if text and not text.endswith("\n"):
         text = text + "\n"

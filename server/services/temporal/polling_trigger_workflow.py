@@ -153,9 +153,7 @@ class PollingTriggerWorkflow:
                 # Activity exhausted its RetryPolicy. Log + continue —
                 # don't terminate the listener over one bad cycle.
                 # Workflow Event History records the failure for ops.
-                workflow.logger.error(
-                    f"PollingTriggerWorkflow cycle failed (will retry next interval): {exc}"
-                )
+                workflow.logger.error(f"PollingTriggerWorkflow cycle failed (will retry next interval): {exc}")
                 continue
 
             seen_ids = set(result.get("seen_ids") or [])
@@ -172,15 +170,11 @@ class PollingTriggerWorkflow:
                     # Per-event spawn failure logged; subsequent events
                     # still try. Same isolation contract as the push
                     # listener.
-                    workflow.logger.error(
-                        f"PollingTriggerWorkflow spawn failed for event.id={event_id}: {spawn_exc}"
-                    )
+                    workflow.logger.error(f"PollingTriggerWorkflow spawn failed for event.id={event_id}: {spawn_exc}")
                 self._processed_count += 1
 
             if self._processed_count >= _MAX_EVENTS_BEFORE_CONTINUE_AS_NEW:
-                workflow.logger.info(
-                    f"PollingTriggerWorkflow continue_as_new: processed={self._processed_count}"
-                )
+                workflow.logger.info(f"PollingTriggerWorkflow continue_as_new: processed={self._processed_count}")
                 # Carry seen_ids forward so the new run doesn't re-emit
                 # what's already been seen by the provider.
                 listener_data["seen_ids"] = list(seen_ids)
@@ -244,13 +238,15 @@ class PollingTriggerWorkflow:
 
         await workflow.start_child_workflow(
             "MachinaWorkflow",
-            args=[{
-                "nodes": filtered_nodes,
-                "edges": filtered_edges,
-                "session_id": session_id,
-                "workflow_id": workflow_id,
-                "tenant_id": tenant_id,
-            }],
+            args=[
+                {
+                    "nodes": filtered_nodes,
+                    "edges": filtered_edges,
+                    "session_id": session_id,
+                    "workflow_id": workflow_id,
+                    "tenant_id": tenant_id,
+                }
+            ],
             id=child_id,
             parent_close_policy=ParentClosePolicy.ABANDON,
             id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE_FAILED_ONLY,
@@ -258,10 +254,7 @@ class PollingTriggerWorkflow:
             run_timeout=timedelta(hours=1),
         )
 
-        workflow.logger.info(
-            f"PollingTriggerWorkflow spawned child run: child_id={child_id} "
-            f"event.id={event.get('id')}"
-        )
+        workflow.logger.info(f"PollingTriggerWorkflow spawned child run: child_id={child_id} " f"event.id={event.get('id')}")
 
         await _broadcast_trigger_waiting(
             node_id=trigger_node_id,

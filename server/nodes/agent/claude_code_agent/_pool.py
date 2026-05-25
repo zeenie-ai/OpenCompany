@@ -204,7 +204,8 @@ class ClaudeSessionPool:
             return
         self._shutdown.clear()
         self._reaper_task = asyncio.create_task(
-            self._reaper_loop(), name="ClaudeSessionPool.reaper",
+            self._reaper_loop(),
+            name="ClaudeSessionPool.reaper",
         )
 
     def peek(self, memory_node_id: str) -> Optional[PooledClaudeSession]:
@@ -250,9 +251,9 @@ class ClaudeSessionPool:
             crashed_uuid = ""
             if existing is not None and existing.process.returncode is not None:
                 logger.info(
-                    "[ClaudeSessionPool] dropping dead session "
-                    "memory_node=%s pid=%s exit=%s — will respawn",
-                    memory_node_id, existing.process.pid,
+                    "[ClaudeSessionPool] dropping dead session " "memory_node=%s pid=%s exit=%s — will respawn",
+                    memory_node_id,
+                    existing.process.pid,
                     existing.process.returncode,
                 )
                 crashed_uuid = existing.current_session_uuid
@@ -276,14 +277,13 @@ class ClaudeSessionPool:
                 # T_warm (the argv-baked one), then drop T_new — it
                 # would otherwise sit orphaned in ``_active_tokens``
                 # until app shutdown.
-                if (
-                    existing.batch_token
-                    and mcp_bearer_token
-                    and mcp_bearer_token != existing.batch_token
-                ):
+                if existing.batch_token and mcp_bearer_token and mcp_bearer_token != existing.batch_token:
                     from services.cli_agent.mcp_server import (
-                        lookup_batch, rebind_batch, unregister_batch,
+                        lookup_batch,
+                        rebind_batch,
+                        unregister_batch,
                     )
+
                     new_ctx = lookup_batch(mcp_bearer_token)
                     if new_ctx is not None:
                         rebind_batch(
@@ -305,6 +305,7 @@ class ClaudeSessionPool:
                 # the delta on disk.
                 if existing.workspace_dir is not None:
                     from ._skills import materialise_skills
+
                     new_set = frozenset(connected_skill_names or [])
                     added, removed = await materialise_skills(
                         existing.workspace_dir,
@@ -314,14 +315,17 @@ class ClaudeSessionPool:
                     )
                     if added or removed:
                         logger.info(
-                            "[ClaudeSessionPool] skill diff "
-                            "memory_node=%s +%d -%d (now %d wired)",
-                            memory_node_id, added, removed, len(new_set),
+                            "[ClaudeSessionPool] skill diff " "memory_node=%s +%d -%d (now %d wired)",
+                            memory_node_id,
+                            added,
+                            removed,
+                            len(new_set),
                         )
                     existing.materialised_skills = new_set
                 logger.info(
                     "[ClaudeSessionPool] warm reuse memory_node=%s pid=%s uuid=%s",
-                    memory_node_id, existing.process.pid,
+                    memory_node_id,
+                    existing.process.pid,
                     existing.current_session_uuid or "(unresolved)",
                 )
                 return existing
@@ -357,9 +361,7 @@ class ClaudeSessionPool:
             # paths know where to materialise live updates and what
             # the prior set was for the diff.
             session.workspace_dir = workspace_dir
-            session.materialised_skills = frozenset(
-                connected_skill_names or []
-            )
+            session.materialised_skills = frozenset(connected_skill_names or [])
             if crashed_uuid:
                 # The new subprocess is resuming the prior session; pre-seed
                 # the UUID so the first turn's emitted CloudEvents carry
@@ -368,7 +370,8 @@ class ClaudeSessionPool:
             self._pool[memory_node_id] = session
             logger.info(
                 "[ClaudeSessionPool] spawned new session memory_node=%s pid=%s",
-                memory_node_id, session.process.pid,
+                memory_node_id,
+                session.process.pid,
             )
             await self._emit_event(
                 "spawned",
@@ -462,10 +465,7 @@ class ClaudeSessionPool:
                     events=[],
                     prompt=prompt,
                     success=False,
-                    error=(
-                        f"claude subprocess exited (code "
-                        f"{session.process.returncode}) before turn"
-                    ),
+                    error=(f"claude subprocess exited (code " f"{session.process.returncode}) before turn"),
                 )
 
             session.result_event.clear()
@@ -498,9 +498,9 @@ class ClaudeSessionPool:
                 )
             except asyncio.TimeoutError:
                 logger.warning(
-                    "[ClaudeSessionPool] turn timeout memory_node=%s "
-                    "prompt_len=%d",
-                    session.memory_node_id, len(prompt),
+                    "[ClaudeSessionPool] turn timeout memory_node=%s " "prompt_len=%d",
+                    session.memory_node_id,
+                    len(prompt),
                 )
                 return self._build_result_from_events(
                     session=session,
@@ -573,9 +573,11 @@ class ClaudeSessionPool:
         # provided (defensive — every production caller passes one).
         if connected_skill_names:
             from ._skills import materialise_skills
+
             target_dir = workspace_dir or cwd
             await materialise_skills(
-                target_dir, connected_skill_names,
+                target_dir,
+                connected_skill_names,
                 previous_skill_names=None,  # cold spawn: no prior set
                 log_label=f"pool {memory_node_id}",
             )
@@ -632,25 +634,26 @@ class ClaudeSessionPool:
                         event = json.loads(line)
                     except json.JSONDecodeError:
                         logger.debug(
-                            "[ClaudeSessionPool] stdout non-JSON line "
-                            "memory_node=%s line=%r",
-                            memory_node_id, line[:200],
+                            "[ClaudeSessionPool] stdout non-JSON line " "memory_node=%s line=%r",
+                            memory_node_id,
+                            line[:200],
                         )
                         continue
                     try:
                         await self._handle_stream_event(session, event)
                     except Exception as exc:  # pragma: no cover
                         logger.warning(
-                            "[ClaudeSessionPool] handler raised "
-                            "memory_node=%s exc=%s",
-                            memory_node_id, exc,
+                            "[ClaudeSessionPool] handler raised " "memory_node=%s exc=%s",
+                            memory_node_id,
+                            exc,
                         )
             except (asyncio.CancelledError, ConnectionError):
                 return
             except Exception as exc:  # pragma: no cover — defensive
                 logger.debug(
                     "[ClaudeSessionPool] stdout reader memory_node=%s exc=%s",
-                    memory_node_id, exc,
+                    memory_node_id,
+                    exc,
                 )
 
         async def _drain_stderr() -> None:
@@ -663,16 +666,18 @@ class ClaudeSessionPool:
                     line = raw.decode("utf-8", errors="replace").rstrip()
                     if line:
                         logger.warning(
-                            "[ClaudeSessionPool] claude stderr "
-                            "memory_node=%s pid=%s: %s",
-                            memory_node_id, process.pid, line,
+                            "[ClaudeSessionPool] claude stderr " "memory_node=%s pid=%s: %s",
+                            memory_node_id,
+                            process.pid,
+                            line,
                         )
             except (asyncio.CancelledError, ConnectionError):
                 return
             except Exception as exc:  # pragma: no cover — defensive
                 logger.debug(
                     "[ClaudeSessionPool] stderr drain memory_node=%s exc=%s",
-                    memory_node_id, exc,
+                    memory_node_id,
+                    exc,
                 )
 
         session.stdout_reader_task = asyncio.create_task(
@@ -691,7 +696,9 @@ class ClaudeSessionPool:
     # ------------------------------------------------------------------
 
     async def _handle_stream_event(
-        self, session: PooledClaudeSession, event: Dict[str, Any],
+        self,
+        session: PooledClaudeSession,
+        event: Dict[str, Any],
     ) -> None:
         """Per-event dispatcher for stream-json lines on ``proc.stdout``.
 
@@ -712,15 +719,13 @@ class ClaudeSessionPool:
         session.events_this_turn.append(event)
         if self._provider.is_final_event(event):
             session.result_event.set()
-        if (
-            event.get("type") == "system"
-            and event.get("subtype") == "compact_boundary"
-        ):
+        if event.get("type") == "system" and event.get("subtype") == "compact_boundary":
             await self._record_native_compaction(session, event)
 
     @staticmethod
     async def _record_native_compaction(
-        session: PooledClaudeSession, event: Dict[str, Any],
+        session: PooledClaudeSession,
+        event: Dict[str, Any],
     ) -> None:
         """Forward a ``system/compact_boundary`` event to
         :class:`CompactionService` so the local-threshold path doesn't
@@ -745,14 +750,15 @@ class ClaudeSessionPool:
                 summary=None,
             )
             logger.info(
-                "[ClaudeSessionPool] native compaction recorded "
-                "memory_node=%s pre_tokens=%d trigger=%s",
-                session.memory_node_id, pre_tokens,
+                "[ClaudeSessionPool] native compaction recorded " "memory_node=%s pre_tokens=%d trigger=%s",
+                session.memory_node_id,
+                pre_tokens,
                 metadata.get("trigger", "unknown"),
             )
         except Exception as exc:  # pragma: no cover
             logger.debug(
-                "[ClaudeSessionPool] compaction.record failed: %s", exc,
+                "[ClaudeSessionPool] compaction.record failed: %s",
+                exc,
             )
 
     def _build_result_from_events(
@@ -766,14 +772,15 @@ class ClaudeSessionPool:
     ) -> SessionResult:
         """Translate per-turn JSONL events to a :class:`SessionResult`."""
         provider_result = self._provider.event_to_session_result(
-            events, stderr="", exit_code=0 if success else -1,
+            events,
+            stderr="",
+            exit_code=0 if success else -1,
         )
         final_success = success and provider_result.get("success", True)
         final_error = error or provider_result.get("error")
         return SessionResult(
             task_id=f"pooled_{uuid.uuid4().hex[:8]}",
-            session_id=provider_result.get("session_id")
-                       or session.current_session_uuid,
+            session_id=provider_result.get("session_id") or session.current_session_uuid,
             provider=self._provider.name,
             prompt=prompt,
             worktree_path=str(session.cwd),
@@ -784,7 +791,8 @@ class ClaudeSessionPool:
             tool_calls=int(provider_result.get("tool_calls", 0)),
             canonical_usage=provider_result.get(
                 "canonical_usage",
-            ) or self._provider.canonical_usage(events),
+            )
+            or self._provider.canonical_usage(events),
             provider_data=dict(provider_result.get("provider_data") or {}),
             success=final_success,
             error=final_error if not final_success else None,
@@ -817,11 +825,13 @@ class ClaudeSessionPool:
         if session.batch_token:
             try:
                 from services.cli_agent.mcp_server import unregister_batch
+
                 unregister_batch(session.batch_token)
             except Exception as exc:  # pragma: no cover — defensive
                 logger.debug(
-                    "[ClaudeSessionPool] unregister_batch on terminate "
-                    "memory_node=%s exc=%s", memory_node_id, exc,
+                    "[ClaudeSessionPool] unregister_batch on terminate " "memory_node=%s exc=%s",
+                    memory_node_id,
+                    exc,
                 )
 
         # 1. Close stdin so claude can exit gracefully.
@@ -849,7 +859,8 @@ class ClaudeSessionPool:
             except Exception as exc:  # pragma: no cover
                 logger.debug(
                     "[ClaudeSessionPool] kill memory_node=%s exc=%s",
-                    memory_node_id, exc,
+                    memory_node_id,
+                    exc,
                 )
 
         # 4. Cancel reader/drain tasks (they'll exit on their own when
@@ -864,7 +875,9 @@ class ClaudeSessionPool:
 
         logger.info(
             "[ClaudeSessionPool] terminated memory_node=%s pid=%s reason=%s",
-            memory_node_id, process.pid, reason,
+            memory_node_id,
+            process.pid,
+            reason,
         )
         await self._emit_event(
             "terminated",
@@ -876,10 +889,7 @@ class ClaudeSessionPool:
     async def _evict_lru_locked(self) -> None:
         """Caller holds ``self._pool_lock``. Evicts the least-recently-
         used non-in-flight entry."""
-        idle_entries = [
-            (key, sess) for key, sess in self._pool.items()
-            if not sess.lock.locked()
-        ]
+        idle_entries = [(key, sess) for key, sess in self._pool.items() if not sess.lock.locked()]
         if not idle_entries:
             logger.info(
                 "[ClaudeSessionPool] all %d entries in-flight; pool over cap",
@@ -887,10 +897,12 @@ class ClaudeSessionPool:
             )
             return
         oldest_key, _ = min(
-            idle_entries, key=lambda kv: kv[1].last_used_at,
+            idle_entries,
+            key=lambda kv: kv[1].last_used_at,
         )
         logger.info(
-            "[ClaudeSessionPool] evicting LRU memory_node=%s", oldest_key,
+            "[ClaudeSessionPool] evicting LRU memory_node=%s",
+            oldest_key,
         )
         await self._terminate_locked(oldest_key, reason="evicted")
 
@@ -914,6 +926,7 @@ class ClaudeSessionPool:
         """
         try:
             from services.status_broadcaster import get_status_broadcaster
+
             broadcaster = get_status_broadcaster()
         except Exception:  # pragma: no cover
             return
@@ -947,10 +960,12 @@ class ClaudeSessionPool:
                     input_tokens=payload.get("input_tokens", 0),
                     output_tokens=payload.get("output_tokens", 0),
                     cache_read_input_tokens=payload.get(
-                        "cache_read_input_tokens", 0,
+                        "cache_read_input_tokens",
+                        0,
                     ),
                     cache_creation_input_tokens=payload.get(
-                        "cache_creation_input_tokens", 0,
+                        "cache_creation_input_tokens",
+                        0,
                     ),
                     duration_ms=payload.get("duration_ms"),
                     num_turns=payload.get("num_turns"),
@@ -958,7 +973,9 @@ class ClaudeSessionPool:
                 )
         except Exception as exc:  # pragma: no cover
             logger.debug(
-                "[ClaudeSessionPool] _emit_event(%s) failed: %s", kind, exc,
+                "[ClaudeSessionPool] _emit_event(%s) failed: %s",
+                kind,
+                exc,
             )
 
     async def _reaper_loop(self) -> None:
@@ -975,15 +992,13 @@ class ClaudeSessionPool:
                 now = time.monotonic()
                 async with self._pool_lock:
                     expired_keys = [
-                        key for key, sess in self._pool.items()
-                        if not sess.lock.locked()
-                        and now - sess.last_used_at >= self._idle_ttl
+                        key for key, sess in self._pool.items() if not sess.lock.locked() and now - sess.last_used_at >= self._idle_ttl
                     ]
                     for key in expired_keys:
                         logger.info(
-                            "[ClaudeSessionPool] reaping idle session "
-                            "memory_node=%s age=%.1fs",
-                            key, now - self._pool[key].last_used_at,
+                            "[ClaudeSessionPool] reaping idle session " "memory_node=%s age=%.1fs",
+                            key,
+                            now - self._pool[key].last_used_at,
                         )
                         await self._terminate_locked(key, reason="idle")
         except asyncio.CancelledError:

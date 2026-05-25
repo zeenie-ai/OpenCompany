@@ -11,6 +11,7 @@ Uses the singleton accessor pattern (``Class.get_instance()``) from
 ``BaseSupervisor`` — same idiom :mod:`nodes.whatsapp._runtime` uses for
 ``WhatsAppRuntime``.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -99,10 +100,7 @@ class TemporalServerRuntime(BaseProcessSupervisor):
         # ``_pre_spawn`` (called by ``BaseProcessSupervisor._do_start``
         # before this method) populates ``self._binaries`` via the
         # pooch downloader. Loud failure if that contract regresses.
-        assert self._binaries is not None, (
-            f"[{self.label}] binary_path() called before _pre_spawn() "
-            "populated self._binaries"
-        )
+        assert self._binaries is not None, f"[{self.label}] binary_path() called before _pre_spawn() " "populated self._binaries"
         return self._binaries["temporal"]
 
     def argv(self) -> list[str]:
@@ -121,13 +119,21 @@ class TemporalServerRuntime(BaseProcessSupervisor):
         #   --log-level      warn keeps the supervisor log readable
         #   --namespace      default namespace bootstrapped at start
         return [
-            str(self.binary_path()), "server", "start-dev",
-            "--port", str(self.settings.temporal_frontend_grpc_port),
-            "--ui-port", str(self.settings.temporal_ui_port),
-            "--db-filename", str(self._sqlite_path),
-            "--metrics-port", "0",
-            "--log-level", "warn",
-            "--namespace", self.settings.temporal_namespace,
+            str(self.binary_path()),
+            "server",
+            "start-dev",
+            "--port",
+            str(self.settings.temporal_frontend_grpc_port),
+            "--ui-port",
+            str(self.settings.temporal_ui_port),
+            "--db-filename",
+            str(self._sqlite_path),
+            "--metrics-port",
+            "0",
+            "--log-level",
+            "warn",
+            "--namespace",
+            self.settings.temporal_namespace,
         ]
 
     def cwd(self) -> Path:
@@ -160,6 +166,7 @@ class TemporalServerRuntime(BaseProcessSupervisor):
 
 
 # ---- module-level singleton accessor ------------------------------------
+
 
 def get_temporal_server_runtime(
     settings: Optional[Settings] = None,

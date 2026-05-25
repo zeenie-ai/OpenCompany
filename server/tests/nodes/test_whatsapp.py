@@ -94,12 +94,15 @@ class TestWhatsappSend:
             captured["message"] = params.get("message")
             return {"success": True}
 
-        with patch(
-            "nodes.whatsapp._service.handle_whatsapp_send",
-            new=AsyncMock(side_effect=fake_send),
-        ), patch(
-            "services.markdown_formatter.to_whatsapp",
-            return_value="*bold*",
+        with (
+            patch(
+                "nodes.whatsapp._service.handle_whatsapp_send",
+                new=AsyncMock(side_effect=fake_send),
+            ),
+            patch(
+                "services.markdown_formatter.to_whatsapp",
+                return_value="*bold*",
+            ),
         ):
             result = await harness.execute(
                 "whatsappSend",
@@ -211,10 +214,7 @@ class TestWhatsappDb:
 
     async def test_search_groups_truncates_and_shapes(self, harness):
         """search_groups returns only {jid, name} and reports truncation."""
-        groups = [
-            {"jid": f"g{i}@g.us", "name": f"Group {i}", "extra_field": "noise"}
-            for i in range(5)
-        ]
+        groups = [{"jid": f"g{i}@g.us", "name": f"Group {i}", "extra_field": "noise"} for i in range(5)]
         # Handler runs data.get('success', True) BEFORE isinstance(data, list)
         # (documented bug), so the RPC stub must return a dict envelope here.
         with _patch_rpc_call({"success": True, "result": groups}):
@@ -387,9 +387,7 @@ class TestWhatsappReceive:
     async def test_happy_path_returns_canned_event(self, harness):
         waiter = _make_waiter_stub(canned_event=self.CANNED)
 
-        with patched_broadcaster(), patched_container(), patch(
-            "services.event_waiter", waiter
-        ):
+        with patched_broadcaster(), patched_container(), patch("services.event_waiter", waiter):
             result = await harness.execute(
                 "whatsappReceive",
                 {
@@ -411,9 +409,7 @@ class TestWhatsappReceive:
 
         waiter = _make_waiter_stub(wait_side_effect=asyncio.CancelledError())
 
-        with patched_broadcaster(), patched_container(), patch(
-            "services.event_waiter", waiter
-        ):
+        with patched_broadcaster(), patched_container(), patch("services.event_waiter", waiter):
             result = await harness.execute(
                 "whatsappReceive",
                 {"filter": "all"},
@@ -425,9 +421,7 @@ class TestWhatsappReceive:
     async def test_waiter_exception_surfaces_as_error(self, harness):
         waiter = _make_waiter_stub(wait_side_effect=RuntimeError("redis stream down"))
 
-        with patched_broadcaster(), patched_container(), patch(
-            "services.event_waiter", waiter
-        ):
+        with patched_broadcaster(), patched_container(), patch("services.event_waiter", waiter):
             result = await harness.execute(
                 "whatsappReceive",
                 {"filter": "keywords", "keywords": "urgent,fire"},

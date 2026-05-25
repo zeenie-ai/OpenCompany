@@ -20,20 +20,29 @@ class TaskQueue:
     and provision a worker pool in ``services/temporal/worker.py``.
     """
 
-    DEFAULT = "machina-default"     # catch-all
-    REST_API = "rest-api"           # lightweight HTTP calls (gmail, brave, twitter)
-    AI_HEAVY = "ai-heavy"           # long-running LLM + agent loops
-    CODE_EXEC = "code-exec"         # python/js/ts sandboxed execution
-    TRIGGERS_POLL = "triggers-poll" # polling triggers (long-lived)
+    DEFAULT = "machina-default"  # catch-all
+    REST_API = "rest-api"  # lightweight HTTP calls (gmail, brave, twitter)
+    AI_HEAVY = "ai-heavy"  # long-running LLM + agent loops
+    CODE_EXEC = "code-exec"  # python/js/ts sandboxed execution
+    TRIGGERS_POLL = "triggers-poll"  # polling triggers (long-lived)
     TRIGGERS_EVENT = "triggers-event"  # event-waiter triggers (long-lived)
-    ANDROID = "android"             # ADB / relay ops
-    BROWSER = "browser"             # agent-browser, Playwright
-    MESSAGING = "messaging"         # whatsapp / telegram / twitter send
+    ANDROID = "android"  # ADB / relay ops
+    BROWSER = "browser"  # agent-browser, Playwright
+    MESSAGING = "messaging"  # whatsapp / telegram / twitter send
 
-    ALL = frozenset({
-        DEFAULT, REST_API, AI_HEAVY, CODE_EXEC,
-        TRIGGERS_POLL, TRIGGERS_EVENT, ANDROID, BROWSER, MESSAGING,
-    })
+    ALL = frozenset(
+        {
+            DEFAULT,
+            REST_API,
+            AI_HEAVY,
+            CODE_EXEC,
+            TRIGGERS_POLL,
+            TRIGGERS_EVENT,
+            ANDROID,
+            BROWSER,
+            MESSAGING,
+        }
+    )
 
 
 @dataclass(frozen=True)
@@ -47,18 +56,20 @@ class RetryPolicy:
     backoff_coefficient: float = 2.0
     maximum_interval: timedelta = timedelta(seconds=60)
     maximum_attempts: int = 3
-    non_retryable_error_types: Sequence[str] = field(default_factory=lambda: (
-        "ValidationError",
-        "PermissionDeniedError",
-        "InvalidParametersError",
-        # Wave 12 A2: NodeUserError is the canonical "user-correctable
-        # failure" exception (missing input, missing credential, API
-        # rejected the payload). Retrying it just burns attempts since
-        # the underlying input won't fix itself. Plugins that raise
-        # NodeUserError fail fast; the framework surfaces the message
-        # to the user / agent loop without traceback noise.
-        "NodeUserError",
-    ))
+    non_retryable_error_types: Sequence[str] = field(
+        default_factory=lambda: (
+            "ValidationError",
+            "PermissionDeniedError",
+            "InvalidParametersError",
+            # Wave 12 A2: NodeUserError is the canonical "user-correctable
+            # failure" exception (missing input, missing credential, API
+            # rejected the payload). Retrying it just burns attempts since
+            # the underlying input won't fix itself. Plugins that raise
+            # NodeUserError fail fast; the framework surfaces the message
+            # to the user / agent loop without traceback noise.
+            "NodeUserError",
+        )
+    )
 
     def to_temporal(self):
         """Lazy import — only called inside the Temporal worker."""
@@ -81,5 +92,5 @@ DEFAULT_RETRY = RetryPolicy()
 # Kind-specific defaults — picked up when a subclass doesn't override.
 ACTION_START_TO_CLOSE = timedelta(minutes=10)
 AI_START_TO_CLOSE = timedelta(minutes=30)
-TRIGGER_START_TO_CLOSE = timedelta(hours=24)     # long-lived
+TRIGGER_START_TO_CLOSE = timedelta(hours=24)  # long-lived
 CODE_START_TO_CLOSE = timedelta(minutes=5)

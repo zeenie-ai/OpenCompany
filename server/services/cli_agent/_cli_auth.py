@@ -33,6 +33,7 @@ async def mark_logged_in(
     Lazy-imports the container so this module stays a leaf service.
     """
     from core.container import container
+
     await container.auth_service().store_oauth_tokens(
         provider=catalogue_key,
         access_token=MARKER_TOKEN,
@@ -45,6 +46,7 @@ async def mark_logged_in(
 async def mark_logged_out(catalogue_key: str) -> None:
     """Drop the cli-managed marker for ``catalogue_key``."""
     from core.container import container
+
     await container.auth_service().remove_oauth_tokens(catalogue_key)
 
 
@@ -52,6 +54,8 @@ async def broadcast_credential_event(event_type: str, provider: str) -> None:
     """Fire a CloudEvents-shaped catalogue-invalidation. Frontend listens
     via ``WebSocketContext`` and re-fetches the catalogue."""
     from services.status_broadcaster import get_status_broadcaster
+
     await get_status_broadcaster().broadcast_credential_event(
-        event_type, provider=provider,
+        event_type,
+        provider=provider,
     )

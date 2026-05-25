@@ -25,7 +25,9 @@ from ._oauth import TwitterOAuth
 
 
 async def _twitter_oauth_factory(
-    *, redirect_uri: Optional[str] = None, **_kwargs,
+    *,
+    redirect_uri: Optional[str] = None,
+    **_kwargs,
 ) -> TwitterOAuth:
     """Build a :class:`TwitterOAuth` from stored client credentials."""
     from services.plugin.deps import get_auth_service

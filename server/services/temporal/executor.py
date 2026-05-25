@@ -98,9 +98,7 @@ class TemporalExecutor:
                             result.get("outputs", {}).get(node_id, {}),
                         )
                     except Exception as e:
-                        logger.warning(
-                            f"Status callback error for node {node_id}: {e}"
-                        )
+                        logger.warning(f"Status callback error for node {node_id}: {e}")
 
             logger.info(
                 "Temporal workflow completed",
@@ -124,6 +122,7 @@ class TemporalExecutor:
 
         except Exception as e:
             import traceback
+
             execution_time = time.time() - start_time
             error_details = f"{type(e).__name__}: {str(e)}"
             tb = traceback.format_exc()

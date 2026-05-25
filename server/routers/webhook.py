@@ -11,6 +11,7 @@ Two dispatch paths:
    ``broadcaster.send_custom_event("webhook_received", …)`` so existing
    ``webhookTrigger`` nodes keep working untouched.
 """
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from typing import Dict
@@ -79,8 +80,8 @@ async def handle_webhook(path: str, request: Request):
         "path": path,
         "headers": dict(request.headers),
         "query": dict(request.query_params),
-        "body": body.decode('utf-8') if isinstance(body, bytes) else (body if body else ""),
-        "json": json_body
+        "body": body.decode("utf-8") if isinstance(body, bytes) else (body if body else ""),
+        "json": json_body,
     }
 
     logger.info(f"[Webhook] Received: {request.method} /webhook/{path}")
@@ -91,12 +92,7 @@ async def handle_webhook(path: str, request: Request):
     await broadcast_webhook_received(webhook_data)
 
     return JSONResponse(
-        content={
-            "status": "received",
-            "path": path,
-            "message": "Webhook received and dispatched to workflow"
-        },
-        status_code=200
+        content={"status": "received", "path": path, "message": "Webhook received and dispatched to workflow"}, status_code=200
     )
 
 
@@ -107,5 +103,5 @@ async def list_info():
         "endpoint": "/webhook/{path}",
         "description": "Send HTTP requests to trigger webhookTrigger nodes",
         "usage": "Deploy a workflow with webhookTrigger node, then send requests to /webhook/{path}",
-        "example": "POST /webhook/my-webhook with JSON body"
+        "example": "POST /webhook/my-webhook with JSON body",
     }

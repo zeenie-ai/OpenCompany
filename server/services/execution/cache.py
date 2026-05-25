@@ -30,7 +30,7 @@ def ensure_str(value: Union[str, bytes, None]) -> Optional[str]:
     if value is None:
         return None
     if isinstance(value, bytes):
-        return value.decode('utf-8')
+        return value.decode("utf-8")
     return value
 
 
@@ -71,15 +71,11 @@ class ExecutionCache:
 
             # Use Redis HSET for structured storage
             if self.cache.is_redis_available():
-                mapping = {
-                    k: json.dumps(v) if isinstance(v, (dict, list)) else str(v)
-                    for k, v in data.items()
-                }
+                mapping = {k: json.dumps(v) if isinstance(v, (dict, list)) else str(v) for k, v in data.items()}
                 if mapping:  # Only call hset if mapping is not empty
                     await self.cache.redis.hset(key, mapping=mapping)
                 # Set TTL (24 hours for completed, no TTL for active)
-                if ctx.status in (WorkflowStatus.COMPLETED, WorkflowStatus.FAILED,
-                                  WorkflowStatus.CANCELLED):
+                if ctx.status in (WorkflowStatus.COMPLETED, WorkflowStatus.FAILED, WorkflowStatus.CANCELLED):
                     await self.cache.redis.expire(key, 86400)
 
                 # Track active executions
@@ -88,8 +84,7 @@ class ExecutionCache:
                 else:
                     await self.cache.redis.srem("executions:active", ctx.execution_id)
 
-                logger.debug("Saved execution state", execution_id=ctx.execution_id,
-                           status=ctx.status.value)
+                logger.debug("Saved execution state", execution_id=ctx.execution_id, status=ctx.status.value)
                 return True
             else:
                 # Fallback to simple key-value
@@ -97,13 +92,12 @@ class ExecutionCache:
                 return True
 
         except Exception as e:
-            logger.error("Failed to save execution state", execution_id=ctx.execution_id,
-                        error=str(e))
+            logger.error("Failed to save execution state", execution_id=ctx.execution_id, error=str(e))
             return False
 
-    async def load_execution_state(self, execution_id: str,
-                                   nodes: List[Dict] = None,
-                                   edges: List[Dict] = None) -> Optional[ExecutionContext]:
+    async def load_execution_state(
+        self, execution_id: str, nodes: List[Dict] = None, edges: List[Dict] = None
+    ) -> Optional[ExecutionContext]:
         """Load execution context from Redis.
 
         Args:
@@ -142,8 +136,7 @@ class ExecutionCache:
                 return None
 
         except Exception as e:
-            logger.error("Failed to load execution state", execution_id=execution_id,
-                        error=str(e))
+            logger.error("Failed to load execution state", execution_id=execution_id, error=str(e))
             return None
 
     async def get_active_executions(self) -> Set[str]:
@@ -180,16 +173,14 @@ class ExecutionCache:
                 await self.cache.redis.srem("executions:active", execution_id)
             return True
         except Exception as e:
-            logger.error("Failed to delete execution state", execution_id=execution_id,
-                        error=str(e))
+            logger.error("Failed to delete execution state", execution_id=execution_id, error=str(e))
             return False
 
     # =========================================================================
     # RESULT CACHING (Prefect pattern)
     # =========================================================================
 
-    async def get_cached_result(self, execution_id: str, node_id: str,
-                                 inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def get_cached_result(self, execution_id: str, node_id: str, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Get cached result for node execution (Prefect pattern).
 
         Args:
@@ -211,9 +202,9 @@ class ExecutionCache:
             logger.error("Failed to get cached result", node_id=node_id, error=str(e))
             return None
 
-    async def set_cached_result(self, execution_id: str, node_id: str,
-                                 inputs: Dict[str, Any], result: Dict[str, Any],
-                                 ttl: int = 3600) -> bool:
+    async def set_cached_result(
+        self, execution_id: str, node_id: str, inputs: Dict[str, Any], result: Dict[str, Any], ttl: int = 3600
+    ) -> bool:
         """Cache node execution result (Prefect pattern).
 
         Args:
@@ -265,18 +256,16 @@ class ExecutionCache:
             if self.cache.is_redis_available():
                 # Redis SETNX with expiry
                 acquired = await self.cache.redis.set(
-                    lock_key, lock_token,
+                    lock_key,
+                    lock_token,
                     ex=timeout,
-                    nx=True  # Only set if not exists
+                    nx=True,  # Only set if not exists
                 )
             else:
                 # Fallback to local asyncio lock
                 if lock_name not in self._local_locks:
                     self._local_locks[lock_name] = asyncio.Lock()
-                await asyncio.wait_for(
-                    self._local_locks[lock_name].acquire(),
-                    timeout=timeout
-                )
+                await asyncio.wait_for(self._local_locks[lock_name].acquire(), timeout=timeout)
                 acquired = True
 
             if not acquired:
@@ -352,8 +341,7 @@ class ExecutionCache:
     # EVENT HISTORY (for debugging and recovery)
     # =========================================================================
 
-    async def add_event(self, execution_id: str, event_type: str,
-                        data: Dict[str, Any]) -> Optional[str]:
+    async def add_event(self, execution_id: str, event_type: str, data: Dict[str, Any]) -> Optional[str]:
         """Add event to execution history stream.
 
         Args:
@@ -366,11 +354,7 @@ class ExecutionCache:
         """
         try:
             stream_key = f"execution:{execution_id}:events"
-            event_data = {
-                "type": event_type,
-                "timestamp": time.time(),
-                **data
-            }
+            event_data = {"type": event_type, "timestamp": time.time(), **data}
             return await self.cache.stream_add(stream_key, event_data, maxlen=1000)
         except Exception as e:
             logger.error("Failed to add event", execution_id=execution_id, error=str(e))
@@ -392,10 +376,7 @@ class ExecutionCache:
                 return []
 
             # Read from stream
-            result = await self.cache.stream_read(
-                {stream_key: "0"},
-                count=count
-            )
+            result = await self.cache.stream_read({stream_key: "0"}, count=count)
 
             events = []
             if result:
@@ -421,8 +402,7 @@ class ExecutionCache:
     # TRANSACTION CHECKPOINTS (Prefect pattern)
     # =========================================================================
 
-    async def checkpoint_transaction(self, transaction_id: str, node_id: str,
-                                      result: Dict[str, Any]) -> bool:
+    async def checkpoint_transaction(self, transaction_id: str, node_id: str, result: Dict[str, Any]) -> bool:
         """Save transaction checkpoint (Prefect pattern).
 
         Args:
@@ -435,11 +415,7 @@ class ExecutionCache:
         """
         try:
             key = f"txn:{transaction_id}:checkpoints"
-            checkpoint = {
-                "node_id": node_id,
-                "result": result,
-                "timestamp": time.time()
-            }
+            checkpoint = {"node_id": node_id, "result": result, "timestamp": time.time()}
             if self.cache.is_redis_available():
                 await self.cache.redis.rpush(key, json.dumps(checkpoint))
                 await self.cache.redis.expire(key, 86400)  # 24 hour TTL
@@ -512,10 +488,7 @@ class ExecutionCache:
             if self.cache.is_redis_available():
                 # Store entry data
                 entry_key = f"dlq:entries:{entry.id}"
-                mapping = {
-                    k: json.dumps(v) if isinstance(v, (dict, list)) else str(v)
-                    for k, v in entry_data.items()
-                }
+                mapping = {k: json.dumps(v) if isinstance(v, (dict, list)) else str(v) for k, v in entry_data.items()}
                 if mapping:  # Only call hset if mapping is not empty
                     await self.cache.redis.hset(entry_key, mapping=mapping)
                 # Set TTL (7 days for DLQ entries)
@@ -534,8 +507,7 @@ class ExecutionCache:
                 # Add to global set
                 await self.cache.redis.sadd("dlq:all", entry.id)
 
-                logger.info("Added to DLQ", entry_id=entry.id, node_id=entry.node_id,
-                           node_type=entry.node_type, error=entry.error[:100])
+                logger.info("Added to DLQ", entry_id=entry.id, node_id=entry.node_id, node_type=entry.node_type, error=entry.error[:100])
                 return True
             else:
                 # Fallback to simple key-value
@@ -584,9 +556,7 @@ class ExecutionCache:
             logger.error("Failed to get DLQ entry", entry_id=entry_id, error=str(e))
             return None
 
-    async def get_dlq_entries(self, workflow_id: Optional[str] = None,
-                               node_type: Optional[str] = None,
-                               limit: int = 100) -> List[DLQEntry]:
+    async def get_dlq_entries(self, workflow_id: Optional[str] = None, node_type: Optional[str] = None, limit: int = 100) -> List[DLQEntry]:
         """Get DLQ entries with optional filtering.
 
         Args:
@@ -668,8 +638,7 @@ class ExecutionCache:
             logger.error("Failed to remove from DLQ", entry_id=entry_id, error=str(e))
             return False
 
-    async def update_dlq_entry(self, entry_id: str, retry_count: int,
-                                error: str) -> bool:
+    async def update_dlq_entry(self, entry_id: str, retry_count: int, error: str) -> bool:
         """Update DLQ entry after failed retry attempt.
 
         Args:
@@ -685,11 +654,9 @@ class ExecutionCache:
                 return False
 
             entry_key = f"dlq:entries:{entry_id}"
-            await self.cache.redis.hset(entry_key, mapping={
-                "retry_count": str(retry_count),
-                "error": error,
-                "last_error_at": str(time.time())
-            })
+            await self.cache.redis.hset(
+                entry_key, mapping={"retry_count": str(retry_count), "error": error, "last_error_at": str(time.time())}
+            )
 
             logger.debug("Updated DLQ entry", entry_id=entry_id, retry_count=retry_count)
             return True
@@ -720,19 +687,15 @@ class ExecutionCache:
                 by_node_type[entry.node_type] = by_node_type.get(entry.node_type, 0) + 1
                 by_workflow[entry.workflow_id] = by_workflow.get(entry.workflow_id, 0) + 1
 
-            return {
-                "total": total,
-                "by_node_type": by_node_type,
-                "by_workflow": by_workflow
-            }
+            return {"total": total, "by_node_type": by_node_type, "by_workflow": by_workflow}
 
         except Exception as e:
             logger.error("Failed to get DLQ stats", error=str(e))
             return {"total": 0, "by_node_type": {}, "by_workflow": {}}
 
-    async def purge_dlq(self, workflow_id: Optional[str] = None,
-                         node_type: Optional[str] = None,
-                         older_than: Optional[float] = None) -> int:
+    async def purge_dlq(
+        self, workflow_id: Optional[str] = None, node_type: Optional[str] = None, older_than: Optional[float] = None
+    ) -> int:
         """Purge entries from DLQ.
 
         Args:
@@ -747,9 +710,7 @@ class ExecutionCache:
             if not self.cache.is_redis_available():
                 return 0
 
-            entries = await self.get_dlq_entries(workflow_id=workflow_id,
-                                                  node_type=node_type,
-                                                  limit=10000)
+            entries = await self.get_dlq_entries(workflow_id=workflow_id, node_type=node_type, limit=10000)
 
             purged = 0
             for entry in entries:
@@ -760,8 +721,7 @@ class ExecutionCache:
                 if await self.remove_from_dlq(entry.id):
                     purged += 1
 
-            logger.info("Purged DLQ entries", count=purged, workflow_id=workflow_id,
-                       node_type=node_type)
+            logger.info("Purged DLQ entries", count=purged, workflow_id=workflow_id, node_type=node_type)
             return purged
 
         except Exception as e:

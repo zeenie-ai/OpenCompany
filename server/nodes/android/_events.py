@@ -74,11 +74,7 @@ def android_connection_status(
     """
     return WorkflowEvent(
         source="machinaos://nodes/android",
-        type=(
-            "com.machinaos.android.connection.opened"
-            if connected
-            else "com.machinaos.android.connection.closed"
-        ),
+        type=("com.machinaos.android.connection.opened" if connected else "com.machinaos.android.connection.closed"),
         subject=device_id,
         data={
             "connected": connected,
@@ -144,10 +140,12 @@ async def broadcast_android_status(
         qr_data=qr_data,
         session_token=session_token,
     )
-    await broadcaster.broadcast({
-        "type": _TYPED_WIRE_KEY,
-        "data": event.model_dump(mode="json"),
-    })
+    await broadcaster.broadcast(
+        {
+            "type": _TYPED_WIRE_KEY,
+            "data": event.model_dump(mode="json"),
+        }
+    )
 
 
 __all__ = [

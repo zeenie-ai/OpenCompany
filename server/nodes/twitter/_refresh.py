@@ -35,9 +35,7 @@ async def refresh_twitter_status(broadcaster: "StatusBroadcaster") -> None:
             from services.plugin.deps import get_auth_service
 
             auth_service = get_auth_service()
-            tokens = await auth_service.get_oauth_tokens(
-                "twitter", customer_id="owner"
-            )
+            tokens = await auth_service.get_oauth_tokens("twitter", customer_id="owner")
             if not tokens or not tokens.get("access_token"):
                 broadcaster._status["twitter"] = {
                     "connected": False,
@@ -64,15 +62,13 @@ async def refresh_twitter_status(broadcaster: "StatusBroadcaster") -> None:
                     username,
                 )
 
-            await broadcaster.broadcast({
-                "type": "twitter_status",
-                "data": broadcaster._status["twitter"],
-            })
-            span.set_attribute(
-                "connected", bool(broadcaster._status["twitter"]["connected"])
+            await broadcaster.broadcast(
+                {
+                    "type": "twitter_status",
+                    "data": broadcaster._status["twitter"],
+                }
             )
+            span.set_attribute("connected", bool(broadcaster._status["twitter"]["connected"]))
         except Exception as exc:  # noqa: BLE001 -- mirror pre-migration behaviour
             span.record_exception(exc)
-            logger.debug(
-                "[StatusBroadcaster] Could not refresh Twitter status: %s", exc
-            )
+            logger.debug("[StatusBroadcaster] Could not refresh Twitter status: %s", exc)

@@ -37,10 +37,8 @@ class TimerNode(ActionNode):
     tool_name = "timer"
     tool_description = "Wait/sleep for a specified duration. Specify duration (1-3600) and unit (seconds, minutes, or hours). Returns timestamp and elapsed time after waiting."
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
     annotations = {"destructive": False, "readonly": True, "open_world": False}
     task_queue = TaskQueue.DEFAULT
@@ -70,7 +68,8 @@ class TimerNode(ActionNode):
 
         complete_time = datetime.now() + timedelta(seconds=wait_seconds)
         await get_status_broadcaster().update_node_status(
-            ctx.node_id, "waiting",
+            ctx.node_id,
+            "waiting",
             {
                 "message": f"Waiting {duration} {unit}...",
                 "complete_time": complete_time.isoformat(),

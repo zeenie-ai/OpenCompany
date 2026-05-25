@@ -35,10 +35,7 @@ class BaseTriggerParams(BaseModel):
 
     event_type_filter: str = Field(
         default="all",
-        description=(
-            "Event type to match. 'all' for every event, exact name, "
-            "or wildcard prefix (e.g. 'foo.*')."
-        ),
+        description=("Event type to match. 'all' for every event, exact name, " "or wildcard prefix (e.g. 'foo.*')."),
     )
 
     model_config = ConfigDict(extra="ignore")
@@ -66,12 +63,7 @@ class WebhookTriggerNode(TriggerNode):
 
     def build_filter(self, params: BaseModel) -> Callable[[Any], bool]:
         type_filter = (getattr(params, "event_type_filter", "") or "all").strip()
-        if (
-            type_filter
-            and type_filter != "all"
-            and self.event_type_prefix
-            and not type_filter.startswith(self.event_type_prefix)
-        ):
+        if type_filter and type_filter != "all" and self.event_type_prefix and not type_filter.startswith(self.event_type_prefix):
             type_filter = self.event_type_prefix + type_filter
         extras = self._extra_filter(params)
 
@@ -113,6 +105,4 @@ class WebhookTriggerNode(TriggerNode):
 
     @Operation("wait")
     async def wait(self, ctx: NodeContext, params: BaseModel):
-        raise NotImplementedError(
-            "Event triggers return via TriggerNode.execute, not the op body"
-        )
+        raise NotImplementedError("Event triggers return via TriggerNode.execute, not the op body")

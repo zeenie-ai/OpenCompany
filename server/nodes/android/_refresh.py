@@ -77,9 +77,7 @@ async def _auto_reconnect_body(broadcaster: "StatusBroadcaster", span) -> None:
 
         if not relay_url or not api_key:
             span.set_attribute("path", "session_missing_creds")
-            logger.debug(
-                "[StatusBroadcaster] Stored session missing relay URL or API key"
-            )
+            logger.debug("[StatusBroadcaster] Stored session missing relay URL or API key")
             return
 
         span.set_attribute("path", "auto_reconnect")
@@ -111,13 +109,9 @@ async def _auto_reconnect_body(broadcaster: "StatusBroadcaster", span) -> None:
             span.set_attribute("reconnect_ok", True)
         else:
             span.set_attribute("reconnect_ok", False)
-            logger.warning(
-                "[StatusBroadcaster] Failed to reconnect Android relay: %s", error
-            )
+            logger.warning("[StatusBroadcaster] Failed to reconnect Android relay: %s", error)
             # Stored session is stale; drop it.
             await database.clear_android_relay_session()
     except Exception as exc:  # noqa: BLE001 -- mirror pre-migration behaviour
         span.record_exception(exc)
-        logger.debug(
-            "[StatusBroadcaster] Could not auto-reconnect Android relay: %s", exc
-        )
+        logger.debug("[StatusBroadcaster] Could not auto-reconnect Android relay: %s", exc)

@@ -117,10 +117,7 @@ class TelegramSendParams(BaseModel):
     # ===== OPTIONS =====
     parse_mode: Literal["Auto", "", "HTML", "Markdown", "MarkdownV2"] = Field(
         default="Auto",
-        description=(
-            "Auto converts LLM markdown to Telegram HTML. "
-            "Empty string = no parse mode (raw text)."
-        ),
+        description=("Auto converts LLM markdown to Telegram HTML. " "Empty string = no parse mode (raw text)."),
         json_schema_extra={
             "displayOptions": {"show": {"message_type": ["text", "photo", "document"]}},
         },
@@ -153,10 +150,8 @@ class TelegramSendNode(ActionNode):
     description = "Send text, photo, document, location, or contact via Telegram bot"
     component_kind = "square"
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
     annotations = {"destructive": False, "readonly": False, "open_world": True}
     credentials = (TelegramCredential,)
@@ -184,6 +179,7 @@ class TelegramSendNode(ActionNode):
             if not chat_id:
                 try:
                     from services.plugin.deps import get_auth_service
+
                     saved = await get_auth_service().get_api_key("telegram_owner_chat_id")
                     if saved:
                         owner_id = int(saved)
@@ -217,21 +213,27 @@ class TelegramSendNode(ActionNode):
             if not params.text:
                 raise RuntimeError("text is required for text message")
             result = await service.send_message(
-                text=params.text, parse_mode=parse_mode, **common,
+                text=params.text,
+                parse_mode=parse_mode,
+                **common,
             )
         elif mt == "photo":
             if not params.media_url:
                 raise RuntimeError("media_url is required for photo message")
             result = await service.send_photo(
-                photo=params.media_url, caption=params.caption or None,
-                parse_mode=parse_mode, **common,
+                photo=params.media_url,
+                caption=params.caption or None,
+                parse_mode=parse_mode,
+                **common,
             )
         elif mt == "document":
             if not params.media_url:
                 raise RuntimeError("media_url is required for document message")
             result = await service.send_document(
-                document=params.media_url, caption=params.caption or None,
-                parse_mode=parse_mode, **common,
+                document=params.media_url,
+                caption=params.caption or None,
+                parse_mode=parse_mode,
+                **common,
             )
         elif mt == "location":
             if params.latitude is None or params.longitude is None:
@@ -258,8 +260,7 @@ class TelegramSendNode(ActionNode):
             raise RuntimeError(f"Unsupported message type: {mt}")
 
         log.info(
-            f"[Telegram] Message sent: type={mt}, chat={chat_id}, "
-            f"msg_id={result.get('message_id')}",
+            f"[Telegram] Message sent: type={mt}, chat={chat_id}, " f"msg_id={result.get('message_id')}",
         )
         return {
             "message_id": result.get("message_id"),

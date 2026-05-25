@@ -24,6 +24,7 @@ async def _get_apify_client():
     """Return an authenticated Apify client, or None if no token saved."""
     from apify_client import ApifyClientAsync  # lazy — optional dep
     from services.plugin.deps import get_auth_service
+
     auth_service = get_auth_service()
     api_token = await auth_service.get_api_key("apify", "default")
     if not api_token:
@@ -37,11 +38,11 @@ def _build_actor_input(parameters: Dict[str, Any]) -> Dict[str, Any]:
     Apify actors expect camelCase keys in their run input (that's the
     SDK contract). The plugin Params are snake_case; we translate here.
     """
-    actor_id = parameters.get('actor_id', '')
-    if actor_id == 'custom':
-        actor_id = parameters.get('custom_actor_id', '')
+    actor_id = parameters.get("actor_id", "")
+    if actor_id == "custom":
+        actor_id = parameters.get("custom_actor_id", "")
 
-    actor_input = parameters.get('actor_input', {})
+    actor_input = parameters.get("actor_input", {})
     if isinstance(actor_input, str):
         try:
             actor_input = json.loads(actor_input) if actor_input.strip() else {}
@@ -50,38 +51,38 @@ def _build_actor_input(parameters: Dict[str, Any]) -> Dict[str, Any]:
     elif not isinstance(actor_input, dict):
         actor_input = {}
 
-    if actor_id == 'apify/instagram-scraper':
-        urls = parameters.get('instagram_urls', '')
+    if actor_id == "apify/instagram-scraper":
+        urls = parameters.get("instagram_urls", "")
         if urls:
-            actor_input['directUrls'] = [u.strip() for u in urls.split(',') if u.strip()]
-    elif actor_id == 'clockworks/tiktok-scraper':
-        profiles = parameters.get('tiktok_profiles', '')
-        hashtags = parameters.get('tiktok_hashtags', '')
+            actor_input["directUrls"] = [u.strip() for u in urls.split(",") if u.strip()]
+    elif actor_id == "clockworks/tiktok-scraper":
+        profiles = parameters.get("tiktok_profiles", "")
+        hashtags = parameters.get("tiktok_hashtags", "")
         if profiles:
-            actor_input['profiles'] = [p.strip() for p in profiles.split(',') if p.strip()]
+            actor_input["profiles"] = [p.strip() for p in profiles.split(",") if p.strip()]
         if hashtags:
-            actor_input['hashtags'] = [h.strip() for h in hashtags.split(',') if h.strip()]
-    elif actor_id == 'apidojo/tweet-scraper':
-        search_terms = parameters.get('twitter_search_terms', '')
-        handles = parameters.get('twitter_handles', '')
+            actor_input["hashtags"] = [h.strip() for h in hashtags.split(",") if h.strip()]
+    elif actor_id == "apidojo/tweet-scraper":
+        search_terms = parameters.get("twitter_search_terms", "")
+        handles = parameters.get("twitter_handles", "")
         if search_terms:
-            actor_input['searchTerms'] = [t.strip() for t in search_terms.split(',') if t.strip()]
+            actor_input["searchTerms"] = [t.strip() for t in search_terms.split(",") if t.strip()]
         if handles:
-            actor_input['twitterHandles'] = [h.strip() for h in handles.split(',') if h.strip()]
-    elif actor_id == 'apify/google-search-scraper':
-        query = parameters.get('google_search_query', '')
-        pages = parameters.get('google_search_pages', 1)
+            actor_input["twitterHandles"] = [h.strip() for h in handles.split(",") if h.strip()]
+    elif actor_id == "apify/google-search-scraper":
+        query = parameters.get("google_search_query", "")
+        pages = parameters.get("google_search_pages", 1)
         if query:
-            actor_input['searchQuery'] = query
-            actor_input['maxPagesPerQuery'] = pages
-    elif actor_id == 'apify/website-content-crawler':
-        start_urls = parameters.get('crawler_start_urls', '')
-        max_depth = parameters.get('crawler_max_depth', 2)
-        max_pages = parameters.get('crawler_max_pages', 50)
+            actor_input["searchQuery"] = query
+            actor_input["maxPagesPerQuery"] = pages
+    elif actor_id == "apify/website-content-crawler":
+        start_urls = parameters.get("crawler_start_urls", "")
+        max_depth = parameters.get("crawler_max_depth", 2)
+        max_pages = parameters.get("crawler_max_pages", 50)
         if start_urls:
-            actor_input['startUrls'] = [{'url': u.strip()} for u in start_urls.split(',') if u.strip()]
-            actor_input['maxCrawlDepth'] = max_depth
-            actor_input['maxCrawlPages'] = max_pages
+            actor_input["startUrls"] = [{"url": u.strip()} for u in start_urls.split(",") if u.strip()]
+            actor_input["maxCrawlDepth"] = max_depth
+            actor_input["maxCrawlPages"] = max_pages
 
     return actor_input
 
@@ -95,6 +96,7 @@ async def validate_apify_token(api_token: str) -> Dict[str, Any]:
     """
     try:
         from apify_client import ApifyClientAsync  # lazy — optional dep
+
         client = ApifyClientAsync(api_token)
         user_info = await client.user("me").get()
         if not user_info:
@@ -189,7 +191,9 @@ class ApifyActorParams(BaseModel):
         json_schema_extra={"displayOptions": {"show": {"actor_id": ["apify/google-search-scraper"]}}},
     )
     google_search_pages: int = Field(
-        default=1, ge=1, le=100,
+        default=1,
+        ge=1,
+        le=100,
         description="Max pages per query.",
         json_schema_extra={"displayOptions": {"show": {"actor_id": ["apify/google-search-scraper"]}}},
     )
@@ -199,12 +203,16 @@ class ApifyActorParams(BaseModel):
         json_schema_extra={"displayOptions": {"show": {"actor_id": ["apify/website-content-crawler"]}}},
     )
     crawler_max_depth: int = Field(
-        default=2, ge=0, le=20,
+        default=2,
+        ge=0,
+        le=20,
         description="Max crawl depth.",
         json_schema_extra={"displayOptions": {"show": {"actor_id": ["apify/website-content-crawler"]}}},
     )
     crawler_max_pages: int = Field(
-        default=50, ge=1, le=10000,
+        default=50,
+        ge=1,
+        le=10000,
         description="Max pages to crawl.",
         json_schema_extra={"displayOptions": {"show": {"actor_id": ["apify/website-content-crawler"]}}},
     )
@@ -274,8 +282,7 @@ class ApifyActorNode(ActionNode):
         memory_mbytes = int(params.memory)
 
         logger.info(
-            f"[Apify] Running actor {actor_id} "
-            f"timeout={timeout_secs}s memory={memory_mbytes}MB",
+            f"[Apify] Running actor {actor_id} " f"timeout={timeout_secs}s memory={memory_mbytes}MB",
         )
         run_info = await client.actor(actor_id).call(
             run_input=actor_input,

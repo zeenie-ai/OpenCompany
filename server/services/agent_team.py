@@ -29,11 +29,7 @@ class AgentTeamService:
     # -------------------------------------------------------------------------
 
     async def create_team(
-        self,
-        team_lead_node_id: str,
-        teammate_node_ids: List[Dict[str, Any]],
-        workflow_id: str,
-        config: Optional[Dict[str, Any]] = None
+        self, team_lead_node_id: str, teammate_node_ids: List[Dict[str, Any]], workflow_id: str, config: Optional[Dict[str, Any]] = None
     ) -> Optional[Dict[str, Any]]:
         """Create a team with lead and teammates.
 
@@ -50,20 +46,14 @@ class AgentTeamService:
 
         # Create team
         team = await self.database.create_team(
-            team_id=team_id,
-            workflow_id=workflow_id,
-            team_lead_node_id=team_lead_node_id,
-            config=config or {"mode": "parallel"}
+            team_id=team_id, workflow_id=workflow_id, team_lead_node_id=team_lead_node_id, config=config or {"mode": "parallel"}
         )
         if not team:
             return None
 
         # Add team lead as member
         await self.database.add_team_member(
-            team_id=team_id,
-            agent_node_id=team_lead_node_id,
-            agent_type="orchestrator_agent",
-            role="team_lead"
+            team_id=team_id, agent_node_id=team_lead_node_id, agent_type="orchestrator_agent", role="team_lead"
         )
 
         # Add teammates
@@ -73,16 +63,14 @@ class AgentTeamService:
                 agent_node_id=teammate["node_id"],
                 agent_type=teammate.get("node_type", "agent"),
                 agent_label=teammate.get("label"),
-                role="teammate"
+                role="teammate",
             )
 
         # Broadcast team creation
         if self.broadcaster:
-            await self.broadcaster.broadcast_team_event(team_id, "team_created", {
-                "team_id": team_id,
-                "workflow_id": workflow_id,
-                "member_count": len(teammate_node_ids) + 1
-            })
+            await self.broadcaster.broadcast_team_event(
+                team_id, "team_created", {"team_id": team_id, "workflow_id": workflow_id, "member_count": len(teammate_node_ids) + 1}
+            )
 
         # Track active team for this workflow
         self._active_teams[workflow_id] = team_id
@@ -120,7 +108,7 @@ class AgentTeamService:
         created_by: str,
         description: Optional[str] = None,
         priority: int = 3,
-        depends_on: Optional[List[str]] = None
+        depends_on: Optional[List[str]] = None,
     ) -> Optional[Dict[str, Any]]:
         """Add a task to the shared task list."""
         task_id = f"task_{uuid.uuid4().hex[:12]}"
@@ -132,7 +120,7 @@ class AgentTeamService:
             created_by=created_by,
             description=description,
             priority=priority,
-            depends_on=depends_on
+            depends_on=depends_on,
         )
 
         if task and self.broadcaster:
@@ -148,9 +136,7 @@ class AgentTeamService:
         task = await self.database.claim_task(task_id, agent_node_id)
 
         if task and self.broadcaster:
-            await self.broadcaster.broadcast_team_event(team_id, "task_claimed", {
-                **task, "claimed_by": agent_node_id
-            })
+            await self.broadcaster.broadcast_team_event(team_id, "task_claimed", {**task, "claimed_by": agent_node_id})
 
         return task
 
@@ -168,9 +154,7 @@ class AgentTeamService:
                 await self.database.update_member_status(team_id, task["assigned_to"], "idle")
 
             if self.broadcaster:
-                await self.broadcaster.broadcast_team_event(team_id, "task_completed", {
-                    "task_id": task_id, "result": result
-                })
+                await self.broadcaster.broadcast_team_event(team_id, "task_completed", {"task_id": task_id, "result": result})
 
         return success
 
@@ -186,9 +170,7 @@ class AgentTeamService:
                 await self.database.update_member_status(team_id, task["assigned_to"], "idle")
 
             if self.broadcaster:
-                await self.broadcaster.broadcast_team_event(team_id, "task_failed", {
-                    "task_id": task_id, "error": error
-                })
+                await self.broadcaster.broadcast_team_event(team_id, "task_failed", {"task_id": task_id, "error": error})
 
         return success
 
@@ -208,12 +190,7 @@ class AgentTeamService:
     # -------------------------------------------------------------------------
 
     async def send_message(
-        self,
-        team_id: str,
-        from_agent: str,
-        content: str,
-        to_agent: Optional[str] = None,
-        message_type: str = "direct"
+        self, team_id: str, from_agent: str, content: str, to_agent: Optional[str] = None, message_type: str = "direct"
     ) -> Optional[Dict[str, Any]]:
         """Send a message to a specific agent or broadcast."""
         msg = await self.database.add_agent_message(
@@ -221,7 +198,7 @@ class AgentTeamService:
             from_agent=from_agent,
             content=content,
             message_type=message_type if to_agent else "broadcast",
-            to_agent=to_agent
+            to_agent=to_agent,
         )
 
         if msg and self.broadcaster:
@@ -233,12 +210,7 @@ class AgentTeamService:
         """Broadcast message to all team members."""
         return await self.send_message(team_id, from_agent, content, to_agent=None)
 
-    async def get_messages(
-        self,
-        team_id: str,
-        agent_node_id: Optional[str] = None,
-        unread_only: bool = False
-    ) -> List[Dict[str, Any]]:
+    async def get_messages(self, team_id: str, agent_node_id: Optional[str] = None, unread_only: bool = False) -> List[Dict[str, Any]]:
         """Get messages for a team or specific agent."""
         return await self.database.get_agent_messages(team_id, agent_node_id, unread_only)
 

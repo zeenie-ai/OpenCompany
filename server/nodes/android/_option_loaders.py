@@ -36,9 +36,6 @@ async def load_service_actions(params: Dict[str, Any]) -> List[Dict[str, Any]]:
 
         android_svc = get_android_service()
         actions = await android_svc.list_actions(service_id)  # type: ignore[attr-defined]
-        return [
-            {"value": a, "label": a.replace("_", " ").title()}
-            for a in actions or []
-        ]
+        return [{"value": a, "label": a.replace("_", " ").title()} for a in actions or []]
     except Exception:
         return []

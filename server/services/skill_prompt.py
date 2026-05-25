@@ -39,12 +39,12 @@ def build_skill_system_prompt(skill_data: List[Dict[str, Any]], log_prefix: str 
     non_personality_names = []
 
     for skill_info in skill_data:
-        skill_name = skill_info.get('skill_name') or skill_info.get('node_type', '').replace('Skill', '-skill').lower()
-        if skill_name.endswith('skill') and '-' not in skill_name:
-            skill_name = skill_name[:-5] + '-skill'
+        skill_name = skill_info.get("skill_name") or skill_info.get("node_type", "").replace("Skill", "-skill").lower()
+        if skill_name.endswith("skill") and "-" not in skill_name:
+            skill_name = skill_name[:-5] + "-skill"
 
-        if skill_name.endswith('-personality'):
-            instructions = skill_info.get('parameters', {}).get('instructions', '')
+        if skill_name.endswith("-personality"):
+            instructions = skill_info.get("parameters", {}).get("instructions", "")
             if instructions:
                 personality_blocks.append(instructions)
                 logger.debug(f"{log_prefix} Personality skill injected (full): {skill_name}")
@@ -65,6 +65,8 @@ def build_skill_system_prompt(skill_data: List[Dict[str, Any]], log_prefix: str 
             parts.append(registry_prompt)
 
     if parts:
-        logger.debug(f"{log_prefix} Enhanced system message: {len(personality_blocks)} personality, {len(non_personality_names)} standard skills")
+        logger.debug(
+            f"{log_prefix} Enhanced system message: {len(personality_blocks)} personality, {len(non_personality_names)} standard skills"
+        )
 
     return "\n\n".join(parts), len(personality_blocks) > 0

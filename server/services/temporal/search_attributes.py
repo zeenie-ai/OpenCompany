@@ -140,17 +140,14 @@ async def register_search_attributes(client: Client, namespace: str) -> dict:
 
     status: dict[str, str] = {}
     to_register: dict[str, IndexedValueType] = {
-        spec.name: spec.indexed_type
-        for spec in EVENT_SEARCH_ATTRIBUTES
-        if spec.name not in existing_names
+        spec.name: spec.indexed_type for spec in EVENT_SEARCH_ATTRIBUTES if spec.name not in existing_names
     }
     for name in existing_names & {s.name for s in EVENT_SEARCH_ATTRIBUTES}:
         status[name] = "already_exists"
 
     if not to_register:
         logger.info(
-            f"All {len(EVENT_SEARCH_ATTRIBUTES)} event-framework Search Attributes "
-            f"already registered on namespace={namespace!r}",
+            f"All {len(EVENT_SEARCH_ATTRIBUTES)} event-framework Search Attributes " f"already registered on namespace={namespace!r}",
         )
         return status
 
@@ -175,7 +172,6 @@ async def register_search_attributes(client: Client, namespace: str) -> dict:
         status[name] = "registered"
 
     logger.info(
-        f"Registered {len(to_register)} event-framework Search Attributes on "
-        f"namespace={namespace!r}: {list(to_register.keys())}",
+        f"Registered {len(to_register)} event-framework Search Attributes on " f"namespace={namespace!r}: {list(to_register.keys())}",
     )
     return status

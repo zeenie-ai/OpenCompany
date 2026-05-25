@@ -9,6 +9,7 @@ Also exposes :func:`temporal_status_snapshot` — the single source of
 truth for the ``{temporal}`` status shape consumed by both this refresh
 callback and ``_handlers.py``'s WS commands.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -45,10 +46,12 @@ async def refresh_temporal_status(broadcaster: "StatusBroadcaster") -> None:
     framework's ``TaskGroup`` swallows a ``TypeError: takes 0 positional
     arguments but 1 was given`` on every server boot.
     """
-    await broadcaster.broadcast({
-        "type": "temporal_status",
-        "data": temporal_status_snapshot(),
-    })
+    await broadcaster.broadcast(
+        {
+            "type": "temporal_status",
+            "data": temporal_status_snapshot(),
+        }
+    )
 
 
 __all__ = ["refresh_temporal_status", "temporal_status_snapshot"]

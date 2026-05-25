@@ -51,9 +51,7 @@ from services.plugin.registry import IdempotentRegistry
 ServiceFactory = Callable[..., Any]
 
 
-_REGISTRY: IdempotentRegistry[str, ServiceFactory] = IdempotentRegistry(
-    "service_factory"
-)
+_REGISTRY: IdempotentRegistry[str, ServiceFactory] = IdempotentRegistry("service_factory")
 
 
 def register_service_factory(name: str, factory: ServiceFactory) -> None:

@@ -135,6 +135,7 @@ async def test_resolver_walks_upward_to_find_git():
 @pytest.mark.asyncio
 async def test_resolver_returns_none_when_override_not_git():
     import tempfile
+
     with tempfile.TemporaryDirectory() as tmp:
         root = await AICliService._resolve_repo_root(
             workspace_dir=Path(tmp),  # ignored when override is set
@@ -196,11 +197,13 @@ async def test_run_batch_emits_diagnostic_logs_when_workspace_not_git(monkeypatc
     # BoundLogger that has no `reset_mock`. Locally patching makes the test
     # robust to import-order pollution.
     from services.cli_agent import service as svc_mod
+
     svc_logger = MagicMock()
     monkeypatch.setattr(svc_mod, "logger", svc_logger)
 
     svc = get_ai_cli_service()  # DI singleton — same accessor production uses
     import tempfile
+
     with tempfile.TemporaryDirectory() as tmp:
         result = await svc.run_batch(
             "claude",
@@ -211,8 +214,7 @@ async def test_run_batch_emits_diagnostic_logs_when_workspace_not_git(monkeypatc
             broadcaster=None,
             repo_root=Path(tmp),
             connected_tools=[
-                {"node_id": "ddg_1", "node_type": "duckduckgoSearch",
-                 "label": "DDG", "parameters": {}},
+                {"node_id": "ddg_1", "node_type": "duckduckgoSearch", "label": "DDG", "parameters": {}},
             ],
         )
 
@@ -254,9 +256,11 @@ async def test_run_batch_registers_mcp_batch_on_happy_path(monkeypatch):
 
     async def _fake_wait(self, timeout):  # noqa: ANN001, ARG002
         return SessionResult(
-            task_id=self.task_id, provider=self._provider.name,
+            task_id=self.task_id,
+            provider=self._provider.name,
             prompt=getattr(self._task, "prompt", ""),
-            success=True, response="stub",
+            success=True,
+            response="stub",
         )
 
     async def _fake_cleanup(self):  # noqa: ANN001
@@ -277,8 +281,7 @@ async def test_run_batch_registers_mcp_batch_on_happy_path(monkeypatch):
         broadcaster=None,
         repo_root=None,  # let the resolver find the parent .git
         connected_tools=[
-            {"node_id": "ddg_1", "node_type": "duckduckgoSearch",
-             "label": "DDG", "parameters": {}},
+            {"node_id": "ddg_1", "node_type": "duckduckgoSearch", "label": "DDG", "parameters": {}},
         ],
         connected_skill_names=["duckduckgo-search-skill"],
     )

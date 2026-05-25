@@ -56,9 +56,7 @@ async def load_group_members(params: Dict[str, Any]) -> List[Dict[str, Any]]:
     if not group_id:
         return []
     response = await handle_whatsapp_group_info(group_id)
-    participants = (
-        response.get("participants", []) if isinstance(response, dict) else []
-    )
+    participants = response.get("participants", []) if isinstance(response, dict) else []
     return [
         {
             "value": p.get("phone") or p.get("jid") or "",

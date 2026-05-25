@@ -56,11 +56,7 @@ class TelegramCredential(ApiKeyCredential):
         username = bot.get("username")
         return ProbeResult(
             valid=True,
-            message=(
-                f"Telegram bot token is valid (@{username})"
-                if username
-                else "Telegram bot token is valid"
-            ),
+            message=(f"Telegram bot token is valid (@{username})" if username else "Telegram bot token is valid"),
             extra={
                 "bot_id": bot.get("id"),
                 "bot_username": username,

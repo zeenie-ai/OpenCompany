@@ -28,10 +28,7 @@ async def _execute_calculator(args: Dict[str, Any]) -> Dict[str, Any]:
     supported = {"add", "subtract", "multiply", "divide", "power", "sqrt", "mod", "abs"}
     if op not in supported:
         return {
-            "error": (
-                f"Unsupported operation '{op}'. "
-                f"Supported: {sorted(supported)}"
-            ),
+            "error": (f"Unsupported operation '{op}'. " f"Supported: {sorted(supported)}"),
             "supported_operations": sorted(supported),
         }
 
@@ -108,6 +105,7 @@ async def _execute_duckduckgo_search(
     max_results = int(config.get("max_results", args.get("max_results", 5)))
     provider = config.get("provider", "duckduckgo")
     from ddgs import DDGS
+
     raw = list(DDGS().text(query, max_results=max_results))
     results = [
         {
@@ -139,7 +137,8 @@ async def handle_write_todos(
     broadcaster = context.get("broadcaster")
     if broadcaster:
         await broadcaster.update_node_status(
-            node_id, "executing",
+            node_id,
+            "executing",
             {"phase": "todo_update", "todos": stored},
             workflow_id=context.get("workflow_id"),
         )

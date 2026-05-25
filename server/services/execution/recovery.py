@@ -27,10 +27,13 @@ class RecoverySweeper:
     - Triggers workflow_decide to resume
     """
 
-    def __init__(self, cache: ExecutionCache,
-                 heartbeat_timeout: int = 300,  # 5 minutes
-                 sweep_interval: int = 60,      # 1 minute
-                 max_retries: int = 3):
+    def __init__(
+        self,
+        cache: ExecutionCache,
+        heartbeat_timeout: int = 300,  # 5 minutes
+        sweep_interval: int = 60,  # 1 minute
+        max_retries: int = 3,
+    ):
         """Initialize recovery sweeper.
 
         Args:
@@ -65,9 +68,7 @@ class RecoverySweeper:
 
         self._running = True
         self._task = asyncio.create_task(self._sweep_loop())
-        logger.info("Recovery sweeper started",
-                   heartbeat_timeout=self.heartbeat_timeout,
-                   sweep_interval=self.sweep_interval)
+        logger.info("Recovery sweeper started", heartbeat_timeout=self.heartbeat_timeout, sweep_interval=self.sweep_interval)
 
     async def stop(self) -> None:
         """Stop the recovery sweeper."""
@@ -105,8 +106,7 @@ class RecoverySweeper:
             try:
                 await self._check_execution(execution_id)
             except Exception as e:
-                logger.error("Failed to check execution",
-                           execution_id=execution_id, error=str(e))
+                logger.error("Failed to check execution", execution_id=execution_id, error=str(e))
 
     async def _check_execution(self, execution_id: str) -> None:
         """Check single execution for stuck nodes.
@@ -118,15 +118,13 @@ class RecoverySweeper:
         ctx = await self.cache.load_execution_state(execution_id)
         if not ctx:
             # Execution not found - remove from active set
-            logger.warning("Orphan execution in active set",
-                          execution_id=execution_id)
+            logger.warning("Orphan execution in active set", execution_id=execution_id)
             if self.cache.cache.is_redis_available():
                 await self.cache.cache.redis.srem("executions:active", execution_id)
             return
 
         # Check if already complete
-        if ctx.status in (WorkflowStatus.COMPLETED, WorkflowStatus.FAILED,
-                          WorkflowStatus.CANCELLED):
+        if ctx.status in (WorkflowStatus.COMPLETED, WorkflowStatus.FAILED, WorkflowStatus.CANCELLED):
             # Should not be in active set
             if self.cache.cache.is_redis_available():
                 await self.cache.cache.redis.srem("executions:active", execution_id)
@@ -145,18 +143,19 @@ class RecoverySweeper:
                     # No heartbeat - node is stuck
                     stuck_duration = current_time - (node_exec.started_at or current_time)
                     if stuck_duration > self.heartbeat_timeout:
-                        logger.warning("Node stuck (no heartbeat)",
-                                      execution_id=execution_id,
-                                      node_id=node_id,
-                                      stuck_seconds=stuck_duration)
+                        logger.warning(
+                            "Node stuck (no heartbeat)", execution_id=execution_id, node_id=node_id, stuck_seconds=stuck_duration
+                        )
                         needs_recovery = True
 
                 elif current_time - last_heartbeat > self.heartbeat_timeout:
                     # Heartbeat too old
-                    logger.warning("Node stuck (stale heartbeat)",
-                                  execution_id=execution_id,
-                                  node_id=node_id,
-                                  heartbeat_age=current_time - last_heartbeat)
+                    logger.warning(
+                        "Node stuck (stale heartbeat)",
+                        execution_id=execution_id,
+                        node_id=node_id,
+                        heartbeat_age=current_time - last_heartbeat,
+                    )
                     needs_recovery = True
 
         if needs_recovery and self._on_recovery:
@@ -164,8 +163,7 @@ class RecoverySweeper:
             try:
                 await self._on_recovery(execution_id)
             except Exception as e:
-                logger.error("Recovery callback failed",
-                           execution_id=execution_id, error=str(e))
+                logger.error("Recovery callback failed", execution_id=execution_id, error=str(e))
 
     async def scan_on_startup(self) -> List[str]:
         """Scan for executions that need recovery on server startup.
@@ -178,8 +176,7 @@ class RecoverySweeper:
         # Get all active executions
         active_ids = await self.cache.get_active_executions()
 
-        logger.info("Startup scan for incomplete executions",
-                   active_count=len(active_ids))
+        logger.info("Startup scan for incomplete executions", active_count=len(active_ids))
 
         for execution_id in active_ids:
             ctx = await self.cache.load_execution_state(execution_id)
@@ -192,9 +189,7 @@ class RecoverySweeper:
                 if ctx.updated_at:
                     age = time.time() - ctx.updated_at
                     if age > self.heartbeat_timeout:
-                        logger.info("Found interrupted execution",
-                                   execution_id=execution_id,
-                                   age_seconds=age)
+                        logger.info("Found interrupted execution", execution_id=execution_id, age_seconds=age)
                         needs_recovery.append(execution_id)
 
         return needs_recovery

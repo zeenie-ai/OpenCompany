@@ -62,9 +62,7 @@ class ProbeResult:
     extra: Dict[str, Any] = field(default_factory=dict)
 
 
-def classify_credential_error(
-    exc: BaseException, *, display_name: str
-) -> ProbeResult:
+def classify_credential_error(exc: BaseException, *, display_name: str) -> ProbeResult:
     """Map a transport / SDK exception to a typed ``ProbeResult``.
 
     Single source of truth for credential-error → user-message mapping.
@@ -169,10 +167,7 @@ class Credential:
                 # Idempotent on re-import — only warn on genuine conflict.
                 existing = CREDENTIAL_REGISTRY[cls.id]
                 if existing.__qualname__ != cls.__qualname__:
-                    raise ValueError(
-                        f"Credential id '{cls.id}' registered by "
-                        f"{existing.__qualname__} and now by {cls.__qualname__}"
-                    )
+                    raise ValueError(f"Credential id '{cls.id}' registered by " f"{existing.__qualname__} and now by {cls.__qualname__}")
             CREDENTIAL_REGISTRY[cls.id] = cls
 
     @classmethod
@@ -343,9 +338,7 @@ class Credential:
         ``openai.OpenAIError`` to let the base map them to a typed
         message via :func:`classify_credential_error`.
         """
-        raise NotImplementedError(
-            f"Credential subclass {cls.__name__} must override _probe()"
-        )
+        raise NotImplementedError(f"Credential subclass {cls.__name__} must override _probe()")
 
 
 class OAuth2Credential(Credential):
@@ -364,8 +357,8 @@ class OAuth2Credential(Credential):
     token_header: ClassVar[str] = "Authorization"
     token_prefix: ClassVar[str] = "Bearer "
     # Keys the user enters in credentials modal (API-key style rows)
-    client_id_api_key: ClassVar[str] = ""       # e.g. "google_client_id"
-    client_secret_api_key: ClassVar[str] = ""   # e.g. "google_client_secret"
+    client_id_api_key: ClassVar[str] = ""  # e.g. "google_client_id"
+    client_secret_api_key: ClassVar[str] = ""  # e.g. "google_client_secret"
 
     @classmethod
     async def resolve(cls, *, user_id: str = "owner") -> Dict[str, Any]:
@@ -379,9 +372,7 @@ class OAuth2Credential(Credential):
             # CloudEvents-typed broadcast (credential.oauth.runtime_failed)
             # via broadcast_credential_event. Plain attribute assignment —
             # no new exception class.
-            err = PermissionError(
-                f"No OAuth tokens for '{cls.id}'. Connect via Credentials modal."
-            )
+            err = PermissionError(f"No OAuth tokens for '{cls.id}'. Connect via Credentials modal.")
             err.provider = cls.id
             err.reason = "missing"
             err.auth = cls.auth  # "oauth2"
@@ -426,7 +417,7 @@ class ApiKeyCredential(Credential):
 
     auth: ClassVar[Literal["api_key"]] = "api_key"
     # Where the key goes
-    key_name: ClassVar[str] = ""              # header name or query-string key
+    key_name: ClassVar[str] = ""  # header name or query-string key
     key_location: ClassVar[Literal["header", "query", "bearer"]] = "header"
     # Extra fields stored alongside (e.g. "apify_account_id" for Apify)
     extra_fields: ClassVar[Sequence[str]] = ()
@@ -439,7 +430,7 @@ class ApiKeyCredential(Credential):
     # ``httpx.HTTPStatusError`` / ``TimeoutException`` / ``ConnectError``
     # propagate to :meth:`Credential.validate`, where
     # :func:`classify_credential_error` produces the user-facing message.
-    probe_url: ClassVar[str] = ""             # set to enable the default probe
+    probe_url: ClassVar[str] = ""  # set to enable the default probe
     probe_method: ClassVar[str] = "GET"
     probe_params: ClassVar[Dict[str, Any]] = {}
     probe_json: ClassVar[Optional[Dict[str, Any]]] = None
@@ -452,9 +443,7 @@ class ApiKeyCredential(Credential):
         auth_service = container.auth_service()
         api_key = await auth_service.get_api_key(cls.id)
         if not api_key:
-            err = PermissionError(
-                f"No API key for '{cls.id}'. Add via Credentials modal."
-            )
+            err = PermissionError(f"No API key for '{cls.id}'. Add via Credentials modal.")
             err.provider = cls.id
             err.reason = "missing"
             err.auth = cls.auth  # "api_key"
@@ -497,8 +486,7 @@ class ApiKeyCredential(Credential):
         """
         if not cls.probe_url:
             raise NotImplementedError(
-                f"Credential subclass {cls.__name__} must override _probe() "
-                f"or set the `probe_url` class attribute"
+                f"Credential subclass {cls.__name__} must override _probe() " f"or set the `probe_url` class attribute"
             )
 
         request = cls.inject(

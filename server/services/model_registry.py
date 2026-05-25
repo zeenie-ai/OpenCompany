@@ -34,9 +34,7 @@ PROVIDER_MAP = {
 }
 
 # Known reasoning models (always temperature=1, no user override)
-REASONING_MODEL_PATTERNS = re.compile(
-    r"^(o1|o3|o4|o3-mini|o4-mini)(-|$)", re.IGNORECASE
-)
+REASONING_MODEL_PATTERNS = re.compile(r"^(o1|o3|o4|o3-mini|o4-mini)(-|$)", re.IGNORECASE)
 
 # Known thinking model patterns -> thinking_type
 THINKING_PATTERNS: List[Tuple[str, str, str]] = [
@@ -44,7 +42,7 @@ THINKING_PATTERNS: List[Tuple[str, str, str]] = [
     ("anthropic", r"claude-(opus|sonnet|haiku)-(4|5|6)", "budget"),
     ("anthropic", r"claude-3[\.\-]5", "budget"),
     ("openai", r"^(o1|o3|o4)", "effort"),
-    ("openai", r"^gpt-5", "effort"),          # GPT-5 hybrid reasoning
+    ("openai", r"^gpt-5", "effort"),  # GPT-5 hybrid reasoning
     ("gemini", r"gemini-(2\.5|3)", "budget"),
     ("groq", r"qwen3", "format"),
     ("cerebras", r"qwen", "budget"),
@@ -68,19 +66,21 @@ DEFAULT_TEMP_RANGES = {
 # DATA STRUCTURES
 # =============================================================================
 
+
 @dataclass
 class ModelInfo:
     """Comprehensive model metadata."""
-    id: str                         # "openai/gpt-5.2"
-    name: str                       # "OpenAI: GPT-5.2"
-    provider: str                   # "openai" (MachinaOs-normalized)
-    local_id: str                   # "gpt-5.2"
+
+    id: str  # "openai/gpt-5.2"
+    name: str  # "OpenAI: GPT-5.2"
+    provider: str  # "openai" (MachinaOs-normalized)
+    local_id: str  # "gpt-5.2"
     context_length: int = 128000
     max_output_tokens: int = 4096
     input_price_per_mtok: float = 0.0
     output_price_per_mtok: float = 0.0
     supports_thinking: bool = False
-    thinking_type: str = "none"     # "budget" | "effort" | "format" | "none"
+    thinking_type: str = "none"  # "budget" | "effort" | "format" | "none"
     temperature_range: tuple = (0.0, 2.0)
     is_reasoning_model: bool = False
     supported_parameters: list = field(default_factory=list)
@@ -104,6 +104,7 @@ class ModelInfo:
 # SERVICE
 # =============================================================================
 
+
 class ModelRegistryService:
     """Centralized model parameter management.
 
@@ -113,7 +114,7 @@ class ModelRegistryService:
     """
 
     def __init__(self):
-        self._models: Dict[str, ModelInfo] = {}   # keyed by "provider/local_id"
+        self._models: Dict[str, ModelInfo] = {}  # keyed by "provider/local_id"
         self._cache_timestamp: Optional[datetime] = None
         self._llm_defaults: Dict[str, Any] = {}
 
@@ -184,11 +185,11 @@ class ModelRegistryService:
         """
         variants = [model]
         # digit-hyphen-digit -> digit.digit  (e.g., claude-sonnet-4-6 -> claude-sonnet-4.6)
-        dot_variant = re.sub(r'(\d)-(\d)', r'\1.\2', model)
+        dot_variant = re.sub(r"(\d)-(\d)", r"\1.\2", model)
         if dot_variant != model:
             variants.append(dot_variant)
         # digit.digit -> digit-digit  (e.g., claude-sonnet-4.6 -> claude-sonnet-4-6)
-        hyphen_variant = re.sub(r'(\d)\.(\d)', r'\1-\2', model)
+        hyphen_variant = re.sub(r"(\d)\.(\d)", r"\1-\2", model)
         if hyphen_variant != model:
             variants.append(hyphen_variant)
         return variants
@@ -301,15 +302,18 @@ class ModelRegistryService:
         self._models[f"{provider}/{model_id}"] = info
         logger.info(
             "[%s] registered model %s (ctx=%s, max_out=%s, tools=%s, vision=%s)",
-            provider, model_id, ctx, max_out,
-            params.get("supports_tools", False), params.get("vision", False),
+            provider,
+            model_id,
+            ctx,
+            max_out,
+            params.get("supports_tools", False),
+            params.get("vision", False),
         )
         # Persist so the entry survives process restart.
         try:
             self._save_cache()
         except Exception as e:  # noqa: BLE001 — best-effort persistence
-            logger.warning("Failed to persist local model entry %s/%s: %s",
-                           provider, model_id, e)
+            logger.warning("Failed to persist local model entry %s/%s: %s", provider, model_id, e)
 
     def get_max_output_tokens(self, model: str, provider: str) -> int:
         """Get max output tokens: registry -> llm_defaults -> 4096."""
@@ -531,9 +535,7 @@ class ModelRegistryService:
                 "_generated": self._cache_timestamp.isoformat() if self._cache_timestamp else None,
                 "_source": "openrouter",
                 "_model_count": len(self._models),
-                "models": {
-                    key: info.to_dict() for key, info in self._models.items()
-                }
+                "models": {key: info.to_dict() for key, info in self._models.items()},
             }
 
             CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)

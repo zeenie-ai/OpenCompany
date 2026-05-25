@@ -39,7 +39,8 @@ def agent_browser_binary_path() -> Optional[str]:
     npm_root.mkdir(parents=True, exist_ok=True)
     result = subprocess.run(
         [npm_cmd, "install", _NPM_SPEC, "--prefix", str(npm_root), "--no-audit", "--no-fund"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if result.returncode != 0 or not bin_path.exists():
         logger.error("[browser] npm install failed: %s", result.stderr.strip())
@@ -49,7 +50,8 @@ def agent_browser_binary_path() -> Optional[str]:
     # post-install step — downloads ~150MB chromium on first use).
     runtime = subprocess.run(
         [str(bin_path), "install"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if runtime.returncode != 0:
         logger.warning("[browser] chromium runtime install failed: %s", runtime.stderr.strip())

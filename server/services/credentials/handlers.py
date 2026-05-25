@@ -76,7 +76,7 @@ def _lookup_credential_default(storage_key: str) -> Optional[str]:
     registry = get_credential_registry()
     for provider in registry.get_all_providers():
         provider_id = provider.get("id") or provider.get("name", "").lower()
-        for field in (provider.get("fields") or []):
+        for field in provider.get("fields") or []:
             field_key = field.get("key")
             if not field_key:
                 continue
@@ -164,7 +164,11 @@ async def handle_delete_api_key(data: Dict[str, Any], websocket: WebSocket) -> D
         broadcaster = get_status_broadcaster()
         await auth_service.remove_api_key(provider, data.get("session_id", "default"))
         await broadcaster.update_api_key_status(
-            provider, valid=False, has_key=False, message="deleted", models=[],
+            provider,
+            valid=False,
+            has_key=False,
+            message="deleted",
+            models=[],
         )
         await broadcaster.broadcast_credential_event(
             "credential.api_key.deleted",

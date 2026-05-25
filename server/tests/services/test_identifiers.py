@@ -56,30 +56,30 @@ def test_accepts_valid_identifiers(value: str) -> None:
 @pytest.mark.parametrize(
     "value",
     [
-        "",                              # empty
-        "1leading_digit",                # digit prefix
-        "with space",                    # whitespace
-        "with-hyphen",                   # hyphen (not a Python identifier char)
-        "with.dot",                      # dot (path separator on URLs)
-        "with/slash",                    # path separator
-        "with\\backslash",               # Windows separator
-        "..",                            # parent-dir token
-        "../etc/passwd",                 # classic traversal
-        "..\\windows\\system32",          # Windows traversal
-        "foo\x00bar",                    # null byte truncation
-        "foo\nbar",                      # newline / CRLF injection
+        "",  # empty
+        "1leading_digit",  # digit prefix
+        "with space",  # whitespace
+        "with-hyphen",  # hyphen (not a Python identifier char)
+        "with.dot",  # dot (path separator on URLs)
+        "with/slash",  # path separator
+        "with\\backslash",  # Windows separator
+        "..",  # parent-dir token
+        "../etc/passwd",  # classic traversal
+        "..\\windows\\system32",  # Windows traversal
+        "foo\x00bar",  # null byte truncation
+        "foo\nbar",  # newline / CRLF injection
         "foo\rbar",
-        "%2e%2e%2fetc",                  # URL-encoded traversal
+        "%2e%2e%2fetc",  # URL-encoded traversal
         " leading_space",
         "trailing_space ",
         "tab\there",
-        "foo;bar",                       # command separator
-        "foo|bar",                       # pipe
-        "$VAR",                          # shell expansion
+        "foo;bar",  # command separator
+        "foo|bar",  # pipe
+        "$VAR",  # shell expansion
         "${HOME}",
-        "foo'bar",                       # quote
-        "foo\"bar",
-        "foo`bar",                       # backtick (command substitution)
+        "foo'bar",  # quote
+        'foo"bar',
+        "foo`bar",  # backtick (command substitution)
     ],
 )
 def test_rejects_traversal_and_injection_vectors(value: str) -> None:

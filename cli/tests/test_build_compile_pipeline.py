@@ -32,6 +32,7 @@ from cli.commands import build
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _run_build_capture_invocations(tmp_path: Path) -> list[dict]:
     """Run ``build_command()`` with all external I/O mocked.
 
@@ -54,11 +55,13 @@ def _run_build_capture_invocations(tmp_path: Path) -> list[dict]:
     # Step [6/6] invokes ``services.temporal._install`` via ``uv_run`` to
     # materialise the Temporal binaries at build time. ``fake_run``
     # captures the argv without actually spawning, so pooch never fires.
-    with patch.object(build, "run", side_effect=fake_run), \
-         patch.object(build, "capture", side_effect=fake_capture), \
-         patch.object(build, "_which_python", return_value="python"), \
-         patch.object(build, "_ensure_uv"), \
-         patch.object(build, "project_root", return_value=tmp_path):
+    with (
+        patch.object(build, "run", side_effect=fake_run),
+        patch.object(build, "capture", side_effect=fake_capture),
+        patch.object(build, "_which_python", return_value="python"),
+        patch.object(build, "_ensure_uv"),
+        patch.object(build, "project_root", return_value=tmp_path),
+    ):
         build.build_command()
 
     return captured
@@ -77,6 +80,7 @@ def _find_call(
 # ---------------------------------------------------------------------------
 # COMPILEALL_SOURCE_DIRS constant
 # ---------------------------------------------------------------------------
+
 
 def test_source_dirs_constant_excludes_venv_and_tests():
     """The bytecode-compile path list must skip ``.venv/`` and
@@ -113,21 +117,24 @@ def test_source_dirs_constant_covers_runtime_modules():
 # Sidecar bundle step ([3/6])
 # ---------------------------------------------------------------------------
 
+
 def test_build_invokes_sidecar_pnpm_filter(tmp_path: Path):
     """[3/6] Build Node.js sidecar via the package's ``build`` script."""
     captured = _run_build_capture_invocations(tmp_path)
     match = _find_call(
         captured,
-        lambda c: c[:1] == ["pnpm"] and "--filter" in c and "machinaos-nodejs-executor" in c,
+        lambda c: c[:1] == ["pnpm"]
+        and "--filter" in c
+        and "machinaos-nodejs-executor" in c,
     )
     assert match is not None, (
         "expected `pnpm --filter machinaos-nodejs-executor run build` in "
         f"{[c['argv'] for c in captured]}"
     )
     argv = match[1]["argv"]
-    assert "run" in argv and "build" in argv, (
-        f"sidecar step must invoke the `build` script, got {argv}"
-    )
+    assert (
+        "run" in argv and "build" in argv
+    ), f"sidecar step must invoke the `build` script, got {argv}"
 
 
 def test_sidecar_build_runs_after_client_build(tmp_path: Path):
@@ -139,9 +146,9 @@ def test_sidecar_build_runs_after_client_build(tmp_path: Path):
     client = _find_call(captured, lambda c: "react-flow-client" in c)
     sidecar = _find_call(captured, lambda c: "machinaos-nodejs-executor" in c)
     assert client is not None and sidecar is not None
-    assert client[0] < sidecar[0], (
-        f"client build idx {client[0]} must precede sidecar bundle idx {sidecar[0]}"
-    )
+    assert (
+        client[0] < sidecar[0]
+    ), f"client build idx {client[0]} must precede sidecar bundle idx {sidecar[0]}"
 
 
 def test_only_one_sidecar_bundle_invocation(tmp_path: Path):
@@ -155,15 +162,16 @@ def test_only_one_sidecar_bundle_invocation(tmp_path: Path):
 # Python bytecode compile step ([5/6])
 # ---------------------------------------------------------------------------
 
+
 def test_compileall_uses_optimised_flag_quiet_and_parallel(tmp_path: Path):
     """``-O`` strips asserts; ``-q`` silences per-file output; ``-j 0``
     parallelises across all CPU cores.
     """
     captured = _run_build_capture_invocations(tmp_path)
     match = _find_call(captured, lambda c: "compileall" in c)
-    assert match is not None, (
-        f"compileall step missing in {[c['argv'] for c in captured]}"
-    )
+    assert (
+        match is not None
+    ), f"compileall step missing in {[c['argv'] for c in captured]}"
     argv = match[1]["argv"]
     assert "-O" in argv, "must use -O for .opt-1.pyc output"
     assert "-q" in argv, "must use -q to silence per-file logging"
@@ -182,9 +190,14 @@ def test_compileall_runs_via_uv_run_python(tmp_path: Path):
     match = _find_call(captured, lambda c: "compileall" in c)
     assert match is not None
     argv = match[1]["argv"]
-    assert argv[:6] == ["uv", "run", "--no-sync", "python", "-O", "-m"], (
-        f"expected `uv run --no-sync python -O -m compileall ...`, got {argv[:7]}"
-    )
+    assert argv[:6] == [
+        "uv",
+        "run",
+        "--no-sync",
+        "python",
+        "-O",
+        "-m",
+    ], f"expected `uv run --no-sync python -O -m compileall ...`, got {argv[:7]}"
 
 
 def test_compileall_path_list_matches_source_dirs_constant(tmp_path: Path):
@@ -199,7 +212,7 @@ def test_compileall_path_list_matches_source_dirs_constant(tmp_path: Path):
     argv = match[1]["argv"]
     # Trailing args after `-j 0` are the path list.
     j_idx = argv.index("-j")
-    paths_passed = tuple(argv[j_idx + 2:])
+    paths_passed = tuple(argv[j_idx + 2 :])
     assert paths_passed == build.COMPILEALL_SOURCE_DIRS, (
         f"compileall args drift: build_command passed {paths_passed!r}, "
         f"constant says {build.COMPILEALL_SOURCE_DIRS!r}"
@@ -214,9 +227,9 @@ def test_compileall_runs_in_server_dir(tmp_path: Path):
     match = _find_call(captured, lambda c: "compileall" in c)
     assert match is not None
     call = match[1]
-    assert call.get("cwd") == tmp_path / "server", (
-        f"compileall must cwd into server/, got {call.get('cwd')}"
-    )
+    assert (
+        call.get("cwd") == tmp_path / "server"
+    ), f"compileall must cwd into server/, got {call.get('cwd')}"
 
 
 def test_compileall_is_non_fatal(tmp_path: Path):
@@ -246,12 +259,12 @@ def test_only_one_compileall_invocation(tmp_path: Path):
 # Temporal install step ([6/6])
 # ---------------------------------------------------------------------------
 
+
 def _find_temporal_install_call(captured: list[dict]) -> tuple[int, dict] | None:
     return _find_call(
         captured,
         lambda c: (
-            c[:3] == ["uv", "run", "--no-sync"]
-            and "services.temporal._install" in c
+            c[:3] == ["uv", "run", "--no-sync"] and "services.temporal._install" in c
         ),
     )
 
@@ -264,14 +277,13 @@ def test_build_invokes_temporal_install_via_uv_run(tmp_path: Path):
     captured = _run_build_capture_invocations(tmp_path)
     match = _find_temporal_install_call(captured)
     assert match is not None, (
-        "expected temporal install step in "
-        f"{[c['argv'] for c in captured]}"
+        "expected temporal install step in " f"{[c['argv'] for c in captured]}"
     )
     argv = match[1]["argv"]
-    assert argv[:6] == ["uv", "run", "--no-sync", "python", "-m",
-                        "services.temporal._install"], (
-        f"expected `uv run --no-sync python -m services.temporal._install`, got {argv[:7]}"
-    )
+    assert (
+        argv[:6]
+        == ["uv", "run", "--no-sync", "python", "-m", "services.temporal._install"]
+    ), f"expected `uv run --no-sync python -m services.temporal._install`, got {argv[:7]}"
 
 
 def test_temporal_install_runs_in_server_dir(tmp_path: Path):
@@ -282,9 +294,9 @@ def test_temporal_install_runs_in_server_dir(tmp_path: Path):
     match = _find_temporal_install_call(captured)
     assert match is not None
     call = match[1]
-    assert call.get("cwd") == tmp_path / "server", (
-        f"temporal install must cwd into server/, got {call.get('cwd')}"
-    )
+    assert (
+        call.get("cwd") == tmp_path / "server"
+    ), f"temporal install must cwd into server/, got {call.get('cwd')}"
 
 
 def test_temporal_install_is_fatal_on_failure(tmp_path: Path):
@@ -298,9 +310,9 @@ def test_temporal_install_is_fatal_on_failure(tmp_path: Path):
     assert match is not None
     call = match[1]
     # ``check`` defaults to True in ``cli.run.run`` — assert no override.
-    assert call.get("check", True) is True, (
-        "temporal install must keep check=True so build aborts on fetch failure"
-    )
+    assert (
+        call.get("check", True) is True
+    ), "temporal install must keep check=True so build aborts on fetch failure"
 
 
 def test_temporal_install_runs_after_uv_sync(tmp_path: Path):
@@ -312,23 +324,24 @@ def test_temporal_install_runs_after_uv_sync(tmp_path: Path):
     uv_sync = _find_call(captured, lambda c: c[:2] == ["uv", "sync"])
     temporal = _find_temporal_install_call(captured)
     assert uv_sync is not None and temporal is not None
-    assert uv_sync[0] < temporal[0], (
-        f"uv_sync idx {uv_sync[0]} must precede temporal install idx {temporal[0]}"
-    )
+    assert (
+        uv_sync[0] < temporal[0]
+    ), f"uv_sync idx {uv_sync[0]} must precede temporal install idx {temporal[0]}"
 
 
 def test_only_one_temporal_install_invocation(tmp_path: Path):
     """Temporal install must fire exactly once per build."""
     captured = _run_build_capture_invocations(tmp_path)
     matches = [c for c in captured if "services.temporal._install" in c["argv"]]
-    assert len(matches) == 1, (
-        f"expected exactly 1 temporal install call, got {len(matches)}"
-    )
+    assert (
+        len(matches) == 1
+    ), f"expected exactly 1 temporal install call, got {len(matches)}"
 
 
 # ---------------------------------------------------------------------------
 # Step ordering invariants
 # ---------------------------------------------------------------------------
+
 
 def test_pipeline_order_client_then_sidecar_then_uv_then_compileall(tmp_path: Path):
     """Full ordering invariant for the new pipeline:
@@ -346,8 +359,12 @@ def test_pipeline_order_client_then_sidecar_then_uv_then_compileall(tmp_path: Pa
     sidecar = _find_call(captured, lambda c: "machinaos-nodejs-executor" in c)
     uv_sync = _find_call(captured, lambda c: c[:2] == ["uv", "sync"])
     compileall = _find_call(captured, lambda c: "compileall" in c)
-    for label, match in (("client", client), ("sidecar", sidecar),
-                         ("uv_sync", uv_sync), ("compileall", compileall)):
+    for label, match in (
+        ("client", client),
+        ("sidecar", sidecar),
+        ("uv_sync", uv_sync),
+        ("compileall", compileall),
+    ):
         assert match is not None, f"missing pipeline step: {label}"
     indices = [client[0], sidecar[0], uv_sync[0], compileall[0]]
     assert indices == sorted(indices), (

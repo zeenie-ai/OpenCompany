@@ -75,9 +75,7 @@ class CircuitBreakerOpen(RuntimeError):
     """Raised when a call short-circuits because the breaker is open."""
 
     def __init__(self, scope: str, retry_after_seconds: float) -> None:
-        super().__init__(
-            f"circuit breaker {scope!r} is open; retry after ~{retry_after_seconds:.0f}s"
-        )
+        super().__init__(f"circuit breaker {scope!r} is open; retry after ~{retry_after_seconds:.0f}s")
         self.scope = scope
         self.retry_after_seconds = retry_after_seconds
 
@@ -173,9 +171,7 @@ class CircuitBreaker:
         if now - self._state.opened_at < self._cooldown:
             return
         # Cooldown elapsed → allow one probe call.
-        logger.info(
-            "circuit_breaker[%s]: cooldown elapsed, moving to half_open", self._scope
-        )
+        logger.info("circuit_breaker[%s]: cooldown elapsed, moving to half_open", self._scope)
         self._state.state = CircuitState.HALF_OPEN
 
     def _record_failure(self, now: float, exc: BaseException) -> None:

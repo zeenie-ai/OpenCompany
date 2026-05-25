@@ -27,8 +27,7 @@ logger = get_logger(__name__)
 class DLQHandlerProtocol(Protocol):
     """Protocol for DLQ handlers (enables duck typing)."""
 
-    async def add_failed_node(self, ctx: ExecutionContext, node: NodeExecution,
-                              inputs: Dict[str, Any], error: str) -> bool:
+    async def add_failed_node(self, ctx: ExecutionContext, node: NodeExecution, inputs: Dict[str, Any], error: str) -> bool:
         """Add a failed node to the DLQ."""
         ...
 
@@ -48,11 +47,9 @@ class NullDLQHandler:
     def enabled(self) -> bool:
         return False
 
-    async def add_failed_node(self, ctx: ExecutionContext, node: NodeExecution,
-                              inputs: Dict[str, Any], error: str) -> bool:
+    async def add_failed_node(self, ctx: ExecutionContext, node: NodeExecution, inputs: Dict[str, Any], error: str) -> bool:
         """No-op: silently succeed without storing anything."""
-        logger.debug("DLQ disabled, skipping failed node storage",
-                    node_id=node.node_id, error=error)
+        logger.debug("DLQ disabled, skipping failed node storage", node_id=node.node_id, error=error)
         return True
 
 
@@ -75,8 +72,7 @@ class DLQHandler:
     def enabled(self) -> bool:
         return True
 
-    async def add_failed_node(self, ctx: ExecutionContext, node: NodeExecution,
-                              inputs: Dict[str, Any], error: str) -> bool:
+    async def add_failed_node(self, ctx: ExecutionContext, node: NodeExecution, inputs: Dict[str, Any], error: str) -> bool:
         """Add a failed node to the Dead Letter Queue.
 
         Args:
@@ -93,27 +89,27 @@ class DLQHandler:
 
             success = await self.cache.add_to_dlq(dlq_entry)
             if success:
-                logger.info("Node added to DLQ",
-                           entry_id=dlq_entry.id,
-                           node_id=node.node_id,
-                           node_type=node.node_type,
-                           retry_count=node.retry_count)
+                logger.info(
+                    "Node added to DLQ", entry_id=dlq_entry.id, node_id=node.node_id, node_type=node.node_type, retry_count=node.retry_count
+                )
 
-                await self.cache.add_event(ctx.execution_id, "node_dlq", {
-                    "node_id": node.node_id,
-                    "dlq_entry_id": dlq_entry.id,
-                    "error": error,
-                    "retry_count": node.retry_count,
-                })
+                await self.cache.add_event(
+                    ctx.execution_id,
+                    "node_dlq",
+                    {
+                        "node_id": node.node_id,
+                        "dlq_entry_id": dlq_entry.id,
+                        "error": error,
+                        "retry_count": node.retry_count,
+                    },
+                )
                 return True
             else:
-                logger.error("Failed to add node to DLQ",
-                            node_id=node.node_id, error=error)
+                logger.error("Failed to add node to DLQ", node_id=node.node_id, error=error)
                 return False
 
         except Exception as e:
-            logger.error("Exception adding node to DLQ",
-                        node_id=node.node_id, error=str(e))
+            logger.error("Exception adding node to DLQ", node_id=node.node_id, error=str(e))
             return False
 
 

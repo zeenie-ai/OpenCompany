@@ -26,10 +26,11 @@ CONFIG_PATH = Path(__file__).parent.parent / "config" / "pricing.json"
 @dataclass
 class ModelPricing:
     """Pricing for a specific LLM model."""
-    input_per_mtok: float   # USD per 1M input tokens
+
+    input_per_mtok: float  # USD per 1M input tokens
     output_per_mtok: float  # USD per 1M output tokens
     cache_read_per_mtok: Optional[float] = None  # USD per 1M cache read tokens (Anthropic)
-    reasoning_per_mtok: Optional[float] = None   # USD per 1M reasoning tokens (OpenAI o-series)
+    reasoning_per_mtok: Optional[float] = None  # USD per 1M reasoning tokens (OpenAI o-series)
 
 
 class PricingService:
@@ -44,7 +45,7 @@ class PricingService:
         """Load pricing config from JSON file."""
         if CONFIG_PATH.exists():
             try:
-                with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+                with open(CONFIG_PATH, "r", encoding="utf-8") as f:
                     self._config = json.load(f)
                 self._build_llm_registry()
                 logger.info(f"[Pricing] Loaded pricing config v{self._config.get('version', 'unknown')}")
@@ -97,7 +98,7 @@ class PricingService:
             # Ensure config directory exists
             CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-            with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+            with open(CONFIG_PATH, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2)
 
             # Reload the config into memory
@@ -128,7 +129,7 @@ class PricingService:
             ModelPricing with rates per million tokens
         """
         provider_lower = provider.lower()
-        model_lower = model.lower() if model else ''
+        model_lower = model.lower() if model else ""
 
         provider_pricing = self._llm_registry.get(provider_lower, {})
 
@@ -138,16 +139,16 @@ class PricingService:
 
         # Try partial match (model name starts with a known key)
         for model_key, pricing in provider_pricing.items():
-            if model_key != '_default' and model_lower.startswith(model_key):
+            if model_key != "_default" and model_lower.startswith(model_key):
                 return pricing
 
         # Try if any key is contained in the model name
         for model_key, pricing in provider_pricing.items():
-            if model_key != '_default' and model_key in model_lower:
+            if model_key != "_default" and model_key in model_lower:
                 return pricing
 
         # Fall back to provider default
-        default_pricing = provider_pricing.get('_default')
+        default_pricing = provider_pricing.get("_default")
         if default_pricing:
             return default_pricing
 
@@ -163,7 +164,7 @@ class PricingService:
         output_tokens: int,
         cache_read_tokens: int = 0,
         cache_creation_tokens: int = 0,
-        reasoning_tokens: int = 0
+        reasoning_tokens: int = 0,
     ) -> Dict[str, float]:
         """Calculate cost for LLM token usage.
 
@@ -206,11 +207,11 @@ class PricingService:
         total_cost = input_cost + output_cost + cache_cost + reasoning_cost
 
         return {
-            'input_cost': round(input_cost, 6),
-            'output_cost': round(output_cost, 6),
-            'cache_cost': round(cache_cost, 6),
-            'reasoning_cost': round(reasoning_cost, 6),
-            'total_cost': round(total_cost, 6),
+            "input_cost": round(input_cost, 6),
+            "output_cost": round(output_cost, 6),
+            "cache_cost": round(cache_cost, 6),
+            "reasoning_cost": round(reasoning_cost, 6),
+            "total_cost": round(total_cost, 6),
         }
 
     def get_all_pricing(self) -> Dict[str, Dict[str, Dict[str, float]]]:
@@ -224,10 +225,10 @@ class PricingService:
             result[provider] = {}
             for model, pricing in models.items():
                 result[provider][model] = {
-                    'input': pricing.input_per_mtok,
-                    'output': pricing.output_per_mtok,
-                    'cache_read': pricing.cache_read_per_mtok,
-                    'reasoning': pricing.reasoning_per_mtok,
+                    "input": pricing.input_per_mtok,
+                    "output": pricing.output_per_mtok,
+                    "cache_read": pricing.cache_read_per_mtok,
+                    "reasoning": pricing.reasoning_per_mtok,
                 }
         return result
 
@@ -245,7 +246,7 @@ class PricingService:
         Returns:
             USD cost per resource/request
         """
-        api_config = self._config.get('api', {})
+        api_config = self._config.get("api", {})
         service_config = api_config.get(service, {})
         return service_config.get(operation, 0.0)
 
@@ -258,10 +259,10 @@ class PricingService:
         Returns:
             Dict of {operation: price} for the service
         """
-        api_config = self._config.get('api', {})
+        api_config = self._config.get("api", {})
         service_config = api_config.get(service, {})
         # Filter out metadata keys starting with _
-        return {k: v for k, v in service_config.items() if not k.startswith('_') and isinstance(v, (int, float))}
+        return {k: v for k, v in service_config.items() if not k.startswith("_") and isinstance(v, (int, float))}
 
     def map_action_to_operation(self, service: str, action: str) -> Optional[str]:
         """Map handler action to pricing operation.
@@ -273,16 +274,11 @@ class PricingService:
         Returns:
             Pricing operation key or None if no mapping
         """
-        operation_map = self._config.get('operation_map', {})
+        operation_map = self._config.get("operation_map", {})
         service_map = operation_map.get(service, {})
         return service_map.get(action)
 
-    def calculate_api_cost(
-        self,
-        service: str,
-        action: str,
-        resource_count: int = 1
-    ) -> Dict[str, Any]:
+    def calculate_api_cost(self, service: str, action: str, resource_count: int = 1) -> Dict[str, Any]:
         """Calculate cost for API usage.
 
         Args:
@@ -299,22 +295,12 @@ class PricingService:
         """
         operation = self.map_action_to_operation(service, action)
         if not operation:
-            return {
-                'operation': action,
-                'unit_cost': 0.0,
-                'resource_count': resource_count,
-                'total_cost': 0.0
-            }
+            return {"operation": action, "unit_cost": 0.0, "resource_count": resource_count, "total_cost": 0.0}
 
         unit_cost = self.get_api_price(service, operation)
         total_cost = unit_cost * resource_count
 
-        return {
-            'operation': operation,
-            'unit_cost': unit_cost,
-            'resource_count': resource_count,
-            'total_cost': round(total_cost, 6)
-        }
+        return {"operation": operation, "unit_cost": unit_cost, "resource_count": resource_count, "total_cost": round(total_cost, 6)}
 
 
 # Singleton instance

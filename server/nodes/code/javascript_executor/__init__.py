@@ -50,9 +50,7 @@ class JavaScriptExecutorNode(CodeExecutorBase):
             ) from exc
 
         if not result.get("success"):
-            raise NodeUserError(
-                result.get("error") or "JavaScript executor failed"
-            )
+            raise NodeUserError(result.get("error") or "JavaScript executor failed")
         return {
             "output": result.get("output"),
             "console_output": result.get("console_output", ""),

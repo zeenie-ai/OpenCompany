@@ -6,6 +6,7 @@ No hardcoded values - everything from .env file.
 Usage:
     gunicorn main:app -c gunicorn.conf.py
 """
+
 import os
 import multiprocessing
 

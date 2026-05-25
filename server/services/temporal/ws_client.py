@@ -22,11 +22,15 @@ from core.config import Settings
 
 logger = get_logger(__name__)
 
-# Load settings
-_settings = Settings()
-WS_URL = f"ws://{_settings.host}:{_settings.port}/ws/internal"
 
-logger.info("WebSocket URL configured", url=WS_URL)
+def _default_ws_url() -> str:
+    """Resolve the activity-side WS URL from current ``Settings``.
+
+    Deferred to first call so module import doesn't require the full env
+    surface — same rationale as ``activities._resolve_urls``.
+    """
+    settings = Settings()
+    return f"ws://{settings.host}:{settings.port}/ws/internal"
 
 
 class WSConnectionPool:
@@ -41,8 +45,8 @@ class WSConnectionPool:
     avoiding the ConcurrencyError that occurs when sharing a single connection.
     """
 
-    def __init__(self, url: str = WS_URL, pool_size: int = 100):
-        self.url = url
+    def __init__(self, url: Optional[str] = None, pool_size: int = 100):
+        self.url = url if url is not None else _default_ws_url()
         self.pool_size = pool_size
         self._session: Optional[aiohttp.ClientSession] = None
         self._lock = asyncio.Lock()
@@ -213,7 +217,7 @@ async def close_ws_client() -> None:
 class TemporalWSClient:
     """Backwards compatibility wrapper around WSConnectionPool."""
 
-    def __init__(self, url: str = WS_URL):
+    def __init__(self, url: Optional[str] = None):
         self._pool = WSConnectionPool(url=url)
 
     @property

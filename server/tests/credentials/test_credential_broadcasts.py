@@ -35,9 +35,7 @@ pytestmark = pytest.mark.credentials
 #   broadcaster.broadcast_credential_event("credential.<anything>", ...)
 # Anchor on `.update_api_key_status(` or `.broadcast_credential_event(`
 # so renames force a test update (intentional).
-_BROADCAST_PATTERN = re.compile(
-    r"\.(?:update_api_key_status|broadcast_credential_event)\s*\("
-)
+_BROADCAST_PATTERN = re.compile(r"\.(?:update_api_key_status|broadcast_credential_event)\s*\(")
 
 
 def _handler_source(handler) -> str:
@@ -69,8 +67,7 @@ class TestCredentialMutationHandlersBroadcast:
 
         src = inspect.getsource(Credential.validate)
         assert _BROADCAST_PATTERN.search(src), (
-            "Credential.validate must broadcast via update_api_key_status — "
-            "every credential mutation must surface to connected clients."
+            "Credential.validate must broadcast via update_api_key_status — " "every credential mutation must surface to connected clients."
         )
 
     def test_save_api_key_broadcasts(self):
@@ -106,17 +103,13 @@ class TestCredentialMutationHandlersBroadcast:
         from nodes.twitter._handlers import handle_twitter_logout
 
         src = _handler_source(handle_twitter_logout)
-        assert _BROADCAST_PATTERN.search(src), (
-            "handle_twitter_logout must broadcast credential.oauth.disconnected"
-        )
+        assert _BROADCAST_PATTERN.search(src), "handle_twitter_logout must broadcast credential.oauth.disconnected"
 
     def test_google_logout_broadcasts(self):
         from nodes.google._handlers import handle_google_logout
 
         src = _handler_source(handle_google_logout)
-        assert _BROADCAST_PATTERN.search(src), (
-            "handle_google_logout must broadcast credential.oauth.disconnected"
-        )
+        assert _BROADCAST_PATTERN.search(src), "handle_google_logout must broadcast credential.oauth.disconnected"
 
 
 class TestCredentialEventCloudEventsShape:
@@ -209,12 +202,8 @@ class TestAuthServiceDbCanonicalInvariant:
         body = match.group(0)
 
         # Find the cache-write block. It assigns to self._oauth_cache[...].
-        cache_block = re.search(
-            r"self\._oauth_cache\[\w+\]\s*=\s*\{[^}]+\}", body, re.DOTALL
-        )
-        assert cache_block, (
-            "AuthService.store_oauth_tokens must populate _oauth_cache"
-        )
+        cache_block = re.search(r"self\._oauth_cache\[\w+\]\s*=\s*\{[^}]+\}", body, re.DOTALL)
+        assert cache_block, "AuthService.store_oauth_tokens must populate _oauth_cache"
         assert '"refresh_token"' not in cache_block.group(0), (
             "RFC 9700 violation: _oauth_cache entry must not carry "
             "refresh_token. Use get_oauth_refresh_token() helper that "
@@ -246,12 +235,10 @@ class TestCredentialRuntimeFailureBroadcast:
 
         for label, src in (("OAuth2Credential", oauth_src), ("ApiKeyCredential", apikey_src)):
             assert "err.provider" in src, (
-                f"{label}.resolve must annotate PermissionError with .provider "
-                "so BaseNode.execute can surface the failing credential."
+                f"{label}.resolve must annotate PermissionError with .provider " "so BaseNode.execute can surface the failing credential."
             )
             assert "err.reason" in src, (
-                f"{label}.resolve must annotate PermissionError with .reason "
-                "('missing' / 'expired' / 'invalid')."
+                f"{label}.resolve must annotate PermissionError with .reason " "('missing' / 'expired' / 'invalid')."
             )
             assert "err.auth" in src, (
                 f"{label}.resolve must annotate PermissionError with .auth "
@@ -271,10 +258,7 @@ class TestCredentialRuntimeFailureBroadcast:
         """
         from services.plugin import base as base_module
 
-        src = (
-            inspect.getsource(base_module.BaseNode.execute)
-            + inspect.getsource(base_module.BaseNode._execute_body)
-        )
+        src = inspect.getsource(base_module.BaseNode.execute) + inspect.getsource(base_module.BaseNode._execute_body)
         assert _BROADCAST_PATTERN.search(src), (
             "BaseNode must broadcast on PermissionError so missing "
             "credentials surface to the Credentials modal. Reuses the "
@@ -282,8 +266,7 @@ class TestCredentialRuntimeFailureBroadcast:
         )
         # Type string convention: credential.<auth>.runtime_failed
         assert "runtime_failed" in src, (
-            "BaseNode should emit credential.<auth>.runtime_failed "
-            "(matches the credential.oauth.connected naming convention)."
+            "BaseNode should emit credential.<auth>.runtime_failed " "(matches the credential.oauth.connected naming convention)."
         )
 
     def test_broadcast_credential_event_carries_workflow_id_and_extras(self):

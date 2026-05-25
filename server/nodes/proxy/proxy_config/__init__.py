@@ -29,9 +29,16 @@ _ROUTING_REMOVE_OPS = ["remove_routing_rule"]
 
 class ProxyConfigParams(BaseModel):
     operation: Literal[
-        "list_providers", "add_provider", "update_provider", "remove_provider",
-        "set_credentials", "test_provider", "get_stats",
-        "add_routing_rule", "list_routing_rules", "remove_routing_rule",
+        "list_providers",
+        "add_provider",
+        "update_provider",
+        "remove_provider",
+        "set_credentials",
+        "test_provider",
+        "get_stats",
+        "add_routing_rule",
+        "list_routing_rules",
+        "remove_routing_rule",
     ] = Field(
         default="list_providers",
         description="Proxy management operation. list_providers / get_stats / list_routing_rules need no extra params.",
@@ -57,7 +64,7 @@ class ProxyConfigParams(BaseModel):
     )
     url_template: Any = Field(
         default="{}",
-        description="JSON template for proxy URL formatting (e.g. {\"username\": \"{user}-country-{country}\"}).",
+        description='JSON template for proxy URL formatting (e.g. {"username": "{user}-country-{country}"}).',
         json_schema_extra={
             "rows": 4,
             "displayOptions": {"show": {"operation": _PROVIDER_EDIT_OPS}},
@@ -75,7 +82,8 @@ class ProxyConfigParams(BaseModel):
     )
     priority: int = Field(
         default=50,
-        ge=0, le=100,
+        ge=0,
+        le=100,
         description="Selection priority (higher ranks first).",
         json_schema_extra={"displayOptions": {"show": {"operation": _PROVIDER_EDIT_OPS}}},
     )
@@ -170,22 +178,22 @@ async def _add_provider(p: Dict[str, Any], proxy_svc) -> Dict[str, Any]:
 
     url_template_raw = p.get("url_template", "{}")
     try:
-        url_template = (
-            json.loads(url_template_raw) if isinstance(url_template_raw, str) else url_template_raw
-        )
+        url_template = json.loads(url_template_raw) if isinstance(url_template_raw, str) else url_template_raw
     except json.JSONDecodeError:
         return {"success": False, "error": f"Invalid url_template JSON: {url_template_raw}"}
 
     db = get_database()
-    await db.save_proxy_provider({
-        "name": name,
-        "enabled": p.get("enabled", True),
-        "priority": int(p.get("priority", 50)),
-        "cost_per_gb": float(p.get("cost_per_gb", 0)),
-        "gateway_host": p.get("gateway_host", ""),
-        "gateway_port": int(p.get("gateway_port", 0)),
-        "url_template": json.dumps(url_template),
-    })
+    await db.save_proxy_provider(
+        {
+            "name": name,
+            "enabled": p.get("enabled", True),
+            "priority": int(p.get("priority", 50)),
+            "cost_per_gb": float(p.get("cost_per_gb", 0)),
+            "gateway_host": p.get("gateway_host", ""),
+            "gateway_port": int(p.get("gateway_port", 0)),
+            "url_template": json.dumps(url_template),
+        }
+    )
     if proxy_svc:
         await proxy_svc.reload_providers()
     return {"success": True, "name": name}
@@ -210,9 +218,7 @@ async def _update_provider(p: Dict[str, Any], proxy_svc) -> Dict[str, Any]:
     url_template_raw = p.get("url_template")
     if url_template_raw:
         try:
-            url_template = (
-                json.loads(url_template_raw) if isinstance(url_template_raw, str) else url_template_raw
-            )
+            url_template = json.loads(url_template_raw) if isinstance(url_template_raw, str) else url_template_raw
             updates["url_template"] = json.dumps(url_template)
         except json.JSONDecodeError:
             return {"success": False, "error": "Invalid url_template JSON"}
@@ -264,7 +270,8 @@ async def _test_provider(p: Dict[str, Any], proxy_svc) -> Dict[str, Any]:
 
     try:
         proxy_url = await proxy_svc.get_proxy_url(
-            "https://httpbin.org/ip", {"proxyProvider": name},
+            "https://httpbin.org/ip",
+            {"proxyProvider": name},
         )
         if not proxy_url:
             return {"success": False, "error": f"Could not get proxy URL for '{name}'"}
@@ -299,19 +306,19 @@ async def _add_routing_rule(p: Dict[str, Any], proxy_svc) -> Dict[str, Any]:
 
     preferred_raw = p.get("preferred_providers", "[]")
     try:
-        preferred = (
-            json.loads(preferred_raw) if isinstance(preferred_raw, str) else preferred_raw
-        )
+        preferred = json.loads(preferred_raw) if isinstance(preferred_raw, str) else preferred_raw
     except json.JSONDecodeError:
         preferred = []
 
     db = get_database()
-    await db.save_proxy_routing_rule({
-        "domain_pattern": domain_pattern,
-        "preferred_providers": json.dumps(preferred),
-        "required_country": p.get("required_country", ""),
-        "session_type": p.get("session_type", "rotating"),
-    })
+    await db.save_proxy_routing_rule(
+        {
+            "domain_pattern": domain_pattern,
+            "preferred_providers": json.dumps(preferred),
+            "required_country": p.get("required_country", ""),
+            "session_type": p.get("session_type", "rotating"),
+        }
+    )
     if proxy_svc:
         await proxy_svc.reload_providers()
     return {"success": True, "domain_pattern": domain_pattern}

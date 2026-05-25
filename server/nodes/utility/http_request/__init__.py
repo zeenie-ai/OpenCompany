@@ -47,7 +47,8 @@ class HttpRequestParams(BaseModel):
         json_schema_extra={"displayOptions": {"show": {"use_proxy": [True]}}},
     )
     sticky_duration: int = Field(
-        default=600, ge=1,
+        default=600,
+        ge=1,
         description="Sticky session duration in seconds.",
         json_schema_extra={
             "displayOptions": {"show": {"use_proxy": [True], "session_type": ["sticky"]}},
@@ -101,10 +102,8 @@ class HttpRequestNode(ActionNode):
         if not params.url:
             raise RuntimeError("URL is required")
 
-        proxy_url = await _resolve_proxy_url(params.url, params.use_proxy,
-                                              params.model_dump())
-        log.info("[HTTP Request] Executing", node_id=ctx.node_id,
-                 method=params.method, url=params.url, proxy=bool(proxy_url))
+        proxy_url = await _resolve_proxy_url(params.url, params.use_proxy, params.model_dump())
+        log.info("[HTTP Request] Executing", node_id=ctx.node_id, method=params.method, url=params.url, proxy=bool(proxy_url))
 
         client_kwargs: dict = {"timeout": float(params.timeout)}
         if proxy_url:
@@ -155,12 +154,14 @@ async def _resolve_proxy_url(url: str, use_proxy: bool, parameters: dict) -> Any
         return None
     try:
         from services.proxy.service import get_proxy_service
+
         svc = get_proxy_service()
         if not svc or not svc.is_enabled():
             return None
         return await svc.get_proxy_url(url, parameters)
     except Exception as e:
         get_logger(__name__).warning(
-            "Proxy URL lookup failed, proceeding without proxy", error=str(e),
+            "Proxy URL lookup failed, proceeding without proxy",
+            error=str(e),
         )
         return None

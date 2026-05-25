@@ -87,12 +87,14 @@ class ProcessManagerNode(ActionNode):
             return response
 
         if op == "start":
-            return _unwrap(await svc.start(
-                name=name,
-                command=_clean(params.command),
-                workflow_id=workflow_id,
-                working_directory=_clean(params.cwd) or agent_dir,
-            ))
+            return _unwrap(
+                await svc.start(
+                    name=name,
+                    command=_clean(params.command),
+                    workflow_id=workflow_id,
+                    working_directory=_clean(params.cwd) or agent_dir,
+                )
+            )
         if op == "stop":
             return _unwrap(await svc.stop(name, workflow_id))
         if op == "restart":

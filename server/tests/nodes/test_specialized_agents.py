@@ -102,9 +102,7 @@ class TestGenericSpecializedAgents:
 
     async def test_auto_prompt_fallback_from_input_main(self, harness):
         """Empty prompt should fall back to connected input-main output."""
-        harness.ai_service.execute_chat_agent = AsyncMock(
-            return_value={"success": True, "result": {"response": "ok"}}
-        )
+        harness.ai_service.execute_chat_agent = AsyncMock(return_value={"success": True, "result": {"response": "ok"}})
 
         nodes = [
             {"id": "trigger-1", "type": "chatTrigger"},
@@ -132,9 +130,7 @@ class TestGenericSpecializedAgents:
 
     async def test_task_completion_strips_tools(self, harness):
         """When task_data.status is completed, tool_data is stripped to []."""
-        harness.ai_service.execute_chat_agent = AsyncMock(
-            return_value={"success": True, "result": {"response": "done"}}
-        )
+        harness.ai_service.execute_chat_agent = AsyncMock(return_value={"success": True, "result": {"response": "done"}})
 
         # Wire a tool and a task trigger to the agent.
         nodes = [
@@ -176,9 +172,7 @@ class TestGenericSpecializedAgents:
     @pytest.mark.parametrize("node_type", TEAM_LEAD_AGENTS)
     async def test_team_lead_collects_teammates_as_tools(self, harness, node_type):
         """orchestrator_agent / ai_employee append teammates to tool_data."""
-        harness.ai_service.execute_chat_agent = AsyncMock(
-            return_value={"success": True, "result": {"response": "team"}}
-        )
+        harness.ai_service.execute_chat_agent = AsyncMock(return_value={"success": True, "result": {"response": "team"}})
 
         nodes = [
             {
@@ -208,15 +202,12 @@ class TestGenericSpecializedAgents:
         _, kwargs = harness.ai_service.execute_chat_agent.await_args
         tool_data = kwargs.get("tool_data") or []
         assert any(
-            t.get("node_id") == "mate-1" and t.get("node_type") == "coding_agent"
-            for t in tool_data
+            t.get("node_id") == "mate-1" and t.get("node_type") == "coding_agent" for t in tool_data
         ), f"expected teammate in tool_data, got {tool_data}"
 
     async def test_non_team_lead_ignores_teammates_handle(self, harness):
         """A non-team-lead (e.g. coding_agent) does not expand input-teammates."""
-        harness.ai_service.execute_chat_agent = AsyncMock(
-            return_value={"success": True, "result": {"response": "ok"}}
-        )
+        harness.ai_service.execute_chat_agent = AsyncMock(return_value={"success": True, "result": {"response": "ok"}})
 
         nodes = [
             {"id": "mate-1", "type": "web_agent", "data": {"label": "mate"}},
@@ -245,9 +236,7 @@ class TestGenericSpecializedAgents:
         assert not any(t.get("node_id") == "mate-1" for t in tool_data)
 
     async def test_failure_envelope_propagates(self, harness):
-        harness.ai_service.execute_chat_agent = AsyncMock(
-            return_value={"success": False, "error": "model unavailable"}
-        )
+        harness.ai_service.execute_chat_agent = AsyncMock(return_value={"success": False, "error": "model unavailable"})
 
         with patched_container(auth_api_keys={"openai": "tk"}):
             result = await harness.execute(
@@ -372,19 +361,21 @@ class TestClaudeCodeAgent:
             tasks_list = list(tasks)
             results = []
             for t in tasks_list:
-                results.append(SessionResult(
-                    task_id=t.task_id or "t_test",
-                    session_id=session_id,
-                    provider=provider,
-                    prompt=t.prompt,
-                    response=response,
-                    cost_usd=cost_usd,
-                    duration_ms=1234,
-                    num_turns=2,
-                    canonical_usage=CanonicalUsage(input_tokens=10, output_tokens=5),
-                    success=success,
-                    error=error,
-                ))
+                results.append(
+                    SessionResult(
+                        task_id=t.task_id or "t_test",
+                        session_id=session_id,
+                        provider=provider,
+                        prompt=t.prompt,
+                        response=response,
+                        cost_usd=cost_usd,
+                        duration_ms=1234,
+                        num_turns=2,
+                        canonical_usage=CanonicalUsage(input_tokens=10, output_tokens=5),
+                        success=success,
+                        error=error,
+                    )
+                )
             n_succeeded = sum(1 for r in results if r.success)
             return BatchResult(
                 tasks=results,
@@ -406,9 +397,13 @@ class TestClaudeCodeAgent:
     async def test_happy_path_routes_through_run_batch(self, harness):
         svc = self._wire_cli_service()
 
-        with patched_container(auth_api_keys={}), patched_broadcaster(), patch(
-            "services.cli_agent.service.get_ai_cli_service",
-            return_value=svc,
+        with (
+            patched_container(auth_api_keys={}),
+            patched_broadcaster(),
+            patch(
+                "services.cli_agent.service.get_ai_cli_service",
+                return_value=svc,
+            ),
         ):
             result = await harness.execute(
                 "claude_code_agent",
@@ -438,9 +433,13 @@ class TestClaudeCodeAgent:
         """Per-task max_budget_usd must reach the ClaudeTaskSpec."""
         svc = self._wire_cli_service()
 
-        with patched_container(auth_api_keys={}), patched_broadcaster(), patch(
-            "services.cli_agent.service.get_ai_cli_service",
-            return_value=svc,
+        with (
+            patched_container(auth_api_keys={}),
+            patched_broadcaster(),
+            patch(
+                "services.cli_agent.service.get_ai_cli_service",
+                return_value=svc,
+            ),
         ):
             await harness.execute(
                 "claude_code_agent",
@@ -459,9 +458,13 @@ class TestClaudeCodeAgent:
         """No prompt + no tasks must short-circuit before constructing a batch."""
         svc = self._wire_cli_service()
 
-        with patched_container(auth_api_keys={}), patched_broadcaster(), patch(
-            "services.cli_agent.service.get_ai_cli_service",
-            return_value=svc,
+        with (
+            patched_container(auth_api_keys={}),
+            patched_broadcaster(),
+            patch(
+                "services.cli_agent.service.get_ai_cli_service",
+                return_value=svc,
+            ),
         ):
             result = await harness.execute(
                 "claude_code_agent",
@@ -478,9 +481,13 @@ class TestClaudeCodeAgent:
         svc = MagicMock(name="AICliService")
         svc.run_batch = AsyncMock(side_effect=RuntimeError("cli exit 1: boom"))
 
-        with patched_container(auth_api_keys={}), patched_broadcaster(), patch(
-            "services.cli_agent.service.get_ai_cli_service",
-            return_value=svc,
+        with (
+            patched_container(auth_api_keys={}),
+            patched_broadcaster(),
+            patch(
+                "services.cli_agent.service.get_ai_cli_service",
+                return_value=svc,
+            ),
         ):
             result = await harness.execute(
                 "claude_code_agent",
@@ -506,9 +513,13 @@ class TestClaudeCodeAgent:
             extra={"outputs": {"src-1": {"message": "upstream text"}}},
         )
 
-        with patched_container(auth_api_keys={}), patched_broadcaster(), patch(
-            "services.cli_agent.service.get_ai_cli_service",
-            return_value=svc,
+        with (
+            patched_container(auth_api_keys={}),
+            patched_broadcaster(),
+            patch(
+                "services.cli_agent.service.get_ai_cli_service",
+                return_value=svc,
+            ),
         ):
             await harness.execute(
                 "claude_code_agent",

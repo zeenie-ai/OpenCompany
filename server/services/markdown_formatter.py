@@ -215,8 +215,7 @@ def _walk_tokens(tokens: list, result: list, depth: int = 0) -> None:
             if table_row:
                 table_rows.append(table_row)
             table_row = []
-        elif ttype in ("thead_open", "thead_close", "tbody_open", "tbody_close",
-                        "th_open", "th_close", "td_open", "td_close"):
+        elif ttype in ("thead_open", "thead_close", "tbody_open", "tbody_close", "th_open", "th_close", "td_open", "td_close"):
             pass  # Handled via tr_open/close and inline collection
         elif ttype == "html_block" or ttype == "html_inline":
             result.append(token.content)

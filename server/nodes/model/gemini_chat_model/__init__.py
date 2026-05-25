@@ -12,7 +12,9 @@ class GeminiChatModelParams(ChatModelParams):
     safety_settings: Literal["default", "strict", "permissive"] = Field(default="default")
     thinking_enabled: bool = Field(default=False)
     thinking_budget: Optional[int] = Field(
-        default=2048, ge=1024, le=16000,
+        default=2048,
+        ge=1024,
+        le=16000,
         json_schema_extra={"displayOptions": {"show": {"thinking_enabled": [True]}}},
     )
 

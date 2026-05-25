@@ -4,6 +4,7 @@ Android Relay Client Manager
 Global instance management for persistent WebSocket connection.
 Provides singleton pattern for reusing connection across API requests.
 """
+
 from typing import Optional
 import structlog
 

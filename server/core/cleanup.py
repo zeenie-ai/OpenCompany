@@ -3,6 +3,7 @@
 Follows the RecoverySweeper pattern from execution/recovery.py.
 All configuration from Settings (environment variables).
 """
+
 import asyncio
 import gc
 from typing import Optional, TYPE_CHECKING
@@ -27,12 +28,7 @@ class CleanupService:
     - Forces garbage collection
     """
 
-    def __init__(
-        self,
-        database: "Database",
-        cache: "CacheService",
-        settings: "Settings"
-    ):
+    def __init__(self, database: "Database", cache: "CacheService", settings: "Settings"):
         self.database = database
         self.cache = cache
         self.settings = settings
@@ -49,7 +45,7 @@ class CleanupService:
             "Cleanup service started",
             interval=self.settings.cleanup_interval,
             logs_max=self.settings.cleanup_logs_max_count,
-            cache_max_age_hours=self.settings.cleanup_cache_max_age_hours
+            cache_max_age_hours=self.settings.cleanup_cache_max_age_hours,
         )
 
     async def stop(self) -> None:
@@ -78,28 +74,24 @@ class CleanupService:
 
         # 1. Expired cache entries (TTL-based)
         try:
-            results['expired_cache'] = await self.database.cleanup_expired_cache()
+            results["expired_cache"] = await self.database.cleanup_expired_cache()
         except Exception as e:
             logger.warning("Failed to cleanup expired cache", error=str(e))
-            results['expired_cache'] = 0
+            results["expired_cache"] = 0
 
         # 2. Old console logs (keep last N)
         try:
-            results['old_logs'] = await self.database.cleanup_old_console_logs(
-                keep=self.settings.cleanup_logs_max_count
-            )
+            results["old_logs"] = await self.database.cleanup_old_console_logs(keep=self.settings.cleanup_logs_max_count)
         except Exception as e:
             logger.warning("Failed to cleanup old console logs", error=str(e))
-            results['old_logs'] = 0
+            results["old_logs"] = 0
 
         # 3. Old cache entries by age
         try:
-            results['old_cache'] = await self.database.cleanup_old_cache(
-                max_age_hours=self.settings.cleanup_cache_max_age_hours
-            )
+            results["old_cache"] = await self.database.cleanup_old_cache(max_age_hours=self.settings.cleanup_cache_max_age_hours)
         except Exception as e:
             logger.warning("Failed to cleanup old cache", error=str(e))
-            results['old_cache'] = 0
+            results["old_cache"] = 0
 
         # 4. Force garbage collection
         gc.collect()
@@ -112,12 +104,8 @@ class CleanupService:
     async def run_once(self) -> dict:
         """Run cleanup once and return results. Useful for testing."""
         results = {}
-        results['expired_cache'] = await self.database.cleanup_expired_cache()
-        results['old_logs'] = await self.database.cleanup_old_console_logs(
-            keep=self.settings.cleanup_logs_max_count
-        )
-        results['old_cache'] = await self.database.cleanup_old_cache(
-            max_age_hours=self.settings.cleanup_cache_max_age_hours
-        )
+        results["expired_cache"] = await self.database.cleanup_expired_cache()
+        results["old_logs"] = await self.database.cleanup_old_console_logs(keep=self.settings.cleanup_logs_max_count)
+        results["old_cache"] = await self.database.cleanup_old_cache(max_age_hours=self.settings.cleanup_cache_max_age_hours)
         gc.collect()
         return results

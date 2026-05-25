@@ -139,14 +139,13 @@ class TestCanaryScope:
     async def test_disabled_when_flag_off(self, monkeypatch, fresh_canary_registry):
         from services.deployment.manager import DeploymentManager
 
-        fresh_canary_registry.register_canary_trigger_type(
-            "webhookTrigger", "com.machinaos.webhook.received"
-        )
+        fresh_canary_registry.register_canary_trigger_type("webhookTrigger", "com.machinaos.webhook.received")
 
         class _Off:
             event_framework_enabled = False
 
         import core.config
+
         monkeypatch.setattr(core.config, "Settings", lambda: _Off())
 
         result = await DeploymentManager._canary_listener_enabled_for("webhookTrigger")
@@ -163,6 +162,7 @@ class TestCanaryScope:
             event_framework_enabled = True
 
         import core.config
+
         monkeypatch.setattr(core.config, "Settings", lambda: _On())
 
         result = await DeploymentManager._canary_listener_enabled_for("whatsappReceive")
@@ -172,17 +172,14 @@ class TestCanaryScope:
     async def test_enabled_when_registered_and_flag_on(self, monkeypatch, fresh_canary_registry):
         from services.deployment.manager import DeploymentManager
 
-        fresh_canary_registry.register_canary_trigger_type(
-            "webhookTrigger", "com.machinaos.webhook.received"
-        )
-        fresh_canary_registry.register_canary_trigger_type(
-            "chatTrigger", "com.machinaos.chat.message.received"
-        )
+        fresh_canary_registry.register_canary_trigger_type("webhookTrigger", "com.machinaos.webhook.received")
+        fresh_canary_registry.register_canary_trigger_type("chatTrigger", "com.machinaos.chat.message.received")
 
         class _On:
             event_framework_enabled = True
 
         import core.config
+
         monkeypatch.setattr(core.config, "Settings", lambda: _On())
 
         assert await DeploymentManager._canary_listener_enabled_for("webhookTrigger") is True
@@ -230,9 +227,7 @@ class TestStartCanaryListener:
     WorkflowIDConflictPolicy.USE_EXISTING + TypedSearchAttributes."""
 
     @pytest.mark.asyncio
-    async def test_starts_with_deterministic_id_and_use_existing_policy(
-        self, monkeypatch
-    ):
+    async def test_starts_with_deterministic_id_and_use_existing_policy(self, monkeypatch):
         from temporalio.common import WorkflowIDConflictPolicy
 
         mgr, _ = _build_manager_with_state(
@@ -254,12 +249,11 @@ class TestStartCanaryListener:
         wrapper.client = client
 
         from core import container as container_mod
+
         monkeypatch.setattr(container_mod.container, "temporal_client", lambda: wrapper)
 
         node = _node("wh-1", "webhookTrigger")
-        listener_id = await mgr._start_canary_listener(
-            node, "wf-abc", params={"path": "hook"}
-        )
+        listener_id = await mgr._start_canary_listener(node, "wf-abc", params={"path": "hook"})
 
         assert listener_id == "trigger-listener-wf-abc-wh-1"
         assert len(recorded_start) == 1
@@ -294,11 +288,10 @@ class TestStartCanaryListener:
         wrapper.client = client
 
         from core import container as container_mod
+
         monkeypatch.setattr(container_mod.container, "temporal_client", lambda: wrapper)
 
-        await mgr._start_canary_listener(
-            _node("wh-1", "webhookTrigger"), "wf-xyz", params={}
-        )
+        await mgr._start_canary_listener(_node("wh-1", "webhookTrigger"), "wf-xyz", params={})
 
         sa = recorded[0]["search_attributes"]
         assert isinstance(sa, TypedSearchAttributes)
@@ -341,11 +334,10 @@ class TestStartCanaryListener:
         wrapper.client = client
 
         from core import container as container_mod
+
         monkeypatch.setattr(container_mod.container, "temporal_client", lambda: wrapper)
 
-        listener_id = await mgr._start_canary_listener(
-            _node("ct-1", "chatTrigger"), "wf-chat", params={"session_id": "default"}
-        )
+        listener_id = await mgr._start_canary_listener(_node("ct-1", "chatTrigger"), "wf-chat", params={"session_id": "default"})
         assert listener_id == "trigger-listener-wf-chat-ct-1"
 
         sa = recorded[0]["search_attributes"]
@@ -359,19 +351,16 @@ class TestStartCanaryListener:
     async def test_returns_none_when_temporal_not_connected(self, monkeypatch):
         """Falls through to legacy path; doesn't raise."""
 
-        mgr, _ = _build_manager_with_state(
-            "wf-1", nodes=[_node("wh-1", "webhookTrigger")], edges=[]
-        )
+        mgr, _ = _build_manager_with_state("wf-1", nodes=[_node("wh-1", "webhookTrigger")], edges=[])
 
         wrapper = MagicMock()
         wrapper.client = None
 
         from core import container as container_mod
+
         monkeypatch.setattr(container_mod.container, "temporal_client", lambda: wrapper)
 
-        result = await mgr._start_canary_listener(
-            _node("wh-1", "webhookTrigger"), "wf-1", params={}
-        )
+        result = await mgr._start_canary_listener(_node("wh-1", "webhookTrigger"), "wf-1", params={})
         assert result is None
 
 
@@ -385,7 +374,6 @@ class TestCancelCanaryListeners:
 
     @pytest.mark.asyncio
     async def test_query_filters_by_workflow_id_and_listener_type(self, monkeypatch):
-
         mgr, _ = _build_manager_with_state("wf-1", nodes=[], edges=[])
 
         recorded_queries: List[str] = []
@@ -416,6 +404,7 @@ class TestCancelCanaryListeners:
         wrapper.client = client
 
         from core import container as container_mod
+
         monkeypatch.setattr(container_mod.container, "temporal_client", lambda: wrapper)
 
         cancelled = await mgr._cancel_canary_listeners("wf-1")
@@ -455,6 +444,7 @@ class TestCancelCanaryListeners:
         wrapper.client = client
 
         from core import container as container_mod
+
         monkeypatch.setattr(container_mod.container, "temporal_client", lambda: wrapper)
 
         cancelled = await mgr._cancel_canary_listeners("wf-1")
@@ -476,12 +466,16 @@ class TestCancelCanaryListeners:
         def get_handle(wf_id):
             handle = MagicMock()
             if wf_id == "trigger-listener-wf-1-wh-1":
+
                 async def boom():
                     raise RuntimeError("simulated handle.cancel failure")
+
                 handle.cancel = boom
             else:
+
                 async def ok():
                     cancelled_ids.append(wf_id)
+
                 handle.cancel = ok
             return handle
 
@@ -492,6 +486,7 @@ class TestCancelCanaryListeners:
         wrapper.client = client
 
         from core import container as container_mod
+
         monkeypatch.setattr(container_mod.container, "temporal_client", lambda: wrapper)
 
         cancelled = await mgr._cancel_canary_listeners("wf-1")
@@ -501,13 +496,13 @@ class TestCancelCanaryListeners:
 
     @pytest.mark.asyncio
     async def test_returns_zero_when_temporal_disconnected(self, monkeypatch):
-
         mgr, _ = _build_manager_with_state("wf-1", nodes=[], edges=[])
 
         wrapper = MagicMock()
         wrapper.client = None
 
         from core import container as container_mod
+
         monkeypatch.setattr(container_mod.container, "temporal_client", lambda: wrapper)
 
         cancelled = await mgr._cancel_canary_listeners("wf-1")
@@ -601,10 +596,13 @@ class TestCancelSweepsStuckNodeStatuses:
             side_effect=lambda **kw: status_calls.append(kw),
         )
         broadcaster._clear_stuck_node_statuses = AsyncMock(
-            side_effect=lambda workflow_id, include_waiting=False: sweep_calls.append({
-                "workflow_id": workflow_id,
-                "include_waiting": include_waiting,
-            }) or 0,
+            side_effect=lambda workflow_id, include_waiting=False: sweep_calls.append(
+                {
+                    "workflow_id": workflow_id,
+                    "include_waiting": include_waiting,
+                }
+            )
+            or 0,
         )
 
         database = MagicMock()
@@ -636,10 +634,7 @@ class TestCancelSweepsStuckNodeStatuses:
 
         # Sweep ran once with include_waiting=True (every indicator
         # goes quiet on explicit user cancel).
-        assert len(sweep_calls) == 1, (
-            f"Expected one stuck-node sweep on cancel, got "
-            f"{len(sweep_calls)}: {sweep_calls!r}"
-        )
+        assert len(sweep_calls) == 1, f"Expected one stuck-node sweep on cancel, got " f"{len(sweep_calls)}: {sweep_calls!r}"
         assert sweep_calls[0] == {
             "workflow_id": "wf-1",
             "include_waiting": True,
@@ -647,8 +642,7 @@ class TestCancelSweepsStuckNodeStatuses:
 
         # Terminal executing=False broadcast for the toolbar.
         assert {"executing": False, "workflow_id": "wf-1"} in status_calls, (
-            f"Expected update_workflow_status(executing=False, "
-            f"workflow_id='wf-1') on cancel; got {status_calls!r}"
+            f"Expected update_workflow_status(executing=False, " f"workflow_id='wf-1') on cancel; got {status_calls!r}"
         )
 
 
@@ -695,7 +689,4 @@ class TestNoInstanceStateForCanaryListeners:
         from services.deployment.manager import DeploymentManager
 
         # Both helpers can be called on the class without an instance.
-        assert (
-            DeploymentManager._listener_workflow_id("wf", "node")
-            == "trigger-listener-wf-node"
-        )
+        assert DeploymentManager._listener_workflow_id("wf", "node") == "trigger-listener-wf-node"

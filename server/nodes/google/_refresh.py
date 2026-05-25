@@ -32,9 +32,7 @@ async def refresh_google_status(broadcaster: "StatusBroadcaster") -> None:
             from services.plugin.deps import get_auth_service
 
             auth_service = get_auth_service()
-            tokens = await auth_service.get_oauth_tokens(
-                "google", customer_id="owner"
-            )
+            tokens = await auth_service.get_oauth_tokens("google", customer_id="owner")
             if not tokens or not tokens.get("access_token"):
                 broadcaster._status["google"] = {
                     "connected": False,
@@ -52,15 +50,13 @@ async def refresh_google_status(broadcaster: "StatusBroadcaster") -> None:
                     tokens.get("email"),
                 )
 
-            await broadcaster.broadcast({
-                "type": "google_status",
-                "data": broadcaster._status["google"],
-            })
-            span.set_attribute(
-                "connected", bool(broadcaster._status["google"]["connected"])
+            await broadcaster.broadcast(
+                {
+                    "type": "google_status",
+                    "data": broadcaster._status["google"],
+                }
             )
+            span.set_attribute("connected", bool(broadcaster._status["google"]["connected"]))
         except Exception as exc:  # noqa: BLE001
             span.record_exception(exc)
-            logger.debug(
-                "[StatusBroadcaster] Could not refresh Google status: %s", exc
-            )
+            logger.debug("[StatusBroadcaster] Could not refresh Google status: %s", exc)

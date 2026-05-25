@@ -38,6 +38,7 @@ def test_service_spec_defaults_safe():
 def test_crash_window_logic():
     """Sliding-window detection: 5 deaths within window => give up."""
     import time
+
     crashes = deque(maxlen=5)
     spec = ServiceSpec(name="x", argv=["true"])
     now = time.monotonic()
@@ -53,6 +54,7 @@ def test_crash_window_logic():
 async def test_manager_runs_clean_exit_service():
     """A NEVER-restart service that exits 0 should let the manager finish cleanly."""
     import sys
+
     m = Manager()
     m.add(
         ServiceSpec(

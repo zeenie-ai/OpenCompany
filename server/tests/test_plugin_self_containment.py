@@ -95,19 +95,19 @@ _FORBIDDEN_IMPORT_FRAGMENTS = (
     "services.whatsapp_service",
     "services.twitter_oauth",
     "services.google_oauth",
-    "services.android",        # legacy relay sub-package
+    "services.android",  # legacy relay sub-package
     "services.android_service",
     "services.browser_service",
     "services.email_service",
     "services.himalaya_service",
     "services.claude_code_service",
-    "services.maps",            # Wave 11.I, N: -> nodes/location/_service
+    "services.maps",  # Wave 11.I, N: -> nodes/location/_service
     "services.node_option_loaders",  # Wave 11.I, M: -> nodes/<plugin>/_option_loaders
     "routers.twitter",
     "routers.google",
     "routers.android",
     "routers.whatsapp",
-    "routers.maps",            # Wave 11.I, N: deleted
+    "routers.maps",  # Wave 11.I, N: deleted
 )
 
 
@@ -151,10 +151,7 @@ class TestNoPluginRouterOutsideNodes:
 
     def test_migrated_plugins_have_no_router_file_in_routers(self):
         routers_dir = _SERVER_ROOT / "routers"
-        present = [
-            name for name in self._MUST_NOT_EXIST
-            if (routers_dir / name).exists()
-        ]
+        present = [name for name in self._MUST_NOT_EXIST if (routers_dir / name).exists()]
         assert not present, (
             f"server/routers/ contains files for migrated plugins: {present}. "
             "These belong under nodes/<plugin>/_router.py and mount via "
@@ -182,8 +179,7 @@ class TestPluginInitSelfRegisters:
         init_path = plugin_dir / "__init__.py"
 
         assert handlers_path.exists(), (
-            f"nodes/{plugin}/_handlers.py missing -- remove {plugin!r} "
-            "from _PLUGINS_WITH_HANDLERS or restore the file."
+            f"nodes/{plugin}/_handlers.py missing -- remove {plugin!r} " "from _PLUGINS_WITH_HANDLERS or restore the file."
         )
         assert init_path.exists(), f"nodes/{plugin}/__init__.py missing"
 
@@ -202,8 +198,7 @@ class TestPluginInitSelfRegisters:
         init_path = plugin_dir / "__init__.py"
 
         assert router_path.exists(), (
-            f"nodes/{plugin}/_router.py missing -- remove {plugin!r} "
-            "from _PLUGINS_WITH_ROUTERS or restore the file."
+            f"nodes/{plugin}/_router.py missing -- remove {plugin!r} " "from _PLUGINS_WITH_ROUTERS or restore the file."
         )
         assert init_path.exists(), f"nodes/{plugin}/__init__.py missing"
 
@@ -221,14 +216,8 @@ class TestPluginInitSelfRegisters:
         Catches a new plugin that ships a handler / router but forgot
         to add itself to the parametrize list.
         """
-        actual_handlers = {
-            p for p in _MIGRATED_PLUGINS
-            if (_SERVER_ROOT / "nodes" / p / "_handlers.py").exists()
-        }
-        actual_routers = {
-            p for p in _MIGRATED_PLUGINS
-            if (_SERVER_ROOT / "nodes" / p / "_router.py").exists()
-        }
+        actual_handlers = {p for p in _MIGRATED_PLUGINS if (_SERVER_ROOT / "nodes" / p / "_handlers.py").exists()}
+        actual_routers = {p for p in _MIGRATED_PLUGINS if (_SERVER_ROOT / "nodes" / p / "_router.py").exists()}
         assert set(_PLUGINS_WITH_HANDLERS) == actual_handlers, (
             f"_PLUGINS_WITH_HANDLERS drifted from filesystem: "
             f"declared={sorted(_PLUGINS_WITH_HANDLERS)}, "
@@ -268,19 +257,19 @@ _STALE_SERVICE_PATHS = (
     "services/twitter_oauth.py",
     "services/google_oauth.py",
     "services/handlers/google_auth.py",
-    "services/android",                  # the relay sub-package
+    "services/android",  # the relay sub-package
     "services/android_service.py",
     "services/browser_service.py",
     "services/email_service.py",
     "services/himalaya_service.py",
     "services/claude_code_service.py",
-    "services/websocket_client.py",      # dead re-export shim, deleted in E
-    "services/maps.py",                  # Wave 11.I, N: -> nodes/location/_service.py
-    "services/node_option_loaders",      # Wave 11.I, M: -> nodes/<plugin>/_option_loaders.py
+    "services/websocket_client.py",  # dead re-export shim, deleted in E
+    "services/maps.py",  # Wave 11.I, N: -> nodes/location/_service.py
+    "services/node_option_loaders",  # Wave 11.I, M: -> nodes/<plugin>/_option_loaders.py
     "routers/twitter.py",
     "routers/google.py",
     "routers/android.py",
-    "routers/maps.py",                   # Wave 11.I, N: deleted (all 4 endpoints dead)
+    "routers/maps.py",  # Wave 11.I, N: deleted (all 4 endpoints dead)
 )
 
 
@@ -320,10 +309,9 @@ class TestMainPyDoesNotMountPluginRouters:
         assert main_path.exists(), "server/main.py missing"
         src = main_path.read_text(encoding="utf-8")
         offenders = [
-            name for name in self._MIGRATED_ROUTER_NAMES
-            if f"app.include_router({name}.router)" in src
-            or f"from routers import {name}" in src
-            or f"from routers.{name}" in src
+            name
+            for name in self._MIGRATED_ROUTER_NAMES
+            if f"app.include_router({name}.router)" in src or f"from routers import {name}" in src or f"from routers.{name}" in src
         ]
         assert not offenders, (
             f"server/main.py explicitly mounts/imports migrated plugin routers: "
@@ -338,10 +326,7 @@ class TestMainPyDoesNotMountPluginRouters:
         for absent modules raise at startup."""
         main_path = _SERVER_ROOT / "main.py"
         src = main_path.read_text(encoding="utf-8")
-        offenders = [
-            f"routers.{name}" for name in self._MIGRATED_ROUTER_NAMES
-            if f'"routers.{name}"' in src
-        ]
+        offenders = [f"routers.{name}" for name in self._MIGRATED_ROUTER_NAMES if f'"routers.{name}"' in src]
         assert not offenders, (
             f"server/main.py container.wire(...) names removed plugin modules: "
             f"{offenders}. Drop these entries -- the plugin packages wire their "
@@ -366,8 +351,7 @@ class TestPluginHandlersDictsArePopulated:
     def test_plugin_handlers_dict_non_empty(self, plugin: str):
         handlers_path = _SERVER_ROOT / "nodes" / plugin / "_handlers.py"
         assert handlers_path.exists(), (
-            f"nodes/{plugin}/_handlers.py missing -- remove {plugin!r} "
-            "from _PLUGINS_WITH_HANDLERS or restore the file."
+            f"nodes/{plugin}/_handlers.py missing -- remove {plugin!r} " "from _PLUGINS_WITH_HANDLERS or restore the file."
         )
 
         src = handlers_path.read_text(encoding="utf-8")
@@ -404,17 +388,11 @@ class TestPluginHandlersDictsArePopulated:
 # Underscore-prefixed siblings (``_service.py`` / ``_credentials.py``,
 # ``_relay/``, etc.) are package-private and skipped by the walker.
 def _public_plugin_files(plugin_dir: Path) -> list[Path]:
-    flat = [
-        p for p in plugin_dir.glob("*.py")
-        if not p.name.startswith("_") and p.name != "__init__.py"
-    ]
+    flat = [p for p in plugin_dir.glob("*.py") if not p.name.startswith("_") and p.name != "__init__.py"]
     nested = [
         sub / "__init__.py"
         for sub in plugin_dir.iterdir()
-        if sub.is_dir()
-        and not sub.name.startswith("_")
-        and sub.name != "__pycache__"
-        and (sub / "__init__.py").exists()
+        if sub.is_dir() and not sub.name.startswith("_") and sub.name != "__pycache__" and (sub / "__init__.py").exists()
     ]
     return flat + nested
 

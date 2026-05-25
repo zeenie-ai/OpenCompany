@@ -94,8 +94,7 @@ class TwitterOAuth(OAuth2PKCEClient):
             error_data = response.json() if response.text else {}
             return {
                 "success": False,
-                "error": error_data.get("detail")
-                or error_data.get("title", "Failed to get user info"),
+                "error": error_data.get("detail") or error_data.get("title", "Failed to get user info"),
             }
 
         user = response.json().get("data", {})

@@ -23,15 +23,31 @@ class TelegramReceiveParams(BaseModel):
     """
 
     content_type_filter: Literal[
-        "all", "text", "photo", "video", "audio", "voice", "document",
-        "sticker", "location", "contact", "poll",
+        "all",
+        "text",
+        "photo",
+        "video",
+        "audio",
+        "voice",
+        "document",
+        "sticker",
+        "location",
+        "contact",
+        "poll",
     ] = Field(
         default="all",
         description="Filter by message content type",
     )
     sender_filter: Literal[
-        "all", "self", "private", "group", "supergroup", "channel",
-        "specific_chat", "specific_user", "keywords",
+        "all",
+        "self",
+        "private",
+        "group",
+        "supergroup",
+        "channel",
+        "specific_chat",
+        "specific_user",
+        "keywords",
     ] = Field(
         default="all",
         description="Filter which messages trigger the workflow",
@@ -61,10 +77,20 @@ class TelegramReceiveParams(BaseModel):
         default=True,
         description="Do not trigger on messages from other bots",
         json_schema_extra={
-            "displayOptions": {"show": {"sender_filter": [
-                "all", "private", "group", "supergroup", "channel",
-                "specific_chat", "specific_user", "keywords",
-            ]}},
+            "displayOptions": {
+                "show": {
+                    "sender_filter": [
+                        "all",
+                        "private",
+                        "group",
+                        "supergroup",
+                        "channel",
+                        "specific_chat",
+                        "specific_user",
+                        "keywords",
+                    ]
+                }
+            },
         },
     )
 
@@ -100,10 +126,7 @@ class TelegramReceiveNode(TriggerNode):
     group = ("social", "trigger")
     description = "Trigger workflow when Telegram message is received"
     component_kind = "trigger"
-    handles = (
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
-    )
+    handles = ({"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},)
     credentials = (TelegramCredential,)
     task_queue = TaskQueue.TRIGGERS_EVENT
     mode = "event"
@@ -116,6 +139,7 @@ class TelegramReceiveNode(TriggerNode):
         # Delegate to legacy filter builder for full feature parity —
         # 11.F ports the body and removes the legacy registry entry.
         from services.event_waiter import build_telegram_filter
+
         return build_telegram_filter(params.model_dump())
 
     async def execute(
@@ -136,14 +160,10 @@ class TelegramReceiveNode(TriggerNode):
         if not getattr(svc, "connected", False):
             return self._wrap_error(
                 start_time=time.time(),
-                error=(
-                    "Telegram bot not connected. Add bot token in Credentials."
-                ),
+                error=("Telegram bot not connected. Add bot token in Credentials."),
             )
         return await super().execute(node_id, parameters, context)
 
     @Operation("wait")
     async def wait(self, ctx: NodeContext, params: TelegramReceiveParams) -> TelegramReceiveOutput:
-        raise NotImplementedError(
-            "Event triggers return via TriggerNode.execute, not the op body"
-        )
+        raise NotImplementedError("Event triggers return via TriggerNode.execute, not the op body")

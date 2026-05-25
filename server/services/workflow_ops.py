@@ -37,6 +37,7 @@ from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
 # Position spec
 # ---------------------------------------------------------------------------
 
+
 class AbsolutePosition(TypedDict):
     x: float
     y: float
@@ -62,6 +63,7 @@ PositionSpec = Union[AbsolutePosition, AnchoredPosition]
 # Node references
 # ---------------------------------------------------------------------------
 
+
 class _ClientRef(TypedDict):
     client_ref: str
 
@@ -75,6 +77,7 @@ NodeRef = Union[str, _ClientRef]
 # ---------------------------------------------------------------------------
 # Operation TypedDicts
 # ---------------------------------------------------------------------------
+
 
 class AddNodeOp(TypedDict, total=False):
     type: Literal["add_node"]
@@ -138,6 +141,7 @@ WorkflowOperation = Union[
 # ---------------------------------------------------------------------------
 # Builder helpers
 # ---------------------------------------------------------------------------
+
 
 def add_node(
     client_ref: str,

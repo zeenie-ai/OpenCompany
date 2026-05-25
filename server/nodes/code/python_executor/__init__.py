@@ -12,9 +12,7 @@ from .._base import CodeExecutorBase, CodeExecutorParams
 # Names available in the sandbox namespace -- kept here so the
 # error-handler can list them when the LLM tries `import X` and hits
 # the "no __import__" wall.
-_SANDBOX_NAMES = (
-    "math, json, datetime, timedelta, re, random, Counter, defaultdict"
-)
+_SANDBOX_NAMES = "math, json, datetime, timedelta, re, random, Counter, defaultdict"
 
 
 class PythonExecutorNode(CodeExecutorBase):
@@ -54,13 +52,33 @@ class PythonExecutorNode(CodeExecutorBase):
             print(*args, **kwargs)
 
         safe_builtins = {
-            "abs": abs, "all": all, "any": any, "bool": bool,
-            "dict": dict, "enumerate": enumerate, "filter": filter,
-            "float": float, "int": int, "len": len, "list": list,
-            "map": map, "max": max, "min": min, "print": captured_print,
-            "range": range, "round": round, "set": set, "sorted": sorted,
-            "str": str, "sum": sum, "tuple": tuple, "type": type, "zip": zip,
-            "True": True, "False": False, "None": None,
+            "abs": abs,
+            "all": all,
+            "any": any,
+            "bool": bool,
+            "dict": dict,
+            "enumerate": enumerate,
+            "filter": filter,
+            "float": float,
+            "int": int,
+            "len": len,
+            "list": list,
+            "map": map,
+            "max": max,
+            "min": min,
+            "print": captured_print,
+            "range": range,
+            "round": round,
+            "set": set,
+            "sorted": sorted,
+            "str": str,
+            "sum": sum,
+            "tuple": tuple,
+            "type": type,
+            "zip": zip,
+            "True": True,
+            "False": False,
+            "None": None,
             # Pre-injected modules — match the documented sandbox contract
             # (skill docs, CLAUDE.md). No __import__: callers reference these
             # by name, e.g. ``datetime.datetime.now()`` not ``import datetime``.
@@ -115,9 +133,7 @@ class PythonExecutorNode(CodeExecutorBase):
 
             captured = stdout_capture.getvalue()
             suffix = f"\n\nstdout before error:\n{captured}" if captured else ""
-            raise NodeUserError(
-                f"{err_type}{line_info}: {err_msg}{suffix}"
-            ) from exc
+            raise NodeUserError(f"{err_type}{line_info}: {err_msg}{suffix}") from exc
 
         return {
             "output": namespace.get("output"),

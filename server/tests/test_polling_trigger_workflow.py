@@ -132,12 +132,14 @@ class TestAsPollActivity:
         activity_fn = cls.as_poll_activity()
         inner = self._underlying(activity_fn)
 
-        result = await inner({
-            "node_id": "n1",
-            "params": {},
-            "seen_ids": [],
-            "baseline_only": True,
-        })
+        result = await inner(
+            {
+                "node_id": "n1",
+                "params": {},
+                "seen_ids": [],
+                "baseline_only": True,
+            }
+        )
 
         assert result["events"] == []
         assert set(result["seen_ids"]) == {"a", "b", "c"}
@@ -148,12 +150,14 @@ class TestAsPollActivity:
         activity_fn = cls.as_poll_activity()
         inner = self._underlying(activity_fn)
 
-        result = await inner({
-            "node_id": "n1",
-            "params": {},
-            "seen_ids": ["a", "b"],   # b is seen; a/b not new; c/d new
-            "baseline_only": False,
-        })
+        result = await inner(
+            {
+                "node_id": "n1",
+                "params": {},
+                "seen_ids": ["a", "b"],  # b is seen; a/b not new; c/d new
+                "baseline_only": False,
+            }
+        )
 
         new_ids = {e["id"] for e in result["events"]}
         assert new_ids == {"c", "d"}
@@ -177,21 +181,20 @@ class TestAsPollActivity:
         activity_fn = cls.as_poll_activity()
         inner = self._underlying(activity_fn)
 
-        result = await inner({
-            "node_id": "n1",
-            "params": {},
-            # Carry-forward from an earlier cycle.
-            "seen_ids": ["a", "b", "c", "d", "e"],
-            "baseline_only": False,
-        })
+        result = await inner(
+            {
+                "node_id": "n1",
+                "params": {},
+                # Carry-forward from an earlier cycle.
+                "seen_ids": ["a", "b", "c", "d", "e"],
+                "baseline_only": False,
+            }
+        )
 
         # Only the genuinely new id (``f``) emits — ``e`` was already
         # in prior_seen.
         new_ids = {ev["id"] for ev in result["events"]}
-        assert new_ids == {"f"}, (
-            "Only items in ``current`` that weren't in ``prior_seen`` "
-            "should emit."
-        )
+        assert new_ids == {"f"}, "Only items in ``current`` that weren't in ``prior_seen`` " "should emit."
         # And the returned seen_ids must NOT contain a/b/c/d — those
         # are gone from the provider's window. If they linger, every
         # subsequent cycle pays Temporal-payload cost for IDs that will
@@ -220,12 +223,14 @@ class TestAsPollActivity:
         activity_fn = cls.as_poll_activity()
         inner = self._underlying(activity_fn)
 
-        result = await inner({
-            "node_id": "n1",
-            "params": {},
-            "seen_ids": [],
-            "baseline_only": False,
-        })
+        result = await inner(
+            {
+                "node_id": "n1",
+                "params": {},
+                "seen_ids": [],
+                "baseline_only": False,
+            }
+        )
 
         assert len(result["events"]) == 1
         assert result["events"][0]["id"] == "x"
@@ -244,12 +249,14 @@ class TestAsPollActivity:
         activity_fn = cls.as_poll_activity()
         inner = self._underlying(activity_fn)
 
-        result = await inner({
-            "node_id": "n1",
-            "params": {},
-            "seen_ids": [],
-            "baseline_only": False,
-        })
+        result = await inner(
+            {
+                "node_id": "n1",
+                "params": {},
+                "seen_ids": [],
+                "baseline_only": False,
+            }
+        )
 
         # Both events still came through even though post_emit raised.
         assert {e["id"] for e in result["events"]} == {"x", "y"}
@@ -290,10 +297,17 @@ class TestPollCoroutineSeenSetBounded:
             type = "introspect.bound"
             display_name = "Introspect"
 
-            async def setup_service(self, params): return MagicMock()
-            async def fetch_ids(self, service, params): return set()
-            async def fetch_detail(self, service, msg_id, params): return {"id": msg_id}
-            async def post_emit(self, service, msg_id, params): pass
+            async def setup_service(self, params):
+                return MagicMock()
+
+            async def fetch_ids(self, service, params):
+                return set()
+
+            async def fetch_detail(self, service, msg_id, params):
+                return {"id": msg_id}
+
+            async def post_emit(self, service, msg_id, params):
+                pass
 
         # _build_poll_coroutine returns a closure; introspect the
         # MRO-resolved method body instead. Strip comments and
@@ -333,20 +347,22 @@ class TestPollingTriggerWorkflowBody:
         from services.temporal import polling_trigger_workflow as pmod
 
         # Activity returns scripted responses per call.
-        responses = iter([
-            # Baseline cycle.
-            {"events": [], "seen_ids": ["a", "b"]},
-            # Second cycle: new id 'c'.
-            {"events": [{"id": "c", "payload": "hello"}], "seen_ids": ["a", "b", "c"]},
-            # Third cycle: same id 'c' (dedup test) + new 'd'.
-            {
-                "events": [
-                    {"id": "c", "payload": "dup"},
-                    {"id": "d", "payload": "fresh"},
-                ],
-                "seen_ids": ["a", "b", "c", "d"],
-            },
-        ])
+        responses = iter(
+            [
+                # Baseline cycle.
+                {"events": [], "seen_ids": ["a", "b"]},
+                # Second cycle: new id 'c'.
+                {"events": [{"id": "c", "payload": "hello"}], "seen_ids": ["a", "b", "c"]},
+                # Third cycle: same id 'c' (dedup test) + new 'd'.
+                {
+                    "events": [
+                        {"id": "c", "payload": "dup"},
+                        {"id": "d", "payload": "fresh"},
+                    ],
+                    "seen_ids": ["a", "b", "c", "d"],
+                },
+            ]
+        )
 
         from temporalio import workflow as temporal_workflow
 
@@ -540,17 +556,17 @@ class TestCollectPollingActivities:
 
         activities = collect_polling_activities()
         # Activity name format: "poll.{type}.v{version}"
-        names = {getattr(a, "__temporal_activity_definition", None) and
-                 getattr(a, "__temporal_activity_definition").name
-                 or getattr(a, "_name", None) for a in activities}
+        names = {
+            getattr(a, "__temporal_activity_definition", None)
+            and getattr(a, "__temporal_activity_definition").name
+            or getattr(a, "_name", None)
+            for a in activities
+        }
         # We can't always extract the activity name (Temporal stores
         # it on a metadata attribute that varies by SDK version) — at
         # minimum assert the gmail polling activity is present by
         # inspecting any name-like attribute.
         flat = " ".join(str(n) for n in names)
-        assert "poll.googleGmailReceive" in flat or any(
-            "googleGmailReceive" in str(n) for n in names
-        ), (
-            "collect_polling_activities() should include the gmail "
-            f"polling activity. Got names: {names}"
+        assert "poll.googleGmailReceive" in flat or any("googleGmailReceive" in str(n) for n in names), (
+            "collect_polling_activities() should include the gmail " f"polling activity. Got names: {names}"
         )

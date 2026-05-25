@@ -10,22 +10,22 @@ from core.container import container
 logger = logging.getLogger(__name__)
 
 # Public routes that don't require authentication
-PUBLIC_PATHS = frozenset([
-    "/health",
-    "/docs",
-    "/openapi.json",
-    "/redoc",
-    "/api/auth/status",
-    "/api/auth/login",
-    "/api/auth/register",
-    "/api/auth/logout",
-    "/ws/internal",  # Internal WebSocket for Temporal workers
-])
+PUBLIC_PATHS = frozenset(
+    [
+        "/health",
+        "/docs",
+        "/openapi.json",
+        "/redoc",
+        "/api/auth/status",
+        "/api/auth/login",
+        "/api/auth/register",
+        "/api/auth/logout",
+        "/ws/internal",  # Internal WebSocket for Temporal workers
+    ]
+)
 
 # Path prefixes that are public
-PUBLIC_PREFIXES = (
-    "/webhook/",
-)
+PUBLIC_PREFIXES = ("/webhook/",)
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -42,10 +42,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
         settings = container.settings()
 
         # Check if auth is disabled (VITE_AUTH_ENABLED=false)
-        if settings.vite_auth_enabled and settings.vite_auth_enabled.lower() == 'false':
+        if settings.vite_auth_enabled and settings.vite_auth_enabled.lower() == "false":
             # Auth disabled - set anonymous user and allow request
             request.state.user_id = 0
-            request.state.user_email = 'anonymous'
+            request.state.user_email = "anonymous"
             request.state.is_owner = True
             return await call_next(request)
 
@@ -53,20 +53,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
         token = request.cookies.get(settings.jwt_cookie_name)
 
         if not token:
-            return JSONResponse(
-                status_code=401,
-                content={"detail": "Not authenticated"}
-            )
+            return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
 
         # Verify token
         user_auth = container.user_auth_service()
         payload = user_auth.verify_token(token)
 
         if not payload:
-            return JSONResponse(
-                status_code=401,
-                content={"detail": "Invalid or expired session"}
-            )
+            return JSONResponse(status_code=401, content={"detail": "Invalid or expired session"})
 
         # Attach user info to request state for downstream handlers
         request.state.user_id = payload.get("sub")

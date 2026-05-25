@@ -46,10 +46,8 @@ class DuckDuckGoSearchNode(ToolNode):
     tool_name = "web_search"
     tool_description = "Search the web for information using DuckDuckGo. Returns relevant search results. Free, no API key required."
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-tool", "kind": "output", "position": "top",
-         "label": "Tool", "role": "tools"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-tool", "kind": "output", "position": "top", "label": "Tool", "role": "tools"},
     )
     ui_hints = {"isToolPanel": True, "hideRunButton": True}
     annotations = {"destructive": False, "readonly": True, "open_world": True}
@@ -60,7 +58,9 @@ class DuckDuckGoSearchNode(ToolNode):
 
     @Operation("search")
     async def search(
-        self, ctx: NodeContext, params: DuckDuckGoSearchParams,
+        self,
+        ctx: NodeContext,
+        params: DuckDuckGoSearchParams,
     ) -> DuckDuckGoSearchOutput:
         from ddgs import DDGS
         from ddgs.exceptions import DDGSException

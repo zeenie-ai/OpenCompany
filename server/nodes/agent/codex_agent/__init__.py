@@ -38,8 +38,7 @@ class CodexAgentParams(BaseModel):
     )
     prompt: str = Field(
         default="",
-        description="Legacy: single-prompt fallback used only when "
-                    "`tasks` is empty.",
+        description="Legacy: single-prompt fallback used only when " "`tasks` is empty.",
         json_schema_extra={"rows": 4, "placeholder": "Or use the tasks array..."},
     )
     model: str = Field(
@@ -48,8 +47,7 @@ class CodexAgentParams(BaseModel):
     )
     sandbox: str = Field(
         default="workspace-write",
-        description="Default sandbox for tasks that don't override it. "
-                    "One of: read-only | workspace-write | danger-full-access.",
+        description="Default sandbox for tasks that don't override it. " "One of: read-only | workspace-write | danger-full-access.",
     )
     ask_for_approval: str = Field(
         default="never",
@@ -82,10 +80,7 @@ class CodexAgentNode(ActionNode):
     display_name = "Codex"
     subtitle = "Sandboxed Coding"
     group = ("agent",)
-    description = (
-        "Run N parallel OpenAI Codex CLI sessions. Sandbox enforced "
-        "by Codex itself; per-task git worktree isolation."
-    )
+    description = "Run N parallel OpenAI Codex CLI sessions. Sandbox enforced " "by Codex itself; per-task git worktree isolation."
     component_kind = "agent"
     handles = std_agent_handles()
     ui_hints = STD_AGENT_HINTS
@@ -100,7 +95,9 @@ class CodexAgentNode(ActionNode):
         cost={"service": "codex_agent", "action": "run", "count": 1},
     )
     async def execute_op(
-        self, ctx: NodeContext, params: CodexAgentParams,
+        self,
+        ctx: NodeContext,
+        params: CodexAgentParams,
     ) -> Any:
         from services.cli_agent.service import get_ai_cli_service
         from services.cli_agent.types import session_result_to_model
@@ -113,7 +110,8 @@ class CodexAgentNode(ActionNode):
         node_id = ctx.node_id
 
         await broadcaster.update_node_status(
-            node_id, "executing",
+            node_id,
+            "executing",
             {"message": "Starting Codex batch..."},
             workflow_id=workflow_id,
         )
@@ -122,9 +120,7 @@ class CodexAgentNode(ActionNode):
         if not tasks:
             prompt = params.prompt or self._infer_prompt_from_inputs(ctx, node_id)
             if not prompt:
-                raise RuntimeError(
-                    "codex_agent: provide either `tasks` or `prompt`"
-                )
+                raise RuntimeError("codex_agent: provide either `tasks` or `prompt`")
             tasks = [
                 CodexTaskSpec(
                     prompt=prompt,
@@ -146,25 +142,20 @@ class CodexAgentNode(ActionNode):
 
         database = get_database()
         _, skill_data, _, _, _ = await collect_agent_connections(
-            node_id, ctx.raw, database,
+            node_id,
+            ctx.raw,
+            database,
         )
-        connected_skills = [
-            s.get("skill_name") or s.get("label")
-            for s in skill_data
-            if s.get("skill_name") or s.get("label")
-        ]
+        connected_skills = [s.get("skill_name") or s.get("label") for s in skill_data if s.get("skill_name") or s.get("label")]
 
         workspace_dir = ctx.raw.get("workspace_dir") or params.working_directory
         if workspace_dir is None:
             from core.config import Settings
-            workspace_dir = Path(Settings().workspace_base_resolved) / (
-                workflow_id or "default"
-            )
+
+            workspace_dir = Path(Settings().workspace_base_resolved) / (workflow_id or "default")
         workspace_dir = Path(workspace_dir)
 
-        repo_root = (
-            Path(params.working_directory) if params.working_directory else None
-        )
+        repo_root = Path(params.working_directory) if params.working_directory else None
 
         svc = get_ai_cli_service()
         result = await svc.run_batch(
@@ -183,16 +174,18 @@ class CodexAgentNode(ActionNode):
         elapsed = time.time() - start_time
         logger.debug(
             "[codex_agent] node=%s tasks=%d ok=%d fail=%d elapsed=%.2fs",
-            node_id, result.n_tasks, result.n_succeeded, result.n_failed, elapsed,
+            node_id,
+            result.n_tasks,
+            result.n_succeeded,
+            result.n_failed,
+            elapsed,
         )
 
         await broadcaster.update_node_status(
-            node_id, "success" if result.n_failed == 0 else "warning",
+            node_id,
+            "success" if result.n_failed == 0 else "warning",
             {
-                "message": (
-                    f"Batch complete: {result.n_succeeded}/{result.n_tasks} "
-                    f"succeeded"
-                ),
+                "message": (f"Batch complete: {result.n_succeeded}/{result.n_tasks} " f"succeeded"),
                 "n_tasks": result.n_tasks,
                 "n_succeeded": result.n_succeeded,
                 "n_failed": result.n_failed,
@@ -202,9 +195,7 @@ class CodexAgentNode(ActionNode):
 
         task_models = [session_result_to_model(t).model_dump() for t in result.tasks]
 
-        legacy_response = (
-            result.tasks[0].response if len(result.tasks) == 1 else None
-        )
+        legacy_response = result.tasks[0].response if len(result.tasks) == 1 else None
 
         return {
             "success": result.n_failed == 0,

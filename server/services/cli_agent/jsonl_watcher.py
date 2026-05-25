@@ -66,8 +66,12 @@ class JsonlWatcher:
     """
 
     __slots__ = (
-        "_path", "_on_event", "_poll_interval", "_start_from_end",
-        "_task", "_stopped",
+        "_path",
+        "_on_event",
+        "_poll_interval",
+        "_start_from_end",
+        "_task",
+        "_stopped",
     )
 
     def __init__(
@@ -113,7 +117,8 @@ class JsonlWatcher:
             except Exception as exc:  # pragma: no cover — defensive
                 logger.debug(
                     "[JsonlWatcher] task exit error path=%s exc=%s",
-                    self._path.name, exc,
+                    self._path.name,
+                    exc,
                 )
         self._task = None
 
@@ -134,7 +139,8 @@ class JsonlWatcher:
         except OSError as exc:
             logger.warning(
                 "[JsonlWatcher] open failed path=%s exc=%s",
-                self._path, exc,
+                self._path,
+                exc,
             )
             return
 
@@ -166,7 +172,8 @@ class JsonlWatcher:
         except Exception as exc:  # pragma: no cover — defensive
             logger.warning(
                 "[JsonlWatcher] read loop ended unexpectedly path=%s exc=%s",
-                self._path.name, exc,
+                self._path.name,
+                exc,
             )
         finally:
             # Flush any final no-newline bytes (claude generally writes
@@ -193,7 +200,8 @@ class JsonlWatcher:
         except Exception as exc:  # pragma: no cover — handler isolation
             logger.warning(
                 "[JsonlWatcher] on_event handler raised path=%s exc=%s",
-                self._path.name, exc,
+                self._path.name,
+                exc,
             )
 
 
@@ -214,8 +222,12 @@ class JsonlDirWatcher:
     """
 
     __slots__ = (
-        "_dir", "_on_new_file", "_poll_interval",
-        "_task", "_stopped", "_baseline",
+        "_dir",
+        "_on_new_file",
+        "_poll_interval",
+        "_task",
+        "_stopped",
+        "_baseline",
     )
 
     def __init__(
@@ -266,16 +278,14 @@ class JsonlDirWatcher:
         """Return the set of ``.jsonl`` filenames currently in the
         directory. Empty set if the directory doesn't exist yet."""
         try:
-            return {
-                entry.name for entry in self._dir.iterdir()
-                if entry.is_file() and entry.suffix == ".jsonl"
-            }
+            return {entry.name for entry in self._dir.iterdir() if entry.is_file() and entry.suffix == ".jsonl"}
         except (FileNotFoundError, NotADirectoryError):
             return set()
         except OSError as exc:
             logger.debug(
                 "[JsonlDirWatcher] snapshot failed dir=%s exc=%s",
-                self._dir, exc,
+                self._dir,
+                exc,
             )
             return set()
 
@@ -309,9 +319,10 @@ class JsonlDirWatcher:
                         raise
                     except Exception as exc:  # pragma: no cover
                         logger.warning(
-                            "[JsonlDirWatcher] on_new_file handler raised "
-                            "dir=%s file=%s exc=%s",
-                            self._dir.name, name, exc,
+                            "[JsonlDirWatcher] on_new_file handler raised " "dir=%s file=%s exc=%s",
+                            self._dir.name,
+                            name,
+                            exc,
                         )
 
             try:

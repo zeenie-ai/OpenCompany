@@ -39,13 +39,13 @@ def _extract_text_from_response(content) -> str:
         text_parts = []
         for block in content:
             if isinstance(block, dict):
-                if block.get('type') == 'text' and block.get('text'):
-                    text_parts.append(block['text'])
-                elif 'text' in block:
-                    text_parts.append(str(block['text']))
+                if block.get("type") == "text" and block.get("text"):
+                    text_parts.append(block["text"])
+                elif "text" in block:
+                    text_parts.append(str(block["text"]))
             elif isinstance(block, str):
                 text_parts.append(block)
-        return '\n'.join(text_parts)
+        return "\n".join(text_parts)
 
     # Handle string content
     if isinstance(content, str):
@@ -57,6 +57,7 @@ def _extract_text_from_response(content) -> str:
 
 class CompactionConfig(BaseModel):
     """Provider-agnostic compaction configuration."""
+
     enabled: bool = True
 
 
@@ -76,6 +77,7 @@ class CompactionService:
         """Per-user override from ``user_settings.compaction_ratio``, falling
         back to ``agent.compaction.ratio`` in ``llm_defaults.json``."""
         from services.model_registry import get_model_registry
+
         try:
             settings = await self._db.get_user_settings("default")
             if settings and "compaction_ratio" in settings:
@@ -95,6 +97,7 @@ class CompactionService:
         wins over the value returned here.
         """
         from services.model_registry import get_model_registry
+
         registry = get_model_registry()
         if ratio is None:
             ratio = float(registry.get_agent_defaults()["compaction"]["ratio"])
@@ -108,10 +111,7 @@ class CompactionService:
         if not threshold:
             ratio = await self._get_compaction_ratio()
             threshold = self.get_model_threshold(model, provider, ratio=ratio)
-        return {
-            "enabled": self._config.enabled,
-            "context_token_threshold": threshold
-        }
+        return {"enabled": self._config.enabled, "context_token_threshold": threshold}
 
     async def anthropic_api_config(self, threshold: Optional[int] = None, model: str = "", provider: str = "anthropic") -> Dict[str, Any]:
         """Anthropic Messages API context_management config."""
@@ -120,12 +120,7 @@ class CompactionService:
             threshold = self.get_model_threshold(model, provider, ratio=ratio)
         return {
             "betas": ["compact-2026-01-12"],
-            "context_management": {
-                "edits": [{
-                    "type": "compact_20260112",
-                    "trigger": {"type": "input_tokens", "value": threshold}
-                }]
-            }
+            "context_management": {"edits": [{"type": "compact_20260112", "trigger": {"type": "input_tokens", "value": threshold}}]},
         }
 
     async def openai_config(self, threshold: Optional[int] = None, model: str = "", provider: str = "openai") -> Dict[str, Any]:
@@ -146,35 +141,40 @@ class CompactionService:
             output_tokens=usage.get("output_tokens", 0),
             cache_read_tokens=usage.get("cache_read_tokens", 0),
             cache_creation_tokens=usage.get("cache_creation_tokens", 0),
-            reasoning_tokens=usage.get("reasoning_tokens", 0)
+            reasoning_tokens=usage.get("reasoning_tokens", 0),
         )
 
         # Save token metric with cost fields
-        await self._db.save_token_metric({
-            "session_id": session_id,
-            "node_id": node_id,
-            "provider": provider,
-            "model": model,
-            **usage,
-            "input_cost": cost["input_cost"],
-            "output_cost": cost["output_cost"],
-            "cache_cost": cost["cache_cost"],
-            "total_cost": cost["total_cost"]
-        })
+        await self._db.save_token_metric(
+            {
+                "session_id": session_id,
+                "node_id": node_id,
+                "provider": provider,
+                "model": model,
+                **usage,
+                "input_cost": cost["input_cost"],
+                "output_cost": cost["output_cost"],
+                "cache_cost": cost["cache_cost"],
+                "total_cost": cost["total_cost"],
+            }
+        )
 
         state = await self._db.get_or_create_session_token_state(session_id)
         new_total = state["cumulative_total"] + usage.get("total_tokens", 0)
         new_total_cost = state.get("cumulative_total_cost", 0.0) + cost["total_cost"]
 
         # Update cumulative state with cost
-        await self._db.update_session_token_state(session_id, {
-            "cumulative_input_tokens": state["cumulative_input_tokens"] + usage.get("input_tokens", 0),
-            "cumulative_output_tokens": state["cumulative_output_tokens"] + usage.get("output_tokens", 0),
-            "cumulative_total": new_total,
-            "cumulative_input_cost": state.get("cumulative_input_cost", 0.0) + cost["input_cost"],
-            "cumulative_output_cost": state.get("cumulative_output_cost", 0.0) + cost["output_cost"],
-            "cumulative_total_cost": new_total_cost
-        })
+        await self._db.update_session_token_state(
+            session_id,
+            {
+                "cumulative_input_tokens": state["cumulative_input_tokens"] + usage.get("input_tokens", 0),
+                "cumulative_output_tokens": state["cumulative_output_tokens"] + usage.get("output_tokens", 0),
+                "cumulative_total": new_total,
+                "cumulative_input_cost": state.get("cumulative_input_cost", 0.0) + cost["input_cost"],
+                "cumulative_output_cost": state.get("cumulative_output_cost", 0.0) + cost["output_cost"],
+                "cumulative_total_cost": new_total_cost,
+            },
+        )
 
         # Priority: per-session custom > model-aware (with user ratio) > global default
         custom = state.get("custom_threshold")
@@ -186,6 +186,7 @@ class CompactionService:
 
         # Get the model's full context window size for frontend display
         from services.model_registry import get_model_registry
+
         registry = get_model_registry()
         context_length = registry.get_context_length(model, provider)
 
@@ -195,22 +196,35 @@ class CompactionService:
             "cost": cost,
             "threshold": threshold,
             "context_length": context_length,
-            "needs_compaction": self._config.enabled and new_total >= threshold
+            "needs_compaction": self._config.enabled and new_total >= threshold,
         }
 
-    async def record(self, session_id: str, node_id: str, provider: str, model: str, tokens_before: int, tokens_after: int, summary: Optional[str] = None) -> None:
+    async def record(
+        self, session_id: str, node_id: str, provider: str, model: str, tokens_before: int, tokens_after: int, summary: Optional[str] = None
+    ) -> None:
         """Record compaction event after native API handles it."""
         state = await self._db.get_or_create_session_token_state(session_id)
-        await self._db.save_compaction_event({
-            "session_id": session_id, "node_id": node_id, "trigger_reason": "native",
-            "tokens_before": tokens_before, "tokens_after": tokens_after,
-            "summary_model": model, "summary_provider": provider, "success": True, "summary_content": summary
-        })
-        await self._db.update_session_token_state(session_id, {
-            "cumulative_total": tokens_after,
-            "last_compaction_at": datetime.now(timezone.utc),
-            "compaction_count": state["compaction_count"] + 1
-        })
+        await self._db.save_compaction_event(
+            {
+                "session_id": session_id,
+                "node_id": node_id,
+                "trigger_reason": "native",
+                "tokens_before": tokens_before,
+                "tokens_after": tokens_after,
+                "summary_model": model,
+                "summary_provider": provider,
+                "success": True,
+                "summary_content": summary,
+            }
+        )
+        await self._db.update_session_token_state(
+            session_id,
+            {
+                "cumulative_total": tokens_after,
+                "last_compaction_at": datetime.now(timezone.utc),
+                "compaction_count": state["compaction_count"] + 1,
+            },
+        )
 
     async def stats(self, session_id: str, model: str = "", provider: str = "") -> Dict[str, Any]:
         """Get session statistics.
@@ -229,6 +243,7 @@ class CompactionService:
         context_length = 0
         if model and provider:
             from services.model_registry import get_model_registry
+
             registry = get_model_registry()
             context_length = registry.get_context_length(model, provider)
 
@@ -299,17 +314,16 @@ Provide a concise but complete summary."""
 
             # Use a reasonable summary size: min(4096, model's max output)
             from services.model_registry import get_model_registry
+
             model_max = get_model_registry().get_max_output_tokens(model, provider)
             summary_tokens = min(4096, model_max)
 
-            llm = self._ai_service.create_model(
-                provider=provider, api_key=api_key, model=model,
-                temperature=0.3, max_tokens=summary_tokens
-            )
+            llm = self._ai_service.create_model(provider=provider, api_key=api_key, model=model, temperature=0.3, max_tokens=summary_tokens)
 
             from langchain_core.messages import HumanMessage
+
             response = await llm.ainvoke([HumanMessage(content=prompt)])
-            raw_content = response.content if hasattr(response, 'content') else str(response)
+            raw_content = response.content if hasattr(response, "content") else str(response)
             summary = _extract_text_from_response(raw_content)
 
             new_memory = f"# Conversation Summary (Compacted)\n*Generated: {datetime.now(timezone.utc).isoformat()}*\n\n{summary}"
@@ -326,8 +340,10 @@ Provide a concise but complete summary."""
 
 _service: Optional[CompactionService] = None
 
+
 def get_compaction_service() -> Optional[CompactionService]:
     return _service
+
 
 def init_compaction_service(database: "Database", settings: "Settings") -> CompactionService:
     global _service

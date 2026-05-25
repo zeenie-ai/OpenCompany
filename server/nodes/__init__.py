@@ -98,7 +98,7 @@ def _discover() -> list[str]:
     for module_info in pkgutil.walk_packages(__path__, prefix=f"{__name__}."):
         # Skip private modules and private subpackages anywhere in the path.
         parts = module_info.name.split(".")
-        if any(part.startswith("_") for part in parts[len(__name__.split(".")):]):
+        if any(part.startswith("_") for part in parts[len(__name__.split(".")) :]):
             continue
         try:
             importlib.import_module(module_info.name)

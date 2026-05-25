@@ -59,6 +59,7 @@ def ws_handler(*required_fields: str):
     under ``services/`` can decorate their own handlers without a
     circular import on the router.
     """
+
     def decorator(func: WSHandler) -> WSHandler:
         @functools.wraps(func)
         async def wrapper(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
@@ -73,20 +74,20 @@ def ws_handler(*required_fields: str):
             except Exception as e:
                 logger.error(f"Handler error: {e}", exc_info=True)
                 return {"success": False, "error": str(e)}
+
         return wrapper
+
     return decorator
+
 
 _WS_REGISTRY: IdempotentRegistry[str, WSHandler] = IdempotentRegistry("ws_handler")
 _ROUTER_REGISTRY: IdempotentRegistry[str, APIRouter] = IdempotentRegistry("router")
-_OPTION_LOADER_REGISTRY: IdempotentRegistry[str, LoadOptionsFn] = IdempotentRegistry(
-    "option_loader"
-)
-_OAUTH_CALLBACK_PATHS: IdempotentRegistry[str, str] = IdempotentRegistry(
-    "oauth_callback_path"
-)
+_OPTION_LOADER_REGISTRY: IdempotentRegistry[str, LoadOptionsFn] = IdempotentRegistry("option_loader")
+_OAUTH_CALLBACK_PATHS: IdempotentRegistry[str, str] = IdempotentRegistry("oauth_callback_path")
 
 
 # ---- WebSocket handlers --------------------------------------------------
+
 
 def register_ws_handlers(handlers: Dict[str, WSHandler]) -> None:
     """Publish a batch of ``message_type -> handler`` mappings.
@@ -115,6 +116,7 @@ def list_registered_types() -> list[str]:
 
 # ---- HTTP routers --------------------------------------------------------
 
+
 def register_router(router: APIRouter, *, name: str) -> None:
     """Publish a plugin-owned ``APIRouter`` for inclusion at app startup.
 
@@ -139,6 +141,7 @@ def list_registered_routers() -> List[str]:
 
 # ---- Option loaders ------------------------------------------------------
 
+
 def register_option_loader(method_name: str, fn: LoadOptionsFn) -> None:
     """Publish a ``loadOptionsMethod`` async loader.
 
@@ -162,9 +165,7 @@ def list_registered_option_methods() -> List[str]:
     return sorted(_OPTION_LOADER_REGISTRY.keys())
 
 
-async def dispatch_load_options(
-    method: str, params: Dict[str, Any] | None = None
-) -> List[Dict[str, Any]]:
+async def dispatch_load_options(method: str, params: Dict[str, Any] | None = None) -> List[Dict[str, Any]]:
     """Look up and invoke a registered loader.
 
     Returns an empty list when the method isn't registered (matches
@@ -185,6 +186,7 @@ def list_load_options_methods() -> List[str]:
 
 
 # ---- OAuth callback paths -----------------------------------------------
+
 
 def register_oauth_callback_path(provider: str, path: str) -> None:
     """Publish a plugin's OAuth callback path (``/api/<provider>/callback``).

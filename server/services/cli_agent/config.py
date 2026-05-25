@@ -24,9 +24,11 @@ logger = get_logger(__name__)
 # Provider config dataclass
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class CliProviderConfig:
     """Per-provider config from `ai_cli_providers.json`."""
+
     name: str
     package_name: str
     binary_name: str
@@ -41,6 +43,7 @@ class CliProviderConfig:
 # ---------------------------------------------------------------------------
 # Load config once at import time
 # ---------------------------------------------------------------------------
+
 
 def _config_path() -> Path:
     return Path(__file__).parent.parent.parent / "config" / "ai_cli_providers.json"
@@ -74,19 +77,13 @@ def _build_configs() -> Dict[str, CliProviderConfig]:
     for name, prov in raw.items():
         # Pull known fields out; everything else lives in `defaults` so
         # provider impls can read e.g. `default_model`, `default_max_turns`.
-        defaults = {
-            k: v for k, v in prov.items()
-            if k.startswith("default_")
-        }
+        defaults = {k: v for k, v in prov.items() if k.startswith("default_")}
         configs[name] = CliProviderConfig(
             name=name,
             package_name=prov.get("package_name", ""),
             binary_name=prov.get("binary_name", name),
             login_argv=tuple(prov.get("login_argv", [])),
-            auth_status_argv=(
-                tuple(prov["auth_status_argv"])
-                if prov.get("auth_status_argv") else None
-            ),
+            auth_status_argv=(tuple(prov["auth_status_argv"]) if prov.get("auth_status_argv") else None),
             ide_lock_env_var=prov.get("ide_lock_env_var"),
             ide_lockfile_dir=_expand_lockfile_dir(prov.get("ide_lockfile_dir")),
             defaults=defaults,

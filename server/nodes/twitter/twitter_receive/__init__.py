@@ -43,10 +43,7 @@ class TwitterReceiveNode(TriggerNode):
     # ``event_waiter._auto_populate_from_plugins`` backfill
     # TRIGGER_REGISTRY without a hardcoded entry in event_waiter.
     event_type = "twitter_event_received"
-    handles = (
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
-    )
+    handles = ({"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},)
     credentials = (TwitterCredential,)
     task_queue = TaskQueue.TRIGGERS_POLL
     mode = "polling"
@@ -62,9 +59,12 @@ class TwitterReceiveNode(TriggerNode):
         context: NodeContext,
     ) -> Dict[str, Any]:
         from services.handlers.triggers import handle_trigger_node
+
         return await handle_trigger_node(
-            node_id=node_id, node_type=self.type,
-            parameters=parameters, context=context.raw,
+            node_id=node_id,
+            node_type=self.type,
+            parameters=parameters,
+            context=context.raw,
         )
 
     @Operation("wait")

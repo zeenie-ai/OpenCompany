@@ -11,8 +11,13 @@ from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
 
 class EmailReadParams(BaseModel):
     provider: Literal[
-        "gmail", "outlook", "yahoo", "icloud",
-        "protonmail", "fastmail", "custom",
+        "gmail",
+        "outlook",
+        "yahoo",
+        "icloud",
+        "protonmail",
+        "fastmail",
+        "custom",
     ] = Field(default="gmail", description="IMAP provider preset.")
     operation: Literal["list", "search", "read", "folders", "move", "delete", "flag"] = Field(
         default="list",
@@ -57,28 +62,34 @@ class EmailReadParams(BaseModel):
 
     # Pagination (list / search)
     limit: int = Field(
-        default=20, ge=1, le=500,
+        default=20,
+        ge=1,
+        le=500,
         description="Max envelopes per page.",
         json_schema_extra={
             "displayOptions": {"show": {"operation": ["list", "search"]}},
         },
     )
     page: int = Field(
-        default=1, ge=1,
+        default=1,
+        ge=1,
         description="Page number (1-indexed).",
         json_schema_extra={
             "displayOptions": {"show": {"operation": ["list", "search"]}},
         },
     )
     page_size: int = Field(
-        default=20, ge=1, le=500,
+        default=20,
+        ge=1,
+        le=500,
         description="Items per page (overrides limit when paginating).",
         json_schema_extra={
             "displayOptions": {"show": {"operation": ["list", "search"]}},
         },
     )
     offset: int = Field(
-        default=0, ge=0,
+        default=0,
+        ge=0,
         description="Alternative to page-based pagination — skip this many messages.",
         json_schema_extra={
             "displayOptions": {"show": {"operation": ["list", "search"]}},
@@ -107,10 +118,8 @@ class EmailReadNode(ActionNode):
     tool_name = "email_read"
     tool_description = "Read and manage emails via IMAP. Operations: list (envelopes), search (query), read (message by ID), folders (list), move, delete, flag."
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
     annotations = {"destructive": False, "readonly": False, "open_world": True}
     task_queue = TaskQueue.MESSAGING
@@ -123,4 +132,5 @@ class EmailReadNode(ActionNode):
     async def query(self, ctx: NodeContext, params: EmailReadParams) -> Any:
         # Body inlined from handlers/email.py (Wave 11.D.1).
         from .._service import get_email_service
+
         return await get_email_service().read(params.model_dump())

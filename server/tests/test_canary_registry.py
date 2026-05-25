@@ -79,9 +79,7 @@ class TestRegistryContract:
         producer envelope shape without coordinating with the listener."""
         fresh_registry.register_canary_trigger_type("chatTrigger", _CE_CHAT)
         with pytest.raises(ValueError, match="diverging"):
-            fresh_registry.register_canary_trigger_type(
-                "chatTrigger", "com.machinaos.chat.message.changed"
-            )
+            fresh_registry.register_canary_trigger_type("chatTrigger", "com.machinaos.chat.message.changed")
 
     def test_multiple_types_coexist(self, fresh_registry):
         for t, ce in (
@@ -90,9 +88,13 @@ class TestRegistryContract:
             ("taskTrigger", _CE_TASK),
         ):
             fresh_registry.register_canary_trigger_type(t, ce)
-        assert fresh_registry.canary_trigger_types() == frozenset({
-            "webhookTrigger", "chatTrigger", "taskTrigger",
-        })
+        assert fresh_registry.canary_trigger_types() == frozenset(
+            {
+                "webhookTrigger",
+                "chatTrigger",
+                "taskTrigger",
+            }
+        )
         assert fresh_registry.cloudevent_type_for("taskTrigger") == _CE_TASK
 
     def test_snapshot_is_immutable(self, fresh_registry):
@@ -109,7 +111,7 @@ class TestRegistryContract:
         with pytest.raises(TypeError):
             fresh_registry.register_canary_trigger_type(None, _CE_WEBHOOK)  # type: ignore[arg-type]
         with pytest.raises(TypeError):
-            fresh_registry.register_canary_trigger_type(123, _CE_WEBHOOK)   # type: ignore[arg-type]
+            fresh_registry.register_canary_trigger_type(123, _CE_WEBHOOK)  # type: ignore[arg-type]
 
     def test_rejects_empty_node_type(self, fresh_registry):
         with pytest.raises(TypeError):
@@ -186,14 +188,15 @@ class TestPluginSelfRegistration:
     rather than masking the import failure.
     """
 
-    @pytest.mark.parametrize("plugin_module,expected_type,expected_cloudevent_type", [
-        ("nodes.trigger.webhook_trigger", "webhookTrigger", "com.machinaos.webhook.received"),
-        ("nodes.trigger.chat_trigger", "chatTrigger", "com.machinaos.chat.message.received"),
-        ("nodes.trigger.task_trigger", "taskTrigger", "com.machinaos.agent.task.completed"),
-    ])
-    def test_plugin_import_registers_its_type(
-        self, plugin_module, expected_type, expected_cloudevent_type
-    ):
+    @pytest.mark.parametrize(
+        "plugin_module,expected_type,expected_cloudevent_type",
+        [
+            ("nodes.trigger.webhook_trigger", "webhookTrigger", "com.machinaos.webhook.received"),
+            ("nodes.trigger.chat_trigger", "chatTrigger", "com.machinaos.chat.message.received"),
+            ("nodes.trigger.task_trigger", "taskTrigger", "com.machinaos.agent.task.completed"),
+        ],
+    )
+    def test_plugin_import_registers_its_type(self, plugin_module, expected_type, expected_cloudevent_type):
         from services.deployment import canary_registry
 
         try:
@@ -244,8 +247,7 @@ class TestCloudEventTypeMatchesSearchAttribute:
         for node_type in canary_registry.canary_trigger_types():
             ce_type = canary_registry.cloudevent_type_for(node_type)
             assert ce_type is not None, (
-                f"canary_trigger_types includes {node_type!r} but "
-                f"cloudevent_type_for() returned None — registry corrupted."
+                f"canary_trigger_types includes {node_type!r} but " f"cloudevent_type_for() returned None — registry corrupted."
             )
             assert ce_type.startswith("com.machinaos."), (
                 f"{node_type!r} registered with cloudevent_type={ce_type!r}; "
@@ -266,8 +268,7 @@ class TestCloudEventTypeMatchesSearchAttribute:
         # The query template MUST format the CloudEvents type into the
         # EventType filter.
         assert "EventType=" in dispatch_mod._RUNNING_CONSUMERS_QUERY, (
-            "dispatch.emit's _RUNNING_CONSUMERS_QUERY no longer filters by "
-            "EventType — listener-side SA registration relies on this key."
+            "dispatch.emit's _RUNNING_CONSUMERS_QUERY no longer filters by " "EventType — listener-side SA registration relies on this key."
         )
         assert "event.type" in src or "event_type=event.type" in src, (
             "dispatch.emit no longer substitutes event.type into the "
@@ -298,8 +299,7 @@ class TestCloudEventTypeMatchesSearchAttribute:
             src,
         )
         assert pair_pattern is not None, (
-            "Couldn't find the SearchAttributePair(event_type_key, ...) "
-            "construction. Check _start_canary_listener for the SA wiring."
+            "Couldn't find the SearchAttributePair(event_type_key, ...) " "construction. Check _start_canary_listener for the SA wiring."
         )
         sa_value_name = pair_pattern.group(1)
         assert sa_value_name == "cloudevent_type", (

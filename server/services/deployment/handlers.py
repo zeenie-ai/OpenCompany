@@ -72,11 +72,11 @@ async def handle_deploy_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
 
     logger.debug(f"[Deploy] Received {len(edges)} edges for workflow {workflow_id}")
     for e in edges:
-        target_handle = e.get('targetHandle')
-        if target_handle and target_handle.startswith('input-') and target_handle != 'input-main':
+        target_handle = e.get("targetHandle")
+        if target_handle and target_handle.startswith("input-") and target_handle != "input-main":
             logger.debug(f"[Deploy] Config edge: {e.get('source')} -> {e.get('target')} (handle={target_handle})")
 
-    tool_edges = [e for e in edges if e.get('targetHandle') == 'input-tools']
+    tool_edges = [e for e in edges if e.get("targetHandle") == "input-tools"]
     if tool_edges:
         logger.debug(f"[Deploy] Tool edges found: {len(tool_edges)}")
         for te in tool_edges:
@@ -94,8 +94,10 @@ async def handle_deploy_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
     # a broken workflow running on a schedule is far worse than a failed
     # one-shot manual run.
     from services.workflow_validator import validate_workflow
+
     deploy_report = await validate_workflow(
-        nodes=nodes, edges=edges,
+        nodes=nodes,
+        edges=edges,
         parameters_by_id=data.get("parameters_by_id"),
     )
     if deploy_report["errors"]:
@@ -321,7 +323,8 @@ async def handle_get_workflow_lock(data: Dict[str, Any], websocket: WebSocket) -
 
 @ws_handler()
 async def handle_update_deployment_settings(
-    data: Dict[str, Any], websocket: WebSocket,
+    data: Dict[str, Any],
+    websocket: WebSocket,
 ) -> Dict[str, Any]:
     """Update deployment settings (can be called during active deployment)."""
     from core.container import container
@@ -341,12 +344,14 @@ async def handle_update_deployment_settings(
     updated_settings = await workflow_service.update_deployment_settings(settings_to_update)
 
     status = workflow_service.get_deployment_status()
-    await broadcaster.broadcast({
-        "type": "deployment_settings_updated",
-        "settings": updated_settings,
-        "is_running": workflow_service.is_deployment_running(),
-        "run_counter": status.get("run_counter", 0),
-    })
+    await broadcaster.broadcast(
+        {
+            "type": "deployment_settings_updated",
+            "settings": updated_settings,
+            "is_running": workflow_service.is_deployment_running(),
+            "run_counter": status.get("run_counter", 0),
+        }
+    )
 
     return {
         "success": True,

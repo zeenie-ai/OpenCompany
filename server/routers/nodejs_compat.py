@@ -37,28 +37,16 @@ async def root():
         "message": "React Flow Project API Server",
         "status": "running",
         "version": "2.0.0-python",
-        "endpoints": {
-            "health": "/api/health",
-            "workflows": "/api/workflows",
-            "nodes": "/api/nodes",
-            "execute": "/api/nodes/execute"
-        },
-        "services": {
-            "main": "http://localhost:3010",
-            "python": "http://localhost:3010"
-        },
-        "timestamp": datetime.now().isoformat()
+        "endpoints": {"health": "/api/health", "workflows": "/api/workflows", "nodes": "/api/nodes", "execute": "/api/nodes/execute"},
+        "services": {"main": "http://localhost:3010", "python": "http://localhost:3010"},
+        "timestamp": datetime.now().isoformat(),
     }
 
 
 @router.get("/api/health")
 async def health_check():
     """Node.js compatible health check."""
-    return {
-        "status": "OK",
-        "message": "React Flow Server is running",
-        "timestamp": datetime.now().isoformat()
-    }
+    return {"status": "OK", "message": "React Flow Server is running", "timestamp": datetime.now().isoformat()}
 
 
 # Workflow management endpoints
@@ -74,25 +62,14 @@ async def get_workflows(database: Database = Depends(lambda: container.database(
 
 
 @router.post("/api/workflows")
-async def save_workflow(
-    request: WorkflowSaveRequest,
-    database: Database = Depends(lambda: container.database())
-):
+async def save_workflow(request: WorkflowSaveRequest, database: Database = Depends(lambda: container.database())):
     """Save workflow (Node.js compatible)."""
     try:
         workflow_id = str(int(datetime.now().timestamp() * 1000))  # Node.js style ID
-        success = await database.save_workflow(
-            workflow_id=workflow_id,
-            name=request.name,
-            data=request.data
-        )
+        success = await database.save_workflow(workflow_id=workflow_id, name=request.name, data=request.data)
 
         if success:
-            return {
-                "success": True,
-                "id": workflow_id,
-                "message": "Workflow saved successfully"
-            }
+            return {"success": True, "id": workflow_id, "message": "Workflow saved successfully"}
         else:
             raise HTTPException(status_code=500, detail="Failed to save workflow")
 
@@ -102,42 +79,24 @@ async def save_workflow(
 
 
 @router.get("/api/workflows/{workflow_id}")
-async def get_workflow(
-    workflow_id: str,
-    database: Database = Depends(lambda: container.database())
-):
+async def get_workflow(workflow_id: str, database: Database = Depends(lambda: container.database())):
     """Get workflow by ID (Node.js compatible)."""
     try:
         workflow = await database.get_workflow(workflow_id)
 
         if workflow:
-            return {
-                "id": workflow.id,
-                "name": workflow.name,
-                "data": workflow.data
-            }
+            return {"id": workflow.id, "name": workflow.name, "data": workflow.data}
         else:
-            return {
-                "id": workflow_id,
-                "name": "Sample Workflow",
-                "data": {"nodes": [], "edges": []}
-            }
+            return {"id": workflow_id, "name": "Sample Workflow", "data": {"nodes": [], "edges": []}}
 
     except Exception as e:
         logger.error("Failed to get workflow", workflow_id=workflow_id, error=str(e))
-        return {
-            "id": workflow_id,
-            "name": "Sample Workflow",
-            "data": {"nodes": [], "edges": []}
-        }
+        return {"id": workflow_id, "name": "Sample Workflow", "data": {"nodes": [], "edges": []}}
 
 
 # Main execution endpoint - Node.js compatible
 @router.post("/api/nodes/execute")
-async def execute_node(
-    request: NodeExecuteRequest,
-    workflow_service: WorkflowService = Depends(lambda: container.workflow_service())
-):
+async def execute_node(request: NodeExecuteRequest, workflow_service: WorkflowService = Depends(lambda: container.workflow_service())):
     """Execute a single node (Node.js compatible)."""
     try:
         if not request.nodeId or not request.nodeType:
@@ -153,7 +112,7 @@ async def execute_node(
             parameters=request.parameters or {},
             nodes=request.nodes or [],
             edges=request.edges or [],
-            session_id="default"
+            session_id="default",
         )
 
         # Transform result to match Node.js format
@@ -165,7 +124,7 @@ async def execute_node(
                 "nodeType": request.nodeType,
                 "result": result.get("result", {}),
                 "executionTime": result.get("execution_time", 0),
-                "timestamp": result.get("timestamp", datetime.now().isoformat())
+                "timestamp": result.get("timestamp", datetime.now().isoformat()),
             }
         else:
             return {
@@ -175,7 +134,7 @@ async def execute_node(
                 "nodeType": request.nodeType,
                 "error": result.get("error", "Unknown error"),
                 "executionTime": result.get("execution_time", 0),
-                "timestamp": result.get("timestamp", datetime.now().isoformat())
+                "timestamp": result.get("timestamp", datetime.now().isoformat()),
             }
 
     except Exception as e:
@@ -189,35 +148,19 @@ async def get_execution_status(execution_id: str):
     """Get execution status (Node.js compatible)."""
     # For simplicity, return success status
     # In a full implementation, you'd track execution status
-    return {
-        "success": True,
-        "executionId": execution_id,
-        "status": "completed",
-        "timestamp": datetime.now().isoformat()
-    }
+    return {"success": True, "executionId": execution_id, "status": "completed", "timestamp": datetime.now().isoformat()}
 
 
 @router.get("/api/nodes/{node_id}/output")
-async def get_node_output(
-    node_id: str,
-    workflow_service: WorkflowService = Depends(lambda: container.workflow_service())
-):
+async def get_node_output(node_id: str, workflow_service: WorkflowService = Depends(lambda: container.workflow_service())):
     """Get node output data (Node.js compatible)."""
     try:
         result = await workflow_service.get_workflow_node_output(node_id)
 
         if result.get("success"):
-            return {
-                "success": True,
-                "nodeId": node_id,
-                "output": result.get("data", {})
-            }
+            return {"success": True, "nodeId": node_id, "output": result.get("data", {})}
         else:
-            return {
-                "success": False,
-                "nodeId": node_id,
-                "error": result.get("error", "Node output not found")
-            }
+            return {"success": False, "nodeId": node_id, "error": result.get("error", "Node output not found")}
 
     except Exception as e:
         logger.error("Get node output error", node_id=node_id, error=str(e))
@@ -229,10 +172,7 @@ async def clear_execution_cache():
     """Clear execution cache (Node.js compatible)."""
     try:
         # Clear workflow service cache if implemented
-        return {
-            "success": True,
-            "message": "Execution cache cleared"
-        }
+        return {"success": True, "message": "Execution cache cleared"}
     except Exception as e:
         logger.error("Clear cache error", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
@@ -241,9 +181,7 @@ async def clear_execution_cache():
 # Legacy endpoint for backwards compatibility
 @router.post("/api/execute/{node_id}")
 async def legacy_execute_node(
-    node_id: str,
-    request: Dict[str, Any],
-    workflow_service: WorkflowService = Depends(lambda: container.workflow_service())
+    node_id: str, request: Dict[str, Any], workflow_service: WorkflowService = Depends(lambda: container.workflow_service())
 ):
     """Legacy execution endpoint (Node.js compatible)."""
     try:
@@ -259,7 +197,7 @@ async def legacy_execute_node(
             parameters=request.get("parameters", {}),
             nodes=request.get("nodes", []),
             edges=request.get("edges", []),
-            session_id="default"
+            session_id="default",
         )
 
         # Return in Node.js format
@@ -271,7 +209,7 @@ async def legacy_execute_node(
                 "nodeType": node_type,
                 "result": result.get("result", {}),
                 "executionTime": result.get("execution_time", 0),
-                "timestamp": result.get("timestamp", datetime.now().isoformat())
+                "timestamp": result.get("timestamp", datetime.now().isoformat()),
             }
         else:
             return {
@@ -281,7 +219,7 @@ async def legacy_execute_node(
                 "nodeType": node_type,
                 "error": result.get("error", "Unknown error"),
                 "executionTime": result.get("execution_time", 0),
-                "timestamp": result.get("timestamp", datetime.now().isoformat())
+                "timestamp": result.get("timestamp", datetime.now().isoformat()),
             }
 
     except Exception as e:

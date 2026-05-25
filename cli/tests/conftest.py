@@ -52,8 +52,9 @@ def workspace_members(root: Path) -> dict[str, Path]:
     """
     # which_argv resolves Windows .cmd / .bat shims via PATHEXT — the
     # same helper cli.run uses everywhere else for the same reason.
-    argv = which_argv(["pnpm", "list", "--json", "--only-projects",
-                       "--recursive", "--depth", "0"])
+    argv = which_argv(
+        ["pnpm", "list", "--json", "--only-projects", "--recursive", "--depth", "0"]
+    )
     try:
         out = subprocess.run(
             argv,

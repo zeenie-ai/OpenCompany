@@ -70,6 +70,7 @@ def _register_builtin_providers() -> None:
     moved yet.
     """
     from services.cli_agent.providers.openai_codex import OpenAICodexProvider
+
     register_provider("codex", OpenAICodexProvider)
 
 

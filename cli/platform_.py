@@ -66,6 +66,7 @@ def project_root() -> Path:
 # Path-prefix helpers -- canonical layout derived from ``project_root``.
 # ---------------------------------------------------------------------------
 
+
 def _root(root: Path | None) -> Path:
     return root if root is not None else project_root()
 
@@ -142,6 +143,7 @@ def user_data_dir() -> Path:
     if override:
         return Path(override).expanduser()
     import platformdirs
+
     return platformdirs.user_data_path(_APP_NAME, appauthor=_APP_NAME)
 
 
@@ -149,16 +151,19 @@ def user_cache_dir() -> Path:
     """User cache directory (downloaded binaries / pooch caches).
     Matches ``server/core/paths.py::packages_dir``."""
     import platformdirs
+
     return platformdirs.user_cache_path(_APP_NAME, appauthor=_APP_NAME)
 
 
 def user_config_dir() -> Path:
     """User config directory."""
     import platformdirs
+
     return platformdirs.user_config_path(_APP_NAME, appauthor=_APP_NAME)
 
 
 def user_log_dir() -> Path:
     """User log directory."""
     import platformdirs
+
     return platformdirs.user_log_path(_APP_NAME, appauthor=_APP_NAME)

@@ -876,12 +876,10 @@ def _bust_schema_cache(node_type: str, _model_class: type[BaseModel]) -> None:
 # Backed by the module-level NODE_OUTPUT_SCHEMAS dict so existing
 # readers (e.g. get_output_schema, list_node_types_with_schema, tests)
 # keep working.
-_OUTPUT_SCHEMA_REGISTRY: _IdempotentRegistry[str, type[BaseModel]] = (
-    _IdempotentRegistry(
-        "output_schema",
-        items=NODE_OUTPUT_SCHEMAS,
-        on_register=_bust_schema_cache,
-    )
+_OUTPUT_SCHEMA_REGISTRY: _IdempotentRegistry[str, type[BaseModel]] = _IdempotentRegistry(
+    "output_schema",
+    items=NODE_OUTPUT_SCHEMAS,
+    on_register=_bust_schema_cache,
 )
 
 

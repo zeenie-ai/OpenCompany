@@ -100,8 +100,7 @@ class TestEndpointResolution:
         precondition without depending on exact registered count
         (which drifts when new credentials land)."""
         assert len(CREDENTIAL_REGISTRY) > 0, (
-            "CREDENTIAL_REGISTRY should be populated by nodes import "
-            "(triggers credential discovery via __init_subclass__)"
+            "CREDENTIAL_REGISTRY should be populated by nodes import " "(triggers credential discovery via __init_subclass__)"
         )
 
     def test_well_known_providers_registered(self):

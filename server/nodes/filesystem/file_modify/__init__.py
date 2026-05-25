@@ -38,7 +38,9 @@ class FileModifyNode(ActionNode):
     group = ("filesystem", "tool")
     description = "Write new files or edit existing files"
     tool_name = "file_modify"
-    tool_description = "Write a new file or edit an existing file with string replacement. Operations: write (create/overwrite), edit (find and replace)."
+    tool_description = (
+        "Write a new file or edit an existing file with string replacement. Operations: write (create/overwrite), edit (find and replace)."
+    )
     component_kind = "square"
     handles = (
         {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
@@ -71,9 +73,7 @@ class FileModifyNode(ActionNode):
                 resolved = backend._resolve_path(file_path)
                 if resolved.exists():
                     if resolved.is_dir():
-                        raise IsADirectoryError(
-                            f"Cannot write to {file_path}: path is a directory"
-                        )
+                        raise IsADirectoryError(f"Cannot write to {file_path}: path is a directory")
                     resolved.unlink()
                 return backend.write(file_path, params.content)
 
@@ -89,7 +89,10 @@ class FileModifyNode(ActionNode):
             if not params.old_string:
                 raise NodeUserError("old_string is required for edit")
             result = await asyncio.to_thread(
-                backend.edit, file_path, params.old_string, params.new_string,
+                backend.edit,
+                file_path,
+                params.old_string,
+                params.new_string,
                 replace_all=params.replace_all,
             )
             if result.error:

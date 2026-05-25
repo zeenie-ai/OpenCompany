@@ -64,13 +64,9 @@ class CredentialRegistry:
                 with _CONFIG_PATH.open(encoding="utf-8") as f:
                     self._raw = json.load(f)
             except FileNotFoundError as e:
-                raise CredentialRegistryError(
-                    f"credential_providers.json not found at {_CONFIG_PATH}"
-                ) from e
+                raise CredentialRegistryError(f"credential_providers.json not found at {_CONFIG_PATH}") from e
             except json.JSONDecodeError as e:
-                raise CredentialRegistryError(
-                    f"credential_providers.json is not valid JSON: {e}"
-                ) from e
+                raise CredentialRegistryError(f"credential_providers.json is not valid JSON: {e}") from e
         return self._raw
 
     def _resolve_all(self) -> Dict[str, Dict[str, Any]]:
@@ -98,13 +94,10 @@ class CredentialRegistry:
         """Walk the extends chain, deep-merge parent then child overrides."""
         if provider_id in visiting:
             raise CredentialRegistryError(
-                f"extends cycle detected involving provider {provider_id!r}: "
-                f"{' -> '.join(sorted(visiting))} -> {provider_id}"
+                f"extends cycle detected involving provider {provider_id!r}: " f"{' -> '.join(sorted(visiting))} -> {provider_id}"
             )
         if provider_id not in raw:
-            raise CredentialRegistryError(
-                f"provider {provider_id!r} referenced via extends but not defined"
-            )
+            raise CredentialRegistryError(f"provider {provider_id!r} referenced via extends but not defined")
 
         entry = raw[provider_id]
         extends = entry.get("extends")
@@ -158,10 +151,7 @@ class CredentialRegistry:
         categories = raw.get("categories", {})
         if not isinstance(categories, dict):
             return []
-        out = [
-            {"key": key, "label": cfg.get("label", key), "order": cfg.get("order", 0)}
-            for key, cfg in categories.items()
-        ]
+        out = [{"key": key, "label": cfg.get("label", key), "order": cfg.get("order", 0)} for key, cfg in categories.items()]
         out.sort(key=lambda c: (c["order"], c["key"]))
         return out
 
@@ -238,11 +228,7 @@ def _deep_merge(parent: Dict[str, Any], child: Dict[str, Any]) -> Dict[str, Any]
         parent_value = result.get(key)
         if isinstance(parent_value, dict) and isinstance(child_value, dict):
             result[key] = _deep_merge(parent_value, child_value)
-        elif (
-            key in _MERGE_BY_KEY_ARRAYS
-            and isinstance(parent_value, list)
-            and isinstance(child_value, list)
-        ):
+        elif key in _MERGE_BY_KEY_ARRAYS and isinstance(parent_value, list) and isinstance(child_value, list):
             result[key] = _merge_array_by_key(parent_value, child_value)
         else:
             result[key] = copy.deepcopy(child_value)

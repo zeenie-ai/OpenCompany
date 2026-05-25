@@ -76,9 +76,7 @@ class AnthropicClaudeProvider:
     def __init__(self) -> None:
         cfg = get_provider_config(NAME)
         if cfg is None:
-            raise RuntimeError(
-                f"Provider config missing for {NAME!r}. Check ai_cli_providers.json."
-            )
+            raise RuntimeError(f"Provider config missing for {NAME!r}. Check ai_cli_providers.json.")
         self.name = NAME
         self.package_name = cfg.package_name
         self.binary_name = cfg.binary_name
@@ -160,10 +158,7 @@ class AnthropicClaudeProvider:
         ``<cwd>/.claude/skills/`` is unchanged.
         """
         if not isinstance(task, ClaudeTaskSpec):
-            raise TypeError(
-                "AnthropicClaudeProvider.interactive_argv requires ClaudeTaskSpec, "
-                f"got {type(task).__name__}"
-            )
+            raise TypeError("AnthropicClaudeProvider.interactive_argv requires ClaudeTaskSpec, " f"got {type(task).__name__}")
 
         argv: List[str] = [str(self.binary_path())]
 
@@ -178,8 +173,10 @@ class AnthropicClaudeProvider:
         # ``<CLAUDE_CONFIG_DIR>/ide/<pid>.lock`` for auto-connection to
         # MachinaOs's MCP server.
         argv += [
-            "--output-format", "stream-json",
-            "--input-format", "stream-json",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
             "--verbose",
             "--ide",
         ]
@@ -193,26 +190,24 @@ class AnthropicClaudeProvider:
             # session start instead of waiting for a `ToolSearch` call
             # the agent often doesn't make
             # (https://code.claude.com/docs/en/mcp#scale-with-mcp-tool-search).
-            mcp_payload = json.dumps({
-                "mcpServers": {
-                    "machinaos": {
-                        "type": "http",
-                        "url": mcp_endpoint_url,
-                        "headers": {
-                            "Authorization": f"Bearer {mcp_bearer_token}",
-                        },
-                        "alwaysLoad": True,
+            mcp_payload = json.dumps(
+                {
+                    "mcpServers": {
+                        "machinaos": {
+                            "type": "http",
+                            "url": mcp_endpoint_url,
+                            "headers": {
+                                "Authorization": f"Bearer {mcp_bearer_token}",
+                            },
+                            "alwaysLoad": True,
+                        }
                     }
                 }
-            })
+            )
             argv += ["--mcp-config", mcp_payload, "--strict-mcp-config"]
 
         # Model
-        model = (
-            task.model
-            or defaults.get("default_model")
-            or self._defaults.get("default_model", "claude-sonnet-4-6")
-        )
+        model = task.model or defaults.get("default_model") or self._defaults.get("default_model", "claude-sonnet-4-6")
         argv += ["--model", model]
 
         # Session continuity. Three valid states, mutually exclusive:
@@ -258,14 +253,9 @@ class AnthropicClaudeProvider:
             "default_allowed_tools",
             self._defaults.get("default_allowed_tools", ""),
         )
-        allowed_list: List[str] = (
-            [t.strip() for t in allowed_extra.split(",") if t.strip()]
-            if allowed_extra else []
-        )
+        allowed_list: List[str] = [t.strip() for t in allowed_extra.split(",") if t.strip()] if allowed_extra else []
         if connected_tool_names:
-            allowed_list += [
-                f"mcp__machinaos__{name}" for name in connected_tool_names
-            ]
+            allowed_list += [f"mcp__machinaos__{name}" for name in connected_tool_names]
         # Conditionally enable claude's built-in ``Skill`` tool ONLY
         # when at least one skill is wired through ``input-skill``.
         # The spawn path (pool + non-pool) materialises connected
@@ -316,9 +306,9 @@ class AnthropicClaudeProvider:
         if task.system_prompt:
             argv += ["--append-system-prompt", task.system_prompt]
             logger.info(
-                "[CC-Agent argv] --append-system-prompt (task) "
-                "length=%d preview=%r",
-                len(task.system_prompt), task.system_prompt[:200],
+                "[CC-Agent argv] --append-system-prompt (task) " "length=%d preview=%r",
+                len(task.system_prompt),
+                task.system_prompt[:200],
             )
 
         # Optional per-task overrides (work in interactive mode per
@@ -402,9 +392,7 @@ class AnthropicClaudeProvider:
                 break
 
         tool_calls = sum(
-            1 for evt in events
-            if evt.get("type") == "tool_use"
-            or (evt.get("type") == "assistant" and self._has_tool_use(evt))
+            1 for evt in events if evt.get("type") == "tool_use" or (evt.get("type") == "assistant" and self._has_tool_use(evt))
         )
 
         provider_data: Dict[str, Any] = {}
@@ -499,10 +487,7 @@ class AnthropicClaudeProvider:
             return CanonicalUsage()
 
         usage = final.get("usage") or {}
-        request_count = (
-            int(final.get("num_turns") or 0)
-            or sum(1 for e in events if e.get("type") == "assistant")
-        )
+        request_count = int(final.get("num_turns") or 0) or sum(1 for e in events if e.get("type") == "assistant")
         return CanonicalUsage(
             input_tokens=int(usage.get("input_tokens", 0)),
             output_tokens=int(usage.get("output_tokens", 0)),
@@ -524,8 +509,5 @@ class AnthropicClaudeProvider:
         msg = event.get("message") or {}
         content = msg.get("content")
         if isinstance(content, list):
-            return any(
-                isinstance(blk, dict) and blk.get("type") == "tool_use"
-                for blk in content
-            )
+            return any(isinstance(blk, dict) and blk.get("type") == "tool_use" for blk in content)
         return False

@@ -9,11 +9,15 @@ from .._credentials import OpenAICredential
 
 class OpenAIChatModelParams(ChatModelParams):
     frequency_penalty: Optional[float] = Field(
-        default=0.0, ge=-2.0, le=2.0,
+        default=0.0,
+        ge=-2.0,
+        le=2.0,
         json_schema_extra={"numberStepSize": 0.1},
     )
     presence_penalty: Optional[float] = Field(
-        default=0.0, ge=-2.0, le=2.0,
+        default=0.0,
+        ge=-2.0,
+        le=2.0,
         json_schema_extra={"numberStepSize": 0.1},
     )
     response_format: Optional[Literal["text", "json_object"]] = Field(default="text")

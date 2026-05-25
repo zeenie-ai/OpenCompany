@@ -39,6 +39,7 @@ from services.cli_agent.mcp_server import (
 # Token registry
 # ---------------------------------------------------------------------------
 
+
 class TestTokenRegistry:
     def setup_method(self):
         _reset_for_tests()
@@ -53,7 +54,8 @@ class TestTokenRegistry:
     def test_register_lookup_unregister(self):
         token = issue_token()
         ctx = BatchContext(
-            workflow_id="wf", node_id="n",
+            workflow_id="wf",
+            node_id="n",
             workspace_dir=Path("."),
         )
         assert lookup_batch(token) is None
@@ -79,6 +81,7 @@ class TestTokenRegistry:
 # ---------------------------------------------------------------------------
 # ASGI auth middleware
 # ---------------------------------------------------------------------------
+
 
 class TestAuthMiddleware:
     def setup_method(self):
@@ -120,9 +123,14 @@ class TestAuthMiddleware:
     async def test_expired_token_returns_401(self):
         """Token registered then unregistered behaves as unknown."""
         token = issue_token()
-        register_batch(token, BatchContext(
-            workflow_id="wf", node_id="n", workspace_dir=Path("."),
-        ))
+        register_batch(
+            token,
+            BatchContext(
+                workflow_id="wf",
+                node_id="n",
+                workspace_dir=Path("."),
+            ),
+        )
         unregister_batch(token)
         app = get_mcp_app()
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
@@ -137,6 +145,7 @@ class TestAuthMiddleware:
 # ---------------------------------------------------------------------------
 # Lockfile format
 # ---------------------------------------------------------------------------
+
 
 class TestLockfile:
     def test_claude_lockfile_path_pid_lock(self, tmp_path):
@@ -182,8 +191,11 @@ class TestLockfile:
     def test_default_url_constructed(self, tmp_path):
         path = write_ide_lockfile(
             ide_lockfile_dir=tmp_path,
-            pid=1, port=3010, token="t",
-            workspace_dir=tmp_path, ide_name="claude",
+            pid=1,
+            port=3010,
+            token="t",
+            workspace_dir=tmp_path,
+            ide_name="claude",
         )
         payload = json.loads(path.read_text(encoding="utf-8"))
         # FastMCP serves at `/mcp` of the sub-app, mounted at `/mcp/ide`.
@@ -200,6 +212,7 @@ class TestLockfile:
         # system idle process on Windows and the swapper on POSIX, so
         # `psutil.pid_exists(0)` returns True everywhere — DON'T use 0.
         import psutil
+
         dead_pid = 99_999_999
         while psutil.pid_exists(dead_pid):
             dead_pid += 1
@@ -207,13 +220,21 @@ class TestLockfile:
                 pytest.skip("could not find a dead PID")
 
         write_ide_lockfile(
-            ide_lockfile_dir=tmp_path, pid=dead_pid, port=3010, token="t",
-            workspace_dir=tmp_path, ide_name="claude",
+            ide_lockfile_dir=tmp_path,
+            pid=dead_pid,
+            port=3010,
+            token="t",
+            workspace_dir=tmp_path,
+            ide_name="claude",
         )
         # Write one with the live PID
         live_path = write_ide_lockfile(
-            ide_lockfile_dir=tmp_path, pid=os.getpid(), port=3010, token="t",
-            workspace_dir=tmp_path, ide_name="claude",
+            ide_lockfile_dir=tmp_path,
+            pid=os.getpid(),
+            port=3010,
+            token="t",
+            workspace_dir=tmp_path,
+            ide_name="claude",
         )
 
         before = list_active_lockfiles(tmp_path)
@@ -242,6 +263,7 @@ class TestLockfile:
 # JSON-RPC.
 # ---------------------------------------------------------------------------
 
+
 class TestMachinaOsToolBridge:
     def setup_method(self):
         _reset_for_tests()
@@ -250,12 +272,17 @@ class TestMachinaOsToolBridge:
     @staticmethod
     def _ctx(node_type: str, label: str) -> BatchContext:
         return BatchContext(
-            workflow_id="wf_test", node_id="claude_code_agent_1",
+            workflow_id="wf_test",
+            node_id="claude_code_agent_1",
             workspace_dir=Path("."),
-            connected_tools=[{
-                "node_id": f"{node_type}_1", "node_type": node_type,
-                "label": label, "parameters": {},
-            }],
+            connected_tools=[
+                {
+                    "node_id": f"{node_type}_1",
+                    "node_type": node_type,
+                    "label": label,
+                    "parameters": {},
+                }
+            ],
         )
 
     @pytest.mark.asyncio
@@ -264,8 +291,10 @@ class TestMachinaOsToolBridge:
         claude sees ``mcp__machinaos__<node_type>`` on first
         ``tools/list``."""
         from services.cli_agent.mcp_server import get_mcp_app
+
         get_mcp_app()  # ensure FastMCP singleton built
         from services.cli_agent.mcp_server import _mcp_singleton as mcp
+
         assert mcp is not None
 
         ctx = self._ctx("calculatorTool", "Calculator")
@@ -278,9 +307,7 @@ class TestMachinaOsToolBridge:
             calc = next(t for t in tools if t.name == "calculatorTool")
             # FastMCP infers the inputSchema from the typed `params` arg
             # (Pydantic-v2 → JSON Schema 2020-12 wire format).
-            assert {"operation", "a", "b"}.issubset(
-                calc.inputSchema["properties"].keys()
-            )
+            assert {"operation", "a", "b"}.issubset(calc.inputSchema["properties"].keys())
         finally:
             unregister_batch(token)
 
@@ -294,8 +321,10 @@ class TestMachinaOsToolBridge:
         ``services.handlers.tools.execute_tool`` and returns the
         plugin's result envelope."""
         from services.cli_agent.mcp_server import (
-            _current_batch, get_mcp_app,
+            _current_batch,
+            get_mcp_app,
         )
+
         get_mcp_app()
         from services.cli_agent.mcp_server import _mcp_singleton as mcp
 
@@ -324,18 +353,24 @@ class TestMachinaOsToolBridge:
         wired it) but the calling batch didn't, the per-handler
         ``_require_batch`` check returns 403."""
         from services.cli_agent.mcp_server import _current_batch, get_mcp_app
+
         get_mcp_app()
         from services.cli_agent.mcp_server import _mcp_singleton as mcp
 
         # Batch A wires both tools — registers them globally.
         token_a = issue_token()
-        register_batch(token_a, BatchContext(
-            workflow_id="wf_a", node_id="cc_a", workspace_dir=Path("."),
-            connected_tools=[
-                {"node_id": "c1", "node_type": "calculatorTool", "label": "C", "parameters": {}},
-                {"node_id": "h1", "node_type": "httpRequest", "label": "H", "parameters": {}},
-            ],
-        ))
+        register_batch(
+            token_a,
+            BatchContext(
+                workflow_id="wf_a",
+                node_id="cc_a",
+                workspace_dir=Path("."),
+                connected_tools=[
+                    {"node_id": "c1", "node_type": "calculatorTool", "label": "C", "parameters": {}},
+                    {"node_id": "h1", "node_type": "httpRequest", "label": "H", "parameters": {}},
+                ],
+            ),
+        )
         # Batch B wires only one. Even though `httpRequest` is exposed
         # globally (refcount=1), batch B's ctx forbids it.
         ctx_b = self._ctx("calculatorTool", "C")
@@ -344,7 +379,8 @@ class TestMachinaOsToolBridge:
         reset = _current_batch.set(ctx_b)
         try:
             out = await mcp.call_tool(
-                "httpRequest", {"method": "GET", "url": "x"},
+                "httpRequest",
+                {"method": "GET", "url": "x"},
             )
         finally:
             _current_batch.reset(reset)
@@ -359,6 +395,7 @@ class TestMachinaOsToolBridge:
     @pytest.mark.asyncio
     async def test_currentTimeTool_real(self):
         from services.cli_agent.mcp_server import _current_batch, get_mcp_app
+
         get_mcp_app()
         from services.cli_agent.mcp_server import _mcp_singleton as mcp
 
@@ -380,6 +417,7 @@ class TestMachinaOsToolBridge:
     @pytest.mark.asyncio
     async def test_duckduckgoSearch_real(self):
         from services.cli_agent.mcp_server import _current_batch, get_mcp_app
+
         get_mcp_app()
         from services.cli_agent.mcp_server import _mcp_singleton as mcp
 
@@ -407,6 +445,7 @@ class TestMachinaOsToolBridge:
     @pytest.mark.asyncio
     async def test_httpRequest_real(self):
         from services.cli_agent.mcp_server import _current_batch, get_mcp_app
+
         get_mcp_app()
         from services.cli_agent.mcp_server import _mcp_singleton as mcp
 

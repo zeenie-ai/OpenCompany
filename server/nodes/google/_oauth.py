@@ -215,26 +215,34 @@ class GoogleOAuth:
         }
         self.token_uri = oauth_endpoints["token_uri"]
         self.revoke_uri = oauth_endpoints.get(
-            "revoke_uri", "https://oauth2.googleapis.com/revoke",
+            "revoke_uri",
+            "https://oauth2.googleapis.com/revoke",
         )
 
     def generate_authorization_url(
-        self, *, state_data: Optional[Dict[str, Any]] = None,
+        self,
+        *,
+        state_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, str]:
         """Build the Google authorization URL + register state."""
         flow = Flow.from_client_config(
-            self.client_config, scopes=self.scopes, redirect_uri=self.redirect_uri,
+            self.client_config,
+            scopes=self.scopes,
+            redirect_uri=self.redirect_uri,
         )
         authorization_url, state = flow.authorization_url(
             access_type="offline",
             include_granted_scopes="true",
             prompt="consent",  # force consent to get refresh token
         )
-        self.state_store.put(state, {
-            "data": state_data or {"mode": "owner"},
-            "redirect_uri": self.redirect_uri,
-            "code_verifier": getattr(flow, "code_verifier", None),
-        })
+        self.state_store.put(
+            state,
+            {
+                "data": state_data or {"mode": "owner"},
+                "redirect_uri": self.redirect_uri,
+                "code_verifier": getattr(flow, "code_verifier", None),
+            },
+        )
         return {"url": authorization_url, "state": state}
 
     async def exchange_code(self, code: str, state: str) -> Dict[str, Any]:
@@ -302,11 +310,16 @@ class GoogleOAuth:
         """Async wrapper around :meth:`refresh_credentials`."""
         return await asyncio.to_thread(
             self.refresh_credentials,
-            refresh_token, self.client_id, self.client_secret, self.token_uri,
+            refresh_token,
+            self.client_id,
+            self.client_secret,
+            self.token_uri,
         )
 
     async def revoke_token(
-        self, token: str, token_type: str = "access_token",
+        self,
+        token: str,
+        token_type: str = "access_token",
     ) -> Dict[str, Any]:
         """Best-effort token revocation via Google's revoke endpoint."""
         try:
@@ -324,7 +337,8 @@ class GoogleOAuth:
         return {
             "success": False,
             "error": (response.json() if response.text else {}).get(
-                "error_description", "Revocation failed",
+                "error_description",
+                "Revocation failed",
             ),
         }
 

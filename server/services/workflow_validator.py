@@ -75,17 +75,21 @@ async def validate_workflow(
         src = e.get("source")
         tgt = e.get("target")
         if src and src not in node_by_id:
-            errors.append({
-                "code": "DANGLING_EDGE",
-                "node_id": None,
-                "message": f"Edge source {src!r} does not match any node",
-            })
+            errors.append(
+                {
+                    "code": "DANGLING_EDGE",
+                    "node_id": None,
+                    "message": f"Edge source {src!r} does not match any node",
+                }
+            )
         if tgt and tgt not in node_by_id:
-            errors.append({
-                "code": "DANGLING_EDGE",
-                "node_id": None,
-                "message": f"Edge target {tgt!r} does not match any node",
-            })
+            errors.append(
+                {
+                    "code": "DANGLING_EDGE",
+                    "node_id": None,
+                    "message": f"Edge target {tgt!r} does not match any node",
+                }
+            )
 
     # 2. Unknown node types — plugin not installed on this instance. Errors.
     # 3. Per-node Pydantic param validation. Warnings (matches runtime
@@ -102,12 +106,14 @@ async def validate_workflow(
 
         cls = get_node_class(node_type)
         if cls is None:
-            errors.append({
-                "code": "UNKNOWN_NODE_TYPE",
-                "node_id": node_id,
-                "node_type": node_type,
-                "message": f"Plugin type {node_type!r} is not installed",
-            })
+            errors.append(
+                {
+                    "code": "UNKNOWN_NODE_TYPE",
+                    "node_id": node_id,
+                    "node_type": node_type,
+                    "message": f"Plugin type {node_type!r} is not installed",
+                }
+            )
             continue
 
         # Param validation — prefer caller-supplied params, fall back to
@@ -127,18 +133,16 @@ async def validate_workflow(
                     first_err = errs[0]
             except Exception:
                 pass
-            msg = (
-                first_err.get("msg")
-                if isinstance(first_err, dict) and first_err.get("msg")
-                else str(exc)
+            msg = first_err.get("msg") if isinstance(first_err, dict) and first_err.get("msg") else str(exc)
+            warnings.append(
+                {
+                    "code": "INVALID_PARAM",
+                    "node_id": node_id,
+                    "node_type": node_type,
+                    "message": msg,
+                    "path": list(first_err.get("loc", ())) if isinstance(first_err, dict) else [],
+                }
             )
-            warnings.append({
-                "code": "INVALID_PARAM",
-                "node_id": node_id,
-                "node_type": node_type,
-                "message": msg,
-                "path": list(first_err.get("loc", ())) if isinstance(first_err, dict) else [],
-            })
 
         # Credential presence — for each Credential subclass declared on
         # the plugin, ask AuthService whether a key/token is stored.
@@ -149,24 +153,28 @@ async def validate_workflow(
                 # fake auth_service injected via the parameter — see
                 # tests/test_workflow_validator.py).
                 from core.container import container
+
                 auth_service = container.auth_service()
             try:
                 stored = await auth_service.has_valid_key(cred_cls.id)
             except Exception:
                 logger.debug(
                     "[workflow_validator] has_valid_key failed for %s",
-                    cred_cls.id, exc_info=True,
+                    cred_cls.id,
+                    exc_info=True,
                 )
                 stored = False
             if not stored:
-                warnings.append({
-                    "code": "MISSING_CREDENTIAL",
-                    "node_id": node_id,
-                    "node_type": node_type,
-                    "provider_id": cred_cls.id,
-                    "message": f"Credential {cred_cls.id!r} is not configured",
-                    "remediation": "add_key",
-                })
+                warnings.append(
+                    {
+                        "code": "MISSING_CREDENTIAL",
+                        "node_id": node_id,
+                        "node_type": node_type,
+                        "provider_id": cred_cls.id,
+                        "message": f"Credential {cred_cls.id!r} is not configured",
+                        "remediation": "add_key",
+                    }
+                )
 
     # 5. Cycle detection via Kahn's algorithm. Errors when unresolved nodes
     #    remain after the topological pass. Mirrors the warn-and-continue
@@ -189,11 +197,13 @@ async def validate_workflow(
                     queue.append(e["target"])
     if seen < len(in_degree):
         unresolved = sorted(nid for nid, d in in_degree.items() if d > 0)
-        errors.append({
-            "code": "CYCLE",
-            "node_id": None,
-            "message": f"Cycle detected involving nodes: {unresolved}",
-            "nodes": unresolved,
-        })
+        errors.append(
+            {
+                "code": "CYCLE",
+                "node_id": None,
+                "message": f"Cycle detected involving nodes: {unresolved}",
+                "nodes": unresolved,
+            }
+        )
 
     return {"errors": errors, "warnings": warnings}

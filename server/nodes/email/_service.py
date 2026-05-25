@@ -43,6 +43,7 @@ class EmailService(ServiceSingleton):
     @property
     def himalaya(self):
         from ._himalaya import get_himalaya_service
+
         return get_himalaya_service()
 
     def _provider_preset(self, name: str) -> Dict:
@@ -58,6 +59,7 @@ class EmailService(ServiceSingleton):
         the provider is 'custom' or when a preset field is empty.
         """
         from services.plugin.deps import get_auth_service
+
         auth = get_auth_service()
 
         provider = params.get("provider") or await auth.get_api_key("email_provider") or self.defaults.get("provider")
@@ -132,19 +134,27 @@ class EmailService(ServiceSingleton):
         folder = params.get("folder", d.get("folder"))
 
         router = {
-            "list":    ("list_envelopes",  {"folder": folder,
-                                            "page": params.get("page", 1),
-                                            "page_size": params.get("page_size", d.get("page_size"))}),
-            "search":  ("search_envelopes", {"query": params.get("query", ""), "folder": folder}),
-            "read":    ("read_message",     {"message_id": params.get("message_id", ""), "folder": folder}),
-            "folders": ("list_folders",     {}),
-            "move":    ("move_message",     {"message_id": params.get("message_id", ""),
-                                            "target_folder": params.get("target_folder", ""), "folder": folder}),
-            "delete":  ("delete_message",   {"message_id": params.get("message_id", ""), "folder": folder}),
-            "flag":    ("flag_message",     {"message_id": params.get("message_id", ""),
-                                            "flag": params.get("flag", d.get("flag")),
-                                            "action": params.get("flag_action", d.get("flag_action")),
-                                            "folder": folder}),
+            "list": (
+                "list_envelopes",
+                {"folder": folder, "page": params.get("page", 1), "page_size": params.get("page_size", d.get("page_size"))},
+            ),
+            "search": ("search_envelopes", {"query": params.get("query", ""), "folder": folder}),
+            "read": ("read_message", {"message_id": params.get("message_id", ""), "folder": folder}),
+            "folders": ("list_folders", {}),
+            "move": (
+                "move_message",
+                {"message_id": params.get("message_id", ""), "target_folder": params.get("target_folder", ""), "folder": folder},
+            ),
+            "delete": ("delete_message", {"message_id": params.get("message_id", ""), "folder": folder}),
+            "flag": (
+                "flag_message",
+                {
+                    "message_id": params.get("message_id", ""),
+                    "flag": params.get("flag", d.get("flag")),
+                    "action": params.get("flag_action", d.get("flag_action")),
+                    "folder": folder,
+                },
+            ),
         }
 
         if op not in router:

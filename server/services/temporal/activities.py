@@ -24,13 +24,21 @@ from core.config import Settings
 
 logger = get_logger(__name__)
 
-# Load settings to get the correct server port
-_settings = Settings()
-MACHINA_URL = f"http://{_settings.host}:{_settings.port}"
-WS_URL = f"ws://{_settings.host}:{_settings.port}/ws/internal"
 
-logger.debug(f"MACHINA_URL configured: {MACHINA_URL}")
-logger.debug(f"WS_URL configured: {WS_URL}")
+def _resolve_urls() -> tuple[str, str]:
+    """Resolve ``(http_base, ws_url)`` from current ``Settings``.
+
+    Deferred to first call so module import doesn't require the full env
+    surface (``HOST``, ``PORT``, ``JWT_SECRET_KEY``, ...). Module-level
+    ``Settings()`` made the temporal package un-importable in any test
+    process that hadn't loaded ``.env`` -- conftest stubs got wiped by
+    sibling test suites and the validation error masked real bugs.
+    """
+    settings = Settings()
+    return (
+        f"http://{settings.host}:{settings.port}",
+        f"ws://{settings.host}:{settings.port}/ws/internal",
+    )
 
 
 class NodeExecutionActivities:
@@ -51,9 +59,10 @@ class NodeExecutionActivities:
             session: aiohttp.ClientSession with connection pooling configured
         """
         self.session = session
-        self.ws_url = WS_URL
-        self.http_url = f"{MACHINA_URL}/api/workflow/node/execute"
-        self.broadcast_url = f"{MACHINA_URL}/api/workflow/broadcast-status"
+        http_base, ws_url = _resolve_urls()
+        self.ws_url = ws_url
+        self.http_url = f"{http_base}/api/workflow/node/execute"
+        self.broadcast_url = f"{http_base}/api/workflow/broadcast-status"
 
     @activity.defn
     async def execute_node_activity(self, context: Dict[str, Any]) -> Dict[str, Any]:
@@ -277,6 +286,7 @@ class NodeExecutionActivities:
 # Factory function for creating activity instance with session
 # =============================================================================
 
+
 def create_node_activities(session: aiohttp.ClientSession) -> NodeExecutionActivities:
     """Factory function to create activity instance with shared session.
 
@@ -333,6 +343,7 @@ async def create_shared_session(pool_size: int = 100) -> aiohttp.ClientSession:
 # start_to_close_timeout=timedelta(seconds=2))``. Defaults are not
 # hardcoded here.
 
+
 @activity.defn
 async def emit_event_activity(event_payload: Dict[str, Any]) -> Dict[str, Any]:
     """Re-enter :func:`services.events.dispatch.emit` from a workflow context.
@@ -356,9 +367,7 @@ async def emit_event_activity(event_payload: Dict[str, Any]) -> Dict[str, Any]:
     try:
         event = WorkflowEvent.model_validate(event_payload)
     except Exception as exc:  # noqa: BLE001
-        activity.logger.warning(
-            f"emit_event_activity: envelope rejected: {exc}"
-        )
+        activity.logger.warning(f"emit_event_activity: envelope rejected: {exc}")
         return {
             "delivered": False,
             "event_id": event_payload.get("id", "?"),
@@ -386,6 +395,7 @@ async def emit_event_activity(event_payload: Dict[str, Any]) -> Dict[str, Any]:
 # transitions: ``"waiting" → "idle (processing)" → "waiting"`` per event.
 # Without this, the canary path would keep the trigger node visually
 # stuck on "waiting" with no firing pulse — a UX regression vs legacy.
+
 
 @activity.defn
 async def store_node_output_activity(payload: Dict[str, Any]) -> None:
@@ -425,13 +435,13 @@ async def store_node_output_activity(payload: Dict[str, Any]) -> None:
     for output_name in ("output_main", "output_top", "output_0"):
         try:
             await workflow_service.store_node_output(
-                session_id, node_id, output_name, data,
+                session_id,
+                node_id,
+                output_name,
+                data,
             )
         except Exception as exc:  # noqa: BLE001 — non-fatal
-            activity.logger.warning(
-                f"store_node_output_activity failed for "
-                f"node={node_id!r} handle={output_name!r}: {exc}"
-            )
+            activity.logger.warning(f"store_node_output_activity failed for " f"node={node_id!r} handle={output_name!r}: {exc}")
 
 
 @activity.defn
@@ -462,7 +472,4 @@ async def broadcast_trigger_status_activity(payload: Dict[str, Any]) -> None:
             workflow_id=payload.get("workflow_id"),
         )
     except Exception as exc:  # noqa: BLE001 — non-fatal
-        activity.logger.warning(
-            f"broadcast_trigger_status_activity failed for "
-            f"node={payload.get('node_id')!r}: {exc}"
-        )
+        activity.logger.warning(f"broadcast_trigger_status_activity failed for " f"node={payload.get('node_id')!r}: {exc}")

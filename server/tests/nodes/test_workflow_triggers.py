@@ -88,9 +88,7 @@ def patched_trigger_waiter(
 
 class TestStart:
     async def test_happy_path_returns_parsed_initial_data(self, harness):
-        result = await harness.execute(
-            "start", {"initial_data": '{"message": "hi", "n": 7}'}
-        )
+        result = await harness.execute("start", {"initial_data": '{"message": "hi", "n": 7}'})
         harness.assert_envelope(result, success=True)
         payload = result["result"]
         assert payload == {"message": "hi", "n": 7}
@@ -114,12 +112,8 @@ class TestStart:
 
 class TestTimer:
     async def test_happy_path_short_sleep(self, harness):
-        with patched_broadcaster() as broadcaster, patch(
-            "asyncio.sleep", new=AsyncMock()
-        ):
-            result = await harness.execute(
-                "timer", {"duration": 1, "unit": "seconds"}
-            )
+        with patched_broadcaster() as broadcaster, patch("asyncio.sleep", new=AsyncMock()):
+            result = await harness.execute("timer", {"duration": 1, "unit": "seconds"})
         harness.assert_envelope(result, success=True)
         harness.assert_output_shape(
             result,
@@ -139,17 +133,13 @@ class TestTimer:
     async def test_unknown_unit_falls_back_to_raw_seconds(self, harness):
         # Post-refactor: unit is a Literal[...]; unknown value rejected by Pydantic.
         with patched_broadcaster():
-            result = await harness.execute(
-                "timer", {"duration": 1, "unit": "fortnights"}
-            )
+            result = await harness.execute("timer", {"duration": 1, "unit": "fortnights"})
         harness.assert_envelope(result, success=False)
         assert "invalid parameters" in result["error"].lower()
 
     async def test_non_numeric_duration_returns_error_envelope(self, harness):
         with patched_broadcaster():
-            result = await harness.execute(
-                "timer", {"duration": "abc", "unit": "seconds"}
-            )
+            result = await harness.execute("timer", {"duration": "abc", "unit": "seconds"})
         harness.assert_envelope(result, success=False)
 
 
@@ -161,9 +151,7 @@ class TestTimer:
 class TestCronScheduler:
     async def test_once_frequency_fires_immediately(self, harness):
         with patched_broadcaster() as broadcaster:
-            result = await harness.execute(
-                "cronScheduler", {"frequency": "once"}
-            )
+            result = await harness.execute("cronScheduler", {"frequency": "once"})
         harness.assert_envelope(result, success=True)
         harness.assert_output_shape(
             result,
@@ -184,16 +172,10 @@ class TestCronScheduler:
         assert payload.get("next_run") is None
         broadcaster.update_node_status.assert_called()
 
-    async def test_recurring_frequency_adds_next_run_and_schedule_string(
-        self, harness
-    ):
+    async def test_recurring_frequency_adds_next_run_and_schedule_string(self, harness):
         # Patch asyncio.sleep so the handler doesn't actually wait 30s.
-        with patched_broadcaster(), patch(
-            "asyncio.sleep", new=AsyncMock()
-        ) as sleep_mock:
-            result = await harness.execute(
-                "cronScheduler", {"frequency": "seconds", "interval": 30}
-            )
+        with patched_broadcaster(), patch("asyncio.sleep", new=AsyncMock()) as sleep_mock:
+            result = await harness.execute("cronScheduler", {"frequency": "seconds", "interval": 30})
         harness.assert_envelope(result, success=True)
         payload = result["result"]
         assert payload["frequency"] == "seconds"
@@ -206,9 +188,7 @@ class TestCronScheduler:
     async def test_unknown_frequency_rejected(self, harness):
         # Post-refactor: frequency is a Literal; unknown value rejected at Params level.
         with patched_broadcaster():
-            result = await harness.execute(
-                "cronScheduler", {"frequency": "quantum"}
-            )
+            result = await harness.execute("cronScheduler", {"frequency": "quantum"})
         harness.assert_envelope(result, success=False)
         assert "invalid parameters" in result["error"].lower()
 
@@ -228,9 +208,7 @@ class TestWebhookTrigger:
             "json": {"hello": "world"},
         }
         with patched_trigger_waiter(canned), patched_broadcaster() as broadcaster:
-            result = await harness.execute(
-                "webhookTrigger", {"path": "my-hook", "method": "POST"}
-            )
+            result = await harness.execute("webhookTrigger", {"path": "my-hook", "method": "POST"})
         harness.assert_envelope(result, success=True)
         assert result["result"] == canned
 
@@ -262,9 +240,7 @@ class TestChatTrigger:
             "timestamp": "2026-04-15T10:00:00Z",
         }
         with patched_trigger_waiter(canned), patched_broadcaster():
-            result = await harness.execute(
-                "chatTrigger", {"sessionId": "default"}
-            )
+            result = await harness.execute("chatTrigger", {"sessionId": "default"})
         harness.assert_envelope(result, success=True)
         payload = result["result"]
         assert payload["message"] == "hello agent"
@@ -280,14 +256,13 @@ class TestChatTrigger:
 
     async def test_wait_failure_returns_error_envelope(self, harness):
         import asyncio as _asyncio
+
         with patched_trigger_waiter() as ew, patched_broadcaster():
             # Plugin awaits waiter.future directly; replace it with a failing future.
             failing = _asyncio.get_event_loop().create_future()
             failing.set_exception(RuntimeError("boom"))
             ew.register.return_value.future = failing
-            result = await harness.execute(
-                "chatTrigger", {"sessionId": "default"}
-            )
+            result = await harness.execute("chatTrigger", {"sessionId": "default"})
         harness.assert_envelope(result, success=False)
         assert "boom" in result["error"]
 
@@ -309,9 +284,7 @@ class TestTaskTrigger:
             "workflow_id": "wf-1",
         }
         with patched_trigger_waiter(canned), patched_broadcaster():
-            result = await harness.execute(
-                "taskTrigger", {"status_filter": "completed"}
-            )
+            result = await harness.execute("taskTrigger", {"status_filter": "completed"})
         harness.assert_envelope(result, success=True)
         assert result["result"]["status"] == "completed"
         assert result["result"]["task_id"] == "t-1"
@@ -327,9 +300,7 @@ class TestTaskTrigger:
             "workflow_id": "wf-1",
         }
         with patched_trigger_waiter(canned), patched_broadcaster():
-            result = await harness.execute(
-                "taskTrigger", {"status_filter": "error"}
-            )
+            result = await harness.execute("taskTrigger", {"status_filter": "error"})
         harness.assert_envelope(result, success=True)
         assert result["result"]["status"] == "error"
         assert result["result"]["error"] == "something failed"

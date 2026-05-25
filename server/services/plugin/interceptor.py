@@ -22,7 +22,7 @@ class InterceptorInput:
     node_id: str
     node_type: str
     parameters: Dict[str, Any]
-    context: Any   # NodeContext (avoid cycle in type hint)
+    context: Any  # NodeContext (avoid cycle in type hint)
 
 
 class Interceptor(ABC):

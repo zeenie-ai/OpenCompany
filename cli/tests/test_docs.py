@@ -59,9 +59,7 @@ def test_collect_registry_keys_scrapes_type_attribute(tmp_path: Path):
     plugin = tmp_path / "category" / "node.py"
     plugin.parent.mkdir(parents=True)
     plugin.write_text(
-        'class FooNode:\n'
-        '    type: str = "fooNode"\n'
-        '    other = "ignored"\n',
+        "class FooNode:\n" '    type: str = "fooNode"\n' '    other = "ignored"\n',
         encoding="utf-8",
     )
     keys = docs._collect_registry_keys(tmp_path)

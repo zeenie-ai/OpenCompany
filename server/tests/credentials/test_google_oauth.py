@@ -74,9 +74,7 @@ class TestAuthorizationUrl:
         assert stored["data"] == {"mode": "owner"}
 
     def test_state_data_passes_through(self, oauth):
-        result = oauth.generate_authorization_url(
-            state_data={"customer_id": "cust-1", "mode": "customer"}
-        )
+        result = oauth.generate_authorization_url(state_data={"customer_id": "cust-1", "mode": "customer"})
         stored = google_oauth._oauth_states[result["state"]]
         assert stored["data"]["customer_id"] == "cust-1"
         assert stored["data"]["mode"] == "customer"

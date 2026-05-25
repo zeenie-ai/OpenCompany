@@ -24,19 +24,14 @@ class WorkflowExecutionRequest(BaseModel):
 
 @router.post("/execute-node")
 async def execute_workflow_node(
-    request: WorkflowExecutionRequest,
-    workflow_service: WorkflowService = Depends(lambda: container.workflow_service())
+    request: WorkflowExecutionRequest, workflow_service: WorkflowService = Depends(lambda: container.workflow_service())
 ):
     """Execute a single node in a workflow with parameter resolution."""
     logger.debug(f"[DEBUG ROUTER] Received execution request: node_id={request.node_id}, node_type={request.node_type}")
 
     # Get broadcaster and send "executing" status
     broadcaster = get_status_broadcaster()
-    await broadcaster.update_node_status(
-        node_id=request.node_id,
-        status="executing",
-        data={"node_type": request.node_type}
-    )
+    await broadcaster.update_node_status(node_id=request.node_id, status="executing", data={"node_type": request.node_type})
 
     try:
         result = await workflow_service.execute_node(
@@ -45,7 +40,7 @@ async def execute_workflow_node(
             parameters=request.parameters,
             nodes=request.nodes,
             edges=request.edges,
-            session_id=request.session_id
+            session_id=request.session_id,
         )
 
         # Broadcast completion status based on result
@@ -53,26 +48,14 @@ async def execute_workflow_node(
             await broadcaster.update_node_status(
                 node_id=request.node_id,
                 status="success",
-                data={
-                    "node_type": request.node_type,
-                    "execution_time": result.get("execution_time"),
-                    "result": result.get("result")
-                }
+                data={"node_type": request.node_type, "execution_time": result.get("execution_time"), "result": result.get("result")},
             )
             # Also broadcast the output
             if result.get("result"):
-                await broadcaster.update_node_output(
-                    node_id=request.node_id,
-                    output=result.get("result")
-                )
+                await broadcaster.update_node_output(node_id=request.node_id, output=result.get("result"))
         else:
             await broadcaster.update_node_status(
-                node_id=request.node_id,
-                status="error",
-                data={
-                    "node_type": request.node_type,
-                    "error": result.get("error")
-                }
+                node_id=request.node_id, status="error", data={"node_type": request.node_type, "error": result.get("error")}
             )
 
         return result
@@ -80,12 +63,7 @@ async def execute_workflow_node(
     except Exception as e:
         # Broadcast error status
         await broadcaster.update_node_status(
-            node_id=request.node_id,
-            status="error",
-            data={
-                "node_type": request.node_type,
-                "error": str(e)
-            }
+            node_id=request.node_id, status="error", data={"node_type": request.node_type, "error": str(e)}
         )
         raise
 
@@ -95,7 +73,7 @@ async def get_workflow_node_output(
     node_id: str,
     output_name: str = "output_0",
     session_id: str = "default",
-    workflow_service: WorkflowService = Depends(lambda: container.workflow_service())
+    workflow_service: WorkflowService = Depends(lambda: container.workflow_service()),
 ):
     """Get stored output data for a node."""
     return await workflow_service.get_workflow_node_output(node_id, output_name, session_id)
@@ -103,35 +81,26 @@ async def get_workflow_node_output(
 
 @router.delete("/clear-outputs")
 async def clear_workflow_outputs(
-    session_id: str = "default",
-    workflow_service: WorkflowService = Depends(lambda: container.workflow_service())
+    session_id: str = "default", workflow_service: WorkflowService = Depends(lambda: container.workflow_service())
 ):
     """Clear all stored node outputs for a session."""
     try:
         await workflow_service.clear_all_outputs(session_id)
-        return {
-            "success": True,
-            "message": f"Cleared all outputs for session: {session_id}"
-        }
+        return {"success": True, "message": f"Cleared all outputs for session: {session_id}"}
     except Exception as e:
         logger.error("Failed to clear outputs", session_id=session_id, error=str(e))
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        return {"success": False, "error": str(e)}
 
 
 @router.get("/health")
 async def workflow_health_check():
     """Workflow service health check."""
-    return {
-        "status": "OK",
-        "service": "workflow"
-    }
+    return {"status": "OK", "service": "workflow"}
 
 
 class TemporalNodeExecuteRequest(BaseModel):
     """Request from Temporal service to execute a single node."""
+
     node_id: str
     node_type: str
     data: Dict[str, Any] = {}
@@ -140,6 +109,7 @@ class TemporalNodeExecuteRequest(BaseModel):
 
 class BroadcastStatusRequest(BaseModel):
     """Request to broadcast node status from Temporal activity."""
+
     node_id: str
     status: str
     data: Dict[str, Any] = {}
@@ -168,8 +138,7 @@ async def broadcast_status_for_temporal(request: BroadcastStatusRequest):
 
 @router.post("/node/execute")
 async def execute_node_for_temporal(
-    request: TemporalNodeExecuteRequest,
-    workflow_service: WorkflowService = Depends(lambda: container.workflow_service())
+    request: TemporalNodeExecuteRequest, workflow_service: WorkflowService = Depends(lambda: container.workflow_service())
 ):
     """Execute a single node - called by Temporal service.
 

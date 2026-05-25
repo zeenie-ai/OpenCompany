@@ -8,6 +8,7 @@ from typing import Dict, Any, List, Optional
 @dataclass
 class DeploymentState:
     """Immutable deployment state."""
+
     deployment_id: str
     workflow_id: str
     is_running: bool
@@ -33,6 +34,7 @@ class DeploymentState:
 @dataclass
 class TriggerInfo:
     """Info about a registered trigger."""
+
     node_id: str
     node_type: str
     job_id: Optional[str] = None  # For cron triggers

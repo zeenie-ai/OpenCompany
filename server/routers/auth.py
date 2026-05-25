@@ -45,9 +45,7 @@ def get_auth_service() -> AuthService:
 
 @router.get("/status")
 async def get_auth_status(
-    request: Request,
-    user_auth: UserAuthService = Depends(get_user_auth_service),
-    settings: Settings = Depends(get_settings)
+    request: Request, user_auth: UserAuthService = Depends(get_user_auth_service), settings: Settings = Depends(get_settings)
 ):
     """
     Get authentication status.
@@ -62,19 +60,14 @@ async def get_auth_status(
     if token:
         user = await user_auth.get_current_user(token)
         if user:
-            current_user = {
-                "id": user.id,
-                "email": user.email,
-                "display_name": user.display_name,
-                "is_owner": user.is_owner
-            }
+            current_user = {"id": user.id, "email": user.email, "display_name": user.display_name, "is_owner": user.is_owner}
 
     # Check if registration is available
     can_register = await user_auth.can_register()
 
     # Determine if auth is enabled from server config
     auth_enabled = True
-    if settings.vite_auth_enabled and settings.vite_auth_enabled.lower() == 'false':
+    if settings.vite_auth_enabled and settings.vite_auth_enabled.lower() == "false":
         auth_enabled = False
 
     return {
@@ -82,7 +75,7 @@ async def get_auth_status(
         "auth_mode": status["auth_mode"],
         "authenticated": current_user is not None,
         "user": current_user,
-        "can_register": can_register
+        "can_register": can_register,
     }
 
 
@@ -91,18 +84,14 @@ async def register(
     request: RegisterRequest,
     response: Response,
     user_auth: UserAuthService = Depends(get_user_auth_service),
-    settings: Settings = Depends(get_settings)
+    settings: Settings = Depends(get_settings),
 ):
     """
     Register a new user.
     In single-owner mode, only the first user can register.
     In multi-user mode, anyone can register.
     """
-    user, error = await user_auth.register(
-        email=request.email,
-        password=request.password,
-        display_name=request.display_name
-    )
+    user, error = await user_auth.register(email=request.email, password=request.password, display_name=request.display_name)
 
     if error:
         raise HTTPException(status_code=400, detail=error)
@@ -115,18 +104,10 @@ async def register(
         httponly=True,
         secure=settings.jwt_cookie_secure,
         samesite=settings.jwt_cookie_samesite,
-        max_age=settings.jwt_expire_minutes * 60
+        max_age=settings.jwt_expire_minutes * 60,
     )
 
-    return {
-        "success": True,
-        "user": {
-            "id": user.id,
-            "email": user.email,
-            "display_name": user.display_name,
-            "is_owner": user.is_owner
-        }
-    }
+    return {"success": True, "user": {"id": user.id, "email": user.email, "display_name": user.display_name, "is_owner": user.is_owner}}
 
 
 @router.post("/login")
@@ -134,16 +115,13 @@ async def login(
     request: LoginRequest,
     response: Response,
     user_auth: UserAuthService = Depends(get_user_auth_service),
-    settings: Settings = Depends(get_settings)
+    settings: Settings = Depends(get_settings),
 ):
     """
     Login with email and password.
     Sets HttpOnly cookie with JWT token.
     """
-    user, error = await user_auth.login(
-        email=request.email,
-        password=request.password
-    )
+    user, error = await user_auth.login(email=request.email, password=request.password)
 
     if error:
         raise HTTPException(status_code=401, detail=error)
@@ -156,18 +134,10 @@ async def login(
         httponly=True,
         secure=settings.jwt_cookie_secure,
         samesite=settings.jwt_cookie_samesite,
-        max_age=settings.jwt_expire_minutes * 60
+        max_age=settings.jwt_expire_minutes * 60,
     )
 
-    return {
-        "success": True,
-        "user": {
-            "id": user.id,
-            "email": user.email,
-            "display_name": user.display_name,
-            "is_owner": user.is_owner
-        }
-    }
+    return {"success": True, "user": {"id": user.id, "email": user.email, "display_name": user.display_name, "is_owner": user.is_owner}}
 
 
 @router.post("/logout")
@@ -175,7 +145,7 @@ async def logout(
     response: Response,
     user_auth: UserAuthService = Depends(get_user_auth_service),
     auth_service: AuthService = Depends(get_auth_service),
-    settings: Settings = Depends(get_settings)
+    settings: Settings = Depends(get_settings),
 ):
     """
     Logout by clearing the auth cookie, encryption key, and memory caches.
@@ -193,19 +163,14 @@ async def logout(
 
     # Delete auth cookie
     response.delete_cookie(
-        key=settings.jwt_cookie_name,
-        httponly=True,
-        secure=settings.jwt_cookie_secure,
-        samesite=settings.jwt_cookie_samesite
+        key=settings.jwt_cookie_name, httponly=True, secure=settings.jwt_cookie_secure, samesite=settings.jwt_cookie_samesite
     )
     return {"success": True}
 
 
 @router.get("/me")
 async def get_current_user(
-    request: Request,
-    user_auth: UserAuthService = Depends(get_user_auth_service),
-    settings: Settings = Depends(get_settings)
+    request: Request, user_auth: UserAuthService = Depends(get_user_auth_service), settings: Settings = Depends(get_settings)
 ):
     """
     Get current authenticated user.
@@ -219,9 +184,4 @@ async def get_current_user(
     if not user:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
 
-    return {
-        "id": user.id,
-        "email": user.email,
-        "display_name": user.display_name,
-        "is_owner": user.is_owner
-    }
+    return {"id": user.id, "email": user.email, "display_name": user.display_name, "is_owner": user.is_owner}

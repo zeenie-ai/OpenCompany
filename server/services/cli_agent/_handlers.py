@@ -33,6 +33,7 @@ logger = get_logger(__name__)
 # Codex — login flow not yet wired; logout works for marker cleanup
 # ---------------------------------------------------------------------------
 
+
 async def handle_codex_cli_login(
     data: Dict[str, Any],  # noqa: ARG001
     websocket: WebSocket,  # noqa: ARG001
@@ -55,7 +56,8 @@ async def handle_codex_cli_logout(
     try:
         await mark_logged_out("codex_cli")
         await broadcast_credential_event(
-            "credential.oauth.disconnected", provider="codex_cli",
+            "credential.oauth.disconnected",
+            provider="codex_cli",
         )
     except Exception as exc:
         logger.warning("[codex_cli_logout] failed: %s", exc)

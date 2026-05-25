@@ -174,11 +174,7 @@ def get_backend(
 
     param_dir = parameters.get("working_directory")
     ctx_dir = context.get("workspace_dir") if context else None
-    root = (
-        param_dir
-        or ctx_dir
-        or os.path.join(Settings().workspace_base_resolved, "default")
-    )
+    root = param_dir or ctx_dir or os.path.join(Settings().workspace_base_resolved, "default")
     os.makedirs(root, exist_ok=True)
     get_logger(__name__).info("[Filesystem] root=%s", root)
     # ``inherit_env=True`` makes the host PATH available so the agent can

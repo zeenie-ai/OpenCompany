@@ -78,21 +78,20 @@ def remap_node_ids(
         if old_id:
             id_map[old_id] = f"{prefix}-{now}{index}-{salt}"
 
-    new_nodes = [
-        {**node, "id": id_map.get(node.get("id"), node.get("id"))}
-        for node in nodes
-    ]
+    new_nodes = [{**node, "id": id_map.get(node.get("id"), node.get("id"))} for node in nodes]
 
     new_edges: List[Dict[str, Any]] = []
     for edge in edges:
         src = id_map.get(edge.get("source"), edge.get("source"))
         tgt = id_map.get(edge.get("target"), edge.get("target"))
-        new_edges.append({
-            **edge,
-            "source": src,
-            "target": tgt,
-            "id": f"e-{src}-{tgt}-{now}-{salt}",
-        })
+        new_edges.append(
+            {
+                **edge,
+                "source": src,
+                "target": tgt,
+                "id": f"e-{src}-{tgt}-{now}-{salt}",
+            }
+        )
 
     new_params: Dict[str, Dict[str, Any]] = {}
     for old_id, params in node_parameters.items():
@@ -133,9 +132,7 @@ def extract_requirements(nodes: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-async def cross_check_credentials(
-    requirements: Dict[str, Any], auth_service
-) -> List[Dict[str, Any]]:
+async def cross_check_credentials(requirements: Dict[str, Any], auth_service) -> List[Dict[str, Any]]:
     """For each credential in the manifest, ask ``auth_service`` whether
     it's stored. Returns the MISSING ones with display info pulled from
     ``CREDENTIAL_REGISTRY`` so the frontend can render a friendly list.
@@ -154,17 +151,21 @@ async def cross_check_credentials(
             stored = await auth_service.has_valid_key(pid)
         except Exception:
             logger.debug(
-                "[workflow_import] has_valid_key failed for %s", pid, exc_info=True,
+                "[workflow_import] has_valid_key failed for %s",
+                pid,
+                exc_info=True,
             )
             stored = False
         if stored:
             continue
         cred_cls = CREDENTIAL_REGISTRY.get(pid)
-        missing.append({
-            "provider_id": pid,
-            "display_name": getattr(cred_cls, "display_name", pid) if cred_cls else pid,
-            "kind": getattr(cred_cls, "auth", "api_key") if cred_cls else "api_key",
-        })
+        missing.append(
+            {
+                "provider_id": pid,
+                "display_name": getattr(cred_cls, "display_name", pid) if cred_cls else pid,
+                "kind": getattr(cred_cls, "auth", "api_key") if cred_cls else "api_key",
+            }
+        )
     return missing
 
 
@@ -250,7 +251,9 @@ async def import_workflow(
 
     # 1. Validate. Errors block the import; warnings flow through.
     report = await validate_workflow(
-        nodes=nodes, edges=edges, parameters_by_id=node_parameters,
+        nodes=nodes,
+        edges=edges,
+        parameters_by_id=node_parameters,
     )
     if report["errors"]:
         return {
@@ -269,9 +272,7 @@ async def import_workflow(
     name_check = await check_name_conflict(proposed_name, database)
 
     # 5. If anything needs user confirmation, return preview without saving.
-    needs_preview = (
-        bool(missing_credentials) and not force_credentials
-    ) or name_check["has_conflict"]
+    needs_preview = (bool(missing_credentials) and not force_credentials) or name_check["has_conflict"]
     if needs_preview:
         return {
             "success": True,
@@ -286,7 +287,9 @@ async def import_workflow(
     # 6. Remap node ids — protects the node_parameters table from
     #    duplicate-id collisions across imports.
     remapped_nodes, remapped_edges, remapped_params = remap_node_ids(
-        nodes, edges, node_parameters,
+        nodes,
+        edges,
+        node_parameters,
     )
 
     # 7. Save. Workflow id format matches the frontend's generateWorkflowId.
@@ -311,7 +314,8 @@ async def import_workflow(
         except Exception as e:
             logger.error(
                 "[workflow_import] save_node_parameters failed for %s: %s",
-                node_id, e,
+                node_id,
+                e,
             )
 
     # 9. CloudEvents broadcast — ``workflow.imported`` envelope. Other
@@ -321,6 +325,7 @@ async def import_workflow(
     #    import — the workflow IS saved either way.
     try:
         from services.status_broadcaster import get_status_broadcaster
+
         await get_status_broadcaster().broadcast_workflow_lifecycle(
             "imported",
             workflow_id=workflow_id,

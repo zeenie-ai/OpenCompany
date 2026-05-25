@@ -55,16 +55,16 @@ async def handle_execute_android_action(data: Dict[str, Any], websocket: WebSock
 
     await broadcaster.update_node_status(node_id, "executing")
     result = await android_service.execute_service(
-        node_id=node_id, service_id=service_id, action=action,
+        node_id=node_id,
+        service_id=service_id,
+        action=action,
         parameters=data.get("parameters", {}),
         android_host=data.get("android_host", "localhost"),
-        android_port=data.get("android_port", 8888)
+        android_port=data.get("android_port", 8888),
     )
 
     status = "success" if result.get("success") else "error"
-    await broadcaster.update_node_status(
-        node_id, status, result.get("result") or {"error": result.get("error")}
-    )
+    await broadcaster.update_node_status(node_id, status, result.get("result") or {"error": result.get("error")})
     return result
 
 
@@ -90,8 +90,7 @@ async def handle_android_relay_connect(data: Dict[str, Any], websocket: WebSocke
     client, error = await get_relay_client(url, api_key)
     if client:
         logger.info(
-            f"[WebSocket] Android relay connect success, qr_data present: "
-            f"{bool(client.qr_data)}, session_token: {client.session_token}"
+            f"[WebSocket] Android relay connect success, qr_data present: " f"{bool(client.qr_data)}, session_token: {client.session_token}"
         )
         return {
             "success": True,

@@ -93,15 +93,16 @@ async def clear_agent_session_state(
         await db.save_node_parameters(memory_node_id, params)
         cleared_memory_node = True
         logger.info(
-            "[Memory] Cleared simpleMemory node fields memory_node=%s "
-            "(memory_content reset + last_session_id wiped)",
+            "[Memory] Cleared simpleMemory node fields memory_node=%s " "(memory_content reset + last_session_id wiped)",
             memory_node_id,
         )
 
     logger.info(
-        "[Memory] Cleared agent session state session=%s workflow_id=%s "
-        "vector_store=%s todo_keys=%s memory_node=%s",
-        session_id, workflow_id, cleared_vector_store, cleared_todo_keys,
+        "[Memory] Cleared agent session state session=%s workflow_id=%s " "vector_store=%s todo_keys=%s memory_node=%s",
+        session_id,
+        workflow_id,
+        cleared_vector_store,
+        cleared_todo_keys,
         cleared_memory_node,
     )
 

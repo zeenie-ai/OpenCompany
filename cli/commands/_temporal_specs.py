@@ -11,6 +11,7 @@ start-dev`` subcommand against a SQLite db at
 Matches the local-dev install method documented at
 https://docs.temporal.io/develop/python/set-up-your-local-python.
 """
+
 from __future__ import annotations
 
 import os
@@ -39,14 +40,18 @@ def temporal_specs(root: Path, cfg: Config) -> list[ServiceSpec]:
         ServiceSpec(
             name="temporal",
             argv=uv_run(
-                "python", "-m", "services.temporal._supervised_runtime",
+                "python",
+                "-m",
+                "services.temporal._supervised_runtime",
                 "services.temporal._runtime:get_temporal_server_runtime",
             ),
             cwd=server_dir(root),
             ready_port=cfg.temporal_port,
             ready_timeout=float(os.environ["TEMPORAL_SERVER_READY_TIMEOUT_SECONDS"]),
             restart=RestartPolicy.ON_CRASH,
-            terminate_grace_seconds=float(os.environ["TEMPORAL_GRACEFUL_SHUTDOWN_SECONDS"]),
+            terminate_grace_seconds=float(
+                os.environ["TEMPORAL_GRACEFUL_SHUTDOWN_SECONDS"]
+            ),
         ),
     ]
 

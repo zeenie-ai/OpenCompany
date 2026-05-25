@@ -26,25 +26,27 @@ class TaskStatus(str, Enum):
                                        -> CANCELLED
         CACHED (Prefect pattern - result from cache, no execution)
     """
-    PENDING = "pending"        # Created, not yet scheduled
-    SCHEDULED = "scheduled"    # In task queue, waiting for worker
-    RUNNING = "running"        # Worker executing
-    COMPLETED = "completed"    # Success, result cached
-    FAILED = "failed"          # Error, may retry
-    CACHED = "cached"          # Result from cache (Prefect pattern)
-    CANCELLED = "cancelled"    # User cancelled
-    WAITING = "waiting"        # Waiting for external event (triggers)
-    SKIPPED = "skipped"        # Skipped due to condition
+
+    PENDING = "pending"  # Created, not yet scheduled
+    SCHEDULED = "scheduled"  # In task queue, waiting for worker
+    RUNNING = "running"  # Worker executing
+    COMPLETED = "completed"  # Success, result cached
+    FAILED = "failed"  # Error, may retry
+    CACHED = "cached"  # Result from cache (Prefect pattern)
+    CANCELLED = "cancelled"  # User cancelled
+    WAITING = "waiting"  # Waiting for external event (triggers)
+    SKIPPED = "skipped"  # Skipped due to condition
 
 
 class WorkflowStatus(str, Enum):
     """Workflow execution states."""
-    PENDING = "pending"        # Created, not started
-    RUNNING = "running"        # At least one node executing
-    PAUSED = "paused"          # User paused
-    COMPLETED = "completed"    # All nodes completed successfully
-    FAILED = "failed"          # Execution failed
-    CANCELLED = "cancelled"    # User cancelled
+
+    PENDING = "pending"  # Created, not started
+    RUNNING = "running"  # At least one node executing
+    PAUSED = "paused"  # User paused
+    COMPLETED = "completed"  # All nodes completed successfully
+    FAILED = "failed"  # Execution failed
+    CANCELLED = "cancelled"  # User cancelled
 
 
 @dataclass
@@ -54,9 +56,10 @@ class RetryPolicy:
     Implements exponential backoff with configurable limits.
     Delay formula: min(initial_delay * (backoff_multiplier ^ attempt), max_delay)
     """
+
     max_attempts: int = 3
-    initial_delay: float = 1.0       # seconds
-    max_delay: float = 60.0          # seconds
+    initial_delay: float = 1.0  # seconds
+    max_delay: float = 60.0  # seconds
     backoff_multiplier: float = 2.0
     retry_on_timeout: bool = True
     retry_on_connection_error: bool = True
@@ -71,7 +74,7 @@ class RetryPolicy:
         Returns:
             Delay in seconds before next attempt
         """
-        delay = self.initial_delay * (self.backoff_multiplier ** attempt)
+        delay = self.initial_delay * (self.backoff_multiplier**attempt)
         return min(delay, self.max_delay)
 
     def should_retry(self, error: str, attempt: int) -> bool:
@@ -157,6 +160,7 @@ class DLQEntry:
 
     Stores failed execution details for manual review and replay.
     """
+
     id: str
     execution_id: str
     workflow_id: str
@@ -200,8 +204,7 @@ class DLQEntry:
         )
 
     @classmethod
-    def create(cls, ctx: "ExecutionContext", node_exec: "NodeExecution",
-               inputs: Dict[str, Any]) -> "DLQEntry":
+    def create(cls, ctx: "ExecutionContext", node_exec: "NodeExecution", inputs: Dict[str, Any]) -> "DLQEntry":
         """Factory method to create DLQ entry from failed execution."""
         return cls(
             id=str(uuid.uuid4()),
@@ -221,6 +224,7 @@ class NodeExecution:
 
     Prefect-style: includes input hash for cache lookup.
     """
+
     node_id: str
     node_type: str
     status: TaskStatus = TaskStatus.PENDING
@@ -271,6 +275,7 @@ class ExecutionContext:
     Conductor pattern: workflow_id identifies the workflow definition,
     execution_id identifies this specific run.
     """
+
     execution_id: str
     workflow_id: str
     status: WorkflowStatus = WorkflowStatus.PENDING
@@ -299,8 +304,9 @@ class ExecutionContext:
     errors: List[Dict[str, Any]] = field(default_factory=list)
 
     @classmethod
-    def create(cls, workflow_id: str, session_id: str = "default",
-               nodes: List[Dict] = None, edges: List[Dict] = None) -> "ExecutionContext":
+    def create(
+        cls, workflow_id: str, session_id: str = "default", nodes: List[Dict] = None, edges: List[Dict] = None
+    ) -> "ExecutionContext":
         """Factory method to create new execution context.
 
         Supports pre-executed nodes (marked with _pre_executed=True) for
@@ -331,7 +337,7 @@ class ExecutionContext:
         ai_agent_node_ids = {n.get("id") for n in (nodes or []) if n.get("type") in AI_AGENT_TYPES}
 
         subnode_ids: set = set()
-        for edge in (edges or []):
+        for edge in edges or []:
             source = edge.get("source")
             target = edge.get("target")
             target_handle = edge.get("targetHandle")
@@ -343,11 +349,11 @@ class ExecutionContext:
             # Nodes connected to AI Agent config handles are sub-nodes
             # These handles: input-memory, input-tools, input-skill, input-teammates
             if target in ai_agent_node_ids and source and target_handle:
-                if target_handle in ('input-memory', 'input-tools', 'input-skill', 'input-teammates'):
+                if target_handle in ("input-memory", "input-tools", "input-skill", "input-teammates"):
                     subnode_ids.add(source)
 
         # Initialize node executions for all nodes (excluding config nodes and sub-nodes)
-        for node in (nodes or []):
+        for node in nodes or []:
             node_id = node.get("id")
             node_type = node.get("type", "unknown")
 
@@ -392,8 +398,7 @@ class ExecutionContext:
         node_exec = self.node_executions.get(node_id)
         return node_exec.status if node_exec else None
 
-    def set_node_status(self, node_id: str, status: TaskStatus,
-                        output: Dict = None, error: str = None) -> None:
+    def set_node_status(self, node_id: str, status: TaskStatus, output: Dict = None, error: str = None) -> None:
         """Update node execution status."""
         if node_id not in self.node_executions:
             return
@@ -416,11 +421,7 @@ class ExecutionContext:
             node_exec.completed_at = time.time()
             if error:
                 node_exec.error = error
-                self.errors.append({
-                    "node_id": node_id,
-                    "error": error,
-                    "timestamp": time.time()
-                })
+                self.errors.append({"node_id": node_id, "error": error, "timestamp": time.time()})
 
     def add_checkpoint(self, node_id: str) -> None:
         """Add checkpoint after node completion (for recovery)."""
@@ -430,22 +431,19 @@ class ExecutionContext:
     def get_completed_nodes(self) -> List[str]:
         """Get list of completed node IDs."""
         return [
-            node_id for node_id, node_exec in self.node_executions.items()
+            node_id
+            for node_id, node_exec in self.node_executions.items()
             if node_exec.status in (TaskStatus.COMPLETED, TaskStatus.CACHED, TaskStatus.SKIPPED)
         ]
 
     def get_pending_nodes(self) -> List[str]:
         """Get list of pending node IDs."""
-        return [
-            node_id for node_id, node_exec in self.node_executions.items()
-            if node_exec.status == TaskStatus.PENDING
-        ]
+        return [node_id for node_id, node_exec in self.node_executions.items() if node_exec.status == TaskStatus.PENDING]
 
     def all_nodes_complete(self) -> bool:
         """Check if all nodes are complete."""
         for node_exec in self.node_executions.values():
-            if node_exec.status not in (TaskStatus.COMPLETED, TaskStatus.CACHED,
-                                        TaskStatus.SKIPPED, TaskStatus.CANCELLED):
+            if node_exec.status not in (TaskStatus.COMPLETED, TaskStatus.CACHED, TaskStatus.SKIPPED, TaskStatus.CANCELLED):
                 return False
         return True
 
@@ -456,9 +454,7 @@ class ExecutionContext:
             "workflow_id": self.workflow_id,
             "status": self.status.value,
             "session_id": self.session_id,
-            "node_executions": {
-                k: v.to_dict() for k, v in self.node_executions.items()
-            },
+            "node_executions": {k: v.to_dict() for k, v in self.node_executions.items()},
             "outputs": self.outputs,
             "execution_order": self.execution_order,
             "current_layer": self.current_layer,
@@ -474,8 +470,7 @@ class ExecutionContext:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], nodes: List[Dict] = None,
-                  edges: List[Dict] = None) -> "ExecutionContext":
+    def from_dict(cls, data: Dict[str, Any], nodes: List[Dict] = None, edges: List[Dict] = None) -> "ExecutionContext":
         """Create from dict (Redis deserialization)."""
         ctx = cls(
             execution_id=data["execution_id"],
@@ -508,8 +503,7 @@ class ExecutionContext:
         return json.dumps(self.to_dict())
 
     @classmethod
-    def from_json(cls, json_str: str, nodes: List[Dict] = None,
-                  edges: List[Dict] = None) -> "ExecutionContext":
+    def from_json(cls, json_str: str, nodes: List[Dict] = None, edges: List[Dict] = None) -> "ExecutionContext":
         """Deserialize from JSON string."""
         data = json.loads(json_str)
         return cls.from_dict(data, nodes, edges)

@@ -44,10 +44,7 @@ class TaskTriggerNode(TriggerNode):
     group = ("trigger", "workflow")
     description = "Triggers when a delegated child agent completes its task (success or error)"
     component_kind = "trigger"
-    handles = (
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
-    )
+    handles = ({"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},)
     task_queue = TaskQueue.TRIGGERS_EVENT
     mode = "event"
     event_type = "task_completed"
@@ -76,9 +73,7 @@ class TaskTriggerNode(TriggerNode):
 
     @Operation("wait")
     async def wait(self, ctx: NodeContext, params: TaskTriggerParams) -> TaskTriggerOutput:
-        raise NotImplementedError(
-            "Event triggers return via TriggerNode.execute, not the op body"
-        )
+        raise NotImplementedError("Event triggers return via TriggerNode.execute, not the op body")
 
 
 # Wave 12 C1 rollout #2: opt this trigger into the TriggerListenerWorkflow

@@ -11,7 +11,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from core.logging import get_logger
 from services.plugin import (
-    NodeContext, Operation, PollingTriggerNode, TaskQueue,
+    NodeContext,
+    Operation,
+    PollingTriggerNode,
+    TaskQueue,
 )
 
 from .._credentials import GoogleCredential
@@ -69,10 +72,7 @@ class GmailReceiveNode(PollingTriggerNode):
     group = ("google", "trigger")
     description = "Polling trigger for incoming Gmail emails"
     component_kind = "trigger"
-    handles = (
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
-    )
+    handles = ({"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},)
     credentials = (GoogleCredential,)
     task_queue = TaskQueue.TRIGGERS_POLL
     default_poll_interval = 60
@@ -94,14 +94,10 @@ class GmailReceiveNode(PollingTriggerNode):
     async def fetch_ids(self, service: Any, params: Dict[str, Any]) -> Set[str]:
         return await poll_gmail_ids(service, self._build_query(params))
 
-    async def fetch_detail(
-        self, service: Any, msg_id: str, params: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def fetch_detail(self, service: Any, msg_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
         return await fetch_email_details(service, msg_id)
 
-    async def post_emit(
-        self, service: Any, msg_id: str, params: Dict[str, Any]
-    ) -> None:
+    async def post_emit(self, service: Any, msg_id: str, params: Dict[str, Any]) -> None:
         if params.get("mark_as_read"):
             try:
                 await mark_email_as_read(service, msg_id)
@@ -130,7 +126,8 @@ class GmailReceiveNode(PollingTriggerNode):
                 query = f"label:{label_filter} {query}"
 
             await get_status_broadcaster().update_node_status(
-                node_id, "waiting",
+                node_id,
+                "waiting",
                 {
                     "message": f"Waiting for Gmail email (polling every {poll_interval}s)...",
                     "event_type": "gmail_email_received",
@@ -166,7 +163,10 @@ class GmailReceiveNode(PollingTriggerNode):
                             logger.warning(f"[GmailReceive] Failed to mark as read: {e}")
 
                     await track_google_usage(
-                        "gmail", node_id, "receive", 1,
+                        "gmail",
+                        node_id,
+                        "receive",
+                        1,
                         {"workflow_id": context.workflow_id, "session_id": context.session_id},
                     )
                     # Inline Run path: the node returns ``email_data`` as
@@ -178,7 +178,9 @@ class GmailReceiveNode(PollingTriggerNode):
                         f"[GmailReceive] New email: {email_data.get('subject', 'no subject')}",
                     )
                     return {
-                        "success": True, "node_id": node_id, "node_type": self.type,
+                        "success": True,
+                        "node_id": node_id,
+                        "node_type": self.type,
                         "result": email_data,
                         "execution_time": time.time() - start_time,
                         "timestamp": datetime.now().isoformat(),
@@ -191,7 +193,9 @@ class GmailReceiveNode(PollingTriggerNode):
         except asyncio.CancelledError:
             logger.info(f"[GmailReceive] Cancelled by user: node_id={node_id}")
             return {
-                "success": False, "node_id": node_id, "node_type": self.type,
+                "success": False,
+                "node_id": node_id,
+                "node_type": self.type,
                 "error": "Cancelled by user",
                 "execution_time": time.time() - start_time,
                 "timestamp": datetime.now().isoformat(),
@@ -199,7 +203,9 @@ class GmailReceiveNode(PollingTriggerNode):
         except Exception as e:
             logger.error(f"[GmailReceive] Error: {e}")
             return {
-                "success": False, "node_id": node_id, "node_type": self.type,
+                "success": False,
+                "node_id": node_id,
+                "node_type": self.type,
                 "error": str(e),
                 "execution_time": time.time() - start_time,
                 "timestamp": datetime.now().isoformat(),
@@ -207,6 +213,4 @@ class GmailReceiveNode(PollingTriggerNode):
 
     @Operation("wait")
     async def wait(self, ctx: NodeContext, params: GmailReceiveParams) -> GmailReceiveOutput:
-        raise NotImplementedError(
-            "googleGmailReceive uses execute() override (Wave 11.D.5 inlined)."
-        )
+        raise NotImplementedError("googleGmailReceive uses execute() override (Wave 11.D.5 inlined).")

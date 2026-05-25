@@ -36,7 +36,9 @@ def _git_describe(root: Path) -> str | None:
         return described
     listed = capture(["git", "tag", "-l", "--sort=-version:refname"], cwd=root)
     if listed:
-        return next((line.strip() for line in listed.splitlines() if line.strip()), None)
+        return next(
+            (line.strip() for line in listed.splitlines() if line.strip()), None
+        )
     return None
 
 
@@ -58,7 +60,9 @@ def _update_package_json(path: Path, new_version: str) -> bool:
 
 
 @app.command("sync", help="Sync package.json versions from latest git tag.")
-def sync(tag: str | None = typer.Argument(None, help="Git tag to use (defaults to latest).")) -> None:
+def sync(
+    tag: str | None = typer.Argument(None, help="Git tag to use (defaults to latest)."),
+) -> None:
     root = project_root()
     resolved_tag = tag or _git_describe(root)
     if not resolved_tag:
@@ -67,7 +71,9 @@ def sync(tag: str | None = typer.Argument(None, help="Git tag to use (defaults t
 
     version = _tag_to_version(resolved_tag)
     if not _VALID_VERSION.match(version):
-        console.print(f"[red]Error: Invalid version from tag {resolved_tag!r}: {version!r}[/]")
+        console.print(
+            f"[red]Error: Invalid version from tag {resolved_tag!r}: {version!r}[/]"
+        )
         console.print("Expected semver format (e.g. v0.0.11 or 0.0.11).")
         raise typer.Exit(code=1)
 

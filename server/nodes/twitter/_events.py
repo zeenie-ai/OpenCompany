@@ -53,11 +53,7 @@ def twitter_event_received(event_data: Mapping[str, Any]) -> WorkflowEvent:
     given tweet is until the downstream filter runs.
     """
     payload = dict(event_data)
-    subject = (
-        payload.get("tweet_id")
-        or payload.get("id")
-        or payload.get("dm_id")
-    )
+    subject = payload.get("tweet_id") or payload.get("id") or payload.get("dm_id")
     return WorkflowEvent(
         source="machinaos://nodes/twitter",
         type="com.machinaos.twitter.event.received",

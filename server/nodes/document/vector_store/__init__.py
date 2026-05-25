@@ -30,7 +30,9 @@ class VectorStoreParams(BaseModel):
         json_schema_extra={"displayOptions": {"show": {"operation": ["query"]}}},
     )
     top_k: int = Field(
-        default=5, ge=1, le=100,
+        default=5,
+        ge=1,
+        le=100,
         json_schema_extra={"displayOptions": {"show": {"operation": ["query"]}}},
     )
     ids: Optional[list] = Field(
@@ -72,48 +74,51 @@ async def _chroma_op(operation: str, params: Dict[str, Any], collection: str) ->
     except ImportError:
         raise NodeUserError("ChromaDB unavailable. pip install chromadb")
 
-    persist_dir = params.get('persist_dir', './data/vectors')
+    persist_dir = params.get("persist_dir", "./data/vectors")
     client = chromadb.PersistentClient(path=persist_dir)
     coll = client.get_or_create_collection(name=collection)
 
-    if operation == 'store':
-        embeddings = params.get('embeddings', [])
-        chunks = params.get('chunks', [])
+    if operation == "store":
+        embeddings = params.get("embeddings", [])
+        chunks = params.get("chunks", [])
         if not embeddings:
             return {"stored_count": 0, "collection_count": coll.count()}
         ids = [str(uuid.uuid4()) for _ in embeddings]
-        docs = [c.get('content', '') if isinstance(c, dict) else str(c) for c in chunks]
+        docs = [c.get("content", "") if isinstance(c, dict) else str(c) for c in chunks]
         while len(docs) < len(embeddings):
-            docs.append('')
+            docs.append("")
         metas = [
-            {'source': c.get('source', 'unknown'), 'chunk_index': c.get('chunk_index', i)}
-            if isinstance(c, dict) else {'source': 'input', 'chunk_index': i}
+            {"source": c.get("source", "unknown"), "chunk_index": c.get("chunk_index", i)}
+            if isinstance(c, dict)
+            else {"source": "input", "chunk_index": i}
             for i, c in enumerate(chunks)
         ]
         while len(metas) < len(embeddings):
-            metas.append({'source': 'unknown', 'chunk_index': len(metas)})
+            metas.append({"source": "unknown", "chunk_index": len(metas)})
         await asyncio.to_thread(coll.add, ids=ids, embeddings=embeddings, documents=docs, metadatas=metas)
         return {"stored_count": len(embeddings), "collection_count": coll.count()}
 
-    if operation == 'query':
-        query_emb = params.get('query_embedding', [])
-        top_k = int(params.get('top_k', 5))
+    if operation == "query":
+        query_emb = params.get("query_embedding", [])
+        top_k = int(params.get("top_k", 5))
         if not query_emb:
             return {"matches": []}
         results = coll.query(query_embeddings=[query_emb], n_results=top_k)
         matches = []
-        if results['ids'] and results['ids'][0]:
-            for i in range(len(results['ids'][0])):
-                matches.append({
-                    'id': results['ids'][0][i],
-                    'document': results['documents'][0][i] if results['documents'] else '',
-                    'metadata': results['metadatas'][0][i] if results['metadatas'] else {},
-                    'distance': results['distances'][0][i] if results.get('distances') else None,
-                })
+        if results["ids"] and results["ids"][0]:
+            for i in range(len(results["ids"][0])):
+                matches.append(
+                    {
+                        "id": results["ids"][0][i],
+                        "document": results["documents"][0][i] if results["documents"] else "",
+                        "metadata": results["metadatas"][0][i] if results["metadatas"] else {},
+                        "distance": results["distances"][0][i] if results.get("distances") else None,
+                    }
+                )
         return {"matches": matches}
 
-    if operation == 'delete':
-        ids = params.get('ids', [])
+    if operation == "delete":
+        ids = params.get("ids", [])
         if ids:
             await asyncio.to_thread(coll.delete, ids=ids)
         return {"deleted": True, "count": len(ids)}
@@ -128,12 +133,12 @@ async def _qdrant_op(operation: str, params: Dict[str, Any], collection: str) ->
     except ImportError:
         raise NodeUserError("Qdrant client unavailable. pip install qdrant-client")
 
-    url = params.get('qdrant_url', 'http://localhost:6333')
+    url = params.get("qdrant_url", "http://localhost:6333")
     client = QdrantClient(url=url)
 
-    if operation == 'store':
-        embeddings = params.get('embeddings', [])
-        chunks = params.get('chunks', [])
+    if operation == "store":
+        embeddings = params.get("embeddings", [])
+        chunks = params.get("chunks", [])
         if not embeddings:
             return {"stored_count": 0}
         vec_size = len(embeddings[0])
@@ -150,32 +155,35 @@ async def _qdrant_op(operation: str, params: Dict[str, Any], collection: str) ->
                 c = chunks[i]
                 if isinstance(c, dict):
                     payload = {
-                        'content': c.get('content', ''),
-                        'source': c.get('source', 'unknown'),
-                        'chunk_index': c.get('chunk_index', i),
+                        "content": c.get("content", ""),
+                        "source": c.get("source", "unknown"),
+                        "chunk_index": c.get("chunk_index", i),
                     }
                 else:
-                    payload = {'content': str(c), 'source': 'input', 'chunk_index': i}
+                    payload = {"content": str(c), "source": "input", "chunk_index": i}
             points.append(PointStruct(id=str(uuid.uuid4()), vector=emb, payload=payload))
         await asyncio.to_thread(client.upsert, collection_name=collection, points=points)
         return {"stored_count": len(embeddings)}
 
-    if operation == 'query':
-        query_emb = params.get('query_embedding', [])
-        top_k = int(params.get('top_k', 5))
+    if operation == "query":
+        query_emb = params.get("query_embedding", [])
+        top_k = int(params.get("top_k", 5))
         if not query_emb:
             return {"matches": []}
         results = await asyncio.to_thread(
-            client.search, collection_name=collection, query_vector=query_emb, limit=top_k,
+            client.search,
+            collection_name=collection,
+            query_vector=query_emb,
+            limit=top_k,
         )
-        return {"matches": [
-            {'id': str(r.id), 'document': r.payload.get('content', ''),
-             'metadata': r.payload, 'score': r.score}
-            for r in results
-        ]}
+        return {
+            "matches": [
+                {"id": str(r.id), "document": r.payload.get("content", ""), "metadata": r.payload, "score": r.score} for r in results
+            ]
+        }
 
-    if operation == 'delete':
-        ids = params.get('ids', [])
+    if operation == "delete":
+        ids = params.get("ids", [])
         if ids:
             await asyncio.to_thread(client.delete, collection_name=collection, points_selector=ids)
         return {"deleted": True, "count": len(ids)}
@@ -186,16 +194,16 @@ async def _qdrant_op(operation: str, params: Dict[str, Any], collection: str) ->
 async def _pinecone_op(operation: str, params: Dict[str, Any], collection: str) -> Dict[str, Any]:
     from pinecone import Pinecone
 
-    api_key = params.get('pinecone_api_key', '')
+    api_key = params.get("pinecone_api_key", "")
     if not api_key:
         raise NodeUserError("Pinecone API key required")
 
     pc = Pinecone(api_key=api_key)
     index = pc.Index(collection)
 
-    if operation == 'store':
-        embeddings = params.get('embeddings', [])
-        chunks = params.get('chunks', [])
+    if operation == "store":
+        embeddings = params.get("embeddings", [])
+        chunks = params.get("chunks", [])
         if not embeddings:
             return {"stored_count": 0}
         vectors = []
@@ -205,33 +213,41 @@ async def _pinecone_op(operation: str, params: Dict[str, Any], collection: str) 
                 c = chunks[i]
                 if isinstance(c, dict):
                     meta = {
-                        'content': c.get('content', ''),
-                        'source': c.get('source', 'unknown'),
-                        'chunk_index': c.get('chunk_index', i),
+                        "content": c.get("content", ""),
+                        "source": c.get("source", "unknown"),
+                        "chunk_index": c.get("chunk_index", i),
                     }
                 else:
-                    meta = {'content': str(c), 'source': 'input', 'chunk_index': i}
-            vectors.append({'id': str(uuid.uuid4()), 'values': emb, 'metadata': meta})
+                    meta = {"content": str(c), "source": "input", "chunk_index": i}
+            vectors.append({"id": str(uuid.uuid4()), "values": emb, "metadata": meta})
         await asyncio.to_thread(index.upsert, vectors=vectors)
         return {"stored_count": len(embeddings)}
 
-    if operation == 'query':
-        query_emb = params.get('query_embedding', [])
-        top_k = int(params.get('top_k', 5))
+    if operation == "query":
+        query_emb = params.get("query_embedding", [])
+        top_k = int(params.get("top_k", 5))
         if not query_emb:
             return {"matches": []}
         results = await asyncio.to_thread(
-            index.query, vector=query_emb, top_k=top_k, include_metadata=True,
+            index.query,
+            vector=query_emb,
+            top_k=top_k,
+            include_metadata=True,
         )
-        return {"matches": [
-            {'id': m.id,
-             'document': m.metadata.get('content', '') if m.metadata else '',
-             'metadata': m.metadata or {}, 'score': m.score}
-            for m in results.matches
-        ]}
+        return {
+            "matches": [
+                {
+                    "id": m.id,
+                    "document": m.metadata.get("content", "") if m.metadata else "",
+                    "metadata": m.metadata or {},
+                    "score": m.score,
+                }
+                for m in results.matches
+            ]
+        }
 
-    if operation == 'delete':
-        ids = params.get('ids', [])
+    if operation == "delete":
+        ids = params.get("ids", [])
         if ids:
             await asyncio.to_thread(index.delete, ids=ids)
         return {"deleted": True, "count": len(ids)}
@@ -261,19 +277,19 @@ class VectorStoreNode(ActionNode):
         p = params.model_dump()
         operation = params.operation
         backend_raw = params.backend
-        backend = 'chroma' if backend_raw in ('chroma', 'chromadb') else backend_raw
+        backend = "chroma" if backend_raw in ("chroma", "chromadb") else backend_raw
         collection = params.collection_name
 
-        if backend == 'chroma':
+        if backend == "chroma":
             result = await _chroma_op(operation, p, collection)
-        elif backend == 'qdrant':
+        elif backend == "qdrant":
             result = await _qdrant_op(operation, p, collection)
-        elif backend == 'pinecone':
+        elif backend == "pinecone":
             result = await _pinecone_op(operation, p, collection)
         else:
             raise NodeUserError(f"Unknown backend: {backend_raw}")
 
-        result['backend'] = backend
-        result['collection_name'] = collection
-        result['operation'] = operation
+        result["backend"] = backend
+        result["collection_name"] = collection
+        result["operation"] = operation
         return VectorStoreOutput(**result)

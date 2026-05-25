@@ -33,12 +33,14 @@ def _root() -> None:
 
 # ----------------------------------------------------------- top-level verbs
 
+
 @app.command(
     "start",
     help="Start all services in production mode (static client + uvicorn + temporal).",
 )
 def _start() -> None:
     from cli.commands.start import start_command
+
     start_command()
 
 
@@ -48,11 +50,13 @@ def _start() -> None:
 )
 def _dev(
     daemon: bool = typer.Option(
-        False, "--daemon",
+        False,
+        "--daemon",
         help="Bind backend to 0.0.0.0 instead of 127.0.0.1.",
     ),
 ) -> None:
     from cli.commands.dev import dev_command
+
     dev_command(daemon=daemon)
 
 
@@ -62,6 +66,7 @@ def _dev(
 )
 def _stop() -> None:
     from cli.commands.stop import stop_command
+
     stop_command()
 
 
@@ -71,6 +76,7 @@ def _stop() -> None:
 )
 def _clean() -> None:
     from cli.commands.clean import clean_command
+
     clean_command()
 
 
@@ -80,6 +86,7 @@ def _clean() -> None:
 )
 def _build() -> None:
     from cli.commands.build import build_command
+
     build_command()
 
 
@@ -99,6 +106,7 @@ daemon_app = typer.Typer(
 )
 def _daemon_start() -> None:
     from cli.commands.daemon.start import start_command
+
     start_command()
 
 
@@ -108,6 +116,7 @@ def _daemon_start() -> None:
 )
 def _daemon_stop() -> None:
     from cli.commands.daemon.stop import stop_command
+
     stop_command()
 
 
@@ -117,6 +126,7 @@ def _daemon_stop() -> None:
 )
 def _daemon_status() -> None:
     from cli.commands.daemon.status import status_command
+
     status_command()
 
 
@@ -126,6 +136,7 @@ def _daemon_status() -> None:
 )
 def _daemon_restart() -> None:
     from cli.commands.daemon.restart import restart_command
+
     restart_command()
 
 
@@ -148,11 +159,13 @@ docs_app = typer.Typer(
 )
 def _docs_nodes(
     check: bool = typer.Option(
-        False, "--check",
+        False,
+        "--check",
         help="Instead of rewriting, exit 1 if any registered node lacks a doc.",
     ),
 ) -> None:
     from cli.commands.docs import nodes
+
     nodes(check=check)
 
 
@@ -175,10 +188,12 @@ version_app = typer.Typer(
 )
 def _version_sync(
     tag: str | None = typer.Argument(
-        None, help="Git tag to use (defaults to latest).",
+        None,
+        help="Git tag to use (defaults to latest).",
     ),
 ) -> None:
     from cli.commands.version import sync
+
     sync(tag=tag)
 
 

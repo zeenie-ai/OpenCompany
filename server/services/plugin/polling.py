@@ -97,9 +97,7 @@ class PollingTriggerNode(TriggerNode, abstract=True):
         """
         raise NotImplementedError
 
-    async def fetch_ids(
-        self, service: Any, params: Dict[str, Any]
-    ) -> Set[str]:
+    async def fetch_ids(self, service: Any, params: Dict[str, Any]) -> Set[str]:
         """Return the current set of visible IDs for one poll cycle.
 
         Called once for the baseline pass at loop start, then once per
@@ -108,9 +106,7 @@ class PollingTriggerNode(TriggerNode, abstract=True):
         """
         raise NotImplementedError
 
-    async def fetch_detail(
-        self, service: Any, msg_id: str, params: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def fetch_detail(self, service: Any, msg_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Fetch the full event payload for one ID.
 
         Called once per new ID per cycle. The returned dict goes
@@ -119,9 +115,7 @@ class PollingTriggerNode(TriggerNode, abstract=True):
         """
         raise NotImplementedError
 
-    async def post_emit(
-        self, service: Any, msg_id: str, params: Dict[str, Any]
-    ) -> None:
+    async def post_emit(self, service: Any, msg_id: str, params: Dict[str, Any]) -> None:
         """Optional side effect AFTER the payload was enqueued.
 
         Default no-op. Override for "mark-as-read" or similar
@@ -222,7 +216,9 @@ class PollingTriggerNode(TriggerNode, abstract=True):
             except Exception as exc:  # noqa: BLE001
                 logger.error(
                     "Polling activity setup failed",
-                    node_id=node_id, node_type=cls.type, error=str(exc),
+                    node_id=node_id,
+                    node_type=cls.type,
+                    error=str(exc),
                 )
                 raise
 
@@ -242,8 +238,10 @@ class PollingTriggerNode(TriggerNode, abstract=True):
                 except Exception as exc:  # noqa: BLE001
                     logger.warning(
                         "Polling activity fetch_detail failed; skipping id",
-                        node_id=node_id, node_type=cls.type,
-                        msg_id=msg_id, error=str(exc),
+                        node_id=node_id,
+                        node_type=cls.type,
+                        msg_id=msg_id,
+                        error=str(exc),
                     )
                     continue
                 # The workflow needs a stable event.id for cross-cycle
@@ -273,22 +271,20 @@ class PollingTriggerNode(TriggerNode, abstract=True):
 
         return _poll_cycle_activity
 
-    def _build_poll_coroutine(
-        self, node_id: str, params: Dict[str, Any]
-    ) -> Callable[[asyncio.Queue, Callable[[], bool]], Any]:
+    def _build_poll_coroutine(self, node_id: str, params: Dict[str, Any]) -> Callable[[asyncio.Queue, Callable[[], bool]], Any]:
         """Return the bound poll coroutine the deployment manager
         consumes. Closes over ``self``, ``node_id``, and ``params``.
         """
 
-        async def poll(
-            queue: asyncio.Queue, is_running_fn: Callable[[], bool]
-        ) -> None:
+        async def poll(queue: asyncio.Queue, is_running_fn: Callable[[], bool]) -> None:
             try:
                 service = await self.setup_service(params)
             except Exception as exc:  # noqa: BLE001 -- single setup failure
                 logger.error(
                     "Polling trigger setup failed",
-                    node_id=node_id, node_type=self.type, error=str(exc),
+                    node_id=node_id,
+                    node_type=self.type,
+                    error=str(exc),
                 )
                 return
 
@@ -304,12 +300,16 @@ class PollingTriggerNode(TriggerNode, abstract=True):
                 seen = await self.fetch_ids(service, params)
                 logger.info(
                     "Polling trigger baseline established",
-                    node_id=node_id, node_type=self.type, seen=len(seen),
+                    node_id=node_id,
+                    node_type=self.type,
+                    seen=len(seen),
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "Polling trigger baseline failed; treating all as new",
-                    node_id=node_id, node_type=self.type, error=str(exc),
+                    node_id=node_id,
+                    node_type=self.type,
+                    error=str(exc),
                 )
 
             cycle = 0
@@ -330,14 +330,15 @@ class PollingTriggerNode(TriggerNode, abstract=True):
                         continue
                     logger.debug(
                         "Polling trigger cycle",
-                        node_id=node_id, node_type=self.type, cycle=cycle,
-                        current=len(current), seen=len(seen),
+                        node_id=node_id,
+                        node_type=self.type,
+                        cycle=cycle,
+                        current=len(current),
+                        seen=len(seen),
                         new=len(new_ids),
                     )
                     for msg_id in new_ids:
-                        payload = await self.fetch_detail(
-                            service, msg_id, params
-                        )
+                        payload = await self.fetch_detail(service, msg_id, params)
                         await queue.put(payload)
                         # post_emit failure must NOT block the next emit
                         # nor kill the loop; mirrors pre-migration
@@ -363,7 +364,8 @@ class PollingTriggerNode(TriggerNode, abstract=True):
                 except Exception as exc:  # noqa: BLE001 -- per-cycle isolation
                     logger.error(
                         "Polling trigger cycle error; retrying next interval",
-                        node_id=node_id, node_type=self.type,
+                        node_id=node_id,
+                        node_type=self.type,
                         error=str(exc),
                     )
 

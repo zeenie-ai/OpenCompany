@@ -12,8 +12,11 @@ from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
 from .._credentials import TwitterCredential
 
 from .._base import (
-    call_with_retry, format_tweet, includes_lookups,
-    sync_search_recent, track_twitter_usage,
+    call_with_retry,
+    format_tweet,
+    includes_lookups,
+    sync_search_recent,
+    track_twitter_usage,
 )
 
 
@@ -25,7 +28,7 @@ class TwitterSearchParams(BaseModel):
         description=(
             "X / Twitter search query for /2/tweets/search/recent. "
             "MUST include at least one STANDALONE term: a keyword, "
-            "quoted \"phrase\", #hashtag, @mention, from:user, to:user, "
+            'quoted "phrase", #hashtag, @mention, from:user, to:user, '
             "or url:domain. "
             "Operators like lang:, -is:retweet, is:reply, has:media, "
             "has:links are CONJUNCTION-REQUIRED -- they only work when "
@@ -36,7 +39,9 @@ class TwitterSearchParams(BaseModel):
         ),
     )
     max_results: int = Field(
-        default=10, ge=10, le=100,
+        default=10,
+        ge=10,
+        le=100,
         description="Number of results (X API minimum 10, max 100)",
     )
     sort_order: Literal["recency", "relevancy"] = Field(
@@ -90,10 +95,8 @@ class TwitterSearchNode(ActionNode):
     tool_name = "twitter_search"
     tool_description = "Search recent tweets on Twitter/X. Returns enriched tweets with expanded URLs, author profile, public_metrics, media, referenced_tweets, note_tweet. Supports query operators: keywords, #hashtags, @mentions, from:user, to:user, -exclude, OR, lang:, has:links/media/images/videos, is:retweet/reply/quote, url:."
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
     annotations = {"destructive": False, "readonly": True, "open_world": True}
     credentials = (TwitterCredential,)

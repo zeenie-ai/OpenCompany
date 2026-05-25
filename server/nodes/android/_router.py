@@ -30,6 +30,7 @@ def _validate_device_id(device_id: str) -> str:
 
 class AndroidServiceRequest(BaseModel):
     """Request model for Android service execution."""
+
     service_id: str = Field(..., description="Android service ID (e.g., 'battery', 'network', 'app_launcher')")
     action: str = Field(..., description="Service action to perform (e.g., 'status', 'launch', 'list')")
     parameters: Dict[str, Any] = Field(default_factory=dict, description="Action-specific parameters")
@@ -38,10 +39,7 @@ class AndroidServiceRequest(BaseModel):
 
 
 @router.post("/execute")
-async def execute_android_service(
-    request: AndroidServiceRequest,
-    android_service: AndroidService = Depends(get_android_service)
-):
+async def execute_android_service(request: AndroidServiceRequest, android_service: AndroidService = Depends(get_android_service)):
     """Execute an Android system service action.
 
     Examples:
@@ -54,7 +52,7 @@ async def execute_android_service(
         service_id=request.service_id,
         action=request.action,
         android_host=request.android_host,
-        android_port=request.android_port
+        android_port=request.android_port,
     )
 
     result = await android_service.execute_service(
@@ -63,7 +61,7 @@ async def execute_android_service(
         action=request.action,
         parameters=request.parameters,
         android_host=request.android_host,
-        android_port=request.android_port
+        android_port=request.android_port,
     )
 
     return result
@@ -71,30 +69,18 @@ async def execute_android_service(
 
 @router.get("/status")
 async def check_device_status(
-    android_host: str = "localhost",
-    android_port: int = 8888,
-    android_service: AndroidService = Depends(get_android_service)
+    android_host: str = "localhost", android_port: int = 8888, android_service: AndroidService = Depends(get_android_service)
 ):
     """Check if Android device API is reachable."""
-    logger.info(
-        "[Android API] Checking device status",
-        android_host=android_host,
-        android_port=android_port
-    )
+    logger.info("[Android API] Checking device status", android_host=android_host, android_port=android_port)
 
-    status = await android_service.check_device_status(
-        android_host=android_host,
-        android_port=android_port
-    )
+    status = await android_service.check_device_status(android_host=android_host, android_port=android_port)
 
     return status
 
 
 @router.get("/services/{service_id}/actions")
-async def get_service_actions(
-    service_id: str,
-    android_service: AndroidService = Depends(get_android_service)
-):
+async def get_service_actions(service_id: str, android_service: AndroidService = Depends(get_android_service)):
     """Get available actions for a specific Android service.
 
     Returns list of action options that can be performed on the service.
@@ -104,25 +90,13 @@ async def get_service_actions(
     actions = android_service.get_service_actions(service_id)
 
     if not actions:
-        return {
-            "success": False,
-            "error": f"Unknown service: {service_id}",
-            "actions": []
-        }
+        return {"success": False, "error": f"Unknown service: {service_id}", "actions": []}
 
-    return {
-        "success": True,
-        "service_id": service_id,
-        "actions": actions
-    }
+    return {"success": True, "service_id": service_id, "actions": actions}
 
 
 @router.get("/services/{service_id}/actions/{action}/parameters")
-async def get_action_parameters(
-    service_id: str,
-    action: str,
-    android_service: AndroidService = Depends(get_android_service)
-):
+async def get_action_parameters(service_id: str, action: str, android_service: AndroidService = Depends(get_android_service)):
     """Get default parameters for a specific service action.
 
     Returns default parameter template that can be used as a starting point.
@@ -131,31 +105,20 @@ async def get_action_parameters(
 
     default_params = android_service.get_default_parameters(service_id, action)
 
-    return {
-        "success": True,
-        "service_id": service_id,
-        "action": action,
-        "default_parameters": default_params
-    }
+    return {"success": True, "service_id": service_id, "action": action, "default_parameters": default_params}
 
 
 @router.get("/devices")
 async def list_android_devices():
     """List all connected Android devices via ADB."""
     import subprocess
+
     try:
         # Run adb devices command
-        result = subprocess.run(
-            ["adb", "devices", "-l"],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=5
-        )
+        result = subprocess.run(["adb", "devices", "-l"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
 
         devices = []
-        lines = result.stdout.strip().split('\n')[1:]  # Skip header "List of devices attached"
+        lines = result.stdout.strip().split("\n")[1:]  # Skip header "List of devices attached"
 
         for line in lines:
             if not line.strip():
@@ -176,97 +139,56 @@ async def list_android_devices():
                     elif part.startswith("device:"):
                         pass  # Can use this for device codename
 
-                devices.append({
-                    "id": device_id,
-                    "state": state,
-                    "model": model,
-                    "android_version": android_version
-                })
+                devices.append({"id": device_id, "state": state, "model": model, "android_version": android_version})
 
-        return {
-            "success": True,
-            "devices": devices,
-            "count": len(devices)
-        }
+        return {"success": True, "devices": devices, "count": len(devices)}
     except FileNotFoundError:
         logger.error("[Android] ADB not found in PATH")
-        return {
-            "success": False,
-            "error": "ADB not found. Please install Android SDK Platform Tools",
-            "devices": []
-        }
+        return {"success": False, "error": "ADB not found. Please install Android SDK Platform Tools", "devices": []}
     except Exception as e:
         logger.error(f"[Android] Failed to list devices: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "devices": []
-        }
+        return {"success": False, "error": str(e), "devices": []}
 
 
 @router.post("/port-forward")
-async def setup_port_forwarding(
-    device_id: str,
-    local_port: int = 8888,
-    device_port: int = 8888
-):
+async def setup_port_forwarding(device_id: str, local_port: int = 8888, device_port: int = 8888):
     """Setup ADB port forwarding for Android device communication."""
     device_id = _validate_device_id(device_id)
     import subprocess
+
     try:
         # Setup port forwarding: adb -s device_id forward tcp:local_port tcp:device_port
         # device_id passes _DEVICE_ID_PATTERN above; subprocess.run is called
         # with an argv list (no shell), so no further interpolation risk.
         cmd = ["adb", "-s", device_id, "forward", f"tcp:{local_port}", f"tcp:{device_port}"]
 
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=5
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
 
         if result.returncode == 0:
-            logger.info(
-                f"[Android] Port forwarding setup: {device_id} tcp:{local_port} -> tcp:{device_port}"
-            )
+            logger.info(f"[Android] Port forwarding setup: {device_id} tcp:{local_port} -> tcp:{device_port}")
             return {
                 "success": True,
                 "device_id": device_id,
                 "local_port": local_port,
                 "device_port": device_port,
-                "message": f"Port forwarding active: localhost:{local_port} -> device:{device_port}"
+                "message": f"Port forwarding active: localhost:{local_port} -> device:{device_port}",
             }
         else:
             error_msg = result.stderr.strip() or result.stdout.strip()
             logger.error(f"[Android] Port forwarding failed: {error_msg}")
-            return {
-                "success": False,
-                "error": error_msg
-            }
+            return {"success": False, "error": error_msg}
     except FileNotFoundError:
         logger.error("[Android] ADB not found in PATH")
-        return {
-            "success": False,
-            "error": "ADB not found. Please install Android SDK Platform Tools"
-        }
+        return {"success": False, "error": "ADB not found. Please install Android SDK Platform Tools"}
     except Exception as e:
         logger.error(f"[Android] Port forwarding error: {e}")
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        return {"success": False, "error": str(e)}
 
 
 @router.get("/health")
 async def android_health_check():
     """Android service health check."""
-    return {
-        "status": "OK",
-        "service": "android"
-    }
+    return {"status": "OK", "service": "android"}
 
 
 @router.get("/relay-status")
@@ -291,7 +213,7 @@ async def get_relay_connection_status():
                 "device_name": relay_client.paired_device_name,
                 "session_token": relay_client.session_token,
                 "qr_data": relay_client.qr_data if not relay_client.is_paired() else None,
-                "status": "paired" if relay_client.is_paired() else "waiting_for_pairing"
+                "status": "paired" if relay_client.is_paired() else "waiting_for_pairing",
             }
         else:
             return {
@@ -301,13 +223,8 @@ async def get_relay_connection_status():
                 "connection_type": None,
                 "device_id": None,
                 "device_name": None,
-                "status": "disconnected"
+                "status": "disconnected",
             }
     except Exception as e:
         logger.error(f"[Android] Failed to get relay status: {e}")
-        return {
-            "success": False,
-            "connected": False,
-            "error": str(e),
-            "status": "error"
-        }
+        return {"success": False, "connected": False, "error": str(e), "status": "error"}

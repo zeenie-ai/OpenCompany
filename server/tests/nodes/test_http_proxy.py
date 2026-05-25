@@ -63,9 +63,7 @@ class TestHttpRequest:
 
     @respx.mock
     async def test_happy_path_no_proxy(self, harness):
-        respx.get(self.URL).mock(
-            return_value=httpx.Response(200, json={"ok": True, "value": 42})
-        )
+        respx.get(self.URL).mock(return_value=httpx.Response(200, json={"ok": True, "value": 42}))
 
         result = await harness.execute(
             "httpRequest",
@@ -73,9 +71,7 @@ class TestHttpRequest:
         )
 
         harness.assert_envelope(result, success=True)
-        harness.assert_output_shape(
-            result, ["status", "data", "headers", "url", "method", "proxied"]
-        )
+        harness.assert_output_shape(result, ["status", "data", "headers", "url", "method", "proxied"])
         payload = result["result"]
         assert payload["status"] == 200
         assert payload["method"] == "GET"
@@ -93,26 +89,18 @@ class TestHttpRequest:
 
     @respx.mock
     async def test_network_error_returns_envelope_not_raise(self, harness):
-        respx.get(self.URL).mock(
-            side_effect=httpx.ConnectError("connection refused")
-        )
+        respx.get(self.URL).mock(side_effect=httpx.ConnectError("connection refused"))
 
-        result = await harness.execute(
-            "httpRequest", {"method": "GET", "url": self.URL}
-        )
+        result = await harness.execute("httpRequest", {"method": "GET", "url": self.URL})
 
         harness.assert_envelope(result, success=False)
         assert "connection refused" in result["error"].lower()
 
     @respx.mock
     async def test_non_json_response_falls_back_to_text(self, harness):
-        respx.get(self.URL).mock(
-            return_value=httpx.Response(200, text="<html>hi</html>")
-        )
+        respx.get(self.URL).mock(return_value=httpx.Response(200, text="<html>hi</html>"))
 
-        result = await harness.execute(
-            "httpRequest", {"method": "GET", "url": self.URL}
-        )
+        result = await harness.execute("httpRequest", {"method": "GET", "url": self.URL})
 
         harness.assert_envelope(result, success=True)
         assert result["result"]["data"] == "<html>hi</html>"
@@ -169,11 +157,11 @@ class TestProxyRequest:
         proxy_svc = _make_proxy_service_mock()
         pricing = _pricing_with_proxy_config()
 
-        with patch(
-            "services.proxy.service.get_proxy_service", return_value=proxy_svc
-        ), patch(
-            "services.pricing.get_pricing_service", return_value=pricing
-        ), patched_container():
+        with (
+            patch("services.proxy.service.get_proxy_service", return_value=proxy_svc),
+            patch("services.pricing.get_pricing_service", return_value=pricing),
+            patched_container(),
+        ):
             result = await harness.execute(
                 "proxyRequest",
                 {
@@ -213,12 +201,8 @@ class TestProxyRequest:
     async def test_service_disabled_short_circuits(self, harness):
         proxy_svc = _make_proxy_service_mock(enabled=False)
 
-        with patch(
-            "services.proxy.service.get_proxy_service", return_value=proxy_svc
-        ), patched_container():
-            result = await harness.execute(
-                "proxyRequest", {"method": "GET", "url": "https://x.test"}
-            )
+        with patch("services.proxy.service.get_proxy_service", return_value=proxy_svc), patched_container():
+            result = await harness.execute("proxyRequest", {"method": "GET", "url": "https://x.test"})
 
         harness.assert_envelope(result, success=False)
         assert "proxy service not initialized" in result["error"].lower()
@@ -226,12 +210,8 @@ class TestProxyRequest:
     async def test_missing_url_returns_validation_error(self, harness):
         proxy_svc = _make_proxy_service_mock()
 
-        with patch(
-            "services.proxy.service.get_proxy_service", return_value=proxy_svc
-        ), patched_container():
-            result = await harness.execute(
-                "proxyRequest", {"method": "GET", "url": ""}
-            )
+        with patch("services.proxy.service.get_proxy_service", return_value=proxy_svc), patched_container():
+            result = await harness.execute("proxyRequest", {"method": "GET", "url": ""})
 
         harness.assert_envelope(result, success=False)
         err = result["error"].lower()
@@ -240,12 +220,8 @@ class TestProxyRequest:
     async def test_no_provider_available_returns_envelope(self, harness):
         proxy_svc = _make_proxy_service_mock(proxy_url=None)
 
-        with patch(
-            "services.proxy.service.get_proxy_service", return_value=proxy_svc
-        ), patched_container():
-            result = await harness.execute(
-                "proxyRequest", {"method": "GET", "url": "https://x.test"}
-            )
+        with patch("services.proxy.service.get_proxy_service", return_value=proxy_svc), patched_container():
+            result = await harness.execute("proxyRequest", {"method": "GET", "url": "https://x.test"})
 
         harness.assert_envelope(result, success=False)
         assert "no proxy provider" in result["error"].lower()
@@ -256,9 +232,7 @@ class TestProxyRequest:
         respx.get(self.URL).mock(side_effect=httpx.ConnectError("boom"))
         proxy_svc = _make_proxy_service_mock()
 
-        with patch(
-            "services.proxy.service.get_proxy_service", return_value=proxy_svc
-        ), patched_container():
+        with patch("services.proxy.service.get_proxy_service", return_value=proxy_svc), patched_container():
             result = await harness.execute(
                 "proxyRequest",
                 {
@@ -287,22 +261,18 @@ class TestProxyRequest:
 class TestProxyConfig:
     async def test_list_providers_happy_path(self, harness):
         stub_provider = MagicMock()
-        stub_provider.model_dump = MagicMock(
-            return_value={"name": "p1", "enabled": True, "score": 0.9}
-        )
+        stub_provider.model_dump = MagicMock(return_value={"name": "p1", "enabled": True, "score": 0.9})
         proxy_svc = _make_proxy_service_mock(providers=[stub_provider])
 
         # proxy.py imports get_proxy_service at module load (line 17),
         # so we must patch it in the handler module too. tools.py re-imports
         # it inside the function, so patching the source is sufficient there.
-        with patch(
-            "services.proxy.service.get_proxy_service", return_value=proxy_svc
-        ), patch(
-            "services.proxy.service.get_proxy_service", return_value=proxy_svc
-        ), patched_container():
-            result = await harness.execute(
-                "proxyConfig", {"operation": "list_providers"}
-            )
+        with (
+            patch("services.proxy.service.get_proxy_service", return_value=proxy_svc),
+            patch("services.proxy.service.get_proxy_service", return_value=proxy_svc),
+            patched_container(),
+        ):
+            result = await harness.execute("proxyConfig", {"operation": "list_providers"})
 
         harness.assert_envelope(result, success=True)
         # Node handler wraps the tool result under result={...} and copies
@@ -310,21 +280,17 @@ class TestProxyConfig:
         tool_payload = result["result"]
         assert tool_payload["success"] is True
         assert tool_payload["operation"] == "list_providers"
-        assert tool_payload["providers"] == [
-            {"name": "p1", "enabled": True, "score": 0.9}
-        ]
+        assert tool_payload["providers"] == [{"name": "p1", "enabled": True, "score": 0.9}]
 
     async def test_add_provider_missing_name_returns_validation_error(self, harness):
         proxy_svc = _make_proxy_service_mock()
 
-        with patch(
-            "services.proxy.service.get_proxy_service", return_value=proxy_svc
-        ), patch(
-            "services.proxy.service.get_proxy_service", return_value=proxy_svc
-        ), patched_container():
-            result = await harness.execute(
-                "proxyConfig", {"operation": "add_provider", "name": ""}
-            )
+        with (
+            patch("services.proxy.service.get_proxy_service", return_value=proxy_svc),
+            patch("services.proxy.service.get_proxy_service", return_value=proxy_svc),
+            patched_container(),
+        ):
+            result = await harness.execute("proxyConfig", {"operation": "add_provider", "name": ""})
 
         harness.assert_envelope(result, success=False)
         assert "provider name is required" in result["error"].lower()
@@ -332,14 +298,12 @@ class TestProxyConfig:
     async def test_unknown_operation_returns_error(self, harness):
         proxy_svc = _make_proxy_service_mock()
 
-        with patch(
-            "services.proxy.service.get_proxy_service", return_value=proxy_svc
-        ), patch(
-            "services.proxy.service.get_proxy_service", return_value=proxy_svc
-        ), patched_container():
-            result = await harness.execute(
-                "proxyConfig", {"operation": "teleport_provider"}
-            )
+        with (
+            patch("services.proxy.service.get_proxy_service", return_value=proxy_svc),
+            patch("services.proxy.service.get_proxy_service", return_value=proxy_svc),
+            patched_container(),
+        ):
+            result = await harness.execute("proxyConfig", {"operation": "teleport_provider"})
 
         harness.assert_envelope(result, success=False)
         assert "invalid parameters" in result["error"].lower()
@@ -353,17 +317,11 @@ class TestProxyConfig:
 class TestProxyStatus:
     async def test_happy_path_returns_providers_and_stats(self, harness):
         stub_provider = MagicMock()
-        stub_provider.model_dump = MagicMock(
-            return_value={"name": "p1", "score": 0.75, "success_rate": 0.9}
-        )
+        stub_provider.model_dump = MagicMock(return_value={"name": "p1", "score": 0.75, "success_rate": 0.9})
         stats = {"total_requests": 100, "total_bytes": 12345}
-        proxy_svc = _make_proxy_service_mock(
-            providers=[stub_provider], stats=stats
-        )
+        proxy_svc = _make_proxy_service_mock(providers=[stub_provider], stats=stats)
 
-        with patch(
-            "services.proxy.service.get_proxy_service", return_value=proxy_svc
-        ):
+        with patch("services.proxy.service.get_proxy_service", return_value=proxy_svc):
             result = await harness.execute("proxyStatus", {})
 
         harness.assert_envelope(result, success=True)
@@ -376,9 +334,7 @@ class TestProxyStatus:
     async def test_disabled_service_returns_empty_success_envelope(self, harness):
         proxy_svc = _make_proxy_service_mock(enabled=False)
 
-        with patch(
-            "services.proxy.service.get_proxy_service", return_value=proxy_svc
-        ):
+        with patch("services.proxy.service.get_proxy_service", return_value=proxy_svc):
             result = await harness.execute("proxyStatus", {})
 
         harness.assert_envelope(result, success=True)
@@ -390,9 +346,7 @@ class TestProxyStatus:
         proxy_svc = _make_proxy_service_mock()
         proxy_svc.get_stats = MagicMock(side_effect=RuntimeError("kaboom"))
 
-        with patch(
-            "services.proxy.service.get_proxy_service", return_value=proxy_svc
-        ):
+        with patch("services.proxy.service.get_proxy_service", return_value=proxy_svc):
             result = await harness.execute("proxyStatus", {})
 
         harness.assert_envelope(result, success=False)

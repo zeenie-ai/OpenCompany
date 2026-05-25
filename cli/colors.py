@@ -23,8 +23,16 @@ console = Console(log_time_format="[%H:%M:%S.%f]", log_path=False)
 # Honcho's rotation, lifted: skip very-dark (black) and very-bright (white)
 # so prefixes remain readable on both light and dark terminals.
 _PALETTE = [
-    "cyan", "green", "yellow", "blue", "magenta",
-    "bright_cyan", "bright_green", "bright_yellow", "bright_blue", "bright_magenta",
+    "cyan",
+    "green",
+    "yellow",
+    "blue",
+    "magenta",
+    "bright_cyan",
+    "bright_green",
+    "bright_yellow",
+    "bright_blue",
+    "bright_magenta",
 ]
 _color_cycle = cycle(_PALETTE)
 

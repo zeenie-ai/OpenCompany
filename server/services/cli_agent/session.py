@@ -106,9 +106,7 @@ class AICliSession(BaseProcessSupervisor):
         # (per-workflow isolation; ``cwd`` for memory-bound runs is
         # ``repo_root`` which would otherwise be shared across workflows).
         self._workspace_dir = Path(workspace_dir).resolve()
-        self._worktree_dir = (
-            self._workspace_dir / node_id / f"wt_{self._task_id}"
-        )
+        self._worktree_dir = self._workspace_dir / node_id / f"wt_{self._task_id}"
         self._branch = task.branch or f"machina/{self._task_id}"
         self._broadcaster = broadcaster
         self._defaults = defaults
@@ -208,13 +206,12 @@ class AICliSession(BaseProcessSupervisor):
         e: Dict[str, str] = {**os.environ, "PYTHONUNBUFFERED": "1"}
         if self._provider.name == "claude":
             from nodes.agent.claude_code_agent._oauth import MACHINA_CLAUDE_DIR
+
             e["CLAUDE_CONFIG_DIR"] = str(MACHINA_CLAUDE_DIR)
         if self._lockfile_path and self._provider.ide_lock_env_var:
             e[self._provider.ide_lock_env_var] = str(self._lockfile_path)
         # Composio-style parent-run-ID for MCP correlation
-        e["MACHINA_PARENT_RUN_ID"] = (
-            f"{self._workflow_id}:{self._node_id}:{self._batch_token[:8]}"
-        )
+        e["MACHINA_PARENT_RUN_ID"] = f"{self._workflow_id}:{self._node_id}:{self._batch_token[:8]}"
         return e
 
     async def _pre_spawn(self) -> None:
@@ -227,30 +224,38 @@ class AICliSession(BaseProcessSupervisor):
             self._worktree_dir.parent.mkdir(parents=True, exist_ok=True)
             wt_proc = await anyio.run_process(
                 [
-                    "git", "-C", str(self._repo_root),
-                    "worktree", "add",
+                    "git",
+                    "-C",
+                    str(self._repo_root),
+                    "worktree",
+                    "add",
                     str(self._worktree_dir),
-                    "-b", self._branch,
+                    "-b",
+                    self._branch,
                 ],
                 check=False,
             )
             if wt_proc.returncode != 0:
-                err = (wt_proc.stderr or b"").decode(
-                    "utf-8", errors="replace",
-                ).strip()
+                err = (
+                    (wt_proc.stderr or b"")
+                    .decode(
+                        "utf-8",
+                        errors="replace",
+                    )
+                    .strip()
+                )
                 raise RuntimeError(f"git worktree add failed: {err}")
         else:
             logger.info(
                 "[%s] memory-bound: skipping worktree, using cwd=%s",
-                self.label, self._repo_root,
+                self.label,
+                self._repo_root,
             )
 
         # 2. IDE lockfile (VSCode pattern) — providers that support it.
         # `workspace_dir` in the lockfile points at whatever cwd will
         # actually be — repo_root for memory-bound runs, else worktree.
-        lockfile_workspace = (
-            self._repo_root if self._memory_bound else self._worktree_dir
-        )
+        lockfile_workspace = self._repo_root if self._memory_bound else self._worktree_dir
         if self._provider.supports("ide_lockfile") and self._provider.ide_lockfile_dir:
             try:
                 self._lockfile_path = write_ide_lockfile(
@@ -264,7 +269,8 @@ class AICliSession(BaseProcessSupervisor):
             except OSError as exc:
                 logger.warning(
                     "[%s] IDE lockfile write failed (%s) — continuing without MCP tools",
-                    self.label, exc,
+                    self.label,
+                    exc,
                 )
 
         # 3. Materialise connected skills under the workspace's
@@ -282,6 +288,7 @@ class AICliSession(BaseProcessSupervisor):
         # Gemini don't register one → call is a no-op.
         if self._connected_skill_names:
             from services.cli_agent.factory import get_skill_materialiser
+
             materialiser = get_skill_materialiser(self._provider.name)
             if materialiser is not None:
                 await materialiser(
@@ -328,7 +335,9 @@ class AICliSession(BaseProcessSupervisor):
         except OSError as exc:
             self._logger.warning(
                 "[%s] could not create project dir %s: %s",
-                self.label, project_dir, exc,
+                self.label,
+                project_dir,
+                exc,
             )
 
         resume_uuid = getattr(self._task, "resume_session_id", None)
@@ -358,8 +367,11 @@ class AICliSession(BaseProcessSupervisor):
 
         self._logger.info(
             "[%s] spawned pid=%s task=%s branch=%s cwd=%s",
-            self.label, self._pty_handle.pid, self._task_id,
-            self._branch, self.cwd(),
+            self.label,
+            self._pty_handle.pid,
+            self._task_id,
+            self._branch,
+            self.cwd(),
         )
 
         # Resolve the JSONL path. For known-UUID `--resume` runs the
@@ -371,7 +383,8 @@ class AICliSession(BaseProcessSupervisor):
         if self._session_jsonl_path is None:
             try:
                 self._session_jsonl_path = await self._wait_for_session_jsonl(
-                    project_dir, baseline_sizes,
+                    project_dir,
+                    baseline_sizes,
                 )
             except TimeoutError as exc:
                 # Surface a clean error envelope rather than letting the
@@ -380,7 +393,8 @@ class AICliSession(BaseProcessSupervisor):
 
         self._logger.info(
             "[%s] watching session JSONL: %s",
-            self.label, self._session_jsonl_path,
+            self.label,
+            self._session_jsonl_path,
         )
 
         # Start the JSONL tail-f. Events flow into `_on_event` which
@@ -416,7 +430,9 @@ class AICliSession(BaseProcessSupervisor):
         return Path(MACHINA_CLAUDE_DIR) / "projects" / project_key
 
     async def _wait_for_session_jsonl(
-        self, project_dir: Path, baseline: Dict[str, int],
+        self,
+        project_dir: Path,
+        baseline: Dict[str, int],
     ) -> Path:
         """Find the JSONL claude is using post-spawn via size-diff vs baseline.
 
@@ -460,10 +476,7 @@ class AICliSession(BaseProcessSupervisor):
         await self._on_event(event)
         if self._provider.is_final_event(event):
             self._result_event.set()
-        if (
-            event.get("type") == "system"
-            and event.get("subtype") == "compact_boundary"
-        ):
+        if event.get("type") == "system" and event.get("subtype") == "compact_boundary":
             await self._record_native_compaction(event)
 
     async def _record_native_compaction(self, event: Dict[str, Any]) -> None:
@@ -487,11 +500,7 @@ class AICliSession(BaseProcessSupervisor):
         # Session-id for the compaction store: prefer the memory bridge
         # session_id (stable across `--resume`), fall back to the
         # current task's resume_session_id or the node id.
-        session_id = (
-            getattr(self._task, "resume_session_id", None)
-            or getattr(self._task, "session_id", None)
-            or self._node_id
-        )
+        session_id = getattr(self._task, "resume_session_id", None) or getattr(self._task, "session_id", None) or self._node_id
         model = getattr(self._task, "model", "") or ""
         try:
             await svc.record(
@@ -505,11 +514,15 @@ class AICliSession(BaseProcessSupervisor):
             )
             self._logger.info(
                 "[%s] native compaction recorded pre_tokens=%d trigger=%s",
-                self.label, pre_tokens, metadata.get("trigger", "unknown"),
+                self.label,
+                pre_tokens,
+                metadata.get("trigger", "unknown"),
             )
         except Exception as exc:  # pragma: no cover — best-effort
             self._logger.debug(
-                "[%s] compaction.record failed: %s", self.label, exc,
+                "[%s] compaction.record failed: %s",
+                self.label,
+                exc,
             )
 
     # ------------------------------------------------------------------
@@ -536,12 +549,7 @@ class AICliSession(BaseProcessSupervisor):
                     payload[k] = v
             await self._safe_node_status("executing", payload)
         else:
-            msg = (
-                event.get("message")
-                or event.get("text")
-                or event.get("delta")
-                or json.dumps(event)
-            )
+            msg = event.get("message") or event.get("text") or event.get("delta") or json.dumps(event)
             text = msg if isinstance(msg, str) else json.dumps(msg)
             await self._safe_terminal_log(text[:500], level="info")
 
@@ -554,34 +562,28 @@ class AICliSession(BaseProcessSupervisor):
                 tools = event.get("tools") or []
                 mcp_servers = event.get("mcp_servers") or []
                 self._logger.info(
-                    "[CC-Agent stream] system.init tools=%d (sample=%s) "
-                    "mcp_servers=%s",
-                    len(tools), tools[:8],
+                    "[CC-Agent stream] system.init tools=%d (sample=%s) " "mcp_servers=%s",
+                    len(tools),
+                    tools[:8],
                     [s.get("name") for s in mcp_servers if isinstance(s, dict)],
                 )
             elif etype == "assistant":
                 msg = event.get("message") or {}
                 content = msg.get("content") or []
-                tool_uses = [
-                    c for c in content
-                    if isinstance(c, dict) and c.get("type") == "tool_use"
-                ]
-                texts = [
-                    c.get("text", "") for c in content
-                    if isinstance(c, dict) and c.get("type") == "text"
-                ]
+                tool_uses = [c for c in content if isinstance(c, dict) and c.get("type") == "tool_use"]
+                texts = [c.get("text", "") for c in content if isinstance(c, dict) and c.get("type") == "text"]
                 if tool_uses:
                     for tu in tool_uses:
                         self._logger.info(
-                            "[CC-Agent stream] assistant->tool_use name=%s "
-                            "input_keys=%s",
+                            "[CC-Agent stream] assistant->tool_use name=%s " "input_keys=%s",
                             tu.get("name"),
                             list((tu.get("input") or {}).keys()),
                         )
                 elif texts:
                     sample = " ".join(t for t in texts if isinstance(t, str))[:300]
                     self._logger.info(
-                        "[CC-Agent stream] assistant.text: %r", sample,
+                        "[CC-Agent stream] assistant.text: %r",
+                        sample,
                     )
             elif etype == "tool_use":
                 self._logger.info(
@@ -594,7 +596,8 @@ class AICliSession(BaseProcessSupervisor):
                 preview = content if isinstance(content, str) else json.dumps(content)
                 self._logger.info(
                     "[CC-Agent stream] tool_result is_error=%s content=%r",
-                    event.get("is_error", False), preview[:300],
+                    event.get("is_error", False),
+                    preview[:300],
                 )
             elif etype == "hook":
                 self._logger.info(
@@ -603,11 +606,12 @@ class AICliSession(BaseProcessSupervisor):
                 )
             elif etype == "result":
                 self._logger.info(
-                    "[CC-Agent stream] result is_error=%s subtype=%s "
-                    "session_id=%s duration_ms=%s num_turns=%s cost=%s",
-                    event.get("is_error", False), event.get("subtype"),
+                    "[CC-Agent stream] result is_error=%s subtype=%s " "session_id=%s duration_ms=%s num_turns=%s cost=%s",
+                    event.get("is_error", False),
+                    event.get("subtype"),
                     event.get("session_id"),
-                    event.get("duration_ms"), event.get("num_turns"),
+                    event.get("duration_ms"),
+                    event.get("num_turns"),
                     event.get("total_cost_usd"),
                 )
         except Exception:
@@ -617,11 +621,13 @@ class AICliSession(BaseProcessSupervisor):
         if not self._broadcaster:
             return
         try:
-            await self._broadcaster.broadcast_terminal_log({
-                "source": f"{self._provider.name}:{self._task_id}",
-                "level": level,
-                "message": message,
-            })
+            await self._broadcaster.broadcast_terminal_log(
+                {
+                    "source": f"{self._provider.name}:{self._task_id}",
+                    "level": level,
+                    "message": message,
+                }
+            )
         except Exception:
             pass
 
@@ -630,7 +636,9 @@ class AICliSession(BaseProcessSupervisor):
             return
         try:
             await self._broadcaster.update_node_status(
-                self._node_id, status, data,
+                self._node_id,
+                status,
+                data,
                 workflow_id=self._workflow_id,
             )
         except Exception:
@@ -656,7 +664,9 @@ class AICliSession(BaseProcessSupervisor):
                 await watcher.stop()
             except Exception as exc:  # pragma: no cover — defensive
                 self._logger.debug(
-                    "[%s] watcher stop: %s", self.label, exc,
+                    "[%s] watcher stop: %s",
+                    self.label,
+                    exc,
                 )
 
         handle = self._pty_handle
@@ -667,7 +677,9 @@ class AICliSession(BaseProcessSupervisor):
                 await handle.kill()
             except Exception as exc:  # pragma: no cover — defensive
                 self._logger.debug(
-                    "[%s] PTY kill: %s", self.label, exc,
+                    "[%s] PTY kill: %s",
+                    self.label,
+                    exc,
                 )
             self._logger.info("[%s] stopped pid=%s", self.label, pid)
 
@@ -686,12 +698,14 @@ class AICliSession(BaseProcessSupervisor):
         """
         if self._pty_handle is None:
             return self._build_result(
-                success=False, error="session never started",
+                success=False,
+                error="session never started",
             )
 
         try:
             await asyncio.wait_for(
-                self._result_event.wait(), timeout=timeout_seconds,
+                self._result_event.wait(),
+                timeout=timeout_seconds,
             )
             # The result event fired; claude wrote `result` on the JSONL.
             # The subprocess is still alive (interactive TUI stays
@@ -725,8 +739,12 @@ class AICliSession(BaseProcessSupervisor):
             try:
                 await anyio.run_process(
                     [
-                        "git", "-C", str(self._repo_root),
-                        "worktree", "remove", "--force",
+                        "git",
+                        "-C",
+                        str(self._repo_root),
+                        "worktree",
+                        "remove",
+                        "--force",
                         str(self._worktree_dir),
                     ],
                     check=False,

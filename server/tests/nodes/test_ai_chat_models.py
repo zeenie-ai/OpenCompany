@@ -76,9 +76,7 @@ class TestAllChatModelsHappyPath:
     """The happy-path contract is identical for every chat-model node."""
 
     @pytest.mark.parametrize("node_type,provider", ALL_PROVIDERS)
-    async def test_dispatches_to_execute_chat_and_returns_envelope(
-        self, harness, node_type, provider
-    ):
+    async def test_dispatches_to_execute_chat_and_returns_envelope(self, harness, node_type, provider):
         harness.ai_service.execute_chat = AsyncMock(return_value=_canned_success(provider))
 
         result = await harness.execute(
@@ -102,9 +100,7 @@ class TestAllChatModelsHappyPath:
         assert params["model"] == "test-model"
 
     @pytest.mark.parametrize("node_type,provider", ALL_PROVIDERS)
-    async def test_api_key_auto_injected_by_executor(
-        self, harness, node_type, provider
-    ):
+    async def test_api_key_auto_injected_by_executor(self, harness, node_type, provider):
         """NodeExecutor._inject_api_keys must fetch 'api_key' per provider."""
         harness.ai_service.execute_chat = AsyncMock(return_value=_canned_success(provider))
 
@@ -112,9 +108,7 @@ class TestAllChatModelsHappyPath:
 
         # auth.get_api_key was called with the provider derived from node_type
         calls = [c.args for c in harness.ai_service.auth.get_api_key.await_args_list]
-        assert any(c[0] == provider for c in calls), (
-            f"expected get_api_key({provider}, ...) for {node_type}, got {calls}"
-        )
+        assert any(c[0] == provider for c in calls), f"expected get_api_key({provider}, ...) for {node_type}, got {calls}"
 
         # Plugin Params use snake_case throughout; model_dump() preserves field names.
         params = harness.ai_service.execute_chat.await_args.args[2]

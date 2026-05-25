@@ -125,20 +125,24 @@ def _install_execute_service(harness, *, return_value=None, side_effect=None):
     if side_effect is not None:
         kwargs["side_effect"] = side_effect
     else:
-        kwargs["return_value"] = return_value if return_value is not None else {
-            "success": True,
-            "result": {
-                "service_id": "unknown",
-                "action": "unknown",
-                "data": {},
-                "response_time": 0.01,
-                "android_host": "localhost",
-                "android_port": 8888,
+        kwargs["return_value"] = (
+            return_value
+            if return_value is not None
+            else {
+                "success": True,
+                "result": {
+                    "service_id": "unknown",
+                    "action": "unknown",
+                    "data": {},
+                    "response_time": 0.01,
+                    "android_host": "localhost",
+                    "android_port": 8888,
+                    "timestamp": datetime.now().isoformat(),
+                },
+                "execution_time": 0.01,
                 "timestamp": datetime.now().isoformat(),
-            },
-            "execution_time": 0.01,
-            "timestamp": datetime.now().isoformat(),
-        }
+            }
+        )
     mock = AsyncMock(**kwargs)
     harness.android_service.execute_service = mock
     return mock
@@ -153,13 +157,9 @@ class TestDispatch:
     """All 16 Android node types share one handler; dispatch the right service_id."""
 
     @pytest.mark.parametrize("node_type,expected_service_id", list(SERVICE_ID_MAP.items()))
-    async def test_registry_routes_to_correct_service_id(
-        self, harness, node_type, expected_service_id
-    ):
+    async def test_registry_routes_to_correct_service_id(self, harness, node_type, expected_service_id):
         action = DEFAULT_ACTIONS[node_type]
-        envelope = _build_service_envelope(
-            service_id=expected_service_id, action=action, data={"ok": True}
-        )
+        envelope = _build_service_envelope(service_id=expected_service_id, action=action, data={"ok": True})
         mock = _install_execute_service(harness, return_value=envelope)
 
         result = await harness.execute(node_type, {"action": action})
@@ -172,9 +172,7 @@ class TestDispatch:
 
     async def test_handler_ignores_frontend_service_id_param(self, harness):
         """Frontend stores hidden `service_id` but handler's SERVICE_ID_MAP wins."""
-        envelope = _build_service_envelope(
-            service_id="device_state", action="status", data={}
-        )
+        envelope = _build_service_envelope(service_id="device_state", action="status", data={})
         mock = _install_execute_service(harness, return_value=envelope)
 
         # Frontend sends the wrong snake_case value (matches factory output,
@@ -188,9 +186,7 @@ class TestDispatch:
         assert kwargs["service_id"] == "device_state"
 
     async def test_default_host_and_port_used_when_absent(self, harness):
-        envelope = _build_service_envelope(
-            service_id="battery", action="status", data={}
-        )
+        envelope = _build_service_envelope(service_id="battery", action="status", data={})
         mock = _install_execute_service(harness, return_value=envelope)
 
         await harness.execute("batteryMonitor", {"action": "status"})
@@ -227,9 +223,7 @@ class TestDispatch:
 class TestParameterHandling:
     async def test_package_name_promoted_into_parameters_dict(self, harness):
         """appLauncher: root-level package_name must end up inside parameters."""
-        envelope = _build_service_envelope(
-            service_id="app_launcher", action="launch", data={"launched": True}
-        )
+        envelope = _build_service_envelope(service_id="app_launcher", action="launch", data={"launched": True})
         mock = _install_execute_service(harness, return_value=envelope)
 
         await harness.execute(
@@ -242,9 +236,7 @@ class TestParameterHandling:
 
     async def test_empty_package_name_is_not_promoted(self, harness):
         """Handler checks `if parameters[key]` - empty strings are skipped."""
-        envelope = _build_service_envelope(
-            service_id="app_launcher", action="launch", data={}
-        )
+        envelope = _build_service_envelope(service_id="app_launcher", action="launch", data={})
         mock = _install_execute_service(harness, return_value=envelope)
 
         await harness.execute(
@@ -256,9 +248,7 @@ class TestParameterHandling:
         assert kwargs["parameters"] == {}
 
     async def test_parameters_json_string_is_parsed(self, harness):
-        envelope = _build_service_envelope(
-            service_id="audio_automation", action="set_volume", data={}
-        )
+        envelope = _build_service_envelope(service_id="audio_automation", action="set_volume", data={})
         mock = _install_execute_service(harness, return_value=envelope)
 
         await harness.execute(
@@ -273,9 +263,7 @@ class TestParameterHandling:
         assert kwargs["parameters"] == {"stream": "music", "level": 5}
 
     async def test_parameters_invalid_json_becomes_empty_dict(self, harness):
-        envelope = _build_service_envelope(
-            service_id="audio_automation", action="set_volume", data={}
-        )
+        envelope = _build_service_envelope(service_id="audio_automation", action="set_volume", data={})
         mock = _install_execute_service(harness, return_value=envelope)
 
         await harness.execute(
@@ -287,9 +275,7 @@ class TestParameterHandling:
         assert kwargs["parameters"] == {}
 
     async def test_parameters_dict_passed_through(self, harness):
-        envelope = _build_service_envelope(
-            service_id="screen_control", action="set_brightness", data={}
-        )
+        envelope = _build_service_envelope(service_id="screen_control", action="set_brightness", data={})
         mock = _install_execute_service(harness, return_value=envelope)
 
         await harness.execute(
@@ -302,9 +288,7 @@ class TestParameterHandling:
 
     async def test_default_action_fallback(self, harness):
         """Handler falls back to action='status' when param missing."""
-        envelope = _build_service_envelope(
-            service_id="battery", action="status", data={}
-        )
+        envelope = _build_service_envelope(service_id="battery", action="status", data={})
         mock = _install_execute_service(harness, return_value=envelope)
 
         await harness.execute("batteryMonitor", {})
@@ -321,9 +305,7 @@ class TestParameterHandling:
 class TestActionBranches:
     @pytest.mark.parametrize("action", ["status", "enable", "disable", "scan"])
     async def test_wifi_actions_pass_through(self, harness, action):
-        envelope = _build_service_envelope(
-            service_id="wifi_automation", action=action, data={"enabled": True}
-        )
+        envelope = _build_service_envelope(service_id="wifi_automation", action=action, data={"enabled": True})
         mock = _install_execute_service(harness, return_value=envelope)
 
         result = await harness.execute("wifiAutomation", {"action": action})
@@ -333,9 +315,7 @@ class TestActionBranches:
 
     @pytest.mark.parametrize("action", ["status", "enable", "disable"])
     async def test_airplane_mode_actions_pass_through(self, harness, action):
-        envelope = _build_service_envelope(
-            service_id="airplane_mode", action=action, data={}
-        )
+        envelope = _build_service_envelope(service_id="airplane_mode", action=action, data={})
         mock = _install_execute_service(harness, return_value=envelope)
 
         await harness.execute("airplaneModeControl", {"action": action})
@@ -362,9 +342,7 @@ class TestOutputFlatten:
         )
         _install_execute_service(harness, return_value=envelope)
 
-        result = await harness.execute(
-            "batteryMonitor", {"action": "status"}, node_id="battery_1"
-        )
+        result = await harness.execute("batteryMonitor", {"action": "status"}, node_id="battery_1")
 
         harness.assert_envelope(result, success=True)
         # The output store receives the flattened payload
@@ -393,9 +371,7 @@ class TestOutputFlatten:
         )
         _install_execute_service(harness, return_value=envelope)
 
-        result = await harness.execute(
-            "location", {"action": "current"}, node_id="loc_1"
-        )
+        result = await harness.execute("location", {"action": "current"}, node_id="loc_1")
 
         harness.assert_envelope(result, success=True)
         stored = harness.output_for("loc_1", key="output_main")
@@ -413,9 +389,7 @@ class TestOutputFlatten:
         )
         _install_execute_service(harness, return_value=envelope)
 
-        result = await harness.execute(
-            "appList", {"action": "list"}, node_id="app_list_1"
-        )
+        result = await harness.execute("appList", {"action": "list"}, node_id="app_list_1")
 
         harness.assert_envelope(result, success=True)
         stored = harness.output_for("app_list_1", key="output_main")
@@ -430,9 +404,7 @@ class TestOutputFlatten:
 
 
 class TestErrorPaths:
-    async def test_service_returns_success_false_surfaces_as_error_envelope(
-        self, harness
-    ):
+    async def test_service_returns_success_false_surfaces_as_error_envelope(self, harness):
         envelope = _build_service_envelope(
             service_id="battery",
             action="status",
@@ -453,9 +425,7 @@ class TestErrorPaths:
         If it does raise (e.g. during future refactors), NodeExecutor catches
         it and returns a failure envelope via ExecutionResult.
         """
-        _install_execute_service(
-            harness, side_effect=RuntimeError("relay client crashed")
-        )
+        _install_execute_service(harness, side_effect=RuntimeError("relay client crashed"))
 
         result = await harness.execute("batteryMonitor", {"action": "status"})
 

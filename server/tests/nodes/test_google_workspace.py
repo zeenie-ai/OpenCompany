@@ -125,6 +125,7 @@ class TestGmail:
             "messages": [{"id": "m1"}, {"id": "m2"}],
             "resultSizeEstimate": 2,
         }
+
         # messages.get returns metadata for each
         def _make_msg(mid):
             return {
@@ -176,9 +177,10 @@ class TestGmail:
         assert "invalid parameters" in result["error"].lower()
 
     async def test_missing_credentials_short_circuits(self, harness):
-        with _patch_creds(
-            "googleGmail", side_effect=ValueError("Google Workspace not connected")
-        ), _patch_build("googleGmail", MagicMock()):
+        with (
+            _patch_creds("googleGmail", side_effect=ValueError("Google Workspace not connected")),
+            _patch_build("googleGmail", MagicMock()),
+        ):
             result = await harness.execute(
                 "googleGmail",
                 {
@@ -226,10 +228,12 @@ class TestGmailReceive:
         async def _instant_sleep(_seconds):
             return None
 
-        with _patch_creds("googleGmail"), _patch_build("googleGmail", service), patch(
-            "asyncio.sleep", new=_instant_sleep
-        ), patch("services.status_broadcaster.get_status_broadcaster") as gsb, patch(
-            "services.event_waiter.dispatch", return_value=1
+        with (
+            _patch_creds("googleGmail"),
+            _patch_build("googleGmail", service),
+            patch("asyncio.sleep", new=_instant_sleep),
+            patch("services.status_broadcaster.get_status_broadcaster") as gsb,
+            patch("services.event_waiter.dispatch", return_value=1),
         ):
             gsb.return_value = MagicMock(update_node_status=AsyncMock())
             result = await harness.execute(
@@ -268,10 +272,12 @@ class TestGmailReceive:
         async def _instant_sleep(_seconds):
             return None
 
-        with _patch_creds("googleGmail"), _patch_build("googleGmail", service), patch(
-            "asyncio.sleep", new=_instant_sleep
-        ), patch("services.status_broadcaster.get_status_broadcaster") as gsb, patch(
-            "services.event_waiter.dispatch", return_value=1
+        with (
+            _patch_creds("googleGmail"),
+            _patch_build("googleGmail", service),
+            patch("asyncio.sleep", new=_instant_sleep),
+            patch("services.status_broadcaster.get_status_broadcaster") as gsb,
+            patch("services.event_waiter.dispatch", return_value=1),
         ):
             gsb.return_value = MagicMock(update_node_status=AsyncMock())
             result = await harness.execute(
@@ -292,9 +298,7 @@ class TestGmailReceive:
         assert modify_call.kwargs["body"] == {"removeLabelIds": ["UNREAD"]}
 
     async def test_missing_credentials_returns_error(self, harness):
-        with _patch_creds(
-            "googleGmail", side_effect=ValueError("Google Workspace not connected")
-        ):
+        with _patch_creds("googleGmail", side_effect=ValueError("Google Workspace not connected")):
             result = await harness.execute(
                 "googleGmailReceive",
                 {
@@ -370,9 +374,10 @@ class TestCalendar:
         assert "invalid parameters" in result["error"].lower()
 
     async def test_missing_credentials_short_circuits(self, harness):
-        with _patch_creds(
-            "googleCalendar", side_effect=ValueError("Google Workspace not connected")
-        ), _patch_build("googleCalendar", MagicMock()):
+        with (
+            _patch_creds("googleCalendar", side_effect=ValueError("Google Workspace not connected")),
+            _patch_build("googleCalendar", MagicMock()),
+        ):
             result = await harness.execute(
                 "googleCalendar",
                 {
@@ -749,9 +754,10 @@ class TestContacts:
         assert "invalid parameters" in result["error"].lower()
 
     async def test_missing_credentials_short_circuits(self, harness):
-        with _patch_creds(
-            "googleContacts", side_effect=ValueError("Google Workspace not connected")
-        ), _patch_build("googleContacts", MagicMock()):
+        with (
+            _patch_creds("googleContacts", side_effect=ValueError("Google Workspace not connected")),
+            _patch_build("googleContacts", MagicMock()),
+        ):
             result = await harness.execute(
                 "googleContacts",
                 {

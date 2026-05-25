@@ -61,6 +61,7 @@ class Routing(BaseModel):
 # ---------------------------------------------------------------------------
 # Template interpolation
 
+
 def _resolve_template(value: Any, env: Dict[str, Any]) -> Any:
     """Resolve ``={{expr}}`` templates against ``env``. Non-string values
     pass through. Supports dotted paths — ``params.maxResults``."""
@@ -94,6 +95,7 @@ def _resolve_dict(d: Dict[str, Any], env: Dict[str, Any]) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 # post_receive strategies
 
+
 def _strategy_root_property(data: Any, action: PostReceiveAction) -> Any:
     if not action.property or not isinstance(data, dict):
         return data
@@ -114,9 +116,7 @@ def _strategy_limit(data: Any, action: PostReceiveAction) -> Any:
 def _strategy_filter(data: Any, action: PostReceiveAction) -> Any:
     if not isinstance(data, list) or not action.where:
         return data
-    return [item for item in data if all(
-        isinstance(item, dict) and item.get(k) == v for k, v in action.where.items()
-    )]
+    return [item for item in data if all(isinstance(item, dict) and item.get(k) == v for k, v in action.where.items())]
 
 
 def _strategy_set(data: Any, action: PostReceiveAction) -> Any:
@@ -125,8 +125,7 @@ def _strategy_set(data: Any, action: PostReceiveAction) -> Any:
     if isinstance(data, dict):
         return {**data, **action.set_fields}
     if isinstance(data, list):
-        return [{**item, **action.set_fields} if isinstance(item, dict) else item
-                for item in data]
+        return [{**item, **action.set_fields} if isinstance(item, dict) else item for item in data]
     return data
 
 
@@ -140,6 +139,7 @@ POST_RECEIVE_STRATEGIES = {
 
 # ---------------------------------------------------------------------------
 # Execution
+
 
 async def execute_routing(
     routing: Routing,
@@ -164,10 +164,7 @@ async def execute_routing(
 
     kwargs: Dict[str, Any] = {"headers": headers, "params": qs}
     if req.body is not None:
-        body_resolved = (
-            _resolve_dict(req.body, env) if isinstance(req.body, dict) else
-            _resolve_template(req.body, env)
-        )
+        body_resolved = _resolve_dict(req.body, env) if isinstance(req.body, dict) else _resolve_template(req.body, env)
         if req.body_encoding == "form":
             kwargs["data"] = body_resolved
         else:

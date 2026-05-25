@@ -50,9 +50,7 @@ def fake_ws():
 @pytest.fixture
 def patched_container(monkeypatch, auth_service):
     """Wire the real auth_service fixture into the container singleton."""
-    monkeypatch.setattr(
-        ws_module.container, "auth_service", lambda: auth_service
-    )
+    monkeypatch.setattr(ws_module.container, "auth_service", lambda: auth_service)
 
     # ai_service.fetch_models is called by handle_validate_api_key for LLM providers.
     fake_ai = MagicMock()
@@ -93,9 +91,7 @@ async def _call(handler, data, ws):
 
 class TestValidateApiKey:
     @patch("services.ai.PROVIDER_CONFIGS", {"openai": object()})
-    async def test_validate_stores_key_with_models(
-        self, patched_container, fake_ws
-    ):
+    async def test_validate_stores_key_with_models(self, patched_container, fake_ws):
         result = await _call(
             ws_module.handle_validate_api_key,
             {"provider": "OpenAI", "api_key": "  sk-foo  "},
@@ -117,9 +113,7 @@ class TestValidateApiKey:
         # Broadcaster notified with hasKey + models
         patched_container.broadcaster.update_api_key_status.assert_awaited_once()
 
-    async def test_validate_unknown_provider_returns_error(
-        self, patched_container, fake_ws
-    ):
+    async def test_validate_unknown_provider_returns_error(self, patched_container, fake_ws):
         # ``handle_validate_api_key`` dispatches via
         # ``CREDENTIAL_REGISTRY``; a provider without a registered
         # ``Credential`` subclass is an explicit error (no fall-through
@@ -136,37 +130,23 @@ class TestValidateApiKey:
         assert "anonymous_provider" in result["error"]
         patched_container.ai.fetch_models.assert_not_called()
 
-    async def test_missing_required_fields_returns_error(
-        self, patched_container, fake_ws
-    ):
-        result = await _call(
-            ws_module.handle_validate_api_key, {"provider": "openai"}, fake_ws
-        )
+    async def test_missing_required_fields_returns_error(self, patched_container, fake_ws):
+        result = await _call(ws_module.handle_validate_api_key, {"provider": "openai"}, fake_ws)
         assert result["success"] is False
         assert "api_key" in result["error"]
 
 
 class TestGetStoredApiKey:
-    async def test_returns_has_key_false_when_absent(
-        self, patched_container, fake_ws
-    ):
-        result = await _call(
-            ws_module.handle_get_stored_api_key, {"provider": "openai"}, fake_ws
-        )
+    async def test_returns_has_key_false_when_absent(self, patched_container, fake_ws):
+        result = await _call(ws_module.handle_get_stored_api_key, {"provider": "openai"}, fake_ws)
         assert result["success"] is True
         assert result["hasKey"] is False
         assert "apiKey" not in result
 
-    async def test_returns_key_and_models_when_present(
-        self, patched_container, fake_ws
-    ):
-        await patched_container.auth.store_api_key(
-            "openai", "sk-stored", models=["gpt-4", "gpt-3.5"]
-        )
+    async def test_returns_key_and_models_when_present(self, patched_container, fake_ws):
+        await patched_container.auth.store_api_key("openai", "sk-stored", models=["gpt-4", "gpt-3.5"])
 
-        result = await _call(
-            ws_module.handle_get_stored_api_key, {"provider": "OpenAI"}, fake_ws
-        )
+        result = await _call(ws_module.handle_get_stored_api_key, {"provider": "OpenAI"}, fake_ws)
 
         assert result["hasKey"] is True
         assert result["apiKey"] == "sk-stored"
@@ -175,9 +155,7 @@ class TestGetStoredApiKey:
 
 
 class TestSaveApiKey:
-    async def test_save_persists_without_validation(
-        self, patched_container, fake_ws
-    ):
+    async def test_save_persists_without_validation(self, patched_container, fake_ws):
         result = await _call(
             ws_module.handle_save_api_key,
             {
@@ -195,25 +173,19 @@ class TestSaveApiKey:
         stored = await patched_container.auth.get_api_key("telegram")
         assert stored == "123:abc"
 
-    async def test_save_strips_whitespace_and_lowercases_provider(
-        self, patched_container, fake_ws
-    ):
+    async def test_save_strips_whitespace_and_lowercases_provider(self, patched_container, fake_ws):
         await _call(
             ws_module.handle_save_api_key,
             {"provider": "ANTHROPIC", "api_key": "  sk-ant-foo \n"},
             fake_ws,
         )
-        assert (
-            await patched_container.auth.get_api_key("anthropic") == "sk-ant-foo"
-        )
+        assert await patched_container.auth.get_api_key("anthropic") == "sk-ant-foo"
 
 
 class TestDeleteApiKey:
     async def test_delete_removes_stored_key(self, patched_container, fake_ws):
         await patched_container.auth.store_api_key("openai", "sk-x", models=[])
-        result = await _call(
-            ws_module.handle_delete_api_key, {"provider": "openai"}, fake_ws
-        )
+        result = await _call(ws_module.handle_delete_api_key, {"provider": "openai"}, fake_ws)
         assert result["success"] is True
         assert await patched_container.auth.get_api_key("openai") is None
 
@@ -230,20 +202,16 @@ class TestTwitterOAuthHandlers:
 
     async def test_login_fails_without_client_id(self, patched_container, fake_ws):
         from nodes.twitter._handlers import handle_twitter_oauth_login
+
         result = await _call(handle_twitter_oauth_login, {}, fake_ws)
         assert result["success"] is False
         assert "Client ID" in result["error"]
 
-    async def test_login_returns_authorization_url(
-        self, patched_container, fake_ws
-    ):
+    async def test_login_returns_authorization_url(self, patched_container, fake_ws):
         from nodes.twitter._handlers import handle_twitter_oauth_login
-        await patched_container.auth.store_api_key(
-            "twitter_client_id", "ci-test", models=[]
-        )
-        await patched_container.auth.store_api_key(
-            "twitter_client_secret", "cs-test", models=[]
-        )
+
+        await patched_container.auth.store_api_key("twitter_client_id", "ci-test", models=[])
+        await patched_container.auth.store_api_key("twitter_client_secret", "cs-test", models=[])
 
         result = await _call(handle_twitter_oauth_login, {}, fake_ws)
 
@@ -253,15 +221,15 @@ class TestTwitterOAuthHandlers:
 
     async def test_status_when_disconnected(self, patched_container, fake_ws):
         from nodes.twitter._handlers import handle_twitter_oauth_status
+
         result = await _call(handle_twitter_oauth_status, {}, fake_ws)
         assert result["connected"] is False
         assert result["username"] is None
 
     async def test_logout_clears_oauth_tokens(self, patched_container, fake_ws):
         from nodes.twitter._handlers import handle_twitter_logout
-        await patched_container.auth.store_oauth_tokens(
-            "twitter", "access", "refresh"
-        )
+
+        await patched_container.auth.store_oauth_tokens("twitter", "access", "refresh")
         with patch(
             "nodes.twitter._oauth.TwitterOAuth.revoke_token",
             new=AsyncMock(return_value={"success": True}),
@@ -278,24 +246,18 @@ class TestGoogleOAuthHandlers:
     # the plugin folder; the dispatch contract is exercised by
     # ``test_plugin_self_containment.py``.
 
-    async def test_login_fails_without_client_credentials(
-        self, patched_container, fake_ws
-    ):
+    async def test_login_fails_without_client_credentials(self, patched_container, fake_ws):
         from nodes.google._handlers import handle_google_oauth_login
+
         result = await _call(handle_google_oauth_login, {}, fake_ws)
         assert result["success"] is False
         assert "Client ID" in result["error"]
 
-    async def test_login_returns_authorization_url(
-        self, patched_container, fake_ws
-    ):
+    async def test_login_returns_authorization_url(self, patched_container, fake_ws):
         from nodes.google._handlers import handle_google_oauth_login
-        await patched_container.auth.store_api_key(
-            "google_client_id", "ci.apps.googleusercontent.com", models=[]
-        )
-        await patched_container.auth.store_api_key(
-            "google_client_secret", "cs-test", models=[]
-        )
+
+        await patched_container.auth.store_api_key("google_client_id", "ci.apps.googleusercontent.com", models=[])
+        await patched_container.auth.store_api_key("google_client_secret", "cs-test", models=[])
 
         result = await _call(handle_google_oauth_login, {}, fake_ws)
 
@@ -306,15 +268,15 @@ class TestGoogleOAuthHandlers:
 
     async def test_status_when_disconnected(self, patched_container, fake_ws):
         from nodes.google._handlers import handle_google_oauth_status
+
         result = await _call(handle_google_oauth_status, {}, fake_ws)
         assert result["connected"] is False
         assert result["email"] is None
 
     async def test_logout_removes_oauth_tokens(self, patched_container, fake_ws):
         from nodes.google._handlers import handle_google_logout
-        await patched_container.auth.store_oauth_tokens(
-            "google", "access", "refresh", email="user@example.com"
-        )
+
+        await patched_container.auth.store_oauth_tokens("google", "access", "refresh", email="user@example.com")
         result = await _call(handle_google_logout, {}, fake_ws)
         assert result["success"] is True
         assert await patched_container.auth.get_oauth_tokens("google") is None

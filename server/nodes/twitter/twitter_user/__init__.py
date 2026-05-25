@@ -33,13 +33,21 @@ class TwitterUserParams(BaseModel):
         default="",
         description="Twitter user ID (numeric)",
         json_schema_extra={
-            "displayOptions": {"show": {"operation": [
-                "by_id", "followers", "following",
-            ]}},
+            "displayOptions": {
+                "show": {
+                    "operation": [
+                        "by_id",
+                        "followers",
+                        "following",
+                    ]
+                }
+            },
         },
     )
     max_results: int = Field(
-        default=100, ge=1, le=1000,
+        default=100,
+        ge=1,
+        le=1000,
         description="Number of users to return (1-1000)",
         json_schema_extra={
             "displayOptions": {"show": {"operation": ["followers", "following"]}},
@@ -60,24 +68,29 @@ class TwitterUserOutput(BaseModel):
 
 def _sync_followers(client, user_id, max_results):
     for page in client.users.get_followers(
-        user_id, max_results=max_results, user_fields=["created_at"],
+        user_id,
+        max_results=max_results,
+        user_fields=["created_at"],
     ):
-        return list(getattr(page, 'data', []) or [])
+        return list(getattr(page, "data", []) or [])
     return []
 
 
 def _sync_following(client, user_id, max_results):
     for page in client.users.get_following(
-        user_id, max_results=max_results, user_fields=["created_at"],
+        user_id,
+        max_results=max_results,
+        user_fields=["created_at"],
     ):
-        return list(getattr(page, 'data', []) or [])
+        return list(getattr(page, "data", []) or [])
     return []
 
 
 async def _do_lookup(client, op: str, p: dict, node_id: str, ctx_raw: dict) -> TwitterUserOutput:
     if op == "me":
         result = await asyncio.to_thread(
-            client.users.get_me, user_fields=["created_at", "description"],
+            client.users.get_me,
+            user_fields=["created_at", "description"],
         )
         await track_twitter_usage(node_id, "me", 1, ctx_raw)
         return TwitterUserOutput(operation="me", user=format_user(result.data))
@@ -87,10 +100,11 @@ async def _do_lookup(client, op: str, p: dict, node_id: str, ctx_raw: dict) -> T
         if not username:
             raise RuntimeError("Username is required")
         result = await asyncio.to_thread(
-            client.users.get_by_usernames, usernames=[username],
+            client.users.get_by_usernames,
+            usernames=[username],
             user_fields=["description", "created_at"],
         )
-        users = getattr(result, 'data', []) or []
+        users = getattr(result, "data", []) or []
         if not users:
             raise RuntimeError(f"User @{username} not found")
         await track_twitter_usage(node_id, "by_username", 1, ctx_raw)
@@ -101,10 +115,11 @@ async def _do_lookup(client, op: str, p: dict, node_id: str, ctx_raw: dict) -> T
         if not user_id:
             raise RuntimeError("User ID is required")
         result = await asyncio.to_thread(
-            client.users.get_by_ids, ids=[user_id],
+            client.users.get_by_ids,
+            ids=[user_id],
             user_fields=["description", "created_at"],
         )
-        users = getattr(result, 'data', []) or []
+        users = getattr(result, "data", []) or []
         if not users:
             raise RuntimeError(f"User ID {user_id} not found")
         await track_twitter_usage(node_id, "by_id", 1, ctx_raw)
@@ -133,10 +148,8 @@ class TwitterUserNode(ActionNode):
     tool_name = "twitter_user"
     tool_description = "Look up Twitter/X user profiles with description and created_at. Operations: me (authenticated user), by_username, by_id, followers (max_results 1-1000), following (max_results 1-1000)."
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
     annotations = {"destructive": False, "readonly": True, "open_world": True}
     credentials = (TwitterCredential,)

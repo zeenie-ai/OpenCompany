@@ -71,10 +71,7 @@ def register_provider(
     """
     existing = _PROVIDER_REGISTRY.get(name)
     if existing is not None and existing is not provider_factory:
-        raise ValueError(
-            f"CLI provider {name!r} already registered with {existing!r}; "
-            f"refusing to overwrite with {provider_factory!r}"
-        )
+        raise ValueError(f"CLI provider {name!r} already registered with {existing!r}; " f"refusing to overwrite with {provider_factory!r}")
     _PROVIDER_REGISTRY[name] = provider_factory
     logger.debug("[cli_agent] registered provider %r -> %r", name, provider_factory)
 
@@ -101,15 +98,11 @@ def create_cli_provider(name: str) -> AICliProvider:
     # implementation is in flight. Surface a clean ``NotImplementedError``
     # so factory consumers can detect the deferred state.
     if name == "gemini":
-        raise NotImplementedError(
-            "gemini provider deferred to v2. Use 'claude' or 'codex' in v1."
-        )
+        raise NotImplementedError("gemini provider deferred to v2. Use 'claude' or 'codex' in v1.")
 
     registered = sorted(_PROVIDER_REGISTRY.keys())
     raise ValueError(
-        f"Unknown CLI provider: {name!r}. "
-        f"Registered: {registered}. "
-        f"Did the plugin's ``__init__.py`` call register_provider()?"
+        f"Unknown CLI provider: {name!r}. " f"Registered: {registered}. " f"Did the plugin's ``__init__.py`` call register_provider()?"
     )
 
 
@@ -126,6 +119,7 @@ def registered_provider_names() -> frozenset[str]:
 # ---------------------------------------------------------------------------
 # Session-pool registry — paired with provider registry above
 # ---------------------------------------------------------------------------
+
 
 def register_session_pool(
     provider_name: str,
@@ -144,13 +138,13 @@ def register_session_pool(
     existing = _POOL_REGISTRY.get(provider_name)
     if existing is not None and existing is not pool_getter:
         raise ValueError(
-            f"Session pool for {provider_name!r} already registered "
-            f"({existing!r}); refusing to overwrite with {pool_getter!r}"
+            f"Session pool for {provider_name!r} already registered " f"({existing!r}); refusing to overwrite with {pool_getter!r}"
         )
     _POOL_REGISTRY[provider_name] = pool_getter
     logger.debug(
         "[cli_agent] registered session pool %r -> %r",
-        provider_name, pool_getter,
+        provider_name,
+        pool_getter,
     )
 
 
@@ -170,6 +164,7 @@ def get_session_pool(provider_name: str) -> Optional[Any]:
 # Skill-materialiser registry
 # ---------------------------------------------------------------------------
 
+
 def register_skill_materialiser(
     provider_name: str,
     materialiser: Callable[..., Any],
@@ -184,13 +179,13 @@ def register_skill_materialiser(
     existing = _SKILL_MATERIALISER_REGISTRY.get(provider_name)
     if existing is not None and existing is not materialiser:
         raise ValueError(
-            f"Skill materialiser for {provider_name!r} already registered "
-            f"({existing!r}); refusing to overwrite with {materialiser!r}"
+            f"Skill materialiser for {provider_name!r} already registered " f"({existing!r}); refusing to overwrite with {materialiser!r}"
         )
     _SKILL_MATERIALISER_REGISTRY[provider_name] = materialiser
     logger.debug(
         "[cli_agent] registered skill materialiser %r -> %r",
-        provider_name, materialiser,
+        provider_name,
+        materialiser,
     )
 
 

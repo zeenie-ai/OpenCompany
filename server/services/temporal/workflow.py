@@ -48,25 +48,28 @@ SKILL_NODE_TYPES = {
 # state (RLM REPL / Claude CLI --resume with stable cwd) requires
 # single-process continuity and breaks across activity boundaries. They
 # continue via F4.A per-type activities.
-AGENT_WORKFLOW_TYPES = frozenset([
-    "aiAgent",
-    "chatAgent",
-    # Specialized agents (12)
-    "android_agent",
-    "coding_agent",
-    "web_agent",
-    "task_agent",
-    "social_agent",
-    "travel_agent",
-    "tool_agent",
-    "productivity_agent",
-    "payments_agent",
-    "consumer_agent",
-    "autonomous_agent",
-    # Team leads (2)
-    "orchestrator_agent",
-    "ai_employee",
-])
+AGENT_WORKFLOW_TYPES = frozenset(
+    [
+        "aiAgent",
+        "chatAgent",
+        # Specialized agents (12)
+        "android_agent",
+        "coding_agent",
+        "web_agent",
+        "task_agent",
+        "social_agent",
+        "travel_agent",
+        "tool_agent",
+        "productivity_agent",
+        "payments_agent",
+        "consumer_agent",
+        "autonomous_agent",
+        # Team leads (2)
+        "orchestrator_agent",
+        "ai_employee",
+    ]
+)
+
 
 @workflow.defn(sandboxed=False)
 class MachinaWorkflow:
@@ -109,21 +112,15 @@ class MachinaWorkflow:
         """
         event_id = event_payload.get("id")
         if not event_id:
-            workflow.logger.warning(
-                "on_event: skipping malformed envelope without 'id'"
-            )
+            workflow.logger.warning("on_event: skipping malformed envelope without 'id'")
             return
         if event_id in self._seen_event_ids:
-            workflow.logger.debug(
-                f"on_event: dedup hit for event.id={event_id}"
-            )
+            workflow.logger.debug(f"on_event: dedup hit for event.id={event_id}")
             return
         self._seen_event_ids.add(event_id)
         self._matched_events.append(event_payload)
         workflow.logger.info(
-            f"on_event: queued event.id={event_id} "
-            f"type={event_payload.get('type', '?')} "
-            f"(matched={len(self._matched_events)})"
+            f"on_event: queued event.id={event_id} " f"type={event_payload.get('type', '?')} " f"(matched={len(self._matched_events)})"
         )
 
     def _has_event_matching(self, predicate=None) -> bool:
@@ -196,9 +193,7 @@ class MachinaWorkflow:
         workflow_id = workflow_data.get("workflow_id")
         tenant_id = workflow_data.get("tenant_id")
 
-        workflow.logger.info(
-            f"Starting workflow orchestration: {len(nodes)} nodes, {len(edges)} edges"
-        )
+        workflow.logger.info(f"Starting workflow orchestration: {len(nodes)} nodes, {len(edges)} edges")
 
         if not nodes:
             return {
@@ -212,8 +207,7 @@ class MachinaWorkflow:
         exec_nodes, exec_edges = self._filter_executable_graph(nodes, edges)
 
         workflow.logger.info(
-            f"After filtering: {len(exec_nodes)} executable nodes "
-            f"(filtered {len(nodes) - len(exec_nodes)} config nodes)"
+            f"After filtering: {len(exec_nodes)} executable nodes " f"(filtered {len(nodes) - len(exec_nodes)} config nodes)"
         )
 
         # 2. Build dependency maps
@@ -289,9 +283,7 @@ class MachinaWorkflow:
                 # Trigger nodes are event listeners - scheduling them as activities
                 # would block indefinitely waiting for external events.
                 if node_type in TRIGGER_NODE_TYPES and not node.get("_pre_executed"):
-                    workflow.logger.warning(
-                        f"Skipping non-pre-executed trigger: {node_id} ({node_type})"
-                    )
+                    workflow.logger.warning(f"Skipping non-pre-executed trigger: {node_id} ({node_type})")
                     outputs[node_id] = {
                         "success": True,
                         "result": {"not_triggered": True},
@@ -338,10 +330,7 @@ class MachinaWorkflow:
                         run_timeout=timedelta(hours=1),
                     )
                     running[node_id] = handle
-                    workflow.logger.info(
-                        f"Scheduled child workflow for node: {node_id} "
-                        f"(workflow={dispatch['name']})"
-                    )
+                    workflow.logger.info(f"Scheduled child workflow for node: {node_id} " f"(workflow={dispatch['name']})")
                 else:
                     # F4.A activity path: per-type when the plugin class is
                     # registered AND the per-type flag is on; legacy
@@ -390,10 +379,7 @@ class MachinaWorkflow:
         # Build final result
         success = len(errors) == 0 and len(completed) == len(node_map)
 
-        workflow.logger.info(
-            f"Workflow complete: success={success}, "
-            f"executed={len(execution_trace)}/{len(node_map)}"
-        )
+        workflow.logger.info(f"Workflow complete: success={success}, " f"executed={len(execution_trace)}/{len(node_map)}")
 
         return {
             "success": success,
@@ -432,10 +418,7 @@ class MachinaWorkflow:
         from core.config import Settings
 
         settings = Settings()
-        if (
-            getattr(settings, "temporal_agent_workflow_enabled", False)
-            and node_type in AGENT_WORKFLOW_TYPES
-        ):
+        if getattr(settings, "temporal_agent_workflow_enabled", False) and node_type in AGENT_WORKFLOW_TYPES:
             return {"kind": "child_workflow", "name": "AgentWorkflow"}
 
         name, queue = self._resolve_activity(node_type)
@@ -499,9 +482,7 @@ class MachinaWorkflow:
         [h for _, h in items]
 
         # Use asyncio.wait pattern via workflow.wait
-        await workflow.wait_condition(
-            lambda: any(h.done() for _, h in items)
-        )
+        await workflow.wait_condition(lambda: any(h.done() for _, h in items))
 
         # Find the completed one
         for node_id, handle in items:
@@ -552,10 +533,9 @@ class MachinaWorkflow:
         # Filter nodes and edges
         exec_nodes = [n for n in nodes if n["id"] not in config_ids]
         exec_edges = [
-            e for e in edges
-            if e.get("source") not in config_ids
-            and e.get("target") not in config_ids
-            and e.get("targetHandle", "") not in CONFIG_HANDLES
+            e
+            for e in edges
+            if e.get("source") not in config_ids and e.get("target") not in config_ids and e.get("targetHandle", "") not in CONFIG_HANDLES
         ]
 
         return exec_nodes, exec_edges

@@ -114,6 +114,7 @@ class WorkflowService:
         """Get or create DeploymentManager."""
         if self._deployment_manager is None:
             from services.status_broadcaster import get_status_broadcaster
+
             self._broadcaster = get_status_broadcaster()
             self._deployment_manager = DeploymentManager(
                 database=self.database,
@@ -260,10 +261,12 @@ class WorkflowService:
         else:
             chosen = "sequential"
         logger.info(
-            "[execute_workflow] routing decision: %s "
-            "(temporal_enabled=%s, executor_wired=%s, parallel=%s, redis=%s)",
-            chosen, use_temporal, executor_wired,
-            use_parallel, self.settings.redis_enabled,
+            "[execute_workflow] routing decision: %s " "(temporal_enabled=%s, executor_wired=%s, parallel=%s, redis=%s)",
+            chosen,
+            use_temporal,
+            executor_wired,
+            use_parallel,
+            self.settings.redis_enabled,
             extra={"workflow_id": workflow_id},
         )
 
@@ -370,16 +373,16 @@ class WorkflowService:
         executed = []
 
         for node in execution_order:
-            node_id = node['id']
-            node_type = node.get('type', 'unknown')
+            node_id = node["id"]
+            node_type = node.get("type", "unknown")
 
             # Skip pre-executed trigger nodes
-            if node.get('_pre_executed'):
+            if node.get("_pre_executed"):
                 executed.append(node_id)
                 continue
 
             # Skip disabled nodes (n8n-style disable)
-            if node.get('data', {}).get('disabled'):
+            if node.get("data", {}).get("disabled"):
                 logger.debug(f"Skipping disabled node: {node_id}")
                 executed.append(node_id)
                 if status_callback:
@@ -469,12 +472,14 @@ class WorkflowService:
         if workflow_id:
             try:
                 from services.cli_agent.service import get_ai_cli_service
+
                 cli_svc = get_ai_cli_service()
                 cancelled = await cli_svc.cancel_workflow(workflow_id)
                 if cancelled:
                     logger.info(
                         "[workflow] cancelled %d CLI agent session(s) for workflow %s",
-                        cancelled, workflow_id,
+                        cancelled,
+                        workflow_id,
                     )
             except Exception as exc:
                 logger.debug("[workflow] CLI agent cancel: %s", exc)
@@ -527,7 +532,9 @@ class WorkflowService:
         # ops that are individually atomic and together race-free since
         # there is no await between them.
         self._outputs.setdefault(key, {})[output_name] = data
-        logger.debug(f"[store_node_output] Stored in memory: key={key}, output_name={output_name}, _outputs keys={list(self._outputs.keys())}")
+        logger.debug(
+            f"[store_node_output] Stored in memory: key={key}, output_name={output_name}, _outputs keys={list(self._outputs.keys())}"
+        )
         await self.database.save_node_output(node_id, session_id, output_name, data)
 
     async def get_node_output(
@@ -555,12 +562,13 @@ class WorkflowService:
                 output = self._outputs[key][output_name]
 
         # Special handling for start nodes
-        if output is None and node_id.startswith('start-'):
+        if output is None and node_id.startswith("start-"):
             import json
+
             params = await self.database.get_node_parameters(node_id)
-            if params and 'initial_data' in params:
+            if params and "initial_data" in params:
                 try:
-                    output = json.loads(params.get('initial_data', '{}'))
+                    output = json.loads(params.get("initial_data", "{}"))
                 except Exception:
                     output = {}
 
@@ -593,13 +601,13 @@ class WorkflowService:
         """Find workflow entry point."""
         # Priority: start > cronScheduler > other triggers
         for node in nodes:
-            if node.get('type') == 'start':
+            if node.get("type") == "start":
                 return node
         for node in nodes:
-            if node.get('type') == 'cronScheduler':
+            if node.get("type") == "cronScheduler":
                 return node
         for node in nodes:
-            if node.get('type') in WORKFLOW_TRIGGER_TYPES:
+            if node.get("type") in WORKFLOW_TRIGGER_TYPES:
                 return node
         return None
 
@@ -607,16 +615,16 @@ class WorkflowService:
         """Build BFS execution order from start node."""
         visited = set()
         order = []
-        queue = [start['id']]
+        queue = [start["id"]]
 
         # Build adjacency map
         adj = {}
         for e in edges:
-            src = e.get('source')
+            src = e.get("source")
             if src:
-                adj.setdefault(src, []).append(e.get('target'))
+                adj.setdefault(src, []).append(e.get("target"))
 
-        node_map = {n['id']: n for n in nodes}
+        node_map = {n["id"]: n for n in nodes}
 
         while queue:
             nid = queue.pop(0)

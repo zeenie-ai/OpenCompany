@@ -26,6 +26,7 @@ from cli.platform_ import (
     IS_WINDOWS,
     IS_WSL,
     platform_name,
+    server_dir,
     server_venv,
     static_client_script,
 )
@@ -44,32 +45,53 @@ def _sqlalchemy_preflight(root: Path) -> None:
     clear remediation message instead of letting uvicorn hang silently.
     See ``docs-internal/errors.md`` #1 / #1a.
 
-    Runs the probe inside the workspace ``.venv`` through ``uv run``
-    (via :func:`cli.run.uv_run`) -- same environment the supervised
-    services will use, no path-to-interpreter logic on this side.
+    Runs the probe inside the server ``.venv`` through ``uv run`` with
+    ``cwd=server/`` so uv discovers ``server/pyproject.toml`` (the only
+    place uv-managed Python deps live -- root ``pyproject.toml`` is the
+    standalone CLI package). Same environment the supervised services
+    will use, no path-to-interpreter logic on this side.
     """
     started = time.monotonic()
     try:
         subprocess.run(
             uv_run("python", "-c", "import sqlalchemy"),
-            cwd=str(root),
+            cwd=str(server_dir(root)),
             timeout=15,
             check=True,
             capture_output=True,
         )
-    except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc:
         elapsed = time.monotonic() - started
+        stderr_tail = ""
+        if isinstance(exc, subprocess.CalledProcessError) and exc.stderr:
+            stderr_bytes = (
+                exc.stderr if isinstance(exc.stderr, bytes) else exc.stderr.encode()
+            )
+            stderr_tail = stderr_bytes.decode(errors="replace").strip()
+        details: list[str] = ["sqlalchemy import hung or crashed."]
+        if stderr_tail:
+            details.append(f"subprocess stderr: {stderr_tail}")
+        if IS_WINDOWS:
+            details.extend(
+                [
+                    "Likely cause on Windows: Defender scan cache or stale kernel state.",
+                    "Fix options:",
+                    "  1. Restart-Service WinDefend  (admin PowerShell)",
+                    "  2. Reboot the machine",
+                    f"  3. Add {server_venv(root)} to Defender exclusions",
+                ]
+            )
+        else:
+            details.extend(
+                [
+                    f"Check that {server_venv(root)} exists and is populated.",
+                    "Run `machina build` to recreate the server venv.",
+                ]
+            )
+        details.append("See docs-internal/errors.md #1 / #1a for details.")
         error_block(
             f"Python venv health check failed ({elapsed:.1f}s).",
-            [
-                "sqlalchemy import hung or crashed.",
-                "Likely cause: Windows Defender scan cache or stale kernel state.",
-                "Fix options:",
-                "  1. Restart-Service WinDefend  (admin PowerShell)",
-                "  2. Reboot the machine",
-                f"  3. Add {server_venv(root)} to Defender exclusions",
-                "See docs-internal/errors.md #1 / #1a for details.",
-            ],
+            details,
         )
         raise typer.Exit(code=1)
     elapsed = time.monotonic() - started
@@ -87,6 +109,7 @@ def _temporal_running(cfg) -> bool:
     own binary via pooch at first boot of the supervised
     ``TemporalServerRuntime``)."""
     from cli.tcp import probe_tcp_port_sync
+
     return probe_tcp_port_sync(cfg.temporal_port)
 
 

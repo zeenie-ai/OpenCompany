@@ -39,9 +39,7 @@ class TestBaseNodeDeclaration:
 
     def test_version_is_positive_int(self):
         for cls in _all_plugin_classes():
-            assert isinstance(cls.version, int) and cls.version >= 1, (
-                f"{cls.__qualname__} version must be a positive int"
-            )
+            assert isinstance(cls.version, int) and cls.version >= 1, f"{cls.__qualname__} version must be a positive int"
 
 
 class TestParamsAndOutput:
@@ -49,15 +47,11 @@ class TestParamsAndOutput:
 
     def test_params_is_basemodel(self):
         for cls in _all_plugin_classes():
-            assert issubclass(cls.Params, BaseModel), (
-                f"{cls.__qualname__}.Params must be a Pydantic BaseModel"
-            )
+            assert issubclass(cls.Params, BaseModel), f"{cls.__qualname__}.Params must be a Pydantic BaseModel"
 
     def test_output_is_basemodel(self):
         for cls in _all_plugin_classes():
-            assert issubclass(cls.Output, BaseModel), (
-                f"{cls.__qualname__}.Output must be a Pydantic BaseModel"
-            )
+            assert issubclass(cls.Output, BaseModel), f"{cls.__qualname__}.Output must be a Pydantic BaseModel"
 
 
 class TestCredentials:
@@ -68,12 +62,8 @@ class TestCredentials:
 
         for cls in _all_plugin_classes():
             for cred in cls.credentials:
-                assert issubclass(cred, Credential), (
-                    f"{cls.__qualname__}.credentials must be Credential subclasses"
-                )
-                assert cred.id in CREDENTIAL_REGISTRY, (
-                    f"{cls.__qualname__} references unregistered credential '{cred.id}'"
-                )
+                assert issubclass(cred, Credential), f"{cls.__qualname__}.credentials must be Credential subclasses"
+                assert cred.id in CREDENTIAL_REGISTRY, f"{cls.__qualname__} references unregistered credential '{cred.id}'"
 
 
 class TestOperations:
@@ -86,25 +76,18 @@ class TestOperations:
             # Pure-display plugins (no handler) are allowed — skip those.
             if cls.Params.__name__ == "_EmptyParams" and cls.Output is _EmptyOutput:
                 continue
-            assert cls._operations, (
-                f"{cls.__qualname__} must declare at least one @Operation"
-            )
+            assert cls._operations, f"{cls.__qualname__} must declare at least one @Operation"
 
     def test_operation_names_unique(self):
         for cls in _all_plugin_classes():
             names = [spec.name for spec in cls._operations.values()]
-            assert len(names) == len(set(names)), (
-                f"{cls.__qualname__} has duplicate operation names: {names}"
-            )
+            assert len(names) == len(set(names)), f"{cls.__qualname__} has duplicate operation names: {names}"
 
     def test_routing_requires_credentials(self):
         for cls in _all_plugin_classes():
             for spec in cls._operations.values():
                 if spec.routing is not None:
-                    assert cls.credentials, (
-                        f"{cls.__qualname__}.{spec.name} uses routing but no "
-                        f"credentials declared"
-                    )
+                    assert cls.credentials, f"{cls.__qualname__}.{spec.name} uses routing but no " f"credentials declared"
 
 
 class TestScalingKnobs:
@@ -114,18 +97,13 @@ class TestScalingKnobs:
         from services.plugin.scaling import TaskQueue
 
         for cls in _all_plugin_classes():
-            assert cls.task_queue in TaskQueue.ALL, (
-                f"{cls.__qualname__}.task_queue={cls.task_queue!r} "
-                f"not in TaskQueue.ALL"
-            )
+            assert cls.task_queue in TaskQueue.ALL, f"{cls.__qualname__}.task_queue={cls.task_queue!r} " f"not in TaskQueue.ALL"
 
     def test_retry_policy_type(self):
         from services.plugin.scaling import RetryPolicy
 
         for cls in _all_plugin_classes():
-            assert isinstance(cls.retry_policy, RetryPolicy), (
-                f"{cls.__qualname__}.retry_policy must be a RetryPolicy"
-            )
+            assert isinstance(cls.retry_policy, RetryPolicy), f"{cls.__qualname__}.retry_policy must be a RetryPolicy"
 
 
 class TestStartToCloseTimeoutOverridesAreCommented:
@@ -181,9 +159,7 @@ class TestStartToCloseTimeoutOverridesAreCommented:
                 continue
             override_line = lines[override_idx]
             has_inline_comment = "#" in override_line.split("=", 1)[1]
-            has_preceding_comment = (
-                override_idx > 0 and lines[override_idx - 1].strip().startswith("#")
-            )
+            has_preceding_comment = override_idx > 0 and lines[override_idx - 1].strip().startswith("#")
             assert has_inline_comment or has_preceding_comment, (
                 f"{cls.__qualname__} overrides start_to_close_timeout away "
                 f"from the kind-base default but has no explanatory comment. "
@@ -203,10 +179,7 @@ class TestToolSchemaGeneration:
                 continue
             schema = cls.as_tool_schema()
             params = schema["parameters"]
-            assert "$defs" not in params, (
-                f"{cls.__qualname__} tool schema contains $defs — LLM "
-                "function-calling rejects $ref"
-            )
+            assert "$defs" not in params, f"{cls.__qualname__} tool schema contains $defs — LLM " "function-calling rejects $ref"
             assert "definitions" not in params
             assert schema.get("name") == cls.type
 
@@ -227,13 +200,8 @@ class TestToolSchemaFastPath:
             if not is_tool:
                 continue
             resolved = get_node_class(cls.type)
-            assert resolved is cls, (
-                f"{cls.__qualname__}: fast-path lookup by type '{cls.type}' "
-                f"returned {resolved}, expected {cls}"
-            )
-            assert hasattr(resolved, "Params"), (
-                f"{cls.__qualname__} has no Params — fast-path would miss it"
-            )
+            assert resolved is cls, f"{cls.__qualname__}: fast-path lookup by type '{cls.type}' " f"returned {resolved}, expected {cls}"
+            assert hasattr(resolved, "Params"), f"{cls.__qualname__} has no Params — fast-path would miss it"
 
 
 class TestTriggerRegistryAutoPopulate:
@@ -250,8 +218,7 @@ class TestTriggerRegistryAutoPopulate:
             if getattr(cls, "mode", "event") != "event":
                 continue
             assert cls.event_type, (
-                f"{cls.__qualname__} (TriggerNode, mode=event) is missing "
-                "event_type — event_waiter won't auto-populate for it"
+                f"{cls.__qualname__} (TriggerNode, mode=event) is missing " "event_type — event_waiter won't auto-populate for it"
             )
 
     def test_event_triggers_populate_registry(self):
@@ -264,7 +231,5 @@ class TestTriggerRegistryAutoPopulate:
             if getattr(cls, "mode", "event") != "event" or not cls.event_type:
                 continue
             cfg = event_waiter.get_trigger_config(cls.type)
-            assert cfg is not None, (
-                f"{cls.__qualname__}: get_trigger_config('{cls.type}') returned None"
-            )
+            assert cfg is not None, f"{cls.__qualname__}: get_trigger_config('{cls.type}') returned None"
             assert cfg.event_type == cls.event_type

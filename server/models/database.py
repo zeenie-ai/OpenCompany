@@ -15,12 +15,10 @@ class NodeParameter(SQLModel, table=True):
     node_id: str = Field(index=True, unique=True, max_length=255)
     parameters: Dict[str, Any] = Field(sa_column=Column(JSON))
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), onupdate=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), onupdate=func.now())
     )
 
 
@@ -34,12 +32,10 @@ class Workflow(SQLModel, table=True):
     description: Optional[str] = Field(default=None, max_length=1000)
     data: Dict[str, Any] = Field(sa_column=Column(JSON))
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), onupdate=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), onupdate=func.now())
     )
 
 
@@ -56,8 +52,7 @@ class Execution(SQLModel, table=True):
     error: Optional[str] = Field(default=None, max_length=2000)
     execution_time: Optional[float] = Field(default=None)
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
 
 
@@ -73,17 +68,12 @@ class APIKey(SQLModel, table=True):
     key_hash: str = Field(max_length=64, index=True)
     models: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     is_valid: bool = Field(default=True)
-    last_validated: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True))
-    )
+    last_validated: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True)))
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), onupdate=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), onupdate=func.now())
     )
 
 
@@ -96,8 +86,7 @@ class APIKeyValidation(SQLModel, table=True):
     key_hash: str = Field(unique=True, max_length=64, index=True)
     validated: bool = Field(default=True)
     timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
 
 
@@ -112,12 +101,10 @@ class NodeOutput(SQLModel, table=True):
     output_name: str = Field(default="output_0", max_length=100)
     data: Dict[str, Any] = Field(sa_column=Column(JSON))
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), onupdate=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), onupdate=func.now())
     )
 
 
@@ -131,8 +118,7 @@ class ConversationMessage(SQLModel, table=True):
     role: str = Field(max_length=20)  # 'human' or 'ai'
     content: str = Field(max_length=50000)  # Large content support
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
 
 
@@ -152,12 +138,10 @@ class ToolSchema(SQLModel, table=True):
     schema_config: Dict[str, Any] = Field(sa_column=Column(JSON))  # Schema fields and types
     connected_services: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))  # For toolkit nodes
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), onupdate=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), onupdate=func.now())
     )
 
 
@@ -175,8 +159,7 @@ class ChatMessage(SQLModel, table=True):
     role: str = Field(max_length=20)  # 'user' or 'assistant'
     message: str = Field(max_length=50000)  # Large content support
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
 
 
@@ -200,8 +183,7 @@ class ConsoleLog(SQLModel, table=True):
     source_node_type: Optional[str] = Field(default=None, max_length=100)
     source_node_label: Optional[str] = Field(default=None, max_length=255)
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
 
 
@@ -227,12 +209,10 @@ class UserSkill(SQLModel, table=True):
     is_active: bool = Field(default=True)  # Whether skill is available
     created_by: Optional[int] = Field(default=None)  # User ID who created it
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), onupdate=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), onupdate=func.now())
     )
 
 
@@ -259,14 +239,14 @@ class UserSettings(SQLModel, table=True):
     onboarding_step: int = Field(default=0)  # Last completed onboarding step (for resuming)
     default_llm_provider: Optional[str] = Field(default=None, max_length=50)  # Global default AI provider
     default_llm_model: Optional[str] = Field(default=None, max_length=200)  # Global default AI model
-    auto_add_skill_for_tools: bool = Field(default=True)  # When a tool node connects to an AI agent's input-tools, auto-enable the matching skill
+    auto_add_skill_for_tools: bool = Field(
+        default=True
+    )  # When a tool node connects to an AI agent's input-tools, auto-enable the matching skill
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), onupdate=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), onupdate=func.now())
     )
 
 
@@ -289,12 +269,10 @@ class ProviderDefaults(SQLModel, table=True):
     reasoning_effort: str = Field(default="medium", max_length=20)  # low, medium, high
     reasoning_format: str = Field(default="parsed", max_length=20)  # parsed, hidden
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), onupdate=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), onupdate=func.now())
     )
 
 
@@ -383,8 +361,7 @@ class APIUsageMetric(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
     session_id: str = Field(index=True, max_length=255)
     node_id: str = Field(max_length=255)
@@ -422,8 +399,7 @@ class AgentTeam(SQLModel, table=True):
     status: str = Field(default="active", max_length=20)  # active, completed, failed, dissolved
     config: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
     completed_at: Optional[datetime] = Field(default=None)
 
@@ -445,8 +421,7 @@ class TeamMember(SQLModel, table=True):
     status: str = Field(default="idle", max_length=20)  # idle, working, offline
     capabilities: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     joined_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
 
 
@@ -474,8 +449,7 @@ class TeamTask(SQLModel, table=True):
     max_retries: int = Field(default=3)
     progress: int = Field(default=0)  # 0-100 percentage
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
     started_at: Optional[datetime] = Field(default=None)
     completed_at: Optional[datetime] = Field(default=None)
@@ -498,8 +472,7 @@ class AgentMessage(SQLModel, table=True):
     extra_data: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     read: bool = Field(default=False)
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
 
 
@@ -521,12 +494,10 @@ class ProxyProviderConfig(SQLModel, table=True):
     gateway_port: int = Field(default=0)
     url_template: str = Field(default="{}", max_length=5000)  # JSON template config
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), onupdate=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), onupdate=func.now())
     )
 
 
@@ -545,8 +516,7 @@ class ProxyRoutingRule(SQLModel, table=True):
     required_country: str = Field(default="", max_length=10)
     session_type: str = Field(default="rotating", max_length=20)
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
 
 
@@ -574,10 +544,8 @@ class GoogleConnection(SQLModel, table=True):
     is_active: bool = Field(default=True)  # Whether connection is active
     last_used_at: Optional[datetime] = Field(default=None)  # Last API call timestamp
     connected_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), onupdate=func.now())
+        default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), onupdate=func.now())
     )

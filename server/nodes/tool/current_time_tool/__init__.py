@@ -33,10 +33,8 @@ class CurrentTimeToolNode(ToolNode):
     tool_name = "get_current_time"
     tool_description = "Get the current date and time. Optionally specify timezone."
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-tool", "kind": "output", "position": "top",
-         "label": "Tool", "role": "tools"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-tool", "kind": "output", "position": "top", "label": "Tool", "role": "tools"},
     )
     ui_hints = {"isToolPanel": True, "hideRunButton": True}
     annotations = {"destructive": False, "readonly": True, "open_world": False}
@@ -49,9 +47,11 @@ class CurrentTimeToolNode(ToolNode):
     async def now(self, ctx: NodeContext, params: CurrentTimeParams) -> CurrentTimeOutput:
         try:
             from zoneinfo import ZoneInfo
+
             tz = ZoneInfo(params.timezone)
         except Exception:
             from zoneinfo import ZoneInfo
+
             tz = ZoneInfo("UTC")
         now = datetime.now(tz)
         return CurrentTimeOutput(

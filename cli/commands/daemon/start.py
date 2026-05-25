@@ -30,10 +30,14 @@ def start_command() -> None:
 
     proc = subprocess.Popen(
         uv_run(
-            "uvicorn", "main:app",
-            "--host", "0.0.0.0",
-            "--port", str(backend_port),
-            "--log-level", "warning",
+            "uvicorn",
+            "main:app",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            str(backend_port),
+            "--log-level",
+            "warning",
         ),
         cwd=str(server_dir(root)),
         stdin=subprocess.DEVNULL,

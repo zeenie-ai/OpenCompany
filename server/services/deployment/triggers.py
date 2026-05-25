@@ -33,8 +33,7 @@ class TriggerManager:
     # CRON TRIGGERS
     # =========================================================================
 
-    def setup_cron(self, node_id: str, cron_expr: str, timezone: str,
-                   on_tick: Callable[[], None]) -> str:
+    def setup_cron(self, node_id: str, cron_expr: str, timezone: str, on_tick: Callable[[], None]) -> str:
         """Setup a cron trigger that calls on_tick on schedule."""
         job_id = f"cron_{node_id}"
 
@@ -43,12 +42,7 @@ class TriggerManager:
                 return
             on_tick()
 
-        cron_scheduler.register_cron_job(
-            job_id=job_id,
-            cron_expression=cron_expr,
-            callback=tick_callback,
-            timezone=timezone
-        )
+        cron_scheduler.register_cron_job(job_id=job_id, cron_expression=cron_expr, callback=tick_callback, timezone=timezone)
 
         self._active_cron_jobs[node_id] = job_id
         logger.info("Cron trigger setup", job_id=job_id, expr=cron_expr)
@@ -81,11 +75,15 @@ class TriggerManager:
     # EVENT TRIGGERS (Webhook, WhatsApp, etc.)
     # =========================================================================
 
-    async def setup_event_trigger(self, node_id: str, node_type: str,
-                                   parameters: Dict[str, Any],
-                                   on_event: Callable[[Dict], Any],
-                                   broadcaster: Any,
-                                   workflow_id: Optional[str] = None) -> None:
+    async def setup_event_trigger(
+        self,
+        node_id: str,
+        node_type: str,
+        parameters: Dict[str, Any],
+        on_event: Callable[[Dict], Any],
+        broadcaster: Any,
+        workflow_id: Optional[str] = None,
+    ) -> None:
         """Setup an event-based trigger with queue-based sequential processing.
 
         Args:
@@ -111,12 +109,12 @@ class TriggerManager:
                         msg = f"Waiting for {config.display_name}..."
                         if queue_size > 0:
                             msg = f"Waiting... ({queue_size} queued)"
-                        await broadcaster.update_node_status(node_id, "waiting", {
-                            "message": msg,
-                            "event_type": config.event_type,
-                            "waiter_id": waiter.id,
-                            "queue_size": queue_size
-                        }, workflow_id=workflow_id)
+                        await broadcaster.update_node_status(
+                            node_id,
+                            "waiting",
+                            {"message": msg, "event_type": config.event_type, "waiter_id": waiter.id, "queue_size": queue_size},
+                            workflow_id=workflow_id,
+                        )
 
                     event_data = await event_waiter.wait_for_event(waiter)
                     if self._is_running:
@@ -143,10 +141,9 @@ class TriggerManager:
                     config = event_waiter.get_trigger_config(node_type)
 
                     # Clear waiting indicator during execution
-                    await broadcaster.update_node_status(node_id, "idle", {
-                        "message": "Graph executing...",
-                        "is_processing": True
-                    }, workflow_id=workflow_id)
+                    await broadcaster.update_node_status(
+                        node_id, "idle", {"message": "Graph executing...", "is_processing": True}, workflow_id=workflow_id
+                    )
 
                     try:
                         await on_event(event_data)
@@ -159,11 +156,9 @@ class TriggerManager:
                     queue_size = event_queue.qsize()
                     name = config.display_name if config else node_type
                     msg = f"Waiting for {name}..." if queue_size == 0 else f"Processing next... ({queue_size} queued)"
-                    await broadcaster.update_node_status(node_id, "waiting", {
-                        "message": msg,
-                        "queue_size": queue_size,
-                        "is_processing": False
-                    }, workflow_id=workflow_id)
+                    await broadcaster.update_node_status(
+                        node_id, "waiting", {"message": msg, "queue_size": queue_size, "is_processing": False}, workflow_id=workflow_id
+                    )
 
                 except asyncio.CancelledError:
                     break
@@ -184,12 +179,16 @@ class TriggerManager:
         task = asyncio.create_task(combined())
         self._active_listeners[node_id] = task
 
-    async def setup_polling_trigger(self, node_id: str, node_type: str,
-                                     parameters: Dict[str, Any],
-                                     poll_coroutine: Callable,
-                                     on_event: Callable[[Dict], Any],
-                                     broadcaster: Any,
-                                     workflow_id: Optional[str] = None) -> None:
+    async def setup_polling_trigger(
+        self,
+        node_id: str,
+        node_type: str,
+        parameters: Dict[str, Any],
+        poll_coroutine: Callable,
+        on_event: Callable[[Dict], Any],
+        broadcaster: Any,
+        workflow_id: Optional[str] = None,
+    ) -> None:
         """Setup a polling-based trigger with queue-based sequential processing.
 
         Unlike event triggers that wait for externally dispatched events via
@@ -211,10 +210,9 @@ class TriggerManager:
         # Broadcast initial "waiting" status immediately
         config = event_waiter.get_trigger_config(node_type)
         display_name = config.display_name if config else node_type
-        await broadcaster.update_node_status(node_id, "waiting", {
-            "message": f"Waiting for {display_name} (polling)...",
-            "is_processing": False
-        }, workflow_id=workflow_id)
+        await broadcaster.update_node_status(
+            node_id, "waiting", {"message": f"Waiting for {display_name} (polling)...", "is_processing": False}, workflow_id=workflow_id
+        )
 
         async def poller():
             """Run the polling coroutine to collect events."""
@@ -238,10 +236,9 @@ class TriggerManager:
                     is_executing = True
                     config = event_waiter.get_trigger_config(node_type)
 
-                    await broadcaster.update_node_status(node_id, "idle", {
-                        "message": "Graph executing...",
-                        "is_processing": True
-                    }, workflow_id=workflow_id)
+                    await broadcaster.update_node_status(
+                        node_id, "idle", {"message": "Graph executing...", "is_processing": True}, workflow_id=workflow_id
+                    )
 
                     try:
                         await on_event(event_data)
@@ -253,11 +250,9 @@ class TriggerManager:
                     queue_size = event_queue.qsize()
                     name = config.display_name if config else node_type
                     msg = f"Waiting for {name} (polling)..." if queue_size == 0 else f"Processing next... ({queue_size} queued)"
-                    await broadcaster.update_node_status(node_id, "waiting", {
-                        "message": msg,
-                        "queue_size": queue_size,
-                        "is_processing": False
-                    }, workflow_id=workflow_id)
+                    await broadcaster.update_node_status(
+                        node_id, "waiting", {"message": msg, "queue_size": queue_size, "is_processing": False}, workflow_id=workflow_id
+                    )
 
                 except asyncio.CancelledError:
                     break
@@ -303,48 +298,48 @@ class TriggerManager:
     @staticmethod
     def build_cron_expression(parameters: Dict[str, Any]) -> Optional[str]:
         """Build cron expression from user-friendly parameters."""
-        frequency = parameters.get('frequency', 'minutes')
+        frequency = parameters.get("frequency", "minutes")
 
-        second, minute, hour = '0', '*/5', '*'
-        day, month, weekday = '*', '*', '*'
+        second, minute, hour = "0", "*/5", "*"
+        day, month, weekday = "*", "*", "*"
 
-        if frequency == 'seconds':
-            interval = str(parameters.get('interval', 30))
-            second, minute = f'*/{interval}', '*'
+        if frequency == "seconds":
+            interval = str(parameters.get("interval", 30))
+            second, minute = f"*/{interval}", "*"
 
-        elif frequency == 'minutes':
-            interval = str(parameters.get('interval_minutes', 5))
-            minute = f'*/{interval}' if interval != '1' else '*'
+        elif frequency == "minutes":
+            interval = str(parameters.get("interval_minutes", 5))
+            minute = f"*/{interval}" if interval != "1" else "*"
 
-        elif frequency == 'hours':
-            interval = str(parameters.get('interval_hours', 1))
-            minute = '0'
-            hour = f'*/{interval}' if interval != '1' else '*'
+        elif frequency == "hours":
+            interval = str(parameters.get("interval_hours", 1))
+            minute = "0"
+            hour = f"*/{interval}" if interval != "1" else "*"
 
-        elif frequency == 'days':
-            time_str = parameters.get('daily_time', '09:00')
-            parts = time_str.split(':')
-            hour = parts[0] if parts else '9'
-            minute = parts[1] if len(parts) > 1 else '0'
+        elif frequency == "days":
+            time_str = parameters.get("daily_time", "09:00")
+            parts = time_str.split(":")
+            hour = parts[0] if parts else "9"
+            minute = parts[1] if len(parts) > 1 else "0"
 
-        elif frequency == 'weeks':
-            time_str = parameters.get('weekly_time', '09:00')
-            parts = time_str.split(':')
-            hour = parts[0] if parts else '9'
-            minute = parts[1] if len(parts) > 1 else '0'
-            weekday = parameters.get('weekday', '1')
+        elif frequency == "weeks":
+            time_str = parameters.get("weekly_time", "09:00")
+            parts = time_str.split(":")
+            hour = parts[0] if parts else "9"
+            minute = parts[1] if len(parts) > 1 else "0"
+            weekday = parameters.get("weekday", "1")
 
-        elif frequency == 'months':
-            time_str = parameters.get('monthly_time', '09:00')
-            parts = time_str.split(':')
-            hour = parts[0] if parts else '9'
-            minute = parts[1] if len(parts) > 1 else '0'
-            day = parameters.get('month_day', '1')
+        elif frequency == "months":
+            time_str = parameters.get("monthly_time", "09:00")
+            parts = time_str.split(":")
+            hour = parts[0] if parts else "9"
+            minute = parts[1] if len(parts) > 1 else "0"
+            day = parameters.get("month_day", "1")
 
-        elif frequency == 'once':
+        elif frequency == "once":
             return None
 
-        return f'{second} {minute} {hour} {day} {month} {weekday}'
+        return f"{second} {minute} {hour} {day} {month} {weekday}"
 
     @staticmethod
     def find_trigger_nodes(nodes: list, edges: list) -> tuple:
@@ -355,16 +350,15 @@ class TriggerManager:
         after an AI agent). Each trigger listens for its event type and, when fired,
         executes its downstream subgraph independently.
         """
-        trigger_types_no_cron = WORKFLOW_TRIGGER_TYPES - {'cronScheduler'}
-        triggers = [n for n in nodes
-                   if n.get('type') in trigger_types_no_cron]
+        trigger_types_no_cron = WORKFLOW_TRIGGER_TYPES - {"cronScheduler"}
+        triggers = [n for n in nodes if n.get("type") in trigger_types_no_cron]
 
-        start_nodes = [n for n in triggers if n.get('type') == 'start']
-        event_triggers = [n for n in triggers if n.get('type') != 'start']
+        start_nodes = [n for n in triggers if n.get("type") == "start"]
+        event_triggers = [n for n in triggers if n.get("type") != "start"]
 
         return start_nodes, event_triggers
 
     @staticmethod
     def find_cron_nodes(nodes: list) -> list:
         """Find all cron scheduler nodes."""
-        return [n for n in nodes if n.get('type') == 'cronScheduler']
+        return [n for n in nodes if n.get("type") == "cronScheduler"]

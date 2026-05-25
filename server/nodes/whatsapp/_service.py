@@ -48,9 +48,9 @@ def extract_phone_from_jid(jid: str | None) -> str | None:
     if not jid:
         return None
     # Remove the @s.whatsapp.net or @c.us suffix
-    phone_part = jid.split('@')[0]
+    phone_part = jid.split("@")[0]
     # Handle device ID suffix like '1234567890:0'
-    phone = phone_part.split(':')[0]
+    phone = phone_part.split(":")[0]
     # Return only if it looks like a phone number (digits only)
     if phone.isdigit():
         return phone
@@ -85,18 +85,17 @@ class RPCClient:
         # The WebSocket handshake to the Go service can take 2-3s on Windows,
         # especially on cold start when Defender is scanning the binary.
         logger.info(f"[WhatsApp RPC] Connecting to {self.url}...")
-        self.ws = await asyncio.wait_for(
-            websockets.connect(self.url, ping_interval=30, max_size=100*1024*1024),
-            timeout=5.0
-        )
+        self.ws = await asyncio.wait_for(websockets.connect(self.url, ping_interval=30, max_size=100 * 1024 * 1024), timeout=5.0)
         self._connected = True
         logger.info("[WhatsApp RPC] WebSocket connected, starting receive loop")
         self._task = asyncio.create_task(self._recv())
 
     async def close(self):
         self._connected = False
-        if self._task: self._task.cancel()
-        if self.ws: await self.ws.close()
+        if self._task:
+            self._task.cancel()
+        if self.ws:
+            await self.ws.close()
 
     async def _recv(self):
         try:
@@ -286,6 +285,7 @@ class RPCClient:
         finally:
             self.pending.pop(req_id, None)
 
+
 _client: Optional[RPCClient] = None
 _lock = asyncio.Lock()
 _send_lock = asyncio.Lock()  # Serialize sends - Go service processes sequentially
@@ -310,6 +310,7 @@ async def get_client(force_reconnect: bool = False) -> RPCClient:
     # under <data_dir>/whatsapp/ instead of the pnpm package directory.
     # Idempotent: no-op if already running or disabled via settings.
     from nodes.whatsapp import get_whatsapp_runtime
+
     try:
         # `start()` is idempotent (BaseSupervisor takes a lock and no-ops
         # if already running) so calling it from every get_client() is safe.
@@ -352,6 +353,7 @@ async def get_client(force_reconnect: bool = False) -> RPCClient:
 # WebSocket Handlers - used by websocket.py
 # ============================================================================
 
+
 async def handle_whatsapp_status() -> dict:
     """Get WhatsApp connection status via direct RPC and broadcast to all clients."""
     try:
@@ -379,19 +381,13 @@ async def handle_whatsapp_status() -> dict:
             "connected": status_data.get("connected", False),
             "device_id": device_id,
             "connected_phone": connected_phone,
-            "timestamp": time.time()
+            "timestamp": time.time(),
         }
     except Exception as e:
         logger.error(f"WhatsApp status check failed: {e}")
         # Return error response immediately - don't broadcast here to avoid race conditions
         # The client will update its local state based on the error response
-        return {
-            "success": False,
-            "error": str(e),
-            "connected": False,
-            "running": False,
-            "timestamp": time.time()
-        }
+        return {"success": False, "error": str(e), "connected": False, "running": False, "timestamp": time.time()}
 
 
 async def handle_whatsapp_connected_phone() -> dict:
@@ -405,30 +401,15 @@ async def handle_whatsapp_connected_phone() -> dict:
         status_data = await client.call("status")
 
         if not status_data.get("connected"):
-            return {
-                "success": False,
-                "error": "WhatsApp not connected",
-                "connected_phone": None,
-                "timestamp": time.time()
-            }
+            return {"success": False, "error": "WhatsApp not connected", "connected_phone": None, "timestamp": time.time()}
 
         device_id = status_data.get("device_id")
         connected_phone = extract_phone_from_jid(device_id)
 
-        return {
-            "success": True,
-            "connected_phone": connected_phone,
-            "device_id": device_id,
-            "timestamp": time.time()
-        }
+        return {"success": True, "connected_phone": connected_phone, "device_id": device_id, "timestamp": time.time()}
     except Exception as e:
         logger.error(f"WhatsApp connected phone check failed: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "connected_phone": None,
-            "timestamp": time.time()
-        }
+        return {"success": False, "error": str(e), "connected_phone": None, "timestamp": time.time()}
 
 
 async def handle_whatsapp_qr() -> dict:
@@ -438,40 +419,17 @@ async def handle_whatsapp_qr() -> dict:
         status = await client.call("status")
 
         if status.get("connected") and status.get("has_session"):
-            return {
-                "success": True,
-                "connected": True,
-                "message": "Already connected with active session",
-                "timestamp": time.time()
-            }
+            return {"success": True, "connected": True, "message": "Already connected with active session", "timestamp": time.time()}
 
         try:
             result = await client.call("qr")
             code = result.get("code")
             if code:
                 qr_image = qr_code_to_base64(code)
-                return {
-                    "success": True,
-                    "connected": False,
-                    "qr": qr_image,
-                    "message": "QR code available",
-                    "timestamp": time.time()
-                }
-            return {
-                "success": True,
-                "connected": False,
-                "qr": None,
-                "message": "No QR code available",
-                "timestamp": time.time()
-            }
+                return {"success": True, "connected": False, "qr": qr_image, "message": "QR code available", "timestamp": time.time()}
+            return {"success": True, "connected": False, "qr": None, "message": "No QR code available", "timestamp": time.time()}
         except Exception as qr_err:
-            return {
-                "success": True,
-                "connected": False,
-                "qr": None,
-                "message": str(qr_err),
-                "timestamp": time.time()
-            }
+            return {"success": True, "connected": False, "qr": None, "message": str(qr_err), "timestamp": time.time()}
     except Exception as e:
         logger.error(f"WhatsApp QR fetch failed: {e}")
         return {"success": False, "connected": False, "error": str(e)}
@@ -561,6 +519,7 @@ async def handle_whatsapp_send(params: dict) -> dict:
                         filename = filename or file_param.get("filename")
                     elif file_param:
                         import base64 as b64
+
                         try:
                             with open(file_param, "rb") as f:
                                 media_data = b64.b64encode(f.read()).decode("utf-8")
@@ -571,6 +530,7 @@ async def handle_whatsapp_send(params: dict) -> dict:
                     if media_url:
                         import httpx
                         import base64 as b64
+
                         try:
                             async with httpx.AsyncClient() as http:
                                 resp = await http.get(media_url, timeout=30)
@@ -581,10 +541,7 @@ async def handle_whatsapp_send(params: dict) -> dict:
                 if not media_data:
                     return {"success": False, "error": f"media data is required for {msg_type} type"}
 
-                rpc_params["media_data"] = {
-                    "data": media_data,
-                    "mime_type": mime_type or _guess_mime_type(msg_type)
-                }
+                rpc_params["media_data"] = {"data": media_data, "mime_type": mime_type or _guess_mime_type(msg_type)}
                 if params.get("caption"):
                     rpc_params["media_data"]["caption"] = params["caption"]
                 final_filename = filename or params.get("filename")
@@ -614,11 +571,7 @@ async def handle_whatsapp_send(params: dict) -> dict:
                 reply_id = params.get("reply_message_id")
                 reply_sender = params.get("reply_sender")
                 if reply_id and reply_sender:
-                    rpc_params["reply"] = {
-                        "message_id": reply_id,
-                        "sender": reply_sender,
-                        "content": params.get("reply_content", "")
-                    }
+                    rpc_params["reply"] = {"message_id": reply_id, "sender": reply_sender, "content": params.get("reply_content", "")}
 
             if params.get("metadata"):
                 rpc_params["metadata"] = params["metadata"]
@@ -627,12 +580,7 @@ async def handle_whatsapp_send(params: dict) -> dict:
             # Use newsletter_send for channel recipients, regular send for others
             rpc_method = "newsletter_send" if recipient_type == "channel" else "send"
             result = await client.call(rpc_method, rpc_params)
-            return {
-                "success": True,
-                "message_id": result.get("message_id"),
-                "message_type": msg_type,
-                "timestamp": time.time()
-            }
+            return {"success": True, "message_id": result.get("message_id"), "message_type": msg_type, "timestamp": time.time()}
         except Exception as e:
             logger.error(f"WhatsApp send failed: {e}")
             return {"success": False, "error": str(e)}
@@ -645,7 +593,7 @@ def _guess_mime_type(msg_type: str) -> str:
         "video": "video/mp4",
         "audio": "audio/ogg",
         "document": "application/octet-stream",
-        "sticker": "image/webp"
+        "sticker": "image/webp",
     }
     return defaults.get(msg_type, "application/octet-stream")
 
@@ -668,12 +616,7 @@ async def handle_whatsapp_start() -> dict:
             qr=None,
         )
 
-        return {
-            "success": True,
-            "message": "WhatsApp connection started",
-            "data": result,
-            "timestamp": time.time()
-        }
+        return {"success": True, "message": "WhatsApp connection started", "data": result, "timestamp": time.time()}
     except Exception as e:
         logger.error(f"WhatsApp start failed: {e}")
         return {"success": False, "error": str(e)}
@@ -704,12 +647,7 @@ async def handle_whatsapp_restart() -> dict:
         # Call restart RPC method
         result = await client.call("restart")
 
-        return {
-            "success": True,
-            "message": "WhatsApp connection restarted",
-            "data": result,
-            "timestamp": time.time()
-        }
+        return {"success": True, "message": "WhatsApp connection restarted", "data": result, "timestamp": time.time()}
     except HTTPException as e:
         logger.error(f"WhatsApp restart failed: {e.detail}")
         return {"success": False, "error": e.detail}
@@ -724,11 +662,7 @@ async def handle_whatsapp_groups() -> dict:
         client = await get_client()
         groups = await client.call("groups")
 
-        return {
-            "success": True,
-            "groups": groups or [],
-            "timestamp": time.time()
-        }
+        return {"success": True, "groups": groups or [], "timestamp": time.time()}
     except Exception as e:
         logger.error(f"WhatsApp groups fetch failed: {e}")
         return {"success": False, "error": str(e), "groups": []}
@@ -755,28 +689,30 @@ async def handle_whatsapp_group_info(group_id: str) -> dict:
 
         # Extract participants with phone numbers
         participants = []
-        for p in result.get('participants', []):
-            jid = p.get('jid', '')
-            phone = p.get('phone', '')
-            name = p.get('name', '')
+        for p in result.get("participants", []):
+            jid = p.get("jid", "")
+            phone = p.get("phone", "")
+            name = p.get("name", "")
 
             # Only include participants with resolved phone numbers
             if phone:
-                participants.append({
-                    "jid": jid,
-                    "phone": phone,
-                    "name": name or phone,  # Use phone as fallback name
-                    "is_admin": p.get('is_admin', False),
-                    "is_super_admin": p.get('is_super_admin', False)
-                })
+                participants.append(
+                    {
+                        "jid": jid,
+                        "phone": phone,
+                        "name": name or phone,  # Use phone as fallback name
+                        "is_admin": p.get("is_admin", False),
+                        "is_super_admin": p.get("is_super_admin", False),
+                    }
+                )
 
         return {
             "success": True,
             "group_id": group_id,
-            "name": result.get('name', ''),
+            "name": result.get("name", ""),
             "participants": participants,
             "participant_count": len(participants),
-            "timestamp": time.time()
+            "timestamp": time.time(),
         }
     except Exception as e:
         logger.error(f"WhatsApp group_info fetch failed for {group_id}: {e}")
@@ -847,7 +783,7 @@ async def handle_whatsapp_chat_history(params: dict) -> dict:
             "messages": result.get("messages", []),
             "total": result.get("total", 0),
             "has_more": result.get("has_more", False),
-            "timestamp": time.time()
+            "timestamp": time.time(),
         }
     except Exception as e:
         logger.error(f"WhatsApp chat_history fetch failed: {e}")
@@ -892,11 +828,7 @@ async def handle_whatsapp_newsletters() -> dict:
         client = await get_client()
         channels = await client.call("newsletters")
 
-        return {
-            "success": True,
-            "channels": channels or [],
-            "timestamp": time.time()
-        }
+        return {"success": True, "channels": channels or [], "timestamp": time.time()}
     except Exception as e:
         logger.error(f"WhatsApp newsletters fetch failed: {e}")
         return {"success": False, "error": str(e), "channels": []}

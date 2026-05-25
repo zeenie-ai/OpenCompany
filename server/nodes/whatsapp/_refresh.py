@@ -54,6 +54,4 @@ async def refresh_whatsapp_status(broadcaster: "StatusBroadcaster") -> None:
             span.set_attribute("connected", bool(status_data.get("connected", False)))
         except Exception as exc:  # noqa: BLE001
             span.record_exception(exc)
-            logger.debug(
-                "[StatusBroadcaster] Could not refresh WhatsApp status: %s", exc
-            )
+            logger.debug("[StatusBroadcaster] Could not refresh WhatsApp status: %s", exc)

@@ -18,6 +18,7 @@ logger = get_logger(__name__)
 @dataclass
 class SkillMetadata:
     """Metadata from SKILL.md frontmatter (loaded at startup for all skills)."""
+
     name: str
     description: str
     allowed_tools: List[str] = field(default_factory=list)
@@ -28,6 +29,7 @@ class SkillMetadata:
 @dataclass
 class Skill:
     """Full skill content (loaded on-demand when activated)."""
+
     metadata: SkillMetadata
     instructions: str  # Markdown body after frontmatter
     scripts: Dict[str, str] = field(default_factory=dict)  # filename -> content
@@ -103,11 +105,12 @@ class SkillLoader:
                 for skill in user_skills:
                     allowed_tools = []
                     if skill.allowed_tools:
-                        allowed_tools = [t.strip() for t in skill.allowed_tools.split(',')]
+                        allowed_tools = [t.strip() for t in skill.allowed_tools.split(",")]
 
                     metadata_dict = {}
                     if skill.metadata_json:
                         import json
+
                         metadata_dict = json.loads(skill.metadata_json)
 
                     self._registry[skill.name] = SkillMetadata(
@@ -115,7 +118,7 @@ class SkillLoader:
                         description=skill.description,
                         allowed_tools=allowed_tools,
                         metadata=metadata_dict,
-                        path=None  # Database skills have no path
+                        path=None,  # Database skills have no path
                     )
                 logger.info(f"[SkillLoader] Loaded {len(user_skills)} skills from database")
             except Exception as e:
@@ -133,10 +136,10 @@ class SkillLoader:
         becomes the visual source. This guarantees skills mirror
         their teaching node's icon / color without per-file drift.
         """
-        content = skill_md_path.read_text(encoding='utf-8')
+        content = skill_md_path.read_text(encoding="utf-8")
 
         # Parse YAML frontmatter (between --- markers)
-        frontmatter_match = re.match(r'^---\s*\n(.*?)\n---\s*\n', content, re.DOTALL)
+        frontmatter_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
         if not frontmatter_match:
             logger.warning(f"[SkillLoader] No frontmatter in {skill_md_path}")
             return None
@@ -148,22 +151,22 @@ class SkillLoader:
             return None
 
         # Validate required fields
-        name = frontmatter.get('name')
-        description = frontmatter.get('description')
+        name = frontmatter.get("name")
+        description = frontmatter.get("description")
 
         if not name or not description:
             logger.warning(f"[SkillLoader] Missing name or description in {skill_md_path}")
             return None
 
         # Validate name format (lowercase, hyphens, no consecutive hyphens)
-        if not re.match(r'^[a-z0-9]+(-[a-z0-9]+)*$', name):
+        if not re.match(r"^[a-z0-9]+(-[a-z0-9]+)*$", name):
             logger.warning(f"[SkillLoader] Invalid skill name format: {name}")
             return None
 
         # Parse allowed-tools (space-delimited)
         allowed_tools = []
-        if 'allowed-tools' in frontmatter:
-            allowed_tools = frontmatter['allowed-tools'].split()
+        if "allowed-tools" in frontmatter:
+            allowed_tools = frontmatter["allowed-tools"].split()
 
         # Resolve icon + color from the target node, mirroring
         # ``BaseNode._metadata_dict``'s chain so skills inherit whichever
@@ -175,13 +178,15 @@ class SkillLoader:
         # Color: ``<plugin>/meta.json`` first, then ``visuals.json``.
         # ``allowed-tools`` uses snake_case; node ``type`` is camelCase.
         from nodes._visuals import (
-            get_color, get_icon, get_plugin_icon_path, get_plugin_meta,
+            get_color,
+            get_icon,
+            get_plugin_icon_path,
+            get_plugin_meta,
         )
-        meta_in = dict(frontmatter.get('metadata') or {})
+
+        meta_in = dict(frontmatter.get("metadata") or {})
         for tok in allowed_tools:
-            cam = tok if "_" not in tok else (
-                tok.split("_")[0] + "".join(p.title() for p in tok.split("_")[1:])
-            )
+            cam = tok if "_" not in tok else (tok.split("_")[0] + "".join(p.title() for p in tok.split("_")[1:]))
             for candidate in (cam, tok):
                 if get_plugin_icon_path(candidate) is not None:
                     icon = f"/api/schemas/nodes/{candidate}/icon"
@@ -190,9 +195,9 @@ class SkillLoader:
                 color = get_plugin_meta(candidate, "color") or get_color(candidate)
                 if icon or color:
                     if icon:
-                        meta_in['icon'] = icon
+                        meta_in["icon"] = icon
                     if color:
-                        meta_in['color'] = color
+                        meta_in["color"] = color
                     break
             else:
                 continue
@@ -238,12 +243,12 @@ class SkillLoader:
             return None
 
         # Parse full content
-        content = skill_md.read_text(encoding='utf-8')
+        content = skill_md.read_text(encoding="utf-8")
 
         # Extract body (after frontmatter)
-        frontmatter_match = re.match(r'^---\s*\n.*?\n---\s*\n', content, re.DOTALL)
+        frontmatter_match = re.match(r"^---\s*\n.*?\n---\s*\n", content, re.DOTALL)
         if frontmatter_match:
-            instructions = content[frontmatter_match.end():]
+            instructions = content[frontmatter_match.end() :]
         else:
             instructions = content
 
@@ -254,7 +259,7 @@ class SkillLoader:
             for script_file in scripts_dir.iterdir():
                 if script_file.is_file():
                     try:
-                        scripts[script_file.name] = script_file.read_text(encoding='utf-8')
+                        scripts[script_file.name] = script_file.read_text(encoding="utf-8")
                     except Exception as e:
                         logger.warning(f"[SkillLoader] Failed to read script {script_file}: {e}")
 
@@ -263,18 +268,13 @@ class SkillLoader:
         refs_dir = skill_path / "references"
         if refs_dir.exists():
             for ref_file in refs_dir.iterdir():
-                if ref_file.is_file() and ref_file.suffix in ['.md', '.txt', '.json']:
+                if ref_file.is_file() and ref_file.suffix in [".md", ".txt", ".json"]:
                     try:
-                        references[ref_file.name] = ref_file.read_text(encoding='utf-8')
+                        references[ref_file.name] = ref_file.read_text(encoding="utf-8")
                     except Exception as e:
                         logger.warning(f"[SkillLoader] Failed to read reference {ref_file}: {e}")
 
-        skill = Skill(
-            metadata=metadata,
-            instructions=instructions,
-            scripts=scripts,
-            references=references
-        )
+        skill = Skill(metadata=metadata, instructions=instructions, scripts=scripts, references=references)
 
         # Cache the loaded skill
         self._cache[name] = skill
@@ -312,32 +312,28 @@ class SkillLoader:
                 user_skill = await self._database.get_user_skill(name)
                 if user_skill:
                     # user_skill is a dict from _skill_to_dict()
-                    allowed_tools = user_skill.get('allowed_tools', [])
+                    allowed_tools = user_skill.get("allowed_tools", [])
                     if isinstance(allowed_tools, str):
-                        allowed_tools = [t.strip() for t in allowed_tools.split(',') if t.strip()]
+                        allowed_tools = [t.strip() for t in allowed_tools.split(",") if t.strip()]
 
-                    metadata_dict = user_skill.get('metadata', {})
+                    metadata_dict = user_skill.get("metadata", {})
                     if isinstance(metadata_dict, str):
                         import json
+
                         try:
                             metadata_dict = json.loads(metadata_dict) if metadata_dict else {}
                         except json.JSONDecodeError:
                             metadata_dict = {}
 
                     metadata = SkillMetadata(
-                        name=user_skill.get('name', name),
-                        description=user_skill.get('description', ''),
+                        name=user_skill.get("name", name),
+                        description=user_skill.get("description", ""),
                         allowed_tools=allowed_tools,
                         metadata=metadata_dict,
-                        path=None
+                        path=None,
                     )
 
-                    skill = Skill(
-                        metadata=metadata,
-                        instructions=user_skill.get('instructions', ''),
-                        scripts={},
-                        references={}
-                    )
+                    skill = Skill(metadata=metadata, instructions=user_skill.get("instructions", ""), scripts={}, references={})
 
                     logger.info(f"[SkillLoader] Loaded user skill from database: {name}")
                     self._cache[name] = skill
@@ -403,7 +399,7 @@ class SkillLoader:
                 "description": metadata.description,
                 "allowed_tools": metadata.allowed_tools,
                 "metadata": metadata.metadata,
-                "is_builtin": metadata.path is not None
+                "is_builtin": metadata.path is not None,
             }
             for metadata in self._registry.values()
         ]

@@ -8,6 +8,7 @@ B1 — the actual broadcast emission moved into
 :mod:`nodes.android._events` (plugin-owned). This file just adapts
 relay-state to that shape.
 """
+
 from typing import Optional, Set
 import structlog
 
@@ -21,7 +22,7 @@ async def _emit_relay_status(
     device_name: Optional[str] = None,
     devices: Optional[Set[str]] = None,
     qr_data: Optional[str] = None,
-    session_token: Optional[str] = None
+    session_token: Optional[str] = None,
 ):
     """Translate relay-shaped args and route to the canonical
     plugin-owned broadcaster (``nodes.android._events``)."""
@@ -47,19 +48,11 @@ async def _emit_relay_status(
 async def broadcast_connected(device_id: str, device_name: Optional[str] = None):
     """Broadcast that Android device is paired"""
     await _emit_relay_status(
-        connected=True,
-        paired=True,
-        device_id=device_id,
-        device_name=device_name,
-        devices={device_id} if device_id else set()
+        connected=True, paired=True, device_id=device_id, device_name=device_name, devices={device_id} if device_id else set()
     )
 
 
-async def broadcast_device_disconnected(
-    relay_connected: bool = True,
-    qr_data: Optional[str] = None,
-    session_token: Optional[str] = None
-):
+async def broadcast_device_disconnected(relay_connected: bool = True, qr_data: Optional[str] = None, session_token: Optional[str] = None):
     """Broadcast that Android device is disconnected (but relay may still be connected).
 
     This is called when the Android device unpairs. The relay connection may still be active.
@@ -77,19 +70,13 @@ async def broadcast_device_disconnected(
         device_name=None,
         devices=set(),
         qr_data=qr_data,  # Keep QR data for re-pairing
-        session_token=session_token
+        session_token=session_token,
     )
 
 
 async def broadcast_relay_disconnected():
     """Broadcast that relay connection is closed (fully disconnected)"""
-    await _emit_relay_status(
-        connected=False,
-        paired=False,
-        device_id=None,
-        device_name=None,
-        devices=set()
-    )
+    await _emit_relay_status(connected=False, paired=False, device_id=None, device_name=None, devices=set())
 
 
 # Legacy alias for backwards compatibility
@@ -107,5 +94,5 @@ async def broadcast_qr_code(qr_data: str, session_token: Optional[str] = None):
         device_name=None,
         devices=set(),
         qr_data=qr_data,
-        session_token=session_token
+        session_token=session_token,
     )

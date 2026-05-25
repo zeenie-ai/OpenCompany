@@ -88,16 +88,10 @@ def _patch_client(stub_cls):
 class TestTwitterSend:
     async def test_tweet_happy_path(self, harness):
         posts = MagicMock(name="posts")
-        posts.create = MagicMock(
-            return_value=SimpleNamespace(
-                data={"id": "1999000000000000001", "text": "hello world"}
-            )
-        )
+        posts.create = MagicMock(return_value=SimpleNamespace(data={"id": "1999000000000000001", "text": "hello world"}))
         stub_cls = _make_client_class(posts=posts)
 
-        with _patch_client(stub_cls), patched_container(
-            auth_oauth_tokens=_ok_tokens()
-        ), patched_pricing():
+        with _patch_client(stub_cls), patched_container(auth_oauth_tokens=_ok_tokens()), patched_pricing():
             result = await harness.execute(
                 "twitterSend",
                 {"action": "tweet", "text": "hello world"},
@@ -115,18 +109,12 @@ class TestTwitterSend:
 
     async def test_tweet_truncates_to_280_chars(self, harness):
         posts = MagicMock(name="posts")
-        posts.create = MagicMock(
-            return_value=SimpleNamespace(data={"id": "1", "text": "t"})
-        )
+        posts.create = MagicMock(return_value=SimpleNamespace(data={"id": "1", "text": "t"}))
         stub_cls = _make_client_class(posts=posts)
         long_text = "x" * 400
 
-        with _patch_client(stub_cls), patched_container(
-            auth_oauth_tokens=_ok_tokens()
-        ), patched_pricing():
-            result = await harness.execute(
-                "twitterSend", {"action": "tweet", "text": long_text}
-            )
+        with _patch_client(stub_cls), patched_container(auth_oauth_tokens=_ok_tokens()), patched_pricing():
+            result = await harness.execute("twitterSend", {"action": "tweet", "text": long_text})
 
         harness.assert_envelope(result, success=True)
         sent = posts.create.call_args.kwargs["body"]["text"]
@@ -135,14 +123,10 @@ class TestTwitterSend:
 
     async def test_reply_happy_path(self, harness):
         posts = MagicMock(name="posts")
-        posts.create = MagicMock(
-            return_value=SimpleNamespace(data={"id": "r1", "text": "replying"})
-        )
+        posts.create = MagicMock(return_value=SimpleNamespace(data={"id": "r1", "text": "replying"}))
         stub_cls = _make_client_class(posts=posts)
 
-        with _patch_client(stub_cls), patched_container(
-            auth_oauth_tokens=_ok_tokens()
-        ), patched_pricing():
+        with _patch_client(stub_cls), patched_container(auth_oauth_tokens=_ok_tokens()), patched_pricing():
             result = await harness.execute(
                 "twitterSend",
                 {
@@ -164,12 +148,8 @@ class TestTwitterSend:
         posts.create = MagicMock()
         stub_cls = _make_client_class(posts=posts)
 
-        with _patch_client(stub_cls), patched_container(
-            auth_oauth_tokens=_ok_tokens()
-        ), patched_pricing():
-            result = await harness.execute(
-                "twitterSend", {"action": "reply", "text": "hi"}
-            )
+        with _patch_client(stub_cls), patched_container(auth_oauth_tokens=_ok_tokens()), patched_pricing():
+            result = await harness.execute("twitterSend", {"action": "reply", "text": "hi"})
 
         harness.assert_envelope(result, success=False)
         assert "tweet_id" in result["error"].lower()
@@ -179,12 +159,8 @@ class TestTwitterSend:
         posts = MagicMock(name="posts")
         stub_cls = _make_client_class(posts=posts)
 
-        with _patch_client(stub_cls), patched_container(
-            auth_oauth_tokens=_ok_tokens()
-        ), patched_pricing():
-            result = await harness.execute(
-                "twitterSend", {"action": "tweet", "text": ""}
-            )
+        with _patch_client(stub_cls), patched_container(auth_oauth_tokens=_ok_tokens()), patched_pricing():
+            result = await harness.execute("twitterSend", {"action": "tweet", "text": ""})
 
         harness.assert_envelope(result, success=False)
         assert "text is required" in result["error"].lower()
@@ -193,12 +169,8 @@ class TestTwitterSend:
         # Post-refactor: action is a Literal; unknown values rejected by Pydantic.
         stub_cls = _make_client_class()
 
-        with _patch_client(stub_cls), patched_container(
-            auth_oauth_tokens=_ok_tokens()
-        ), patched_pricing():
-            result = await harness.execute(
-                "twitterSend", {"action": "mysterious", "text": "x", "tweet_id": "1"}
-            )
+        with _patch_client(stub_cls), patched_container(auth_oauth_tokens=_ok_tokens()), patched_pricing():
+            result = await harness.execute("twitterSend", {"action": "mysterious", "text": "x", "tweet_id": "1"})
 
         harness.assert_envelope(result, success=False)
         assert "invalid parameters" in result["error"].lower()
@@ -206,12 +178,14 @@ class TestTwitterSend:
     async def test_missing_oauth_tokens_errors(self, harness):
         stub_cls = _make_client_class()
 
-        with _patch_client(stub_cls), patched_container(
-            auth_oauth_tokens={}  # no twitter entry
-        ), patched_pricing():
-            result = await harness.execute(
-                "twitterSend", {"action": "tweet", "text": "hi"}
-            )
+        with (
+            _patch_client(stub_cls),
+            patched_container(
+                auth_oauth_tokens={}  # no twitter entry
+            ),
+            patched_pricing(),
+        ):
+            result = await harness.execute("twitterSend", {"action": "tweet", "text": "hi"})
 
         harness.assert_envelope(result, success=False)
         assert "not connected" in result["error"].lower()
@@ -239,18 +213,17 @@ class TestTwitterSend:
             }
         )
 
-        with _patch_client(stub_cls), patched_container(
-            auth_oauth_tokens=_ok_tokens()
-        ), patched_pricing(), patch(
-            "nodes.twitter._oauth.TwitterOAuth"
-        ) as oauth_cls:
+        with (
+            _patch_client(stub_cls),
+            patched_container(auth_oauth_tokens=_ok_tokens()),
+            patched_pricing(),
+            patch("nodes.twitter._oauth.TwitterOAuth") as oauth_cls,
+        ):
             oauth_instance = MagicMock()
             oauth_instance.refresh_access_token = refresh_mock
             oauth_cls.return_value = oauth_instance
 
-            result = await harness.execute(
-                "twitterSend", {"action": "tweet", "text": "hi"}
-            )
+            result = await harness.execute("twitterSend", {"action": "tweet", "text": "hi"})
 
         harness.assert_envelope(result, success=True)
         assert calls["n"] == 2  # original + retry
@@ -313,25 +286,17 @@ class TestTwitterSearch:
                     "profile_image_url": "https://example.com/a.jpg",
                 }
             ],
-            "media": [
-                {"media_key": "mk1", "type": "photo", "url": "https://example.com/m.jpg"}
-            ],
-            "tweets": [
-                {"id": "twQ", "text": "quoted body", "author_id": "userQ"}
-            ],
+            "media": [{"media_key": "mk1", "type": "photo", "url": "https://example.com/m.jpg"}],
+            "tweets": [{"id": "twQ", "text": "quoted body", "author_id": "userQ"}],
         }
 
         posts = MagicMock(name="posts")
         # search_recent is a generator; one page is enough per the handler's
         # "break after first page" contract.
-        posts.search_recent = MagicMock(
-            return_value=iter([self._search_page([raw_tweet], includes)])
-        )
+        posts.search_recent = MagicMock(return_value=iter([self._search_page([raw_tweet], includes)]))
         stub_cls = _make_client_class(posts=posts)
 
-        with _patch_client(stub_cls), patched_container(
-            auth_oauth_tokens=_ok_tokens()
-        ), patched_pricing():
+        with _patch_client(stub_cls), patched_container(auth_oauth_tokens=_ok_tokens()), patched_pricing():
             result = await harness.execute(
                 "twitterSearch",
                 {"query": "hello", "max_results": 10},
@@ -372,17 +337,11 @@ class TestTwitterSearch:
             "public_metrics": {},
         }
         posts = MagicMock(name="posts")
-        posts.search_recent = MagicMock(
-            return_value=iter([self._search_page([raw_tweet], {})])
-        )
+        posts.search_recent = MagicMock(return_value=iter([self._search_page([raw_tweet], {})]))
         stub_cls = _make_client_class(posts=posts)
 
-        with _patch_client(stub_cls), patched_container(
-            auth_oauth_tokens=_ok_tokens()
-        ), patched_pricing():
-            result = await harness.execute(
-                "twitterSearch", {"query": "x"}
-            )
+        with _patch_client(stub_cls), patched_container(auth_oauth_tokens=_ok_tokens()), patched_pricing():
+            result = await harness.execute("twitterSearch", {"query": "x"})
 
         harness.assert_envelope(result, success=True)
         tw = result["result"]["tweets"][0]
@@ -394,12 +353,8 @@ class TestTwitterSearch:
         posts.search_recent = MagicMock(return_value=iter([self._search_page([], {})]))
         stub_cls = _make_client_class(posts=posts)
 
-        with _patch_client(stub_cls), patched_container(
-            auth_oauth_tokens=_ok_tokens()
-        ), patched_pricing():
-            result = await harness.execute(
-                "twitterSearch", {"query": "x", "max_results": 500}
-            )
+        with _patch_client(stub_cls), patched_container(auth_oauth_tokens=_ok_tokens()), patched_pricing():
+            result = await harness.execute("twitterSearch", {"query": "x", "max_results": 500})
 
         harness.assert_envelope(result, success=False)
         assert "invalid parameters" in result["error"].lower()
@@ -409,12 +364,8 @@ class TestTwitterSearch:
         posts.search_recent = MagicMock(return_value=iter([self._search_page([], {})]))
         stub_cls = _make_client_class(posts=posts)
 
-        with _patch_client(stub_cls), patched_container(
-            auth_oauth_tokens=_ok_tokens()
-        ), patched_pricing():
-            result = await harness.execute(
-                "twitterSearch", {"query": "x", "max_results": 3}
-            )
+        with _patch_client(stub_cls), patched_container(auth_oauth_tokens=_ok_tokens()), patched_pricing():
+            result = await harness.execute("twitterSearch", {"query": "x", "max_results": 3})
 
         harness.assert_envelope(result, success=False)
         assert "invalid parameters" in result["error"].lower()
@@ -424,12 +375,8 @@ class TestTwitterSearch:
         posts.search_recent = MagicMock()
         stub_cls = _make_client_class(posts=posts)
 
-        with _patch_client(stub_cls), patched_container(
-            auth_oauth_tokens=_ok_tokens()
-        ), patched_pricing():
-            result = await harness.execute(
-                "twitterSearch", {"query": "   "}
-            )
+        with _patch_client(stub_cls), patched_container(auth_oauth_tokens=_ok_tokens()), patched_pricing():
+            result = await harness.execute("twitterSearch", {"query": "   "})
 
         # Handler checks "not query" i.e. falsy, so empty string fails.
         # Whitespace-only goes through but a strip-less empty check means
@@ -442,9 +389,7 @@ class TestTwitterSearch:
         posts.search_recent = MagicMock()
         stub_cls = _make_client_class(posts=posts)
 
-        with _patch_client(stub_cls), patched_container(
-            auth_oauth_tokens=_ok_tokens()
-        ), patched_pricing():
+        with _patch_client(stub_cls), patched_container(auth_oauth_tokens=_ok_tokens()), patched_pricing():
             result = await harness.execute("twitterSearch", {"query": ""})
 
         harness.assert_envelope(result, success=False)
@@ -475,9 +420,7 @@ class TestTwitterUser:
         )
         stub_cls = _make_client_class(users=users)
 
-        with _patch_client(stub_cls), patched_container(
-            auth_oauth_tokens=_ok_tokens()
-        ), patched_pricing():
+        with _patch_client(stub_cls), patched_container(auth_oauth_tokens=_ok_tokens()), patched_pricing():
             result = await harness.execute("twitterUser", {"operation": "me"})
 
         harness.assert_envelope(result, success=True)
@@ -490,17 +433,11 @@ class TestTwitterUser:
 
     async def test_by_username_not_found(self, harness):
         users = MagicMock(name="users")
-        users.get_by_usernames = MagicMock(
-            return_value=SimpleNamespace(data=[])
-        )
+        users.get_by_usernames = MagicMock(return_value=SimpleNamespace(data=[]))
         stub_cls = _make_client_class(users=users)
 
-        with _patch_client(stub_cls), patched_container(
-            auth_oauth_tokens=_ok_tokens()
-        ), patched_pricing():
-            result = await harness.execute(
-                "twitterUser", {"operation": "by_username", "username": "ghost"}
-            )
+        with _patch_client(stub_cls), patched_container(auth_oauth_tokens=_ok_tokens()), patched_pricing():
+            result = await harness.execute("twitterUser", {"operation": "by_username", "username": "ghost"})
 
         harness.assert_envelope(result, success=False)
         assert "ghost" in result["error"]
@@ -511,12 +448,8 @@ class TestTwitterUser:
         users.get_by_usernames = MagicMock()
         stub_cls = _make_client_class(users=users)
 
-        with _patch_client(stub_cls), patched_container(
-            auth_oauth_tokens=_ok_tokens()
-        ), patched_pricing():
-            result = await harness.execute(
-                "twitterUser", {"operation": "by_username"}
-            )
+        with _patch_client(stub_cls), patched_container(auth_oauth_tokens=_ok_tokens()), patched_pricing():
+            result = await harness.execute("twitterUser", {"operation": "by_username"})
 
         harness.assert_envelope(result, success=False)
         assert "username" in result["error"].lower()
@@ -524,16 +457,10 @@ class TestTwitterUser:
 
     async def test_followers_above_1000_rejected(self, harness):
         users = MagicMock(name="users")
-        users.get_followers = MagicMock(
-            return_value=iter(
-                [SimpleNamespace(data=[{"id": "u1", "username": "a", "name": "A"}])]
-            )
-        )
+        users.get_followers = MagicMock(return_value=iter([SimpleNamespace(data=[{"id": "u1", "username": "a", "name": "A"}])]))
         stub_cls = _make_client_class(users=users)
 
-        with _patch_client(stub_cls), patched_container(
-            auth_oauth_tokens=_ok_tokens()
-        ), patched_pricing():
+        with _patch_client(stub_cls), patched_container(auth_oauth_tokens=_ok_tokens()), patched_pricing():
             result = await harness.execute(
                 "twitterUser",
                 {"operation": "followers", "user_id": "x1", "max_results": 9999},
@@ -545,12 +472,8 @@ class TestTwitterUser:
     async def test_unknown_operation(self, harness):
         stub_cls = _make_client_class()
 
-        with _patch_client(stub_cls), patched_container(
-            auth_oauth_tokens=_ok_tokens()
-        ), patched_pricing():
-            result = await harness.execute(
-                "twitterUser", {"operation": "mysterious"}
-            )
+        with _patch_client(stub_cls), patched_container(auth_oauth_tokens=_ok_tokens()), patched_pricing():
+            result = await harness.execute("twitterUser", {"operation": "mysterious"})
 
         harness.assert_envelope(result, success=False)
         assert "invalid parameters" in result["error"].lower()
@@ -597,9 +520,7 @@ class TestTwitterReceive:
     async def test_happy_path_returns_canned_event(self, harness):
         waiter = _make_waiter_stub(canned_event=self.CANNED)
 
-        with patched_broadcaster(), patch(
-            "services.handlers.triggers.event_waiter", waiter
-        ):
+        with patched_broadcaster(), patch("services.handlers.triggers.event_waiter", waiter):
             result = await harness.execute(
                 "twitterReceive",
                 {"trigger_type": "mentions", "poll_interval": 60},
@@ -618,12 +539,8 @@ class TestTwitterReceive:
         waiter = _make_waiter_stub()
         waiter.wait_for_event = AsyncMock(side_effect=asyncio.CancelledError())
 
-        with patched_broadcaster(), patch(
-            "services.handlers.triggers.event_waiter", waiter
-        ):
-            result = await harness.execute(
-                "twitterReceive", {"trigger_type": "mentions"}
-            )
+        with patched_broadcaster(), patch("services.handlers.triggers.event_waiter", waiter):
+            result = await harness.execute("twitterReceive", {"trigger_type": "mentions"})
 
         harness.assert_envelope(result, success=False)
         assert "cancel" in result["error"].lower()
@@ -633,12 +550,8 @@ class TestTwitterReceive:
         waiter = _make_waiter_stub()
         waiter.get_trigger_config = MagicMock(return_value=None)
 
-        with patched_broadcaster(), patch(
-            "services.handlers.triggers.event_waiter", waiter
-        ):
-            result = await harness.execute(
-                "twitterReceive", {"trigger_type": "mentions"}
-            )
+        with patched_broadcaster(), patch("services.handlers.triggers.event_waiter", waiter):
+            result = await harness.execute("twitterReceive", {"trigger_type": "mentions"})
 
         harness.assert_envelope(result, success=False)
         assert "unknown trigger" in result["error"].lower()
@@ -648,12 +561,8 @@ class TestTwitterReceive:
         waiter = _make_waiter_stub()
         waiter.wait_for_event = AsyncMock(side_effect=RuntimeError("boom"))
 
-        with patched_broadcaster(), patch(
-            "services.handlers.triggers.event_waiter", waiter
-        ):
-            result = await harness.execute(
-                "twitterReceive", {"trigger_type": "mentions"}
-            )
+        with patched_broadcaster(), patch("services.handlers.triggers.event_waiter", waiter):
+            result = await harness.execute("twitterReceive", {"trigger_type": "mentions"})
 
         harness.assert_envelope(result, success=False)
         assert "boom" in result["error"]

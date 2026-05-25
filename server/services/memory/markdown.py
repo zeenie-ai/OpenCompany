@@ -25,7 +25,7 @@ def parse_memory_markdown(content: str) -> List[BaseMessage]:
         response content
     """
     messages: List[BaseMessage] = []
-    pattern = r'### \*\*(Human|Assistant)\*\*[^\n]*\n(.*?)(?=\n### \*\*|$)'
+    pattern = r"### \*\*(Human|Assistant)\*\*[^\n]*\n(.*?)(?=\n### \*\*|$)"
     for role, text in re.findall(pattern, content, re.DOTALL):
         text = text.strip()
         if text:
@@ -47,14 +47,14 @@ def trim_markdown_window(content: str, window_size: int) -> tuple:
     """Keep the last ``window_size`` message PAIRS; return
     ``(trimmed_content, removed_texts)``. Removed texts are returned
     so callers can hand them to the long-term vector store."""
-    pattern = r'(### \*\*(Human|Assistant)\*\*[^\n]*\n.*?)(?=\n### \*\*|$)'
+    pattern = r"(### \*\*(Human|Assistant)\*\*[^\n]*\n.*?)(?=\n### \*\*|$)"
     blocks = [m[0] for m in re.findall(pattern, content, re.DOTALL)]
 
     if len(blocks) <= window_size * 2:
         return content, []
 
-    keep = blocks[-(window_size * 2):]
-    removed = blocks[:-(window_size * 2)]
+    keep = blocks[-(window_size * 2) :]
+    removed = blocks[: -(window_size * 2)]
 
     removed_texts: List[str] = []
     for block in removed:

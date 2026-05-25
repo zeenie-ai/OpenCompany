@@ -57,10 +57,13 @@ class WorkflowExecutor:
     - Event history for debugging and recovery
     """
 
-    def __init__(self, cache: ExecutionCache,
-                 node_executor: Callable[[str, str, Dict, Dict], Awaitable[Dict]],
-                 status_callback: Callable[[str, str, Dict], Awaitable[None]] = None,
-                 dlq_enabled: bool = False):
+    def __init__(
+        self,
+        cache: ExecutionCache,
+        node_executor: Callable[[str, str, Dict, Dict], Awaitable[Dict]],
+        status_callback: Callable[[str, str, Dict], Awaitable[None]] = None,
+        dlq_enabled: bool = False,
+    ):
         """Initialize executor.
 
         Args:
@@ -85,9 +88,9 @@ class WorkflowExecutor:
     # EXECUTION ENTRY POINTS
     # =========================================================================
 
-    async def execute_workflow(self, workflow_id: str, nodes: List[Dict],
-                               edges: List[Dict], session_id: str = "default",
-                               enable_caching: bool = True) -> Dict[str, Any]:
+    async def execute_workflow(
+        self, workflow_id: str, nodes: List[Dict], edges: List[Dict], session_id: str = "default", enable_caching: bool = True
+    ) -> Dict[str, Any]:
         """Execute a workflow with parallel node execution.
 
         Args:
@@ -113,11 +116,13 @@ class WorkflowExecutor:
         # Compute execution layers (for parallel batches)
         ctx.execution_order = self._compute_execution_layers(nodes, edges)
 
-        logger.info("Starting workflow execution",
-                   execution_id=ctx.execution_id,
-                   workflow_id=workflow_id,
-                   node_count=len(nodes),
-                   layers=len(ctx.execution_order))
+        logger.info(
+            "Starting workflow execution",
+            execution_id=ctx.execution_id,
+            workflow_id=workflow_id,
+            node_count=len(nodes),
+            layers=len(ctx.execution_order),
+        )
 
         # Track in memory
         self._active_contexts[ctx.execution_id] = ctx
@@ -128,10 +133,14 @@ class WorkflowExecutor:
         await self.cache.save_execution_state(ctx)
 
         # Add workflow_started event
-        await self.cache.add_event(ctx.execution_id, "workflow_started", {
-            "workflow_id": workflow_id,
-            "node_count": len(nodes),
-        })
+        await self.cache.add_event(
+            ctx.execution_id,
+            "workflow_started",
+            {
+                "workflow_id": workflow_id,
+                "node_count": len(nodes),
+            },
+        )
 
         try:
             # Run the decide loop
@@ -147,11 +156,15 @@ class WorkflowExecutor:
             await self.cache.save_execution_state(ctx)
 
             # Add workflow_completed event
-            await self.cache.add_event(ctx.execution_id, "workflow_completed", {
-                "status": ctx.status.value,
-                "completed_nodes": len(ctx.get_completed_nodes()),
-                "execution_time": ctx.completed_at - ctx.started_at,
-            })
+            await self.cache.add_event(
+                ctx.execution_id,
+                "workflow_completed",
+                {
+                    "status": ctx.status.value,
+                    "completed_nodes": len(ctx.get_completed_nodes()),
+                    "execution_time": ctx.completed_at - ctx.started_at,
+                },
+            )
 
             return {
                 "success": ctx.status == WorkflowStatus.COMPLETED,
@@ -178,14 +191,17 @@ class WorkflowExecutor:
             }
 
         except Exception as e:
-            logger.error("Workflow execution failed", execution_id=ctx.execution_id,
-                        error=str(e))
+            logger.error("Workflow execution failed", execution_id=ctx.execution_id, error=str(e))
             ctx.status = WorkflowStatus.FAILED
             ctx.errors.append({"error": str(e), "timestamp": time.time()})
             await self.cache.save_execution_state(ctx)
-            await self.cache.add_event(ctx.execution_id, "workflow_failed", {
-                "error": str(e),
-            })
+            await self.cache.add_event(
+                ctx.execution_id,
+                "workflow_failed",
+                {
+                    "error": str(e),
+                },
+            )
             return {
                 "success": False,
                 "execution_id": ctx.execution_id,
@@ -211,8 +227,7 @@ class WorkflowExecutor:
         if ctx:
             ctx.status = WorkflowStatus.CANCELLED
             for node_exec in ctx.node_executions.values():
-                if node_exec.status in (TaskStatus.PENDING, TaskStatus.SCHEDULED,
-                                        TaskStatus.RUNNING, TaskStatus.WAITING):
+                if node_exec.status in (TaskStatus.PENDING, TaskStatus.SCHEDULED, TaskStatus.RUNNING, TaskStatus.WAITING):
                     node_exec.status = TaskStatus.CANCELLED
             await self.cache.save_execution_state(ctx)
             logger.info("Execution cancelled", execution_id=execution_id)
@@ -223,8 +238,7 @@ class WorkflowExecutor:
     # CONDUCTOR DECIDE PATTERN
     # =========================================================================
 
-    async def _workflow_decide(self, ctx: ExecutionContext,
-                                enable_caching: bool = True) -> None:
+    async def _workflow_decide(self, ctx: ExecutionContext, enable_caching: bool = True) -> None:
         """Core orchestration loop - Conductor's decide pattern.
 
         Evaluates current state, finds ready nodes, executes them in parallel,
@@ -236,19 +250,15 @@ class WorkflowExecutor:
         """
         # Distributed lock prevents concurrent decides for same execution
         try:
-            async with self.cache.distributed_lock(
-                f"execution:{ctx.execution_id}:decide", timeout=60
-            ):
+            async with self.cache.distributed_lock(f"execution:{ctx.execution_id}:decide", timeout=60):
                 await self._decide_iteration(ctx, enable_caching)
         except TimeoutError:
-            logger.warning("Could not acquire decide lock",
-                          execution_id=ctx.execution_id)
+            logger.warning("Could not acquire decide lock", execution_id=ctx.execution_id)
             # Retry after short delay
             await asyncio.sleep(0.5)
             await self._workflow_decide(ctx, enable_caching)
 
-    async def _decide_iteration(self, ctx: ExecutionContext,
-                                 enable_caching: bool) -> None:
+    async def _decide_iteration(self, ctx: ExecutionContext, enable_caching: bool) -> None:
         """Continuous scheduling loop - Temporal/Conductor pattern.
 
         When any node completes, immediately check for newly-ready dependents
@@ -270,15 +280,15 @@ class WorkflowExecutor:
             else:
                 pending = ctx.get_pending_nodes()
                 if pending:
-                    logger.warning("Stuck: pending nodes with unsatisfied deps",
-                                  execution_id=ctx.execution_id,
-                                  pending=pending)
+                    logger.warning("Stuck: pending nodes with unsatisfied deps", execution_id=ctx.execution_id, pending=pending)
             return
 
-        logger.info("Starting continuous execution",
-                   execution_id=ctx.execution_id,
-                   initial_batch=len(ready_nodes),
-                   nodes=[n.node_id for n in ready_nodes])
+        logger.info(
+            "Starting continuous execution",
+            execution_id=ctx.execution_id,
+            initial_batch=len(ready_nodes),
+            nodes=[n.node_id for n in ready_nodes],
+        )
 
         # Execute with continuous scheduling - new pattern
         await self._execute_with_continuous_scheduling(ctx, ready_nodes, enable_caching)
@@ -291,10 +301,7 @@ class WorkflowExecutor:
     # =========================================================================
 
     async def _execute_with_continuous_scheduling(
-        self,
-        ctx: ExecutionContext,
-        initial_nodes: List[NodeExecution],
-        enable_caching: bool
+        self, ctx: ExecutionContext, initial_nodes: List[NodeExecution], enable_caching: bool
     ) -> None:
         """Execute workflow with continuous scheduling.
 
@@ -317,10 +324,7 @@ class WorkflowExecutor:
         def create_node_task(node: NodeExecution) -> asyncio.Task:
             """Create and track a task for node execution."""
             node.status = TaskStatus.SCHEDULED
-            task = asyncio.create_task(
-                self._execute_node_with_retry(ctx, node, enable_caching),
-                name=f"node_{node.node_id}"
-            )
+            task = asyncio.create_task(self._execute_node_with_retry(ctx, node, enable_caching), name=f"node_{node.node_id}")
             task_to_node[task] = node
             pending_tasks.add(task)
             return task
@@ -340,10 +344,7 @@ class WorkflowExecutor:
                 break
 
             # Wait for ANY task to complete
-            done, pending_tasks = await asyncio.wait(
-                pending_tasks,
-                return_when=asyncio.FIRST_COMPLETED
-            )
+            done, pending_tasks = await asyncio.wait(pending_tasks, return_when=asyncio.FIRST_COMPLETED)
 
             # Process each completed task
             for task in done:
@@ -357,11 +358,13 @@ class WorkflowExecutor:
                         node.status = TaskStatus.FAILED
                         node.error = str(result)
                         node.completed_at = time.time()
-                        ctx.errors.append({
-                            "node_id": node.node_id,
-                            "error": str(result),
-                            "timestamp": time.time(),
-                        })
+                        ctx.errors.append(
+                            {
+                                "node_id": node.node_id,
+                                "error": str(result),
+                                "timestamp": time.time(),
+                            }
+                        )
                         await self._notify_status(node.node_id, "error", {"error": str(result)})
                         logger.error("Node failed", node_id=node.node_id, error=str(result))
                         workflow_failed = True
@@ -370,23 +373,27 @@ class WorkflowExecutor:
                         node.status = TaskStatus.FAILED
                         node.error = result.get("error", "Unknown error")
                         node.completed_at = time.time()
-                        ctx.errors.append({
-                            "node_id": node.node_id,
-                            "error": node.error,
-                            "retries_exhausted": True,
-                            "timestamp": time.time(),
-                        })
+                        ctx.errors.append(
+                            {
+                                "node_id": node.node_id,
+                                "error": node.error,
+                                "retries_exhausted": True,
+                                "timestamp": time.time(),
+                            }
+                        )
                         workflow_failed = True
 
                     elif not result.get("success"):
                         node.status = TaskStatus.FAILED
                         node.error = result.get("error", "Unknown error")
                         node.completed_at = time.time()
-                        ctx.errors.append({
-                            "node_id": node.node_id,
-                            "error": node.error,
-                            "timestamp": time.time(),
-                        })
+                        ctx.errors.append(
+                            {
+                                "node_id": node.node_id,
+                                "error": node.error,
+                                "timestamp": time.time(),
+                            }
+                        )
                         await self._notify_status(node.node_id, "error", {"error": node.error})
                         logger.error("Node failed", node_id=node.node_id, error=node.error)
                         workflow_failed = True
@@ -408,11 +415,13 @@ class WorkflowExecutor:
                     node.status = TaskStatus.FAILED
                     node.error = str(e)
                     node.completed_at = time.time()
-                    ctx.errors.append({
-                        "node_id": node.node_id,
-                        "error": str(e),
-                        "timestamp": time.time(),
-                    })
+                    ctx.errors.append(
+                        {
+                            "node_id": node.node_id,
+                            "error": str(e),
+                            "timestamp": time.time(),
+                        }
+                    )
                     await self._notify_status(node.node_id, "error", {"error": str(e)})
                     logger.error("Node exception", node_id=node.node_id, error=str(e))
                     workflow_failed = True
@@ -422,27 +431,21 @@ class WorkflowExecutor:
                     for ready_node in newly_ready:
                         create_node_task(ready_node)
                         await self._notify_status(ready_node.node_id, "scheduled", {})
-                        logger.info("Scheduled dependent node",
-                                   node_id=ready_node.node_id,
-                                   triggered_by=node.node_id)
+                        logger.info("Scheduled dependent node", node_id=ready_node.node_id, triggered_by=node.node_id)
 
             # Periodic state save
             await self.cache.save_execution_state(ctx)
 
         # Handle workflow failure - cancel remaining tasks
         if workflow_failed and pending_tasks:
-            logger.info("Workflow failed, cancelling remaining tasks",
-                       pending_count=len(pending_tasks))
+            logger.info("Workflow failed, cancelling remaining tasks", pending_count=len(pending_tasks))
 
             for task in pending_tasks:
                 task.cancel()
 
             # Wait for cancelled tasks
             if pending_tasks:
-                cancelled_done, _ = await asyncio.wait(
-                    pending_tasks,
-                    return_when=asyncio.ALL_COMPLETED
-                )
+                cancelled_done, _ = await asyncio.wait(pending_tasks, return_when=asyncio.ALL_COMPLETED)
 
                 for task in cancelled_done:
                     node = task_to_node.get(task)
@@ -456,9 +459,7 @@ class WorkflowExecutor:
     # PARALLEL EXECUTION (Legacy - Fork/Join with FIRST_COMPLETED pattern)
     # =========================================================================
 
-    async def _execute_parallel_nodes(self, ctx: ExecutionContext,
-                                       nodes: List[NodeExecution],
-                                       enable_caching: bool) -> None:
+    async def _execute_parallel_nodes(self, ctx: ExecutionContext, nodes: List[NodeExecution], enable_caching: bool) -> None:
         """Execute multiple nodes in parallel using asyncio.wait with FIRST_COMPLETED.
 
         Uses the standard asyncio pattern for mixed task types:
@@ -485,10 +486,7 @@ class WorkflowExecutor:
         task_to_node: Dict[asyncio.Task, NodeExecution] = {}
 
         for node in nodes:
-            task = asyncio.create_task(
-                self._execute_node_with_retry(ctx, node, enable_caching),
-                name=f"node_{node.node_id}"
-            )
+            task = asyncio.create_task(self._execute_node_with_retry(ctx, node, enable_caching), name=f"node_{node.node_id}")
             node_to_task[node.node_id] = task
             task_to_node[task] = node
 
@@ -498,10 +496,7 @@ class WorkflowExecutor:
         # Process tasks as they complete using FIRST_COMPLETED pattern
         while pending:
             # Wait for any task to complete
-            done, pending = await asyncio.wait(
-                pending,
-                return_when=asyncio.FIRST_COMPLETED
-            )
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
 
             # Process completed tasks
             for task in done:
@@ -515,14 +510,15 @@ class WorkflowExecutor:
                         node.status = TaskStatus.FAILED
                         node.error = str(result)
                         node.completed_at = time.time()
-                        ctx.errors.append({
-                            "node_id": node.node_id,
-                            "error": str(result),
-                            "timestamp": time.time(),
-                        })
+                        ctx.errors.append(
+                            {
+                                "node_id": node.node_id,
+                                "error": str(result),
+                                "timestamp": time.time(),
+                            }
+                        )
                         await self._notify_status(node.node_id, "error", {"error": str(result)})
-                        logger.error("Parallel node failed",
-                                   node_id=node.node_id, error=str(result))
+                        logger.error("Parallel node failed", node_id=node.node_id, error=str(result))
                         workflow_failed = True
 
                     elif result.get("retries_exhausted"):
@@ -530,12 +526,14 @@ class WorkflowExecutor:
                         node.status = TaskStatus.FAILED
                         node.error = result.get("error", "Unknown error")
                         node.completed_at = time.time()
-                        ctx.errors.append({
-                            "node_id": node.node_id,
-                            "error": node.error,
-                            "retries_exhausted": True,
-                            "timestamp": time.time(),
-                        })
+                        ctx.errors.append(
+                            {
+                                "node_id": node.node_id,
+                                "error": node.error,
+                                "retries_exhausted": True,
+                                "timestamp": time.time(),
+                            }
+                        )
                         workflow_failed = True
 
                     elif not result.get("success"):
@@ -543,14 +541,15 @@ class WorkflowExecutor:
                         node.status = TaskStatus.FAILED
                         node.error = result.get("error", "Unknown error")
                         node.completed_at = time.time()
-                        ctx.errors.append({
-                            "node_id": node.node_id,
-                            "error": node.error,
-                            "timestamp": time.time(),
-                        })
+                        ctx.errors.append(
+                            {
+                                "node_id": node.node_id,
+                                "error": node.error,
+                                "timestamp": time.time(),
+                            }
+                        )
                         await self._notify_status(node.node_id, "error", {"error": node.error})
-                        logger.error("Parallel node failed",
-                                   node_id=node.node_id, error=node.error)
+                        logger.error("Parallel node failed", node_id=node.node_id, error=node.error)
                         workflow_failed = True
 
                 except asyncio.CancelledError:
@@ -564,31 +563,28 @@ class WorkflowExecutor:
                     node.status = TaskStatus.FAILED
                     node.error = str(e)
                     node.completed_at = time.time()
-                    ctx.errors.append({
-                        "node_id": node.node_id,
-                        "error": str(e),
-                        "timestamp": time.time(),
-                    })
+                    ctx.errors.append(
+                        {
+                            "node_id": node.node_id,
+                            "error": str(e),
+                            "timestamp": time.time(),
+                        }
+                    )
                     await self._notify_status(node.node_id, "error", {"error": str(e)})
-                    logger.error("Parallel node exception",
-                               node_id=node.node_id, error=str(e))
+                    logger.error("Parallel node exception", node_id=node.node_id, error=str(e))
                     workflow_failed = True
 
             # If workflow failed, cancel remaining pending tasks
             # This prevents trigger nodes from blocking forever when a regular node fails
             if workflow_failed and pending:
-                logger.info("Workflow failed, cancelling remaining tasks",
-                           pending_count=len(pending))
+                logger.info("Workflow failed, cancelling remaining tasks", pending_count=len(pending))
 
                 for task in pending:
                     task.cancel()
 
                 # Wait for cancelled tasks to finish
                 if pending:
-                    cancelled_done, _ = await asyncio.wait(
-                        pending,
-                        return_when=asyncio.ALL_COMPLETED
-                    )
+                    cancelled_done, _ = await asyncio.wait(pending, return_when=asyncio.ALL_COMPLETED)
 
                     # Mark cancelled nodes
                     for task in cancelled_done:
@@ -604,9 +600,7 @@ class WorkflowExecutor:
         if workflow_failed:
             ctx.status = WorkflowStatus.FAILED
 
-    async def _execute_single_node(self, ctx: ExecutionContext,
-                                    node: NodeExecution,
-                                    enable_caching: bool) -> None:
+    async def _execute_single_node(self, ctx: ExecutionContext, node: NodeExecution, enable_caching: bool) -> None:
         """Execute a single node with retry logic.
 
         Args:
@@ -625,23 +619,27 @@ class WorkflowExecutor:
                 node.status = TaskStatus.FAILED
                 node.error = result.get("error", "Unknown error")
                 node.completed_at = time.time()
-                ctx.errors.append({
-                    "node_id": node.node_id,
-                    "error": node.error,
-                    "retries_exhausted": True,
-                    "timestamp": time.time(),
-                })
+                ctx.errors.append(
+                    {
+                        "node_id": node.node_id,
+                        "error": node.error,
+                        "retries_exhausted": True,
+                        "timestamp": time.time(),
+                    }
+                )
                 ctx.status = WorkflowStatus.FAILED
 
         except Exception as e:
             node.status = TaskStatus.FAILED
             node.error = str(e)
             node.completed_at = time.time()
-            ctx.errors.append({
-                "node_id": node.node_id,
-                "error": str(e),
-                "timestamp": time.time(),
-            })
+            ctx.errors.append(
+                {
+                    "node_id": node.node_id,
+                    "error": str(e),
+                    "timestamp": time.time(),
+                }
+            )
             await self._notify_status(node.node_id, "error", {"error": str(e)})
             ctx.status = WorkflowStatus.FAILED
 
@@ -649,9 +647,7 @@ class WorkflowExecutor:
     # RETRY LOGIC
     # =========================================================================
 
-    async def _execute_node_with_retry(self, ctx: ExecutionContext,
-                                        node: NodeExecution,
-                                        enable_caching: bool) -> Dict[str, Any]:
+    async def _execute_node_with_retry(self, ctx: ExecutionContext, node: NodeExecution, enable_caching: bool) -> Dict[str, Any]:
         """Execute node with retry logic and DLQ on final failure.
 
         Uses exponential backoff retry policy based on node type.
@@ -689,19 +685,25 @@ class WorkflowExecutor:
                 # Check if we should retry
                 if retry_policy.should_retry(error, attempt + 1):
                     delay = retry_policy.calculate_delay(attempt)
-                    logger.info("Retrying node after failure",
-                               node_id=node.node_id,
-                               attempt=attempt + 1,
-                               max_attempts=retry_policy.max_attempts,
-                               delay=delay,
-                               error=error[:100])
+                    logger.info(
+                        "Retrying node after failure",
+                        node_id=node.node_id,
+                        attempt=attempt + 1,
+                        max_attempts=retry_policy.max_attempts,
+                        delay=delay,
+                        error=error[:100],
+                    )
 
-                    await self._notify_status(node.node_id, "retrying", {
-                        "attempt": attempt + 1,
-                        "max_attempts": retry_policy.max_attempts,
-                        "delay": delay,
-                        "error": error,
-                    })
+                    await self._notify_status(
+                        node.node_id,
+                        "retrying",
+                        {
+                            "attempt": attempt + 1,
+                            "max_attempts": retry_policy.max_attempts,
+                            "delay": delay,
+                            "error": error,
+                        },
+                    )
 
                     await asyncio.sleep(delay)
 
@@ -717,18 +719,12 @@ class WorkflowExecutor:
                 raise  # Propagate cancellation
             except Exception as e:
                 last_error = str(e)
-                logger.warning("Node execution exception",
-                              node_id=node.node_id,
-                              attempt=attempt + 1,
-                              error=last_error)
+                logger.warning("Node execution exception", node_id=node.node_id, attempt=attempt + 1, error=last_error)
 
                 # Check if we should retry
                 if retry_policy.should_retry(last_error, attempt + 1):
                     delay = retry_policy.calculate_delay(attempt)
-                    logger.info("Retrying node after exception",
-                               node_id=node.node_id,
-                               attempt=attempt + 1,
-                               delay=delay)
+                    logger.info("Retrying node after exception", node_id=node.node_id, attempt=attempt + 1, delay=delay)
 
                     await asyncio.sleep(delay)
                     node.status = TaskStatus.PENDING
@@ -752,9 +748,7 @@ class WorkflowExecutor:
     # CACHED NODE EXECUTION (Prefect pattern)
     # =========================================================================
 
-    async def _execute_node_with_caching(self, ctx: ExecutionContext,
-                                          node: NodeExecution,
-                                          enable_caching: bool) -> Dict[str, Any]:
+    async def _execute_node_with_caching(self, ctx: ExecutionContext, node: NodeExecution, enable_caching: bool) -> Dict[str, Any]:
         """Execute node with result caching (Prefect pattern).
 
         Args:
@@ -771,9 +765,7 @@ class WorkflowExecutor:
 
         # Check cache first (Prefect pattern)
         if enable_caching:
-            cached_result = await self.cache.get_cached_result(
-                ctx.execution_id, node.node_id, inputs
-            )
+            cached_result = await self.cache.get_cached_result(ctx.execution_id, node.node_id, inputs)
             if cached_result:
                 logger.info("Cache hit", node_id=node.node_id)
                 node.status = TaskStatus.CACHED
@@ -781,11 +773,14 @@ class WorkflowExecutor:
                 node.input_hash = hash_inputs(inputs)
                 node.completed_at = time.time()
                 ctx.outputs[node.node_id] = cached_result
-                await self._notify_status(node.node_id, "success",
-                                          {"cached": True, **cached_result})
-                await self.cache.add_event(ctx.execution_id, "node_cached", {
-                    "node_id": node.node_id,
-                })
+                await self._notify_status(node.node_id, "success", {"cached": True, **cached_result})
+                await self.cache.add_event(
+                    ctx.execution_id,
+                    "node_cached",
+                    {
+                        "node_id": node.node_id,
+                    },
+                )
                 return cached_result
 
         # Execute node
@@ -793,10 +788,14 @@ class WorkflowExecutor:
         node.started_at = time.time()
         node.input_hash = hash_inputs(inputs)
         await self._notify_status(node.node_id, "executing", {})
-        await self.cache.add_event(ctx.execution_id, "node_started", {
-            "node_id": node.node_id,
-            "node_type": node.node_type,
-        })
+        await self.cache.add_event(
+            ctx.execution_id,
+            "node_started",
+            {
+                "node_id": node.node_id,
+                "node_type": node.node_type,
+            },
+        )
 
         # Update heartbeat (for crash detection)
         await self.cache.update_heartbeat(ctx.execution_id, node.node_id)
@@ -816,12 +815,7 @@ class WorkflowExecutor:
         logger.info(f"[Executor] exec_context['outputs'] keys: {list(exec_context['outputs'].keys())}")
 
         # Call the actual node executor
-        result = await self.node_executor(
-            node.node_id,
-            node.node_type,
-            node_data.get("parameters", {}),
-            exec_context
-        )
+        result = await self.node_executor(node.node_id, node.node_type, node_data.get("parameters", {}), exec_context)
 
         # Process result
         if result.get("success"):
@@ -832,30 +826,38 @@ class WorkflowExecutor:
 
             # Cache result (Prefect pattern)
             if enable_caching:
-                await self.cache.set_cached_result(
-                    ctx.execution_id, node.node_id, inputs, node.output
-                )
+                await self.cache.set_cached_result(ctx.execution_id, node.node_id, inputs, node.output)
 
             await self._notify_status(node.node_id, "success", node.output)
-            await self.cache.add_event(ctx.execution_id, "node_completed", {
-                "node_id": node.node_id,
-                "execution_time": node.completed_at - node.started_at,
-            })
+            await self.cache.add_event(
+                ctx.execution_id,
+                "node_completed",
+                {
+                    "node_id": node.node_id,
+                    "execution_time": node.completed_at - node.started_at,
+                },
+            )
         else:
             node.status = TaskStatus.FAILED
             node.error = result.get("error", "Unknown error")
             node.completed_at = time.time()
-            ctx.errors.append({
-                "node_id": node.node_id,
-                "error": node.error,
-                "timestamp": time.time(),
-            })
+            ctx.errors.append(
+                {
+                    "node_id": node.node_id,
+                    "error": node.error,
+                    "timestamp": time.time(),
+                }
+            )
 
             await self._notify_status(node.node_id, "error", {"error": node.error})
-            await self.cache.add_event(ctx.execution_id, "node_failed", {
-                "node_id": node.node_id,
-                "error": node.error,
-            })
+            await self.cache.add_event(
+                ctx.execution_id,
+                "node_failed",
+                {
+                    "node_id": node.node_id,
+                    "error": node.error,
+                },
+            )
 
             # Mark workflow as failed
             ctx.status = WorkflowStatus.FAILED
@@ -866,8 +868,7 @@ class WorkflowExecutor:
     # DAG ANALYSIS
     # =========================================================================
 
-    def _compute_execution_layers(self, nodes: List[Dict],
-                                   edges: List[Dict]) -> List[List[str]]:
+    def _compute_execution_layers(self, nodes: List[Dict], edges: List[Dict]) -> List[List[str]]:
         """Compute execution layers for parallel execution.
 
         Nodes in the same layer have no dependencies on each other
@@ -891,9 +892,7 @@ class WorkflowExecutor:
         from constants import CONFIG_NODE_TYPES, TOOLKIT_NODE_TYPES, AI_AGENT_TYPES
 
         # Build node type lookup for trigger detection
-        node_types: Dict[str, str] = {
-            node["id"]: node.get("type", "unknown") for node in nodes
-        }
+        node_types: Dict[str, str] = {node["id"]: node.get("type", "unknown") for node in nodes}
 
         # Find toolkit sub-nodes (nodes that connect TO a toolkit)
         toolkit_node_ids = {n.get("id") for n in nodes if n.get("type") in TOOLKIT_NODE_TYPES}
@@ -914,7 +913,7 @@ class WorkflowExecutor:
             # Nodes connected to AI Agent config handles are sub-nodes
             # These handles: input-memory, input-tools, input-skill, input-teammates
             if target in ai_agent_node_ids and source and target_handle:
-                if target_handle in ('input-memory', 'input-tools', 'input-skill', 'input-teammates'):
+                if target_handle in ("input-memory", "input-tools", "input-skill", "input-teammates"):
                     subnode_ids.add(source)
 
         # Filter out config nodes and sub-nodes from execution
@@ -949,15 +948,11 @@ class WorkflowExecutor:
 
         while remaining:
             # Find all nodes with in-degree 0 (no dependencies)
-            layer = [
-                node_id for node_id in remaining
-                if in_degree[node_id] == 0
-            ]
+            layer = [node_id for node_id in remaining if in_degree[node_id] == 0]
 
             if not layer:
                 # Cycle detected or stuck
-                logger.warning("Cycle detected or no start nodes",
-                              remaining=list(remaining))
+                logger.warning("Cycle detected or no start nodes", remaining=list(remaining))
                 # Add remaining as single layer to avoid infinite loop
                 layers.append(list(remaining))
                 break
@@ -977,7 +972,7 @@ class WorkflowExecutor:
                             "Non-trigger node found at graph entry point",
                             node_id=node_id,
                             node_type=node_type,
-                            expected_types=list(WORKFLOW_TRIGGER_TYPES)
+                            expected_types=list(WORKFLOW_TRIGGER_TYPES),
                         )
 
                 # Log trigger node identification
@@ -985,10 +980,7 @@ class WorkflowExecutor:
                     logger.info(
                         "Identified trigger nodes as workflow starting points",
                         trigger_count=len(trigger_nodes),
-                        trigger_nodes=[
-                            f"{nid[:8]}({node_types.get(nid)})"
-                            for nid in trigger_nodes
-                        ]
+                        trigger_nodes=[f"{nid[:8]}({node_types.get(nid)})" for nid in trigger_nodes],
                     )
 
                 is_first_layer = False
@@ -1001,9 +993,7 @@ class WorkflowExecutor:
                 for successor in adjacency[node_id]:
                     in_degree[successor] -= 1
 
-        logger.debug("Computed execution layers",
-                    layer_count=len(layers),
-                    layers=[[n[:8] for n in layer] for layer in layers])
+        logger.debug("Computed execution layers", layer_count=len(layers), layers=[[n[:8] for n in layer] for layer in layers])
 
         return layers
 
@@ -1077,22 +1067,18 @@ class WorkflowExecutor:
             # Check conditional edges for this node
             if node_id in conditional_edges:
                 # Has conditional incoming edges - evaluate them
-                conditions_met = self._evaluate_incoming_conditions(
-                    ctx, node_id, conditional_edges[node_id]
-                )
+                conditions_met = self._evaluate_incoming_conditions(ctx, node_id, conditional_edges[node_id])
                 if not conditions_met:
                     # Mark as SKIPPED if conditions not met and all deps done
                     node_exec.status = TaskStatus.SKIPPED
-                    logger.info("Node skipped due to unmet conditions",
-                               node_id=node_id)
+                    logger.info("Node skipped due to unmet conditions", node_id=node_id)
                     continue
 
             ready.append(node_exec)
 
         return ready
 
-    def _evaluate_incoming_conditions(self, ctx: ExecutionContext, target_node_id: str,
-                                       edges: List[Dict]) -> bool:
+    def _evaluate_incoming_conditions(self, ctx: ExecutionContext, target_node_id: str, edges: List[Dict]) -> bool:
         """Evaluate conditions on incoming edges to determine if node should run.
 
         Args:
@@ -1115,16 +1101,11 @@ class WorkflowExecutor:
 
             # Evaluate condition
             if evaluate_condition(condition, source_output):
-                logger.debug("Conditional edge matched",
-                           source=source_id,
-                           target=target_node_id,
-                           condition=condition)
+                logger.debug("Conditional edge matched", source=source_id, target=target_node_id, condition=condition)
                 return True
 
         # No conditions matched
-        logger.debug("No conditional edges matched",
-                    target=target_node_id,
-                    edge_count=len(edges))
+        logger.debug("No conditional edges matched", target=target_node_id, edge_count=len(edges))
         return False
 
     def _get_node_data(self, ctx: ExecutionContext, node_id: str) -> Dict[str, Any]:
@@ -1167,8 +1148,7 @@ class WorkflowExecutor:
     # STATUS NOTIFICATIONS
     # =========================================================================
 
-    async def _notify_status(self, node_id: str, status: str,
-                              data: Dict[str, Any]) -> None:
+    async def _notify_status(self, node_id: str, status: str, data: Dict[str, Any]) -> None:
         """Send status notification via callback.
 
         Args:
@@ -1186,9 +1166,7 @@ class WorkflowExecutor:
     # RECOVERY
     # =========================================================================
 
-    async def recover_execution(self, execution_id: str,
-                                 nodes: List[Dict],
-                                 edges: List[Dict]) -> Optional[Dict[str, Any]]:
+    async def recover_execution(self, execution_id: str, nodes: List[Dict], edges: List[Dict]) -> Optional[Dict[str, Any]]:
         """Recover and resume an interrupted execution.
 
         Args:
@@ -1205,8 +1183,7 @@ class WorkflowExecutor:
             return None
 
         if ctx.status != WorkflowStatus.RUNNING:
-            logger.info("Execution already complete", execution_id=execution_id,
-                       status=ctx.status.value)
+            logger.info("Execution already complete", execution_id=execution_id, status=ctx.status.value)
             return {
                 "success": ctx.status == WorkflowStatus.COMPLETED,
                 "execution_id": execution_id,
@@ -1214,9 +1191,7 @@ class WorkflowExecutor:
                 "recovered": False,
             }
 
-        logger.info("Recovering execution",
-                   execution_id=execution_id,
-                   checkpoints=ctx.checkpoints)
+        logger.info("Recovering execution", execution_id=execution_id, checkpoints=ctx.checkpoints)
 
         # Reset any RUNNING nodes to PENDING (they were interrupted)
         for node_exec in ctx.node_executions.values():
@@ -1262,9 +1237,7 @@ class WorkflowExecutor:
     # DLQ REPLAY
     # =========================================================================
 
-    async def replay_dlq_entry(self, entry_id: str,
-                                nodes: List[Dict],
-                                edges: List[Dict]) -> Dict[str, Any]:
+    async def replay_dlq_entry(self, entry_id: str, nodes: List[Dict], edges: List[Dict]) -> Dict[str, Any]:
         """Replay a failed node from the Dead Letter Queue.
 
         Creates a new execution context and attempts to re-execute the failed node.
@@ -1285,11 +1258,13 @@ class WorkflowExecutor:
                 "error": f"DLQ entry not found: {entry_id}",
             }
 
-        logger.info("Replaying DLQ entry",
-                   entry_id=entry_id,
-                   node_id=entry.node_id,
-                   node_type=entry.node_type,
-                   original_execution=entry.execution_id)
+        logger.info(
+            "Replaying DLQ entry",
+            entry_id=entry_id,
+            node_id=entry.node_id,
+            node_type=entry.node_type,
+            original_execution=entry.execution_id,
+        )
 
         # Create new execution context for replay
         ctx = ExecutionContext.create(
@@ -1321,9 +1296,7 @@ class WorkflowExecutor:
             if node_exec.status == TaskStatus.COMPLETED:
                 # Success - remove from DLQ
                 await self.cache.remove_from_dlq(entry_id)
-                logger.info("DLQ replay succeeded",
-                           entry_id=entry_id,
-                           node_id=entry.node_id)
+                logger.info("DLQ replay succeeded", entry_id=entry_id, node_id=entry.node_id)
 
                 return {
                     "success": True,
@@ -1334,11 +1307,7 @@ class WorkflowExecutor:
                 }
             else:
                 # Still failing - update DLQ entry
-                await self.cache.update_dlq_entry(
-                    entry_id,
-                    entry.retry_count + 1,
-                    node_exec.error or "Unknown error"
-                )
+                await self.cache.update_dlq_entry(entry_id, entry.retry_count + 1, node_exec.error or "Unknown error")
 
                 return {
                     "success": False,

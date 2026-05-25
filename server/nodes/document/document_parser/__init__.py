@@ -16,24 +16,28 @@ logger = get_logger(__name__)
 
 def _parse_file_sync(path: Path, parser: str) -> str:
     """Synchronous file parsing — runs in thread pool."""
-    if parser == 'pypdf':
+    if parser == "pypdf":
         from pypdf import PdfReader
-        return "\n\n".join(p.extract_text() or '' for p in PdfReader(str(path)).pages)
-    if parser == 'marker':
+
+        return "\n\n".join(p.extract_text() or "" for p in PdfReader(str(path)).pages)
+    if parser == "marker":
         from marker.converters.pdf import PdfConverter
         from marker.models import create_model_dict
+
         converter = PdfConverter(artifact_dict=create_model_dict())
         result = converter(str(path))
-        return result.markdown if hasattr(result, 'markdown') else str(result)
-    if parser == 'unstructured':
+        return result.markdown if hasattr(result, "markdown") else str(result)
+    if parser == "unstructured":
         from unstructured.partition.auto import partition
+
         return "\n\n".join(str(el) for el in partition(str(path)))
-    if parser == 'beautifulsoup':
+    if parser == "beautifulsoup":
         from bs4 import BeautifulSoup
-        soup = BeautifulSoup(path.read_text(errors='ignore'), 'html.parser')
+
+        soup = BeautifulSoup(path.read_text(errors="ignore"), "html.parser")
         for s in soup(["script", "style"]):
             s.decompose()
-        return soup.get_text(separator='\n')
+        return soup.get_text(separator="\n")
     raise ValueError(f"Unknown parser: {parser}")
 
 
@@ -88,7 +92,7 @@ class DocumentParserNode(ActionNode):
         parser = params.parser
         explicit_path = params.file_path
         input_dir = params.input_dir
-        file_pattern = params.file_pattern or '*.pdf'
+        file_pattern = params.file_pattern or "*.pdf"
 
         paths: list[Path] = []
         if explicit_path:
@@ -103,13 +107,20 @@ class DocumentParserNode(ActionNode):
         for path in paths:
             try:
                 content = await asyncio.to_thread(_parse_file_sync, path, parser)
-                documents.append({
-                    'source': str(path), 'filename': path.name,
-                    'content': content, 'length': len(content), 'parser': parser,
-                })
+                documents.append(
+                    {
+                        "source": str(path),
+                        "filename": path.name,
+                        "content": content,
+                        "length": len(content),
+                        "parser": parser,
+                    }
+                )
             except Exception as e:
-                failed.append({'file': str(path), 'error': str(e)})
+                failed.append({"file": str(path), "error": str(e)})
 
         return DocumentParserOutput(
-            documents=documents, parsed_count=len(documents), failed=failed,
+            documents=documents,
+            parsed_count=len(documents),
+            failed=failed,
         )

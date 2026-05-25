@@ -77,10 +77,12 @@ async def broadcast_workflow_ops(
         caller_node_id=caller_node_id,
         operations=operations,
     )
-    await broadcaster.broadcast({
-        "type": _WIRE_ROUTING_KEY,
-        "data": payload,
-    })
+    await broadcaster.broadcast(
+        {
+            "type": _WIRE_ROUTING_KEY,
+            "data": payload,
+        }
+    )
 
 
 __all__ = [

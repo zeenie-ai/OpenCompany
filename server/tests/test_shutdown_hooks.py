@@ -178,10 +178,13 @@ class TestNoCrossPluginShutdownReachesInMain:
 class TestPluginSelfRegistration:
     """Smoke: importing each plugin populates the registry."""
 
-    @pytest.mark.parametrize("plugin_module,expected_label", [
-        ("nodes.android", "android_relay"),
-        ("nodes.browser", "browser_service"),
-    ])
+    @pytest.mark.parametrize(
+        "plugin_module,expected_label",
+        [
+            ("nodes.android", "android_relay"),
+            ("nodes.browser", "browser_service"),
+        ],
+    )
     def test_plugin_import_registers_its_hook(self, plugin_module, expected_label):
         from services.plugin import shutdown_hooks as sh
 
@@ -192,7 +195,5 @@ class TestPluginSelfRegistration:
 
         labels = sh.registered_labels()
         assert expected_label in labels, (
-            f"Importing {plugin_module} should call "
-            f"register_shutdown_hook({expected_label!r}, ...). "
-            f"Current labels: {labels}"
+            f"Importing {plugin_module} should call " f"register_shutdown_hook({expected_label!r}, ...). " f"Current labels: {labels}"
         )

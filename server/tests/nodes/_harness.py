@@ -176,10 +176,7 @@ class NodeTestHarness:
             assert isinstance(result["error"], str), "envelope 'error' must be str"
 
         if success is not None:
-            assert result["success"] is success, (
-                f"expected success={success}, got {result['success']} "
-                f"(error={result.get('error')})"
-            )
+            assert result["success"] is success, f"expected success={success}, got {result['success']} " f"(error={result.get('error')})"
 
     @staticmethod
     def assert_output_shape(result: Dict[str, Any], expected_keys: List[str]) -> None:
@@ -219,18 +216,24 @@ def _build_mock_ai_service() -> MagicMock:
     svc.auth.get_api_key = AsyncMock(return_value="test-api-key")
     svc.auth.get_stored_models = AsyncMock(return_value=["test-model"])
     svc.auth.get_oauth_tokens = AsyncMock(return_value=None)
-    svc.execute_chat = AsyncMock(return_value={
-        "success": True,
-        "result": {"response": "mocked response", "model": "test-model", "provider": "test"},
-    })
-    svc.execute_agent = AsyncMock(return_value={
-        "success": True,
-        "result": {"response": "mocked agent response", "model": "test-model"},
-    })
-    svc.execute_chat_agent = AsyncMock(return_value={
-        "success": True,
-        "result": {"response": "mocked chat agent response", "model": "test-model"},
-    })
+    svc.execute_chat = AsyncMock(
+        return_value={
+            "success": True,
+            "result": {"response": "mocked response", "model": "test-model", "provider": "test"},
+        }
+    )
+    svc.execute_agent = AsyncMock(
+        return_value={
+            "success": True,
+            "result": {"response": "mocked agent response", "model": "test-model"},
+        }
+    )
+    svc.execute_chat_agent = AsyncMock(
+        return_value={
+            "success": True,
+            "result": {"response": "mocked chat agent response", "model": "test-model"},
+        }
+    )
     svc.fetch_models = AsyncMock(return_value=["test-model-1", "test-model-2"])
     return svc
 
@@ -247,14 +250,18 @@ def _build_mock_text_service() -> MagicMock:
     svc.generate_text = AsyncMock(return_value="mocked text")
     # Plugin paths for text generator / file handler now call these names
     # directly on the TextService singleton.
-    svc.execute_text_generator = AsyncMock(return_value={
-        "success": True,
-        "text": "mocked text",
-    })
-    svc.execute_file_handler = AsyncMock(return_value={
-        "success": True,
-        "content": "mocked content",
-    })
+    svc.execute_text_generator = AsyncMock(
+        return_value={
+            "success": True,
+            "text": "mocked text",
+        }
+    )
+    svc.execute_file_handler = AsyncMock(
+        return_value={
+            "success": True,
+            "content": "mocked content",
+        }
+    )
     return svc
 
 

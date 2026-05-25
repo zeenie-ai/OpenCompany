@@ -83,8 +83,14 @@ class TestCalculatorTool:
         assert "quantum" in result["error"]
         supported = result["supported_operations"]
         assert set(supported) == {
-            "add", "subtract", "multiply", "divide",
-            "power", "sqrt", "mod", "abs",
+            "add",
+            "subtract",
+            "multiply",
+            "divide",
+            "power",
+            "sqrt",
+            "mod",
+            "abs",
         }
 
     async def test_non_numeric_operand_raises(self):
@@ -119,8 +125,12 @@ class TestCurrentTimeTool:
         result = await _execute_current_time({"timezone": "UTC"}, {})
 
         assert set(result.keys()) == {
-            "datetime", "date", "time", "timezone",
-            "day_of_week", "timestamp",
+            "datetime",
+            "date",
+            "time",
+            "timezone",
+            "day_of_week",
+            "timestamp",
         }
         assert result["timezone"] == "UTC"
         assert isinstance(result["timestamp"], int)
@@ -168,7 +178,6 @@ class TestDuckDuckGoSearch:
     """ddgs-library wrapper; heavy mocking so no real network is touched."""
 
     async def test_happy_path_maps_ddgs_results_to_documented_shape(self):
-
         fake_ddgs_instance = MagicMock()
         fake_ddgs_instance.text.return_value = [
             {"title": "A", "body": "snippet A", "href": "https://a.example"},
@@ -180,6 +189,7 @@ class TestDuckDuckGoSearch:
         fake_module.DDGS = fake_ddgs_class
 
         from tests.nodes._compat import _execute_duckduckgo_search as _flat_search
+
         with patch.dict("sys.modules", {"ddgs": fake_module}):
             result = await _flat_search(
                 {"query": "python"},
@@ -267,9 +277,8 @@ class TestTaskManager:
         }
 
         from nodes.tool.task_manager import _execute_task_manager
-        result = await _execute_task_manager(
-            {"operation": "list_tasks"}, {"parameters": {}}
-        )
+
+        result = await _execute_task_manager({"operation": "list_tasks"}, {"parameters": {}})
 
         assert result["success"] is True
         assert result["operation"] == "list_tasks"
@@ -293,6 +302,7 @@ class TestTaskManager:
         tools_mod._delegation_results["c1"] = {"status": "completed"}
 
         from nodes.tool.task_manager import _execute_task_manager
+
         result = await _execute_task_manager(
             {"operation": "list_tasks", "status_filter": "running"},
             {"parameters": {}},
@@ -305,9 +315,8 @@ class TestTaskManager:
         tools_mod = _reset_registry
 
         from nodes.tool.task_manager import _execute_task_manager
-        result = await _execute_task_manager(
-            {"operation": "get_task"}, {"parameters": {}}
-        )
+
+        result = await _execute_task_manager({"operation": "get_task"}, {"parameters": {}})
         assert result["success"] is False
         assert "task_id is required" in result["error"]
 
@@ -316,6 +325,7 @@ class TestTaskManager:
         tools_mod._delegation_results["gone"] = {"status": "completed"}
 
         from nodes.tool.task_manager import _execute_task_manager
+
         result = await _execute_task_manager(
             {"operation": "mark_done", "task_id": "gone"},
             {"parameters": {}},
@@ -329,6 +339,7 @@ class TestTaskManager:
         tools_mod = _reset_registry
 
         from nodes.tool.task_manager import _execute_task_manager
+
         result = await _execute_task_manager(
             {"operation": "mark_done", "task_id": "never-seen"},
             {"parameters": {}},
@@ -342,9 +353,8 @@ class TestTaskManager:
         tools_mod = _reset_registry
 
         from nodes.tool.task_manager import _execute_task_manager
-        result = await _execute_task_manager(
-            {"operation": "self_destruct"}, {"parameters": {}}
-        )
+
+        result = await _execute_task_manager({"operation": "self_destruct"}, {"parameters": {}})
         assert result["success"] is False
         assert "Unknown operation" in result["error"]
 
@@ -415,9 +425,9 @@ class TestWriteTodos:
 
         todos = [
             {"content": "valid", "status": "pending"},
-            {"content": "   ", "status": "pending"},              # dropped (empty)
-            {"content": "bad-status", "status": "on_hold"},       # coerced to pending
-            "not a dict",                                         # dropped
+            {"content": "   ", "status": "pending"},  # dropped (empty)
+            {"content": "bad-status", "status": "on_hold"},  # coerced to pending
+            "not a dict",  # dropped
         ]
 
         result = await handle_write_todos(
@@ -446,9 +456,7 @@ class TestWriteTodos:
         )
 
         assert result["success"] is True
-        assert get_todo_service().get("default") == [
-            {"content": "x", "status": "pending"}
-        ]
+        assert get_todo_service().get("default") == [{"content": "x", "status": "pending"}]
 
     async def test_empty_todos_list_yields_empty_stored_state(self):
         from tests.nodes._compat import handle_write_todos
@@ -479,6 +487,4 @@ class TestWriteTodos:
         )
 
         assert result["success"] is True
-        assert get_todo_service().get("wf") == [
-            {"content": "x", "status": "pending"}
-        ]
+        assert get_todo_service().get("wf") == [{"content": "x", "status": "pending"}]

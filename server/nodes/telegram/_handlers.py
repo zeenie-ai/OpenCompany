@@ -38,7 +38,9 @@ def _send_text(svc, data, parse_mode):
     if not text:
         return None, "text required for text message"
     return svc.send_message(
-        chat_id=data["chat_id"], text=text, parse_mode=parse_mode,
+        chat_id=data["chat_id"],
+        text=text,
+        parse_mode=parse_mode,
     ), None
 
 
@@ -47,8 +49,10 @@ def _send_photo(svc, data, parse_mode):
     if not photo_url:
         return None, "media_url required for photo"
     return svc.send_photo(
-        chat_id=data["chat_id"], photo=photo_url,
-        caption=data.get("caption"), parse_mode=parse_mode,
+        chat_id=data["chat_id"],
+        photo=photo_url,
+        caption=data.get("caption"),
+        parse_mode=parse_mode,
     ), None
 
 
@@ -57,8 +61,10 @@ def _send_document(svc, data, parse_mode):
     if not doc_url:
         return None, "media_url required for document"
     return svc.send_document(
-        chat_id=data["chat_id"], document=doc_url,
-        caption=data.get("caption"), parse_mode=parse_mode,
+        chat_id=data["chat_id"],
+        document=doc_url,
+        caption=data.get("caption"),
+        parse_mode=parse_mode,
     ), None
 
 
@@ -67,7 +73,9 @@ def _send_location(svc, data, parse_mode):
     if lat is None or lon is None:
         return None, "latitude and longitude required"
     return svc.send_location(
-        chat_id=data["chat_id"], latitude=float(lat), longitude=float(lon),
+        chat_id=data["chat_id"],
+        latitude=float(lat),
+        longitude=float(lon),
     ), None
 
 
@@ -76,7 +84,9 @@ def _send_contact(svc, data, parse_mode):
     if not phone or not first_name:
         return None, "phone_number and first_name required"
     return svc.send_contact(
-        chat_id=data["chat_id"], phone_number=phone, first_name=first_name,
+        chat_id=data["chat_id"],
+        phone_number=phone,
+        first_name=first_name,
         last_name=data.get("last_name"),
     ), None
 

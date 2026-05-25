@@ -14,6 +14,7 @@ Usage:
     client = get_tracked_client()
     response = await client.post("https://api.twitter.com/2/tweets", json={...})
 """
+
 import re
 import asyncio
 import contextvars
@@ -30,22 +31,12 @@ logger = get_logger(__name__)
 # Context Variables (thread-safe tracking metadata)
 # ============================================================================
 
-_tracking_ctx: contextvars.ContextVar[Dict[str, Any]] = contextvars.ContextVar(
-    'api_tracking', default={}
-)
+_tracking_ctx: contextvars.ContextVar[Dict[str, Any]] = contextvars.ContextVar("api_tracking", default={})
 
 
-def set_tracking_context(
-    node_id: str,
-    session_id: str = "default",
-    workflow_id: Optional[str] = None
-):
+def set_tracking_context(node_id: str, session_id: str = "default", workflow_id: Optional[str] = None):
     """Set tracking context for current async task."""
-    _tracking_ctx.set({
-        'node_id': node_id,
-        'session_id': session_id,
-        'workflow_id': workflow_id
-    })
+    _tracking_ctx.set({"node_id": node_id, "session_id": session_id, "workflow_id": workflow_id})
 
 
 def clear_tracking_context():
@@ -74,7 +65,7 @@ def _load_url_patterns():
 
     try:
         pricing = get_pricing_service()
-        _url_patterns = pricing.get_config().get('url_patterns', {})
+        _url_patterns = pricing.get_config().get("url_patterns", {})
         _patterns_loaded = True
         logger.debug(f"[APITracker] Loaded URL patterns for {len(_url_patterns)} services")
     except Exception as e:
@@ -103,11 +94,11 @@ def _match_url(url: str, method: str) -> Optional[Tuple[str, str, Optional[str]]
     _load_url_patterns()
 
     for service, config in _url_patterns.items():
-        base = config.get('base', '')
+        base = config.get("base", "")
         if not base or not re.search(base, url):
             continue
 
-        for pattern, action_info in config.get('actions', {}).items():
+        for pattern, action_info in config.get("actions", {}).items():
             if not re.search(pattern, url):
                 continue
 
@@ -116,13 +107,9 @@ def _match_url(url: str, method: str) -> Optional[Tuple[str, str, Optional[str]]
                 return (service, action_info, None)
 
             # Dict with action, method, count_path
-            expected_method = action_info.get('method', '*')
-            if expected_method == '*' or expected_method.upper() == method.upper():
-                return (
-                    service,
-                    action_info.get('action', 'unknown'),
-                    action_info.get('count_path')
-                )
+            expected_method = action_info.get("method", "*")
+            if expected_method == "*" or expected_method.upper() == method.upper():
+                return (service, action_info.get("action", "unknown"), action_info.get("count_path"))
 
     return None
 
@@ -142,8 +129,8 @@ def _extract_count(data: Any, path: Optional[str]) -> int:
         return 1
 
     try:
-        for part in path.split('.'):
-            if part == 'length' and isinstance(data, list):
+        for part in path.split("."):
+            if part == "length" and isinstance(data, list):
                 return len(data)
             elif isinstance(data, dict):
                 data = data.get(part)
@@ -162,6 +149,7 @@ def _extract_count(data: Any, path: Optional[str]) -> int:
 # ============================================================================
 # HTTPX Event Hook (the magic happens here)
 # ============================================================================
+
 
 async def _on_response(response: httpx.Response):
     """
@@ -204,33 +192,27 @@ async def _on_response(response: httpx.Response):
         logger.error(f"[APITracker] Error in response hook: {e}")
 
 
-async def _save_metric(
-    service: str,
-    action: str,
-    count: int,
-    ctx: Dict[str, Any]
-):
+async def _save_metric(service: str, action: str, count: int, ctx: Dict[str, Any]):
     """Save metric to database (non-blocking)."""
     try:
         pricing = get_pricing_service()
         cost = pricing.calculate_api_cost(service, action, count)
 
         db = container.database()
-        await db.save_api_usage_metric({
-            'session_id': ctx.get('session_id', 'default'),
-            'node_id': ctx.get('node_id', ''),
-            'workflow_id': ctx.get('workflow_id'),
-            'service': service,
-            'operation': cost.get('operation', action),
-            'endpoint': action,
-            'resource_count': count,
-            'cost': cost.get('total_cost', 0.0)
-        })
-
-        logger.debug(
-            f"[APITracker] Tracked {service}/{action}: "
-            f"{count} resources, ${cost.get('total_cost', 0):.6f}"
+        await db.save_api_usage_metric(
+            {
+                "session_id": ctx.get("session_id", "default"),
+                "node_id": ctx.get("node_id", ""),
+                "workflow_id": ctx.get("workflow_id"),
+                "service": service,
+                "operation": cost.get("operation", action),
+                "endpoint": action,
+                "resource_count": count,
+                "cost": cost.get("total_cost", 0.0),
+            }
         )
+
+        logger.debug(f"[APITracker] Tracked {service}/{action}: " f"{count} resources, ${cost.get('total_cost', 0):.6f}")
 
     except Exception as e:
         logger.error(f"[APITracker] Failed to save metric: {e}")
@@ -239,6 +221,7 @@ async def _save_metric(
 # ============================================================================
 # Tracked Client Factory
 # ============================================================================
+
 
 def create_tracked_client(**kwargs) -> httpx.AsyncClient:
     """
@@ -256,10 +239,7 @@ def create_tracked_client(**kwargs) -> httpx.AsyncClient:
     Returns:
         httpx.AsyncClient with tracking event hook
     """
-    return httpx.AsyncClient(
-        event_hooks={'response': [_on_response]},
-        **kwargs
-    )
+    return httpx.AsyncClient(event_hooks={"response": [_on_response]}, **kwargs)
 
 
 # Shared singleton client (for performance)

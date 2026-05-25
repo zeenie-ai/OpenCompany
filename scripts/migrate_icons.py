@@ -135,7 +135,9 @@ def main() -> int:
             print(f"  migrated {rel} -> lucide:{used}")
         else:
             skipped += 1
-    print(f"\n  {migrated} files migrated, {skipped} skipped (no emoji icon to migrate).")
+    print(
+        f"\n  {migrated} files migrated, {skipped} skipped (no emoji icon to migrate)."
+    )
     return 0
 
 

@@ -63,6 +63,7 @@ class TestStripeWebhookShape:
 
     def test_shape_extracts_stripe_fields(self):
         from nodes.stripe._source import get_webhook_source
+
         src = get_webhook_source()
         payload = {
             "id": "evt_1",
@@ -87,11 +88,11 @@ class TestStripeWebhookShape:
 
     def test_handle_dispatches_on_valid_signature(self):
         from nodes.stripe._source import get_webhook_source
+
         src = get_webhook_source()
         body = json.dumps({"id": "evt_2", "type": "charge.succeeded", "data": {}}).encode()
         req = _fake_request(body, headers=_signed(body, self.SECRET))
-        with self._stub_secret_resolution(), \
-             patch("services.event_waiter.dispatch") as dispatch:
+        with self._stub_secret_resolution(), patch("services.event_waiter.dispatch") as dispatch:
             ev = _run(src.handle(req))
         assert ev.type == "stripe.charge.succeeded"
         dispatch.assert_called_once()
@@ -102,6 +103,7 @@ class TestStripeWebhookShape:
     def test_handle_rejects_tampered_signature(self):
         from fastapi import HTTPException
         from nodes.stripe._source import get_webhook_source
+
         src = get_webhook_source()
         body = json.dumps({"id": "evt_3", "type": "charge.succeeded"}).encode()
         req = _fake_request(body, headers=_signed(body, "whsec_other"))
@@ -119,11 +121,13 @@ class TestStripeWebhookShape:
 class TestStripeReceiveFilter:
     def _filter(self, params: dict | None = None):
         from nodes.stripe.stripe_receive import StripeReceiveNode, StripeReceiveParams
+
         node = StripeReceiveNode()
         return node.build_filter(StripeReceiveParams(**(params or {})))
 
     def _ev(self, stripe_type: str, livemode: bool = False):
         from services.events import WorkflowEvent
+
         return WorkflowEvent(
             source="stripe://acct_1",
             type=f"stripe.{stripe_type}",
@@ -159,6 +163,7 @@ class TestStripeReceiveReshape:
     def test_shape_output_extracts_stripe_fields(self):
         from nodes.stripe.stripe_receive import StripeReceiveNode
         from services.events import WorkflowEvent
+
         ev = WorkflowEvent(
             id="evt_1",
             source="stripe://acct_42",
@@ -200,6 +205,7 @@ class TestStripeActionPassthrough:
         captured, fake = cli_capture
         with patch("nodes.stripe.stripe_action.run_cli_command", AsyncMock(side_effect=fake)):
             from nodes.stripe.stripe_action import StripeActionNode, StripeActionParams
+
             node = StripeActionNode()
             result = _run(node.run(None, StripeActionParams(command="customers create --email a@b.com")))
             assert result["success"] is True
@@ -209,12 +215,14 @@ class TestStripeActionPassthrough:
         captured, fake = cli_capture
         with patch("nodes.stripe.stripe_action.run_cli_command", AsyncMock(side_effect=fake)):
             from nodes.stripe.stripe_action import StripeActionNode, StripeActionParams
+
             node = StripeActionNode()
             _run(node.run(None, StripeActionParams(command="customers create --name 'Acme Inc'")))
             assert captured == [["customers", "create", "--name", "Acme Inc"]]
 
     def test_empty_command_raises(self):
         from nodes.stripe.stripe_action import StripeActionNode, StripeActionParams
+
         node = StripeActionNode()
         with pytest.raises(RuntimeError, match="command is required"):
             _run(node.run(None, StripeActionParams(command="   ")))
@@ -240,29 +248,37 @@ class TestStripePluginRegistration:
     def test_ws_handlers_registered(self):
         import nodes.stripe  # noqa: F401
         from services.ws_handler_registry import get_ws_handlers
+
         registered = get_ws_handlers()
         for name in (
-            "stripe_login", "stripe_logout",
-            "stripe_connect", "stripe_disconnect", "stripe_reconnect",
-            "stripe_status", "stripe_trigger",
+            "stripe_login",
+            "stripe_logout",
+            "stripe_connect",
+            "stripe_disconnect",
+            "stripe_reconnect",
+            "stripe_status",
+            "stripe_trigger",
         ):
             assert name in registered, f"WS handler '{name}' not registered"
 
     def test_webhook_source_registered(self):
         import nodes.stripe  # noqa: F401
         from services.events import WEBHOOK_SOURCES
+
         assert "stripe" in WEBHOOK_SOURCES
         assert WEBHOOK_SOURCES["stripe"].type == "stripe.webhook"
 
     def test_node_classes_registered(self):
         import nodes.stripe  # noqa: F401
         from services.node_registry import get_node_class
+
         assert get_node_class("stripeReceive").__name__ == "StripeReceiveNode"
         assert get_node_class("stripeAction").__name__ == "StripeActionNode"
 
     def test_credential_registered(self):
         import nodes.stripe  # noqa: F401
         from services.plugin.credential import CREDENTIAL_REGISTRY
+
         # Stripe CLI manages auth at ~/.config/stripe/config.toml; the
         # credential class is a thin marker keyed by "stripe" (no api_key).
         assert "stripe" in CREDENTIAL_REGISTRY
@@ -270,19 +286,23 @@ class TestStripePluginRegistration:
     def test_output_schemas_registered(self):
         import nodes.stripe  # noqa: F401
         from services.node_output_schemas import NODE_OUTPUT_SCHEMAS
+
         assert "stripeReceive" in NODE_OUTPUT_SCHEMAS
         assert "stripeAction" in NODE_OUTPUT_SCHEMAS
 
     def test_action_node_is_ai_tool(self):
         from nodes.stripe.stripe_action import StripeActionNode
+
         assert StripeActionNode.usable_as_tool is True
 
     def test_receive_node_subscribes_to_stripe_webhook(self):
         from nodes.stripe.stripe_receive import StripeReceiveNode
+
         assert StripeReceiveNode.event_type == "stripe.webhook"
 
     def test_listen_source_has_correct_namespace(self):
         from nodes.stripe._source import get_listen_source
+
         src = get_listen_source()
         assert src.process_name == "stripe-listen"
         assert src.workflow_namespace == "_stripe"

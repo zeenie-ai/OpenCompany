@@ -95,8 +95,11 @@ async def handle_save_skill_content(data: Dict[str, Any], websocket: WebSocket) 
             skill_loader.clear_cache()
 
             from nodes.skill.master_skill._events import broadcast_skill_lifecycle
+
             await broadcast_skill_lifecycle(
-                "content_saved", name=skill_name, is_builtin=True,
+                "content_saved",
+                name=skill_name,
+                is_builtin=True,
             )
             logger.info(f"[Skills] Updated built-in skill: {skill_name}")
             return {
@@ -116,8 +119,11 @@ async def handle_save_skill_content(data: Dict[str, Any], websocket: WebSocket) 
         )
         if updated:
             from nodes.skill.master_skill._events import broadcast_skill_lifecycle
+
             await broadcast_skill_lifecycle(
-                "content_saved", name=skill_name, is_builtin=False,
+                "content_saved",
+                name=skill_name,
+                is_builtin=False,
             )
             logger.info(f"[Skills] Updated user skill: {skill_name}")
             return {
@@ -171,10 +177,12 @@ async def handle_list_skill_folders(data: Dict[str, Any], websocket: WebSocket) 
         for item in sorted(skills_dir.iterdir()):
             if item.is_dir() and not item.name.startswith("."):
                 skill_count = len(list(item.rglob("SKILL.md")))
-                folders.append({
-                    "name": item.name,
-                    "skill_count": skill_count,
-                })
+                folders.append(
+                    {
+                        "name": item.name,
+                        "skill_count": skill_count,
+                    }
+                )
 
     return {"success": True, "folders": folders}
 
@@ -205,18 +213,21 @@ async def handle_scan_skill_folder(data: Dict[str, Any], websocket: WebSocket) -
             metadata.path = skill_md.parent
             skill_loader._registry[metadata.name] = metadata
 
-            skills.append({
-                "name": metadata.name,
-                "description": metadata.description,
-                "metadata": metadata.metadata,
-            })
+            skills.append(
+                {
+                    "name": metadata.name,
+                    "description": metadata.description,
+                    "metadata": metadata.metadata,
+                }
+            )
 
     return {"success": True, "skills": skills, "folder": folder}
 
 
 @ws_handler()
 async def handle_lookup_skill_metadata(
-    data: Dict[str, Any], websocket: WebSocket,
+    data: Dict[str, Any],
+    websocket: WebSocket,
 ) -> Dict[str, Any]:
     """Look up SKILL.md metadata for a list of skill names across every
     folder (and the user-skills DB).
@@ -241,11 +252,13 @@ async def handle_lookup_skill_metadata(
     for name in names:
         meta = skill_loader._registry.get(name)
         if meta:
-            skills.append({
-                "name": meta.name,
-                "description": meta.description,
-                "metadata": meta.metadata,
-            })
+            skills.append(
+                {
+                    "name": meta.name,
+                    "description": meta.description,
+                    "metadata": meta.metadata,
+                }
+            )
 
     return {"success": True, "skills": skills}
 
@@ -409,7 +422,7 @@ async def handle_reset_skill(data: Dict[str, Any], websocket: WebSocket) -> Dict
 
     frontmatter_match = re.match(r"^---\s*\n.*?\n---\s*\n", content, re.DOTALL)
     if frontmatter_match:
-        original_instructions = content[frontmatter_match.end():]
+        original_instructions = content[frontmatter_match.end() :]
     else:
         original_instructions = content
 

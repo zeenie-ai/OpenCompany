@@ -40,9 +40,7 @@ from services.plugin.registry import IdempotentRegistry
 # plugins both declaring ``name="cron-scheduler"`` would surface a
 # namespace clash). SimplePlugin instances are content-comparable via
 # the IdempotentRegistry's qualname check (reload safe).
-_REGISTRY: IdempotentRegistry[str, SimplePlugin] = IdempotentRegistry(
-    "temporal_plugin"
-)
+_REGISTRY: IdempotentRegistry[str, SimplePlugin] = IdempotentRegistry("temporal_plugin")
 
 
 def register_temporal_plugin(plugin: SimplePlugin) -> None:

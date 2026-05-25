@@ -7,7 +7,12 @@ from typing import Any, Dict, List, Optional
 
 from core.logging import get_logger
 from services.llm.protocol import (
-    LLMResponse, Message, ThinkingConfig, ToolCall, ToolDef, Usage,
+    LLMResponse,
+    Message,
+    ThinkingConfig,
+    ToolCall,
+    ToolDef,
+    Usage,
 )
 
 logger = get_logger(__name__)
@@ -18,6 +23,7 @@ class AnthropicProvider:
 
     def __init__(self, api_key: str, *, proxy_url: Optional[str] = None):
         import anthropic
+
         kwargs: Dict[str, Any] = {"api_key": api_key}
         if proxy_url:
             kwargs["base_url"] = proxy_url
@@ -71,6 +77,7 @@ class AnthropicProvider:
 
     async def fetch_models(self, api_key: str) -> List[str]:
         import httpx
+
         async with httpx.AsyncClient() as client:
             r = await client.get(
                 "https://api.anthropic.com/v1/models",
@@ -117,12 +124,14 @@ class AnthropicProvider:
             if m.content:
                 content.append({"type": "text", "text": m.content})
             for tc in m.tool_calls:
-                content.append({
-                    "type": "tool_use",
-                    "id": tc.id,
-                    "name": tc.name,
-                    "input": tc.args,
-                })
+                content.append(
+                    {
+                        "type": "tool_use",
+                        "id": tc.id,
+                        "name": tc.name,
+                        "input": tc.args,
+                    }
+                )
             return {"role": "assistant", "content": content}
 
         return {"role": role, "content": m.content}
@@ -146,11 +155,13 @@ class AnthropicProvider:
             elif block.type == "thinking":
                 thinking_parts.append(block.thinking)
             elif block.type == "tool_use":
-                tool_calls.append(ToolCall(
-                    id=block.id,
-                    name=block.name,
-                    args=block.input if isinstance(block.input, dict) else json.loads(block.input),
-                ))
+                tool_calls.append(
+                    ToolCall(
+                        id=block.id,
+                        name=block.name,
+                        args=block.input if isinstance(block.input, dict) else json.loads(block.input),
+                    )
+                )
 
         usage = Usage(
             input_tokens=getattr(resp.usage, "input_tokens", 0),

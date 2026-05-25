@@ -18,9 +18,11 @@ logger = get_logger(__name__)
 # Provider config dataclass
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ProviderConfig:
     """Metadata for a single LLM provider."""
+
     name: str
     default_model: str
     detection_patterns: Tuple[str, ...]
@@ -34,6 +36,7 @@ class ProviderConfig:
 # ---------------------------------------------------------------------------
 # Load config/llm_defaults.json once at import time
 # ---------------------------------------------------------------------------
+
 
 def _load_llm_defaults() -> Dict[str, Any]:
     config_path = Path(__file__).parent.parent.parent / "config" / "llm_defaults.json"
@@ -68,6 +71,7 @@ _AUTH_OVERRIDES: Dict[str, Dict[str, str]] = {
 # Provider registry -- built dynamically from llm_defaults.json
 # ---------------------------------------------------------------------------
 
+
 def _build_provider_configs() -> Dict[str, ProviderConfig]:
     """Build ProviderConfig entries from llm_defaults.json."""
     providers = LLM_DEFAULTS.get("providers", {})
@@ -100,6 +104,7 @@ def get_provider_config(provider: str) -> Optional[ProviderConfig]:
 # Provider detection from model name
 # ---------------------------------------------------------------------------
 
+
 def detect_provider_from_model(model: str) -> str:
     model_lower = model.lower()
     for name, cfg in PROVIDER_CONFIGS.items():
@@ -114,7 +119,7 @@ def is_model_valid_for_provider(model: str, provider: str) -> bool:
     # match any "lmstudio"/"ollama" substring. Treat as always-valid;
     # the upstream API will 404 a genuinely missing model. See the
     # mirror in services/ai.py for the full rationale.
-    if provider in ('openrouter', 'ollama', 'lmstudio'):
+    if provider in ("openrouter", "ollama", "lmstudio"):
         return True
     cfg = PROVIDER_CONFIGS.get(provider)
     if not cfg:
@@ -126,6 +131,7 @@ def is_model_valid_for_provider(model: str, provider: str) -> bool:
 # ---------------------------------------------------------------------------
 # Default model helpers
 # ---------------------------------------------------------------------------
+
 
 def get_default_model(provider: str) -> str:
     cfg = PROVIDER_CONFIGS.get(provider)
@@ -148,9 +154,11 @@ async def get_default_model_async(provider: str, database) -> str:
 # Max-tokens / temperature resolution
 # ---------------------------------------------------------------------------
 
+
 def resolve_max_tokens(params: dict, model: str, provider: str) -> int:
     """Resolve max_tokens: user param -> model registry -> llm_defaults -> 4096."""
     from services.model_registry import get_model_registry
+
     registry = get_model_registry()
     model_max = registry.get_max_output_tokens(model, provider)
 
@@ -167,6 +175,7 @@ def resolve_max_tokens(params: dict, model: str, provider: str) -> int:
 def resolve_temperature(params: dict, model: str, provider: str, thinking_enabled: bool) -> float:
     """Resolve temperature with model-specific constraints."""
     from services.model_registry import get_model_registry
+
     registry = get_model_registry()
 
     user_temp = float(params.get("temperature", 0.7))

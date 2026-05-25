@@ -76,8 +76,8 @@ async def _finalize_claude_login() -> None:
         info = await claude_auth_status_info()
         if not info.get("loggedIn"):
             logger.warning(
-                "[claude_code_login] CLI exited cleanly but auth status "
-                "reports not logged in: %s", info,
+                "[claude_code_login] CLI exited cleanly but auth status " "reports not logged in: %s",
+                info,
             )
             return
 
@@ -85,7 +85,8 @@ async def _finalize_claude_login() -> None:
         org_name = info.get("orgName")
         await mark_logged_in(_CATALOGUE_KEY, email=email, name=org_name)
         await broadcast_credential_event(
-            "credential.oauth.connected", provider=_CATALOGUE_KEY,
+            "credential.oauth.connected",
+            provider=_CATALOGUE_KEY,
         )
         logger.info(
             "[claude_code_login] connected as %s (%s · %s)",
@@ -115,7 +116,8 @@ async def handle_claude_code_login(
                 name=info.get("orgName"),
             )
             await broadcast_credential_event(
-                "credential.oauth.connected", provider=_CATALOGUE_KEY,
+                "credential.oauth.connected",
+                provider=_CATALOGUE_KEY,
             )
         except Exception as exc:
             logger.warning("[claude_code_login] mark/broadcast failed: %s", exc)
@@ -145,7 +147,8 @@ async def handle_claude_code_logout(
         await claude_auth_logout()
         await mark_logged_out(_CATALOGUE_KEY)
         await broadcast_credential_event(
-            "credential.oauth.disconnected", provider=_CATALOGUE_KEY,
+            "credential.oauth.disconnected",
+            provider=_CATALOGUE_KEY,
         )
     except Exception as exc:
         logger.warning("[claude_code_logout] failed: %s", exc)

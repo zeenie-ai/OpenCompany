@@ -72,9 +72,7 @@ class PosixPtyHandle:
             # EIO = the slave end closed (process exited). Surface as a
             # clean ConnectionError so callers can distinguish from a
             # genuine permission / FD-leak bug.
-            raise ConnectionError(
-                f"PTY write failed (pid={self.pid}): {exc}"
-            ) from exc
+            raise ConnectionError(f"PTY write failed (pid={self.pid}): {exc}") from exc
 
     async def kill(self, signal_: int = signal.SIGTERM) -> None:
         """SIGTERM, wait briefly, escalate to SIGKILL if still alive.
@@ -93,7 +91,9 @@ class PosixPtyHandle:
         # call signal helpers directly.
         try:
             await loop.run_in_executor(
-                None, self._proc.kill, signal_,  # type: ignore[attr-defined]
+                None,
+                self._proc.kill,
+                signal_,  # type: ignore[attr-defined]
             )
         except (ProcessLookupError, OSError) as exc:
             logger.debug("PTY first-stage signal raced exit: %s", exc)
@@ -111,7 +111,9 @@ class PosixPtyHandle:
         # Escalate. ``kill(SIGKILL)`` is the documented force-quit path.
         try:
             await loop.run_in_executor(
-                None, self._proc.kill, signal.SIGKILL,  # type: ignore[attr-defined]
+                None,
+                self._proc.kill,
+                signal.SIGKILL,  # type: ignore[attr-defined]
             )
         except (ProcessLookupError, OSError):
             pass
@@ -187,6 +189,8 @@ class PosixPtyTransport(PtyTransport):
         )
         logger.info(
             "[PtyTransport posix] spawned pid=%s cwd=%s argv0=%s",
-            getattr(proc, "pid", "?"), cwd, binary,
+            getattr(proc, "pid", "?"),
+            cwd,
+            binary,
         )
         return PosixPtyHandle(proc)

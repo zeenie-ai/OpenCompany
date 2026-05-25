@@ -56,8 +56,10 @@ class FileReadNode(ActionNode):
         file_path = normalize_virtual_path(params.file_path)
         try:
             content = await asyncio.to_thread(
-                backend.read, file_path,
-                offset=params.offset, limit=params.limit,
+                backend.read,
+                file_path,
+                offset=params.offset,
+                limit=params.limit,
             )
         except (FileNotFoundError, IsADirectoryError, ValueError) as e:
             # File doesn't exist / is a directory / bad offset — the

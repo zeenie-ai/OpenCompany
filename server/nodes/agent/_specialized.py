@@ -36,14 +36,23 @@ class SpecializedAgentParams(BaseModel):
         },
     )
     provider: Literal[
-        "openai", "anthropic", "gemini", "openrouter",
-        "groq", "cerebras", "deepseek", "kimi", "mistral",
+        "openai",
+        "anthropic",
+        "gemini",
+        "openrouter",
+        "groq",
+        "cerebras",
+        "deepseek",
+        "kimi",
+        "mistral",
         # Local-server providers — see ai_agent.Params for the proxy_url
         # rationale. Same fix; same reason.
-        "ollama", "lmstudio",
+        "ollama",
+        "lmstudio",
     ] = "openai"
     model: str = Field(
-        default="", json_schema_extra={"placeholder": "Select a model..."},
+        default="",
+        json_schema_extra={"placeholder": "Select a model..."},
     )
     system_message: Optional[str] = Field(
         default="You are a helpful assistant",
@@ -54,14 +63,18 @@ class SpecializedAgentParams(BaseModel):
     # default=None so an unset value falls through to ``agent.default_temperature``
     # in server/config/llm_defaults.json (resolved by _resolve_temperature).
     temperature: Optional[float] = Field(
-        default=None, ge=0.0, le=2.0,
+        default=None,
+        ge=0.0,
+        le=2.0,
         json_schema_extra={"group": "options"},
     )
     # default=None so an unset value is absent from the dumped dict and the
     # backend (_resolve_max_tokens) falls through to the per-model default
     # in server/config/llm_defaults.json instead of being silently capped.
     max_tokens: Optional[int] = Field(
-        default=None, ge=1, le=200000,
+        default=None,
+        ge=1,
+        le=200000,
         json_schema_extra={"group": "options"},
     )
 
@@ -117,9 +130,11 @@ class SpecializedAgentBase(ActionNode, abstract=True):
         ai_service = get_ai_service()
         database = get_database()
         kwargs = await prepare_agent_call(
-            node_id=ctx.node_id, node_type=self.type,
+            node_id=ctx.node_id,
+            node_type=self.type,
             parameters=params.model_dump(),
-            context=ctx.raw, database=database,
+            context=ctx.raw,
+            database=database,
             log_prefix=f"[{self.type}]",
         )
         response = await ai_service.execute_chat_agent(ctx.node_id, **kwargs)

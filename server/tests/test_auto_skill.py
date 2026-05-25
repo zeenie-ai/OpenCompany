@@ -97,8 +97,10 @@ def test_non_agent_target_is_noop():
 
 def test_unknown_target_node_class_is_noop():
     """get_node_class returns None when the type isn't registered -- treat as non-agent."""
-    with patch("services.auto_skill.get_skill", return_value="http-request-skill"), \
-         patch("services.auto_skill.get_node_class", return_value=None):
+    with (
+        patch("services.auto_skill.get_skill", return_value="http-request-skill"),
+        patch("services.auto_skill.get_node_class", return_value=None),
+    ):
         result = _evaluate()
         assert result == {"operations": []}
 

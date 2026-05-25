@@ -27,16 +27,10 @@ class TestGetBaseUrl:
         assert get_base_url(_conn("ws://localhost:3010/ws/status")) == "http://localhost:3010"
 
     def test_wss_scheme_becomes_https(self):
-        assert (
-            get_base_url(_conn("wss://flow.zeenie.xyz/ws/status"))
-            == "https://flow.zeenie.xyz"
-        )
+        assert get_base_url(_conn("wss://flow.zeenie.xyz/ws/status")) == "https://flow.zeenie.xyz"
 
     def test_http_scheme_preserved(self):
-        assert (
-            get_base_url(_conn("http://localhost:3010/api/google"))
-            == "http://localhost:3010"
-        )
+        assert get_base_url(_conn("http://localhost:3010/api/google")) == "http://localhost:3010"
 
     def test_https_scheme_preserved(self):
         assert get_base_url(_conn("https://example.com/anything")) == "https://example.com"
@@ -45,10 +39,7 @@ class TestGetBaseUrl:
         assert get_base_url(_conn("http://localhost:3010/")) == "http://localhost:3010"
 
     def test_preserves_non_default_port(self):
-        assert (
-            get_base_url(_conn("http://localhost:8080/anything"))
-            == "http://localhost:8080"
-        )
+        assert get_base_url(_conn("http://localhost:8080/anything")) == "http://localhost:8080"
 
 
 class TestGetRedirectUri:
@@ -75,9 +66,7 @@ class TestGetRedirectUri:
         """`get_oauth_callback_path` (the real one, not mocked) falls
         back to ``/api/<provider>/callback`` for any unregistered
         provider. Test the integrated path end-to-end."""
-        uri = get_redirect_uri(
-            _conn("http://localhost:3010/anything"), "newprovider"
-        )
+        uri = get_redirect_uri(_conn("http://localhost:3010/anything"), "newprovider")
         assert uri == "http://localhost:3010/api/newprovider/callback"
 
     def test_paths_registered_by_plugins(self):

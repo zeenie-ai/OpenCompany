@@ -56,9 +56,5 @@ class GoogleMapsCredential(ApiKeyCredential):
             )
         return ProbeResult(
             valid=True,
-            message=(
-                "Google Maps API key is valid"
-                if status == "OK"
-                else f"API key is valid (status: {status})"
-            ),
+            message=("Google Maps API key is valid" if status == "OK" else f"API key is valid (status: {status})"),
         )

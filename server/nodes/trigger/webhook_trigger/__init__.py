@@ -79,10 +79,7 @@ class WebhookTriggerNode(TriggerNode):
     group = ("trigger",)
     description = "Start workflow when HTTP request is received"
     component_kind = "trigger"
-    handles = (
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
-    )
+    handles = ({"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},)
     task_queue = TaskQueue.TRIGGERS_EVENT
     mode = "event"
     event_type = "webhook_received"
@@ -106,9 +103,7 @@ class WebhookTriggerNode(TriggerNode):
     # stub operation so invariants see it.
     @Operation("wait")
     async def wait(self, ctx: NodeContext, params: WebhookTriggerParams) -> WebhookTriggerOutput:
-        raise NotImplementedError(
-            "Event triggers return via TriggerNode.execute, not the op body"
-        )
+        raise NotImplementedError("Event triggers return via TriggerNode.execute, not the op body")
 
 
 # Wave 12 C1 canary: opt this trigger type into TriggerListenerWorkflow.

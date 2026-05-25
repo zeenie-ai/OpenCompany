@@ -18,13 +18,14 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 
-
 # ---------------------------------------------------------------------------
 # Task specs (discriminated union)
 # ---------------------------------------------------------------------------
 
+
 class BaseAICliTaskSpec(BaseModel):
     """Shared fields for every CLI task."""
+
     task_id: Optional[str] = Field(
         default=None,
         description="Auto-assigned `t_<8hex>` if omitted.",
@@ -36,15 +37,16 @@ class BaseAICliTaskSpec(BaseModel):
     )
     branch: Optional[str] = Field(
         default=None,
-        description="Branch name for the per-task git worktree. "
-                    "Auto-named `machina/<task_id>` if omitted.",
+        description="Branch name for the per-task git worktree. " "Auto-named `machina/<task_id>` if omitted.",
     )
     model: Optional[str] = Field(default=None)
     timeout_seconds: int = Field(
-        default=600, ge=10, le=3600,
+        default=600,
+        ge=10,
+        le=3600,
         description="Hard timeout per task. On expiry the session is "
-                    "terminate_then_kill'd and a diagnostic dump is "
-                    "written to ~/.claude-machina/logs/.",
+        "terminate_then_kill'd and a diagnostic dump is "
+        "written to ~/.claude-machina/logs/.",
     )
     system_prompt: Optional[str] = Field(
         default=None,
@@ -60,46 +62,49 @@ class BaseAICliTaskSpec(BaseModel):
 class ClaudeTaskSpec(BaseAICliTaskSpec):
     """Claude Code CLI task. Full feature set: sessions, resume, budget,
     turns, allowed_tools, permission_mode."""
+
     provider: Literal["claude"] = "claude"
     session_id: Optional[str] = Field(
         default=None,
         description="Start a named session. Pair with `resume_session_id` "
-                    "to chain conversations. Note: silently dropped in "
-                    "interactive mode (claude assigns its own UUID); "
-                    "kept for back-compat.",
+        "to chain conversations. Note: silently dropped in "
+        "interactive mode (claude assigns its own UUID); "
+        "kept for back-compat.",
     )
     resume_session_id: Optional[str] = Field(
         default=None,
         description="Resume from a specific prior session UUID. Mutually "
-                    "exclusive with `continue_session`. Generally unset by "
-                    "claude_code_agent — set `continue_session=True` for "
-                    "memory-bound runs and let claude find its own latest.",
+        "exclusive with `continue_session`. Generally unset by "
+        "claude_code_agent — set `continue_session=True` for "
+        "memory-bound runs and let claude find its own latest.",
     )
     continue_session: bool = Field(
         default=False,
         description="Emit `--continue` so claude auto-loads the most "
-                    "recent conversation under the current cwd (per "
-                    "code.claude.com/docs/en/cli-reference). The cleaner "
-                    "alternative to passing a specific UUID via "
-                    "`resume_session_id` — claude handles session "
-                    "tracking itself, no UUID round-trip through the "
-                    "memory node's params required.",
+        "recent conversation under the current cwd (per "
+        "code.claude.com/docs/en/cli-reference). The cleaner "
+        "alternative to passing a specific UUID via "
+        "`resume_session_id` — claude handles session "
+        "tracking itself, no UUID round-trip through the "
+        "memory node's params required.",
     )
     max_turns: Optional[int] = Field(
-        default=None, ge=1,
+        default=None,
+        ge=1,
         description="Per-task turn cap. Defaults to provider config.",
     )
     max_budget_usd: Optional[float] = Field(
-        default=None, ge=0,
+        default=None,
+        ge=0,
         description="Per-task USD budget. Defaults to provider config.",
     )
     allowed_tools: Optional[str] = Field(
         default=None,
         description="Comma-separated tool list. Default is empty — "
-                    "claude built-ins (Read/Edit/Bash/Glob/Grep/Write/"
-                    "Skill/WebSearch/WebFetch) are intentionally NOT in "
-                    "the allowlist; the agent only gets connected MCP "
-                    "tools + MachinaOs's own MCP infrastructure tools.",
+        "claude built-ins (Read/Edit/Bash/Glob/Grep/Write/"
+        "Skill/WebSearch/WebFetch) are intentionally NOT in "
+        "the allowlist; the agent only gets connected MCP "
+        "tools + MachinaOs's own MCP infrastructure tools.",
     )
     permission_mode: Literal["default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"] = "dontAsk"
 
@@ -128,10 +133,9 @@ class ClaudeTaskSpec(BaseAICliTaskSpec):
 
 class CodexTaskSpec(BaseAICliTaskSpec):
     """OpenAI Codex CLI task. Sandbox-first; no session/resume/budget/turns."""
+
     provider: Literal["codex"] = "codex"
-    sandbox: Literal["read-only", "workspace-write", "danger-full-access"] = (
-        "workspace-write"
-    )
+    sandbox: Literal["read-only", "workspace-write", "danger-full-access"] = "workspace-write"
     ask_for_approval: Literal["untrusted", "on-request", "never"] = "never"
 
 
@@ -141,6 +145,7 @@ class GeminiTaskSpec(BaseAICliTaskSpec):
     Schema lives in v1 so the discriminated union JSON Schema for the
     LLM tool fast-path doesn't change when v2 lands.
     """
+
     provider: Literal["gemini"] = "gemini"
     session_id: Optional[str] = None
     resume: Optional[str] = Field(
@@ -161,8 +166,10 @@ AICliTaskSpec = Annotated[
 # Result models (Pydantic for serialisation; mirror dataclasses in protocol.py)
 # ---------------------------------------------------------------------------
 
+
 class CanonicalUsagePydantic(BaseModel):
     """Pydantic mirror of `protocol.CanonicalUsage` for output serialisation."""
+
     input_tokens: int = 0
     output_tokens: int = 0
     cache_read: int = 0
@@ -173,6 +180,7 @@ class CanonicalUsagePydantic(BaseModel):
 
 class SessionResultModel(BaseModel):
     """Per-task result, JSON-serialisable."""
+
     task_id: str
     session_id: Optional[str] = None
     provider: str = ""
@@ -194,6 +202,7 @@ class SessionResultModel(BaseModel):
 
 class BatchSummary(BaseModel):
     """Aggregated batch summary."""
+
     n_tasks: int = 0
     n_succeeded: int = 0
     n_failed: int = 0
@@ -204,6 +213,7 @@ class BatchSummary(BaseModel):
 
 class BatchResultModel(BaseModel):
     """Top-level batch result returned by `run_batch()`."""
+
     tasks: List[SessionResultModel] = Field(default_factory=list)
     summary: BatchSummary = Field(default_factory=BatchSummary)
     provider: str = ""
@@ -213,6 +223,7 @@ class BatchResultModel(BaseModel):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def session_result_to_model(sr: Any) -> SessionResultModel:
     """Convert a `protocol.SessionResult` dataclass to its Pydantic mirror."""

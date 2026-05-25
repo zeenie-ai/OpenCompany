@@ -41,7 +41,8 @@ async def build_google_service(
     creds = await GoogleCredential.build_credentials(parameters, context)
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(
-        None, lambda: build(api_name, api_version, credentials=creds),
+        None,
+        lambda: build(api_name, api_version, credentials=creds),
     )
 
 
@@ -65,16 +66,18 @@ async def track_google_usage(
     cost_data = pricing.calculate_api_cost(service, action, resource_count)
 
     db = get_database()
-    await db.save_api_usage_metric({
-        'session_id': context.get('session_id', 'default'),
-        'node_id': node_id,
-        'workflow_id': context.get('workflow_id'),
-        'service': service,
-        'operation': cost_data.get('operation', action),
-        'endpoint': action,
-        'resource_count': resource_count,
-        'cost': cost_data.get('total_cost', 0.0),
-    })
+    await db.save_api_usage_metric(
+        {
+            "session_id": context.get("session_id", "default"),
+            "node_id": node_id,
+            "workflow_id": context.get("workflow_id"),
+            "service": service,
+            "operation": cost_data.get("operation", action),
+            "endpoint": action,
+            "resource_count": resource_count,
+            "cost": cost_data.get("total_cost", 0.0),
+        }
+    )
     return cost_data
 
 

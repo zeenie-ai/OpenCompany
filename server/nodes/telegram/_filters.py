@@ -55,16 +55,11 @@ def build_telegram_filter(params: Dict) -> Callable[[Dict], bool]:
     content_type_filter = params.get("content_type_filter", "all")
     chat_id_filter = params.get("chat_id", "")
     from_user_filter = params.get("from_user", "")
-    keywords = [
-        k.strip().lower() for k in params.get("keywords", "").split(",") if k.strip()
-    ]
+    keywords = [k.strip().lower() for k in params.get("keywords", "").split(",") if k.strip()]
     ignore_bots = params.get("ignore_bots", True)
     owner_chat_id = params.get("_owner_chat_id")
 
-    logger.debug(
-        f"[TelegramFilter] Built: sender={sender_filter}, "
-        f"content_type={content_type_filter}, owner_chat_id={owner_chat_id}"
-    )
+    logger.debug(f"[TelegramFilter] Built: sender={sender_filter}, " f"content_type={content_type_filter}, owner_chat_id={owner_chat_id}")
 
     def _get_owner_chat_id() -> object:
         """Lazy lookup from the local service -- handles owner detected
@@ -113,10 +108,7 @@ def build_telegram_filter(params: Dict) -> Callable[[Dict], bool]:
         if sender_filter != "self" and ignore_bots and m.get("is_bot", False):
             return False
 
-        logger.debug(
-            f"[TelegramFilter] Matched message from "
-            f"{m.get('from_username', m.get('from_id'))}"
-        )
+        logger.debug(f"[TelegramFilter] Matched message from " f"{m.get('from_username', m.get('from_id'))}")
         return True
 
     return matches

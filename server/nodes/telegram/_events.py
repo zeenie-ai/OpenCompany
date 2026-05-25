@@ -71,11 +71,7 @@ def telegram_connection_status(
         data["has_stored_token"] = has_stored_token
     return WorkflowEvent(
         source="machinaos://nodes/telegram",
-        type=(
-            "com.machinaos.telegram.connection.opened"
-            if connected
-            else "com.machinaos.telegram.connection.closed"
-        ),
+        type=("com.machinaos.telegram.connection.opened" if connected else "com.machinaos.telegram.connection.closed"),
         subject=bot_username,
         data=data,
     )
@@ -138,10 +134,12 @@ async def broadcast_telegram_status(
         owner_chat_id=owner_chat_id,
         has_stored_token=has_stored_token,
     )
-    await broadcaster.broadcast({
-        "type": _STATUS_TYPED_WIRE_KEY,
-        "data": event.model_dump(mode="json"),
-    })
+    await broadcaster.broadcast(
+        {
+            "type": _STATUS_TYPED_WIRE_KEY,
+            "data": event.model_dump(mode="json"),
+        }
+    )
 
 
 async def dispatch_telegram_message_received(event_data: Mapping[str, Any]) -> None:

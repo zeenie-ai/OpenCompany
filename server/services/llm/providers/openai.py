@@ -11,7 +11,12 @@ from typing import Any, Dict, List, Optional
 
 from core.logging import get_logger
 from services.llm.protocol import (
-    LLMResponse, Message, ThinkingConfig, ToolCall, ToolDef, Usage,
+    LLMResponse,
+    Message,
+    ThinkingConfig,
+    ToolCall,
+    ToolDef,
+    Usage,
 )
 
 logger = get_logger(__name__)
@@ -22,6 +27,7 @@ class OpenAIProvider:
 
     def __init__(self, api_key: str, *, proxy_url: Optional[str] = None, base_url: Optional[str] = None):
         import openai
+
         kwargs: Dict[str, Any] = {"api_key": api_key}
         url = proxy_url or base_url
         if url:
@@ -143,11 +149,13 @@ class OpenAIProvider:
         if msg.tool_calls:
             for tc in msg.tool_calls:
                 args = tc.function.arguments
-                tool_calls.append(ToolCall(
-                    id=tc.id,
-                    name=tc.function.name,
-                    args=json.loads(args) if isinstance(args, str) else args,
-                ))
+                tool_calls.append(
+                    ToolCall(
+                        id=tc.id,
+                        name=tc.function.name,
+                        args=json.loads(args) if isinstance(args, str) else args,
+                    )
+                )
 
         u = resp.usage
         usage = Usage(

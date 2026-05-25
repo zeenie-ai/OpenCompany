@@ -25,7 +25,6 @@ from __future__ import annotations
 import inspect
 
 
-
 class TestFactoryShape:
     def test_factory_exists_and_returns_workflow_event(self):
         from services.events import WorkflowEvent
@@ -74,16 +73,12 @@ class TestBroadcasterWrapper:
         broadcasts when this method is rewritten."""
         from services.status_broadcaster import StatusBroadcaster
 
-        src = inspect.getsource(
-            StatusBroadcaster.broadcast_node_parameters_updated
-        )
+        src = inspect.getsource(StatusBroadcaster.broadcast_node_parameters_updated)
         assert "WorkflowEvent" in src, (
-            "broadcast_node_parameters_updated must build a "
-            "WorkflowEvent envelope; raw-dict broadcasts violate RFC §6.4."
+            "broadcast_node_parameters_updated must build a " "WorkflowEvent envelope; raw-dict broadcasts violate RFC §6.4."
         )
         assert "node_parameters_updated" in src, (
-            "Wire-format key node_parameters_updated must stay in "
-            "the broadcast payload (FE back-compat)."
+            "Wire-format key node_parameters_updated must stay in " "the broadcast payload (FE back-compat)."
         )
 
 

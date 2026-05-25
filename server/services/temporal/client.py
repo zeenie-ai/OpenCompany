@@ -65,9 +65,7 @@ class TemporalClientWrapper:
                 )
                 # Verify namespace is ready (gRPC port may accept connections
                 # before the server finishes registering namespaces)
-                await client.service_client.workflow_service.describe_namespace(
-                    DescribeNamespaceRequest(namespace=self.namespace)
-                )
+                await client.service_client.workflow_service.describe_namespace(DescribeNamespaceRequest(namespace=self.namespace))
                 self._client = client
                 logger.info(f"Connected to Temporal server at {self.server_address}")
                 # Wave 12 A4: idempotently register the event-framework
@@ -79,22 +77,17 @@ class TemporalClientWrapper:
                     from services.temporal.search_attributes import (
                         register_search_attributes,
                     )
+
                     await register_search_attributes(self._client, self.namespace)
                 except Exception as sa_exc:  # noqa: BLE001 — non-fatal
-                    logger.warning(
-                        f"Search-attribute registration failed (non-fatal): {sa_exc}"
-                    )
+                    logger.warning(f"Search-attribute registration failed (non-fatal): {sa_exc}")
                 return self._client
             except Exception as e:
-                logger.warning(
-                    f"Temporal connection attempt {attempt}/{retries} failed: {e}"
-                )
+                logger.warning(f"Temporal connection attempt {attempt}/{retries} failed: {e}")
                 if attempt < retries:
                     await asyncio.sleep(delay)
 
-        logger.error(
-            f"Failed to connect to Temporal server at {self.server_address} after {retries} attempts"
-        )
+        logger.error(f"Failed to connect to Temporal server at {self.server_address} after {retries} attempts")
         return None
 
     async def disconnect(self) -> None:
@@ -104,7 +97,9 @@ class TemporalClientWrapper:
             logger.info("Disconnected from Temporal server")
 
     async def terminate_running_workflows(
-        self, *, reason: str = "MachinaOS startup: auto-resumption disabled",
+        self,
+        *,
+        reason: str = "MachinaOS startup: auto-resumption disabled",
     ) -> int:
         """Terminate every workflow in ``Running`` state in our namespace.
 
@@ -122,9 +117,7 @@ class TemporalClientWrapper:
         race that produces ``WorkflowNotFoundError``.
         """
         if self._client is None:
-            logger.warning(
-                "terminate_running_workflows called before connect; no-op"
-            )
+            logger.warning("terminate_running_workflows called before connect; no-op")
             return 0
 
         count = 0
@@ -133,18 +126,13 @@ class TemporalClientWrapper:
         ):
             try:
                 handle = self._client.get_workflow_handle(
-                    wf.id, run_id=wf.run_id,
+                    wf.id,
+                    run_id=wf.run_id,
                 )
                 await handle.terminate(reason=reason)
                 count += 1
             except Exception as exc:  # noqa: BLE001 — best-effort sweep
-                logger.debug(
-                    f"Failed to terminate workflow id={wf.id} "
-                    f"run_id={wf.run_id}: {exc}"
-                )
+                logger.debug(f"Failed to terminate workflow id={wf.id} " f"run_id={wf.run_id}: {exc}")
         if count:
-            logger.info(
-                f"Terminated {count} running workflow(s) at startup "
-                "(history preserved; resumption disabled)"
-            )
+            logger.info(f"Terminated {count} running workflow(s) at startup " "(history preserved; resumption disabled)")
         return count

@@ -10,6 +10,7 @@ Connection flow:
 4. Receive pairing.connected when Android pairs
 5. Exchange messages via relay.send / relay.message
 """
+
 import asyncio
 import json
 import uuid
@@ -18,12 +19,7 @@ from typing import Optional, Dict, Any, Set, Callable
 import structlog
 
 from .protocol import RPCResponse, RPCRequestTracker, is_response
-from .broadcaster import (
-    broadcast_connected,
-    broadcast_device_disconnected,
-    broadcast_relay_disconnected,
-    broadcast_qr_code
-)
+from .broadcaster import broadcast_connected, broadcast_device_disconnected, broadcast_relay_disconnected, broadcast_qr_code
 
 logger = structlog.get_logger()
 
@@ -90,7 +86,7 @@ class RelayWebSocketClient:
                 self.url,
                 heartbeat=30,
                 autoping=True,
-                ssl=True  # Explicit SSL for wss://
+                ssl=True,  # Explicit SSL for wss://
             )
             self.connected = True
             self._running = True
@@ -111,9 +107,7 @@ class RelayWebSocketClient:
                     self.session_token = params.get("session_token")
                     self.qr_data = params.get("qr_data")
 
-                    logger.info("[Relay] Connection established",
-                               session_token=self.session_token,
-                               has_qr=bool(self.qr_data))
+                    logger.info("[Relay] Connection established", session_token=self.session_token, has_qr=bool(self.qr_data))
 
                     # Broadcast QR data to frontend
                     if self.qr_data:
@@ -208,6 +202,7 @@ class RelayWebSocketClient:
         """Clear stored pairing session from database."""
         try:
             from services.plugin.deps import get_database
+
             database = get_database()
 
             await database.clear_android_relay_session()
@@ -277,11 +272,7 @@ class RelayWebSocketClient:
                 await asyncio.sleep(25)
                 if self._running and self.ws and not self.ws.closed:
                     try:
-                        await self.ws.send_json({
-                            "jsonrpc": "2.0",
-                            "method": "ping",
-                            "params": {}
-                        })
+                        await self.ws.send_json({"jsonrpc": "2.0", "method": "ping", "params": {}})
                     except Exception as e:
                         logger.error("[Relay] Keepalive error", error=str(e))
                         self._running = False
@@ -335,9 +326,7 @@ class RelayWebSocketClient:
         self.paired_device_id = params.get("device_id")
         self.paired_device_name = params.get("device_name")
 
-        logger.info("[Relay] Android paired",
-                   device_id=self.paired_device_id,
-                   device_name=self.paired_device_name)
+        logger.info("[Relay] Android paired", device_id=self.paired_device_id, device_name=self.paired_device_name)
 
         await broadcast_connected(self.paired_device_id, self.paired_device_name)
 
@@ -353,9 +342,9 @@ class RelayWebSocketClient:
         self.paired_device_id = params.get("device_id")
         self.paired_device_name = params.get("device_name")
 
-        logger.info("[Relay] Android pairing restored (auto-reconnect)",
-                   device_id=self.paired_device_id,
-                   device_name=self.paired_device_name)
+        logger.info(
+            "[Relay] Android pairing restored (auto-reconnect)", device_id=self.paired_device_id, device_name=self.paired_device_name
+        )
 
         await broadcast_connected(self.paired_device_id, self.paired_device_name)
 
@@ -369,6 +358,7 @@ class RelayWebSocketClient:
         """Save pairing session to database for auto-reconnect."""
         try:
             from services.plugin.deps import get_database
+
             database = get_database()
 
             await database.save_android_relay_session(
@@ -376,7 +366,7 @@ class RelayWebSocketClient:
                 api_key=self.api_key,
                 device_id=self.paired_device_id,
                 device_name=self.paired_device_name,
-                session_token=self.session_token
+                session_token=self.session_token,
             )
             logger.debug("[Relay] Pairing session saved for auto-reconnect")
         except Exception as e:
@@ -396,11 +386,7 @@ class RelayWebSocketClient:
         self.paired_device_name = None
 
         # Broadcast device disconnection - relay is still connected, pass QR data for re-pairing
-        await broadcast_device_disconnected(
-            relay_connected=self.is_connected(),
-            qr_data=self.qr_data,
-            session_token=self.session_token
-        )
+        await broadcast_device_disconnected(relay_connected=self.is_connected(), qr_data=self.qr_data, session_token=self.session_token)
 
         if self.on_pairing_disconnected:
             await self.on_pairing_disconnected(params)
@@ -414,8 +400,7 @@ class RelayWebSocketClient:
         # Schema: params = {"data": {...}}
         data = params.get("data", {})
 
-        logger.debug("[Relay] relay.message received",
-                   data_keys=list(data.keys()) if isinstance(data, dict) else "not_dict")
+        logger.debug("[Relay] relay.message received", data_keys=list(data.keys()) if isinstance(data, dict) else "not_dict")
 
         # Route to service response queue if matching request_id
         # Android app uses "request_id" (underscore), not "requestId" (camelCase)
@@ -505,7 +490,7 @@ class RelayWebSocketClient:
         action: str,
         parameters: Dict[str, Any] = None,
         target_id: Optional[str] = None,  # Ignored, kept for compatibility
-        timeout: float = 30.0
+        timeout: float = 30.0,
     ) -> Optional[Dict[str, Any]]:
         """
         Send service request to paired Android device.
@@ -535,17 +520,11 @@ class RelayWebSocketClient:
             # - action
             # - request_id (not requestId)
             # - params (not parameters)
-            await self.relay_send({
-                "service": service_id,
-                "action": action,
-                "request_id": request_id,
-                "params": parameters or {}
-            }, timeout=5.0)
+            await self.relay_send(
+                {"service": service_id, "action": action, "request_id": request_id, "params": parameters or {}}, timeout=5.0
+            )
 
-            logger.debug("[Relay] Sent service request",
-                       request_id=request_id,
-                       service_id=service_id,
-                       action=action)
+            logger.debug("[Relay] Sent service request", request_id=request_id, service_id=service_id, action=action)
 
             # Wait for response
             logger.debug("[Relay] Waiting for response", request_id=request_id, timeout=timeout)
@@ -554,7 +533,9 @@ class RelayWebSocketClient:
             return response
 
         except asyncio.TimeoutError:
-            logger.warning("[Relay] Service response timeout", request_id=request_id, timeout=timeout, pending_queues=list(self._service_queues.keys()))
+            logger.warning(
+                "[Relay] Service response timeout", request_id=request_id, timeout=timeout, pending_queues=list(self._service_queues.keys())
+            )
             return None
         except Exception as e:
             logger.error("[Relay] Service request error", error=str(e))

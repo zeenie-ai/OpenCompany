@@ -20,24 +20,15 @@ class TextService:
         start_time = time.time()
 
         try:
-            text = parameters.get('text', 'Hello World')
-            include_timestamp = parameters.get('include_timestamp', True)
+            text = parameters.get("text", "Hello World")
+            include_timestamp = parameters.get("include_timestamp", True)
 
-            result_data = {
-                "text": text,
-                "length": len(text),
-                "nodeId": node_id
-            }
+            result_data = {"text": text, "length": len(text), "nodeId": node_id}
 
             if include_timestamp:
                 result_data["timestamp"] = datetime.now().isoformat()
 
-            result = {
-                "type": "text",
-                "data": result_data,
-                "nodeId": node_id,
-                "timestamp": datetime.now().isoformat()
-            }
+            result = {"type": "text", "data": result_data, "nodeId": node_id, "timestamp": datetime.now().isoformat()}
 
             log_execution_time(logger, "text_generator", start_time, time.time())
 
@@ -47,7 +38,7 @@ class TextService:
                 "node_type": "textGenerator",
                 "result": result,
                 "execution_time": time.time() - start_time,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
 
         except Exception as e:
@@ -58,7 +49,7 @@ class TextService:
                 "node_type": "textGenerator",
                 "error": str(e),
                 "execution_time": time.time() - start_time,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
 
     async def execute_file_handler(self, node_id: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
@@ -66,9 +57,9 @@ class TextService:
         start_time = time.time()
 
         try:
-            file_type = parameters.get('file_type', 'generic')
-            file_content = parameters.get('content', '')
-            file_name = parameters.get('file_name', 'untitled.txt')
+            file_type = parameters.get("file_type", "generic")
+            file_content = parameters.get("content", "")
+            file_name = parameters.get("file_name", "untitled.txt")
 
             # Basic file processing
             result_data = {
@@ -78,15 +69,10 @@ class TextService:
                 "size": len(file_content),
                 "processed": True,
                 "processingType": file_type,
-                "nodeId": node_id
+                "nodeId": node_id,
             }
 
-            result = {
-                "type": "file",
-                "data": result_data,
-                "nodeId": node_id,
-                "timestamp": datetime.now().isoformat()
-            }
+            result = {"type": "file", "data": result_data, "nodeId": node_id, "timestamp": datetime.now().isoformat()}
 
             log_execution_time(logger, "file_handler", start_time, time.time())
 
@@ -96,7 +82,7 @@ class TextService:
                 "node_type": "fileHandler",
                 "result": result,
                 "execution_time": time.time() - start_time,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
 
         except Exception as e:
@@ -107,5 +93,5 @@ class TextService:
                 "node_type": "fileHandler",
                 "error": str(e),
                 "execution_time": time.time() - start_time,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }

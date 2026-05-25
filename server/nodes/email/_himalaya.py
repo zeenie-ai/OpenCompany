@@ -60,35 +60,39 @@ class HimalayaService(ServiceSingleton):
         smtp_encryption = credentials.get("smtp_encryption", "tls")
 
         lines = [
-            f'[accounts.{account_name}]',
+            f"[accounts.{account_name}]",
             f'email = "{email}"',
         ]
         if display_name:
             lines.append(f'display-name = "{display_name}"')
 
         # IMAP backend
-        lines.extend([
-            '',
-            'backend.type = "imap"',
-            f'backend.host = "{imap_host}"',
-            f'backend.port = {imap_port}',
-            f'backend.encryption = "{imap_encryption}"',
-            f'backend.login = "{email}"',
-            'backend.auth.type = "password"',
-            f'backend.auth.raw = "{password}"',
-        ])
+        lines.extend(
+            [
+                "",
+                'backend.type = "imap"',
+                f'backend.host = "{imap_host}"',
+                f"backend.port = {imap_port}",
+                f'backend.encryption = "{imap_encryption}"',
+                f'backend.login = "{email}"',
+                'backend.auth.type = "password"',
+                f'backend.auth.raw = "{password}"',
+            ]
+        )
 
         # SMTP sender
-        lines.extend([
-            '',
-            'message.send.backend.type = "smtp"',
-            f'message.send.backend.host = "{smtp_host}"',
-            f'message.send.backend.port = {smtp_port}',
-            f'message.send.backend.encryption = "{smtp_encryption}"',
-            f'message.send.backend.login = "{email}"',
-            'message.send.backend.auth.type = "password"',
-            f'message.send.backend.auth.raw = "{password}"',
-        ])
+        lines.extend(
+            [
+                "",
+                'message.send.backend.type = "smtp"',
+                f'message.send.backend.host = "{smtp_host}"',
+                f"message.send.backend.port = {smtp_port}",
+                f'message.send.backend.encryption = "{smtp_encryption}"',
+                f'message.send.backend.login = "{email}"',
+                'message.send.backend.auth.type = "password"',
+                f'message.send.backend.auth.raw = "{password}"',
+            ]
+        )
 
         return "\n".join(lines)
 
@@ -103,9 +107,7 @@ class HimalayaService(ServiceSingleton):
         binary = await self.ensure_binary()
         config_content = self._generate_config(account_name, credentials)
 
-        tmp = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".toml", prefix="himalaya_", delete=False
-        )
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".toml", prefix="himalaya_", delete=False)
         try:
             tmp.write(config_content)
             tmp.flush()
@@ -113,9 +115,12 @@ class HimalayaService(ServiceSingleton):
 
             cmd = [
                 binary,
-                "-c", tmp.name,
-                "-a", account_name,
-                "--output", "json",
+                "-c",
+                tmp.name,
+                "-a",
+                account_name,
+                "--output",
+                "json",
             ] + args
 
             logger.debug(f"[Himalaya] Executing: himalaya {' '.join(args)}")
@@ -157,9 +162,14 @@ class HimalayaService(ServiceSingleton):
     # =========================================================================
 
     async def send_email(
-        self, credentials: dict,
-        to: str, subject: str, body: str,
-        cc: str = "", bcc: str = "", body_type: str = "text",
+        self,
+        credentials: dict,
+        to: str,
+        subject: str,
+        body: str,
+        cc: str = "",
+        bcc: str = "",
+        body_type: str = "text",
     ) -> dict:
         """Send an email via SMTP. Composes RFC 2822 and pipes to himalaya."""
         account = self._account_name(credentials)
@@ -179,72 +189,107 @@ class HimalayaService(ServiceSingleton):
             msg["Bcc"] = bcc
 
         return await self.execute(
-            account, credentials,
+            account,
+            credentials,
             ["message", "send"],
             stdin_data=msg.as_string(),
         )
 
     async def list_envelopes(
-        self, credentials: dict,
-        folder: str = "INBOX", page: int = 1, page_size: int = 20,
+        self,
+        credentials: dict,
+        folder: str = "INBOX",
+        page: int = 1,
+        page_size: int = 20,
     ) -> dict:
         """List email envelopes in a folder."""
         account = self._account_name(credentials)
-        return await self.execute(account, credentials, [
-            "envelope", "list", "-f", folder,
-            "--page", str(page), "--page-size", str(page_size),
-        ])
+        return await self.execute(
+            account,
+            credentials,
+            [
+                "envelope",
+                "list",
+                "-f",
+                folder,
+                "--page",
+                str(page),
+                "--page-size",
+                str(page_size),
+            ],
+        )
 
     async def search_envelopes(
-        self, credentials: dict, query: str, folder: str = "INBOX",
+        self,
+        credentials: dict,
+        query: str,
+        folder: str = "INBOX",
     ) -> dict:
         """Search email envelopes by query."""
         account = self._account_name(credentials)
         return await self.execute(
-            account, credentials,
+            account,
+            credentials,
             ["envelope", "list", "-f", folder, "--query", query],
         )
 
     async def read_message(
-        self, credentials: dict, message_id: str, folder: str = "INBOX",
+        self,
+        credentials: dict,
+        message_id: str,
+        folder: str = "INBOX",
     ) -> dict:
         """Read full message content."""
         account = self._account_name(credentials)
         return await self.execute(
-            account, credentials,
+            account,
+            credentials,
             ["message", "read", message_id, "-f", folder],
         )
 
     async def move_message(
-        self, credentials: dict,
-        message_id: str, target_folder: str, folder: str = "INBOX",
+        self,
+        credentials: dict,
+        message_id: str,
+        target_folder: str,
+        folder: str = "INBOX",
     ) -> dict:
         """Move a message to another folder."""
         account = self._account_name(credentials)
         return await self.execute(
-            account, credentials,
+            account,
+            credentials,
             ["message", "move", message_id, target_folder, "-f", folder],
         )
 
     async def delete_message(
-        self, credentials: dict, message_id: str, folder: str = "INBOX",
+        self,
+        credentials: dict,
+        message_id: str,
+        folder: str = "INBOX",
     ) -> dict:
         """Delete a message."""
         account = self._account_name(credentials)
         return await self.execute(
-            account, credentials,
+            account,
+            credentials,
             ["message", "delete", message_id, "-f", folder],
         )
 
     async def flag_message(
-        self, credentials: dict,
-        message_id: str, flag: str, action: str = "add", folder: str = "INBOX",
+        self,
+        credentials: dict,
+        message_id: str,
+        flag: str,
+        action: str = "add",
+        folder: str = "INBOX",
     ) -> dict:
         """Add or remove a flag on a message."""
         account = self._account_name(credentials)
         flag_cmd = "add" if action == "add" else "remove"
         return await self.execute(
-            account, credentials,
+            account,
+            credentials,
             ["flag", flag_cmd, message_id, "--flag", flag, "-f", folder],
         )
 

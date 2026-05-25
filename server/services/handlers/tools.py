@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+
 def _plugin_connection_factory(plugin_cls, context):
     """Build a per-call :class:`Connection` factory bound to a plugin
     class's declared credentials. Mirrors
@@ -33,10 +34,7 @@ def _plugin_connection_factory(plugin_cls, context):
     def factory(credential_id: str):
         cred_cls = creds_by_id.get(credential_id)
         if cred_cls is None:
-            raise RuntimeError(
-                f"Plugin {plugin_cls.type} did not declare credential "
-                f"'{credential_id}' but tried to use it."
-            )
+            raise RuntimeError(f"Plugin {plugin_cls.type} did not declare credential " f"'{credential_id}' but tried to use it.")
         return Connection(cred_cls, user_id=user_id, session_id=session_id)
 
     return factory
@@ -68,8 +66,7 @@ def is_node_in_active_delegation(node_id: str) -> bool:
     return _active_delegated_nodes.get(node_id, 0) > 0
 
 
-async def execute_tool(tool_name: str, tool_args: Dict[str, Any],
-                       config: Dict[str, Any]) -> Dict[str, Any]:
+async def execute_tool(tool_name: str, tool_args: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
     """Execute a tool by name and own the tool node's status lifecycle.
 
     This is the single source of truth for the tool node's
@@ -98,12 +95,13 @@ async def execute_tool(tool_name: str, tool_args: Dict[str, Any],
     from services.status_broadcaster import get_status_broadcaster
 
     broadcaster = get_status_broadcaster()
-    node_id = config.get('node_id')
-    workflow_id = config.get('workflow_id')
+    node_id = config.get("node_id")
+    workflow_id = config.get("workflow_id")
 
     if node_id and broadcaster:
         await broadcaster.update_node_status(
-            node_id, "executing",
+            node_id,
+            "executing",
             {"message": f"Executing {tool_name}"},
             workflow_id=workflow_id,
         )
@@ -114,34 +112,32 @@ async def execute_tool(tool_name: str, tool_args: Dict[str, Any],
         logger.error("[Tool] Execution failed: %s", tool_name, exc_info=True)
         if node_id and broadcaster:
             await broadcaster.update_node_status(
-                node_id, "error",
+                node_id,
+                "error",
                 {"message": f"{tool_name} failed", "error": str(e)},
                 workflow_id=workflow_id,
             )
         raise
 
-    handler_owns_lifecycle = (
-        isinstance(result, dict)
-        and result.get("status") in ("delegated", "ALREADY_DELEGATED")
-    )
+    handler_owns_lifecycle = isinstance(result, dict) and result.get("status") in ("delegated", "ALREADY_DELEGATED")
     if node_id and broadcaster and not handler_owns_lifecycle:
         await broadcaster.update_node_status(
-            node_id, "success",
+            node_id,
+            "success",
             {"message": f"{tool_name} completed", "result": result},
             workflow_id=workflow_id,
         )
     return result
 
 
-async def _dispatch_tool(tool_name: str, tool_args: Dict[str, Any],
-                         config: Dict[str, Any]) -> Dict[str, Any]:
+async def _dispatch_tool(tool_name: str, tool_args: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
     """Route a tool call to the right handler based on ``node_type``.
 
     Pure dispatch — no broadcasting. Lifecycle is owned by
     :func:`execute_tool`.
     """
-    node_type = config.get('node_type', '')
-    node_params = config.get('parameters', {})
+    node_type = config.get("node_type", "")
+    node_params = config.get("parameters", {})
 
     # Execution context for tool handlers. Includes canvas state
     # (nodes/edges/workflow_id) that callers (chat_tool_executor in
@@ -150,14 +146,14 @@ async def _dispatch_tool(tool_name: str, tool_args: Dict[str, Any],
     # read these via NodeContext.nodes / .edges / .workflow_id; tools
     # that don't simply ignore them.
     context = {
-        'workspace_dir': config.get('workspace_dir', ''),
-        'nodes': config.get('nodes', []),
-        'edges': config.get('edges', []),
-        'workflow_id': config.get('workflow_id'),
-        'parent_node_id': config.get('parent_node_id'),
+        "workspace_dir": config.get("workspace_dir", ""),
+        "nodes": config.get("nodes", []),
+        "edges": config.get("edges", []),
+        "workflow_id": config.get("workflow_id"),
+        "parent_node_id": config.get("parent_node_id"),
     }
 
-    logger.info("[Tool] Executing '%s' (node_type=%s, workspace=%s)", tool_name, node_type, context['workspace_dir'])
+    logger.info("[Tool] Executing '%s' (node_type=%s, workspace=%s)", tool_name, node_type, context["workspace_dir"])
 
     # ----------------------------------------------------------------
     # Plugin fast-path (Wave 11.B.1): if this node_type is a
@@ -175,17 +171,16 @@ async def _dispatch_tool(tool_name: str, tool_args: Dict[str, Any],
     # prompt) expect for delegation tools.
     # ----------------------------------------------------------------
     from services.node_registry import get_node_class
-    plugin_cls = (
-        None if node_type in AI_AGENT_TYPES
-        else get_node_class(node_type)
-    )
+
+    plugin_cls = None if node_type in AI_AGENT_TYPES else get_node_class(node_type)
     if plugin_cls is not None:
         from services.plugin import NodeContext
+
         instance = plugin_cls()
         ctx = NodeContext.from_legacy(
-            node_id=config.get('node_id', f'tool_{node_type}'),
+            node_id=config.get("node_id", f"tool_{node_type}"),
             node_type=node_type,
-            context={**context, 'parameters': node_params},
+            context={**context, "parameters": node_params},
             connection_factory=_plugin_connection_factory(plugin_cls, context),
         )
         return await instance.execute_as_tool(tool_args, node_params, ctx)
@@ -203,31 +198,35 @@ async def _dispatch_tool(tool_name: str, tool_args: Dict[str, Any],
     # also need LLM-arg translation that doesn't fit the plugin Params
     # shape. Both dispatchers live with their domain on
     # nodes/android/_base.py (Wave 11.E.3 move).
-    if node_type == 'androidTool':
+    if node_type == "androidTool":
         from nodes.android._base import execute_android_toolkit
+
         return await execute_android_toolkit(tool_args, config)
     if node_type in ANDROID_SERVICE_NODE_TYPES:
         from nodes.android._base import execute_android_service_tool
+
         return await execute_android_service_tool(tool_args, config)
 
     # taskManager: dispatcher reads through to the agent-delegation
     # tracking dicts (_delegated_tasks / _delegation_results) defined
     # below in this module. The operation matrix moved to the plugin
     # (Wave 11.I, milestone O).
-    if node_type == 'taskManager':
+    if node_type == "taskManager":
         from nodes.tool.task_manager import _execute_task_manager
+
         return await _execute_task_manager(tool_args, config)
 
     # proxyConfig: 10-operation matrix lives on the plugin
     # (nodes/proxy/proxy_config.execute_proxy_config). Plugin params win.
-    if node_type == 'proxyConfig':
+    if node_type == "proxyConfig":
         from nodes.proxy.proxy_config import execute_proxy_config
-        merged = {**config.get('parameters', {}), **tool_args}
+
+        merged = {**config.get("parameters", {}), **tool_args}
         return await execute_proxy_config(merged)
 
     # Built-in: Check delegated task results
     # Auto-injected when parent has delegation tools
-    if node_type == '_builtin_check_delegated_tasks':
+    if node_type == "_builtin_check_delegated_tasks":
         return await _execute_check_delegated_tasks(tool_args, config)
 
     # AI Agent delegation (fire-and-forget async delegation).
@@ -246,14 +245,6 @@ async def _dispatch_tool(tool_name: str, tool_args: Dict[str, Any],
 # nodes/tool/calculator_tool.py CalculatorToolNode.calculate().
 
 
-
-
-
-
-
-
-
-
 # _execute_duckduckgo_search: Wave 11.C moved logic to
 # nodes/search/duckduckgo_search.py DuckDuckGoSearchNode.search(). Wave
 # 11.I milestone O moved the flat (args, config) -> dict shim used by
@@ -262,10 +253,6 @@ async def _dispatch_tool(tool_name: str, tool_args: Dict[str, Any],
 #
 # Wave 11.D.9: _execute_whatsapp_{send,db} deleted. WhatsApp tool execution
 # now routes through the plugin fast-path (nodes/whatsapp/*.py).
-
-
-
-
 
 
 # Wave 11.D.10: _execute_geocoding / _execute_nearby_places deleted.
@@ -282,16 +269,7 @@ async def _dispatch_tool(tool_name: str, tool_args: Dict[str, Any],
 # (nodes/google/*.py). These functions were defined but unreferenced.
 
 
-
-
-
-
-
-
-
-
-async def _execute_generic(args: Dict[str, Any],
-                           config: Dict[str, Any]) -> Dict[str, Any]:
+async def _execute_generic(args: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
     """Execute a generic tool (fallback handler).
 
     For node types without specific handlers, this returns the input
@@ -305,15 +283,14 @@ async def _execute_generic(args: Dict[str, Any],
         Dict with input echoed and node info
     """
     return {
-        "input": args.get('input', ''),
-        "node_type": config.get('node_type'),
-        "node_id": config.get('node_id'),
-        "message": "Generic tool executed - no specific handler for this node type"
+        "input": args.get("input", ""),
+        "node_type": config.get("node_type"),
+        "node_id": config.get("node_id"),
+        "message": "Generic tool executed - no specific handler for this node type",
     }
 
 
-async def _execute_delegated_agent(args: Dict[str, Any],
-                                    config: Dict[str, Any]) -> Dict[str, Any]:
+async def _execute_delegated_agent(args: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
     """Delegate a task to a child AI Agent (fire-and-forget pattern).
 
     This spawns the child agent as an asyncio background task and returns
@@ -329,26 +306,26 @@ async def _execute_delegated_agent(args: Dict[str, Any],
     """
     from services.status_broadcaster import get_status_broadcaster
 
-    node_id = config.get('node_id')
-    node_type = config.get('node_type')
-    workflow_id = config.get('workflow_id')
-    task_description = args.get('task', '')
-    task_context = args.get('context', '')
+    node_id = config.get("node_id")
+    node_type = config.get("node_type")
+    workflow_id = config.get("workflow_id")
+    task_description = args.get("task", "")
+    task_context = args.get("context", "")
 
     # Get injected services
-    ai_service = config.get('ai_service')
-    database = config.get('database')
-    nodes = config.get('nodes', [])
-    edges = config.get('edges', [])
+    ai_service = config.get("ai_service")
+    database = config.get("database")
+    nodes = config.get("nodes", [])
+    edges = config.get("edges", [])
 
     if not ai_service or not database:
         return {
             "error": "Agent delegation requires ai_service and database in config",
-            "hint": "Ensure nodes/edges are passed to tool config"
+            "hint": "Ensure nodes/edges are passed to tool config",
         }
 
     # Get parent node ID for duplicate tracking
-    parent_node_id = config.get('parent_node_id', '')
+    parent_node_id = config.get("parent_node_id", "")
 
     # Generate hash of task to detect duplicate delegation attempts
     task_hash = hashlib.md5(f"{task_description}:{task_context}".encode()).hexdigest()[:16]
@@ -362,7 +339,7 @@ async def _execute_delegated_agent(args: Dict[str, Any],
             "success": True,
             "status": "ALREADY_DELEGATED",
             "task_id": existing_task_id,
-            "agent_name": config.get('parameters', {}).get('label', node_type),
+            "agent_name": config.get("parameters", {}).get("label", node_type),
             "result": (
                 f"This task was ALREADY delegated (task_id: {existing_task_id}). "
                 f"Do NOT call this tool again. Use 'check_delegated_tasks' to check status."
@@ -388,44 +365,41 @@ async def _execute_delegated_agent(args: Dict[str, Any],
 
     # Inject API key - delegated agents bypass NodeExecutor._inject_api_keys,
     # so we must resolve the key here from the credential store
-    if not child_params.get('api_key'):
+    if not child_params.get("api_key"):
         from constants import detect_ai_provider
+
         provider = detect_ai_provider(node_type, child_params)
         key = await ai_service.auth.get_api_key(provider, "default")
         if key:
-            child_params['api_key'] = key
+            child_params["api_key"] = key
             logger.debug(f"[Delegated Agent] Injected API key for provider={provider}")
 
     # Inject default model if not set
-    if not child_params.get('model'):
+    if not child_params.get("model"):
         from constants import detect_ai_provider
+
         provider = detect_ai_provider(node_type, child_params)
         models = await ai_service.auth.get_stored_models(provider, "default")
         if models:
-            child_params['model'] = models[0]
+            child_params["model"] = models[0]
 
     # Task goes into system_message (directive), context data goes into prompt.
     # Schema-canonical key is snake_case; drop any pre-migration camelCase
     # mirror so the saved-params dict downstream uses the canonical key.
-    child_params['system_message'] = task_description
-    child_params.pop('systemMessage', None)
-    child_params['prompt'] = task_context if task_context else task_description
+    child_params["system_message"] = task_description
+    child_params.pop("systemMessage", None)
+    child_params["prompt"] = task_context if task_context else task_description
 
     # Create execution context for child agent
-    child_context = {
-        'nodes': nodes,
-        'edges': edges,
-        'workflow_id': workflow_id,
-        'outputs': {},
-        'parent_task_id': task_id
-    }
+    child_context = {"nodes": nodes, "edges": edges, "workflow_id": workflow_id, "outputs": {}, "parent_task_id": task_id}
 
     broadcaster = get_status_broadcaster()
-    agent_label = child_params.get('label', node_type)
+    agent_label = child_params.get("label", node_type)
 
     logger.info(f"[Delegated Agent] Starting task {task_id} for '{agent_label}' (node: {node_id})")
-    logger.debug(f"[Delegated Agent] Context: {len(nodes)} nodes, {len(edges)} edges, "
-                 f"edge_targets={set(e.get('target') for e in edges)}")
+    logger.debug(
+        f"[Delegated Agent] Context: {len(nodes)} nodes, {len(edges)} edges, " f"edge_targets={set(e.get('target') for e in edges)}"
+    )
 
     # Define the background coroutine
     async def run_child_agent():
@@ -434,12 +408,8 @@ async def _execute_delegated_agent(args: Dict[str, Any],
             await broadcaster.update_node_status(
                 node_id,
                 "executing",
-                {
-                    "phase": "delegated_task",
-                    "task_id": task_id,
-                    "message": f"Working on: {task_description[:100]}..."
-                },
-                workflow_id=workflow_id
+                {"phase": "delegated_task", "task_id": task_id, "message": f"Working on: {task_description[:100]}..."},
+                workflow_id=workflow_id,
             )
 
             # Execute the child agent via its own plugin class.
@@ -455,27 +425,22 @@ async def _execute_delegated_agent(args: Dict[str, Any],
                 raise RuntimeError(f"Unknown delegated agent type: {node_type}")
             instance = plugin_cls()
             child_ctx = NodeContext.from_legacy(
-                node_id=node_id, node_type=node_type, context=child_context,
+                node_id=node_id,
+                node_type=node_type,
+                context=child_context,
             )
             result = await instance.execute(node_id, child_params, child_ctx)
 
             logger.info(f"[Delegated Agent] Task {task_id} completed: success={result.get('success')}")
 
             # Check if child agent actually succeeded
-            if not result.get('success'):
+            if not result.get("success"):
                 # Child agent returned failure - treat as error
-                error_msg = result.get('error', 'Child agent returned failure')
+                error_msg = result.get("error", "Child agent returned failure")
                 logger.warning(f"[Delegated Agent] Task {task_id} returned success=False: {error_msg}")
 
                 await broadcaster.update_node_status(
-                    node_id,
-                    "error",
-                    {
-                        "phase": "delegated_error",
-                        "task_id": task_id,
-                        "error": error_msg
-                    },
-                    workflow_id=workflow_id
+                    node_id, "error", {"phase": "delegated_error", "task_id": task_id, "error": error_msg}, workflow_id=workflow_id
                 )
 
                 # Cache error for parent retrieval
@@ -496,11 +461,11 @@ async def _execute_delegated_agent(args: Dict[str, Any],
                         output_name="delegation_result",
                         data={
                             "task_id": task_id,
-                            "parent_node_id": config.get('parent_node_id', ''),
+                            "parent_node_id": config.get("parent_node_id", ""),
                             "agent_name": agent_label,
                             "status": "error",
                             "error": error_msg,
-                        }
+                        },
                     )
 
                 # Dispatch error event for trigger nodes — Wave 12 B8.
@@ -510,7 +475,7 @@ async def _execute_delegated_agent(args: Dict[str, Any],
                     task_id=task_id,
                     agent_name=agent_label,
                     agent_node_id=node_id,
-                    parent_node_id=config.get('parent_node_id', ''),
+                    parent_node_id=config.get("parent_node_id", ""),
                     workflow_id=workflow_id,
                     error=error_msg,
                 )
@@ -518,22 +483,18 @@ async def _execute_delegated_agent(args: Dict[str, Any],
                 return result
 
             # Success case - extract response properly
-            response_text = result.get('result', {}).get('response', '')
+            response_text = result.get("result", {}).get("response", "")
             if not response_text:
                 # Fallback: try to stringify the result dict
-                response_text = str(result.get('result', '')) if result.get('result') else 'No response generated'
+                response_text = str(result.get("result", "")) if result.get("result") else "No response generated"
 
             # Broadcast completion
-            response_preview = response_text[:200] if response_text else ''
+            response_preview = response_text[:200] if response_text else ""
             await broadcaster.update_node_status(
                 node_id,
                 "success",
-                {
-                    "phase": "delegated_complete",
-                    "task_id": task_id,
-                    "result_summary": response_preview
-                },
-                workflow_id=workflow_id
+                {"phase": "delegated_complete", "task_id": task_id, "result_summary": response_preview},
+                workflow_id=workflow_id,
             )
 
             # Cache result for parent retrieval (Layer 2: in-memory)
@@ -554,11 +515,11 @@ async def _execute_delegated_agent(args: Dict[str, Any],
                     output_name="delegation_result",
                     data={
                         "task_id": task_id,
-                        "parent_node_id": config.get('parent_node_id', ''),
+                        "parent_node_id": config.get("parent_node_id", ""),
                         "agent_name": agent_label,
                         "status": "completed",
                         "result": response_text,
-                    }
+                    },
                 )
 
             # Dispatch task_completed event for trigger nodes — Wave 12 B8.
@@ -568,7 +529,7 @@ async def _execute_delegated_agent(args: Dict[str, Any],
                 task_id=task_id,
                 agent_name=agent_label,
                 agent_node_id=node_id,
-                parent_node_id=config.get('parent_node_id', ''),
+                parent_node_id=config.get("parent_node_id", ""),
                 workflow_id=workflow_id,
                 result=response_text,
             )
@@ -578,14 +539,7 @@ async def _execute_delegated_agent(args: Dict[str, Any],
         except Exception as e:
             logger.error(f"[Delegated Agent] Task {task_id} failed: {e}")
             await broadcaster.update_node_status(
-                node_id,
-                "error",
-                {
-                    "phase": "delegated_error",
-                    "task_id": task_id,
-                    "error": str(e)
-                },
-                workflow_id=workflow_id
+                node_id, "error", {"phase": "delegated_error", "task_id": task_id, "error": str(e)}, workflow_id=workflow_id
             )
 
             # Cache error for parent retrieval (Layer 2: in-memory)
@@ -606,11 +560,11 @@ async def _execute_delegated_agent(args: Dict[str, Any],
                     output_name="delegation_result",
                     data={
                         "task_id": task_id,
-                        "parent_node_id": config.get('parent_node_id', ''),
+                        "parent_node_id": config.get("parent_node_id", ""),
                         "agent_name": agent_label,
                         "status": "error",
                         "error": str(e),
-                    }
+                    },
                 )
 
             # Dispatch task_completed event for trigger nodes (error case) — Wave 12 B8.
@@ -620,7 +574,7 @@ async def _execute_delegated_agent(args: Dict[str, Any],
                 task_id=task_id,
                 agent_name=agent_label,
                 agent_node_id=node_id,
-                parent_node_id=config.get('parent_node_id', ''),
+                parent_node_id=config.get("parent_node_id", ""),
                 workflow_id=workflow_id,
                 error=str(e),
             )
@@ -661,8 +615,7 @@ async def _execute_delegated_agent(args: Dict[str, Any],
     }
 
 
-async def get_delegated_task_status(task_ids: Optional[List[str]] = None,
-                                     database=None) -> Dict[str, Any]:
+async def get_delegated_task_status(task_ids: Optional[List[str]] = None, database=None) -> Dict[str, Any]:
     """Check status and retrieve results of delegated tasks.
 
     3-layer lookup: live tasks -> memory cache -> DB (NodeOutput).
@@ -677,9 +630,7 @@ async def get_delegated_task_status(task_ids: Optional[List[str]] = None,
     """
     if not task_ids:
         # Return all known from memory
-        task_ids = list(set(
-            list(_delegated_tasks.keys()) + list(_delegation_results.keys())
-        ))
+        task_ids = list(set(list(_delegated_tasks.keys()) + list(_delegation_results.keys())))
 
     tasks = []
     db_lookup_ids = []
@@ -694,7 +645,7 @@ async def get_delegated_task_status(task_ids: Optional[List[str]] = None,
                 # Task finished -- extract result via task.result()
                 try:
                     result = live_task.result()
-                    response = result.get('result', {}).get('response', str(result.get('result', '')))
+                    response = result.get("result", {}).get("response", str(result.get("result", "")))
                     tasks.append({"task_id": tid, "status": "completed", "result": response})
                 except Exception as e:
                     tasks.append({"task_id": tid, "status": "error", "error": str(e)})
@@ -712,21 +663,20 @@ async def get_delegated_task_status(task_ids: Optional[List[str]] = None,
     # DB fallback for results not in memory (cross-restart)
     if db_lookup_ids and database:
         for tid in list(db_lookup_ids):
-            db_result = await database.get_node_output_by_session(
-                session_id=f"delegation_{tid}",
-                output_name="delegation_result"
-            )
+            db_result = await database.get_node_output_by_session(session_id=f"delegation_{tid}", output_name="delegation_result")
             if db_result:
-                data = db_result.get('data', {})
+                data = db_result.get("data", {})
                 result_data = data.get("result", {})
                 response_text = result_data.get("response", str(result_data)) if isinstance(result_data, dict) else str(result_data)
-                tasks.append({
-                    "task_id": tid,
-                    "status": data.get("status", "completed"),
-                    "agent_name": data.get("agent_name", ""),
-                    "result": response_text,
-                    "error": data.get("error"),
-                })
+                tasks.append(
+                    {
+                        "task_id": tid,
+                        "status": data.get("status", "completed"),
+                        "agent_name": data.get("agent_name", ""),
+                        "result": response_text,
+                        "error": data.get("error"),
+                    }
+                )
                 db_lookup_ids.remove(tid)
 
     # Remaining IDs not found anywhere
@@ -736,15 +686,14 @@ async def get_delegated_task_status(task_ids: Optional[List[str]] = None,
     return {"tasks": tasks}
 
 
-async def _execute_check_delegated_tasks(args: Dict[str, Any],
-                                          config: Dict[str, Any]) -> Dict[str, Any]:
+async def _execute_check_delegated_tasks(args: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
     """LLM-callable tool: check on delegated child agents.
 
     Returns status and results for previously delegated tasks.
     Follows Celery AsyncResult / Ray ObjectRef patterns.
     """
-    task_ids = args.get('task_ids')
-    database = config.get('database')
+    task_ids = args.get("task_ids")
+    database = config.get("database")
     result = await get_delegated_task_status(task_ids=task_ids, database=database)
 
     formatted = []
@@ -788,6 +737,3 @@ async def _execute_check_delegated_tasks(args: Dict[str, Any],
 # now route through the plugin fast-path in execute_tool which calls
 # the BaseNode.execute_as_tool method on the plugin class.
 # _execute_serper_search_tool stays until serperSearch is migrated.
-
-
-

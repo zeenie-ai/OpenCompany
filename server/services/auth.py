@@ -59,13 +59,7 @@ class AuthService:
     Decrypted keys are cached in memory only (not Redis) for security.
     """
 
-    def __init__(
-        self,
-        credentials_db: CredentialsDatabase,
-        cache: CacheService,
-        database: Database,
-        settings: Settings
-    ):
+    def __init__(self, credentials_db: CredentialsDatabase, cache: CacheService, database: Database, settings: Settings):
         self.credentials_db = credentials_db
         self.cache = cache  # Kept for backward compatibility, not used for API keys
         self.database = database  # Kept for backward compatibility
@@ -167,9 +161,7 @@ class AuthService:
             logger.error("Failed to store API key", provider=provider, error=str(e))
             return False
 
-    async def get_model_params(
-        self, provider: str, session_id: str = "default"
-    ) -> Dict[str, Dict[str, Any]]:
+    async def get_model_params(self, provider: str, session_id: str = "default") -> Dict[str, Dict[str, Any]]:
         """Return per-model params (context_length etc.) for the provider.
 
         Reads straight from the credentials DB — there's no in-memory
@@ -180,9 +172,7 @@ class AuthService:
         been validated yet.
         """
         try:
-            return await self.credentials_db.get_api_key_model_params(
-                provider, session_id
-            )
+            return await self.credentials_db.get_api_key_model_params(provider, session_id)
         except Exception as e:
             logger.error("Failed to get model_params", provider=provider, error=str(e))
             return {}
@@ -212,9 +202,7 @@ class AuthService:
             # second roundtrip on the next get_stored_models() call.
             api_key = await self.credentials_db.get_api_key(provider, session_id)
             if api_key:
-                models = await self.credentials_db.get_api_key_models(
-                    provider, session_id
-                ) or []
+                models = await self.credentials_db.get_api_key_models(provider, session_id) or []
                 self._api_key_cache[cache_key] = ApiKeyCacheEntry(
                     key=api_key,
                     models=models,
@@ -326,7 +314,7 @@ class AuthService:
         email: Optional[str] = None,
         name: Optional[str] = None,
         scopes: Optional[str] = None,
-        customer_id: str = "owner"
+        customer_id: str = "owner",
     ) -> bool:
         """Store OAuth tokens in encrypted credentials database.
 
@@ -353,7 +341,7 @@ class AuthService:
                 email=email,
                 name=name,
                 scopes=scopes,
-                customer_id=customer_id
+                customer_id=customer_id,
             )
 
             # 2. Cache only the access token + display fields. Refresh
@@ -379,11 +367,7 @@ class AuthService:
             logger.error("Failed to store OAuth tokens", provider=provider, error=str(e))
             return False
 
-    async def get_oauth_tokens(
-        self,
-        provider: str,
-        customer_id: str = "owner"
-    ) -> Optional[Dict[str, Any]]:
+    async def get_oauth_tokens(self, provider: str, customer_id: str = "owner") -> Optional[Dict[str, Any]]:
         """Get OAuth display tokens from cache or encrypted database.
 
         Returns ``{access_token, email, name, scopes}`` only — the
@@ -454,9 +438,7 @@ class AuthService:
                 return tokens.get("refresh_token")
             return None
         except Exception as e:
-            logger.error(
-                "Failed to get OAuth refresh token", provider=provider, error=str(e)
-            )
+            logger.error("Failed to get OAuth refresh token", provider=provider, error=str(e))
             return None
 
     async def refresh_oauth_tokens_with_breaker(
@@ -516,9 +498,7 @@ class AuthService:
             # in this codebase return {"success": False, "error": "..."}
             # instead of raising.
             if isinstance(result, dict) and result.get("success") is False:
-                raise RuntimeError(
-                    result.get("error") or "oauth refresh reported failure"
-                )
+                raise RuntimeError(result.get("error") or "oauth refresh reported failure")
             return result
 
         try:
@@ -545,11 +525,7 @@ class AuthService:
                 "needs_reauth": True,
             }
 
-    async def remove_oauth_tokens(
-        self,
-        provider: str,
-        customer_id: str = "owner"
-    ) -> bool:
+    async def remove_oauth_tokens(self, provider: str, customer_id: str = "owner") -> bool:
         """Remove OAuth tokens from storage and cache.
 
         Args:

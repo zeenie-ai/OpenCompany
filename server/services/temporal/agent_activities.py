@@ -83,8 +83,7 @@ async def execute_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
     ``heartbeat_timeout``.
     """
     activity.logger.info(
-        f"Agent LLM step: provider={payload.get('provider')} "
-        f"model={payload.get('model')} messages={len(payload.get('messages', []))}"
+        f"Agent LLM step: provider={payload.get('provider')} " f"model={payload.get('model')} messages={len(payload.get('messages', []))}"
     )
     activity.heartbeat(f"LLM step starting: {payload.get('model')}")
 
@@ -160,6 +159,7 @@ async def execute_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
     # cache metadata, etc.). The workflow extracts ``tool_calls`` from
     # ``response.tool_calls`` separately for scheduling.
     from langchain_core.messages import messages_to_dict
+
     assistant_dict = messages_to_dict([response])[0]
 
     if hasattr(response, "tool_calls") and response.tool_calls:
@@ -242,6 +242,7 @@ async def persist_agent_turn(payload: Dict[str, Any]) -> Dict[str, Any]:
     # container) — same pattern handlers/tools.py / handlers/triggers.py
     # use. ``container.status_broadcaster()`` does NOT exist.
     from services.status_broadcaster import get_status_broadcaster
+
     broadcaster = get_status_broadcaster()
     await broadcaster.broadcast_node_parameters_updated(
         memory_node_id,
@@ -442,10 +443,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     connected tools / skills / memory still produce a valid payload
     that AgentWorkflow can run.
     """
-    activity.logger.info(
-        f"Preparing AgentWorkflow payload for {context.get('node_type')!r} "
-        f"node_id={context.get('node_id')!r}"
-    )
+    activity.logger.info(f"Preparing AgentWorkflow payload for {context.get('node_type')!r} " f"node_id={context.get('node_id')!r}")
 
     # Lazy imports — keep agent_activities.py top-level light so the
     # worker can register this activity without dragging the whole
@@ -482,7 +480,11 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     edges = context.get("edges") or []
     if nodes and edges:
         parameters = await workflow_service._param_resolver.resolve(
-            parameters, node_id, nodes, edges, session_id,
+            parameters,
+            node_id,
+            nodes,
+            edges,
+            session_id,
         )
 
     options = parameters.get("options") or {}
@@ -506,8 +508,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         api_key = await auth.get_api_key(provider) or await auth.get_api_key(f"{provider}_api_key")
     if not api_key:
         raise RuntimeError(
-            f"API key for provider {provider!r} required for AgentWorkflow "
-            f"node {node_id!r}; configure it in the Credentials Modal."
+            f"API key for provider {provider!r} required for AgentWorkflow " f"node {node_id!r}; configure it in the Credentials Modal."
         )
 
     max_tokens = _resolve_max_tokens(flattened, model, provider)
@@ -531,7 +532,9 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     temperature = _resolve_temperature(
-        flattened, model, provider,
+        flattened,
+        model,
+        provider,
         bool(thinking_config_obj and thinking_config_obj.enabled),
     )
 
@@ -541,16 +544,19 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         "edges": context.get("edges") or [],
         "workflow_id": workflow_id,
     }
-    memory_data, skill_data, tool_data, input_data, _task_data = (
-        await collect_agent_connections(
-            node_id, walk_context, database, log_prefix=f"[AgentWorkflow:{node_type}]",
-        )
+    memory_data, skill_data, tool_data, input_data, _task_data = await collect_agent_connections(
+        node_id,
+        walk_context,
+        database,
+        log_prefix=f"[AgentWorkflow:{node_type}]",
     )
 
     # ---- Skill prompt injection ----------------------------------------
     from services.ai import _build_skill_system_prompt
+
     skill_prompt, has_personality = _build_skill_system_prompt(
-        skill_data, log_prefix=f"[AgentWorkflow:{node_type}]",
+        skill_data,
+        log_prefix=f"[AgentWorkflow:{node_type}]",
     )
     if skill_prompt:
         system_message = skill_prompt if has_personality else f"{system_message}\n\n{skill_prompt}"
@@ -580,31 +586,32 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         try:
             tool, _config = await ai_service._build_tool_from_node(tool_info)
         except Exception as e:  # noqa: BLE001 — defensive: skip a broken tool
-            activity.logger.warning(
-                f"prepare_payload: failed to build tool {tool_info.get('node_type')!r}: {e}"
-            )
+            activity.logger.warning(f"prepare_payload: failed to build tool {tool_info.get('node_type')!r}: {e}")
             continue
         if tool is None:
             continue
         # Look up plugin class for activity-dispatch metadata.
         from services.node_registry import get_node_class
+
         cls = get_node_class(tool_info.get("node_type", ""))
         version = getattr(cls, "version", 1) if cls else 1
         task_queue = getattr(cls, "task_queue", "machina-default") if cls else "machina-default"
 
-        tools_payload.append({
-            "name": tool.name,
-            "node_type": tool_info.get("node_type", ""),
-            "version": version,
-            "task_queue": task_queue,
-            "tool_node_id": tool_info.get("node_id", ""),
-            "parameters": tool_info.get("parameters") or {},
-            # Raw tool_info — what ``collect_agent_connections`` returned
-            # and what ``_build_tool_from_node`` accepts as input. Passed
-            # through the workflow verbatim so ``execute_llm_step`` can
-            # rebuild the real StructuredTool inside the activity.
-            "tool_info": tool_info,
-        })
+        tools_payload.append(
+            {
+                "name": tool.name,
+                "node_type": tool_info.get("node_type", ""),
+                "version": version,
+                "task_queue": task_queue,
+                "tool_node_id": tool_info.get("node_id", ""),
+                "parameters": tool_info.get("parameters") or {},
+                # Raw tool_info — what ``collect_agent_connections`` returned
+                # and what ``_build_tool_from_node`` accepts as input. Passed
+                # through the workflow verbatim so ``execute_llm_step`` can
+                # rebuild the real StructuredTool inside the activity.
+                "tool_info": tool_info,
+            }
+        )
 
     # ---- Compaction threshold ------------------------------------------
     # Model-aware threshold (50% of context window per agent.compaction.ratio
@@ -615,6 +622,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     compaction_threshold: int | None = None
     try:
         from services.compaction import get_compaction_service
+
         svc = get_compaction_service()
         if svc is not None:
             cfg = await svc.anthropic_config(model=model, provider=provider)

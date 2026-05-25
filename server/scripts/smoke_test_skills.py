@@ -56,7 +56,8 @@ async def main() -> int:
 
         # Step 1 — materialise the skill into the workspace.
         added, removed = await materialise_skills(
-            workspace, [skill_under_test],
+            workspace,
+            [skill_under_test],
             previous_skill_names=None,
             log_label="smoke",
         )
@@ -67,6 +68,7 @@ async def main() -> int:
 
         # Step 2 — build argv and check Skill is in --allowedTools.
         from services.cli_agent.factory import create_cli_provider
+
         provider = create_cli_provider("claude")
         spec = ClaudeTaskSpec(
             prompt="Use the humanify-skill to format this list nicely: apples, bananas, cherries.",
@@ -85,9 +87,7 @@ async def main() -> int:
         allowed_idx = argv.index("--allowedTools")
         allowed = argv[allowed_idx + 1].split(",")
         assert "Skill" in allowed, f"Skill missing from allowlist: {allowed}"
-        assert "--add-dir" in argv and str(workspace) in argv, (
-            f"workspace not in --add-dir argv: {argv}"
-        )
+        assert "--add-dir" in argv and str(workspace) in argv, f"workspace not in --add-dir argv: {argv}"
         print(f"[smoke] step 2 PASS — argv has Skill in allowlist + --add-dir {workspace.name}")
 
         # Step 3 — spawn via the pool (cold spawn). Pool uses
@@ -114,9 +114,11 @@ async def main() -> int:
                 workspace_dir=workspace,
                 workflow_id=workflow_id,
             )
-            print(f"[smoke] step 3 PASS — claude pid={pooled.process.pid}, "
-                  f"workspace_dir bound, materialised_skills="
-                  f"{set(pooled.materialised_skills)}")
+            print(
+                f"[smoke] step 3 PASS — claude pid={pooled.process.pid}, "
+                f"workspace_dir bound, materialised_skills="
+                f"{set(pooled.materialised_skills)}"
+            )
             assert skill_under_test in pooled.materialised_skills
 
             # Step 4 — send a turn that should activate the skill.
@@ -131,9 +133,11 @@ async def main() -> int:
                 workflow_id=workflow_id,
             )
             assert result.success, f"turn failed: {result.error}"
-            print(f"[smoke] step 4 PASS — session_id={result.session_id}, "
-                  f"cost=${result.cost_usd}, num_turns={result.num_turns}, "
-                  f"duration_ms={result.duration_ms}")
+            print(
+                f"[smoke] step 4 PASS — session_id={result.session_id}, "
+                f"cost=${result.cost_usd}, num_turns={result.num_turns}, "
+                f"duration_ms={result.duration_ms}"
+            )
             print("[smoke] response (first 400 chars):")
             print(f"  {result.response[:400]!r}")
 
@@ -157,8 +161,7 @@ async def main() -> int:
             response_lc = result.response.lower()
             for marker in error_markers:
                 assert marker not in response_lc, (
-                    f"response indicates skill not loaded: matched marker {marker!r}\n"
-                    f"full response: {result.response[:1000]!r}"
+                    f"response indicates skill not loaded: matched marker {marker!r}\n" f"full response: {result.response[:1000]!r}"
                 )
             print("[smoke] step 5 PASS — response present, no 'skill not found' markers")
 

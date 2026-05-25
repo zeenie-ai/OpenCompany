@@ -48,7 +48,8 @@ class TextGeneratorNode(ActionNode):
 
         text_service = get_text_service()
         response = await text_service.execute_text_generator(
-            ctx.node_id, params.model_dump(),
+            ctx.node_id,
+            params.model_dump(),
         )
         if response.get("success"):
             return response.get("result") or response

@@ -59,10 +59,8 @@ class GmapsLocationsNode(ActionNode):
     tool_name = "geocode"
     tool_description = "Geocode addresses to coordinates or reverse geocode coordinates to addresses using Google Maps."
     handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
+        {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
+        {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
     annotations = {"destructive": False, "readonly": True, "open_world": True}
     credentials = (GoogleMapsCredential,)
@@ -78,7 +76,9 @@ class GmapsLocationsNode(ActionNode):
 
         maps_service = get_maps_service()
         response = await maps_service.geocode_location(
-            ctx.node_id, params.model_dump(), ctx.raw,
+            ctx.node_id,
+            params.model_dump(),
+            ctx.raw,
         )
         if response.get("success"):
             return response.get("result") or response

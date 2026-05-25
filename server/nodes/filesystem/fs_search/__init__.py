@@ -31,7 +31,9 @@ class FsSearchNode(ActionNode):
     group = ("filesystem", "tool")
     description = "Search the filesystem (ls, glob, grep)"
     tool_name = "fs_search"
-    tool_description = "Search the filesystem. Modes: ls (list directory), glob (pattern match files), grep (search file contents for text)."
+    tool_description = (
+        "Search the filesystem. Modes: ls (list directory), glob (pattern match files), grep (search file contents for text)."
+    )
     component_kind = "square"
     handles = (
         {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
@@ -65,7 +67,9 @@ class FsSearchNode(ActionNode):
             if not params.pattern:
                 raise NodeUserError("pattern is required for glob mode")
             matches = await asyncio.to_thread(
-                backend.glob_info, params.pattern, path=path,
+                backend.glob_info,
+                params.pattern,
+                path=path,
             )
             return {
                 "path": path,
@@ -78,7 +82,9 @@ class FsSearchNode(ActionNode):
             if not params.pattern:
                 raise NodeUserError("pattern is required for grep mode")
             result = await asyncio.to_thread(
-                backend.grep_raw, params.pattern, path=path,
+                backend.grep_raw,
+                params.pattern,
+                path=path,
             )
             if isinstance(result, str):
                 raise NodeUserError(result)

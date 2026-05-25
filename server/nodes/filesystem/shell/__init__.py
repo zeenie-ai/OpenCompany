@@ -68,7 +68,7 @@ class ShellNode(ActionNode):
         # Nushell's parser does, so the LLM sees an actionable hint instead
         # of ``nu::parser::shell_andand``. Documented in
         # ``server/skills/terminal/shell-skill/SKILL.md``.
-        if (m := _BASH_CHAIN_RE.search(params.command)):
+        if m := _BASH_CHAIN_RE.search(params.command):
             op = m.group(1)
             replacement = "; (sequential)" if op == "&&" else "try { … } catch { … }"
             raise NodeUserError(
@@ -85,17 +85,22 @@ class ShellNode(ActionNode):
         # misleading users into thinking shell runs daemons.
         log.info(
             "[Shell] Executing: %s (timeout=%ds)",
-            params.command[:200], params.timeout,
+            params.command[:200],
+            params.timeout,
         )
         result = await asyncio.to_thread(
-            backend.execute, params.command, timeout=params.timeout,
+            backend.execute,
+            params.command,
+            timeout=params.timeout,
         )
         if result.exit_code == 124:
             log.warning("[Shell] Timed out after %ds: %s", params.timeout, params.command[:100])
         elif result.exit_code != 0:
             log.warning(
                 "[Shell] Non-zero exit (%d): %s -> %s",
-                result.exit_code, params.command[:100], result.output[:300],
+                result.exit_code,
+                params.command[:100],
+                result.output[:300],
             )
         else:
             log.info("[Shell] Completed: exit=%d len=%d", result.exit_code, len(result.output))

@@ -46,9 +46,7 @@ class TypeScriptExecutorNode(CodeExecutorBase):
             ) from exc
 
         if not result.get("success"):
-            raise NodeUserError(
-                result.get("error") or "TypeScript executor failed"
-            )
+            raise NodeUserError(result.get("error") or "TypeScript executor failed")
         return {
             "output": result.get("output"),
             "console_output": result.get("console_output", ""),

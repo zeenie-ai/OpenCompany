@@ -14,6 +14,7 @@ The downloaded ``temporal`` CLI powers ``temporal server start-dev``
 (the SQLite/in-memory dev server) and ad-hoc workflow / operator
 commands.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -92,10 +93,7 @@ def _fetch_cli_sync() -> Path:
     """
     key = (platform.system(), platform.machine())
     if key not in _CLI_PLATFORM_MAP:
-        raise RuntimeError(
-            f"[Temporal install] Unsupported platform for CLI: {key}. "
-            f"Supported: {sorted(_CLI_PLATFORM_MAP.keys())}"
-        )
+        raise RuntimeError(f"[Temporal install] Unsupported platform for CLI: {key}. " f"Supported: {sorted(_CLI_PLATFORM_MAP.keys())}")
     url_platform, url_arch = _CLI_PLATFORM_MAP[key]
     url = f"{_CLI_BASE_URL}?platform={url_platform}&arch={url_arch}"
 
@@ -116,8 +114,7 @@ def _fetch_cli_sync() -> Path:
     match = next((Path(p) for p in extracted if Path(p).name == target), None)
     if match is None:
         raise RuntimeError(
-            f"[Temporal install] CLI binary {target!r} not found in archive. "
-            f"Extracted files: {[Path(p).name for p in extracted]}"
+            f"[Temporal install] CLI binary {target!r} not found in archive. " f"Extracted files: {[Path(p).name for p in extracted]}"
         )
     if not is_windows:
         mode = match.stat().st_mode
