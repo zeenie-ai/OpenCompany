@@ -1,94 +1,55 @@
-# pre-commit hooks shared across Python (ruff) + JS/TS (eslint, prettier)
-# + workflow files (actionlint).
+# pre-commit hooks — Python (ruff-format) + workflow validation (actionlint).
 #
 # Install once with:   pre-commit install
 # Run on all files:    pre-commit run --all-files
-# Update hook pins:    pre-commit autoupdate
 #
-# Hook pins are revisions, not floating tags — pre-commit caches per
-# revision, and Dependabot bumps these via the `github-actions`
-# ecosystem (pre-commit-ci.com extends Dependabot's coverage to
-# pre-commit's own rev pins via the same PR cadence).
+# Scope is deliberately narrow: only validators (yaml/toml/json shape,
+# merge-conflict markers, oversized files, private keys, workflow
+# schema) plus ruff-format. The frontend ``prettier`` / ``eslint``
+# hooks and the ``ruff check`` lint pass were dropped because they
+# produced multi-hundred-file format diffs against an already-shipped
+# tree -- the team runs ``pnpm --filter react-flow-client run lint``
+# in ``predeploy.yml`` for the real lint gate, and ``ruff check`` is
+# available ad hoc.
 #
-# CI mirror: `predeploy.yml` runs `pre-commit run --all-files` so
-# unfixed lint issues block merges even when a contributor skipped
-# `pre-commit install` locally.
+# Likewise the stdlib ``end-of-file-fixer`` / ``trailing-whitespace``
+# hooks are off: they flag editor artefacts uniformly across vendored
+# SVG / JSON / .env files and the noise outweighs the signal.
 
 default_install_hook_types:
   - pre-commit
   - commit-msg
 
-# Run hooks against staged files only by default; CI uses
-# `pre-commit run --all-files` for full-tree validation.
 default_stages: [pre-commit]
 
 repos:
-  # ---------------------------------------------------------------- stdlib
+  # ---------------------------------------------------------------- validators
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
-      - id: trailing-whitespace
-        exclude: '\.md$'  # Markdown trailing whitespace = line break
-      - id: end-of-file-fixer
-        # SVG icons are vendored single-line assets (from lobehub /
-        # lucide / vendor brand kits); they ship without a trailing
-        # newline and reformatting drifts the SHA against upstream.
-        exclude: '\.svg$'
       - id: check-yaml
         args: ['--allow-multiple-documents']
       - id: check-toml
       - id: check-json
+        # Workflow JSON exports keep wide whitespace + trailing comma
+        # tolerance for the React Flow round-trip. Validators against
+        # strict JSON have flagged them historically; the schema
+        # validator inside ``services.workflow_import`` is the real
+        # gate.
+        exclude: '^\.machina/workflows/.*\.json$'
       - id: check-merge-conflict
       - id: check-added-large-files
-        args: ['--maxkb=500']  # generous cap; binaries should live elsewhere
+        args: ['--maxkb=500']
       - id: detect-private-key
 
   # ---------------------------------------------------------------- Python: ruff-format
-  # Format only. The ruff lint pass (F401 unused-imports, F821, F841
-  # etc.) was producing noise on legitimate ``__getattr__``-driven
-  # lazy-module patterns and on temporary scaffolding -- kept out of
-  # the gate. Run ``ruff check`` ad hoc when you actually want lint
-  # signal.
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.8.4
     hooks:
       - id: ruff-format
         types_or: [python, pyi]
 
-  # ---------------------------------------------------------------- JS/TS: prettier
-  # Prettier owns formatting (semicolons, quote style, indent). ESLint
-  # is invoked separately below for lint rules.
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v4.0.0-alpha.8
-    hooks:
-      - id: prettier
-        # Limit to the client/ workspace -- the server's TS sidecar
-        # (server/nodejs/) is generated/copied and intentionally
-        # unprettierified to keep diffs against upstream minimal.
-        files: '^client/.*\.(ts|tsx|js|jsx|json|css|md)$'
-        additional_dependencies:
-          - prettier@3.4.2
-
-  # ---------------------------------------------------------------- JS/TS: eslint
-  # Run on staged TS/TSX files only. Full workspace lint runs in
-  # predeploy.yml via `pnpm --filter react-flow-client run lint`.
-  - repo: https://github.com/pre-commit/mirrors-eslint
-    rev: v9.17.0
-    hooks:
-      - id: eslint
-        files: '^client/src/.*\.(ts|tsx)$'
-        additional_dependencies:
-          # Match the ESLint major version in client/package.json so
-          # plugin compatibility holds across the local + CI run.
-          - eslint@9
-          - typescript-eslint@8
-          - eslint-plugin-react-hooks@5
-          - eslint-plugin-react-refresh@0.4
-
   # ---------------------------------------------------------------- Workflows: actionlint
-  # Catches GitHub Actions schema errors, shellcheck issues inside
-  # `run:` blocks, and known anti-patterns (e.g. running an action
-  # without a pinned version -- complements zizmor's deeper scan).
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.4
     hooks:
