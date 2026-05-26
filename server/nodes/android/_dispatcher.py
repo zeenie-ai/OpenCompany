@@ -294,13 +294,17 @@ class AndroidService:
             return result
 
         except Exception as e:
-            logger.error("[Android Service] Relay execution failed", node_id=node_id, service_id=service_id, action=action, error=str(e))
+            logger.error(
+                "[Android Service] Relay execution failed",
+                node_id=node_id, service_id=service_id, action=action,
+                error=str(e), exc_info=True,
+            )
 
             return {
                 "success": False,
                 "node_id": node_id,
                 "node_type": "androidService",
-                "error": str(e),
+                "error": "Relay execution failed",
                 "result": {"service_id": service_id, "action": action, "connection_type": "relay", "timestamp": datetime.now().isoformat()},
                 "execution_time": time.time() - start_time,
                 "timestamp": datetime.now().isoformat(),
@@ -439,7 +443,7 @@ class AndroidService:
                 "node_id": node_id,
                 "node_type": "androidService",
                 "error": error_msg,
-                "result": {"service_id": service_id, "action": action, "connection_error": str(e), "timestamp": datetime.now().isoformat()},
+                "result": {"service_id": service_id, "action": action, "connection_error": "connection failed", "timestamp": datetime.now().isoformat()},
                 "execution_time": time.time() - start_time,
                 "timestamp": datetime.now().isoformat(),
             }
@@ -470,7 +474,7 @@ class AndroidService:
                 "success": False,
                 "node_id": node_id,
                 "node_type": "androidService",
-                "error": str(e),
+                "error": "Android service execution failed",
                 "result": {"service_id": service_id, "action": action, "timestamp": datetime.now().isoformat()},
                 "execution_time": time.time() - start_time,
                 "timestamp": datetime.now().isoformat(),
@@ -495,4 +499,4 @@ class AndroidService:
                 }
         except Exception as e:
             logger.warning("[Android Service] Device offline", android_host=android_host, android_port=android_port, error=str(e))
-            return {"online": False, "error": str(e), "android_host": android_host, "android_port": android_port}
+            return {"online": False, "error": "Device offline", "android_host": android_host, "android_port": android_port}
