@@ -14,7 +14,10 @@ runs:
     - uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.node-version }}
-        cache: 'pnpm'
+        # ``cache:`` intentionally omitted -- setup-node's post-job cache
+        # save fails with ``Path Validation Error`` in jobs that didn't
+        # actually run pnpm (e.g. CLI / Backend test lanes), marking
+        # the whole job red even though every test passed.
     - uses: actions/setup-python@v5
       with:
         python-version: '3.12'
