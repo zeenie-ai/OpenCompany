@@ -15,9 +15,12 @@ jobs:
       - uses: ./.github/actions/setup
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
-      - run: pnpm --filter react-flow-client run lint
-      - run: pnpm --filter react-flow-client run typecheck
-      - run: pnpm --filter react-flow-client run test
+      - name: Lint client
+        run: pnpm --filter react-flow-client run lint
+      - name: TypeScript check
+        run: pnpm --filter react-flow-client run typecheck
+      - name: Frontend tests (vitest)
+        run: pnpm --filter react-flow-client run test
 
   backend-tests:
     name: Backend tests

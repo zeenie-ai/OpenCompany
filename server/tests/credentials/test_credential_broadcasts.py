@@ -284,7 +284,10 @@ class TestCredentialRuntimeFailureBroadcast:
 
         broadcaster.broadcast = fake_broadcast  # type: ignore[method-assign]
 
-        asyncio.get_event_loop().run_until_complete(
+        # ``asyncio.get_event_loop()`` is removed in Python 3.12+ when no
+        # loop is running in the main thread; use ``asyncio.run`` to
+        # create a fresh loop for the single async call.
+        asyncio.run(
             broadcaster.broadcast_credential_event(
                 event_type="credential.api_key.runtime_failed",
                 provider="telegram",
