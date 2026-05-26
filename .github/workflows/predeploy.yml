@@ -6,6 +6,9 @@ name: Predeploy
 on:
   workflow_call:
 
+permissions:
+  contents: read
+
 jobs:
   build-and-lint:
     name: Build + lint
