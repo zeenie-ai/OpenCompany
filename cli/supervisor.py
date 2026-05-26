@@ -59,9 +59,19 @@ class ServiceSpec:
 
 
 def _full_env(spec_env: dict[str, str]) -> dict[str, str]:
-    """Inherit parent env + force-color so child output stays readable."""
+    """Inherit parent env + force-color so child output stays readable.
+
+    ``VIRTUAL_ENV`` is stripped: ``uv run`` resolves the project venv
+    via the workspace ``pyproject.toml`` and warns when an inherited
+    ``VIRTUAL_ENV`` points elsewhere (which it does whenever the user
+    has the root ``.venv`` activated in their shell and the spec runs
+    with ``cwd=server/``). The warning has no operational effect --
+    uv ignores ``VIRTUAL_ENV`` unless ``--active`` is passed -- so we
+    drop it at the source rather than teach every reader to ignore it.
+    """
+    inherited = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
     return {
-        **os.environ,
+        **inherited,
         "FORCE_COLOR": "1",
         "PYTHONUNBUFFERED": "1",
         **spec_env,
