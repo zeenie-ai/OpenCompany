@@ -126,16 +126,20 @@ if (uvVersion) {
   }
 }
 
-// Temporal binary: downloaded on first backend boot by
-// server/services/temporal/_install.py via pooch (~90 MB tarball
-// cached under platformdirs.user_cache). No global npm install.
-// User-installed `temporal` on PATH (brew / scoop / cargo) is still
-// honoured by the Python supervisor's shutil.which fallback.
+// Temporal binary: downloaded eagerly during install (step [6/6])
+// by ``python -m services.temporal._install``, same call ``machina
+// build`` already makes. The pooch cache (~/.cache/MachinaOs/...)
+// makes re-runs sub-second. Done eagerly because
+// ``TemporalServerRuntime._pre_spawn`` unconditionally calls
+// ``ensure_temporal_binaries`` -- the runtime always uses the
+// pooch-downloaded binary regardless of any system ``temporal`` on
+// PATH -- so pre-fetching here eliminates a 30-90 s stall on the
+// user's first ``machina start``.
 let temporalVersion = getVersion('temporal --version');
 console.log(
   temporalVersion
-    ? `  temporal: ${temporalVersion} (system install, will be reused)`
-    : '  temporal: managed by Python backend (pooch download on first boot)',
+    ? `  temporal: ${temporalVersion} (system install, pooch copy installed below)`
+    : '  temporal: not on PATH, pooch copy installed below',
 );
 
 // agent-browser is managed by the Python backend
@@ -156,7 +160,7 @@ try {
   // Calculate total steps
   let totalSteps = 1;  // .env always
   if (!clientDistExists) totalSteps += 2;  // client deps + build
-  totalSteps += 3;  // Python deps + bytecode compile + CLI venv
+  totalSteps += 4;  // Python deps + bytecode compile + CLI venv + Temporal binary
   let step = 0;
 
   // Create .env if needed
@@ -227,6 +231,18 @@ try {
     run(`uv venv "${cliVenvDir}"`, ROOT);
   }
   run(`uv pip install --python "${cliVenvPython}" --quiet -e .`, ROOT);
+
+  // Eagerly fetch the official Temporal CLI binary (~90 MB tarball
+  // from temporal.download/cli/archive/latest). Same call ``machina
+  // build`` step [6/6] makes. The runtime supervisor unconditionally
+  // uses this pooch-cached copy via
+  // ``TemporalServerRuntime._pre_spawn`` -- it ignores any system
+  // ``temporal`` on PATH -- so pre-fetching at install time turns a
+  // 30-90 s stall on first ``machina start`` into a sub-second
+  // cache hit. Idempotent on re-install (pooch cache).
+  step++;
+  console.log(`[${step}/${totalSteps}] Installing Temporal binaries...`);
+  run('uv run python -m services.temporal._install', serverDir, 600000);
 
   // WhatsApp RPC is now an npm dependency - binary downloaded via postinstall
   console.log('');
