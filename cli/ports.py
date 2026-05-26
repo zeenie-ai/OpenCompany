@@ -77,9 +77,22 @@ def kill_pid(pid: int, *, graceful_timeout: float = 3.0) -> bool:
         if sys.platform == "win32":
             try:
                 os.kill(pid, signal.CTRL_BREAK_EVENT)
-            except (OSError, ProcessLookupError):
-                # Target wasn't in its own process group — fall back
-                # to TerminateProcess via psutil.terminate.
+            except (OSError, ProcessLookupError, SystemError):
+                # Fall back to TerminateProcess via psutil.terminate.
+                #   * ``OSError`` -- target wasn't in our process group.
+                #   * ``SystemError`` -- CPython issue #106148: on
+                #     Windows, ``os.kill`` returns success AND sets an
+                #     ``OSError`` when ``GenerateConsoleCtrlEvent``
+                #     fails with ERROR_INVALID_PARAMETER (e.g. the
+                #     target process isn't in the caller's console
+                #     group). CPython detects the inconsistency and
+                #     raises ``SystemError`` instead of propagating
+                #     the underlying OSError. ``kill_pid`` is used to
+                #     clean up stale state (port squatters, orphans
+                #     from a prior session) -- none of them are in
+                #     our console group, so this path fires every
+                #     time on Windows and used to crash
+                #     ``machina stop``.
                 proc.terminate()
         else:
             proc.terminate()
