@@ -451,7 +451,9 @@ class ExecutionContext:
     edges: List[Dict]          # Edge definitions
 
     # Workspace (per-workflow filesystem for nodes and agents)
-    workspace_dir: str         # Absolute path to data/workspaces/<workflow_id>/
+    workspace_dir: str         # Absolute path to data/workspaces/<workflow_slug>/
+                               # (Wave 14 — keyed by the human-readable slug,
+                               # not the UUID id; see CLAUDE.md "Workflow Naming")
 
     # Execution Progress
     execution_order: List[List[str]]  # Computed layers

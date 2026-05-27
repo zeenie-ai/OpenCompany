@@ -1471,7 +1471,7 @@ Residential proxy provider management with geo-targeting, session control, and a
 - **typescriptExecutor**: **Dual-purpose node** - Execute TypeScript code via persistent Node.js server with type safety, syntax-highlighted editor and console output. Works as workflow node OR AI Agent tool (`typescript_code`).
 
 ### Filesystem & Shell Nodes (4 nodes)
-Dual-purpose tool nodes wrapping `deepagents.backends.LocalShellBackend`. Per-workflow workspace from execution context (`context["workspace_dir"]` = `~/.machina/workspaces/<workflow_id>/`). Fallback uses `Settings().workspace_base_dir` (never `os.getcwd()`).
+Dual-purpose tool nodes wrapping `deepagents.backends.LocalShellBackend`. Per-workflow workspace from execution context (`context["workspace_dir"]` = `~/.machina/workspaces/<workflow_slug>/` post-Wave-14; the slug is the human-readable form `AI_Assistant_1`, see "Workflow Naming" section). Fallback uses `Settings().workspace_base_dir` (never `os.getcwd()`).
 
 **Path safety**: `nodes/filesystem/_backend.py` exposes `normalize_virtual_path()` which uses `pathlib.PureWindowsPath` (host-OS independent) to strip Windows drives, POSIX root, and UNC anchors uniformly, then delegates to `deepagents.backends.utils.validate_path` for `..`/`~` rejection. Wired into `file_read`, `file_modify`, and `fs_search` so LLM-emitted paths in any flavour (`C:\foo`, `/tmp/foo`, `\\server\share\x`, `foo\bar`) all map to a virtual path under the workspace. `virtual_mode=True` only sandboxes filesystem ops — `execute()` itself is never path-restricted (deepagents documents this).
 
@@ -2024,7 +2024,7 @@ Console logs are persisted to SQLite database and loaded on page refresh.
 ### Per-Workflow Workspace Directory
 Each workflow execution gets a persistent workspace directory where nodes save output files and AI agents (especially Deep Agent) access them via filesystem tools.
 
-**Directory**: `~/.machina/workspaces/<workflow_id>/`
+**Directory**: `~/.machina/workspaces/<workflow_slug>/` (Wave 14 — keyed by the human-readable slug, not the UUID; see "Workflow naming" below).
 
 **Configuration** (`server/core/config.py`):
 ```python
@@ -2032,11 +2032,12 @@ workspace_base_dir: str = Field(default="data/workspaces", env="WORKSPACE_BASE_D
 ```
 
 **How it works:**
-- `workflow.py` creates the workspace dir and injects `workspace_dir` into the execution context
+- `workflow.py` creates the workspace dir and injects `workspace_dir` into the execution context. The dir name is the `workflow_slug` resolved from the DB (falls back to `"default"` for one-off Runs without a saved row).
 - `fileDownloader` saves to `{workspace_dir}/downloads/` by default
 - Code executors (Python/JS/TS) receive `workspace_dir` in their execution namespace
 - Deep Agent uses `FilesystemBackend(root_dir=workspace_dir, virtual_mode=True)` -- its filesystem tools (`read_file`, `write_file`, `edit_file`, `ls`, `glob`, `grep`) operate within the workspace
 - `virtual_mode=True` sandboxes paths to prevent traversal outside workspace
+- Rename follows the workflow: when the user renames a workflow, `save_workflow` recomputes the slug and `os.rename`s the workspace dir to match (existing files preserved).
 
 **Key Files:**
 | File | Description |
@@ -2046,6 +2047,27 @@ workspace_base_dir: str = Field(default="data/workspaces", env="WORKSPACE_BASE_D
 | `server/services/handlers/document.py` | `fileDownloader` uses workspace for downloads |
 | `server/services/handlers/code.py` | `workspace_dir` available in Python/JS/TS execution |
 | `server/nodes/filesystem/_backend.py` | `NushellBackend(root_dir=workspace_dir, virtual_mode=True)` for the file/shell plugins |
+
+### Workflow Naming (Wave 14)
+The workflow record carries three identity fields with strict separation:
+
+| Field | Carrier | Stable? | Surfaces |
+|---|---|---|---|
+| `Workflow.id` | opaque 32-hex UUID (`uuid.uuid4().hex`) | yes — never changes on rename | FK target (`Execution.workflow_id`), `EventWorkflowId` Search Attribute in Temporal Visibility, `WorkflowEvent.workflow_id` CloudEvents extension, `log_context(workflow_id=...)`, Redis cache keys, `DeploymentManager._deployments` dict key, frontend `useAppStore.currentWorkflow.id` |
+| `Workflow.name` | free-form display ("AI Assistant") | mutable | sidebar, parameter panel, exported JSON |
+| `Workflow.slug` | `<Sanitized_Name>_<N>` (`AI_Assistant_1`) | mutable, recomputed on rename | `~/.machina/workspaces/<slug>/`, Temporal start id (`<slug>_<uuid8>` visible in Temporal Web UI), cron Schedule IDs, export filenames |
+
+Single source of truth: [`server/services/workflow_naming.py`](./server/services/workflow_naming.py) — `slugify_name` (via `python-slugify` for Unicode transliteration, emoji strip, case preservation, length cap), `next_available_slug(name, database, *, exclude_id=None)` (fill-gap counter; pass `exclude_id=workflow_id` on rename so the row doesn't bump itself), `new_workflow_id()` (bare hex UUID).
+
+**Rename path** — there is NO dedicated rename endpoint. The frontend's auto-save chain (`TopToolbar` inline edit → `updateWorkflow({name})` → debounced save → REST `POST /api/database/workflows` → `services.workflow_storage.handlers.handle_save_workflow`) IS the rename path. When `name` changes between saves, the handler (1) allocates a fresh slug via `next_available_slug`, (2) `database.rename_workflow` updates name + slug atomically (id UUID stays put), (3) renames the on-disk workspace dir via `Path.rename()`, (4) broadcasts a CloudEvents `workflow.renamed` envelope (`broadcaster.broadcast_workflow_lifecycle("renamed", workflow_id=..., name=..., slug=..., old_slug=...)`) so other tabs invalidate their workflows query.
+
+**Invariants** (locked by `tests/services/test_workflow_naming.py` + `test_workflow_rename.py` — 42 tests):
+- First creation always gets `_1` suffix (no bare-base slugs).
+- Fill-gap: deleted `AI_Assistant_2` slot is reused on next "AI Assistant" creation.
+- Renaming `AI Assistant` → `AI Assistant!` (same slug base) keeps `_1` via `exclude_id` (no self-bump).
+- UNIQUE constraint on `slug` is the final collision guard; `IntegrityError` indicates a race the caller should retry.
+- Non-ASCII names transliterate via `text-unidecode` ("日本語" → "Ri_Ben_Yu"); fall back to `Workflow_N` only when slug is empty after sanitize.
+- No backfill migration — the slug column is required on every save. Existing DBs must be rebuilt.
 
 ### Execution System
 - **Supported Components**: AI models, location services, Android automation, WhatsApp messaging, HTTP requests, webhooks

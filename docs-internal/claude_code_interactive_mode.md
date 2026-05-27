@@ -311,7 +311,8 @@ was the wrong default).
 [`nodes/agent/claude_code_agent/_skills.py::materialise_skills`](../server/nodes/agent/claude_code_agent/_skills.py)
 writes one `SKILL.md` tree per connected-and-enabled skill under
 `<workspace_dir>/.claude/skills/<name>/`. The workspace dir
-(`~/.machina/workspaces/<workflow_id>/`) is already passed via
+(`~/.machina/workspaces/<workflow_slug>/` — Wave 14 keys it by the
+human-readable slug, not the UUID id) is already passed via
 `--add-dir`, and per the skills spec's
 [Automatic discovery from parent and nested directories](https://code.claude.com/docs/en/skills#automatic-discovery-from-parent-and-nested-directories)
 rule, claude scans `.claude/skills/` inside every `--add-dir` path.
@@ -361,7 +362,7 @@ skill-injection channel — workspace-dir + live-watch is canonical.
 **Workspace dir — routed via `--add-dir`.**
 [`AICliService.run_batch`](../server/services/cli_agent/service.py)
 splices the per-workflow workspace
-(`~/.machina/workspaces/<workflow_id>/`, injected into `ctx.raw` by
+(`~/.machina/workspaces/<workflow_slug>/`, injected into `ctx.raw` by
 `workflow.py:_get_workspace_dir`) into each task's `add_dir` list
 right after `task_list` is built — `interactive_argv` already emits
 `--add-dir <path>` per entry. Runs BEFORE the pool/non-pool branch

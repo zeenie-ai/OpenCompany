@@ -24,16 +24,23 @@ A workflow JSON document contains:
   "title": "Workflow",
   "description": "A workflow automation definition containing nodes and connections",
   "type": "object",
-  "required": ["id", "name", "nodes", "edges", "createdAt", "lastModified"],
+  "required": ["id", "name", "slug", "nodes", "edges", "createdAt", "lastModified"],
   "properties": {
     "id": {
       "type": "string",
-      "pattern": "^workflow_[0-9]+$"
+      "description": "Stable system UUID — 32 lowercase hex chars (uuid.uuid4().hex). Never changes on rename. FK target for cross-table refs + Temporal Search Attributes + CloudEvents extension + log context.",
+      "pattern": "^[0-9a-f]{32}$"
     },
     "name": {
       "type": "string",
+      "description": "Free-form display name (sidebar label, parameter panel).",
       "minLength": 1,
       "maxLength": 100
+    },
+    "slug": {
+      "type": "string",
+      "description": "Human-readable identifier (e.g. AI_Assistant_1). Derived from name via services.workflow_naming.next_available_slug. Mutable on rename — recomputed + propagated to workspace dir + Temporal Web UI prefix + cron Schedule IDs. UNIQUE across active workflows.",
+      "pattern": "^[A-Za-z0-9]+(_[0-9]+)?$"
     },
     "nodes": {
       "type": "array",
