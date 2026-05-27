@@ -35,6 +35,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from core.logging import get_logger
 from services.node_registry import get_node_class
+from services.workflow_naming import new_workflow_id, next_available_slug
 from services.workflow_validator import validate_workflow
 
 logger = get_logger(__name__)
@@ -292,11 +293,14 @@ async def import_workflow(
         node_parameters,
     )
 
-    # 7. Save. Workflow id format matches the frontend's generateWorkflowId.
-    workflow_id = f"workflow-{int(time.time() * 1000)}-{secrets.token_hex(4)}"
+    # 7. Save. UUID-based system identity + name-derived slug for
+    #    human-visible surfaces (folder names, Temporal Web UI).
+    workflow_id = new_workflow_id()
+    slug = await next_available_slug(proposed_name, database)
     saved = await database.save_workflow(
         workflow_id=workflow_id,
         name=proposed_name,
+        slug=slug,
         description=workflow.get("description"),
         data={"nodes": remapped_nodes, "edges": remapped_edges},
     )

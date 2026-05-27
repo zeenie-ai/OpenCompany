@@ -139,15 +139,37 @@ class WorkflowService:
     # NODE EXECUTION
     # =========================================================================
 
-    def _get_workspace_dir(self, workflow_id: Optional[str]) -> str:
-        """Get or create workspace directory for a workflow."""
+    def _get_workspace_dir(self, workflow_slug: Optional[str]) -> str:
+        """Get or create workspace directory for a workflow.
+
+        Keyed by the human-readable ``workflow_slug`` (Wave 14) so the
+        on-disk dir name matches the Temporal Web UI listing and the
+        sidebar entry. Callers that don't have a slug yet pass
+        ``"default"`` (one-off Run, no DB row) — preserved as the
+        anonymous workspace.
+        """
         base = Path(self.settings.workspace_base_resolved)
-        wf_id = workflow_id or "default"
-        workspace = base / wf_id
+        slug = workflow_slug or "default"
+        workspace = base / slug
         workspace.mkdir(parents=True, exist_ok=True)
         resolved = str(workspace.resolve())
-        logger.info("[Workspace] workflow_id=%s -> %s", wf_id, resolved)
+        logger.info("[Workspace] workflow_slug=%s -> %s", slug, resolved)
         return resolved
+
+    async def _resolve_workflow_slug(self, workflow_id: Optional[str]) -> Optional[str]:
+        """Look up the slug for a workflow_id (one query, opportunistic).
+
+        Returns ``None`` if the row doesn't exist (one-off Run without
+        a saved workflow). Callers fall back to ``"default"`` in that
+        case via :meth:`_get_workspace_dir`.
+        """
+        if not workflow_id:
+            return None
+        try:
+            wf = await self.database.get_workflow(workflow_id)
+            return wf.slug if wf and wf.slug else None
+        except Exception:
+            return None
 
     async def execute_node(
         self,
@@ -159,16 +181,21 @@ class WorkflowService:
         session_id: str = "default",
         execution_id: str = None,
         workflow_id: str = None,
+        workflow_slug: str = None,
         outputs: Dict[str, Any] = None,
     ) -> Dict[str, Any]:
         """Execute a single workflow node."""
-        workspace_dir = self._get_workspace_dir(workflow_id)
+        # Resolve slug from DB if caller passed only workflow_id.
+        if workflow_slug is None:
+            workflow_slug = await self._resolve_workflow_slug(workflow_id)
+        workspace_dir = self._get_workspace_dir(workflow_slug)
         context = {
             "nodes": nodes,
             "edges": edges,
             "session_id": session_id,
             "execution_id": execution_id,
-            "workflow_id": workflow_id,  # For per-workflow status scoping (n8n pattern)
+            "workflow_id": workflow_id,  # UUID — stable system identity, FK target
+            "workflow_slug": workflow_slug,  # Human-readable, mutable on rename
             "workspace_dir": workspace_dir,  # Per-workflow filesystem for nodes and agents
             "get_output_fn": self.get_node_output,
             "outputs": outputs or {},  # Upstream node outputs for data flow (e.g., taskTrigger -> chatAgent)
@@ -198,6 +225,7 @@ class WorkflowService:
             session_id=context.get("session_id", "default"),
             execution_id=context.get("execution_id"),
             workflow_id=context.get("workflow_id"),
+            workflow_slug=context.get("workflow_slug"),
         )
 
     # =========================================================================
@@ -301,9 +329,14 @@ class WorkflowService:
         if not workflow_id:
             workflow_id = f"temporal_{session_id}_{int(time.time() * 1000)}"
 
+        # Look up the human-readable slug so Temporal's Web UI shows
+        # ``<slug>_<uuid8>`` instead of the opaque UUID.
+        workflow_slug = await self._resolve_workflow_slug(workflow_id)
+
         logger.info(
             "Executing workflow via Temporal",
             workflow_id=workflow_id,
+            workflow_slug=workflow_slug,
             node_count=len(nodes),
         )
 
@@ -313,6 +346,7 @@ class WorkflowService:
             edges=edges,
             session_id=session_id,
             enable_caching=True,
+            workflow_slug=workflow_slug,
         )
 
         # Notify status callback for completed nodes if provided

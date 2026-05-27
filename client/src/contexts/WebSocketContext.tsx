@@ -714,17 +714,20 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
 
         case 'workflow_lifecycle': {
-          // CloudEvents-typed workflow lifecycle (today: workflow.imported).
-          // Frontend action: invalidate the workflows query so the sidebar
-          // picks up the new entry on every connected client. Other stages
-          // (deployment.started, lock.acquired, ...) are read for future
-          // dispatch but currently have side effects elsewhere.
+          // CloudEvents-typed workflow lifecycle. ``.imported`` and
+          // ``.renamed`` both invalidate the workflows query so every
+          // connected client refreshes the sidebar. The renaming tab
+          // already updated its in-memory store from the save response
+          // — this broadcast covers other open tabs of the same user.
           const event = data as WorkflowEvent<{
             name?: string;
+            slug?: string;
+            old_slug?: string;
             node_count?: number;
             edge_count?: number;
           }>;
-          if (event?.type?.endsWith('.imported')) {
+          const eventType = event?.type ?? '';
+          if (eventType.endsWith('.imported') || eventType.endsWith('.renamed')) {
             void queryClient.invalidateQueries({ queryKey: WORKFLOWS_QUERY_KEY });
           }
           break;

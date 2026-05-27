@@ -21,7 +21,13 @@ export interface WorkflowData {
   nodes: Node[];
   edges: Edge[];
   name: string;
+  /** Stable UUID — backend system identity. Never changes on rename. */
   id: string;
+  /** Human-readable slug derived from name (e.g. "AI_Assistant_1").
+   *  Backend recomputes on every name change and rotates the on-disk
+   *  workspace dir + Temporal Web UI prefix to match. Read-only on
+   *  the client — server is the source of truth. */
+  slug: string;
   createdAt: Date;
   lastModified: Date;
 }
@@ -109,6 +115,7 @@ interface AppStore {
 const createDefaultWorkflow = (): WorkflowData => ({
   id: generateWorkflowId(),
   name: theme.constants.defaultWorkflowName,
+  slug: '',  // Server allocates on first save.
   nodes: [],
   edges: [],
   createdAt: new Date(),
@@ -213,26 +220,27 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const { currentWorkflow } = get();
     if (!currentWorkflow) return;
 
-    const updatedWorkflow = {
-      ...currentWorkflow,
-      lastModified: new Date(),
-    };
-
     // Save to database - sanitize node.data to only include UI fields (label, disabled, condition).
     // Parameters live in the DB node_parameters table, not in node.data.
-    const success = await workflowApi.saveWorkflow(
-      updatedWorkflow.id,
-      updatedWorkflow.name,
-      { nodes: sanitizeNodes(updatedWorkflow.nodes), edges: updatedWorkflow.edges }
+    // The save handler returns the canonical slug (recomputed server-side
+    // when the display name changed) so we can sync the store with it.
+    const result = await workflowApi.saveWorkflow(
+      currentWorkflow.id,
+      currentWorkflow.name,
+      { nodes: sanitizeNodes(currentWorkflow.nodes), edges: currentWorkflow.edges }
     );
 
-    if (!success) {
+    if (!result) {
       console.error('Failed to save workflow to database');
       return;
     }
 
     set({
-      currentWorkflow: updatedWorkflow,
+      currentWorkflow: {
+        ...currentWorkflow,
+        slug: result.slug ?? currentWorkflow.slug,
+        lastModified: new Date(),
+      },
       hasUnsavedChanges: false,
     });
     invalidateWorkflowsList();
@@ -248,6 +256,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const workflowData: WorkflowData = {
         id: result.id,
         name: result.name,
+        slug: result.slug ?? '',
         nodes,
         edges,
         createdAt: new Date(result.createdAt),

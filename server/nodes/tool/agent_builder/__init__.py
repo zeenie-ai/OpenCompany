@@ -40,6 +40,7 @@ from core.logging import get_logger
 from services import workflow_ops
 from services.node_registry import registered_node_classes
 from services.plugin import NodeContext, Operation, TaskQueue, ToolNode
+from services.workflow_naming import new_workflow_id, next_available_slug
 
 
 logger = get_logger(__name__)
@@ -595,12 +596,17 @@ class AgentBuilderNode(ToolNode):
                 summary="create_workflow: workflow_name is required.",
             )
 
-        workflow_id = f"wf_{uuid.uuid4().hex[:12]}"
+        from services.plugin.deps import get_database
+
+        database = get_database()
+        workflow_id = new_workflow_id()
+        slug = await next_available_slug(name, database)
         start_node_id = f"start-{uuid.uuid4().hex[:8]}"
         description = (params.workflow_description or "").strip()
         workflow_data = {
             "id": workflow_id,
             "name": name,
+            "slug": slug,
             "description": description,
             "nodes": [
                 {
@@ -614,12 +620,10 @@ class AgentBuilderNode(ToolNode):
             "nodeParameters": {},
         }
 
-        from services.plugin.deps import get_database
-
-        database = get_database()
         ok = await database.save_workflow(
             workflow_id,
             name,
+            slug,
             workflow_data,
             description=description or None,
         )
@@ -630,6 +634,6 @@ class AgentBuilderNode(ToolNode):
             )
         return AgentBuilderOutput(
             operation="create_workflow",
-            summary=(f"Created workflow '{name}' (id: {workflow_id}). " "User can switch to it from the toast notification."),
+            summary=(f"Created workflow '{name}' (slug: {slug}). " "User can switch to it from the toast notification."),
             workflow_id=workflow_id,
         )

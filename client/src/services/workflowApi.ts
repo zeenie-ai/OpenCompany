@@ -10,6 +10,7 @@ const getApiBase = () => `${API_CONFIG.PYTHON_BASE_URL}/api/database`;
 export interface WorkflowSummary {
   id: string;
   name: string;
+  slug: string;
   nodeCount: number;
   createdAt: string;
   lastModified: string;
@@ -18,6 +19,7 @@ export interface WorkflowSummary {
 export interface WorkflowData {
   id: string;
   name: string;
+  slug: string;
   data: {
     nodes: any[];
     edges: any[];
@@ -26,8 +28,14 @@ export interface WorkflowData {
   lastModified: string;
 }
 
+export interface SaveWorkflowResult {
+  success: boolean;
+  slug?: string;
+  name?: string;
+}
+
 export const workflowApi = {
-  async saveWorkflow(workflowId: string, name: string, data: { nodes: any[]; edges: any[] }): Promise<boolean> {
+  async saveWorkflow(workflowId: string, name: string, data: { nodes: any[]; edges: any[] }): Promise<SaveWorkflowResult | null> {
     try {
       const response = await fetch(`${getApiBase()}/workflows`, {
         method: 'POST',
@@ -36,10 +44,11 @@ export const workflowApi = {
         body: JSON.stringify({ workflow_id: workflowId, name, data })
       });
       const result = await response.json();
-      return result.success;
+      if (!result.success) return null;
+      return { success: true, slug: result.slug, name: result.name };
     } catch (error) {
       console.error('Failed to save workflow:', error);
-      return false;
+      return null;
     }
   },
 

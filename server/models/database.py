@@ -23,12 +23,27 @@ class NodeParameter(SQLModel, table=True):
 
 
 class Workflow(SQLModel, table=True):
-    """Workflow definitions."""
+    """Workflow definitions.
+
+    Three identity carriers (Wave 14 split):
+
+    * ``id`` — opaque UUID, stable for the lifetime of the workflow.
+      FK target for every cross-table reference (``Execution.workflow_id``,
+      soft refs on ``ConsoleLog`` / ``TokenUsageMetric`` / etc.), Temporal
+      Search Attributes, log context. Never changes on rename.
+    * ``name`` — free-form human display name ("AI Assistant"). Mutable.
+    * ``slug`` — sanitized + dedup-counter form ("AI_Assistant_1").
+      Recomputed on rename via :func:`services.workflow_naming.next_available_slug`.
+      Used for workspace dirs on disk, Temporal workflow IDs in the
+      Web UI, cron Schedule IDs, export filenames — anywhere a human
+      sees the workflow externally. UNIQUE by construction.
+    """
 
     __tablename__ = "workflows"
 
     id: str = Field(primary_key=True, max_length=255)
     name: str = Field(max_length=255)
+    slug: str = Field(default="", max_length=64, unique=True, index=True)
     description: Optional[str] = Field(default=None, max_length=1000)
     data: Dict[str, Any] = Field(sa_column=Column(JSON))
     created_at: datetime = Field(

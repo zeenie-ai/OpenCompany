@@ -103,6 +103,14 @@ dependencies = [
     # Markdown formatting (GFM to platform-native)
     "markdown-it-py>=3.0.0",
 
+    # Workflow naming — production-grade slugify with Unicode
+    # transliteration (60M dl/mo, MIT). Used by
+    # ``services.workflow_naming.slugify_name`` to derive
+    # ``Workflow.slug`` from user display names. Brings ``text-unidecode``
+    # as a transitive dep so "日本語" -> "Ri_Ben_Yu" instead of falling
+    # back to "Workflow_N".
+    "python-slugify>=8.0.0",
+
     # Local LLM SDKs — used by `nodes/model/_local_validator.py` to
     # introspect the user's actually-loaded models (context_length,
     # max_output_tokens). Replaces hand-rolled httpx probes against

@@ -2,12 +2,13 @@
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from typing import Dict, Any
+from typing import Any, Dict
 
 from core.container import container
 from core.database import Database
 from core.logging import get_logger
 from services.example_loader import import_examples_for_user
+from services.workflow_storage.handlers import handle_save_workflow
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/database", tags=["database"])
@@ -63,11 +64,19 @@ async def delete_node_parameters(node_id: str, database: Database = Depends(lamb
 
 
 @router.post("/workflows")
-async def save_workflow(request: WorkflowSaveRequest, database: Database = Depends(lambda: container.database())):
-    """Save workflow to database."""
+async def save_workflow(request: WorkflowSaveRequest):
+    """Save workflow — REST passthrough to the WS handler.
+
+    Single source of truth lives in
+    :func:`services.workflow_storage.handlers.handle_save_workflow` —
+    it owns slug allocation, the workspace-dir rename on name change,
+    and the CloudEvents ``workflow.renamed`` broadcast.
+    """
     try:
-        success = await database.save_workflow(workflow_id=request.workflow_id, name=request.name, data=request.data)
-        return {"success": success, "workflow_id": request.workflow_id}
+        return await handle_save_workflow(
+            {"workflow_id": request.workflow_id, "name": request.name, "data": request.data},
+            websocket=None,  # type: ignore[arg-type]  # unused by the handler
+        )
     except Exception as e:
         logger.error("Failed to save workflow", error=str(e), exc_info=True)
         return {"success": False, "error": "Failed to save workflow"}
@@ -99,6 +108,7 @@ async def get_all_workflows(database: Database = Depends(lambda: container.datab
                 {
                     "id": w.id,
                     "name": w.name,
+                    "slug": w.slug,
                     "nodeCount": len(w.data.get("nodes", [])) if w.data else 0,
                     "createdAt": w.created_at.isoformat() if w.created_at else None,
                     "lastModified": w.updated_at.isoformat() if w.updated_at else None,
@@ -122,6 +132,7 @@ async def get_workflow(workflow_id: str, database: Database = Depends(lambda: co
                 "workflow": {
                     "id": workflow.id,
                     "name": workflow.name,
+                    "slug": workflow.slug,
                     "data": workflow.data,
                     "createdAt": workflow.created_at.isoformat() if workflow.created_at else None,
                     "lastModified": workflow.updated_at.isoformat() if workflow.updated_at else None,

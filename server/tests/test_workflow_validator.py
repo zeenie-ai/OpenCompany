@@ -423,6 +423,9 @@ def _fake_database(existing_names: list[str] | None = None):
 
     db = MagicMock()
     db.get_all_workflows = AsyncMock(return_value=[_FakeWorkflow(n) for n in (existing_names or [])])
+    # Wave 14: workflow_import.import_workflow allocates a slug via
+    # ``next_available_slug`` before save, which scans existing slugs.
+    db.list_workflow_slugs = AsyncMock(return_value=[])
 
     async def save_workflow(**kwargs):
         saved_workflows.append(kwargs)
@@ -472,7 +475,9 @@ class TestImportWorkflowOrchestrator:
         )
         assert result["success"] is True
         assert result["preview"] is False
-        assert result["workflow_id"].startswith("workflow-")
+        # Wave 14: workflow ids are bare 32-hex UUIDs (no prefix).
+        assert len(result["workflow_id"]) == 32
+        assert all(c in "0123456789abcdef" for c in result["workflow_id"])
         assert result["name"] == "My Workflow"
         assert len(db._saved_workflows) == 1
 
@@ -633,7 +638,9 @@ class TestImportWorkflowOrchestrator:
         assert len(calls) == 1, "import_workflow save path must call broadcast_workflow_lifecycle " "exactly once on success."
         stage, kwargs = calls[0]
         assert stage == "imported"
-        assert kwargs["workflow_id"].startswith("workflow-")
+        # Wave 14: workflow ids are bare 32-hex UUIDs (no prefix).
+        assert len(kwargs["workflow_id"]) == 32
+        assert all(c in "0123456789abcdef" for c in kwargs["workflow_id"])
         assert kwargs["name"] == "Broadcast Test"
 
 

@@ -188,6 +188,7 @@ class WorkflowEvent(BaseModel):
             "execution.started",
             "execution.stopped",
             "imported",
+            "renamed",
         ],
         *,
         workflow_id: str,
@@ -202,6 +203,13 @@ class WorkflowEvent(BaseModel):
         after the new workflow is persisted. Frontend listeners invalidate
         the workflows query so the sidebar picks up the new entry across
         all connected clients (browser tabs).
+
+        ``renamed`` fires from the ``rename_workflow`` WebSocket
+        handler. ``data`` carries ``{name, slug, old_slug}`` so the
+        frontend updates the open workflow's display + invalidates the
+        workflows query for the sidebar. The ``workflow_id`` (UUID) is
+        unchanged across the rename — only the human-readable fields
+        change.
         """
         return cls(
             source="machinaos://services/workflow",

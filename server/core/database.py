@@ -273,8 +273,23 @@ class Database:
     # Workflows
     # ============================================================================
 
-    async def save_workflow(self, workflow_id: str, name: str, data: Dict[str, Any], description: Optional[str] = None) -> bool:
-        """Save or update workflow."""
+    async def save_workflow(
+        self,
+        workflow_id: str,
+        name: str,
+        slug: str,
+        data: Dict[str, Any],
+        description: Optional[str] = None,
+    ) -> bool:
+        """Save or update workflow.
+
+        ``slug`` is required for new rows and is updated on every save
+        for existing rows (so a rename routed through this path stays
+        consistent). Callers compute the slug via
+        :func:`services.workflow_naming.next_available_slug` before
+        calling this method — the unique constraint on the column is
+        the final check against collision.
+        """
         try:
             async with self.get_session() as session:
                 stmt = select(Workflow).where(Workflow.id == workflow_id)
@@ -283,10 +298,11 @@ class Database:
 
                 if existing:
                     existing.name = name
+                    existing.slug = slug
                     existing.description = description
                     existing.data = data
                 else:
-                    existing = Workflow(id=workflow_id, name=name, description=description, data=data)
+                    existing = Workflow(id=workflow_id, name=name, slug=slug, description=description, data=data)
                     session.add(existing)
 
                 await session.commit()
@@ -319,6 +335,48 @@ class Database:
         except Exception as e:
             logger.error("Failed to get all workflows", error=str(e))
             return []
+
+    async def list_workflow_slugs(self) -> List[tuple]:
+        """Cheap projection of ``(id, slug)`` pairs.
+
+        Consumed by :func:`services.workflow_naming.next_available_slug`
+        to find the lowest free ``_<N>`` suffix for a given slug base.
+        Returns an empty list on error so the slug allocator falls
+        through to ``_1``.
+        """
+        try:
+            async with self.get_session() as session:
+                stmt = select(Workflow.id, Workflow.slug)
+                result = await session.execute(stmt)
+                return list(result.all())
+        except Exception as e:
+            logger.error("Failed to list workflow slugs", error=str(e))
+            return []
+
+    async def rename_workflow(self, workflow_id: str, new_name: str, new_slug: str) -> bool:
+        """Atomically update display name + slug. ``id`` (PK) never moves.
+
+        Cross-table FK references (``Execution.workflow_id``) and soft
+        refs (``ConsoleLog`` / ``TokenUsageMetric`` / etc.) all key on
+        the UUID, so renaming is a single-row UPDATE — no cascade
+        needed. The unique constraint on ``slug`` is the collision
+        guard; the caller must pre-allocate a free slug via
+        :func:`services.workflow_naming.next_available_slug`.
+        """
+        try:
+            async with self.get_session() as session:
+                stmt = select(Workflow).where(Workflow.id == workflow_id)
+                result = await session.execute(stmt)
+                existing = result.scalar_one_or_none()
+                if not existing:
+                    return False
+                existing.name = new_name
+                existing.slug = new_slug
+                await session.commit()
+                return True
+        except Exception as e:
+            logger.error("Failed to rename workflow", workflow_id=workflow_id, error=str(e))
+            return False
 
     async def delete_workflow(self, workflow_id: str) -> bool:
         """Delete workflow."""

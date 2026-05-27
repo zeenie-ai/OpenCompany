@@ -48,25 +48,35 @@ class TemporalExecutor:
         edges: List[Dict],
         session_id: str = "default",
         enable_caching: bool = True,
+        workflow_slug: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Execute a workflow using Temporal.
 
         Args:
-            workflow_id: Unique workflow identifier
+            workflow_id: Stable UUID system identity (FK target).
             nodes: List of node definitions
             edges: List of edge definitions
             session_id: Session identifier
             enable_caching: Whether to enable result caching (passed to activity)
+            workflow_slug: Human-readable slug used in the Temporal Web UI
+                listing prefix. Optional — falls back to ``"workflow"`` for
+                one-off Runs without a saved DB row.
 
         Returns:
             Dict with success, outputs, execution_trace, and timing info
         """
         start_time = time.time()
-        execution_id = f"temporal-{uuid.uuid4().hex[:8]}"
+        # Temporal start ID surfaces in the Web UI — prefix with the
+        # human-readable slug so an operator browsing the workflows
+        # listing can find runs by name. The uuid8 suffix keeps per-run
+        # uniqueness.
+        slug_prefix = workflow_slug or "workflow"
+        execution_id = f"{slug_prefix}_{uuid.uuid4().hex[:8]}"
 
         logger.info(
             "Starting Temporal workflow execution",
             workflow_id=workflow_id,
+            workflow_slug=workflow_slug,
             execution_id=execution_id,
             node_count=len(nodes),
             edge_count=len(edges),
@@ -81,6 +91,7 @@ class TemporalExecutor:
                     "edges": edges,
                     "session_id": session_id,
                     "workflow_id": workflow_id,
+                    "workflow_slug": workflow_slug,
                 },
                 id=execution_id,
                 task_queue=self.task_queue,

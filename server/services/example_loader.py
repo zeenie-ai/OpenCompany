@@ -54,14 +54,20 @@ async def import_examples_for_user(database) -> int:
     Returns the count of workflows imported.
     """
     from services.workflow_import import remap_node_ids
+    from services.workflow_naming import new_workflow_id, next_available_slug
     from services.workflow_validator import validate_workflow
 
     examples = get_example_workflows()
     imported = 0
 
     for example in examples:
-        # Use ID from JSON, prefixed with 'example_' for clarity
-        workflow_id = f"example_{example.get('id', 'unknown')}"
+        # Fresh UUID for each example (pre-Wave-14 used "example_"
+        # prefix + JSON id which produced ugly "example_example_workflow-..."
+        # double-prefixed strings). Slug comes from the seed's display
+        # name via the standard helper.
+        workflow_id = new_workflow_id()
+        example_name = example.get("name", "Example Workflow")
+        slug = await next_available_slug(example_name, database)
 
         # Rewrite every node id so two examples that share ids don't
         # overwrite each other's parameters in the node_parameters table.
@@ -107,7 +113,8 @@ async def import_examples_for_user(database) -> int:
         # Reuse existing save_workflow method
         success = await database.save_workflow(
             workflow_id=workflow_id,
-            name=example.get("name", "Example Workflow"),
+            name=example_name,
+            slug=slug,
             description=example.get("description"),
             data={"nodes": nodes, "edges": edges},
         )
