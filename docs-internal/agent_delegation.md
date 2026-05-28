@@ -6,9 +6,14 @@ How memory, parameters, and execution context flow when one AI agent delegates w
 
 ## Overview
 
-AI Agents can delegate tasks to other agents connected to their `input-tools` handle. The parent agent's LLM decides when to call the child agent by invoking a `delegate_to_<agent>` tool. The child spawns as an independent `asyncio.Task` and the parent continues working immediately -- a **fire-and-forget** pattern.
+AI Agents can delegate tasks to other agents connected to their `input-tools` handle. The parent agent's LLM decides when to call the child agent by invoking a `delegate_to_<agent>` tool.
 
-The parent passes only a `task` string and optional `context` string. Everything else -- the child's provider, model, system message, memory, skills, and tools -- comes from the child's own configuration and workflow connections.
+**Two execution paths** depending on whether the parent is running under Temporal F4.B:
+
+- **F4.B (default, `TEMPORAL_AGENT_WORKFLOW_ENABLED=true`):** the delegation tool dispatch inside `AgentWorkflow` spawns the child as a **child `AgentWorkflow`** via `workflow.execute_child_workflow`. Parent's `node_id` is passed in `child_context["parent_node_id"]` so the child's `_emit_phase` mirrors progress onto the parent canvas badge. Parent awaits the child's result synchronously through the Temporal child-workflow handle — see [TEMPORAL_ARCHITECTURE.md §F4.B](./TEMPORAL_ARCHITECTURE.md#agent-as-child-workflow-f4b).
+- **Legacy / F4.A-only:** the rest of this doc. `_execute_delegated_agent` spawns the child as an independent `asyncio.Task` and the parent continues working immediately — the **fire-and-forget** pattern. Still the path for `rlm_agent` / `claude_code_agent` (excluded from `AGENT_WORKFLOW_TYPES`) and any deployment with F4.B disabled.
+
+In both paths the parent passes only a `task` string and optional `context` string. Everything else -- the child's provider, model, system message, memory, skills, and tools -- comes from the child's own configuration and workflow connections.
 
 ## Architecture
 

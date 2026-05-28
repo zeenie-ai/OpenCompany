@@ -47,7 +47,7 @@ Both are defined in `TEAM_LEAD_TYPES` in `server/services/handlers/ai.py`.
    - For "hi" or simple questions → responds directly (no delegation)
    - For complex tasks → uses appropriate delegation tools
 
-5. **Delegated agents execute** via the standard `_execute_delegated_agent()` flow in `handlers/tools.py`
+5. **Delegated agents execute** via the standard `_execute_delegated_agent()` flow in `handlers/tools.py` (legacy / F4.A path), OR — when the parent runs as a Temporal `AgentWorkflow` under F4.B and the child type is in `AGENT_WORKFLOW_TYPES` — as a child `AgentWorkflow` spawned via `workflow.execute_child_workflow` with `parent_node_id` plumbed through `child_context` so the parent canvas badge mirrors child progress. See [agent_delegation.md](./agent_delegation.md#overview) for both paths.
 
 ## Input Handles
 

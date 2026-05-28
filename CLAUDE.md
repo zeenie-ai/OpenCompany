@@ -932,6 +932,8 @@ Search API nodes that work BOTH as standalone workflow nodes AND as AI Agent too
 - Brave Search and Perplexity in **Search** category
 - Serper in **Scrapers** category (Google SERP scraping)
 
+**Perplexity validation note:** `PerplexityCredential._probe` short-circuits to `ProbeResult(valid=True)` without an HTTP call — Perplexity exposes no cheap auth-gated endpoint (`/v1/models` returns 200 for any key including garbage; every other endpoint charges tokens, and `chat/completions` rejects `max_tokens<16` for `sonar` with HTTP 400 before checking auth). Runtime calls will surface 401 if the key is wrong. `ProbeResult` is exported from `services.plugin` for `_probe` overrides like this.
+
 ### Specialized AI Agents (15 nodes)
 Specialized agents are AI Agents pre-configured for specific domains. They inherit full AI Agent functionality (provider, model, prompt, system message, thinking/reasoning) while being tailored for specific capabilities. All specialized agents dispatch through `BaseNode.execute()` via the node registry (Wave 11) and support the same input handles. Node colors use centralized dracula theme constants imported from `client/src/styles/theme.ts`.
 
@@ -1630,7 +1632,7 @@ server/nodes/document/
 
 Workflows execute via Temporal for durability and horizontal scaling. Three dispatch paths (legacy `execute_node_activity` / per-type `node.{type}.v{version}` (F4.A) / Agent-as-child-workflow (F4.B)) gated by `TEMPORAL_PER_TYPE_DISPATCH` and `TEMPORAL_AGENT_WORKFLOW_ENABLED` settings flags.
 
-Full architecture, dispatch matrix, per-node lifecycle, heartbeat semantics, the 14 migrating agent types + 2 bypass agents (rlm_agent / claude_code_agent), the 6 F4.B agent activities (`prepare_payload.v1` / `execute_llm_step.v1` / `persist_turn.v1` / `compact_memory.v1` / `store_output.v1` / `broadcast_progress.v1`), and the future `TemporalWorkerPool` per-queue routing live in [docs-internal/TEMPORAL_ARCHITECTURE.md](./docs-internal/TEMPORAL_ARCHITECTURE.md). Tool-call dispatch under F4.A documented at [docs-internal/tool_building_pipeline.md §9](./docs-internal/tool_building_pipeline.md).
+Full architecture, dispatch matrix, per-node lifecycle, heartbeat semantics, the 14 migrating agent types + 2 bypass agents (rlm_agent / claude_code_agent), the 6 F4.B agent activities (`prepare_payload.v1` / `execute_llm_step.v1` / `persist_turn.v1` / `compact_memory.v1` / `store_output.v1` / `broadcast_progress.v1`), the **`delegate_to_<x>` Temporal-native dispatch** (child agent type in `AGENT_WORKFLOW_TYPES` → `workflow.execute_child_workflow` with `parent_node_id` propagation + parent-mirror in `_emit_phase` so the parent's canvas badge advances live; falls through to `execute_activity` otherwise), and the future `TemporalWorkerPool` per-queue routing live in [docs-internal/TEMPORAL_ARCHITECTURE.md](./docs-internal/TEMPORAL_ARCHITECTURE.md). Tool-call dispatch under F4.A documented at [docs-internal/tool_building_pipeline.md §9](./docs-internal/tool_building_pipeline.md).
 
 **Configuration** (`.env.template` — canonical defaults; `.env` layers user overrides):
 ```env
@@ -2486,7 +2488,12 @@ Both call corresponding AI service methods:
 
 AI Agents can delegate tasks to other agents connected to their `input-tools` handle. This enables hierarchical agent architectures where a parent agent can spawn child agents that work independently.
 
-**Architecture: Fire-and-Forget Pattern**
+**Two execution paths** depending on whether the parent runs under Temporal F4.B:
+
+- **F4.B (default)**: parent `AgentWorkflow` spawns the child as a **child `AgentWorkflow`** via `workflow.execute_child_workflow` when the child type is in `AGENT_WORKFLOW_TYPES`. Parent's `node_id` is passed in `child_context["parent_node_id"]` so the child's `_emit_phase` mirrors progress onto the parent's canvas badge (parent badge advances live alongside child iteration counter instead of freezing). Deterministic child workflow id `f"{parent_workflow_id}-delegate-{child_node_id}-{iteration}"`. Parent waits for child result through the child-workflow handle — synchronous within the parent's loop.
+- **Legacy / F4.A-only**: the fire-and-forget pattern below. Still the path for `rlm_agent` / `claude_code_agent` (excluded from `AGENT_WORKFLOW_TYPES`) and any deployment with `TEMPORAL_AGENT_WORKFLOW_ENABLED=false`.
+
+**Architecture: Fire-and-Forget Pattern (legacy / F4.A)**
 ```
 Parent Agent calls "delegate_to_ai_agent" tool
        |
@@ -2501,7 +2508,7 @@ Child Agent executes independently in background
 Child broadcasts its own status updates (executing, success, error)
 ```
 
-**How It Works:**
+**How It Works (legacy / F4.A):**
 1. Connect a Child Agent (aiAgent/chatAgent) to Parent Agent's `input-tools` handle
 2. Parent sees a tool like `delegate_to_ai_agent` with schema `{task: string, context?: string}`
 3. When Parent calls the tool, handler spawns Child as `asyncio.create_task()`

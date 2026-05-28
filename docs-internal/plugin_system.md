@@ -350,6 +350,16 @@ Declarative credentials live **in each node folder's `_credentials.py`**
   auto-refresh via `auth_service.get_oauth_tokens`.
 - `Credential` — fully custom (override `resolve()` + `inject()`).
 
+**Validation probe**: subclasses normally declare `probe_url` /
+`probe_method` / `probe_json` so the default `_probe` issues a probe
+HTTP request and reads the status code through `_classify_status`. When
+the provider has no cheap auth-gated endpoint (Perplexity's `/v1/models`
+returns 200 for any key including garbage; every other endpoint charges
+tokens), override `_probe` to return `ProbeResult(valid=True)` directly
+and let runtime calls surface the 401 — see `nodes/search/perplexity_search/__init__.py`
+for the canonical no-probe pattern. `ProbeResult` is exported from
+`services.plugin` for this override.
+
 Auto-discovery rides on node-package import. When
 `nodes/__init__.py:pkgutil.walk_packages` imports a plugin module,
 that module's `from ._credentials import XCredential` statement

@@ -301,7 +301,12 @@ AgentWorkflow.run(context):
     3. if kind == "tool_calls":
          for each call:
            emit_phase("executing_tool", tool_name=...)
-           execute_activity(f"node.{tool_node_type}.v{version}")
+           if delegate_to_* AND child type in AGENT_WORKFLOW_TYPES:
+             execute_child_workflow("AgentWorkflow", child_context)
+               child_context = {**tool_payload, "parent_node_id": <self>}
+               id = f"{parent_workflow_id}-delegate-{child_node_id}-{iter}"
+           else:
+             execute_activity(f"node.{tool_node_type}.v{version}")
            emit_phase("tool_completed", tool_name=...)
            _serialise_tool_result unwraps F4.A's {success, result, ...}
            envelope so the LLM sees only the handler's return value
@@ -323,9 +328,9 @@ AgentWorkflow.run(context):
   emit_phase("completed", status="success")
 ```
 
-`emit_phase(phase, status?)` is a thin helper that schedules `agent.broadcast_progress.v1`. The activity emits `WorkflowEvent.agent_progress` (CloudEvents v1.0, `type="com.machinaos.agent.progress"`) for FE consumers; when `status` is supplied it also drives a raw-dict `update_node_status` for the canvas-glow color (executing / success / error). Same dual-channel pattern F4.A's `_node_activity` uses.
+`emit_phase(phase, status?)` is a thin helper that schedules `agent.broadcast_progress.v1`. The activity emits `WorkflowEvent.agent_progress` (CloudEvents v1.0, `type="com.machinaos.agent.progress"`) for FE consumers; when `status` is supplied it also drives a raw-dict `update_node_status` for the canvas-glow color (executing / success / error). Same dual-channel pattern F4.A's `_node_activity` uses. When this workflow is itself a delegated child (`context["parent_node_id"]` set), every `emit_phase` call ALSO schedules a second broadcast against the parent's `node_id` with `phase="delegating"` — the parent's canvas badge then advances in real time while the child loops, instead of freezing at "executing" glow until the child completes.
 
-Each LLM step is one activity, each tool call is one per-type activity (the same activities F4.A registered). Failures of tool activities surface as error messages back to the LLM (matching the in-process agent loop behaviour); the agent loop continues.
+Each LLM step is one activity, each tool call is one per-type activity (the same activities F4.A registered). **Delegation tool calls** (`delegate_to_<x>`) where the child type is in `AGENT_WORKFLOW_TYPES` are the exception: they spawn a child `AgentWorkflow` via `workflow.execute_child_workflow` instead of a per-type activity, with `parent_node_id` injected into `child_context` to enable the parent-mirror broadcast above. Deterministic child workflow id is `f"{parent_workflow_id}-delegate-{child_node_id}-{iteration}"` so Temporal retries don't spawn duplicates. Non-agent tools and excluded types (`rlm_agent`, `claude_code_agent`) still go through `execute_activity` as before. Failures of tool activities surface as error messages back to the LLM (matching the in-process agent loop behaviour); the agent loop continues.
 
 **Broadcasts inside the loop** wrap `WorkflowEvent` (CloudEvents v1.0) per RFC §6.4: `agent_progress` events (`com.machinaos.agent.progress`) and `node_parameters_updated` events (`com.machinaos.node.parameters.updated`) flow through the `StatusBroadcaster.broadcast_agent_progress` and `StatusBroadcaster.broadcast_node_parameters_updated` wrappers respectively. The latter is reused by the legacy `routers/websocket.py:handle_save_node_parameters` (user-source) and `services/cli_agent/service.py:_persist_memory` (cli-source) — all three emission sites share the same envelope, distinguished by `source_hint` (`"user"` / `"cli"` / `"agent"`).
 
