@@ -180,3 +180,24 @@ class AnthropicProvider:
             finish_reason=resp.stop_reason or "stop",
             raw=resp,
         )
+
+
+# ---------------------------------------------------------------------------
+# Plugin self-registration
+# ---------------------------------------------------------------------------
+# Module load triggers registration into the global ProviderRegistry. The
+# eager top-level ``import anthropic`` is required to resolve the typed
+# ``APIError`` class used by the unifier's translation layer; the SDK is
+# small enough that the cost is in the same band as the existing eager
+# ``import openai`` in ``services/ai.py``.
+
+import anthropic as _anthropic_sdk
+from services.llm.registry import ProviderSpec, register_provider
+
+register_provider(
+    ProviderSpec(
+        name="anthropic",
+        factory=AnthropicProvider,
+        sdk_exception_types=(_anthropic_sdk.APIError,),
+    )
+)

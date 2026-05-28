@@ -133,7 +133,11 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 # Native LLM provider imports (dual-path: native for chat, LangChain for agents)
 # ---------------------------------------------------------------------------
-from services.llm.factory import create_provider, is_native_provider
+# ``create_provider`` / ``is_native_provider`` are no longer called from
+# this module — ``ChatUnifier`` (injected via DI) owns provider
+# dispatch. The imports stay deleted; Phase D removes the legacy
+# factory functions entirely once the LangChain fallback for
+# groq/cerebras lands behind the unifier.
 from services.llm.protocol import (
     Message as NativeMessage,
     ThinkingConfig as NativeThinkingConfig,
@@ -929,11 +933,25 @@ def _build_skill_system_prompt(skill_data: List[Dict[str, Any]], log_prefix: str
 class AIService:
     """AI model service for LangChain operations."""
 
-    def __init__(self, auth_service: AuthService, database, cache, settings: Settings):
+    def __init__(
+        self,
+        auth_service: AuthService,
+        database,
+        cache,
+        settings: Settings,
+        chat_unifier=None,
+    ):
         self.auth = auth_service
         self.database = database
         self.cache = cache
         self.settings = settings
+        # ``ChatUnifier`` is the single facade for chat-model dispatch +
+        # typed-exception translation + JSON-driven incompatible_models
+        # filter. Injected by the DI container; the legacy ``None``
+        # default exists only so tests and ad-hoc constructions without
+        # the DI container can still instantiate ``AIService`` (the chat
+        # paths will fall back to direct factory calls).
+        self.chat_unifier = chat_unifier
         # RLM service (lazy import to avoid circular deps)
         from services.rlm import RLMService
 
@@ -1311,57 +1329,39 @@ class AIService:
         return [m for m in max_tokens_map if m != "_default"]
 
     async def fetch_models(self, provider: str, api_key: str) -> List[str]:
-        """Fetch available models from provider API.
+        """Fetch available models from a provider via ``ChatUnifier``.
 
-        Native providers use their SDK-based fetch_models(). Groq/Cerebras
-        fall back to the LangChain httpx path. Local providers (ollama,
-        lmstudio) honour the user's stored ``{provider}_proxy`` base URL
-        the same way ``execute_chat`` does — without this passthrough the
-        probe always hits the JSON default and never sees the user's
-        actual installed models.
+        The unifier handles ``{provider}_proxy`` resolution, typed-SDK
+        exception translation, and the JSON-driven ``incompatible_models``
+        filter. All 12 providers (4 dedicated + 8 OpenAI-compat
+        including groq + cerebras) route through here — Phase D removed
+        the legacy LangChain fallback path.
+
+        On API failure, falls back to the curated list from
+        ``llm_defaults.json``. When the provider has no ``default_model``
+        declared (intentional for local servers like ollama / lmstudio),
+        returns an empty list so the frontend dropdown shows a real
+        "no models" empty state instead of a placeholder name.
         """
-        # --- Native SDK path ---
-        if is_native_provider(provider):
-            proxy_url = await self.auth.get_api_key(f"{provider}_proxy")
-            native_provider = create_provider(provider, api_key, proxy_url=proxy_url)
-            return await native_provider.fetch_models(api_key)
-
-        # --- LangChain fallback (groq, cerebras) ---
-        if provider == "cerebras" and not CEREBRAS_AVAILABLE:
-            raise ValueError(f"Cerebras provider not available: {CEREBRAS_IMPORT_ERROR or 'langchain-cerebras package not installed'}")
-
-        config = get_provider_configs().get(provider)
-        if not config:
-            raise ValueError(f"Unsupported provider: {provider}")
-
-        endpoint = config.models_endpoint
-        headers = config.models_header_fn(api_key)
-        curated = self._get_curated_models(provider)
-
+        if self.chat_unifier is None:
+            raise NodeUserError(
+                "ChatUnifier is not injected. AIService must be constructed via "
+                "the DI container (core.container.Container)."
+            )
         try:
-            async with httpx.AsyncClient(timeout=self.settings.ai_timeout) as client:
-                response = await client.get(endpoint, headers=headers)
-                response.raise_for_status()
-                data = response.json()
-
-            # Both Groq and Cerebras use OpenAI-compatible /v1/models format.
-            # Their API may return owner-prefixed IDs (e.g. "openai/gpt-oss-120b")
-            # but their chat API expects flat IDs (e.g. "gpt-oss-120b"), so strip prefixes.
-            raw_ids = [m["id"] for m in data.get("data", []) if m.get("id")]
-            api_models = sorted(set(mid.split("/", 1)[-1] if "/" in mid else mid for mid in raw_ids))
-            if api_models:
-                return api_models
+            return await self.chat_unifier.fetch_models(provider=provider, api_key=api_key)
+        except NodeUserError:
+            raise
         except Exception as e:
             logger.warning(f"[AI] Failed to fetch models from {provider} API: {e}")
 
-        # Fallback to curated list from llm_defaults.json. When the
-        # provider has no default_model declared (intentional for local
-        # servers like ollama/lmstudio), return an empty list so the
-        # frontend dropdown shows a real "no models" empty state instead
-        # of a placeholder name the user doesn't actually have.
+        # JSON-curated fallback
+        curated = self._get_curated_models(provider)
         if curated:
             return curated
-        return [config.default_model] if config.default_model else []
+        provider_cfg = _LLM_DEFAULTS.get("providers", {}).get(provider, {})
+        default_model = provider_cfg.get("default_model", "")
+        return [default_model] if default_model else []
 
     async def execute_chat(self, node_id: str, node_type: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """Execute AI chat model."""
@@ -1413,75 +1413,49 @@ class AIService:
                     format=flattened.get("reasoning_format", "parsed"),
                 )
 
-            # Check for proxy URL (stored as {provider}_proxy credential)
-            proxy_url = await self.auth.get_api_key(f"{provider}_proxy")
-
-            # --- Native SDK path (openai, anthropic, gemini, openrouter, xai) ---
-            if is_native_provider(provider):
-                max_tokens = native_resolve_max_tokens(flattened, model, provider)
-                temperature = native_resolve_temperature(
-                    flattened,
-                    model,
-                    provider,
-                    bool(thinking_config and thinking_config.enabled),
+            # --- Unifier path (every provider) ---
+            #
+            # ``ChatUnifier`` owns proxy_url resolution + provider
+            # instantiation + typed-SDK exception translation (raises
+            # ``NodeUserError`` for both unknown providers and typed SDK
+            # errors so ``BaseNode.execute()`` logs one WARN line with
+            # no traceback). No per-provider Python lives here.
+            #
+            # The LangChain fallback for groq + cerebras was deleted in
+            # Phase D — both providers now register through the
+            # OpenAI-compat path in ``services.llm.providers._compat``.
+            if self.chat_unifier is None:
+                raise NodeUserError(
+                    "ChatUnifier is not injected. AIService must be constructed via "
+                    "the DI container (core.container.Container)."
                 )
 
-                native_provider = create_provider(provider, api_key, proxy_url=proxy_url)
+            max_tokens = native_resolve_max_tokens(flattened, model, provider)
+            temperature = native_resolve_temperature(
+                flattened,
+                model,
+                provider,
+                bool(thinking_config and thinking_config.enabled),
+            )
 
-                # Build native messages
-                native_msgs: List[NativeMessage] = []
-                if system_prompt and is_valid_message_content(system_prompt):
-                    native_msgs.append(NativeMessage(role="system", content=system_prompt))
-                native_msgs.append(NativeMessage(role="user", content=prompt))
+            native_msgs: List[NativeMessage] = []
+            if system_prompt and is_valid_message_content(system_prompt):
+                native_msgs.append(NativeMessage(role="system", content=system_prompt))
+            native_msgs.append(NativeMessage(role="user", content=prompt))
 
-                llm_resp: LLMResponse = await native_provider.chat(
-                    native_msgs,
-                    model=model,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    thinking=thinking_config,
-                )
+            llm_resp: LLMResponse = await self.chat_unifier.chat(
+                provider=provider,
+                api_key=api_key,
+                messages=native_msgs,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                thinking=thinking_config,
+            )
 
-                response_text = llm_resp.content
-                thinking_content = llm_resp.thinking
-                finish_reason = llm_resp.finish_reason
-
-            # --- LangChain fallback path (groq, cerebras) ---
-            else:
-                from langchain_core.messages import HumanMessage, SystemMessage
-
-                max_tokens = _resolve_max_tokens(flattened, model, provider)
-                temperature = _resolve_temperature(
-                    flattened,
-                    model,
-                    provider,
-                    bool(thinking_config and thinking_config.enabled),
-                )
-
-                # Convert NativeThinkingConfig -> LangChain ThinkingConfig if needed
-                lc_thinking = None
-                if thinking_config:
-                    lc_thinking = ThinkingConfig(
-                        enabled=thinking_config.enabled,
-                        budget=thinking_config.budget,
-                        effort=thinking_config.effort,
-                        level=thinking_config.level,
-                        format=thinking_config.format,
-                    )
-
-                chat_model = self.create_model(provider, api_key, model, temperature, max_tokens, lc_thinking, proxy_url)
-
-                messages = []
-                if system_prompt and is_valid_message_content(system_prompt):
-                    messages.append(SystemMessage(content=system_prompt))
-                messages.append(HumanMessage(content=prompt))
-
-                filtered_messages = filter_empty_messages(messages)
-                response = chat_model.invoke(filtered_messages)
-
-                text_content, thinking_content = extract_thinking_from_response(response)
-                response_text = text_content if text_content else response.content
-                finish_reason = "stop"
+            response_text = llm_resp.content
+            thinking_content = llm_resp.thinking
+            finish_reason = llm_resp.finish_reason
 
             result = {
                 "response": response_text,
@@ -1508,21 +1482,15 @@ class AIService:
                 "execution_time": time.time() - start_time,
             }
 
-        except openai.OpenAIError as e:
-            # Typed openai SDK exception — context overflow (BadRequestError),
-            # bad key (AuthenticationError), missing model (NotFoundError),
-            # server unreachable (APIConnectionError), etc. All
-            # user-correctable. Propagate as NodeUserError so BaseNode.execute()
-            # logs at WARN with no traceback.
-            log_api_call(
-                logger,
-                provider if "provider" in locals() else "unknown",
-                model if "model" in locals() else "unknown",
-                "chat",
-                False,
-                error=str(e),
-            )
-            raise NodeUserError(str(e)) from e
+        except NodeUserError:
+            # Re-raise without wrapping. ``ChatUnifier`` already
+            # translated the typed SDK exception (openai / anthropic /
+            # google APIError, …) into ``NodeUserError`` at the single
+            # delegation site. ``BaseNode.execute()`` catches this and
+            # logs one WARN line with no traceback. Every chat-path
+            # call goes through the unifier post-Phase-A3, so the
+            # previous per-provider catch blocks are gone.
+            raise
 
         except Exception as e:
             logger.error("AI execution failed", node_id=node_id, error=str(e))

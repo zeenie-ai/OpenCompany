@@ -78,3 +78,22 @@ class OpenRouterProvider(OpenAIProvider):
             models.append(display)
 
         return sorted(models, key=lambda x: (not x.startswith("[FREE]"), x))
+
+
+# ---------------------------------------------------------------------------
+# Plugin self-registration
+# ---------------------------------------------------------------------------
+# OpenRouter rides the OpenAI Python SDK with a different ``base_url`` +
+# extra headers, so its typed exceptions are ``openai.OpenAIError``
+# subclasses — same exception tuple as the openai provider above.
+
+import openai as _openai_sdk
+from services.llm.registry import ProviderSpec, register_provider
+
+register_provider(
+    ProviderSpec(
+        name="openrouter",
+        factory=OpenRouterProvider,
+        sdk_exception_types=(_openai_sdk.OpenAIError,),
+    )
+)

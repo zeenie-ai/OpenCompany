@@ -174,3 +174,27 @@ class OpenAIProvider:
             finish_reason=choice.finish_reason or "stop",
             raw=resp,
         )
+
+
+# ---------------------------------------------------------------------------
+# Plugin self-registration
+# ---------------------------------------------------------------------------
+# Registers ``openai`` into the global registry. The ``openai`` SDK is
+# already eagerly imported by ``services/ai.py`` so the module-level
+# import here is free (Python caches the module).
+#
+# OpenAI-compatible providers (xai / deepseek / kimi / mistral / ollama /
+# lmstudio) register separately in ``_compat.py`` — they reuse
+# ``OpenAIProvider`` as their factory but pin ``base_url`` via
+# ``ProviderSpec.client_kwargs`` rather than per-provider Python.
+
+import openai as _openai_sdk
+from services.llm.registry import ProviderSpec, register_provider
+
+register_provider(
+    ProviderSpec(
+        name="openai",
+        factory=OpenAIProvider,
+        sdk_exception_types=(_openai_sdk.OpenAIError,),
+    )
+)

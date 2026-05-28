@@ -22,6 +22,20 @@ from services.llm.protocol import (
 )
 from services.llm.messages import is_valid_message_content, filter_empty_messages
 from services.llm.factory import create_provider, is_native_provider, NATIVE_PROVIDERS
+from services.llm.registry import (
+    ProviderSpec,
+    register_provider,
+    get_provider,
+    all_providers,
+    has_provider,
+)
+from services.llm.unifier import ChatUnifier
+
+# Side-effect import — populates the provider registry by importing
+# every provider module (each calls ``register_provider`` at the
+# bottom). Must run BEFORE any caller asks the registry for a provider
+# or constructs a ``ChatUnifier``.
+from services.llm import providers as _providers  # noqa: F401
 
 __all__ = [
     # Config
@@ -45,8 +59,15 @@ __all__ = [
     # Messages
     "is_valid_message_content",
     "filter_empty_messages",
-    # Factory
+    # Factory (legacy — replaced by unifier in Phase A3; kept for back-compat)
     "create_provider",
     "is_native_provider",
     "NATIVE_PROVIDERS",
+    # Plugin registry + unifier (Phase A — single SERVICE facade)
+    "ProviderSpec",
+    "register_provider",
+    "get_provider",
+    "all_providers",
+    "has_provider",
+    "ChatUnifier",
 ]

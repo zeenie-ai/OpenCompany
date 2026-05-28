@@ -36,12 +36,33 @@ from services.compaction import init_compaction_service
 
 _clog("all service imports done")
 
+# Side-effect import: populates ``services.llm.registry._REGISTRY`` with
+# every shipped provider (4 dedicated + 6 OpenAI-compat). MUST run
+# BEFORE the DI container constructs ``ChatUnifier`` so the unifier sees
+# the full provider catalogue. ``ChatUnifier`` is the single facade
+# ``AIService`` uses for chat-model dispatch + typed-exception translation.
+from services.llm import ChatUnifier
+from services.llm.config import LLM_DEFAULTS
+
+_clog("LLM registry populated + unifier imported")
+
 from services.temporal import TemporalClientWrapper
 
 
 def _create_temporal_client(server_address: str, namespace: str):
     """Factory function for temporal client."""
     return TemporalClientWrapper(server_address=server_address, namespace=namespace)
+
+
+def _build_chat_unifier(auth_service):
+    """Construct the chat-model unifier with the shared JSON defaults.
+
+    Wrapped in a factory function so the DI container doesn't have to
+    inject ``LLM_DEFAULTS`` (a module-level dict). ``LLM_DEFAULTS`` is
+    loaded once at import time by ``services.llm.config`` and reflects
+    the on-disk ``server/config/llm_defaults.json``.
+    """
+    return ChatUnifier(defaults=LLM_DEFAULTS, auth_service=auth_service)
 
 
 # Wave 12 C4 sub-piece C: plugin-owned service factories.
@@ -125,7 +146,21 @@ class Container(containers.DeclarativeContainer):
         UserAuthService, database=database, settings=settings, encryption=encryption_service, credentials_db=credentials_database
     )
 
-    ai_service = providers.Singleton(AIService, auth_service=auth_service, database=database, cache=cache, settings=settings)
+    # ChatUnifier — single SERVICE facade for chat-model dispatch.
+    # Reads the provider registry populated at import time and applies
+    # JSON-driven typed-exception translation + ``incompatible_models``
+    # filter. ``AIService`` delegates to this rather than calling
+    # provider classes directly.
+    chat_unifier = providers.Singleton(_build_chat_unifier, auth_service=auth_service)
+
+    ai_service = providers.Singleton(
+        AIService,
+        auth_service=auth_service,
+        database=database,
+        cache=cache,
+        settings=settings,
+        chat_unifier=chat_unifier,
+    )
 
     maps_service = providers.Factory(_build_maps_service, auth_service=auth_service, settings=settings)
 
