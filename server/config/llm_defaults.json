@@ -97,7 +97,9 @@
       },
       "thinking_models": ["gemini-2.5", "gemini-3", "gemini-flash-latest", "gemini-pro-latest"],
       "thinking_type": "budget",
-      "temperature_range": [0.0, 2.0]
+      "temperature_range": [0.0, 2.0],
+      "_incompatible_models_note": "Models that the dropdown should hide because they need a different API endpoint than `generate_content`. antigravity-preview-05-2026 requires the Interactions API; selecting it currently surfaces a `google.genai.errors.APIError`. ChatUnifier reads this list in fetch_models and filters before returning. Drop entries here when the unifier gains routing support for the alternate endpoint.",
+      "incompatible_models": ["antigravity-preview-05-2026"]
     },
     "openrouter": {
       "default_model": "anthropic/claude-sonnet-4.6",

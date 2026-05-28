@@ -186,6 +186,11 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# Default run excludes ``live`` tests so CI / local pytest doesn't
+# accidentally hit real LLM provider APIs and incur charges. Opt in
+# explicitly via ``pytest -m live`` (key-less providers still skip
+# cleanly inside the test body).
+addopts = "-m 'not live'"
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",
@@ -195,6 +200,7 @@ markers = [
     "node_contract: contract tests that drive a handler through NodeExecutor",
     "slow: tests that take >1s",
     "credentials: tests for the credentials subsystem (encryption, auth_service, oauth)",
+    "live: tests that call real LLM provider APIs — require API keys in .env or environment. Opt-in via `pytest -m live`.",
 ]
 
 [tool.coverage.run]

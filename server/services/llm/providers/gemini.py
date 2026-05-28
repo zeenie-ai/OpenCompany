@@ -203,3 +203,25 @@ class GeminiProvider:
             finish_reason=finish,
             raw=resp,
         )
+
+
+# ---------------------------------------------------------------------------
+# Plugin self-registration
+# ---------------------------------------------------------------------------
+# ``google.genai.errors`` carries the typed ``APIError`` raised on
+# Interactions-API-only models (e.g. ``antigravity-preview-05-2026`` —
+# the live failure that motivated the unifier introduction). The unifier
+# translates it into ``NodeUserError`` at one catch site so the error
+# surfaces as a single WARN line through ``BaseNode.execute()`` instead
+# of bubbling up as a bare ``RuntimeError`` traceback.
+
+from google.genai import errors as _google_genai_errors
+from services.llm.registry import ProviderSpec, register_provider
+
+register_provider(
+    ProviderSpec(
+        name="gemini",
+        factory=GeminiProvider,
+        sdk_exception_types=(_google_genai_errors.APIError,),
+    )
+)
