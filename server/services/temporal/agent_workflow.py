@@ -53,6 +53,7 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy  # kept for type hints
 
 from ._retry_policies import DEFAULT_ACTIVITY_RETRY
+from .workflow import AGENT_WORKFLOW_TYPES
 
 
 # Activity timeouts. LLM step can stream for several minutes on
@@ -205,6 +206,7 @@ class AgentWorkflow:
 
         agent_node_id = payload["node_id"]
         agent_workflow_id = payload.get("workflow_id")
+        self._parent_node_id: Optional[str] = context.get("parent_node_id")
 
         # Emit "executing" + phase="starting" via the existing
         # broadcast_agent_progress activity (CloudEvents
@@ -377,12 +379,22 @@ class AgentWorkflow:
                 )
 
                 try:
-                    tool_result = await workflow.execute_activity(
-                        tool_activity_name,
-                        args=[tool_payload],
-                        start_to_close_timeout=TOOL_STEP_TIMEOUT,
-                        heartbeat_timeout=TOOL_HEARTBEAT_TIMEOUT,
-                    )
+                    if is_delegation and tool_info["node_type"] in AGENT_WORKFLOW_TYPES:
+                        child_context = {**tool_payload, "parent_node_id": agent_node_id}
+                        tool_result = await workflow.execute_child_workflow(
+                            "AgentWorkflow",
+                            args=[child_context],
+                            id=f"{workflow.info().workflow_id}-delegate-{tool_info['tool_node_id']}-{iteration}",
+                            execution_timeout=timedelta(hours=1),
+                            run_timeout=timedelta(hours=1),
+                        )
+                    else:
+                        tool_result = await workflow.execute_activity(
+                            tool_activity_name,
+                            args=[tool_payload],
+                            start_to_close_timeout=TOOL_STEP_TIMEOUT,
+                            heartbeat_timeout=TOOL_HEARTBEAT_TIMEOUT,
+                        )
                     tool_content = _serialise_tool_result(tool_result)
                     await self._emit_phase(
                         agent_node_id,
@@ -524,7 +536,11 @@ class AgentWorkflow:
         """Schedule the ``agent.broadcast_progress.v1`` activity with a
         single ``phase`` label. When ``status`` is set, the activity
         also broadcasts a raw-dict node_status update so the canvas
-        glows accordingly (executing / success / error)."""
+        glows accordingly (executing / success / error). When this
+        workflow is a delegated child (``self._parent_node_id`` set),
+        also mirrors the broadcast onto the parent's node_id so the
+        parent's canvas badge advances alongside the child.
+        """
         await workflow.execute_activity(
             "agent.broadcast_progress.v1",
             args=[
@@ -541,6 +557,23 @@ class AgentWorkflow:
             start_to_close_timeout=PERSIST_TURN_TIMEOUT,
             retry_policy=AGENT_ACTIVITY_RETRY,
         )
+
+        if self._parent_node_id:
+            await workflow.execute_activity(
+                "agent.broadcast_progress.v1",
+                args=[
+                    {
+                        "node_id": self._parent_node_id,
+                        "workflow_id": workflow_id,
+                        "iteration": iteration,
+                        "max_iterations": max_iterations,
+                        "phase": "delegating",
+                        **(extra or {}),
+                    }
+                ],
+                start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                retry_policy=AGENT_ACTIVITY_RETRY,
+            )
 
     async def _persist_turn(
         self,
