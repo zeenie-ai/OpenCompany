@@ -308,6 +308,7 @@ class TestStripePluginRegistration:
         assert src.workflow_namespace == "_stripe"
         # Empty binary_name disables the framework's PATH check; the
         # plugin resolves the binary itself via ensure_stripe_cli (which
-        # falls back to a workspace-local download on systems without
-        # a system install of the Stripe CLI).
+        # falls back to an OS-cache download via
+        # ``core.paths.package_dir('stripe')`` on systems without a
+        # system install of the Stripe CLI).
         assert src.binary_name == ""

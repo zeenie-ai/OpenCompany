@@ -70,9 +70,9 @@ class DaemonEventSource(EventSource):
         return None
 
     def workdir(self) -> Path:
-        from core.config import Settings
+        from core.paths import daemons_dir
 
-        cwd = Path(Settings().workspace_base_resolved).resolve() / self.workflow_namespace
+        cwd = daemons_dir() / self.workflow_namespace
         cwd.mkdir(parents=True, exist_ok=True)
         return cwd
 

@@ -114,6 +114,7 @@ _make_submodule(
         "package_dir": lambda name: _TEST_MACHINA_ROOT / "packages" / name,
         "claude_config_dir": lambda: _TEST_MACHINA_ROOT / "claude",
         "claude_npm_dir": lambda: _TEST_MACHINA_ROOT / "claude" / "npm",
+        "daemons_dir": lambda: _TEST_MACHINA_ROOT / "daemons",
         "workspaces_dir": lambda: _TEST_MACHINA_ROOT / "workspaces",
         "workspace_dir": lambda wf: _TEST_MACHINA_ROOT / "workspaces" / wf,
         "example_workflows_dir": lambda: _TEST_MACHINA_ROOT / "workflows",

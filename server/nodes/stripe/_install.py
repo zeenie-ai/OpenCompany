@@ -7,6 +7,14 @@ bin/stripe[.exe]``). A system install on PATH (brew / scoop / apt /
 direct binary) is preferred — the download path only fires when no
 system binary is found.
 
+Note: the cache directory above is the *binary* install location and
+is separate from the ``stripe listen`` daemon's working directory,
+which lives at ``<DATA_DIR>/daemons/_stripe/`` (see
+:func:`core.paths.daemons_dir`). The two were not always separate —
+prior to the daemon-cwd cleanup, the daemon ran from
+``<DATA_DIR>/workspaces/_stripe/`` and polluted per-workflow scratch
+space with framework state.
+
 Pin a version here when bumping; pre-built archives are signed by
 Stripe and served over GitHub's CDN.
 """
@@ -69,9 +77,10 @@ async def ensure_stripe_cli() -> Path:
     Resolution order:
       1. Cached path from a prior call (in-process).
       2. ``shutil.which("stripe")`` — system install on PATH.
-      3. Workspace-local copy at ``_stripe/bin/stripe[.exe]``.
-      4. Fresh download from GitHub releases under
-         :data:`_VERSION`.
+      3. Previously-downloaded copy at ``package_dir("stripe")/bin/
+         stripe[.exe]`` (OS cache, see :func:`core.paths.package_dir`).
+      4. Fresh download from GitHub releases under :data:`_VERSION`
+         into the same OS-cache directory.
     """
     global _cached_path
     if _cached_path and _cached_path.exists():

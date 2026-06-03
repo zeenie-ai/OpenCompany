@@ -21,16 +21,28 @@ State layout under ``~/.machina/`` (flat, no redundant nesting):
   - ``~/.machina/credentials.db``  Fernet-encrypted secrets
   - ``~/.machina/workflow.db``     SQLite app DB
 
-Binaries that MachinaOs downloads on first use (Stripe CLI, the
-``@anthropic-ai/claude-code`` npm tree, ``agent-browser``'s npm tree)
-live separately, under the OS-conventional cache dir (see
-:func:`packages_dir`). Resolved via :func:`platformdirs.user_cache_path`
-— the standard cross-platform resolver every XDG-aware tool already
-uses:
+Binaries that MachinaOs downloads on first use (Stripe CLI,
+``agent-browser``'s npm tree) live separately, under the
+OS-conventional cache dir (see :func:`packages_dir`). Resolved via
+:func:`platformdirs.user_cache_path` — the standard cross-platform
+resolver every XDG-aware tool already uses:
 
   - Linux:   ``~/.cache/MachinaOs/<service>/``
   - macOS:   ``~/Library/Caches/MachinaOs/<service>/``
   - Windows: ``%LOCALAPPDATA%\\MachinaOs\\Cache\\<service>\\``
+
+Claude Code is the deliberate exception: its npm tree lives at
+``<DATA_DIR>/claude/npm/`` (see :func:`claude_npm_dir`) alongside the
+``CLAUDE_CONFIG_DIR`` auth state at ``<DATA_DIR>/claude/``. Keeping
+the entire claude footprint (binary + tokens + IDE lockfiles + session
+JSONL) under one operator-visible subtree means a single
+``mv ~/.machina/claude /backup`` carries everything claude needs;
+every operation requires both anyway, so the binary-vs-state split
+that's useful for Stripe / browser hurts here. Supervised
+event-source daemons (``stripe listen``, future plugins) keep their
+cwd under :func:`daemons_dir` — a sibling of :func:`workspaces_dir`
+so per-workflow scratch (workspaces) is never mixed with framework
+state (daemons).
 
 Out of scope here: the downloaded Temporal CLI binary (pooch cache
 under :func:`packages_dir`, see ``services/temporal/_install.py``),
@@ -199,12 +211,31 @@ def claude_config_dir() -> Path:
 def claude_npm_dir() -> Path:
     """Where ``npm install @anthropic-ai/claude-code`` lands.
 
-    Resolves to ``<packages_dir>/claude/npm/`` — under the unified
-    install root (see :func:`packages_dir`). Separate from
-    :func:`claude_config_dir` (auth state) so ``machina clean`` can
-    wipe binaries without dropping auth.
+    Resolves to ``<DATA_DIR>/claude/npm/`` — sibling of
+    :func:`claude_config_dir` (the OAuth state dir, exposed to the
+    CLI via ``CLAUDE_CONFIG_DIR``). Keeps the entire claude footprint
+    (binary + auth state + IDE lockfiles + session JSONL) under one
+    operator-visible tree, so a single ``mv ~/.machina/claude /backup``
+    carries everything claude needs. Deliberate exception to the
+    binary-vs-state split documented on :func:`packages_dir` — see
+    the module docstring.
     """
-    return package_dir("claude") / "npm"
+    return data_path("claude") / "npm"
+
+
+def daemons_dir() -> Path:
+    """Root for supervised event-source daemons (``stripe listen``, etc.).
+
+    Resolves to ``<DATA_DIR>/daemons/`` — sibling of
+    :func:`workspaces_dir`. Daemons are framework-owned, long-lived
+    processes whose cwd is just a place to drop log / state files;
+    workspaces are per-workflow scratch owned by workflow nodes
+    (one subdir per ``Workflow.slug``). Conflating the two clutters
+    workspaces with framework state, which is what
+    ``DaemonEventSource.workdir()`` used to do before this helper
+    existed.
+    """
+    return data_path("daemons")
 
 
 def workspaces_dir() -> Path:
@@ -277,6 +308,7 @@ __all__ = [
     "package_dir",
     "claude_config_dir",
     "claude_npm_dir",
+    "daemons_dir",
     "workspaces_dir",
     "workspace_dir",
     "example_workflows_dir",
