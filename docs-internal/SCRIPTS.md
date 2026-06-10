@@ -56,7 +56,7 @@ Run with `npm run <script>` from the project root.
 | `python:start` | `cd server && uv run uvicorn main:app ...` | Start Python backend |
 | `temporal:worker` | `cd server && uv run python -m services.temporal.worker` | Start standalone Temporal worker |
 
-Temporal server lifecycle is managed by `machina start` / `machina dev` / `machina stop` directly (see [Temporal Architecture](./TEMPORAL_ARCHITECTURE.md)). The official `temporal` CLI is downloaded by `pooch` to a per-OS cache during `machina build` and spawned as a supervised subprocess.
+Temporal server lifecycle is managed by `machina start` / `machina dev` / `machina stop` directly (see [Temporal Architecture](./TEMPORAL_ARCHITECTURE.md)). The official `temporal` CLI is downloaded by `pooch` to `<DATA_DIR>/packages/temporal/` (= `~/.machina/packages/temporal/` by default) during `machina build` and spawned as a supervised subprocess.
 
 ### Docker Scripts (Development)
 

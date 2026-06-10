@@ -7,7 +7,7 @@
 The compaction service enables automatic memory compaction, token tracking, and **cost calculation** for MachinaOs specialized agents. It uses a hybrid approach leveraging native provider APIs (Anthropic, OpenAI) when available, with comprehensive token and cost tracking for all providers.
 
 **Inspired by:** Claude Code's compaction pattern from the Anthropic SDK
-**Threshold Strategy:** per-session `custom_threshold` > model-aware (50% of context window) > global default (100K)
+**Threshold Strategy:** per-session `custom_threshold` > per-user `UserSettings.compaction_ratio` > env `Settings.compaction_ratio` (default **0.8** = 80% of context window) > JSON `llm_defaults.json:agent.compaction.ratio` fallback
 **Cost Calculation:** Official pricing from each provider (per 1M tokens)
 
 ## Architecture
@@ -60,9 +60,9 @@ from services.compaction import get_compaction_service
 
 svc = get_compaction_service()
 
-# Model-aware threshold (50% of context window)
+# Model-aware threshold (80% of context window by default)
 compaction_config = svc.anthropic_config(model="claude-opus-4.6", provider="anthropic")
-# Returns: {"enabled": True, "context_token_threshold": 500000}  (50% of 1M context)
+# Returns: {"enabled": True, "context_token_threshold": 800000}  (80% of 1M context)
 
 # Or override with explicit threshold
 compaction_config = svc.anthropic_config(threshold=100000)
@@ -84,7 +84,7 @@ For direct Messages API usage with the compaction beta:
 ```python
 # Model-aware threshold
 api_config = svc.anthropic_api_config(model="claude-sonnet-4.5", provider="anthropic")
-# Threshold auto-computed from model's context window (50% of 1M = 500000)
+# Threshold auto-computed from model's context window (80% of 1M = 800000)
 
 # Or override with explicit threshold
 api_config = svc.anthropic_api_config(threshold=100000)
@@ -104,7 +104,7 @@ For OpenAI models (including GPT-4 and o-series):
 ```python
 # Model-aware threshold
 openai_config = svc.openai_config(model="gpt-5.2", provider="openai")
-# Returns: {"context_management": {"compact_threshold": 200000}}  (50% of 400K)
+# Returns: {"context_management": {"compact_threshold": 320000}}  (80% of 400K)
 
 # Or override with explicit threshold
 openai_config = svc.openai_config(threshold=100000)
@@ -240,12 +240,12 @@ result = await svc.track(
 # result:
 # {
 #     "total": 6000,           # New cumulative total
-#     "threshold": 500000,     # Model-aware: 50% of 1M context window
+#     "threshold": 800000,     # Model-aware: 80% of 1M context window
 #     "total_cost": 0.021,     # USD cost
 #     "needs_compaction": False
 # }
 #
-# Threshold priority: custom_threshold > model-aware (50% context) > global default
+# Threshold priority: custom_threshold > per-user UserSettings.compaction_ratio > env Settings.compaction_ratio (80%) > JSON fallback
 ```
 
 ### Record Compaction Event
@@ -272,7 +272,7 @@ stats = await svc.stats("user-session-123", model="claude-opus-4.6", provider="a
 # {
 #     "session_id": "user-session-123",
 #     "total": 15000,
-#     "threshold": 500000,  # 50% of 1M context window
+#     "threshold": 800000,  # 80% of 1M context window
 #     "count": 1  # Number of compactions
 # }
 
@@ -457,7 +457,7 @@ if memory_data and memory_data.get('session_id'):
 
 3. **Per-Session State**: Each memory session has independent token tracking and thresholds. This allows different agents to have different compaction settings.
 
-4. **Model-Aware Threshold**: Threshold is 50% of the model's context window (via `get_model_threshold()`). For example, Claude Opus 4.6 (1M context) gets a 500K threshold, GPT-5.2 (400K) gets 200K, Groq models (131K) get ~65K. Falls back to global `COMPACTION_THRESHOLD` when model info is unavailable. Per-session `custom_threshold` always takes priority.
+4. **Model-Aware Threshold**: Threshold is `compaction_ratio` x the model's context window (default ratio **0.8** = 80%). For example, Claude Opus 4.6 (1M context) gets an 800K threshold, GPT-5.2 (400K) gets 320K, Groq models (131K) get ~105K. Ratio precedence: per-session `custom_threshold` > per-user `UserSettings.compaction_ratio` > env `Settings.compaction_ratio` (`COMPACTION_RATIO`, default 0.8) > JSON `llm_defaults.json:agent.compaction.ratio` fallback.
 
 5. **Singleton Pattern**: Service accessible via `get_compaction_service()` for easy integration anywhere in the codebase.
 

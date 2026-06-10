@@ -156,23 +156,26 @@ After validation succeeds, the frontend still calls `saveApiKey` (or backend sto
 
 ### 2.6 Pattern F — OAuth via isolated subprocess (Claude)
 
-**Credentials stored**: not in encrypted DB. Tokens persist in `~/.claude-machina/.credentials.json`, written by the official `@anthropic-ai/claude-code` CLI which is installed into `~/.claude-machina/npm/` to keep it isolated from the user's main Claude session.
+**Credentials stored**: not in MachinaOs's encrypted DB. The official `@anthropic-ai/claude-code` CLI manages its own credentials file under `CLAUDE_CONFIG_DIR = <DATA_DIR>/claude/` (= `~/.machina/claude/` by default), isolated from the user's own `~/.claude/` session. MachinaOs never reads or writes that file; it only writes a synthetic `"cli-managed"` marker OAuth token via `auth_service.store_oauth_tokens` so the catalogue's `stored` flag flips. The CLI binary is npm-installed into the shared MachinaOs tree at `<DATA_DIR>/packages/node_modules/.bin/claude[.cmd]`.
 
-**Happy path**:
+**Happy path** (wire keys `claude_code_login` / `claude_code_logout`; handlers in `nodes/agent/claude_code_agent/_handlers.py`, CLI wrappers in `_oauth.py`):
 ```
-sendRequest('claude_oauth_login')
-  -> initiate_claude_oauth (claude_oauth.py:61)
-     -> ensure CLI installed (npm install --prefix ~/.claude-machina/npm)
-     -> spawn `claude login` with env CLAUDE_CONFIG_DIR=~/.claude-machina
-     -> pipe "yes\nyes\n" to stdin to auto-accept prompts
-     -> CLI opens browser; user authorizes on console.anthropic.com
-     -> returns {success, pid, config_dir}
-
-Frontend polls sendRequest('claude_oauth_status'):
-  -> get_claude_credentials (claude_oauth.py:121)
-     -> reads ~/.claude-machina/.credentials.json
-     -> returns {success, has_token, access_token, expires_at}
+sendRequest('claude_code_login')
+  -> handle_claude_code_login
+     -> claude auth status (already logged in? sync marker + return)
+     -> else asyncio.create_task(_finalize_claude_login()), return immediately
+        -> run_claude_login() -> `claude auth login`
+             - binary via claude_binary_path() (npm install --prefix <packages_dir> on miss)
+             - env CLAUDE_CONFIG_DIR=<DATA_DIR>/claude/
+             - stdin=PIPE (never written) so the native CLI's stdin reader
+               blocks instead of EOFing -> its localhost callback server
+               stays alive until the browser OAuth flow completes
+             - CLI opens browser; user authorizes on claude.ai / console.anthropic.com
+        -> claude auth status -> {loggedIn, email, orgName, subscriptionType}
+        -> mark_logged_in('claude_code', email, name) + broadcast
+           credential.oauth.connected -> FE refetches the catalogue
 ```
+The handler returns `{success: True}` synchronously; the real connect state arrives later via the `credential_catalogue_updated` broadcast (the modal flips Connected within ~2 s of CLI exit).
 
 No logout WebSocket handler — user can manually delete the credentials file or run `claude logout` separately.
 
@@ -375,7 +378,7 @@ These are the non-negotiable behaviours the test suite enforces. The refactor is
 | DB | [server/core/credentials_database.py](../server/core/credentials_database.py) | Two encrypted tables + metadata |
 | OAuth (Google) | [server/services/google_oauth.py](../server/services/google_oauth.py) | Flow, PKCE, refresh, service builders |
 | OAuth (Twitter) | [server/services/twitter_oauth.py](../server/services/twitter_oauth.py) | Manual PKCE, token exchange/refresh/revoke |
-| OAuth (Claude) | [server/services/claude_oauth.py](../server/services/claude_oauth.py) | Subprocess-based isolated login |
+| OAuth (Claude) | [server/nodes/agent/claude_code_agent/_oauth.py](../server/nodes/agent/claude_code_agent/_oauth.py) + [_handlers.py](../server/nodes/agent/claude_code_agent/_handlers.py) | CLI-managed `claude auth login` (subprocess, `stdin=PIPE`), `CLAUDE_CONFIG_DIR=<DATA_DIR>/claude/` |
 | OAuth utils | [server/services/oauth_utils.py](../server/services/oauth_utils.py) | Runtime redirect URI derivation |
 | Container | [server/core/container.py](../server/core/container.py) | DI wiring for `auth_service` etc. |
 

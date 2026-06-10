@@ -98,11 +98,12 @@ flowchart TD
 
 ## External Dependencies
 
-- **Binaries**: `claude` on PATH, or `npx` fallback.
+- **Binaries**: `@anthropic-ai/claude-code`, MachinaOs-managed — auto-installed on first use into the shared npm tree at `<DATA_DIR>/packages/` (binary at `<DATA_DIR>/packages/node_modules/.bin/claude[.cmd]`); requires `npm` on PATH.
 - **Python packages**: standard library only
   (`asyncio.create_subprocess_exec`).
 - **Credentials**: Claude Code handles its own authentication via
-  `~/.claude-machina` (see [Claude OAuth](../../claude_code_agent_architecture.md));
+  `CLAUDE_CONFIG_DIR=<DATA_DIR>/claude/` (= `~/.machina/claude/` by
+  default; see [Claude OAuth](../../claude_code_agent_architecture.md));
   MachinaOs does not inject an API key.
 
 ## Edge cases & known limits

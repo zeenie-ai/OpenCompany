@@ -291,8 +291,8 @@ and runs `stripe logout --all` to clear the config file.
    - System install (`brew install stripe/stripe-cli/stripe`,
      `scoop install stripe`, `apt install stripe`, or a direct
      binary from <https://stripe.com/docs/stripe-cli#install>).
-   - MachinaOs workspace cache at
-     `{workspace_base}/_stripe/bin/stripe[.exe]` (populated
+   - MachinaOs package cache at
+     `<DATA_DIR>/packages/stripe/bin/stripe[.exe]` (populated
      automatically from GitHub releases — pinned to a known-good
      CLI version).
 2. Credentials Modal → Stripe → **Login with Stripe** → a browser

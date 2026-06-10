@@ -391,7 +391,7 @@ cwd + UUID5/last_session_id round-trip. Documented in
 [cli_agent_framework.md → Memory bridge](./cli_agent_framework.md#memory-bridge--simplememory--claude_code_agent).
 
 **Project-key derivation verified empirically** by listing
-`data/claude-machina/projects/` on disk and reproducing each name from
+`<DATA_DIR>/claude/projects/` on disk and reproducing each name from
 its source cwd via `re.sub(r"[^a-zA-Z0-9.-]", "-", str(cwd))`. Three
 sample names matched byte-for-byte:
 

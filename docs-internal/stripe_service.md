@@ -112,7 +112,7 @@ handle_stripe_login()
    │
    ├── ensure_stripe_cli()    ← _install.py
    │     ├── system PATH lookup (brew/scoop/apt)
-   │     ├── workspace cache: {workspace}/_stripe/bin/stripe[.exe]
+   │     ├── package cache: <DATA_DIR>/packages/stripe/bin/stripe[.exe]
    │     └── on miss: download v1.40.9 from github.com/stripe/stripe-cli/releases
    │     returns absolute binary path
    │
@@ -123,15 +123,23 @@ handle_stripe_login()
    ├── return {success, url, verification_code} to the frontend
    │     (modal opens the URL in a new tab, displays the code)
    │
-   └── asyncio.create_task(_complete_login(binary, next_step))
+   └── pre_mtime = config.toml mtime  (0.0 if absent — snapshot BEFORE step 2)
+       asyncio.create_task(_complete_login(binary, next_step, pre_mtime))
          │
          ▼
        run_cli_command([binary, "login", "--complete", next_step], timeout=600s)
          │
          │  (CLI polls Stripe; user authorises in browser; CLI writes
-         │   credentials to ~/.config/stripe/config.toml and exits 0)
+         │   credentials to ~/.config/stripe/config.toml. NB: the CLI may
+         │   exit 1 with stderr 'exceeded max attempts' even after a
+         │   successful write — exit code alone is not trusted.)
          │
-         ├── if is_logged_in():
+         ├── post_mtime = config.toml mtime
+         │   fresh_credentials_written = post_mtime > pre_mtime AND is_logged_in()
+         │   (mtime advance is ground truth: is_logged_in() alone is true
+         │    for ANY prior login, so it can't tell THIS attempt apart)
+         │
+         ├── if fresh_credentials_written:
          │     ├── _mark_logged_in()           ← marker-token write
          │     │     auth_service.store_oauth_tokens(
          │     │         provider="stripe",
@@ -181,7 +189,7 @@ StripeListenSource.start()  (lock-protected, idempotent)
    │                --forward-to http://localhost:{port}/webhook/stripe
    │                --print-secret",            # no --api-key
    │       workflow_id="_stripe_global",
-   │       working_directory={workspace}/_stripe,
+   │       working_directory=<DATA_DIR>/daemons,   # shared daemons_dir() root
    │       line_handler=self._on_line,           # ← per-line callback
    │   )
    │   (CLI reads credentials from its config file; binary path is
@@ -207,7 +215,7 @@ StripeListenSource.stop()
 |---|---|
 | `server/nodes/stripe/__init__.py` | Wiring: 5 `register_*` calls + `make_status_refresh`. |
 | `server/nodes/stripe/_credentials.py` | `StripeCredential(Credential)` — thin marker class. The CLI manages auth at `~/.config/stripe/config.toml`; this class only exposes the captured `stripe_webhook_secret` for the framework's signature-verifier path. |
-| `server/nodes/stripe/_install.py` | `ensure_stripe_cli()` — async, idempotent, lock-guarded. Resolves the binary path: in-process cache → system PATH → workspace-local cache at `{workspace}/_stripe/bin/stripe[.exe]` → fresh download from GitHub releases (pinned `_VERSION = "1.40.9"`). Asset-name map covers Windows AMD64, Linux x86_64/arm64, macOS x86_64/arm64. Subsequent calls hit the cache instantly. |
+| `server/nodes/stripe/_install.py` | `ensure_stripe_cli()` — async, idempotent, lock-guarded. Resolves the binary path: in-process cache → system PATH → previously-downloaded copy at `<DATA_DIR>/packages/stripe/bin/stripe[.exe]` (`core.paths.package_dir("stripe") / "bin"`) → fresh download from GitHub releases (pinned `_VERSION = "1.40.9"`) into that same dir. Asset-name map covers Windows AMD64, Linux x86_64/arm64, macOS x86_64/arm64. Subsequent calls hit the cache instantly. |
 | `server/skills/payments_agent/stripe-skill/SKILL.md` | LLM teaching markdown for the `stripe_action` tool. ~10K chars covering customers, charges, payment_intents, refunds, invoices, products/prices, subscriptions, the `trigger` command, common workflows, quoting/escaping, idempotency, test vs live mode, error patterns, and webhook delivery. |
 | `server/config/credential_providers.json` | JSON-driven Credentials Modal catalogue. The `payments` category + `stripe` provider entry tell the frontend modal to render a **Login with Stripe** button (no API-key field) wired to the `stripe_login` / `stripe_logout` / `stripe_status` WebSocket handlers. No React file edits required. |
 | `server/services/ai.py` | `DEFAULT_TOOL_NAMES['stripeAction'] = 'stripe_action'` and the matching tool-description entry — what the LLM sees when the action node is wired to an agent's `input-tools` handle. |
@@ -275,8 +283,8 @@ plus the per-line callback subscription via `ProcessService`'s
 | Method / attr | Purpose |
 |---|---|
 | `process_name = "stripe-listen"` | Key used by `ProcessService` to track this daemon. |
-| `binary_name = ""` | **Empty** — disables `DaemonEventSource`'s built-in `shutil.which` PATH check. The plugin handles install + verification itself via `ensure_stripe_cli()`, which falls back to a workspace-local download. |
-| `workflow_namespace = "_stripe"` | The `ProcessService` workflow id and working dir under `{workspace_base}/_stripe`. |
+| `binary_name = ""` | **Empty** — disables `DaemonEventSource`'s built-in `shutil.which` PATH check. The plugin handles install + verification itself via `ensure_stripe_cli()`, which falls back to a download into `<DATA_DIR>/packages/stripe/`. |
+| `workflow_namespace = "_stripe"` | The `ProcessService` workflow-id key for this daemon. NOTE: `DaemonEventSource.workdir()` now returns `daemons_dir()` itself (the shared `<DATA_DIR>/daemons/` root) — `workflow_namespace` is a logical process key, not a per-namespace directory. Pre-fix it carved `{workspace_base}/_stripe/` and left an empty dir behind under per-workflow scratch. |
 | `install_hint` | Surfaced in the "install failed" error path when the auto-installer can't reach GitHub releases. |
 | `credential = StripeCredential` | Resolved by the framework before `build_command` is called. |
 | `start()` (override) | `await ensure_stripe_cli()` then `super().start()`. Caches the resolved binary path so `build_command` (sync) can pick it up. |
@@ -429,11 +437,11 @@ the modal's Connect button are `stripe_login` and `stripe_logout`:
 | `stripe_trigger` | passes `["trigger", event]` to `run_cli_command` (after `ensure_stripe_cli`) | Synthetic test event |
 | `stripe_connect/disconnect/reconnect` | `source.start/stop/restart()` from the lifecycle factory | Daemon-only lifecycle; used by the auto-reconnect path on WS-client connect |
 
-Background `_complete_login(binary, next_step)` flow:
+Background `_complete_login(binary, next_step, pre_mtime)` flow:
 
-1. `next_step` from step 1 is a literal shell command (`stripe login --complete '<URL>'`); extract the auth URL with `shlex.split(next_step)[-1]` before passing it to `--complete`.
-2. `run_cli_command([binary, "login", "--complete", complete_url], timeout=600s)` blocks until OAuth completes.
-3. `is_logged_in()` flips true (the CLI wrote `_api_key` lines into `config.toml`).
+1. `next_step` from step 1 is a literal shell command (`stripe login --complete '<URL>'`); extract the auth URL with `shlex.split(next_step)[-1]` before passing it to `--complete`. `pre_mtime` is the `config.toml` mtime captured by `handle_stripe_login` *before* this task spawned (`0.0` if the file was absent).
+2. `run_cli_command([binary, "login", "--complete", complete_url], timeout=600s)` blocks until OAuth completes. The CLI may exit `1` with `stderr='exceeded max attempts'` even after a successful write, so its exit code is not trusted on its own.
+3. Success is declared only when `post_mtime > pre_mtime AND is_logged_in()`. The mtime advance is the disambiguator: `is_logged_in()` is a bare "config contains `_api_key`" check that is true for *any* prior login (the Stripe CLI owns that file globally), so it cannot tell *this* attempt apart from a stale leftover. The `exceeded max attempts` stderr is forgiven when the mtime actually advanced.
 4. `_mark_logged_in()` writes `auth_service.store_oauth_tokens("stripe", "cli-managed", "cli-managed")`.
 5. `get_listen_source().start()` spawns the supervised `stripe listen` daemon; the `whsec_…` banner is captured via the `line_handler` callback.
 6. `_broadcast_credential_event("credential.oauth.connected")` emits a CloudEvents v1.0 envelope (`WorkflowEvent`) via `StatusBroadcaster.broadcast_credential_event`, wrapped under the `credential_catalogue_updated` wire-format type. The frontend invalidates the catalogue and `provider.stored = true` flips the connection indicator.
@@ -663,7 +671,7 @@ If none of these are present, the first click on **Login with Stripe**
 triggers `ensure_stripe_cli()` which downloads the platform-matched
 release archive (~12 MB) from `github.com/stripe/stripe-cli/releases`,
 extracts the `stripe[.exe]` binary into
-`{workspace_base}/_stripe/bin/`, and proceeds with login. Subsequent
+`<DATA_DIR>/packages/stripe/bin/`, and proceeds with login. Subsequent
 calls hit the cache.
 
 If the download fails (no internet, GitHub down), the WS
@@ -716,7 +724,7 @@ class attributes:
 |---|---|---|
 | Daemon process name | `StripeListenSource.process_name` | `"stripe-listen"` |
 | Binary name | `StripeListenSource.binary_name` | `"stripe"` |
-| Workspace subdir | `StripeListenSource.workflow_namespace` | `"_stripe"` (under `Settings().workspace_base_resolved`) |
+| Daemon process key | `StripeListenSource.workflow_namespace` | `"_stripe"` (logical `ProcessService` key; cwd is the shared `daemons_dir()` = `<DATA_DIR>/daemons/`, not a per-namespace subdir) |
 | Webhook path | `StripeWebhookSource.path` | `"stripe"` (i.e. `/webhook/stripe`) |
 | Forward-to port | derived from `Settings().port` | typically `3010` |
 | Verifier | `StripeWebhookSource.verifier` | `StripeVerifier` |

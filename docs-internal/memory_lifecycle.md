@@ -159,7 +159,7 @@ F4.B `AgentWorkflow` runs steps 4-9 as separate Temporal activities (`prepare_pa
 
 ## 9. Compaction trigger
 
-Compaction is a separate concern documented in [memory_compaction.md](./memory_compaction.md). The trigger point is step 5 in §7. Threshold = `model_context_length * agent.compaction.ratio` (default 0.5; configured in [`server/config/llm_defaults.json`](../server/config/llm_defaults.json)).
+Compaction is a separate concern documented in [memory_compaction.md](./memory_compaction.md). The trigger point is step 5 in §7. Threshold = `model_context_length * compaction_ratio` (default **0.8** = 80%, env `COMPACTION_RATIO` via `Settings`; per-user override in `UserSettings.compaction_ratio`; JSON `llm_defaults.json:agent.compaction.ratio` is the last-resort fallback).
 
 The compaction service is the SSOT for thresholds, native-API integration (Anthropic `compact-2026-01-12` beta, OpenAI `context_management.compact_threshold`), and client-side summarization fallback. Memory lifecycle (this doc) is the SSOT for storage shape and helper signatures.
 

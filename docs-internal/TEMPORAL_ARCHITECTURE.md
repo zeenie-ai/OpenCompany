@@ -471,7 +471,7 @@ The Temporal binary + persistence are managed in-process by the plugin-folder pa
 **What runs**: one process — `temporal server start-dev --port 7233 --ui-port 8080 --db-filename ~/.machina/temporal.db --namespace default`. Both gRPC + Web UI bind to the same process (per docs.temporal.io/cli/server — "all running in a single process"). SQLite-backed durability; history persisted across restarts.
 
 **Modern libs doing the heavy lifting** (zero custom infrastructure code):
-- **[`pooch`](https://pypi.org/project/pooch/)** — `services/temporal/_install.py` downloads the official `temporal` CLI archive from `https://temporal.download/cli/archive/latest?platform=<os>&arch=<arch>`. Cross-platform (Windows zip / macOS+Linux tar.gz), XDG-cached via `pooch.os_cache("machinaos-temporal")`. Standalone entry: `python -m services.temporal._install` (invoked by `machina build` step [6/6] so first `machina start` doesn't pay the ~114 MB download).
+- **[`pooch`](https://pypi.org/project/pooch/)** — `services/temporal/_install.py` downloads the official `temporal` CLI archive from `https://temporal.download/cli/archive/latest?platform=<os>&arch=<arch>`. Cross-platform (Windows zip / macOS+Linux tar.gz), cached at `<DATA_DIR>/packages/temporal/` via `_cache_dir() = core.paths.package_dir("temporal")` (pooch's `path=` argument). Standalone entry: `python -m services.temporal._install` (invoked by `machina build` step [6/6] so first `machina start` doesn't pay the ~114 MB download). Pre-fix this used `pooch.os_cache("machinaos-temporal")` (`~/.cache/MachinaOs/machinaos-temporal/` etc.) — a separate OS-cache namespace operators reported as "not local"; it now sits under DATA_DIR alongside the Stripe binary and the shared npm tree.
 - **`BaseProcessSupervisor` + `BaseSupervisor`** (`server/services/_supervisor/`) — the in-house supervisor base classes that `server/nodes/whatsapp/_runtime.py` also uses. Provides cross-platform signal handling (POSIX `setsid` + Windows Job Objects + `CREATE_NEW_PROCESS_GROUP` for graceful `CTRL_BREAK_EVENT` shutdown), restart policy via tenacity, log draining, status snapshots. We subclass both — zero custom supervisor logic.
 
 **ServiceSpec wiring**: [`cli/commands/_temporal_specs.py`](../cli/commands/_temporal_specs.py) returns one ServiceSpec for the supervised Temporal dev server (env reads happen inside `temporal_specs()` at call time, safe to import before `cli.config.load_config()` runs). Both `start.py` and `dev.py` call it. The generic supervised-runtime shim lives at [`server/services/temporal/_supervised_runtime.py`](../server/services/temporal/_supervised_runtime.py) so the spawned `uv run python -m services.temporal._supervised_runtime services.temporal._runtime:get_temporal_server_runtime` resolves out of the workspace `.venv` without any cross-tree path plumbing.
@@ -482,7 +482,7 @@ The Temporal binary + persistence are managed in-process by the plugin-folder pa
 
 **Port management**: Temporal owns ports 7233 (gRPC) + 8080 (Web UI). Both bound by the same `temporal.exe` process; both listed in `cli.config.Config.all_ports` so `machina stop`'s port-freeing pre-flight covers them.
 
-**Direct CLI access**: the pooch-installed `temporal` binary lives under `~/.cache/MachinaOs/machinaos-temporal/` (Linux) / `~/Library/Caches/MachinaOs/machinaos-temporal/` (macOS) / `%LOCALAPPDATA%\MachinaOs\Cache\machinaos-temporal\` (Windows). Run `temporal --version`, `temporal workflow list`, etc. directly from there.
+**Direct CLI access**: the pooch-installed `temporal` binary lives under `<DATA_DIR>/packages/temporal/` (= `~/.machina/packages/temporal/` by default, on every OS). Run `temporal --version`, `temporal workflow list`, etc. directly from there.
 
 **Cluster tunables** — all sourced from `.env.template` (canonical defaults; no Python-side fallbacks). Settings fields with `Field(env="...")` require the env var to be present, surfaced via `cli.config.load_config()`'s `.env.template` → `.env` → `os.environ` merge.
 
@@ -512,8 +512,8 @@ One supervisor-build-time env var (read inside `_temporal_specs.py`, not in `Set
 # Temporal Web UI
 open http://localhost:8080
 
-# List workflows via the local CLI binary (under platformdirs cache)
-~/.cache/MachinaOs/machinaos-temporal/.../temporal.exe workflow list --address localhost:7233
+# List workflows via the local CLI binary (under <DATA_DIR>/packages/temporal/)
+~/.machina/packages/temporal/.../temporal.exe workflow list --address localhost:7233
 
 # Re-fetch the binary at any time
 uv run python -m services.temporal._install

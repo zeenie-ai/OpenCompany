@@ -60,6 +60,12 @@ Keep `sourcemap: analyze` (already correct), keep React Compiler config.
 
 The npm tarball still excludes `__pycache__/` per `package.json` `files` (cross-Python-minor pyc fragility) — `compileall` runs on the user's machine via `machina build` or `scripts/install.js` post-install.
 
+### 4b. Temporal binary fetch + DATA_DIR parity
+
+- Step `[6/6]` runs `uv run python -m services.temporal._install`, which pooch-downloads the official `temporal` CLI into `<DATA_DIR>/packages/temporal/` (= `~/.machina/packages/temporal/` by default). Pre-fetching at build time turns the ~114 MB download into a sub-second cache hit on first `machina start`.
+- **`machina build` layers `.env.dev` first.** `build_command()` calls `cli.config.load_dev_overrides(root)` before the install steps, so the build's `DATA_DIR` matches what the runtime sees. Without it, a repo checkout's `machina build` read `DATA_DIR=~/.machina` from `.env.template` and installed Temporal under user home, but `machina dev` then read `DATA_DIR=.machina` from `.env.dev` and re-downloaded into `<repo>/.machina/` — a redundant ~114 MB fetch on every fresh clone.
+- **Safe for global installs.** `.env.dev` is git-committed for contributors but is NOT in the npm `files` list, so an npm-distributed copy has no `.env.dev` — `load_dev_overrides` is a no-op and everything falls through to the `.env.template` default (`DATA_DIR=~/.machina`), matching `machina start` / `machina daemon`.
+
 ### 5. Wire bundle + compileall into install.js
 
 - `scripts/install.js` → after `uv sync`:

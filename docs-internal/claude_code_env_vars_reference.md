@@ -119,7 +119,7 @@ sets or relies on.
 
 | Variable | Purpose |
 |---|---|
-| `CLAUDE_CONFIG_DIR` | Override the root config directory. Defaults to `~/.claude/`. **MachinaOs sets this** to `<repo>/data/claude-machina` so credentials are project-local — see `services/claude_oauth.py:MACHINA_CLAUDE_DIR`. This is the directory under which claude's session JSONL lives at `<CLAUDE_CONFIG_DIR>/projects/<project_key>/<session_id>.jsonl`. |
+| `CLAUDE_CONFIG_DIR` | Override the root config directory. Defaults to `~/.claude/`. **MachinaOs sets this** to `<DATA_DIR>/claude/` (= `~/.machina/claude/` by default) so credentials are project-local and isolated from the user's own `~/.claude/` session — see `nodes/agent/claude_code_agent/_oauth.py:MACHINA_CLAUDE_DIR` (`= data_path("claude")`). This is the directory under which claude's session JSONL lives at `<CLAUDE_CONFIG_DIR>/projects/<project_key>/<session_id>.jsonl`. The npm-installed CLI binary is separate, in the shared tree at `<DATA_DIR>/packages/node_modules/.bin/claude[.cmd]`. |
 | `CLAUDE_REMOTE_CONTROL_SESSION_NAME_PREFIX` | Default prefix for auto-generated Remote Control session names. |
 
 ## Timeouts

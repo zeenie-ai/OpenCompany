@@ -4,7 +4,7 @@ Multi-instance, multi-provider runtime for AI CLI agents (Claude Code, Codex, Ge
 
 | Provider | Status | Login flow |
 |---|---|---|
-| Claude Code (`@anthropic-ai/claude-code`) | shipping | Local-install + spawn (`nodes/agent/claude_code_agent/_oauth.py:initiate_claude_oauth`) |
+| Claude Code (`@anthropic-ai/claude-code`) | shipping | Shared-tree install + spawn (`nodes/agent/claude_code_agent/_oauth.py:run_claude_login`) |
 | OpenAI Codex (`@openai/codex`) | shipping (no login flow yet) | User runs `codex login` manually; UI returns a graceful "not yet wired" error |
 | Google Gemini (`@google/gemini-cli`) | v2 stub | factory raises `NotImplementedError` |
 
@@ -49,7 +49,7 @@ Reuses (do not duplicate):
 - `services/skill_loader.py` — `scan_skills` / `load_skill` consumed by MCP `listSkills` / `getSkill`
 - `services/auth.py` — `AuthService.get_api_key` consumed by MCP `getCredential`
 - `services/credential_registry.py` — deep-merge `extends` for `_cli_base` entry
-- `nodes/agent/claude_code_agent/_oauth.py` — Claude `auth login` / `auth status` / `auth logout` wrappers, project-local npm install at `~/.machina/claude/npm/`, inherited stdio so the CLI opens the browser itself
+- `nodes/agent/claude_code_agent/_oauth.py` — Claude `auth login` / `auth status` / `auth logout` wrappers, npm install into the shared MachinaOs tree at `<DATA_DIR>/packages/` (binary resolves to `<DATA_DIR>/packages/node_modules/.bin/claude[.cmd]`), `CLAUDE_CONFIG_DIR=<DATA_DIR>/claude/`. The `login` spawn passes `stdin=PIPE` (un-written) so the native CLI's stdin reader blocks instead of EOFing — keeps its localhost OAuth callback server alive until the browser flow completes
 - `nodes/stripe/_handlers.py` — pattern reference for marker-token + catalogue broadcast
 
 ## Provider abstraction (mirrors `services/llm/`)
@@ -98,7 +98,7 @@ the interactive billing bucket (entrypoint `claude-vscode`, NOT
 `sdk-cli`) since `-p` / `--print` is never emitted.
 
 ```
-~/.machina/claude/npm/node_modules/.bin/claude[.cmd]
+~/.machina/packages/node_modules/.bin/claude[.cmd]
   --output-format stream-json     # events on stdout
   --input-format stream-json      # user turns to stdin as JSON
   --verbose                       # required with stream-json for full event detail
@@ -218,14 +218,14 @@ CLI auth is delegated to the CLI's own login flow + a synthetic marker token in 
 Steps:
 
 1. Run `claude auth status`. If it exits 0, write the marker + broadcast and return immediately (idempotent re-click).
-2. Otherwise call `services.claude_oauth.initiate_claude_oauth()`:
-   - Project-local install of `@anthropic-ai/claude-code` into `~/.machina/claude/npm/` via `npm install --prefix` (mirrors WhatsApp's `<repo>/node_modules/edgymeow/` layout; skipped if already installed).
-   - `asyncio.create_subprocess_exec(claude, "auth", "login", env={..., CLAUDE_CONFIG_DIR=<repo>/data/claude-machina})` with **inherited stdio** — same way the VSCode Claude Code extension delegates to the binary. Anthropic doesn't expose `--print-url` or a programmatic OAuth helper (issue [anthropics/claude-code#7100](https://github.com/anthropics/claude-code/issues/7100), closed "not planned"), so we let the CLI open the user's browser via its own OS-level call. Returns `{success: True, pid}` immediately.
+2. Otherwise schedule `_finalize_claude_login()` (in `nodes/agent/claude_code_agent/_handlers.py`), which calls `run_claude_login()` from `_oauth.py`:
+   - MachinaOs-managed install of `@anthropic-ai/claude-code` into the shared npm tree at `<DATA_DIR>/packages/` via `npm install --prefix <packages_dir>` (same tree as `edgymeow` / `agent-browser`; skipped if already installed). Binary resolves to `<DATA_DIR>/packages/node_modules/.bin/claude[.cmd]`.
+   - `claude auth login` via `run_cli_command(..., env={..., CLAUDE_CONFIG_DIR=<DATA_DIR>/claude/}, stdin=asyncio.subprocess.PIPE)` — same way the VSCode Claude Code extension delegates to the binary. Anthropic doesn't expose `--print-url` or a programmatic OAuth helper (issue [anthropics/claude-code#7100](https://github.com/anthropics/claude-code/issues/7100), closed "not planned"), so we let the CLI open the user's browser via its own OS-level call. `stdin=PIPE` is **load-bearing** for claude-code >= 2.1.162's native binary: it reads stdin while waiting for the browser callback, and an inherited (closed) stdin EOFs it into an early exit that kills the localhost callback server before the redirect arrives — `stdin=PIPE` (never written) makes the read block so the server stays up.
 3. Schedule a background task that polls `claude auth status` every 2s up to 600s. On exit-0, write the synthetic `"cli-managed"` marker via `auth_service.store_oauth_tokens("claude_code", ...)` and broadcast `credential_catalogue_updated`. The catalogue's `stored` flag flips and the existing `OAuthConnect.tsx` primitive renders the modal as Connected.
 
 **Logout**: runs `claude auth logout`, drops the marker via `auth_service.remove_oauth_tokens()`, and broadcasts.
 
-**Codex login**: not yet wired. The handler returns a graceful error pointing the user at `npm install -g @openai/codex` + `codex login` manual flow. Follow-up: write `services/codex_oauth.py` mirroring `claude_oauth.py` with `HOME=~/.codex-machina` env redirect (Codex has no `CONFIG_DIR` equivalent).
+**Codex login**: not yet wired. The handler returns a graceful error pointing the user at `npm install -g @openai/codex` + `codex login` manual flow. Follow-up: mirror `nodes/agent/claude_code_agent/_oauth.py` for codex with a `HOME=<DATA_DIR>/codex/` env redirect (Codex has no `CONFIG_DIR` equivalent).
 
 **Frontend**: no changes. The existing `client/src/components/credentials/primitives/OAuthConnect.tsx:42-44` already documents and supports the Stripe-style fieldless-CLI case (`config.fields = []`, `kind: "oauth"`, `stored` flag drives Connected state).
 
@@ -548,7 +548,7 @@ Plugin contract: `tests/test_plugin_contract.py` + `tests/test_node_spec.py` —
 
 Live verification (needs a real Claude install + auth):
 
-1. Empty `~/.machina/claude/`. Open Credentials Modal → click "Login with Claude Code CLI". Confirm the npm install runs (visible in backend logs), `~/.machina/claude/npm/node_modules/.bin/claude[.cmd]` appears, browser opens for Anthropic OAuth. Modal flips Connected within ~2s of CLI exit (background `claude auth status` poll detects success).
+1. Empty `~/.machina/claude/` + `~/.machina/packages/`. Open Credentials Modal → click "Login with Claude Code CLI". Confirm the npm install runs (visible in backend logs), `~/.machina/packages/node_modules/.bin/claude[.cmd]` appears, browser opens for Anthropic OAuth. Modal flips Connected within ~2s of CLI exit (background `claude auth status` poll detects success). The browser tab should render the CLI's own "Signed in" success page (this needs the `stdin=PIPE` spawn — without it the native binary exits early and the tab is left on the bare `localhost/callback` URL).
 2. Refresh the page. Modal stays Connected (`auth_service.get_oauth_tokens("claude_code")` still returns the marker; idempotent re-click also stays Connected).
 3. Click Disconnect. Modal flips Disconnected (`claude auth logout` clears CLI creds + marker dropped).
 4. Add a `claude_code_agent` node, set `tasks=[{prompt:"echo A"},{prompt:"echo B"},{prompt:"echo C"}]`, run. Three distinct `claude:<task_id>` Terminal streams interleaved. Three distinct session_ids. Three worktrees created and removed. `summary.wall_clock_ms < sum(duration_ms)` (proves parallelism).
@@ -557,11 +557,11 @@ Live verification (needs a real Claude install + auth):
 
 ## Risks / open considerations
 
-- **Codex login not yet wired.** v1 returns a graceful error directing the user to `npm install -g @openai/codex` + `codex login`. Follow-up: `services/codex_oauth.py` mirroring `claude_oauth.py` with `HOME=~/.codex-machina` env redirect (Codex has no `CONFIG_DIR` env; `HOME` redirect is risky on Windows, so Windows may need a different strategy or accept user-global Codex auth).
+- **Codex login not yet wired.** v1 returns a graceful error directing the user to `npm install -g @openai/codex` + `codex login`. Follow-up: a codex `_oauth.py` mirroring `nodes/agent/claude_code_agent/_oauth.py` with a `HOME=<DATA_DIR>/codex/` env redirect (Codex has no `CONFIG_DIR` env; `HOME` redirect is risky on Windows, so Windows may need a different strategy or accept user-global Codex auth).
 - **Gemini deferred.** `factory.create_cli_provider("gemini")` raises `NotImplementedError`. v2 work: implement `providers/google_gemini.py`, drop the factory branch, add `nodes/agent/gemini_cli_agent.py`. ~430 LoC. No abstraction changes needed.
 - **`--include-partial-messages`** assumes a recent Claude CLI; older versions fall back gracefully via the parser's `parse_event` returning `None` for unknown shapes.
-- **Browser-prompt phrasing** can change between Claude CLI versions; `b"yes\nyes\n"` might land on the wrong question. Defensible because that's exactly what `claude_oauth.py` has been doing in production.
+- **Native-binary stdin sensitivity.** claude-code >= 2.1.162 ships a native binary that reads stdin during `auth login`. We spawn it with `stdin=asyncio.subprocess.PIPE` (never written) so the read blocks and the OAuth callback server stays alive; an inherited/closed stdin EOFs the binary into an early exit that drops the browser callback. If a future CLI version changes its stdin contract this is the spot to revisit.
 - **Marker token written without verifying CLI is actually functional** — we trust `claude auth status`'s exit code. If Anthropic invalidates the token server-side and the CLI hasn't re-checked, the modal still shows Connected until the next session attempt's `detect_auth_error` catches it.
 - **MCP SDK is pre-1.0-stable.** Pinned at `mcp>=1.0.0`. The surface is isolated in `mcp_server.py` so an SDK breaking change touches one file.
-- **Concurrent install safety.** `claude_oauth.py:_get_claude_cmd` doesn't currently use a lock — two simultaneous login clicks within 2s could race the npm install. Low-risk in practice (modal debounces clicks); a follow-up could add an `asyncio.Lock`.
+- **Concurrent install safety.** `_oauth.py:claude_binary_path` doesn't currently use a lock — two simultaneous login clicks within 2s could race the npm install into the shared tree. Low-risk in practice (modal debounces clicks); a follow-up could add an `asyncio.Lock`.
 - **Worktree leak on hard crash.** Out-of-scope cleanup pass; document.

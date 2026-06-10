@@ -16,7 +16,7 @@ MachinaOS integrates external services that manage their own lifecycle via CLI t
 
 Wraps the official `temporal` CLI's `server start-dev` mode (per [docs.temporal.io/develop/python/set-up-your-local-python](https://docs.temporal.io/develop/python/set-up-your-local-python)) — SQLite-backed dev server, single process, gRPC + Web UI both embedded.
 
-**Install:** Automated. `machina build` step [6/6] runs `python -m services.temporal._install`, which uses `pooch` to download the official CLI archive from `https://temporal.download/cli/archive/latest?platform=<os>&arch=<arch>` into a per-OS cache (`~/.cache/MachinaOs/machinaos-temporal/` on Linux, `~/Library/Caches/MachinaOs/machinaos-temporal/` on macOS, `%LOCALAPPDATA%\MachinaOs\Cache\machinaos-temporal\` on Windows). No npm package, no system install required.
+**Install:** Automated. `machina build` step [6/6] runs `python -m services.temporal._install`, which uses `pooch` to download the official CLI archive from `https://temporal.download/cli/archive/latest?platform=<os>&arch=<arch>` into `<DATA_DIR>/packages/temporal/` (= `~/.machina/packages/temporal/` by default, on every OS — via `core.paths.package_dir("temporal")`). No npm package, no system install required.
 
 **Lifecycle:** Managed entirely by the CLI commands (`machina start` / `machina dev` / `machina stop`) — there's no separate `temporal:start` npm script. The supervisor at [cli/supervisor.py](../cli/supervisor.py) spawns the official CLI via the supervised-runtime shim at [server/services/temporal/_supervised_runtime.py](../server/services/temporal/_supervised_runtime.py).
 

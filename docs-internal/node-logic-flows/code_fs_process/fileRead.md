@@ -14,7 +14,7 @@
 Reads a file within the per-workflow workspace. Delegates to
 `LocalShellBackend.read()` from the `deepagents` package. The backend is
 instantiated with `virtual_mode=True` and a `root_dir` pinned to
-`data/workspaces/<workflow_slug>/` (or the node-level `working_directory`
+`<DATA_DIR>/workspaces/<workflow_slug>/` (or the node-level `working_directory`
 override), so path traversal outside the workspace is rejected by the
 backend itself.
 
