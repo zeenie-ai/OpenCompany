@@ -44,10 +44,14 @@ _TARGETS = [
 # ``.machina`` entry can't go in ``_TARGETS`` anymore because the
 # ``workflows/`` subtree holds shipped example seeds (git-tracked,
 # imported on first launch by ``services.example_loader``) -- wiping
-# it would force the operator to re-clone to recover. Anything else
-# under ``.machina/`` (claude state, workspaces, credentials.db, ...)
-# is transient runtime state and is fair game.
-_MACHINA_KEEP = frozenset({"workflows"})
+# it would force the operator to re-clone to recover. ``deploy/``
+# holds ``machina deploy``'s Terraform working dirs + state files:
+# deleting state for LIVE cloud resources orphans the VM/firewall
+# (``machina deploy destroy`` could no longer find them) -- only
+# ``deploy destroy`` removes that tree. Anything else under
+# ``.machina/`` (claude state, workspaces, credentials.db, ...) is
+# transient runtime state and is fair game.
+_MACHINA_KEEP = frozenset({"workflows", "deploy"})
 
 
 def _rmtree_with_retry(path: Path, *, attempts: int = 3, delay: float = 0.1) -> bool:

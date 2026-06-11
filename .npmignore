@@ -102,6 +102,3 @@ MachinaOS/
 # Package lock files
 package-lock.json
 **/package-lock.json
-
-# Build/deploy scripts not needed for users
-deploy.sh

@@ -20,11 +20,13 @@ def test_targets_list_is_stable():
     ]
 
 
-def test_machina_keep_preserves_workflows():
-    """``workflows/`` lives under ``.machina/`` (shipped example seeds);
-    ``clean`` must never wipe it. Pin the keep list so accidental
-    additions/removals surface in review."""
-    assert clean._MACHINA_KEEP == frozenset({"workflows"})
+def test_machina_keep_preserves_workflows_and_deploy_state():
+    """``workflows/`` (shipped example seeds) and ``deploy/`` (``machina
+    deploy``'s Terraform working dirs + state for LIVE cloud resources —
+    wiping it orphans the VM/firewall; only ``deploy destroy`` removes it)
+    live under ``.machina/``; ``clean`` must never wipe either. Pin the
+    keep list so accidental additions/removals surface in review."""
+    assert clean._MACHINA_KEEP == frozenset({"workflows", "deploy"})
 
 
 def test_rmtree_with_retry_handles_oserror(tmp_path: Path):

@@ -81,8 +81,10 @@ Temporal server lifecycle is managed by `machina start` / `machina dev` / `machi
 
 | Script | Command | Description |
 |--------|---------|-------------|
-| `deploy` | `bash deploy.sh` | Deploy to production server |
-| `deploy:gcp` | `bash deploy.sh` | Deploy to GCP |
+| `deploy` | `python -m cli deploy` | Self-deploy to a cloud VM (`machina deploy up/status/destroy` — gcloud preflight + Terraform; see `cli/commands/deploy/`) |
+
+The legacy `deploy.sh` (SCP + docker-compose to a GCE box) was removed; `machina deploy`
+provisions a login-gated VM natively via the operator's cloud CLI + Terraform.
 
 ---
 

@@ -2599,22 +2599,33 @@ python test_websocket.py
 
 ## Production Deployment
 
-### Docker Deployment
-The project deploys using Docker Compose with nginx reverse proxy.
+### Self-Deploy CLI (`machina deploy`) — current path
+One command provisions a login-gated MachinaOs VM on a cloud provider. Two stages: the
+operator's **cloud CLI** (gcloud; aws planned) handles auth + project/region/zone resolution +
+ADC verification + API enablement, then **Terraform** (`cli/terraform/gcp/`) owns all resources —
+VM (always named `machinaos`), firewall, artifact bucket (local `npm pack` source), service
+account, and a cloud-init startup script that installs Node 22 + uv + the package and runs
+`machina serve` under systemd. Login gate = built-in auth (`VITE_AUTH_ENABLED=true`,
+`AUTH_MODE=single`) with the owner credential generated at deploy time and seeded on first boot.
 
-#### Deploy Script (`deploy.sh`)
 ```bash
-# Deploy to server (configure DEPLOY_HOST in .env)
-./deploy.sh [HOST]
+machina deploy up --provider gcp --owner-email you@example.com   # provision + install + print URL/creds
+machina deploy status                                            # URL + /health
+machina deploy destroy                                           # terraform destroy + clear state
 ```
 
-**Deployment Steps:**
-1. Build Docker images locally (`docker-compose -f docker-compose.prod.yml build`)
-2. Save and compress images (`docker save | gzip`)
-3. Upload to GCP via SCP
-4. Deploy on remote (`docker-compose up -d`)
-5. Configure nginx reverse proxy with SSL
-6. Auto-cleanup dangling Docker images
+Key files: `cli/commands/serve.py` (single-port runtime: uvicorn fronts API + WS + built SPA, plus
+the node sidecar), `cli/commands/deploy/` (verbs, secrets, Terraform driver, provider CLI adapters),
+`cli/terraform/gcp/` (HCL module + `startup.sh.tftpl`). Deployment state lives at
+`<user-data>/deploy/machinaos/` (preserved by `machina clean` — see `_MACHINA_KEEP`); only
+`machina deploy destroy` removes it. The deploy code is fully delinked from `machina build` /
+`machina clean` (lazy verb stubs in `cli/cli.py`; nothing in the build pipeline imports it).
+
+The legacy `deploy.sh` (docker-compose images over SCP to a GCE box) was removed. The Docker
+Compose notes below are retained for reference for the historical container topology.
+
+### Docker Deployment (legacy reference)
+The project previously deployed using Docker Compose with nginx reverse proxy.
 
 #### Docker Configuration (4-Container Stack)
 
