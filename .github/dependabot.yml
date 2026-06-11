@@ -1,0 +1,41 @@
+version: 2
+updates:
+  # Root pnpm workspace (covers client/ and server/nodejs/ via pnpm-lock.yaml)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      npm-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  # Standalone npm manifest (server/package-lock.json)
+  - package-ecosystem: "npm"
+    directory: "/server"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+
+  # FastAPI backend — requirements.txt is exported from server/uv.lock
+  # (uv.lock itself is gitignored; keep the export in sync via
+  #  `uv export --frozen --no-emit-project --no-hashes --no-dev -o requirements.txt`)
+  - package-ecosystem: "pip"
+    directory: "/server"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      python-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  # GitHub Actions workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
