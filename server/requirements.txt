@@ -247,7 +247,7 @@ langchain-openai==1.1.14
     # via
     #   langchain-cerebras
     #   machinaos-server
-langchain-protocol==0.0.15
+langchain-protocol==0.0.16
     # via langchain-core
 langchain-text-splitters==1.1.2
     # via machinaos-server
