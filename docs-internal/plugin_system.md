@@ -145,6 +145,25 @@ class SpecializedAgentBase(ActionNode, abstract=True):
 
 This is the contract that makes `writeTodos` / `calculatorTool` etc. broadcast successfully through F4.A — without the polymorphic override, the wrapper's `if result.get("success")` check would treat every ToolNode result as failure and never call `update_node_output`.
 
+### Output contract enforcement (`_serialize_result`)
+
+The declared `Output` model is enforced at the serialization boundary — the same semantics FastAPI applies to `response_model` (validate → coerce → serialize). `BaseNode._serialize_result` (called by both `_wrap_success` implementations):
+
+- **`BaseModel` return** → `model_dump(mode="json")` (datetimes → ISO strings, enums → values).
+- **dict return + declared `Output`** → `Output.model_validate(result).model_dump(mode="json", exclude_unset=True)`. `exclude_unset` preserves the producer's exact key set — declared-but-absent `Optional` fields never materialise as `None` keys.
+- **dict return, no declared `Output`** (`_EmptyOutput` default) → pass-through.
+- **Violation** (wrong type in a declared field, or a non-serializable object anywhere) → standard error envelope with `error_type="OutputValidationError"` + full traceback in the operator log. A contract violation is a plugin bug that fails loudly at the producer instead of corrupting `node_outputs` persistence or the WS broadcast downstream.
+
+Practical rules for plugin authors:
+
+1. Prefer returning the `Output` model instance (`return ExampleOutput(...)`). Dicts work but get validated.
+2. `Output` models declare `extra="allow"` + all-`Optional` fields by convention — extra context keys pass through; only type mismatches fail.
+3. Never put raw third-party objects (dataclasses like deepagents' `ReadResult`, SDK response objects) into the result — unwrap to plain fields. Everything downstream (JSON column, orjson WS broadcast, `_serialise_tool_result`) expects JSON-compatible data.
+4. LLM-facing string formatting is the dispatcher's job (`_serialise_tool_result` JSON-dumps the whole payload) — return real lists/dicts, not pre-stringified JSON.
+5. Params fields that may receive LLM-stringified JSON (Gemini sometimes stringifies array/object args in tool calls) coerce at the boundary with `field_validator(..., mode="before")` — see `AndroidServiceParams._coerce_parameters` and `WriteTodosParams._coerce_todos` for the canonical shape.
+
+Defense in depth below the plugin layer: the SQLAlchemy engine in `core/database.py` sets `json_serializer=lambda obj: json.dumps(to_jsonable_python(obj, fallback=str))` (`pydantic_core.to_jsonable_python` — official arbitrary-object → JSON coercion), so every JSON column on the engine tolerates dataclasses / datetimes / enums / sets even if a payload bypasses Output validation. Locked by `tests/test_output_contract.py`.
+
 ### Auto-derived uiHints
 
 `BaseNode._metadata_dict` (`server/services/plugin/base.py`) calls

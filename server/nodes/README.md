@@ -211,6 +211,13 @@ every plugin. Common ones you'll trip:
   `messaging` / `machina-default`).
 - Tool schemas (`usable_as_tool=True` or `ToolNode`) — no `$defs`,
   no `$ref` (LLM-compat).
+- **`Output` is enforced at runtime.** Dict results from operations are
+  validated against the declared `Output` model and dumped with
+  `model_dump(mode="json", exclude_unset=True)` (FastAPI
+  `response_model` semantics — see `BaseNode._serialize_result`). A
+  type mismatch in a declared field produces an `OutputValidationError`
+  envelope. Prefer returning the `Output` instance directly; keep
+  `extra="allow"` + `Optional` fields so context keys pass through.
 
 Run: `pytest server/tests/test_plugin_contract.py -q`.
 
@@ -323,6 +330,22 @@ Full reference: [docs-internal/plugin_system.md → "Self-contained plugin folde
   Pydantic models or `Union`, the LLM-schema emission will add `$defs`
   and fail the invariant. Keep tool-facing Params flat; move nested
   types to `Output` instead.
+- **Return plain data, never raw third-party objects.** Backend / SDK
+  result objects (deepagents `ReadResult` / `WriteResult`, httpx
+  responses, …) must be unwrapped to plain fields before returning —
+  the Output validation rejects them, and everything downstream
+  (`node_outputs` JSON column, orjson WS broadcast,
+  `_serialise_tool_result`) expects JSON-compatible data. Likewise
+  return real lists/dicts, not pre-stringified JSON — LLM-facing
+  serialization is the dispatcher's job.
+- **Coerce LLM-stringified JSON args at the Params boundary.** Gemini
+  (and others) sometimes pass array/object tool args as JSON-encoded
+  strings. Fields that can receive them declare a
+  `field_validator(..., mode="before")` that `json.loads`es string
+  input — canonical examples: `AndroidServiceParams._coerce_parameters`,
+  `WriteTodosParams._coerce_todos`. Malformed JSON should pass through
+  unchanged so Pydantic raises a proper `ValidationError` the LLM can
+  correct.
 - **Collapse advanced options with `group="..."`.** Tag rarely-tuned
   fields with `json_schema_extra={"group": "options"}` and they get
   lifted into a collapsible "Options" collection in the parameter

@@ -454,6 +454,24 @@ Reach for `NodeUserError` for any user-correctable failure
 (missing required field, unknown enum value, bad regex). Reserve
 `RuntimeError` / `Exception` for genuinely unexpected server bugs.
 
+**Output contract enforcement** (`BaseNode._serialize_result` in
+`services/plugin/base.py`): the declared `Output` Pydantic model is
+enforced at the serialization boundary, FastAPI-`response_model` style.
+Dict results validate via `Output.model_validate(...).model_dump(mode="json",
+exclude_unset=True)`; `BaseModel` results dump `mode="json"`; violations
+produce an `error_type="OutputValidationError"` envelope at the producer.
+Rules: prefer returning the `Output` instance; never put raw third-party
+objects (SDK results, dataclasses) or pre-stringified JSON into result
+dicts — return plain lists/dicts; Params fields that may receive
+LLM-stringified JSON args coerce with `field_validator(mode="before")`
+(canonical: `AndroidServiceParams._coerce_parameters`,
+`WriteTodosParams._coerce_todos`). Below the plugin layer, the SQLAlchemy
+engine sets `json_serializer` backed by `pydantic_core.to_jsonable_python`
+(`core/database.py`) so every JSON column tolerates dataclasses /
+datetimes / enums / sets. Full spec:
+[docs-internal/plugin_system.md → Output contract enforcement](./docs-internal/plugin_system.md);
+locked by `server/tests/test_output_contract.py`.
+
 ### 6. Cleanup & Lifecycle
 - **Use existing teardown methods** - e.g., `_teardown_all_cron_triggers()` for cron cleanup
 - **Cleanup in finally blocks** - Ensure resources are released even on error
@@ -1632,7 +1650,7 @@ server/nodes/document/
 
 Workflows execute via Temporal for durability and horizontal scaling. Three dispatch paths (legacy `execute_node_activity` / per-type `node.{type}.v{version}` (F4.A) / Agent-as-child-workflow (F4.B)) gated by `TEMPORAL_PER_TYPE_DISPATCH` and `TEMPORAL_AGENT_WORKFLOW_ENABLED` settings flags.
 
-Full architecture, dispatch matrix, per-node lifecycle, heartbeat semantics, the 14 migrating agent types + 2 bypass agents (rlm_agent / claude_code_agent), the 6 F4.B agent activities (`prepare_payload.v1` / `execute_llm_step.v1` / `persist_turn.v1` / `compact_memory.v1` / `store_output.v1` / `broadcast_progress.v1`), the **`delegate_to_<x>` Temporal-native dispatch** (child agent type in `AGENT_WORKFLOW_TYPES` → `workflow.execute_child_workflow` with `parent_node_id` propagation + parent-mirror in `_emit_phase` so the parent's canvas badge advances live; falls through to `execute_activity` otherwise), and the future `TemporalWorkerPool` per-queue routing live in [docs-internal/TEMPORAL_ARCHITECTURE.md](./docs-internal/TEMPORAL_ARCHITECTURE.md). Tool-call dispatch under F4.A documented at [docs-internal/tool_building_pipeline.md §9](./docs-internal/tool_building_pipeline.md).
+Full architecture, dispatch matrix, per-node lifecycle, heartbeat semantics, the 14 migrating agent types + 2 bypass agents (rlm_agent / claude_code_agent), the 6 F4.B agent activities (`prepare_payload.v1` / `execute_llm_step.v1` / `persist_turn.v1` / `compact_memory.v1` / `store_output.v1` / `broadcast_progress.v1`), the **`delegate_to_<x>` Temporal-native dispatch** (child agent type in `AGENT_WORKFLOW_TYPES` → `workflow.execute_child_workflow` with `parent_node_id` propagation + parent-mirror in `_emit_phase` so the parent's canvas badge advances live; falls through to `execute_activity` otherwise), and the future `TemporalWorkerPool` per-queue routing live in [docs-internal/TEMPORAL_ARCHITECTURE.md](./docs-internal/TEMPORAL_ARCHITECTURE.md). Tool-call dispatch under F4.A documented at [docs-internal/tool_building_pipeline.md §9](./docs-internal/tool_building_pipeline.md). **Delegation input contract**: the LLM's `{task, context}` args travel as the child workflow input's `invocation` field (per-invocation input vs node config); `prepare_agent_payload` applies it AFTER config resolution so stored node parameters never override the delegated task — empty-task calls are rejected at the parent's call boundary, and `execute_llm_step` raises `ApplicationError(type="EmptyAgentPrompt", non_retryable=True)` on system-only message lists (providers require ≥1 non-system message).
 
 **Configuration** (`.env.template` — canonical defaults; `.env` layers user overrides):
 ```env
@@ -2501,7 +2519,7 @@ AI Agents can delegate tasks to other agents connected to their `input-tools` ha
 
 **Two execution paths** depending on whether the parent runs under Temporal F4.B:
 
-- **F4.B (default)**: parent `AgentWorkflow` spawns the child as a **child `AgentWorkflow`** via `workflow.execute_child_workflow` when the child type is in `AGENT_WORKFLOW_TYPES`. Parent's `node_id` is passed in `child_context["parent_node_id"]` so the child's `_emit_phase` mirrors progress onto the parent's canvas badge (parent badge advances live alongside child iteration counter instead of freezing). Deterministic child workflow id `f"{parent_workflow_id}-delegate-{child_node_id}-{iteration}"`. Parent waits for child result through the child-workflow handle — synchronous within the parent's loop.
+- **F4.B (default)**: parent `AgentWorkflow` spawns the child as a **child `AgentWorkflow`** via `workflow.execute_child_workflow` when the child type is in `AGENT_WORKFLOW_TYPES`. Parent's `node_id` is passed in `child_context["parent_node_id"]` so the child's `_emit_phase` mirrors progress onto the parent's canvas badge (parent badge advances live alongside child iteration counter instead of freezing). The LLM's `{task, context}` args travel as `child_context["invocation"]` — per-invocation input applied AFTER config resolution in `prepare_agent_payload` (`task` → system_message, `context`-or-`task` → prompt, same semantics as the legacy path), so stored node parameters never override the delegated task; empty-task calls are rejected at the call boundary without spawning. Deterministic child workflow id `f"{parent_workflow_id}-delegate-{child_node_id}-{iteration}"`. Parent waits for child result through the child-workflow handle — synchronous within the parent's loop.
 - **Legacy / F4.A-only**: the fire-and-forget pattern below. Still the path for `rlm_agent` / `claude_code_agent` (excluded from `AGENT_WORKFLOW_TYPES`) and any deployment with `TEMPORAL_AGENT_WORKFLOW_ENABLED=false`.
 
 **Architecture: Fire-and-Forget Pattern (legacy / F4.A)**

@@ -298,12 +298,23 @@ AgentWorkflow.run(context):
          (messages_to_dict round-trip preserves provider-specific
          fields: Gemini thought_signature, Anthropic cache markers,
          OpenAI reasoning_content) — appended verbatim to messages.
+         After filter_empty_messages, a list with no human/ai/tool
+         message raises ApplicationError(type="EmptyAgentPrompt",
+         non_retryable=True) — providers require >=1 non-system
+         message (Gemini pulls SystemMessages into system_instruction
+         and rejects empty contents), so the failure surfaces to the
+         parent LLM on attempt 1 instead of consuming the retry budget.
     3. if kind == "tool_calls":
          for each call:
            emit_phase("executing_tool", tool_name=...)
            if delegate_to_* AND child type in AGENT_WORKFLOW_TYPES:
+             # {task, context} are per-invocation INPUT, not node
+             # config — both empty -> tool-error back to the LLM,
+             # no child spawn.
              execute_child_workflow("AgentWorkflow", child_context)
-               child_context = {**tool_payload, "parent_node_id": <self>}
+               child_context = {**tool_payload,
+                                "parent_node_id": <self>,
+                                "invocation": {"task": …, "context": …}}
                id = f"{parent_workflow_id}-delegate-{child_node_id}-{iter}"
            else:
              execute_activity(f"node.{tool_node_type}.v{version}")
@@ -343,14 +354,16 @@ AgentWorkflow.run(context):
 
 Each LLM step is one activity, each tool call is one per-type activity (the same activities F4.A registered). **Delegation tool calls** (`delegate_to_<x>`) where the child type is in `AGENT_WORKFLOW_TYPES` are the exception: they spawn a child `AgentWorkflow` via `workflow.execute_child_workflow` instead of a per-type activity, with `parent_node_id` injected into `child_context` to enable the parent-mirror broadcast above. Deterministic child workflow id is `f"{parent_workflow_id}-delegate-{child_node_id}-{iteration}"` so Temporal retries don't spawn duplicates. Non-agent tools and excluded types (`rlm_agent`, `claude_code_agent`) still go through `execute_activity` as before. Failures of tool activities surface as error messages back to the LLM (matching the in-process agent loop behaviour); the agent loop continues.
 
+**Delegation input contract (input-vs-config separation).** The LLM's `{task, context}` args are per-invocation *input*, not node configuration, and travel as the child workflow input's `invocation` field. `prepare_agent_payload` applies it AFTER its config resolution (`{**node_data, **db_params}` — DB wins for config liveness): `task` → system_message, `context`-or-`task` → prompt — the same semantics as the legacy `handlers.tools._execute_delegated_agent`. Stored node parameters (including the empty default `prompt` the frontend persists on drop) therefore never override the delegated task. A call with both fields empty is rejected at the parent's call boundary (tool-error message to the LLM, no child spawn). Bypass agents dispatched as plain activities (`rlm_agent` / `claude_code_agent`) instead receive the remap directly in `node_data` — their per-type activity consumes `node_data` verbatim with no DB re-merge.
+
 **Canvas-aware tools** opt into receiving the parent workflow's `nodes`/`edges` by declaring `needs_canvas: ClassVar[bool] = True` on their `BaseNode` subclass. The F4.B tool dispatch reads this via `services.node_registry.get_node_class(node_type).needs_canvas` and forwards `context.get("nodes")` / `context.get("edges")` into `tool_payload`; default plugins keep the empty-canvas optimisation. Today only `agentBuilder` opts in (it walks edges to resolve its calling agent and mutates the canvas). Operations inside agentBuilder reload via `database.get_workflow(workflow_id)` so in-run duplicate detection sees mutations from earlier calls in the same workflow run — see [agent_builder section in CLAUDE.md](../CLAUDE.md).
 
 **Seven agent activities** are registered by `collect_agent_activities()` for `AgentWorkflow` to schedule by name:
 
 | Activity | Purpose |
 |---|---|
-| `agent.prepare_payload.v1` | Resolves the DB-backed payload (provider / model / api_key / system_message / user_prompt / tools / memory_node_id / memory_content / memory_window_size / max_iterations / thinking_config / compaction_threshold / auto_rebind_tools). Reads `UserSettings.agent_recursion_limit` + `UserSettings.auto_rebind_tools_after_canvas_change`. |
-| `agent.execute_llm_step.v1` | One LLM turn — rebuilds StructuredTools from the workflow's current `tools` list and returns the assistant message + tool_calls. |
+| `agent.prepare_payload.v1` | Resolves the DB-backed payload (provider / model / api_key / system_message / user_prompt / tools / memory_node_id / memory_content / memory_window_size / max_iterations / thinking_config / compaction_threshold / auto_rebind_tools). Reads `UserSettings.agent_recursion_limit` + `UserSettings.auto_rebind_tools_after_canvas_change`. Applies the optional `invocation` field (delegation children) after config resolution — per-invocation input always beats stored parameters. |
+| `agent.execute_llm_step.v1` | One LLM turn — rebuilds StructuredTools from the workflow's current `tools` list and returns the assistant message + tool_calls. Guards against un-invokable payloads: post-filter system-only message lists raise `ApplicationError(type="EmptyAgentPrompt", non_retryable=True)`. |
 | `agent.refresh_tools.v1` | Translates `workflow_ops` add_node ops (component_kind="tool" OR usable_as_tool=True) into fresh `tool_payload` entries via `_build_tool_from_node`. Workflow extends `tools` + `tool_index` from the result. |
 | `agent.persist_turn.v1` | Appends the latest human/assistant exchange to memory markdown, trims the window, broadcasts `node.parameters.updated`. |
 | `agent.compact_memory.v1` | Token-budget compaction when cumulative tokens hit the threshold. Best-effort: continues with un-compacted history on failure. |
