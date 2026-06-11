@@ -11,6 +11,8 @@ const PKG = JSON.parse(readFileSync(resolve(ROOT, 'package.json'), 'utf-8'));
 const COMMANDS = {
   start: 'Start in production mode',
   dev: 'Start development server (hot-reload)',
+  serve: 'Serve on a single public port (API + WS + SPA; used by deploy)',
+  deploy: 'Provision a cloud VM running MachinaOs (Terraform)',
   stop: 'Stop all running services',
   build: 'Build the project for production',
   clean: 'Clean build artifacts',
@@ -175,8 +177,11 @@ if (cmd === 'help' || cmd === '--help' || cmd === '-h') {
   console.log(`machina v${PKG.version}`);
 } else if (cmd === 'doctor') {
   doctor();
-} else if (cmd === 'start' || cmd === 'dev' || cmd === 'build') {
+} else if (cmd === 'start' || cmd === 'dev' || cmd === 'build' || cmd === 'serve') {
   checkDeps();
+  run(cmd, process.argv.slice(3));
+} else if (cmd === 'deploy') {
+  // Needs sub-verb + flags forwarded (up/status/destroy --provider ...).
   run(cmd, process.argv.slice(3));
 } else if (COMMANDS[cmd]) {
   run(cmd);

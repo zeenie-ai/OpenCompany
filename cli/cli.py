@@ -90,6 +90,22 @@ def _build() -> None:
     build_command()
 
 
+@app.command(
+    "serve",
+    help="Run on a single public port (API + WebSocket + built SPA + sidecar). Used by `machina deploy`.",
+)
+def _serve(
+    port: int | None = typer.Option(
+        None,
+        "--port",
+        help="Public port (default: $PORT, else PYTHON_BACKEND_PORT).",
+    ),
+) -> None:
+    from cli.commands.serve import serve_command
+
+    serve_command(port=port)
+
+
 # --------------------------------------------------------------- daemon group
 
 daemon_app = typer.Typer(
@@ -141,6 +157,77 @@ def _daemon_restart() -> None:
 
 
 app.add_typer(daemon_app, name="daemon")
+
+
+# --------------------------------------------------------------- deploy group
+
+deploy_app = typer.Typer(
+    name="deploy",
+    help="Provision a fresh cloud VM running MachinaOs (via Terraform).",
+    no_args_is_help=True,
+    add_completion=False,
+)
+
+
+@deploy_app.command(
+    "up",
+    help="Create the 'machinaos' VM, install MachinaOs behind the login gate, and run it.",
+)
+def _deploy_up(
+    provider: str = typer.Option("gcp", "--provider", help="Cloud provider: gcp (aws is a follow-on)."),
+    owner_email: str = typer.Option(..., "--owner-email", help="Login email for the owner account."),
+    owner_password: str | None = typer.Option(
+        None, "--owner-password", help="Login password (>=8 chars). Generated + printed once if omitted."
+    ),
+    source: str = typer.Option("local", "--source", help="Install source: local (npm pack) or release (npm registry)."),
+    version: str = typer.Option("latest", "--version", help="machinaos version when --source release."),
+    machine_type: str = typer.Option("e2-standard-2", "--machine-type", help="VM size."),
+    port: int = typer.Option(8080, "--port", help="Public port the app binds + the firewall opens."),
+    allow_cidr: str = typer.Option("0.0.0.0/0", "--allow-cidr", help="Firewall source range (restrict to your IP/32)."),
+    region: str | None = typer.Option(None, "--region", help="Cloud region (provider default if omitted)."),
+    zone: str | None = typer.Option(None, "--zone", help="Cloud zone (provider default if omitted)."),
+    project: str | None = typer.Option(None, "--project", help="GCP project (defaults to gcloud config)."),
+) -> None:
+    from cli.commands.deploy.up import up_command
+
+    up_command(
+        provider=provider,
+        region=region,
+        zone=zone,
+        machine_type=machine_type,
+        port=port,
+        owner_email=owner_email,
+        owner_password=owner_password,
+        source=source,
+        version=version,
+        allow_cidr=allow_cidr,
+        project=project,
+    )
+
+
+@deploy_app.command(
+    "status",
+    help="Show the 'machinaos' deployment's URL + health.",
+)
+def _deploy_status() -> None:
+    from cli.commands.deploy.status import status_command
+
+    status_command()
+
+
+@deploy_app.command(
+    "destroy",
+    help="Terraform-destroy the 'machinaos' deployment and remove its local state.",
+)
+def _deploy_destroy(
+    keep_state: bool = typer.Option(False, "--keep-state", help="Keep the local Terraform state dir."),
+) -> None:
+    from cli.commands.deploy.destroy import destroy_command
+
+    destroy_command(keep_state=keep_state)
+
+
+app.add_typer(deploy_app, name="deploy")
 
 
 # ----------------------------------------------------------------- docs group

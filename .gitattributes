@@ -1,0 +1,8 @@
+# Files that execute on Linux (shebangs, cloud-init, systemd) must keep LF
+# even on Windows checkouts (core.autocrlf=true would otherwise produce
+# CRLF working files, and `npm pack` ships the working tree verbatim —
+# a CRLF shebang breaks /usr/bin/env on the deployed VM).
+bin/cli.js   text eol=lf
+*.sh         text eol=lf
+*.tftpl      text eol=lf
+*.service    text eol=lf

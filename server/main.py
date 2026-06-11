@@ -151,6 +151,31 @@ async def lifespan(app: FastAPI):
         logger.info("Encryption service initialized")
     _startup_log("Credentials + encryption initialized")
 
+    # Seed the owner login credential from the environment (container
+    # login gate). Idempotent: only creates the owner when no user exists,
+    # so restarts and in-app password changes are never clobbered. Reuses
+    # the built-in auth (UserAuthService.register -> bcrypt User row) — no
+    # new auth code. Set MACHINA_OWNER_EMAIL + MACHINA_OWNER_PASSWORD
+    # (password >= 8 chars) via Secret Manager to define the secret login.
+    import os as _seed_os
+
+    _owner_email = _seed_os.environ.get("MACHINA_OWNER_EMAIL", "").strip()
+    _owner_password = _seed_os.environ.get("MACHINA_OWNER_PASSWORD", "")
+    if _owner_email and _owner_password:
+        try:
+            _user_auth = container.user_auth_service()
+            if await _user_auth.get_user_count() == 0:
+                _owner_name = _seed_os.environ.get("MACHINA_OWNER_NAME", "Owner")
+                _seeded, _seed_err = await _user_auth.register(_owner_email, _owner_password, _owner_name)
+                if _seeded is not None:
+                    logger.info("Seeded owner account from environment", email=_owner_email)
+                else:
+                    logger.error("Owner account seed failed", reason=_seed_err)
+            else:
+                logger.debug("Owner seed skipped: a user already exists")
+        except Exception as _seed_exc:  # noqa: BLE001 — seeding must never block startup
+            logger.error("Owner account seed raised", error=str(_seed_exc))
+
     # Initialize event waiter with cache service for Redis Streams support
     from services import event_waiter
 
@@ -645,6 +670,61 @@ async def health_check():
         "temporal": temporal_status,
         "timestamp": datetime.now().isoformat(),
     }
+
+
+# ---------------------------------------------------------------------------
+# Single-port SPA serving (container / Cloud Run)
+# ---------------------------------------------------------------------------
+#
+# In the containerised deployment one uvicorn process must front the API,
+# the WebSocket, AND the built React client on a single port ($PORT). The
+# CLI dev/start path serves the client from a separate node static server
+# (scripts/serve-client.js), so this block is gated on the dist existing +
+# SERVE_STATIC_CLIENT so local ``machina dev`` is unaffected.
+#
+# Registered LAST so every real API / WS / mounted route above wins; this
+# only catches otherwise-unmatched GET paths and returns the SPA shell for
+# client-side routing. Non-SPA prefixes return 404 so API misses stay JSON.
+import os as _spa_os
+from pathlib import Path as _SpaPath
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+_CLIENT_DIST = _SpaPath(__file__).resolve().parents[1] / "client" / "dist"
+_SERVE_STATIC = _spa_os.environ.get("SERVE_STATIC_CLIENT", "true").lower() in ("1", "true", "yes")
+# Path prefixes owned by the backend — never shadowed by the SPA fallback.
+_NON_SPA_PREFIXES = ("api/", "ws/", "webhook/", "mcp/", "health", "docs", "redoc", "openapi.json")
+
+if _SERVE_STATIC and (_CLIENT_DIST / "index.html").is_file():
+    # The nodejs-compat router registers an informational ``GET /`` JSON shim
+    # that would shadow the SPA at the root. In the container the SPA must own
+    # "/", so drop that single route before installing the fallback. Its
+    # ``/api/*`` routes are untouched.
+    from starlette.routing import Route as _Route
+
+    app.router.routes = [
+        _r
+        for _r in app.router.routes
+        if not (isinstance(_r, _Route) and _r.path == "/" and "GET" in (_r.methods or set()))
+    ]
+
+    _assets_dir = _CLIENT_DIST / "assets"
+    if _assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=str(_assets_dir)), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def _serve_spa(full_path: str):
+        """Serve a built static asset when it exists, else the SPA shell."""
+        if full_path.startswith(_NON_SPA_PREFIXES):
+            return JSONResponse(status_code=404, content={"detail": "Not Found"})
+        candidate = (_CLIENT_DIST / full_path).resolve()
+        # is_file() + containment check guard against ``..`` path traversal
+        # escaping the build directory.
+        if full_path and candidate.is_file() and _CLIENT_DIST in candidate.parents:
+            return FileResponse(str(candidate))
+        return FileResponse(str(_CLIENT_DIST / "index.html"))
+
+    logger.info("Serving built client from %s", _CLIENT_DIST)
 
 
 if __name__ == "__main__":

@@ -64,6 +64,7 @@
   "scripts": {
     "start": "python -m cli start",
     "dev": "python -m cli dev",
+    "serve": "python -m cli serve",
     "start:temporal": "cross-env TEMPORAL_ENABLED=true python -m cli start",
     "client:start": "cd client && npm run start",
     "python:start": "cd server && uv run uvicorn main:app --host 127.0.0.1 --port 3010 --log-level warning",
@@ -81,8 +82,7 @@
     "test:nodes": "cd server && uv run pytest tests/nodes/ -v --cov=services.handlers --cov-report=term-missing",
     "docs:nodes": "python -m cli docs nodes",
     "docs:nodes:check": "python -m cli docs nodes --check",
-    "deploy": "bash deploy.sh",
-    "deploy:gcp": "bash deploy.sh",
+    "deploy": "python -m cli deploy",
     "daemon:start": "python -m cli daemon start",
     "daemon:stop": "python -m cli daemon stop",
     "daemon:status": "python -m cli daemon status",

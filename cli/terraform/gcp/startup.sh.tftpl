@@ -1,0 +1,65 @@
+#!/bin/bash
+# MachinaOs VM startup script (rendered by Terraform `templatefile`).
+# Installs the toolchain, installs MachinaOs (npm), writes the login-gate env
+# file, and runs it under systemd via `machina serve`.
+#
+# NOTE on syntax: Terraform renders this file with templatefile(), so any
+# dollar-brace sequence is a Terraform interpolation. Bash variables are
+# therefore written UNBRACED ($TOKEN, $MACHINA_BIN) so Terraform leaves them
+# alone. `set -x` is intentionally NOT used so secrets in the env file are
+# never echoed to the serial console.
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+
+echo "[machinaos] installing toolchain..."
+apt-get update
+apt-get install -y curl ca-certificates git build-essential pkg-config libffi-dev libssl-dev
+curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+apt-get install -y nodejs
+corepack enable || true
+# uv on a stable system path (machina build uses it to sync the Python venv).
+curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
+
+echo "[machinaos] installing MachinaOs package..."
+%{ if source_mode == "local" ~}
+TOKEN=$(curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" | python3 -c 'import sys, json; print(json.load(sys.stdin)["access_token"])')
+curl -fsS -H "Authorization: Bearer $TOKEN" -o /tmp/machinaos.tgz "https://storage.googleapis.com/storage/v1/b/${bucket}/o/${object}?alt=media"
+npm install -g /tmp/machinaos.tgz
+%{ else ~}
+npm install -g machinaos@${version}
+%{ endif ~}
+
+echo "[machinaos] writing login-gate env..."
+mkdir -p /etc/machinaos
+cat > /etc/machinaos/machina.env <<'MACHINA_ENV_EOF'
+%{ for k, v in app_env ~}
+${k}=${v}
+%{ endfor ~}
+MACHINA_ENV_EOF
+chmod 600 /etc/machinaos/machina.env
+
+mkdir -p /var/lib/machinaos
+
+echo "[machinaos] installing systemd service..."
+MACHINA_BIN=$(command -v machina)
+cat > /etc/systemd/system/machinaos.service <<SERVICE_EOF
+[Unit]
+Description=MachinaOs (single login-gated instance)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/machinaos/machina.env
+ExecStart=$MACHINA_BIN serve
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target
+SERVICE_EOF
+
+systemctl daemon-reload
+systemctl enable --now machinaos
+echo "[machinaos] done."

@@ -24,8 +24,10 @@ PUBLIC_PATHS = frozenset(
     ]
 )
 
-# Path prefixes that are public
-PUBLIC_PREFIXES = ("/webhook/",)
+# Path prefixes that are public. ``/mcp/`` is the CLI-agent MCP server, which
+# enforces its own per-batch bearer-token auth (cookies don't apply to it), so
+# it bypasses this cookie gate.
+PUBLIC_PREFIXES = ("/webhook/", "/mcp/")
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -36,6 +38,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # Allow public paths
         if self._is_public_path(path):
+            return await call_next(request)
+
+        # Static SPA shell, built assets, and client-side routes carry no
+        # secrets and must load BEFORE login (the SPA renders the login page
+        # itself). When the container serves the client on a single port, any
+        # GET/HEAD that is not an API or WebSocket call is the SPA — treat it
+        # as public. The protected surface (/api/*, /ws/*) stays gated below.
+        if request.method in ("GET", "HEAD") and not path.startswith(("/api/", "/ws/")):
             return await call_next(request)
 
         # Get settings
