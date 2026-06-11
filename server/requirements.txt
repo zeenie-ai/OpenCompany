@@ -98,7 +98,7 @@ distro==1.9.0
     #   portkey-ai
 dnspython==2.8.0
     # via email-validator
-docstring-parser==0.17.0
+docstring-parser==0.18.0
     # via anthropic
 email-validator==2.3.0
     # via machinaos-server
