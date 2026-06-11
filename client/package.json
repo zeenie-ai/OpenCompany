@@ -89,11 +89,11 @@
     "@testing-library/user-event": "^14.6.1",
     "@typescript-eslint/parser": "^8.59.2",
     "@typescript/native-preview": "7.0.0-dev.20260504.1",
-    "@vitest/coverage-v8": "^3.0.0",
+    "@vitest/coverage-v8": "^4.1.8",
     "babel-plugin-react-compiler": "19.1.0-rc.3",
     "jsdom": "^25.0.1",
     "rollup-plugin-visualizer": "^7.0.1",
     "typescript-eslint": "^8.59.2",
-    "vitest": "^3.0.0"
+    "vitest": "^4.1.8"
   }
 }
