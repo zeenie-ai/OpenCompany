@@ -42,7 +42,9 @@ dependencies = [
 
     # Auth
     "bcrypt>=4.2.0",
-    "python-jose[cryptography]>=3.3.0",
+    # pyjwt replaced python-jose (2026-06): python-jose drags in python-ecdsa,
+    # which has an unpatchable Minerva timing-attack advisory (GHSA-wj6h-64fc-37mp).
+    "pyjwt>=2.13.0",
     "email-validator>=2.0.0",
 
     # Credential Encryption

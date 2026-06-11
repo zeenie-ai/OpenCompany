@@ -4,7 +4,8 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any
 
-from jose import jwt, JWTError
+import jwt
+from jwt import PyJWTError
 from sqlmodel import select
 
 from core.config import Settings
@@ -149,7 +150,7 @@ class UserAuthService:
         try:
             payload = jwt.decode(token, self.settings.jwt_secret_key, algorithms=[self._algorithm])
             return payload
-        except JWTError as e:
+        except PyJWTError as e:
             logger.debug(f"Token verification failed: {e}")
             return None
 
