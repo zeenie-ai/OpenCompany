@@ -161,12 +161,16 @@ PYTHON_BACKEND_PORT=3011
 ```
 
 ### Python dependencies fail
-Create a virtual environment:
+The server is uv-managed — prefer `uv sync` from `server/` (creates `server/.venv` against `uv.lock`). The pip fallback works too:
 ```bash
 cd server
 python -m venv venv
 source venv/bin/activate  # or venv\Scripts\activate on Windows
 pip install -r requirements.txt
+```
+`server/requirements.txt` is an exact-pin export of the lock — regenerate after dependency changes with:
+```bash
+uv export --frozen --no-emit-project --no-hashes --no-dev -o requirements.txt
 ```
 
 ### Database issues
