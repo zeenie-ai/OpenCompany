@@ -52,7 +52,7 @@ const SquareNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectab
 
   // Minimum glow duration state - keeps glow visible for at least 500ms
   const [isGlowing, setIsGlowing] = useState(false);
-  const glowTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const glowTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Track when execution starts to ensure minimum glow duration
   useEffect(() => {

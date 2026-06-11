@@ -38,7 +38,7 @@ const generateRequestId = (): string => {
 interface PendingRequest {
   resolve: (value: any) => void;
   reject: (reason: any) => void;
-  timeout: NodeJS.Timeout | null;  // null for no timeout (trigger nodes)
+  timeout: ReturnType<typeof setTimeout> | null;  // null for no timeout (trigger nodes)
 }
 
 // Queued send tracking (for replay after reconnect)
@@ -517,7 +517,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // type tightens to the library's class so any feature-specific calls
   // (`shouldReconnect`, `reconnect()`) type-check.
   const wsRef = useRef<ReconnectingWebSocket | null>(null);
-  const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pingIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRequestsRef = useRef<Map<string, PendingRequest>>(new Map());
   // Generic broadcast subscribers ({type -> Set<handler>}) for events
   // surfaced via send_custom_event on the backend. Lets new features
@@ -1395,7 +1395,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         continue;
       }
       const requestId = generateRequestId();
-      let timeout: NodeJS.Timeout | null = null;
+      let timeout: ReturnType<typeof setTimeout> | null = null;
       if (queued.timeoutMs > 0) {
         // Reset the timeout budget on replay so caller's perspective
         // remains "now"; queue-side timer was already aborted above.
@@ -1880,7 +1880,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // FAST PATH: socket open — send immediately.
       if (wsRef.current?.readyState === ReconnectingWebSocket.OPEN) {
         const requestId = generateRequestId();
-        let timeout: NodeJS.Timeout | null = null;
+        let timeout: ReturnType<typeof setTimeout> | null = null;
         if (effectiveTimeout > 0) {
           timeout = setTimeout(() => {
             pendingRequestsRef.current.delete(requestId);
