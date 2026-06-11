@@ -128,7 +128,12 @@ def _fetch_cli_sync() -> Path:
         path=_cache_dir(),
         fname=fname,
         processor=processor,
-        progressbar=True,
+        # requests' timeout is per-socket-read, not total download time —
+        # only a 300s zero-byte stall aborts, so slow links can finish.
+        # pooch's default is 30s, which killed npm installs on slow/WSL
+        # links. progressbar must live on the downloader: retrieve()
+        # ignores its own progressbar kwarg when downloader= is explicit.
+        downloader=pooch.HTTPDownloader(timeout=300, progressbar=True),
     )
 
     target = "temporal.exe" if is_windows else "temporal"

@@ -242,7 +242,15 @@ try {
   // cache hit. Idempotent on re-install (pooch cache).
   step++;
   console.log(`[${step}/${totalSteps}] Installing Temporal binaries...`);
-  run('uv run python -m services.temporal._install', serverDir, 600000);
+  // Non-fatal: TemporalServerRuntime._pre_spawn() re-runs this download
+  // lazily on first `machina start` — a failed fetch must never fail
+  // `npm install`.
+  try {
+    run('uv run python -m services.temporal._install', serverDir, 600000);
+  } catch (err) {
+    console.log(`  Warning: Temporal CLI download failed (non-fatal): ${err.message}`);
+    console.log('  It will be fetched automatically on first `machina start`.');
+  }
 
   // WhatsApp RPC is now an npm dependency - binary downloaded via postinstall
   console.log('');
