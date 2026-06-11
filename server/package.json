@@ -11,7 +11,7 @@
     "@react-three/fiber": "^9.6.1",
     "clsx": "^2.1.1",
     "express": "^5.2.1",
-    "morgan": "^1.10.1",
+    "morgan": "^1.11.0",
     "tailwind-merge": "^3.5.0",
     "three": "^0.184.0"
   },
