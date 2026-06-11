@@ -20,13 +20,16 @@ def test_targets_list_is_stable():
     ]
 
 
-def test_machina_keep_preserves_workflows_and_deploy_state():
-    """``workflows/`` (shipped example seeds) and ``deploy/`` (``machina
+def test_machina_keep_preserves_workflows_deploy_and_packages():
+    """``workflows/`` (shipped example seeds), ``deploy/`` (``machina
     deploy``'s Terraform working dirs + state for LIVE cloud resources —
     wiping it orphans the VM/firewall; only ``deploy destroy`` removes it)
-    live under ``.machina/``; ``clean`` must never wipe either. Pin the
+    and ``packages/`` (MachinaOs-managed binaries: Temporal CLI ~114 MB,
+    Stripe CLI, shared npm tree — re-fetchable but expensive; wiping it
+    forced a full Temporal re-download on every clean+build cycle) live
+    under ``.machina/``; ``clean`` must never wipe any of them. Pin the
     keep list so accidental additions/removals surface in review."""
-    assert clean._MACHINA_KEEP == frozenset({"workflows", "deploy"})
+    assert clean._MACHINA_KEEP == frozenset({"workflows", "deploy", "packages"})
 
 
 def test_rmtree_with_retry_handles_oserror(tmp_path: Path):

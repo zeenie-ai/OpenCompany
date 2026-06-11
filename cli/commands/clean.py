@@ -48,10 +48,15 @@ _TARGETS = [
 # holds ``machina deploy``'s Terraform working dirs + state files:
 # deleting state for LIVE cloud resources orphans the VM/firewall
 # (``machina deploy destroy`` could no longer find them) -- only
-# ``deploy destroy`` removes that tree. Anything else under
-# ``.machina/`` (claude state, workspaces, credentials.db, ...) is
-# transient runtime state and is fair game.
-_MACHINA_KEEP = frozenset({"workflows", "deploy"})
+# ``deploy destroy`` removes that tree. ``packages/`` holds the
+# MachinaOs-managed binaries (Temporal CLI ~114 MB, Stripe CLI, the
+# shared npm tree with claude/agent-browser/edgymeow): all of it is
+# re-fetchable but expensive -- wiping it forced a full Temporal
+# re-download on every clean+build cycle, which hard-fails ``machina
+# build`` on slow links. Anything else under ``.machina/`` (claude
+# state, workspaces, credentials.db, ...) is transient runtime state
+# and is fair game.
+_MACHINA_KEEP = frozenset({"workflows", "deploy", "packages"})
 
 
 def _rmtree_with_retry(path: Path, *, attempts: int = 3, delay: float = 0.1) -> bool:
