@@ -31,7 +31,12 @@ class FileReadNode(ActionNode):
     group = ("filesystem", "tool")
     description = "Read file contents with line numbers and pagination"
     tool_name = "file_read"
-    tool_description = "Read file contents with pagination. Returns line-numbered text."
+    tool_description = (
+        "Read file contents with pagination. Returns line-numbered text. "
+        "Paths resolve inside the per-workflow workspace — use "
+        "workspace-relative paths (e.g. 'reports/data.csv'); '..' is not "
+        "allowed."
+    )
     component_kind = "square"
     handles = (
         {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},

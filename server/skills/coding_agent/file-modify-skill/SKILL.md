@@ -13,6 +13,8 @@ metadata:
 
 Write new files or edit existing files with exact string replacement. Uses deepagents filesystem backend.
 
+**Path sandbox:** all paths resolve inside the per-workflow workspace root. Use workspace-relative paths (e.g. `reports/summary.md`); `..` and `~` segments are rejected, and absolute paths are remapped into the workspace.
+
 ## file_modify Tool
 
 ### Schema Fields

@@ -13,6 +13,8 @@ metadata:
 
 Read file contents with line-numbered output and pagination. Uses deepagents filesystem backend.
 
+**Path sandbox:** all paths resolve inside the per-workflow workspace root. Use workspace-relative paths (e.g. `reports/data.csv`); `..` and `~` segments are rejected, and absolute paths are remapped into the workspace. Use `fs_search` with `mode: "ls"` to discover what exists.
+
 ## file_read Tool
 
 ### Schema Fields

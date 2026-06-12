@@ -32,7 +32,10 @@ class FsSearchNode(ActionNode):
     description = "Search the filesystem (ls, glob, grep)"
     tool_name = "fs_search"
     tool_description = (
-        "Search the filesystem. Modes: ls (list directory), glob (pattern match files), grep (search file contents for text)."
+        "Search the filesystem. Modes: ls (list directory), glob (pattern "
+        "match files), grep (search file contents for text). Paths resolve "
+        "inside the per-workflow workspace — use workspace-relative paths; "
+        "'..' is not allowed."
     )
     component_kind = "square"
     handles = (

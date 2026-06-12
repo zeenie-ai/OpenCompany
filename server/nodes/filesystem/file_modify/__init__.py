@@ -39,7 +39,10 @@ class FileModifyNode(ActionNode):
     description = "Write new files or edit existing files"
     tool_name = "file_modify"
     tool_description = (
-        "Write a new file or edit an existing file with string replacement. Operations: write (create/overwrite), edit (find and replace)."
+        "Write a new file or edit an existing file with string replacement. "
+        "Operations: write (create/overwrite), edit (find and replace). "
+        "Paths resolve inside the per-workflow workspace — use "
+        "workspace-relative paths; '..' is not allowed."
     )
     component_kind = "square"
     handles = (

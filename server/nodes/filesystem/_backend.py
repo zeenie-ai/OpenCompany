@@ -41,7 +41,14 @@ def normalize_virtual_path(path: str) -> str:
     drives, UNC, and POSIX absolutes uniformly on any host OS. Strip
     the anchor here, then delegate to :func:`validate_path` for traversal
     rejection (``..``, ``~``) and canonical normalisation.
+
+    A rejected path is an LLM/user-correctable input error, not a server
+    bug — it surfaces as :class:`NodeUserError` (single WARN line, no
+    traceback) with guidance the LLM can act on, instead of leaking
+    deepagents' bare ``ValueError`` through the generic-exception path.
     """
+    from services.plugin import NodeUserError
+
     if not path:
         return path
     pw = PureWindowsPath(path)
@@ -49,7 +56,15 @@ def normalize_virtual_path(path: str) -> str:
         rel = "/" + "/".join(pw.parts[1:]) if len(pw.parts) > 1 else "/"
     else:
         rel = path.replace("\\", "/")
-    return validate_path(rel)
+    try:
+        return validate_path(rel)
+    except ValueError as e:
+        raise NodeUserError(
+            f"{e}. The filesystem is sandboxed to the per-workflow workspace "
+            "root — use a path relative to the workspace (e.g. "
+            "'reports/data.csv'); '..' and '~' segments are rejected. To see "
+            "what exists, use fs_search with mode='ls'."
+        ) from e
 
 
 def _find_nu() -> Optional[str]:

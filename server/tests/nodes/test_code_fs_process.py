@@ -349,6 +349,31 @@ class TestFileRead:
         # backend is even called, so the error comes from deepagents'
         # ``validate_path`` helper, not the (unreached) FileNotFoundError.
         assert "path traversal not allowed" in result["error"].lower()
+        # LLM-correctable input error: NodeUserError path (single WARN,
+        # no traceback) carrying actionable sandbox guidance — not the
+        # generic-exception path that leaks deepagents' bare ValueError.
+        assert result.get("error_type") == "NodeUserError"
+        assert "workspace" in result["error"].lower()
+
+    def test_normalize_virtual_path_traversal_raises_user_error(self):
+        """Central contract on the shared helper — all three filesystem
+        plugins (fileRead / fileModify / fsSearch) call it outside their
+        operation try-blocks, so the conversion to NodeUserError must
+        happen inside the helper itself."""
+        import pytest
+
+        from nodes.filesystem._backend import normalize_virtual_path
+        from services.plugin import NodeUserError
+
+        with pytest.raises(NodeUserError) as excinfo:
+            normalize_virtual_path("../../package.json")
+        msg = str(excinfo.value).lower()
+        assert "path traversal not allowed" in msg
+        assert "workspace" in msg
+
+        # Valid flavours still normalise (no raise).
+        assert normalize_virtual_path("reports/data.csv") == "/reports/data.csv"
+        assert normalize_virtual_path("C:\\tmp\\x.txt") == "/tmp/x.txt"
 
 
 # ============================================================================
