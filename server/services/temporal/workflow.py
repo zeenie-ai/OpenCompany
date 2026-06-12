@@ -197,6 +197,13 @@ class MachinaWorkflow:
         # (one-off Runs without a saved DB row).
         workflow_slug = workflow_data.get("workflow_slug") or workflow_id
         tenant_id = workflow_data.get("tenant_id")
+        # Stable per-run execution id. The executor passes the same value
+        # it uses as this workflow's Temporal id (``<slug>-<uuid8>``), so
+        # the fallback to ``workflow.info().workflow_id`` is identical by
+        # construction. Threaded into every node activity context so
+        # session-keyed nodes (browser) share one instance per run instead
+        # of minting a fresh uuid per call (node_executor.py fallback).
+        execution_id = workflow_data.get("execution_id") or workflow.info().workflow_id
 
         workflow.logger.info(f"Starting workflow orchestration: {len(nodes)} nodes, {len(edges)} edges")
 
@@ -308,6 +315,7 @@ class MachinaWorkflow:
                     "workflow_slug": workflow_slug,
                     "tenant_id": tenant_id,
                     "session_id": session_id,
+                    "execution_id": execution_id,
                     "nodes": nodes,  # Full list for tool/memory detection
                     "edges": edges,  # Full list for tool/memory detection
                     # Include pre-executed info if applicable

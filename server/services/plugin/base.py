@@ -752,6 +752,7 @@ class BaseNode:
                     nodes=context.get("nodes", []),
                     edges=context.get("edges", []),
                     session_id=context.get("session_id", "default"),
+                    execution_id=context.get("execution_id"),
                     workflow_id=workflow_id,
                     outputs=context.get("inputs", {}),
                     extras=extras or None,

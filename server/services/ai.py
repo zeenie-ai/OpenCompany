@@ -1803,6 +1803,9 @@ class AIService:
                     config["nodes"] = context.get("nodes", [])
                     config["edges"] = context.get("edges", [])
                     config["workspace_dir"] = context.get("workspace_dir", "")
+                    # Stable per-run id so session-keyed tools (browser)
+                    # reuse one instance across the agent loop.
+                    config["execution_id"] = context.get("execution_id")
 
                 try:
                     result = await execute_tool(tool_name, tool_args, config)
@@ -2348,6 +2351,9 @@ class AIService:
                         config["nodes"] = context.get("nodes", [])
                         config["edges"] = context.get("edges", [])
                         config["workspace_dir"] = context.get("workspace_dir", "")
+                        # Stable per-run id so session-keyed tools (browser)
+                        # reuse one instance across the agent loop.
+                        config["execution_id"] = context.get("execution_id")
 
                     try:
                         result = await execute_tool(tool_name, tool_args, config)

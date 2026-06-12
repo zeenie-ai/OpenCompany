@@ -163,6 +163,14 @@ Browser detection uses `shutil.which()` on Linux/macOS (PATH lookup) and the Win
 
 The browser daemon auto-starts on first use and persists between commands (for session reuse). It is automatically shut down when MachinaOs stops -- no manual cleanup needed.
 
+### Sessions
+
+Each distinct session name maps to ONE browser instance. When the `session` field is left empty (the normal case), it auto-derives as `machina_<execution_id>` -- stable for the whole workflow/agent run, including delegated sub-agents -- so every browser call in a run reuses the same browser window and keeps its cookies, tabs, and login state.
+
+- **Leave `session` empty.** Do not invent a session name per call; the auto-derived session already chains your calls onto one browser.
+- Set `session` explicitly only to persist state across separate runs (e.g. `my_login_session`) or to isolate parallel flows within one run.
+- Concurrent instances are capped by `BROWSER_MAX_INSTANCES` (default 3); when a new session would exceed the cap, the oldest active session is closed first. Idle browsers auto-close after `BROWSER_IDLE_TIMEOUT_MS` (default 10 minutes) without commands.
+
 ## Stealth / Anti-Detection
 
 These settings reduce bot detection. Configure them in the node's Advanced section, not as tool arguments.

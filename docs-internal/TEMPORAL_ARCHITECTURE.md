@@ -89,6 +89,10 @@ context = {
     "workflow_id": "6868cbbf4a36409fbd07ca24999f8b66",  # 32-hex UUID, stable across rename
     "workflow_slug": "AI_Assistant_1",                  # Human-readable, used for Temporal child IDs
     "session_id": "session-xyz",
+    "execution_id": "AI_Assistant_1-a1b2c3d4",  # Stable per run (= the MachinaWorkflow Temporal id);
+                                                # threaded into AgentWorkflow tool payloads + delegate
+                                                # children so session-keyed nodes (browser) reuse one
+                                                # instance per run instead of minting a uuid per call
     "nodes": [...],  # Full list for tool/memory detection
     "edges": [...],  # Full list for tool/memory detection
 }

@@ -3,8 +3,8 @@
 | Field | Value |
 |------|-------|
 | **Category** | web_automation / tool (dual-purpose) |
-| **Backend handler** | [`server/services/handlers/browser.py::handle_browser`](../../../server/services/handlers/browser.py) |
-| **Service** | [`server/services/browser_service.py::BrowserService`](../../../server/services/browser_service.py) |
+| **Backend handler** | [`server/nodes/browser/browser/__init__.py::BrowserNode`](../../../server/nodes/browser/browser/__init__.py) |
+| **Service** | [`server/nodes/browser/_service.py::BrowserService`](../../../server/nodes/browser/_service.py) |
 | **Tests** | [`server/tests/nodes/test_web_automation.py`](../../../server/tests/nodes/test_web_automation.py) |
 | **Skill (if any)** | [`server/skills/web_agent/browser-skill/SKILL.md`](../../../server/skills/web_agent/browser-skill/SKILL.md) |
 | **Dual-purpose tool** | yes - tool name `browser` |
@@ -20,8 +20,22 @@ element refs returned by snapshot -> `snapshot` again to verify.
 
 Session state (cookies, open tabs, auth) persists across sequential operations
 that share the same `session` value. If no session is provided the handler
-derives `machina_<execution_id>` from the current execution context, so every
-workflow run gets its own isolated browser.
+derives `machina_<execution_id>` from the current execution context. The
+execution_id is stable for the whole run — threaded through MachinaWorkflow
+node contexts, AgentWorkflow tool payloads (deterministic
+`workflow.info().run_id` fallback), the legacy in-process tool dispatch, and
+delegated child agents — so every browser call in one workflow/agent run
+(including delegated sub-agents) reuses ONE browser instance, while separate
+runs stay isolated.
+
+Concurrent instances are capped: each distinct `--session` name maps to one
+browser instance, and `BrowserService` gates new sessions against
+agent-browser's own registry (`session list --json`), closing the oldest
+listed session via per-session `close` when `BROWSER_MAX_INSTANCES`
+(default 3) would be exceeded. Idle browsers self-reap via
+`AGENT_BROWSER_IDLE_TIMEOUT_MS`, injected into every spawn from
+`BROWSER_IDLE_TIMEOUT_MS` (default 600000 ms; 0 disables). Canonical values
+for both knobs live in `.env.template`.
 
 ## Inputs (handles)
 
@@ -129,8 +143,17 @@ flowchart TD
 
 - **Service missing**: `get_browser_service()` returns `None` when `npx` is not on
   PATH -> immediate `agent-browser not installed` error envelope.
-- **Session resolution**: empty `session` -> `machina_<execution_id>`. Only the
-  stripped value is considered empty; whitespace triggers the fallback.
+- **Session resolution**: empty `session` -> `machina_<execution_id>` via the
+  typed `ctx.execution_id` accessor (handles present-but-None on the agent
+  tool-dispatch path). Only the stripped value is considered empty; whitespace
+  triggers the fallback. The resolved session is logged in the `[Browser]`
+  info line.
+- **Instance cap**: before each command, `_enforce_instance_cap` admits the
+  session (once per process, `_gated_sessions` fast-path). Unknown sessions
+  trigger one `session list --json` probe; if admitting would exceed
+  `BROWSER_MAX_INSTANCES`, the oldest listed sessions are closed first
+  (`close --session <name>`). The probe fails open — gating never blocks an
+  actual browser operation.
 - **Browser upgrade**: `""` or `bundled` both normalised to `chrome`. Users who
   specifically want the bundled Chromium must pick `bundled_explicit`.
 - **Executable resolution**: `shutil.which()` against Linux/macOS PATH names,
@@ -170,7 +193,11 @@ flowchart TD
 - **Services**: `BrowserService` singleton; `npx` on PATH; `agent-browser`
   pinned in the project's `package.json` and installed under `node_modules`.
 - **Python packages**: `psutil` (for process-tree kill).
-- **Environment variables**: none.
+- **Environment variables**: `BROWSER_MAX_INSTANCES` (concurrent session cap,
+  default 3), `BROWSER_IDLE_TIMEOUT_MS` (daemon idle auto-shutdown in ms,
+  default 600000, 0 disables) — canonical values in `.env.template`, mirrored
+  by `Settings` defaults. `AGENT_BROWSER_IDLE_TIMEOUT_MS` is injected into
+  every agent-browser spawn from the latter.
 
 ## Edge cases & known limits
 

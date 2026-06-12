@@ -190,6 +190,13 @@ class AgentWorkflow:
             start_to_close_timeout=PERSIST_TURN_TIMEOUT * 2,  # 60s default
             retry_policy=AGENT_ACTIVITY_RETRY,
         )
+        # Stable per-run execution id, forwarded into every tool-call
+        # activity so session-keyed nodes (browser) reuse one instance
+        # across iterations instead of minting a fresh uuid per call
+        # (node_executor.py fallback). Delegation children inherit it via
+        # the ``child_context`` spread below. ``workflow.info().run_id``
+        # is deterministic — safe inside workflow code.
+        execution_id = str(context.get("execution_id") or "") or workflow.info().run_id[:8]
         # ---- Build initial message list ---------------------------------
         # Workflow state is JSON dicts in LangChain's canonical shape
         # ({"type": "<role>", "data": {"content": "...", ...}}) so the
@@ -427,6 +434,7 @@ class AgentWorkflow:
                     "inputs": {},
                     "workflow_id": payload.get("workflow_id"),
                     "session_id": payload.get("session_id", "default"),
+                    "execution_id": execution_id,
                     "nodes": child_nodes,
                     "edges": child_edges,
                     # Surface the auto-rebind toggle into the tool's ctx

@@ -1395,7 +1395,7 @@ See **[Email Service](./docs-internal/email_service.md)** for the full architect
 ### Browser Nodes (1 node)
 Interactive browser automation via the [agent-browser](https://www.npmjs.com/package/agent-browser) CLI binary. Wraps a persistent headless Chromium browser with an accessibility-tree-based interaction model designed for AI agents.
 
-- **browser**: **Dual-purpose node** - Interactive browser automation. Works as workflow node OR AI Agent tool. Group: `['browser', 'tool']`. Session persistence across chained operations via `session` parameter (auto-derived from execution_id as `machina_{execution_id}` if not specified). Operations:
+- **browser**: **Dual-purpose node** - Interactive browser automation. Works as workflow node OR AI Agent tool. Group: `['browser', 'tool']`. Session persistence across chained operations via `session` parameter (auto-derived as `machina_{execution_id}` if not specified; execution_id is stable per workflow/agent run — threaded through MachinaWorkflow node contexts, AgentWorkflow tool payloads, the legacy tool dispatch, and delegated child agents — so every browser call in one run, including delegated sub-agents, reuses ONE browser instance while separate runs stay isolated). **Instance cap**: each distinct session = one browser instance; `BrowserService` gates new sessions against agent-browser's own registry (`session list --json`) and closes the oldest via per-session `close` when `BROWSER_MAX_INSTANCES` (default 3) would be exceeded; idle browsers self-reap via `AGENT_BROWSER_IDLE_TIMEOUT_MS` injected from `BROWSER_IDLE_TIMEOUT_MS` (default 10 min). Canonical values for both knobs live in `.env.template`. Operations:
   - `navigate`: Open a URL
   - `click`: Click an element (CSS selector or `@eN` ref from snapshot)
   - `type`: Type text keystroke-by-keystroke
@@ -1416,13 +1416,13 @@ Interactive browser automation via the [agent-browser](https://www.npmjs.com/pac
 | File | Description |
 |------|-------------|
 | `client/src/assets/icons/browser/` | Chrome browser icon (from @ant-design/icons-svg) |
-| `server/services/browser_service.py` | BrowserService singleton -- thin subprocess wrapper, reads first JSON line from stdout |
-| `server/services/handlers/browser.py` | Handler dispatcher mapping operation+params to agent-browser CLI args |
-| `server/skills/web_agent/browser-skill/SKILL.md` | AI agent skill documenting snapshot-act-snapshot loop |
+| `server/nodes/browser/_service.py` | BrowserService singleton -- thin subprocess wrapper, reads first JSON line from stdout; instance-cap gate via agent-browser's session registry |
+| `server/nodes/browser/browser/__init__.py` | BrowserNode plugin mapping operation+params to agent-browser CLI args; derives the per-run session |
+| `server/skills/web_agent/browser-skill/SKILL.md` | AI agent skill documenting snapshot-act-snapshot loop + session semantics |
 
 **Installation Requirement:** `agent-browser` is MachinaOs-managed (NOT a `package.json` dep). On first browser-node invocation, [`server/nodes/browser/_install.py::agent_browser_binary_path`](../server/nodes/browser/_install.py) runs `npm install agent-browser@latest --prefix <packages_dir()>` then `<bin> install` for the Chromium runtime. Same shape as [`claude_binary_path`](../server/nodes/agent/claude_code_agent/_oauth.py) (the precedent) — both land in the single shared npm tree at [`core.paths.packages_dir()`](../server/core/paths.py) = `<DATA_DIR>/packages/` (= `~/.machina/packages/` by default), resolving to `~/.machina/packages/node_modules/.bin/agent-browser[.cmd]`. Pre-fix `packages_dir()` routed through `platformdirs.user_cache_path` (`~/.cache/MachinaOs/`, `~/Library/Caches/MachinaOs/`, `%LOCALAPPDATA%\MachinaOs\Cache\`); it now sits under DATA_DIR with everything else MachinaOs owns.
 
-**Implementation Detail:** `browser_service.py` invokes the resolved binary directly via `subprocess.Popen([binary, ...args], shell=False)`. Reads only the first JSON output line from agent-browser (the daemon holds stdout open), truncates at 100KB, and kills the process tree via `psutil`. `shell=False` with list argv avoids BatBadBut (CVE-2024-1874) on Windows; `npm` itself is located via `shutil.which("npm")` which honours `PATHEXT` for the `.cmd` shim.
+**Implementation Detail:** `nodes/browser/_service.py` invokes the resolved binary directly via `subprocess.Popen([binary, ...args], shell=False)`. Reads only the first JSON output line from agent-browser (the daemon holds stdout open), truncates at 100KB, and kills the process tree via `psutil` (the Rust daemon detaches and persists between commands). `shell=False` with list argv avoids BatBadBut (CVE-2024-1874) on Windows; `npm` itself is located via `shutil.which("npm")` which honours `PATHEXT` for the `.cmd` shim. The `[Browser]` info log line carries `session=` so per-run session reuse is visible in the operator log.
 
 ---
 

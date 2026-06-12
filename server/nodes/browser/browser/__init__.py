@@ -360,13 +360,15 @@ class BrowserNode(ActionNode):
             )
 
         op = params.operation
-        session = params.session.strip() or f"machina_{ctx.raw.get('execution_id', 'default')}"
+        # Typed accessor (not ctx.raw.get) — the key can be present-but-None
+        # on the agent tool-dispatch path; `or` covers both missing and None.
+        session = params.session.strip() or f"machina_{ctx.execution_id or 'default'}"
         timeout = params.timeout
         browser_sel = params.browser or "chrome"
         if browser_sel == "bundled":
             browser_sel = "chrome"
         executable_path = _resolve_browser(browser_sel, params.executable_path.strip())
-        logger.info("[Browser] browser=%s executable=%s", browser_sel, executable_path)
+        logger.info("[Browser] session=%s browser=%s executable=%s", session, browser_sel, executable_path)
 
         run_kw = dict(
             headed=params.headed,

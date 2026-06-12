@@ -151,6 +151,10 @@ async def _dispatch_tool(tool_name: str, tool_args: Dict[str, Any], config: Dict
         "edges": config.get("edges", []),
         "workflow_id": config.get("workflow_id"),
         "parent_node_id": config.get("parent_node_id"),
+        # Stable per-run id so session-keyed tools (browser) reuse one
+        # instance across the agent loop instead of falling back to a
+        # shared default session.
+        "execution_id": config.get("execution_id"),
     }
 
     logger.info("[Tool] Executing '%s' (node_type=%s, workspace=%s)", tool_name, node_type, context["workspace_dir"])
@@ -390,8 +394,17 @@ async def _execute_delegated_agent(args: Dict[str, Any], config: Dict[str, Any])
     child_params.pop("systemMessage", None)
     child_params["prompt"] = task_context if task_context else task_description
 
-    # Create execution context for child agent
-    child_context = {"nodes": nodes, "edges": edges, "workflow_id": workflow_id, "outputs": {}, "parent_task_id": task_id}
+    # Create execution context for child agent. Forward the parent's
+    # execution_id so session-keyed tools (browser) used by the child
+    # share the parent run's instance.
+    child_context = {
+        "nodes": nodes,
+        "edges": edges,
+        "workflow_id": workflow_id,
+        "outputs": {},
+        "parent_task_id": task_id,
+        "execution_id": config.get("execution_id"),
+    }
 
     broadcaster = get_status_broadcaster()
     agent_label = child_params.get("label", node_type)

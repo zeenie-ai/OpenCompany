@@ -93,6 +93,7 @@ class TemporalExecutor:
                     "session_id": session_id,
                     "workflow_id": workflow_id,
                     "workflow_slug": workflow_slug,
+                    "execution_id": execution_id,
                 },
                 id=execution_id,
                 task_queue=self.task_queue,

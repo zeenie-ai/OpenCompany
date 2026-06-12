@@ -241,6 +241,17 @@ class Settings(BaseSettings):
     # silently allows. Override to "0.0.0.0" for container deployments.
     whatsapp_bind_host: str = Field(default="localhost", env="WHATSAPP_BIND_HOST")
 
+    # Browser automation (agent-browser CLI). Canonical values live in
+    # .env.template (same pattern as COMPACTION_RATIO — the code default
+    # only mirrors the template for bare Settings() construction, e.g.
+    # pytest/CI without the CLI env layering). Each distinct session name
+    # maps to one Chrome instance; the cap closes the oldest session
+    # before a new one would exceed it. Idle timeout (ms) makes the
+    # agent-browser daemon shut down its browser after inactivity; 0
+    # disables.
+    browser_max_instances: int = Field(default=3, env="BROWSER_MAX_INSTANCES", ge=1, le=50)
+    browser_idle_timeout_ms: int = Field(default=600_000, env="BROWSER_IDLE_TIMEOUT_MS", ge=0)
+
     # Compaction Configuration. Threshold = model context_length ×
     # compaction_ratio. Per-user UserSettings row overrides at runtime.
     compaction_enabled: bool = Field(default=True, env="COMPACTION_ENABLED")

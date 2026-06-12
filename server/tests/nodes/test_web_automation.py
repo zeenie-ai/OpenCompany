@@ -99,6 +99,27 @@ class TestBrowser:
         assert args == ("snapshot", "-i")
         assert session.startswith("machina_")
 
+    async def test_session_stable_across_calls_in_one_run(self, harness):
+        # Two browser calls sharing one execution context (one agent run)
+        # must derive the SAME session -> same browser instance. Regression:
+        # the Temporal tool path minted a fresh execution_id per call, so
+        # every call spawned a new Chrome.
+        fake = _FakeBrowserService(canned={"success": True, "data": {}})
+        ctx = harness.build_context(execution_id="run1234")
+
+        with _patch_browser_service(fake):
+            r1 = await harness.execute(
+                "browser",
+                {"operation": "navigate", "url": "https://example.com"},
+                context=ctx,
+            )
+            r2 = await harness.execute("browser", {"operation": "snapshot"}, context=ctx)
+
+        harness.assert_envelope(r1, success=True)
+        harness.assert_envelope(r2, success=True)
+        sessions = [call[1] for call in fake.calls]
+        assert sessions == ["machina_run1234", "machina_run1234"]
+
     async def test_screenshot_with_jpeg_and_quality(self, harness):
         fake = _FakeBrowserService(canned={"success": True, "base64": "AAAA"})
 

@@ -306,6 +306,71 @@ class TestAutoRebindTools:
         )
 
 
+class TestExecutionIdPropagation:
+    """A stable per-run ``execution_id`` must flow into every tool-call
+    activity. Session-keyed nodes (browser) derive their session name
+    from it — without propagation, ``NodeExecutor.execute`` mints a
+    fresh uuid per call and every browser tool call spawns a NEW Chrome
+    instance instead of reusing the run's browser.
+
+    Source-introspection invariants — a live run needs a Temporal
+    WorkflowEnvironment, too heavy for unit tests (same rationale as
+    ``TestDelegationToolDispatch``).
+    """
+
+    def test_agent_workflow_tool_payload_carries_execution_id(self):
+        import inspect
+
+        from services.temporal.agent_workflow import AgentWorkflow
+
+        src = inspect.getsource(AgentWorkflow.run)
+        assert '"execution_id"' in src, (
+            "AgentWorkflow tool_payload must include execution_id so "
+            "session-keyed tools (browser) reuse one instance per run."
+        )
+        assert "workflow.info().run_id" in src, (
+            "AgentWorkflow must fall back to the deterministic "
+            "workflow.info().run_id when the input omits execution_id."
+        )
+
+    def test_as_activity_forwards_execution_id(self):
+        import inspect
+
+        from services.plugin.base import BaseNode
+
+        src = inspect.getsource(BaseNode.as_activity)
+        assert 'execution_id=context.get("execution_id")' in src, (
+            "BaseNode.as_activity must pass execution_id through to "
+            "workflow_service.execute_node — otherwise NodeExecutor "
+            "mints a fresh uuid per tool call."
+        )
+
+    def test_machina_workflow_threads_execution_id(self):
+        import inspect
+
+        from services.temporal.workflow import MachinaWorkflow
+
+        src = inspect.getsource(MachinaWorkflow.run)
+        assert '"execution_id"' in src, (
+            "MachinaWorkflow per-node context must carry execution_id."
+        )
+        assert "workflow.info().workflow_id" in src, (
+            "MachinaWorkflow must fall back to its own workflow id "
+            "(identical to the executor-minted execution_id by construction)."
+        )
+
+    def test_temporal_executor_passes_execution_id_in_input(self):
+        import inspect
+
+        from services.temporal.executor import TemporalExecutor
+
+        src = inspect.getsource(TemporalExecutor.execute_workflow)
+        assert '"execution_id": execution_id' in src, (
+            "TemporalExecutor must thread the minted execution_id into "
+            "the MachinaWorkflow input dict, not only the workflow id."
+        )
+
+
 class TestDelegationInvocationContract:
     """Regression: the delegated task must survive the child's config
     resolution. Pre-fix the parent remapped ``{task, context}`` into the
