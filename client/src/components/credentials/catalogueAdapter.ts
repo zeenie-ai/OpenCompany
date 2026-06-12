@@ -156,6 +156,7 @@ export function rehydrateProvider(entry: ServerProviderConfig): ProviderConfig {
   return {
     id: entry.id,
     name: entry.name,
+    vertexName: entry.vertex_display_name,
     category: entry.category,
     categoryLabel: entry.category_label,
     color: entry.color,

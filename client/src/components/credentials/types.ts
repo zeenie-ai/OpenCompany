@@ -84,6 +84,8 @@ export interface QrPairingDef {
 export interface ProviderConfig {
   id: string;
   name: string;
+  /** Display name shown instead of `name` while the key in the field is a Vertex / Agent Platform key (AQ. prefix). */
+  vertexName?: string;
   category: string;
   categoryLabel: string;
   /** Theme color key (resolved via theme.colors[color] at render). */

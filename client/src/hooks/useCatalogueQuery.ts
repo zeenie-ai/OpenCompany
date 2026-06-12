@@ -95,6 +95,8 @@ export interface ServerQrDef {
 export interface ServerProviderConfig {
   id: string;
   name: string;
+  /** Display name shown instead of `name` while the stored key is a Vertex / Agent Platform key (AQ. prefix). */
+  vertex_display_name?: string;
   category: string;
   category_label: string;
   color: string;

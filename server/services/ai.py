@@ -147,6 +147,7 @@ from services.llm.config import (
     resolve_max_tokens as native_resolve_max_tokens,
     resolve_temperature as native_resolve_temperature,
 )
+from services.llm.vertex import is_vertex_express_key
 
 
 # =============================================================================
@@ -1248,6 +1249,16 @@ class AIService:
         # Build kwargs dynamically from registry config
         kwargs = {config.api_key_param: api_key, "model": model, "temperature": temperature, config.max_tokens_param: max_tokens}
 
+        # Agent Platform / Vertex Express keys ("AQ." prefix) route the same
+        # ChatGoogleGenerativeAI to the Vertex backend — billed to the key's
+        # GCP project instead of personal AI Studio credits. The library
+        # handles endpoint construction and key transport.
+        if provider == "gemini" and is_vertex_express_key(api_key):
+            kwargs["vertexai"] = True
+            if proxy_url:
+                logger.warning("[AI] gemini: proxy_url ignored in Vertex AI mode")
+                proxy_url = None
+
         # Proxy mode: route through local proxy that handles auth (Ollama pattern)
         # Proxy URL stored as {provider}_proxy credential
         if proxy_url:
@@ -1432,7 +1443,10 @@ class AIService:
                     enabled=True,
                     budget=int(flattened.get("thinking_budget", 2048)),
                     effort=flattened.get("reasoning_effort", "medium"),
-                    level=flattened.get("thinking_level", "medium"),
+                    # No fabricated default — only forward thinking_level
+                    # when the node actually configured it (Vertex rejects
+                    # an unsolicited thinking_level on 2.5-era models).
+                    level=flattened.get("thinking_level"),
                     format=flattened.get("reasoning_format", "parsed"),
                 )
 

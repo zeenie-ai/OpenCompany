@@ -54,7 +54,12 @@ const ApiKeyPanel: React.FC<{ config: ProviderConfig; visible: boolean }> = ({ c
                 className="h-12 w-12 text-2xl"
               />
             </div>
-            <CardTitle className="text-lg">{config.name}</CardTitle>
+            {/* AQ.-prefixed keys route to the Vertex backend — show the
+                vertex display name so the user knows which billing path
+                is active. */}
+            <CardTitle className="text-lg">
+              {config.vertexName && inputValue.startsWith('AQ.') ? config.vertexName : config.name}
+            </CardTitle>
           </div>
           {validated && (
             <Badge variant="success" className="gap-1">
@@ -93,6 +98,9 @@ const ApiKeyPanel: React.FC<{ config: ProviderConfig; visible: boolean }> = ({ c
               saveLabel={field.key === 'apiKey' ? 'Validate' : 'Fetch'}
               savedLabel={field.key === 'apiKey' ? 'Valid' : 'Connected'}
             />
+          )}
+          {field?.help && (
+            <p className="mt-2 text-xs text-muted-foreground">{field.help}</p>
           )}
         </CardContent>
       </Card>

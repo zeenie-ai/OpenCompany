@@ -28,7 +28,11 @@ class ThinkingConfig:
     enabled: bool = False
     budget: int = 2048
     effort: str = "medium"
-    level: str = "medium"  # Gemini 3+ thinking_level
+    # Gemini 3+ thinking_level — None unless the user explicitly set it.
+    # Fabricating a default here makes the gemini provider send
+    # thinking_level alongside thinking_budget, which Vertex rejects on
+    # 2.5-era models (400 INVALID_ARGUMENT).
+    level: Optional[str] = None
     format: str = "parsed"
 
 

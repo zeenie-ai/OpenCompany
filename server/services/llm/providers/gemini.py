@@ -23,6 +23,19 @@ class GeminiProvider:
     def __init__(self, api_key: str, *, proxy_url: Optional[str] = None):
         from google import genai
 
+        from services.llm.vertex import is_vertex_express_key
+
+        self._vertex = is_vertex_express_key(api_key)
+        if self._vertex:
+            # Agent Platform / Vertex Express key — the SDK routes to
+            # aiplatform.googleapis.com and bills the key's GCP project.
+            # proxy_url rewrites base_url to a local auth-delegating relay,
+            # which is meaningless against the Vertex endpoint.
+            if proxy_url:
+                logger.warning("gemini: proxy_url ignored in Vertex AI mode")
+            self._client = genai.Client(vertexai=True, api_key=api_key)
+            return
+
         kwargs: Dict[str, Any] = {"api_key": api_key}
         if proxy_url:
             kwargs["http_options"] = {"base_url": proxy_url}
@@ -54,7 +67,10 @@ class GeminiProvider:
         if system_instruction:
             config["system_instruction"] = system_instruction
 
-        # Thinking -- pass available fields, let the SDK/API resolve per model
+        # Thinking -- forward exactly the fields the caller configured and
+        # let the SDK/API validate per model. `level` is None unless the
+        # user explicitly set thinking_level (Vertex rejects an unsolicited
+        # thinking_level on 2.5-era models with 400 INVALID_ARGUMENT).
         if thinking and thinking.enabled:
             thinking_kwargs: Dict[str, Any] = {}
             if thinking.budget:
@@ -79,6 +95,27 @@ class GeminiProvider:
     # ------------------------------------------------------------------
 
     async def fetch_models(self, api_key: str) -> List[str]:
+        """Validate the key, then return the curated model list.
+
+        The same curated list (``max_output_tokens`` keys from the gemini
+        block in llm_defaults.json — real model names, no ``-latest``
+        aliases) serves both backends, so the dropdown is identical for
+        AI Studio and Vertex keys. Only the key probe differs: Vertex
+        rejects API keys on ``models.list`` (401 — requires an OAuth
+        principal), so a free ``count_tokens`` call verifies the key
+        there; the Developer API uses its models endpoint. Invalid keys
+        raise the typed SDK error which the unifier translates into
+        ``NodeUserError``.
+        """
+        models = self._curated_models()
+
+        if self._vertex:
+            probe_model = models[0] if models else "gemini-2.5-flash"
+            await self._client.aio.models.count_tokens(
+                model=probe_model, contents="hello"
+            )
+            return models
+
         import httpx
 
         async with httpx.AsyncClient() as client:
@@ -87,14 +124,18 @@ class GeminiProvider:
                 timeout=15.0,
             )
             r.raise_for_status()
-            data = r.json()
-        models = []
-        for m in data.get("models", []):
-            name = m.get("name", "")
-            if name.startswith("models/"):
-                name = name[7:]
-            models.append(name)
-        return sorted(models)
+        return models
+
+    @staticmethod
+    def _curated_models() -> List[str]:
+        from services.llm import config as llm_config
+
+        max_tokens_map = (
+            llm_config.LLM_DEFAULTS.get("providers", {})
+            .get("gemini", {})
+            .get("max_output_tokens", {})
+        )
+        return [m for m in max_tokens_map if m != "_default"]
 
     # ------------------------------------------------------------------
     # internals
