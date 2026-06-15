@@ -1,22 +1,78 @@
 {
-  "_generated": "2026-06-11T07:11:47.589504+00:00",
+  "_generated": "2026-06-15T11:06:36.902932+00:00",
   "_source": "openrouter",
-  "_model_count": 338,
+  "_model_count": 337,
   "models": {
-    "~anthropic/claude-fable-latest": {
-      "id": "~anthropic/claude-fable-latest",
-      "name": "Anthropic: Claude Fable Latest",
-      "provider": "~anthropic",
-      "local_id": "claude-fable-latest",
-      "context_length": 1000000,
-      "max_output_tokens": 128000,
-      "input_price_per_mtok": 10.0,
-      "output_price_per_mtok": 50.0,
+    "openrouter/fusion": {
+      "id": "openrouter/fusion",
+      "name": "OpenRouter: Fusion",
+      "provider": "openrouter",
+      "local_id": "fusion",
+      "context_length": 128000,
+      "max_output_tokens": 0,
+      "input_price_per_mtok": -1000000.0,
+      "output_price_per_mtok": -1000000.0,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
         0.0,
         2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": []
+    },
+    "moonshotai/kimi-k2.7-code": {
+      "id": "moonshotai/kimi-k2.7-code",
+      "name": "MoonshotAI: Kimi K2.7 Code",
+      "provider": "moonshotai",
+      "local_id": "kimi-k2.7-code",
+      "context_length": 262144,
+      "max_output_tokens": 262144,
+      "input_price_per_mtok": 0.75,
+      "output_price_per_mtok": 3.5,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "logit_bias",
+        "logprobs",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "reasoning",
+        "repetition_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_logprobs",
+        "top_p"
+      ]
+    },
+    "anthropic/claude-fable-latest": {
+      "id": "~anthropic/claude-fable-latest",
+      "name": "Anthropic: Claude Fable Latest",
+      "provider": "anthropic",
+      "local_id": "claude-fable-latest",
+      "context_length": 1000000,
+      "max_output_tokens": 128000,
+      "input_price_per_mtok": 10.0,
+      "output_price_per_mtok": 50.0,
+      "supports_thinking": true,
+      "thinking_type": "budget",
+      "temperature_range": [
+        0.0,
+        1.0
       ],
       "is_reasoning_model": false,
       "supported_parameters": [
@@ -187,8 +243,8 @@
       "local_id": "qwen3.7-plus",
       "context_length": 1000000,
       "max_output_tokens": 65536,
-      "input_price_per_mtok": 0.4,
-      "output_price_per_mtok": 1.6,
+      "input_price_per_mtok": 0.32,
+      "output_price_per_mtok": 1.28,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -229,13 +285,24 @@
       ],
       "is_reasoning_model": false,
       "supported_parameters": [
+        "frequency_penalty",
         "include_reasoning",
+        "logit_bias",
+        "logprobs",
         "max_tokens",
+        "min_p",
+        "presence_penalty",
         "reasoning",
+        "repetition_penalty",
         "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
         "temperature",
         "tool_choice",
         "tools",
+        "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -449,24 +516,6 @@
         "tools",
         "verbosity"
       ]
-    },
-    "openrouter/fusion": {
-      "id": "openrouter/fusion",
-      "name": "OpenRouter: Fusion",
-      "provider": "openrouter",
-      "local_id": "fusion",
-      "context_length": 128000,
-      "max_output_tokens": 0,
-      "input_price_per_mtok": -1000000.0,
-      "output_price_per_mtok": -1000000.0,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": []
     },
     "perceptron/perceptron-mk1": {
       "id": "perceptron/perceptron-mk1",
@@ -797,20 +846,20 @@
         "tools"
       ]
     },
-    "~anthropic/claude-haiku-latest": {
+    "anthropic/claude-haiku-latest": {
       "id": "~anthropic/claude-haiku-latest",
       "name": "Anthropic Claude Haiku Latest",
-      "provider": "~anthropic",
+      "provider": "anthropic",
       "local_id": "claude-haiku-latest",
       "context_length": 200000,
       "max_output_tokens": 64000,
       "input_price_per_mtok": 1.0,
       "output_price_per_mtok": 5.0,
-      "supports_thinking": false,
-      "thinking_type": "none",
+      "supports_thinking": true,
+      "thinking_type": "budget",
       "temperature_range": [
         0.0,
-        2.0
+        1.0
       ],
       "is_reasoning_model": false,
       "supported_parameters": [
@@ -827,17 +876,17 @@
         "top_p"
       ]
     },
-    "~openai/gpt-mini-latest": {
+    "openai/gpt-mini-latest": {
       "id": "~openai/gpt-mini-latest",
       "name": "OpenAI GPT Mini Latest",
-      "provider": "~openai",
+      "provider": "openai",
       "local_id": "gpt-mini-latest",
       "context_length": 400000,
       "max_output_tokens": 128000,
       "input_price_per_mtok": 0.75,
       "output_price_per_mtok": 4.5,
-      "supports_thinking": false,
-      "thinking_type": "none",
+      "supports_thinking": true,
+      "thinking_type": "effort",
       "temperature_range": [
         0.0,
         2.0
@@ -855,10 +904,10 @@
         "tools"
       ]
     },
-    "~google/gemini-pro-latest": {
+    "gemini/gemini-pro-latest": {
       "id": "~google/gemini-pro-latest",
       "name": "Google Gemini Pro Latest",
-      "provider": "~google",
+      "provider": "gemini",
       "local_id": "gemini-pro-latest",
       "context_length": 1048576,
       "max_output_tokens": 65536,
@@ -885,10 +934,10 @@
         "top_p"
       ]
     },
-    "~moonshotai/kimi-latest": {
+    "moonshotai/kimi-latest": {
       "id": "~moonshotai/kimi-latest",
       "name": "MoonshotAI Kimi Latest",
-      "provider": "~moonshotai",
+      "provider": "moonshotai",
       "local_id": "kimi-latest",
       "context_length": 262144,
       "max_output_tokens": 262142,
@@ -925,10 +974,10 @@
         "top_p"
       ]
     },
-    "~google/gemini-flash-latest": {
+    "gemini/gemini-flash-latest": {
       "id": "~google/gemini-flash-latest",
       "name": "Google Gemini Flash Latest",
-      "provider": "~google",
+      "provider": "gemini",
       "local_id": "gemini-flash-latest",
       "context_length": 1048576,
       "max_output_tokens": 65536,
@@ -955,20 +1004,20 @@
         "top_p"
       ]
     },
-    "~anthropic/claude-sonnet-latest": {
+    "anthropic/claude-sonnet-latest": {
       "id": "~anthropic/claude-sonnet-latest",
       "name": "Anthropic Claude Sonnet Latest",
-      "provider": "~anthropic",
+      "provider": "anthropic",
       "local_id": "claude-sonnet-latest",
       "context_length": 1000000,
       "max_output_tokens": 128000,
       "input_price_per_mtok": 3.0,
       "output_price_per_mtok": 15.0,
-      "supports_thinking": false,
-      "thinking_type": "none",
+      "supports_thinking": true,
+      "thinking_type": "budget",
       "temperature_range": [
         0.0,
-        2.0
+        1.0
       ],
       "is_reasoning_model": false,
       "supported_parameters": [
@@ -987,17 +1036,17 @@
         "verbosity"
       ]
     },
-    "~openai/gpt-latest": {
+    "openai/gpt-latest": {
       "id": "~openai/gpt-latest",
       "name": "OpenAI GPT Latest",
-      "provider": "~openai",
+      "provider": "openai",
       "local_id": "gpt-latest",
       "context_length": 1050000,
       "max_output_tokens": 128000,
       "input_price_per_mtok": 5.0,
       "output_price_per_mtok": 30.0,
-      "supports_thinking": false,
-      "thinking_type": "none",
+      "supports_thinking": true,
+      "thinking_type": "effort",
       "temperature_range": [
         0.0,
         2.0
@@ -1151,9 +1200,9 @@
       "provider": "qwen",
       "local_id": "qwen3.6-27b",
       "context_length": 262144,
-      "max_output_tokens": 131072,
-      "input_price_per_mtok": 0.289,
-      "output_price_per_mtok": 2.4,
+      "max_output_tokens": 262140,
+      "input_price_per_mtok": 0.2885,
+      "output_price_per_mtok": 3.17,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -1282,9 +1331,9 @@
       "provider": "deepseek",
       "local_id": "deepseek-v4-flash",
       "context_length": 1048576,
-      "max_output_tokens": 131072,
-      "input_price_per_mtok": 0.0983,
-      "output_price_per_mtok": 0.1966,
+      "max_output_tokens": 65536,
+      "input_price_per_mtok": 0.09,
+      "output_price_per_mtok": 0.18,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -1506,20 +1555,20 @@
         "top_p"
       ]
     },
-    "~anthropic/claude-opus-latest": {
+    "anthropic/claude-opus-latest": {
       "id": "~anthropic/claude-opus-latest",
       "name": "Anthropic: Claude Opus Latest",
-      "provider": "~anthropic",
+      "provider": "anthropic",
       "local_id": "claude-opus-latest",
       "context_length": 1000000,
       "max_output_tokens": 128000,
       "input_price_per_mtok": 5.0,
       "output_price_per_mtok": 25.0,
-      "supports_thinking": false,
-      "thinking_type": "none",
+      "supports_thinking": true,
+      "thinking_type": "budget",
       "temperature_range": [
         0.0,
-        2.0
+        1.0
       ],
       "is_reasoning_model": false,
       "supported_parameters": [
@@ -1791,9 +1840,9 @@
       "provider": "gemini",
       "local_id": "gemma-4-31b-it",
       "context_length": 262144,
-      "max_output_tokens": 8192,
+      "max_output_tokens": 262144,
       "input_price_per_mtok": 0.12,
-      "output_price_per_mtok": 0.36,
+      "output_price_per_mtok": 0.35,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -2067,8 +2116,8 @@
       "local_id": "minimax-m2.7",
       "context_length": 204800,
       "max_output_tokens": 131072,
-      "input_price_per_mtok": 0.27,
-      "output_price_per_mtok": 1.08,
+      "input_price_per_mtok": 0.25,
+      "output_price_per_mtok": 1.0,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -3190,8 +3239,8 @@
       "local_id": "kimi-k2.5",
       "context_length": 262144,
       "max_output_tokens": 0,
-      "input_price_per_mtok": 0.35,
-      "output_price_per_mtok": 1.89,
+      "input_price_per_mtok": 0.375,
+      "output_price_per_mtok": 2.025,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -3733,6 +3782,7 @@
         "response_format",
         "seed",
         "stop",
+        "structured_outputs",
         "temperature",
         "tool_choice",
         "tools",
@@ -5643,6 +5693,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -5655,6 +5706,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -5742,41 +5794,6 @@
         "temperature",
         "tool_choice",
         "tools",
-        "top_p"
-      ]
-    },
-    "nvidia/nemotron-nano-9b-v2": {
-      "id": "nvidia/nemotron-nano-9b-v2",
-      "name": "NVIDIA: Nemotron Nano 9B V2",
-      "provider": "nvidia",
-      "local_id": "nemotron-nano-9b-v2",
-      "context_length": 131072,
-      "max_output_tokens": 16384,
-      "input_price_per_mtok": 0.04,
-      "output_price_per_mtok": 0.16,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "include_reasoning",
-        "logit_bias",
-        "max_tokens",
-        "min_p",
-        "presence_penalty",
-        "reasoning",
-        "repetition_penalty",
-        "response_format",
-        "seed",
-        "stop",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_k",
         "top_p"
       ]
     },
@@ -6456,6 +6473,7 @@
         "response_format",
         "seed",
         "stop",
+        "structured_outputs",
         "temperature",
         "tool_choice",
         "tools",
@@ -7711,7 +7729,7 @@
       "name": "DeepSeek: DeepSeek V3 0324",
       "provider": "deepseek",
       "local_id": "deepseek-chat-v3-0324",
-      "context_length": 131072,
+      "context_length": 163840,
       "max_output_tokens": 16384,
       "input_price_per_mtok": 0.2,
       "output_price_per_mtok": 0.77,
@@ -8140,36 +8158,6 @@
         "top_p"
       ]
     },
-    "meta/llama-guard-3-8b": {
-      "id": "meta-llama/llama-guard-3-8b",
-      "name": "Llama Guard 3 8B",
-      "provider": "meta",
-      "local_id": "llama-guard-3-8b",
-      "context_length": 131072,
-      "max_output_tokens": 131072,
-      "input_price_per_mtok": 0.484,
-      "output_price_per_mtok": 0.03,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "logit_bias",
-        "max_tokens",
-        "min_p",
-        "presence_penalty",
-        "repetition_penalty",
-        "seed",
-        "stop",
-        "temperature",
-        "top_k",
-        "top_p"
-      ]
-    },
     "openai/o3-mini-high": {
       "id": "openai/o3-mini-high",
       "name": "OpenAI: o3 Mini High",
@@ -8273,9 +8261,9 @@
       "provider": "qwen",
       "local_id": "qwen2.5-vl-72b-instruct",
       "context_length": 131072,
-      "max_output_tokens": 0,
-      "input_price_per_mtok": 0.25,
-      "output_price_per_mtok": 0.75,
+      "max_output_tokens": 128000,
+      "input_price_per_mtok": 0.8,
+      "output_price_per_mtok": 1.0,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -8448,9 +8436,9 @@
       "name": "DeepSeek: R1 Distill Llama 70B",
       "provider": "deepseek",
       "local_id": "deepseek-r1-distill-llama-70b",
-      "context_length": 131072,
-      "max_output_tokens": 16384,
-      "input_price_per_mtok": 0.7,
+      "context_length": 128000,
+      "max_output_tokens": 8192,
+      "input_price_per_mtok": 0.8,
       "output_price_per_mtok": 0.8,
       "supports_thinking": false,
       "thinking_type": "none",
@@ -8462,13 +8450,10 @@
       "supported_parameters": [
         "frequency_penalty",
         "include_reasoning",
-        "logit_bias",
         "max_tokens",
-        "min_p",
         "presence_penalty",
         "reasoning",
         "repetition_penalty",
-        "response_format",
         "seed",
         "stop",
         "temperature",
