@@ -263,6 +263,7 @@ class NodeExecutor:
     _NEEDS_CONNECTED_OUTPUTS = frozenset(
         {
             "pythonExecutor",
+            "montyExecutor",
             "javascriptExecutor",
             "typescriptExecutor",
             "webhookResponse",

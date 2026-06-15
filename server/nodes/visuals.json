@@ -238,6 +238,9 @@
   "pythonExecutor": {
     "skill": "python-skill"
   },
+  "montyExecutor": {
+    "skill": "monty-skill"
+  },
   "rlm_agent": {
     "icon": "🧠"
   },

@@ -147,6 +147,16 @@ dependencies = [
     # out-of-process pty-host (VSCode's pattern).
     "ptyprocess>=0.7.0; sys_platform != 'win32'",
     "pywinpty>=3.0.3; sys_platform == 'win32'",
+
+    # Sandboxed Python interpreter (montyExecutor node). Pydantic Monty:
+    # a deny-by-default Python subset written in Rust with ENFORCED
+    # time/memory limits, for safely running AI-generated code without
+    # container overhead (no filesystem/network/env unless explicitly
+    # granted via external_functions / MountDir). Prebuilt cross-platform
+    # wheels on PyPI (cp310-cp314, win/mac/linux), so a normal dep — NOT
+    # the pooch/npm lazy-binary pattern (that's for non-PyPI binaries).
+    # Pinned because pre-1.0 (alpha; API still moving fast).
+    "pydantic-monty==0.0.18",
 ]
 
 [project.optional-dependencies]

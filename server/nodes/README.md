@@ -112,7 +112,7 @@ email/       — IMAP/SMTP via Himalaya CLI
 search/      — Web search APIs (brave / serper / perplexity / duckduckgo)
 scraper/     — Apify / Crawlee
 document/    — RAG pipeline (scrape / download / parse / chunk / embed / store)
-code/        — Python / JS / TS executors
+code/        — Python / Monty (sandboxed Python) / JS / TS executors
 filesystem/  — file_read / file_modify / shell / fs_search
 proxy/       — Residential proxy (request / config / status)
 location/    — Google Maps (create / locations / nearby places)
@@ -142,7 +142,7 @@ these first before writing new code:
 | `model/` | `_base.ChatModelBase` | 9 chat models inherit → same `@Operation("chat")` body that calls `ai_service.execute_chat` |
 | `android/` | `_base.AndroidServiceBase` | 16 Android services inherit; payload translation + `SERVICE_ID_MAP` lives on this base |
 | `android/` | `_base.execute_android_toolkit` / `execute_android_service_tool` | AI-tool dispatchers — called from `services/handlers/tools.py` for the toolkit aggregator + direct service tool branches |
-| `code/` | `_base.CodeExecutorBase` + `_nodejs.NodeJSClient` | Python/JS/TS executors |
+| `code/` | `_base.CodeExecutorBase` + `_nodejs.NodeJSClient` | Python/JS/TS executors; `monty_executor/` is sandboxed Python via `pydantic-monty` (enforced limits + opt-in capabilities) |
 | `google/` | `_base.build_google_service` / `track_google_usage` | 7 Google plugins (OAuth + API) |
 | `google/` | `_gmail.fetch_email_details` / `mark_email_as_read` | gmail + gmail_receive |
 | `twitter/` | `_base.call_with_retry` / `format_tweet` / `sync_search_recent` | 4 twitter plugins (XDK + refresh) |
