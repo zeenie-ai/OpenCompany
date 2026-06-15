@@ -14,27 +14,23 @@ This document is the playbook for working in the design system: token taxonomy, 
 ## Architecture at a glance
 
 ```
-client/src/themes/
-├── base.css         neutral defaults (space, radii, motion easings, sound pack hint)
-├── light.css        :root + :root[data-theme="light"]    — new contract values
-├── dark.css         .dark + :root[data-theme="dark"]     — new contract values
-├── renaissance.css  :root[data-theme="renaissance"]      — full palette + shadcn bridge
-├── greek.css        :root[data-theme="greek"]            — lapis + oxblood on marble
-├── edo.css          :root[data-theme="edo"]              — washi + sumi + vermillion
-├── steampunk.css    :root[data-theme="steampunk"]        — brass + copper on leather
-├── atomic.css       :root[data-theme="atomic"]           — atomic orange on cardstock
-├── cyber.css        :root[data-theme="cyber"]            — neon over void
-├── wasteland.css    :root[data-theme="wasteland"]        — ochre + radioactive scrap
-├── rot.css          :root[data-theme="rot"]              — moss bloom in crypt
-├── plague.css       :root[data-theme="plague"]           — woodcut quarantine
-└── surveillance.css :root[data-theme="surveillance"]     — REC red + phosphor
+client/src/themes/        (colour VALUES are hex + color-mix(); never HSL triplets)
+├── base.css         shared scalars: space / radii / chrome / shadow / type scale, motion
+│                    easings, the --tint-* alpha scale (single home for color-mix %), node visuals
+├── light.css        :root + :root[data-theme="light"]  — light colour hex: shadcn + dracula
+│                    + node + action (+ -ink); defined on bare :root so they apply globally
+├── dark.css         .dark + :root[data-theme="dark"]   — dark colour-hex overrides (+ -ink, shadows)
+├── renaissance.css  :root[data-theme="renaissance"]    — full palette (hex) + per-theme decorations
+├── greek / edo / steampunk / atomic / cyber / wasteland / rot / plague / surveillance .css
+└── animations.css   per-theme --pulse-keyframe/-duration/-timing + executing/trigger keyframes
+                     + .machina-* helpers (.machina-pulse / -trigger-armed / -bolt / -crt / -scanline)
 
-client/src/index.css
-├── @layer base :root  — shadcn HSL-triplet tokens (light defaults) + dracula raw
-├── @layer base .dark  — shadcn HSL-triplet tokens (dark overrides)
-└── @theme inline { … } — Tailwind v4 utility bindings for both contracts
-                          (--color-bg-app, --color-fg-default, --color-border-default,
-                           --font-display, --font-body, etc.)
+client/src/index.css       PLUMBING ONLY — holds NO literal colour values:
+├── @layer base            global resets only (*, html/body, #root) — token blocks moved to themes/
+└── @theme inline { … }    Tailwind v4 bridge mapping --color-X: var(--X) (NO hsl() wrapper);
+                           /opacity (bg-primary/50) composes via color-mix for any colour format
+
+client/tailwind.config.js  second colour bridge — theme.extend.colors map var(--X) (no hsl() wrapper)
 
 client/src/contexts/ThemeContext.tsx
 ├── ThemeName = 'light' | 'dark' | 'renaissance' | 'greek' | 'edo' | 'steampunk'
@@ -97,15 +93,15 @@ Surface hierarchy across themes; every theme assigns these in its `:root[data-th
 | `tracking-[var(--type-tracking-display)]` | `--type-tracking-display` | Letter-spacing for display headings |
 | `[text-transform:var(--type-uppercase)]` | `--type-uppercase` | Theme-driven uppercase / capitalize / none |
 
-**Note**: full-colour values, no HSL triplet, so alpha composition (`bg-bg-app/50`) does **not** work for these. Use the shadcn alias (`bg-background/50`) when you need alpha.
+**Note**: values are hex + `color-mix()`. Tailwind v4 composes `/opacity` via `color-mix` for any colour format, so `bg-bg-app/50` *does* work — but prefer a named token (`--bg-overlay`, a `-soft`/`-tint` variant) over ad-hoc surface alpha.
 
-### 2. shadcn semantic tokens (preserved for primitives + alpha-composed call sites)
+### 2. shadcn semantic tokens (preserved for primitives)
 
-Standard shadcn keys (`background`, `foreground`, `card`, `popover`, `primary`, `destructive`, `success`, `warning`, `info`, `border`, `input`, `ring`, etc.). Each theme's CSS file regenerates them as HSL triplets matching the same colour as the new-contract token, so existing utilities keep working. **Use these when you need `/50` alpha** (e.g., `bg-primary/10`, `text-foreground/80`).
+Standard shadcn keys (`background`, `foreground`, `card`, `popover`, `primary`, `destructive`, `success`, `warning`, `info`, `border`, `input`, `ring`, etc.). Each theme defines them as **hex** matching the new-contract colour, so shadcn primitives + generic chrome resolve against the active theme. `/opacity` works on these too (`bg-primary/10`, `text-foreground/80`) via v4 color-mix.
 
 ### 3. Action role tokens
 
-Six semantic intents: `run | stop | save | config | secret | tools`. Each exposes `base / -soft / -hover / -border` (see [client/src/index.css](../client/src/index.css)). Read via `<ActionButton intent="run">` or directly: `bg-action-run-soft text-action-run border-action-run-border`. Themes redefine these in their own block.
+Six semantic intents: `run | stop | save | config | secret | tools`. Each exposes `base / -soft / -hover / -border / -ink` — the colour-hex bases live in light.css/dark.css and the `-soft/-hover/-border` tints are `color-mix` over the base referencing the shared `var(--tint-action-*)` scale. `-ink` is the readable label colour (light: darkened accent; dark: raw accent). Read via `<ActionButton intent="run">` or directly: `bg-action-run-soft text-action-run-ink border-action-run-border`. Themes redefine these (or just override the `--tint-action-*` scalars) in their own block.
 
 ### 4. Node-type role tokens
 
@@ -179,20 +175,23 @@ Result by theme (display font / tracking / case):
      --type-tracking-display: 0|0.10em|0.18em;
      --radius-sm: …; --radius-md: …; --radius-lg: …; --radius-pill: …;
 
-     /* Shadcn HSL-triplet bridge — same colours, HSL form */
-     --background: H S% L%; --foreground: H S% L%;
-     --card: H S% L%; --popover: H S% L%; --primary: H S% L%;
-     --secondary: H S% L%; --muted: H S% L%; --accent: H S% L%;
-     --destructive: H S% L%; --success: H S% L%; --warning: H S% L%; --info: H S% L%;
-     --border: H S% L%; --input: H S% L%; --ring: H S% L%;
+     /* Shadcn bridge — same colours, HEX (not HSL triplets) */
+     --background: #rrggbb; --foreground: #rrggbb;
+     --card: #rrggbb; --popover: #rrggbb; --primary: #rrggbb;
+     --secondary: #rrggbb; --muted: #rrggbb; --accent: #rrggbb;
+     --destructive: #rrggbb; --success: #rrggbb; --warning: #rrggbb; --info: #rrggbb;
+     --border: #rrggbb; --input: #rrggbb; --ring: #rrggbb;
 
-     /* Action role tokens — derive from theme semantic palette */
-     --action-run: H S% L%;     --action-run-soft: H S% L% / 0.18; …
-     --action-stop: H S% L%;    …
-     --action-save: H S% L%;    …
-     --action-config: H S% L%;  …
-     --action-secret: H S% L%;  …
-     --action-tools: H S% L%;   …
+     /* Action role tokens — base hex + color-mix tints over the shared
+        var(--tint-action-*) scale (override --tint-action-* here if the
+        theme wants stronger/weaker tints). -ink = readable label:
+        a darkened accent on light themes, var(--action-X) on dark. */
+     --action-run: #rrggbb;
+     --action-run-soft:   color-mix(in srgb, var(--action-run) var(--tint-action-soft), transparent);
+     --action-run-hover:  color-mix(in srgb, var(--action-run) var(--tint-action-hover), transparent);
+     --action-run-border: color-mix(in srgb, var(--action-run) var(--tint-action-border), transparent);
+     --action-run-ink:    #rrggbb;   /* or var(--action-run) on dark themes */
+     /* …repeat for stop / save / config / secret / tools */
    }
    ```
 2. Import it in [client/src/main.tsx](../client/src/main.tsx) **before** `index.css`.
@@ -202,6 +201,7 @@ Result by theme (display font / tracking / case):
 6. **(Optional, canvas)** Add a `THEME_OVERRIDES` entry in [client/src/hooks/useAppTheme.ts](../client/src/hooks/useAppTheme.ts) so canvas selection rings, action buttons, and edge strokes pick up the theme's accents. Whichever keys you omit fall through to `lightColors` / `darkColors` (chosen by `DARK_BASE_THEMES`).
 7. **(Optional, fonts)** If the theme uses Google Fonts not already loaded, append the family to the deferred-load `<link>` in [client/index.html](../client/index.html).
 8. **(Optional, sound)** Pick one of the 10 existing `SoundPackName` values in `--sound-pack` (or add a new pack to [client/src/lib/sound.ts](../client/src/lib/sound.ts) and the `VALID_PACKS` set in [client/src/hooks/useSound.ts](../client/src/hooks/useSound.ts)).
+9. **(Optional, motion)** The theme inherits the default `node-pulse` executing glow and the `.machina-trigger-armed` trigger heartbeat automatically. For a bespoke executing pulse, add a `[data-theme="X"]` block in [client/src/themes/animations.css](../client/src/themes/animations.css) overriding `--pulse-keyframe` / `--pulse-duration` / `--pulse-timing` and define that keyframe there. Set the glow accent via `--node-pulse-color` in the theme's own block.
 
 **No component code changes.** That is the contract.
 
@@ -209,7 +209,7 @@ Result by theme (display font / tracking / case):
 
 1. **Theme-conditional logic in components.** No `if (theme === 'cyber')` branches. Visual differences live in the per-theme CSS file.
 2. **Whole-store Zustand destructure.** Always `useAppStore((s) => s.x)`, never `{ x } = useAppStore()`.
-3. **Opacity arithmetic on new-contract tokens.** `bg-bg-app/10` does not work — they're full-colour. Add a new variant under `client/src/themes/<name>.css` if you need a different alpha, or fall back to the shadcn alias (`bg-background/10`).
+3. **Ad-hoc opacity arithmetic on role/surface tokens.** Don't inline alpha (`bg-bg-app/10`, `bg-node-agent/30`, `bg-action-run/25`). Tailwind v4 *can* now color-mix `/opacity` on hex tokens, but the discipline is to reference a NAMED token: add/define a `-soft` / `-hover` / `-border` variant, or a `--tint-*` step in base.css, and use it by name.
 4. **Hardcoded colours.** No `bg-white`, `bg-black`, `text-gray-500`, `style={{ backgroundColor: '#fff' }}`. Use tokens.
 5. **`useAppTheme()` in new files.** Allowed only for surfaces that need JS-side hex values Tailwind can't express: canvas node components (`AIAgentNode`, `SquareNode`, `TriggerNode`, `StartNode`, `ToolkitNode`, `TeamMonitorNode`, `GenericNode`), `EdgeConditionEditor`, and the Google Maps SDK consumers (`MapSelector`, `GoogleMapsPicker`, `MapsPreviewPanel`). Every other surface uses Tailwind + tokens. New themes contribute to `useAppTheme` via a `THEME_OVERRIDES` entry, never by importing `lightColors` / `darkColors` directly.
 6. **Hand-rolled modal backdrops.** Use `<Modal>` from `client/src/components/ui/Modal.tsx`.
@@ -219,7 +219,7 @@ Result by theme (display font / tracking / case):
 ## What's done vs deferred
 
 ### Done
-- **`--node-pulse-color` contract** — executing-node glow color is independent of `--node-color` (the plugin accent). Each theme overrides `--node-pulse-color` to its highest-contrast accent (Cyber neon cyan, Surveillance REC red, Renaissance ultramarine `--lapis-bright`, Atomic turquoise, etc.) so the glow stays visible against any canvas background. Defined in [base.css](../client/src/themes/base.css) at `:root`, overridden in each per-theme file. The `node-pulse` keyframe consumes `var(--node-pulse-color)` for a triple-layer expanding box-shadow (12px ring + 32px mid halo + 56px outer atmospheric halo at peak). Themes that want a non-`node-pulse` animation (Cyber `cyber-pulse-exec`, Surveillance `surv-pulse-exec`, Renaissance `ren-pulse-exec`) bind their own box-shadow keyframe via `.sq-node[data-executing] .sq-node-box, .react-flow__node.executing .sq-node-box, .react-flow__node.executing .node`. **Never animate `opacity` on whole-node selectors** — it fades the node icon + content, not just the glow.
+- **`--node-pulse-color` contract** — executing-node glow color is independent of `--node-color` (the plugin accent). Each theme overrides `--node-pulse-color` to its highest-contrast accent (Cyber neon cyan, Surveillance REC red, Renaissance ultramarine `--lapis-bright`, Atomic turquoise, etc.) so the glow stays visible against any canvas background. Defined in [base.css](../client/src/themes/base.css) at `:root`, overridden in each per-theme file. The executing keyframes (`node-pulse` + per-theme `cyber-pulse-exec` / `surv-pulse-exec` / `ren-pulse-exec`) and the per-theme `--pulse-keyframe` / `--pulse-duration` / `--pulse-timing` tokens live in [animations.css](../client/src/themes/animations.css); base.css's `.sq-node[data-executing] .sq-node-box` / `.react-flow__node.executing .{sq-node-box,node}` rule reads `var(--pulse-keyframe, node-pulse)`, so a theme picks its pulse by overriding ONE token (Cyber → `cyber-pulse-exec`, Surveillance → `surv-pulse-exec`, Renaissance → `ren-pulse-exec`) — no high-specificity per-theme animation rule. `node-pulse` is a triple-layer expanding box-shadow (12px ring + 32px mid halo + 56px outer halo) consuming `var(--node-pulse-color)` + the shared `--tint-pulse-*` alphas. Trigger nodes use a separate continuous `.machina-trigger-armed` "listening" heartbeat (`trigger-listening` keyframe) while waiting, plus `.machina-bolt` on the ⚡ badge — distinct from the one-shot execution pulse. **Never animate `opacity` on whole-node selectors** — it fades the node icon + content, not just the glow.
 - **`data-page-hidden` animation pause** — [Dashboard.tsx](../client/src/Dashboard.tsx) mounts a `visibilitychange` listener that toggles `data-page-hidden` on `<html>`; [base.css](../client/src/themes/base.css) declares `html[data-page-hidden] *, *::before, *::after { animation-play-state: paused !important; }`. Without this, paused CSS keyframes accumulate frames in the compositor queue while the tab is hidden; on tab return all 50+ executing nodes' triple-layer pulses + Cyber's full-viewport `cyber-flicker` / `cyber-roll` resume simultaneously, stalling the GPU compositor 100-200ms and blocking input dispatch (first-click-feels-frozen pattern). The unpause is deferred via `requestAnimationFrame` so input dispatch wins the frame before composite resumes.
 - **Parameter panel theme contract** — MasterSkillEditor, OutputPanel, MiddleSection, ToolSchemaEditor, ParameterPanel removed `useAppTheme()`. Every surface renders against Tailwind tokens + new-contract CSS custom props. Section headers carry the display-typography triplet (`font-display tracking-[var(--type-tracking-display)] [text-transform:var(--type-uppercase)] text-fg-default`); action buttons use `<ActionButton intent="run|stop|save|config|tools">`; backgrounds use `bg-bg-elevated` / `bg-bg-panel` / `bg-bg-input` from the surface tier table above. EditableNodeLabel emits both `sq-node-label` and `node-label` classNames so per-theme typography rules fire under either topology. Per-theme scrollbar webkit rules (`::-webkit-scrollbar-thumb` etc.) declared in all 10 themes — gold (Renaissance), square-cornered (Atomic / Edo / Greek / Wasteland / Plague), metallic (Steampunk), phosphor (Rot), neon (Cyber), REC-red (Surveillance), shadcn neutral (Light / Dark).
 - **Canvas-node class topology alignment** (W26) — TriggerNode, StartNode, ToolkitNode migrated from `.node` (rectangular spec-card) topology to `.sq-node` / `.sq-node-box` (square-icon node) topology so per-theme decorations (Steampunk brass rivets, Edo hanko seal, Surveillance REC LED, Renaissance gold emblem) reach them. Status pips, gear buttons, and React Flow handles on every node component now carry `.sq-node-pip` / `.sq-node-gear` / `.sq-node-handle.in/.out` (square nodes) or `.node-pip` / `.node-gear` / `.node-handle.in/.out` (rectangular nodes — AIAgentNode, GenericNode, TeamMonitorNode). Pip background is data-driven via `data-status="idle | executing | waiting | success | error"` — base.css picks the colour from shadcn semantic tokens; per-theme files override. Inline JS-computed `backgroundColor` / `border` / `animation` on these elements stripped — CSS owns visuals. Cyber's `.node-trigger` rule extended to dual-target both rectangular and square topologies (`.sq-node.node-trigger .sq-node-box`). Orphan `.node-output` rule removed. EditableNodeLabel now emits both `sq-node-label` and `node-label` classNames so per-theme typography rules fire. StartNode reads `nodeColor` from `definition?.defaults?.color` instead of hardcoded `theme.dracula.cyan`.
@@ -246,9 +246,9 @@ Result by theme (display font / tracking / case):
 - **Canvas overlay packs** — [client/src/hooks/useAppTheme.ts](../client/src/hooks/useAppTheme.ts) extended from 2-way (`{light, dark}`) to 10-way: a `THEME_OVERRIDES` map applies a small overlay (primary, focus, focusRing, action colours, edge palette) on top of `lightColors` / `darkColors`. Existing call sites continue to read `theme.colors.X` and `theme.isDarkMode` unchanged; canvas selection rings, action buttons, and edge strokes pick up the active theme's accents under any of the 10 themes.
 
 ### Deferred (future PRs)
-- **`--*-soft` token family** — `--info-soft`, `--warning-soft`, `--danger-soft`, `--success-soft` are referenced across multiple theme rules (greek, atomic, wasteland, plague, action-deploy, chat-msg-user, wf-card.selected, cmdk-item.active, action-run) but never declared. W22 patched the four `.sq-node.selected .sq-node-box` references to inline alpha composition (`hsl(var(--info) / 0.25)` etc.); the broader pattern is tech debt. Centralise the family as alpha-composed pairs alongside their base tokens (e.g. `--info-soft: <hsl-triplet> / 0.18`) in [client/src/index.css](../client/src/index.css).
+- **`--*-soft` token family** — `--info-soft`, `--warning-soft`, `--danger-soft`, `--success-soft` are referenced across multiple theme rules (greek, atomic, wasteland, plague, action-deploy, chat-msg-user, wf-card.selected, cmdk-item.active, action-run) but never declared. the hex migration converted the inline alpha compositions to `color-mix(in srgb, var(--info) 25%, transparent)`; the broader undeclared-family pattern is still tech debt. Centralise the family as `color-mix` tokens alongside their base (e.g. `--info-soft: color-mix(in srgb, var(--info) 18%, transparent)`) in a theme/base file.
 - **Edo / Steampunk / Atomic canvas-host pseudo-element decorations** — these themes' richer canvas overlays (Edo radial-gradient ink-wash mountain, Steampunk corner radial accents, Atomic dot constellation) are pseudo-element decorations rather than tileable `--canvas-grid` patterns; W24 ported the tileable layer only. Wire via `.canvas::before/::after` rules in a future pass if needed.
-- **Parameter panel internals** — `MiddleSection`, `MasterSkillEditor`, `ParameterRenderer` consume shadcn tokens through the bridge so they retint correctly, but their interior section headers don't yet carry the display-typography triplet. Apply the recipe (`font-display tracking-[var(--type-tracking-display)] text-fg-default [text-transform:var(--type-uppercase)]`) when next touched.
+- **Parameter panel internals** — RESOLVED: `ParameterRenderer`, `MiddleSection`, `MasterSkillEditor`, `ToolSchemaEditor` are fully on shadcn primitives + tokens (zero `useAppTheme` / `theme.colors`); section headers carry the display-typography triplet. The panel modal also picks up per-theme `.modal` / `.modal-head` / `.modal-title` decoration via `Modal.tsx`.
 - **Credentials modal sub-panels** — `OAuthPanel`, `EmailPanel`, `ApiKeyPanel`, `QrPairingPanel` headers same pattern.
 
 ## Per-component decorations
@@ -296,7 +296,7 @@ The `.selected` co-class is bound to React Flow's `selected` prop on every canva
 | plague | parchment | red X pattern (SVG) | nailed nail (`.sq-node-box::after`) | — |
 | surveillance | solid | CCTV crosshair + REC label + phosphor scanlines | REC LED blink (`.sq-node-box::before`) | `surv-blink` |
 
-`var(--accent)` etc. handoff reads were wrapped to `hsl(var(--accent))` for shadcn-bridged tokens; theme-specific spot colours (`--gold`, `--crimson`, `--neon-magenta`, `--rec-red`) port verbatim as hex.
+Token reads use `var(--token)` directly (no `hsl()` wrapper) — every colour value is hex / `color-mix()`, including the shadcn-bridged tokens and theme spot colours (`--gold`, `--crimson`, `--neon-magenta`, `--rec-red`).
 
 ## Canvas-node visual contract (W21)
 
@@ -339,9 +339,9 @@ Both families share the same status-pip data contract:
 <div className="sq-node-pip" data-status={pipStatus} />  // or className="node-pip"
 ```
 
-`pipStatus` is a string from the bucket `'idle' | 'executing' | 'waiting' | 'success' | 'error'`. base.css colors the pip per-status using `hsl(var(--success))` / `hsl(var(--destructive))` / `var(--node-color)` etc. Per-theme files override for material-specific identity.
+`pipStatus` is a string from the bucket `'idle' | 'executing' | 'waiting' | 'success' | 'error'`. base.css colors the pip per-status using `var(--success)` / `var(--destructive)` / `var(--node-color)` etc. Per-theme files override for material-specific identity.
 
-Execution-state animation: `data-executing={isExecuting ? '' : undefined}` on the outer wrapper. base.css binds `.sq-node[data-executing] .sq-node-box` and `.react-flow__node.executing .node` to the `node-pulse` keyframe.
+Execution-state animation: `data-executing={isExecuting ? '' : undefined}` on the outer wrapper. base.css binds `.sq-node[data-executing] .sq-node-box` and `.react-flow__node.executing .node` to `var(--pulse-keyframe, node-pulse)` (the theme-selected pulse; keyframes + per-theme `--pulse-keyframe` live in `animations.css`). Trigger nodes apply `.machina-trigger-armed` (continuous listening heartbeat) on the `waiting` state instead — distinct from the execution pulse — plus `.machina-bolt` on the ⚡ badge.
 
 Selection state: `selected` co-class on the outer wrapper, driven by React Flow's `selected` prop.
 
@@ -465,9 +465,9 @@ cd client && npx eslint <files>
 
 | File | Role |
 |---|---|
-| [client/src/themes/base.css](../client/src/themes/base.css) | Neutral defaults |
-| [client/src/themes/light.css](../client/src/themes/light.css) | Light theme tokens |
-| [client/src/themes/dark.css](../client/src/themes/dark.css) | Dark theme tokens |
+| [client/src/themes/base.css](../client/src/themes/base.css) | Shared scalars (space / radii / chrome / shadow / type) + `--tint-*` alpha scale + node-visual contract |
+| [client/src/themes/light.css](../client/src/themes/light.css) | Light colour hex (shadcn + dracula + node + action + `-ink`); on bare `:root` so global |
+| [client/src/themes/dark.css](../client/src/themes/dark.css) | Dark colour-hex overrides (+ `-ink`, deeper shadows) |
 | [client/src/themes/renaissance.css](../client/src/themes/renaissance.css) | Renaissance theme + bridge |
 | [client/src/themes/greek.css](../client/src/themes/greek.css) | Greek theme + bridge |
 | [client/src/themes/edo.css](../client/src/themes/edo.css) | Edo theme + bridge |
@@ -478,7 +478,9 @@ cd client && npx eslint <files>
 | [client/src/themes/rot.css](../client/src/themes/rot.css) | Necromantic Rot theme + bridge |
 | [client/src/themes/plague.css](../client/src/themes/plague.css) | Plague City theme + bridge |
 | [client/src/themes/surveillance.css](../client/src/themes/surveillance.css) | Surveillance theme + bridge |
-| [client/src/index.css](../client/src/index.css) | shadcn HSL triplets + `@theme inline` Tailwind utilities |
+| [client/src/themes/animations.css](../client/src/themes/animations.css) | Per-theme `--pulse-keyframe` tokens + executing / trigger keyframes + `.machina-*` helpers |
+| [client/tailwind.config.js](../client/tailwind.config.js) | Colour bridge (`theme.extend.colors` → `var(--X)`, no `hsl()`) |
+| [client/src/index.css](../client/src/index.css) | Plumbing: global resets + `@theme inline` `var()` bridge (no literal colours) |
 | [client/src/contexts/ThemeContext.tsx](../client/src/contexts/ThemeContext.tsx) | `<ThemeProvider>` + `useTheme()` (10-way) |
 | [client/src/hooks/useAppTheme.ts](../client/src/hooks/useAppTheme.ts) | Canvas overlay packs (10 themes × Colors override) |
 | [client/src/lib/sound.ts](../client/src/lib/sound.ts) | WebAudio engine — 10 sound packs, 9 events |

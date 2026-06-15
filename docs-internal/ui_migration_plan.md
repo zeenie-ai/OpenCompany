@@ -345,7 +345,7 @@ The MachinaOs frontend was coupled to Ant Design (40 files, 187-line theme file,
 2. **No owned layout wrappers.** Tailwind utility classes are the API. `<div className="flex flex-col gap-3">` is the answer, not `<Stack gap="3">`.
 3. **No facade layers.** `import { toast } from 'sonner'` directly at call sites. No `lib/toast.ts` wrapper preserving antd's call shape.
 4. **Library defaults beat invented abstractions.** Use shadcn's `Form` composition with `react-hook-form` + `zod` exactly as the docs show. Use `@jsonforms/react`'s built-in renderer registry, don't invent another.
-5. **Tokens are owned.** CSS vars are the one thing shadcn doesn't ship — they're our palette (Solarized + Dracula). One CSS file (`tokens.css`), exported as HSL triplets so Tailwind alpha composition works.
+5. **Tokens are owned.** CSS vars are the one thing shadcn doesn't ship — they're our palette (Solarized + Dracula), defined per-theme in `client/src/themes/*.css` as hex + `color-mix()`. The `@theme inline` bridge maps `--color-X: var(--X)` (no `hsl()` wrapper); Tailwind v4 composes `/opacity` via `color-mix`. (W1 shipped these as HSL triplets; a later wave migrated the whole system to hex + color-mix — see [theme_system.md](./theme_system.md).)
 6. **Each phase ships independently.** App stays green; antd coexists until Phase 7.
 
 ## Codebase facts (from audit, 2026-04-13)

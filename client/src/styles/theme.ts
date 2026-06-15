@@ -272,8 +272,8 @@ export const theme = {
 
   // Node sizes (fixed per industry standard)
   nodeSize: {
-    square: '60px',          // SquareNode
-    squareIcon: '28px',      // Icon inside square node
+    square: '64px',          // SquareNode (design-system spec: 64px box)
+    squareIcon: '28px',      // Icon inside square node (≈ 0.44 × box)
     toolkitWidth: '120px',   // ToolkitNode width (rectangular, wider)
     toolkitHeight: '50px',   // ToolkitNode height (shorter)
     handle: '8px',           // Connection handles

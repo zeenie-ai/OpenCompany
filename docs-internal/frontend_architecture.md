@@ -189,9 +189,9 @@ client/src/
 
 ## Tokens + theming
 
-The frontend ships **10 themes** organised utopian / dystopian: `light` · `dark` · `renaissance` · `greek` · `edo` · `steampunk` · `atomic` · `cyber` · `wasteland` · `rot` · `plague` · `surveillance`. Active theme is `<html data-theme="...">` set by `<ThemeProvider>` (see [contexts/ThemeContext.tsx](../client/src/contexts/ThemeContext.tsx)). Per-theme blocks live in [client/src/themes/](../client/src/themes/); shadcn-aliased HSL triplets in [src/index.css](../client/src/index.css). Full token contract, sound + decorative-layer wiring, and the 10-theme migration playbook in **[theme_system.md](./theme_system.md)** — read that before adding a theme or migrating a component.
+The frontend ships **10 themes** organised utopian / dystopian: `light` · `dark` · `renaissance` · `greek` · `edo` · `steampunk` · `atomic` · `cyber` · `wasteland` · `rot` · `plague` · `surveillance`. Active theme is `<html data-theme="...">` set by `<ThemeProvider>` (see [contexts/ThemeContext.tsx](../client/src/contexts/ThemeContext.tsx)). Per-theme blocks live in [client/src/themes/](../client/src/themes/) and own all colour VALUES as **hex + `color-mix()`** (never HSL triplets); [src/index.css](../client/src/index.css) is **plumbing-only** (the `@theme inline` `var()` bridge — no literal colours). Full token contract, sound + decorative-layer wiring, and the 12-theme migration playbook in **[theme_system.md](./theme_system.md)** — read that before adding a theme or migrating a component.
 
-Single source of truth for the bridge: [src/index.css](../client/src/index.css).
+The bridge ([src/index.css](../client/src/index.css)) maps each Tailwind colour token to a raw `var(--X)`.
 
 ```css
 @import "tailwindcss";
@@ -200,67 +200,47 @@ Single source of truth for the bridge: [src/index.css](../client/src/index.css).
 @plugin "@tailwindcss/typography";
 @custom-variant dark (&:is(.dark *));
 
-:root, [data-theme="light"] {
-  --background: 218 22% 97%;
-  --foreground: 214 11% 12%;
-  --primary: 221 83% 53%;
-  --destructive: 0 74% 51%;
-  --success: 161 94% 30%;
-  --warning: 32 95% 44%;
-  --info: 192 91% 36%;
-  --border: 216 12% 84%;
-  --radius: 0.5rem;
+/* Colour VALUES live in client/src/themes/*.css as hex + color-mix() — NOT here.
+ * light.css defines them on bare :root (global); dark.css + the 10 skins override. */
+:root, :root[data-theme="light"] {       /* client/src/themes/light.css */
+  --background: #f5f7fa; --foreground: #1a1d21; --primary: #2563eb;
+  --destructive: #dc2626; --success: #059669; --border: #d1d5db; --radius: 0.5rem;
 
   /* Dracula action palette, same across themes */
-  --dracula-green: 135 94% 65%;
-  --dracula-purple: 265 89% 78%;
-  /* ...pink, cyan, red, orange, yellow */
+  --dracula-green: #50fa7b; --dracula-purple: #bd93f9;  /* …pink, cyan, red, orange, yellow */
 
-  /* Node-type role tokens — base + soft (tinted bg) + border (tinted outline).
-   * Themes redefine these in their own scope; call sites use bg-node-X /
-   * bg-node-X-soft / border-node-X-border directly with no opacity arithmetic. */
-  --node-agent:        265 89% 78%;
-  --node-agent-soft:   265 89% 78% / 0.08;
-  --node-agent-border: 265 89% 78% / 0.3;
-  --node-model:        191 97% 77%;   /* + -soft / -border */
-  --node-skill:        135 94% 65%;   /* + -soft / -border */
-  --node-tool:         135 94% 65%;   /* + -soft / -border */
-  --node-trigger:      326 100% 74%;  /* + -soft / -border */
-  --node-workflow:     27 100% 71%;   /* + -soft / -border */
+  /* Node + action role tokens: color-mix over the dracula base + the shared
+   * --tint-* alpha scale (base.css). Call sites use bg-node-X / -soft /
+   * border-node-X-border + text-action-X-ink directly — no opacity arithmetic. */
+  --node-agent:        var(--dracula-purple);
+  --node-agent-soft:   color-mix(in srgb, var(--dracula-purple) var(--tint-soft), transparent);
+  --node-agent-border: color-mix(in srgb, var(--dracula-purple) var(--tint-border), transparent);
+  --action-run:        var(--dracula-green);
+  --action-run-soft:   color-mix(in srgb, var(--dracula-green) var(--tint-action-soft), transparent);
+  --action-run-ink:    #15803d;   /* readable label; dark themes use var(--action-run) */
 }
 
-/* Dark + the 8 designed themes each ship their own per-theme block.
- * Every block redeclares the shadcn HSL triplets for the bridge AND
- * the new-contract tokens (--bg-app, --fg-default, --font-display,
- * --sound-pack, etc.) the migrated chrome consumes via Tailwind's
- * --color-bg-app etc. utilities. See client/src/themes/<name>.css for
- * the full 10-block set + theme_system.md for the contract. */
-[data-theme="dark"] {
-  --background: 192 100% 11%;   /* Solarized base03 */
-  --foreground: 60 30% 96%;     /* Dracula fg */
-  --primary: 205 69% 49%;       /* Solarized blue */
-  --destructive: 1 71% 52%;     /* Solarized red */
-  /* ...etc */
+[data-theme="dark"] {                     /* client/src/themes/dark.css — colour-hex overrides */
+  --background: #002b36;   /* Solarized base03 */
+  --foreground: #f8f8f2;   /* Dracula fg */
+  --primary: #268bd2;      /* Solarized blue */
+  /* …etc; node/action tokens inherit light.css's :root (identical in dark) + -ink overrides */
 }
 
-@theme inline {
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
-  --color-primary: hsl(var(--primary));
-  --color-destructive: hsl(var(--destructive));
-  --color-success: hsl(var(--success));
-  --color-warning: hsl(var(--warning));
-  --color-info: hsl(var(--info));
-  --color-dracula-green: hsl(var(--dracula-green));
-  /* ...etc */
+@theme inline {                           /* client/src/index.css — bridge ONLY, no values */
+  --color-background: var(--background);   /* NO hsl() wrapper */
+  --color-primary: var(--primary);
+  --color-node-agent-soft: var(--node-agent-soft);
+  --color-action-run-ink: var(--action-run-ink);
+  /* …every --color-X maps a raw var(--X) */
 }
 ```
 
 Rules:
-1. **HSL triplets, no `hsl()` wrapper.** Tailwind composes alpha via `bg-primary/50`.
+1. **Hex + `color-mix()`; bridge maps `--color-X: var(--X)`** (no `hsl()` wrapper). Tailwind v4 still composes `/opacity` (`bg-primary/50`) via `color-mix` for any colour format.
 2. **shadcn's variable names win** (`--background`, `--primary`, `--destructive`, etc.) so every shadcn-generated file resolves against our palette with no re-wiring.
 3. Theme switches via `[data-theme="<name>"]` set by `<ThemeProvider>`. Themes whose backgrounds are dark (`dark`, `cyber`, `wasteland`, `rot`, `surveillance`, `steampunk`) also flip Tailwind's `.dark` class so legacy `dark:` variants resolve correctly. The 10-way `THEME_OVERRIDES` map in [hooks/useAppTheme.ts](../client/src/hooks/useAppTheme.ts) layers per-theme accents (primary, focus, action colours, edge palette) on top of `lightColors` / `darkColors` for canvas surfaces.
-4. `styles/theme.ts` exports `lightColors` / `darkColors` base packs + raw `dracula` / `solarized` palette constants. Consumed only by `useAppTheme` (overlay merge) and canvas node components for inline per-definition gradients. New code uses Tailwind classes (`bg-primary`, `bg-action-run-soft`, `bg-node-agent-soft`, `bg-bg-app`, `text-fg-default`) or `hsl(var(--...))` inline. Palette names (`text-dracula-green`) are forbidden in components — go through the matching `--action-X` or `--node-X` semantic role token.
+4. `styles/theme.ts` exports `lightColors` / `darkColors` base packs + raw `dracula` / `solarized` palette constants. Consumed only by `useAppTheme` (overlay merge) and canvas node components for inline per-definition gradients. New code uses Tailwind classes (`bg-primary`, `bg-action-run-soft`, `bg-node-agent-soft`, `bg-bg-app`, `text-fg-default`) or `var(--...)` inline. Palette names (`text-dracula-green`) are forbidden in components — go through the matching `--action-X` or `--node-X` semantic role token.
 
 ### Token tier — pick the most specific that fits
 
@@ -499,7 +479,7 @@ The DIY widget registry (RHF + zod + a tester+rank dispatch) is modeled on n8n's
 
 ## Theme + canvas chrome
 
-[index.css](../client/src/index.css) also styles React Flow, scrollbars, and dot grid against the CSS-var palette. No inline hex codes in theme-sensitive surfaces — everything references `hsl(var(--...))` so dark mode flips cleanly.
+[index.css](../client/src/index.css) also styles React Flow, scrollbars, and dot grid against the CSS-var palette. No inline hex codes in theme-sensitive surfaces — everything references `var(--...)` so themes flip cleanly.
 
 ## Build + dev
 
