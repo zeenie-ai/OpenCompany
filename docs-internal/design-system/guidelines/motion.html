@@ -1,0 +1,26 @@
+<!-- @dsCard group="Spacing" viewport="700x150" subtitle="90 / 180 / 320ms · one smooth ease, one springy emphasis" name="Motion" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+@keyframes slide-default { 0%, 15% { transform: translateX(0); } 60%, 100% { transform: translateX(220px); } }
+@keyframes slide-emphasis { 0%, 15% { transform: translateX(0); } 60%, 100% { transform: translateX(220px); } }
+.lane { position: relative; height: 28px; background: var(--bg-panel); border: 1px solid var(--border-default); border-radius: 6px; overflow: hidden; }
+.dot { position: absolute; top: 4px; left: 6px; width: 18px; height: 18px; border-radius: 5px; }
+</style>
+</head>
+<body style="background: var(--bg-app); margin: 0; padding: 18px 24px;">
+<div style="display: grid; grid-template-columns: 290px 1fr; gap: 10px 16px; align-items: center;">
+  <div class="lane"><div class="dot" style="background: var(--primary); animation: slide-default 1.6s var(--ease-default) infinite;"></div></div>
+  <span style="font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted);">--ease-default · cubic-bezier(.2,.7,.3,1)</span>
+  <div class="lane"><div class="dot" style="background: var(--accent); animation: slide-emphasis 1.6s var(--ease-emphasis) infinite;"></div></div>
+  <span style="font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted);">--ease-emphasis · cubic-bezier(.6,-.05,.3,1.4)</span>
+  <div style="display: flex; gap: 14px; font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted);">
+    <span>fast 90ms</span><span>default 180ms</span><span>slow 320ms</span>
+  </div>
+  <span style="font-family: var(--font-mono); font-size: 11px; color: var(--fg-faint);">hover: lift −1px · press: +1px</span>
+</div>
+</body>
+</html>

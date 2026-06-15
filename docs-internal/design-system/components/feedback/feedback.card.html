@@ -1,0 +1,60 @@
+<!-- @dsCard group="Components" viewport="700x420" name="Feedback" subtitle="Modal, Toast, Tooltip, Spinner, Progress, EmptyState" -->
+<!DOCTYPE html>
+<html class="dark">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="../../_ds_bundle.js?v=3"></script>
+</head>
+<body style="background: var(--bg-panel); margin: 0; padding: 16px;">
+<div id="root"></div>
+<script type="text/babel">
+const { Modal, Toast, Tooltip, Spinner, Progress, EmptyState, Button, ActionButton, Input, Icon } = window.MachinaOSDesignSystem_2559cf;
+
+function FeedbackCard() {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
+      <Modal inline title="API Credentials" onClose={() => {}} footer={<>
+        <Button variant="outline">Cancel</Button>
+        <Button>Save</Button>
+      </>}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>Anthropic API key</span>
+          <Input type="password" defaultValue="sk-ant-api03-xxxxxxxx" icon={<Icon name="KeyRound" size={14} />} />
+        </div>
+      </Modal>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <Toast tone="success" title="Workflow deployed" message="Listening for incoming messages" time="12:01:33" onClose={() => {}} />
+        <Toast tone="error" title="API key invalid" message="Check your Anthropic credentials" time="12:02:10" onClose={() => {}} />
+        <Toast tone="warning" title="Unsaved changes" time="12:05:44" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginTop: 2 }}>
+          <Tooltip label="Override all agent nodes to use the selected model">
+            <ActionButton intent="config" iconOnly><Icon name="Repeat" size={14} /></ActionButton>
+          </Tooltip>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Spinner size={15} color="var(--dracula-cyan)" />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--fg-muted)' }}>Deploying...</span>
+          </span>
+        </div>
+        <Progress value={64} label="Pulling llama3.1:8b" color="var(--dracula-cyan)" />
+      </div>
+      <div style={{ gridColumn: '1 / -1' }}>
+        <EmptyState
+          icon={<Icon name="FolderOpen" size={30} strokeWidth={1.5} />}
+          title="No workflows yet"
+          hint="Create your first workflow to get started"
+          action={<Button><Icon name="FilePlus" size={14} /> New Workflow</Button>}
+          style={{ padding: '20px 24px' }}
+        />
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<FeedbackCard />);
+</script>
+</body>
+</html>

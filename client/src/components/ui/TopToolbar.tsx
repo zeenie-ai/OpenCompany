@@ -172,7 +172,7 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
           onClick={onToggleSidebar}
           aria-pressed={sidebarVisible}
           title={sidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
-          className="border-action-save-border bg-action-save-soft text-action-save hover:bg-action-save/25 aria-pressed:bg-action-save/30"
+          className="border-action-save-border bg-action-save-soft text-action-save-ink hover:bg-action-save-hover aria-pressed:bg-action-save-hover"
         >
           {sidebarVisible ? <PanelLeftClose /> : <PanelLeftOpen />}
         </Button>
@@ -185,7 +185,7 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
             <Button
               variant="outline"
               size="sm"
-              className="border-action-save-border bg-action-save-soft text-action-save hover:bg-action-save/25"
+              className="border-action-save-border bg-action-save-soft text-action-save-ink hover:bg-action-save-hover"
             >
               <FileText />
               {/* font-display + tracking-display drive the per-theme display
@@ -360,7 +360,7 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
           size="icon-sm"
           onClick={onOpenSettings}
           title="Settings"
-          className="border-action-config-border bg-action-config-soft text-action-config hover:bg-action-config/25"
+          className="border-action-config-border bg-action-config-soft text-action-config-ink hover:bg-action-config-hover"
         >
           <SettingsIcon />
         </Button>
@@ -370,7 +370,7 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
           size="icon-sm"
           onClick={onOpenCredentials}
           title="API Credentials"
-          className="border-action-secret-border bg-action-secret-soft text-action-secret hover:bg-action-secret/25"
+          className="border-action-secret-border bg-action-secret-soft text-action-secret-ink hover:bg-action-secret-hover"
         >
           <KeyRound />
         </Button>
@@ -383,7 +383,7 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
             size="icon-sm"
             onClick={logout}
             title={`Logout ${user.display_name}`}
-            className="border-action-stop-border bg-action-stop-soft text-action-stop hover:bg-action-stop/25"
+            className="border-action-stop-border bg-action-stop-soft text-action-stop-ink hover:bg-action-stop-hover"
           >
             <LogOut />
           </Button>
@@ -449,7 +449,7 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
           onClick={onToggleComponentPalette}
           aria-pressed={componentPaletteVisible}
           title={componentPaletteVisible ? 'Hide components' : 'Show components'}
-          className="border-action-tools-border bg-action-tools-soft text-action-tools hover:bg-action-tools/25 aria-pressed:bg-action-tools/30"
+          className="border-action-tools-border bg-action-tools-soft text-action-tools-ink hover:bg-action-tools-hover aria-pressed:bg-action-tools-hover"
         >
           {componentPaletteVisible ? <PanelRightClose /> : <PanelRightOpen />}
         </Button>

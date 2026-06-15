@@ -1,0 +1,250 @@
+/* ============================================================================
+ * themes/wasteland.css — irradiated dust, rust, hand-painted warnings on
+ * scrap metal. Reads like a Mad Max settlement.
+ * Ported from design_handoff_machinaos_themes/themes/wasteland.css.
+ * ============================================================================ */
+
+:root[data-theme="wasteland"] {
+  --bg-app: #2a2018;
+  --bg-panel: #3a2c1c;
+  --bg-canvas: #1a1410;
+  --bg-elevated: #4a3826;
+  --bg-input: #1a1410;
+  --bg-hover: rgba(232, 140, 40, 0.10);
+  --bg-active: rgba(232, 140, 40, 0.22);
+  --bg-overlay: rgba(20, 12, 6, 0.78);
+
+  --border-default: #6a4a28;
+  --border-strong: #8a3a18;
+  --border-focus: #e88a28;
+  --ornament-frame: none;
+
+  --fg-default: #e8d8a8;
+  --fg-muted: #b89868;
+  --fg-faint: #786040;
+  --fg-on-accent: #1a1410;
+  --fg-on-success: #1a1410;
+  --fg-on-danger: #e8d8a8;
+  --fg-on-warning: #1a1410;
+
+  --rust: #8a3a18;
+  --bone: #d8c8a0;
+  --rad: #c8d038;
+  --ochre: #e88a28;
+
+  --font-display: 'Special Elite', 'Black Ops One', monospace;
+  --font-body: 'Special Elite', 'Courier Prime', monospace;
+  --font-mono: 'VT323', 'Courier New', monospace;
+  --type-scale-base: 14px;
+  --type-tracking-display: 0.10em;
+  --type-uppercase: uppercase;
+
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-pill: 0px;
+
+  --dur-fast: 60ms;
+  --dur-default: 180ms;
+  --dur-slow: 320ms;
+  --ease-default: cubic-bezier(0.6, 0, 0.4, 1);
+  --ease-emphasis: cubic-bezier(0.6, 0, 0.4, 1);
+  --motion-style: jittery;
+  --sound-pack: scrap;
+
+  /* Wave 30: radioactive-yellow pulse — high-contrast against ochre
+   * dust + matches the rust-belt accent palette. */
+  --node-pulse-color: hsl(var(--accent));
+
+  --cursor-default: auto;
+  --cursor-pointer: pointer;
+  --scrollbar-track: #2a2018;
+  --scrollbar-thumb: #8a3a18;
+
+  /* Shadcn HSL bridge */
+  --background: 30 28% 13%;
+  --foreground: 41 53% 78%;
+  --card: 28 32% 22%;
+  --card-foreground: 41 53% 78%;
+  --popover: 28 32% 22%;
+  --popover-foreground: 41 53% 78%;
+
+  --primary: 28 80% 53%;           /* ochre */
+  --primary-foreground: 24 28% 8%;
+  --secondary: 28 36% 17%;
+  --secondary-foreground: 41 53% 78%;
+  --muted: 28 36% 17%;
+  --muted-foreground: 35 36% 56%;
+  --accent: 64 56% 51%;            /* radioactive */
+  --accent-foreground: 24 28% 8%;
+
+  --destructive: 6 75% 41%;
+  --destructive-foreground: 41 53% 78%;
+  --success: 64 56% 41%;
+  --warning: 64 56% 51%;
+  --info: 28 80% 53%;
+
+  --border: 32 47% 28%;
+  --input: 32 47% 28%;
+  --ring: 28 80% 53%;
+
+  /* Action role bridge */
+  --action-run: 64 56% 41%;
+  --action-run-soft: 64 56% 41% / 0.20;
+  --action-run-hover: 64 56% 41% / 0.34;
+  --action-run-border: 64 56% 41% / 0.7;
+
+  --action-stop: 6 75% 41%;
+  --action-stop-soft: 6 75% 41% / 0.22;
+  --action-stop-hover: 6 75% 41% / 0.36;
+  --action-stop-border: 6 75% 41% / 0.7;
+
+  --action-save: 28 80% 53%;
+  --action-save-soft: 28 80% 53% / 0.20;
+  --action-save-hover: 28 80% 53% / 0.34;
+  --action-save-border: 28 80% 53% / 0.7;
+
+  --action-config: 64 56% 51%;
+  --action-config-soft: 64 56% 51% / 0.18;
+  --action-config-hover: 64 56% 51% / 0.32;
+  --action-config-border: 64 56% 51% / 0.6;
+
+  --action-secret: 28 80% 53%;
+  --action-secret-soft: 28 80% 53% / 0.16;
+  --action-secret-hover: 28 80% 53% / 0.30;
+  --action-secret-border: 28 80% 53% / 0.6;
+
+  --action-tools: 64 56% 51%;
+  --action-tools-soft: 64 56% 51% / 0.18;
+  --action-tools-hover: 64 56% 51% / 0.32;
+  --action-tools-border: 64 56% 51% / 0.6;
+
+  --tint-soft: 18%;
+  --tint-border: 45%;
+
+  /* Canvas backplane — cracked-earth fissures on 200x200 tile */
+  --canvas-grid:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><g stroke='%23e88a28' stroke-width='0.4' fill='none' opacity='0.10'><path d='M40 10 Q60 60 30 100 Q10 140 50 180 M120 0 Q140 80 100 140 M180 30 Q160 80 190 130'/></g></svg>");
+  --canvas-grid-opacity: 1;
+}
+
+/* Body — dust + grit texture */
+:root[data-theme="wasteland"] body {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><filter id='d'><feTurbulence baseFrequency='0.9' numOctaves='3'/><feColorMatrix values='0 0 0 0 0.55 0 0 0 0 0.40 0 0 0 0 0.18 0 0 0 0.16 0'/></filter><rect width='300' height='300' filter='url(%23d)'/></svg>"),
+    var(--bg-app);
+}
+
+:root[data-theme="wasteland"] ::selection {
+  background: rgba(232, 138, 40, 0.5);
+  color: #1a1410;
+}
+
+/* Wasteland scrollbars — rust thumb on dust track */
+:root[data-theme="wasteland"] ::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+:root[data-theme="wasteland"] ::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+:root[data-theme="wasteland"] ::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--radius-sm, 0);
+}
+:root[data-theme="wasteland"] ::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--scrollbar-thumb) 80%, white);
+}
+
+/* ── Per-component decorations (Wave 16 port from handoff) ─── */
+
+:root[data-theme="wasteland"] .toolbar,
+:root[data-theme="wasteland"] .sidebar,
+:root[data-theme="wasteland"] .palette,
+:root[data-theme="wasteland"] .chat {
+  background:
+    linear-gradient(180deg, transparent 60%, rgba(0,0,0,0.3)),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><filter id='r'><feTurbulence baseFrequency='0.5' numOctaves='2'/><feColorMatrix values='0 0 0 0 0.54 0 0 0 0 0.22 0 0 0 0 0.10 0 0 0 0.18 0'/></filter><rect width='300' height='300' filter='url(%23r)'/></svg>"),
+    var(--bg-panel);
+}
+:root[data-theme="wasteland"] .toolbar { border-bottom: 2px solid var(--rust); box-shadow: inset 0 -1px 0 hsl(var(--accent)); }
+:root[data-theme="wasteland"] .sidebar { border-right: 2px solid var(--rust); }
+:root[data-theme="wasteland"] .palette { border-left: 2px solid var(--rust); }
+:root[data-theme="wasteland"] .chat    { border-top: 2px solid var(--rust); }
+
+/* CANVAS — cracked earth */
+:root[data-theme="wasteland"] .canvas {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><g stroke='%23e88a28' stroke-width='0.4' fill='none' opacity='0.10'><path d='M40 10 Q60 60 30 100 Q10 140 50 180 M120 0 Q140 80 100 140 M180 30 Q160 80 190 130'/></g></svg>"),
+    var(--bg-canvas);
+}
+
+/* TYPOGRAPHY — typewritten */
+:root[data-theme="wasteland"] body { font-family: var(--font-body); color: var(--fg-default); }
+:root[data-theme="wasteland"] h1, :root[data-theme="wasteland"] h2, :root[data-theme="wasteland"] h3,
+:root[data-theme="wasteland"] .v-display {
+  font-family: var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; color: hsl(var(--accent));
+}
+
+/* SQUARE NODE — scrap metal plate, hand-stenciled */
+:root[data-theme="wasteland"] .sq-node-box {
+  background:
+    linear-gradient(180deg, rgba(232,140,40,0.06), transparent),
+    var(--bg-elevated);
+  border: 2px solid var(--rust); border-radius: 0;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.4), 2px 2px 0 var(--rust);
+  color: hsl(var(--accent));
+  position: relative;
+}
+:root[data-theme="wasteland"] .sq-node-box::before {
+  content: ''; position: absolute; inset: 2px;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><filter id='s'><feTurbulence baseFrequency='2' numOctaves='1'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.18 0'/></filter><rect width='100' height='100' filter='url(%23s)'/></svg>");
+  pointer-events: none;
+}
+:root[data-theme="wasteland"] .sq-node.selected .sq-node-box { border-color: hsl(var(--accent)); box-shadow: 0 0 0 2px hsl(var(--info) / 0.25), 2px 2px 0 var(--rust); }
+:root[data-theme="wasteland"] .sq-node-gear { background: var(--rust); color: hsl(var(--accent)); border: 1px solid hsl(var(--accent)); border-radius: 0; }
+:root[data-theme="wasteland"] .sq-node-handle.out { background: hsl(var(--accent)); }
+:root[data-theme="wasteland"] .sq-node-label { font-family: var(--font-display); letter-spacing: 0.10em; }
+
+/* ACTIONS — stenciled */
+:root[data-theme="wasteland"] .action-btn {
+  font-family: var(--font-display); letter-spacing: 0.10em; text-transform: uppercase;
+  border-radius: 0; border-width: 2px; border-style: dashed;
+}
+:root[data-theme="wasteland"] .action-run { background: hsl(var(--success-soft)); color: hsl(var(--success)); border-color: hsl(var(--success)); border-style: solid; }
+:root[data-theme="wasteland"] .action-deploy { background: hsl(var(--info-soft)); color: hsl(var(--accent)); border-color: hsl(var(--accent)); border-style: solid; }
+:root[data-theme="wasteland"] .action-save { background: hsl(var(--warning-soft)); color: hsl(var(--warning)); border-color: hsl(var(--warning)); border-style: solid; }
+:root[data-theme="wasteland"] .action-stop { background: hsl(var(--danger-soft)); color: hsl(var(--danger)); border-color: hsl(var(--danger)); border-style: solid; }
+
+/* CARDS */
+:root[data-theme="wasteland"] .wf-card,
+:root[data-theme="wasteland"] .cat,
+:root[data-theme="wasteland"] .comp,
+:root[data-theme="wasteland"] .settings-section,
+:root[data-theme="wasteland"] .cred-card {
+  background: var(--bg-elevated); border: 1px solid var(--rust); border-radius: 0;
+}
+:root[data-theme="wasteland"] .wf-card.selected { border-color: hsl(var(--accent)); box-shadow: inset 3px 0 0 hsl(var(--accent)); }
+:root[data-theme="wasteland"] .cat-tile { background: var(--rust); color: hsl(var(--accent)); border-radius: 0; }
+:root[data-theme="wasteland"] .comp-ico { background: var(--bg-input); color: hsl(var(--accent)); border: 1px solid var(--rust); border-radius: 0; }
+
+/* CHAT */
+:root[data-theme="wasteland"] .chat-msg { border-radius: 0; }
+:root[data-theme="wasteland"] .chat-msg-user { background: hsl(var(--info-soft)); border: 1px solid hsl(var(--accent)); }
+:root[data-theme="wasteland"] .chat-msg-bot { background: var(--bg-elevated); border: 1px solid var(--rust); }
+
+/* STATUS BAR */
+:root[data-theme="wasteland"] .statusbar {
+  background: var(--bg-input); color: hsl(var(--accent)); border-top: 2px dashed var(--rust);
+  font-family: var(--font-mono); letter-spacing: 0.10em;
+}
+:root[data-theme="wasteland"] .statusbar .pip { background: var(--rad); box-shadow: 0 0 6px var(--rad); border-radius: 0; }
+
+/* MODAL */
+:root[data-theme="wasteland"] .modal { background: var(--bg-elevated); border: 3px solid hsl(var(--accent)); border-radius: 0; box-shadow: 6px 6px 0 var(--rust); }
+:root[data-theme="wasteland"] .modal-head { border-bottom: 2px dashed var(--rust); background: var(--bg-panel); }
+:root[data-theme="wasteland"] .modal-title { font-family: var(--font-display); color: hsl(var(--accent)); letter-spacing: 0.12em; }
+
+/* CMDK */
+:root[data-theme="wasteland"] .cmdk { background: var(--bg-elevated); border: 3px solid hsl(var(--accent)); border-radius: 0; }
+:root[data-theme="wasteland"] .cmdk-item.active { background: var(--bg-active); color: hsl(var(--accent)); border-left: 3px solid var(--rust); }

@@ -1,0 +1,28 @@
+<!-- @dsCard group="Spacing" viewport="700x170" subtitle="Quiet chrome shadows; glow is reserved for meaning" name="Shadows & Glow" -->
+<!DOCTYPE html>
+<html class="dark">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+</head>
+<body style="background: var(--bg-app); margin: 0; padding: 22px 24px;">
+<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px;">
+  <div style="display:flex; flex-direction:column; gap:8px; align-items:center;">
+    <div style="width: 100%; height: 70px; border-radius: 8px; background: var(--surface-card); border: 1px solid var(--border-default); box-shadow: var(--shadow-card);"></div>
+    <span style="font-family: var(--font-mono); font-size: 10px; color: var(--fg-muted);">--shadow-card</span>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:8px; align-items:center;">
+    <div style="width: 100%; height: 70px; border-radius: 8px; background: var(--surface-card); border: 1px solid var(--border-default); box-shadow: var(--shadow-modal);"></div>
+    <span style="font-family: var(--font-mono); font-size: 10px; color: var(--fg-muted);">--shadow-modal</span>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:8px; align-items:center;">
+    <div style="width: 100%; height: 70px; border-radius: 10px; border: 2px solid color-mix(in srgb, var(--dracula-purple) 60%, transparent); background: linear-gradient(135deg, color-mix(in srgb, var(--dracula-purple) 16%, var(--surface-card)), var(--surface-card)); box-shadow: 0 2px 8px color-mix(in srgb, var(--dracula-purple) 18%, transparent);"></div>
+    <span style="font-family: var(--font-mono); font-size: 10px; color: var(--fg-muted);">node accent glow</span>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:8px; align-items:center;">
+    <div class="machina-pulse" style="--node-pulse-color: var(--info); width: 100%; height: 70px; border-radius: 10px; border: 2px solid color-mix(in srgb, var(--dracula-cyan) 60%, transparent); background: linear-gradient(135deg, color-mix(in srgb, var(--dracula-cyan) 16%, var(--surface-card)), var(--surface-card));"></div>
+    <span style="font-family: var(--font-mono); font-size: 10px; color: var(--fg-muted);">executing pulse</span>
+  </div>
+</div>
+</body>
+</html>

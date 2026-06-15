@@ -1204,12 +1204,11 @@ const DashboardContent: React.FC = () => {
           brackets under Cyber, riveted ridged frame under Steampunk,
           REC dot under Surveillance, etc.). Decorations declare
           pointer-events: none so they don't intercept clicks. */}
-      <div className="app-frame" style={{
+      <div className="app-frame bg-bg-app" style={{
         width: '100%',
         height: '100vh',
         display: 'flex',
         flexDirection: 'column',
-        backgroundColor: theme.colors.background,
         fontFamily: 'system-ui, sans-serif',
       }}>
         {/* Top Toolbar */}
@@ -1256,7 +1255,7 @@ const DashboardContent: React.FC = () => {
             width: sidebarVisible ? '280px' : '0px',
             overflow: 'hidden',
             transition: 'width 0.3s ease',
-            borderRight: sidebarVisible ? `1px solid ${theme.colors.border}` : 'none',
+            borderRight: sidebarVisible ? '1px solid var(--border-default)' : 'none',
             display: 'flex',
             flexDirection: 'column',
           }}>
@@ -1345,7 +1344,7 @@ const DashboardContent: React.FC = () => {
               width: componentPaletteVisible ? theme.layout.sidebarWidth : '0px',
               overflow: 'hidden',
               transition: 'width 0.3s ease',
-              borderLeft: componentPaletteVisible ? `1px solid ${theme.colors.border}` : 'none',
+              borderLeft: componentPaletteVisible ? '1px solid var(--border-default)' : 'none',
               display: 'flex',
               flexDirection: 'column',
             }}>

@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 900" width="100%" preserveAspectRatio="xMidYMid meet" font-family="ui-monospace, &#39;SFMono-Regular&#39;, Menlo, Consolas, monospace">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f8f8f2"></path>
+    </marker>
+    
+  </defs>
+
+  <rect class="bg" width="1400" height="900"></rect>
+
+  
+  <text x="700" y="35" class="title" text-anchor="middle" font-size="20">AI Service: Native SDK vs LangChain Routing</text>
+  <text x="700" y="58" class="caption" text-anchor="middle">server/services/ai.py + server/services/llm/</text>
+
+  
+  <rect class="entry" x="540" y="85" width="320" height="70" rx="8"></rect>
+  <text x="700" y="115" class="big" text-anchor="middle">AIService</text>
+  <text x="700" y="138" class="sub" text-anchor="middle">server/services/ai.py (~4500 lines)</text>
+
+  
+  <path class="conn" d="M 700 155 L 700 185 L 300 185 L 300 215" marker-end="url(#arrow)"></path>
+  <path class="conn" d="M 700 155 L 700 185 L 1100 185 L 1100 215" marker-end="url(#arrow)"></path>
+
+  
+  <text x="300" y="205" class="col-header" text-anchor="middle">Method 1: Direct Chat</text>
+  <text x="1100" y="205" class="col-header" text-anchor="middle">Method 2: Agent Tool-Calling</text>
+
+  
+  <rect class="method" x="120" y="215" width="360" height="75" rx="8"></rect>
+  <text x="300" y="243" class="big" text-anchor="middle">execute_chat(parameters)</text>
+  <text x="300" y="265" class="sub" text-anchor="middle">Used by chat model nodes</text>
+  <text x="300" y="283" class="caption" text-anchor="middle">openaiChatModel, anthropicChatModel, ...</text>
+
+  
+  <polygon class="decision" points="300,310 470,385 300,460 130,385"></polygon>
+  <text x="300" y="375" class="big" text-anchor="middle">is_native_provider</text>
+  <text x="300" y="400" class="big" text-anchor="middle">(provider)?</text>
+
+  
+  <path class="conn" d="M 300 290 L 300 310" marker-end="url(#arrow)"></path>
+
+  
+  <path class="conn-native" d="M 470 385 L 530 385 L 530 495" marker-end="url(#arrow)"></path>
+  <text x="505" y="375" class="branch-label">yes</text>
+
+  
+  <path class="conn-lc" d="M 130 385 L 70 385 L 70 495" marker-end="url(#arrow)"></path>
+  <text x="95" y="375" class="branch-label">no</text>
+
+  
+  <rect class="native" x="340" y="495" width="380" height="150" rx="8"></rect>
+  <text x="530" y="522" class="title" text-anchor="middle" fill="#8be9fd">Native SDK Path</text>
+  <text x="530" y="545" class="sub" text-anchor="middle">create_provider(name, api_key)</text>
+  <text x="530" y="563" class="sub" text-anchor="middle">lazy-imports one of:</text>
+  <text x="530" y="582" class="path" text-anchor="middle">AnthropicProvider / OpenAIProvider</text>
+  <text x="530" y="600" class="path" text-anchor="middle">GeminiProvider / OpenRouterProvider</text>
+  <text x="530" y="622" class="sub" text-anchor="middle">OpenAI-compatible (xAI, DeepSeek,</text>
+  <text x="530" y="638" class="sub" text-anchor="middle">Kimi, Mistral): shared OpenAIProvider + base_url</text>
+
+  
+  <rect class="langchain" x="10" y="495" width="260" height="150" rx="8"></rect>
+  <text x="140" y="522" class="title" text-anchor="middle" fill="#bd93f9">LangChain Fallback</text>
+  <text x="140" y="545" class="sub" text-anchor="middle">create_model()</text>
+  <text x="140" y="565" class="path-lc" text-anchor="middle">ChatGroq</text>
+  <text x="140" y="583" class="path-lc" text-anchor="middle">ChatCerebras</text>
+  <text x="140" y="608" class="sub" text-anchor="middle">(providers without native</text>
+  <text x="140" y="624" class="sub" text-anchor="middle">SDK implementation yet)</text>
+
+  
+  <path class="conn-native" d="M 530 645 L 530 690" marker-end="url(#arrow)"></path>
+  <path class="conn-lc" d="M 140 645 L 140 680 L 340 680 L 340 690" marker-end="url(#arrow)"></path>
+
+  
+  <rect class="method" x="920" y="215" width="360" height="75" rx="8"></rect>
+  <text x="1100" y="243" class="big" text-anchor="middle">execute_agent(parameters)</text>
+  <text x="1100" y="263" class="sub" text-anchor="middle">execute_chat_agent(parameters)</text>
+  <text x="1100" y="283" class="caption" text-anchor="middle">aiAgent, chatAgent, 11 specialized + 2 team leads</text>
+
+  
+  <path class="conn-lc" d="M 1100 290 L 1100 330" marker-end="url(#arrow)"></path>
+
+  
+  <rect class="langchain" x="920" y="330" width="360" height="130" rx="8"></rect>
+  <text x="1100" y="358" class="title" text-anchor="middle" fill="#bd93f9">LangChain chat model</text>
+  <text x="1100" y="382" class="sub" text-anchor="middle">create_model() -&gt; LangChain class</text>
+  <text x="1100" y="402" class="path-lc" text-anchor="middle">ChatOpenAI / ChatAnthropic</text>
+  <text x="1100" y="420" class="path-lc" text-anchor="middle">ChatGoogleGenerativeAI / ChatGroq / ...</text>
+  <text x="1100" y="442" class="sub" text-anchor="middle">.bind_tools([StructuredTool, ...])</text>
+
+  
+  <path class="conn-lc" d="M 1100 460 L 1100 500" marker-end="url(#arrow)"></path>
+
+  
+  <rect class="langchain" x="900" y="500" width="400" height="155" rx="8"></rect>
+  <text x="1100" y="528" class="title" text-anchor="middle" fill="#bd93f9">_run_agent_loop (plain async)</text>
+  <text x="1100" y="552" class="sub" text-anchor="middle">for iteration in range(max): ainvoke -&gt; tool_calls?</text>
+  <text x="1100" y="572" class="sub" text-anchor="middle">if tools: dispatch each, append ToolMessage, loop</text>
+  <text x="1100" y="592" class="sub" text-anchor="middle">else: return final response</text>
+  <text x="1100" y="615" class="caption" text-anchor="middle">Max iterations guard against tool loops</text>
+  <text x="1100" y="635" class="caption" text-anchor="middle">Agent Teams: delegate_to_&lt;type&gt; tools auto-injected</text>
+
+  
+  <rect class="shared" x="340" y="690" width="720" height="85" rx="8"></rect>
+  <text x="700" y="718" class="title" text-anchor="middle" fill="#50fa7b">Normalized LLMResponse</text>
+  <text x="700" y="740" class="sub" text-anchor="middle">content, thinking, tool_calls, usage (tokens), model, finish_reason</text>
+  <text x="700" y="758" class="caption" text-anchor="middle">services/llm/protocol.py -- dataclass shared across all providers</text>
+
+  
+  <path class="conn-lc" d="M 1100 655 L 1100 685 L 720 685 L 720 690" marker-end="url(#arrow)"></path>
+
+  
+  <rect class="shared" x="200" y="800" width="1000" height="80" rx="8"></rect>
+  <text x="700" y="828" class="title" text-anchor="middle" fill="#50fa7b">Shared Infrastructure</text>
+  <text x="700" y="850" class="sub" text-anchor="middle">compaction.py: token tracking, cost calculation, model-aware compaction (50% of context window)</text>
+  <text x="700" y="868" class="sub" text-anchor="middle">pricing.py: USD cost per provider from config/pricing.json  |  model_registry.py: context length lookup</text>
+
+  
+  <path class="conn" d="M 700 775 L 700 800" marker-end="url(#arrow)"></path>
+</svg>

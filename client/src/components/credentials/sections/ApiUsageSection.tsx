@@ -49,7 +49,7 @@ const ApiUsageSection: React.FC<Props> = ({ service, serviceName }) => {
       <AccordionItem value="usage">
         <AccordionTrigger>
           <span className="flex items-center gap-2">
-            <DollarSign className="h-4 w-4 text-dracula-yellow" />
+            <DollarSign className="h-4 w-4 text-warning" />
             API Usage &amp; Costs {costBadge}
           </span>
         </AccordionTrigger>
@@ -67,9 +67,9 @@ const ApiUsageSection: React.FC<Props> = ({ service, serviceName }) => {
           ) : (
             <div className="flex w-full flex-col gap-4">
               <div className="flex flex-wrap gap-4">
-                <Stat label="Total Cost" value={`$${data.total_cost.toFixed(4)}`} className="text-dracula-green" />
-                <Stat label="API Calls" value={data.execution_count} className="text-dracula-cyan" />
-                <Stat label="Resources" value={data.total_resources} className="text-dracula-purple" />
+                <Stat label="Total Cost" value={`$${data.total_cost.toFixed(4)}`} className="text-success" />
+                <Stat label="API Calls" value={data.execution_count} className="text-info" />
+                <Stat label="Resources" value={data.total_resources} className="text-primary" />
               </div>
 
               {data.operations?.length > 0 && (

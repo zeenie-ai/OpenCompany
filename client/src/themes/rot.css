@@ -55,7 +55,7 @@
 
   /* Wave 30: phosphor-green pulse — high-contrast against the moss
    * + crypt-brown canvas backplane. */
-  --node-pulse-color: hsl(var(--accent));
+  --node-pulse-color: var(--accent);
 
   --cursor-default: auto;
   --cursor-pointer: pointer;
@@ -63,62 +63,68 @@
   --scrollbar-thumb: #4a6a4a;
 
   /* Shadcn HSL bridge */
-  --background: 200 13% 9%;
-  --foreground: 90 22% 80%;
-  --card: 199 14% 17%;
-  --card-foreground: 90 22% 80%;
-  --popover: 199 14% 17%;
-  --popover-foreground: 90 22% 80%;
+  --background: #14181a;
+  --foreground: #c8d8c0;
+  --card: #252e33;
+  --card-foreground: #c8d8c0;
+  --popover: #252e33;
+  --popover-foreground: #c8d8c0;
 
-  --primary: 120 43% 63%;          /* moss bloom */
-  --primary-foreground: 200 25% 5%;
-  --secondary: 198 16% 13%;
-  --secondary-foreground: 90 22% 80%;
-  --muted: 198 16% 13%;
-  --muted-foreground: 120 6% 50%;
-  --accent: 35 78% 56%;            /* candleflame amber */
-  --accent-foreground: 200 25% 5%;
+  --primary: #74d074;          /* moss bloom */
+  --primary-foreground: #060f14;
+  --secondary: #1c2327;
+  --secondary-foreground: #c8d8c0;
+  --muted: #1c2327;
+  --muted-foreground: #788878;
+  --accent: #e8a338;            /* candleflame amber */
+  --accent-foreground: #060f14;
 
-  --destructive: 0 49% 44%;
-  --destructive-foreground: 90 22% 80%;
-  --success: 120 43% 63%;
-  --warning: 35 78% 56%;
-  --info: 200 36% 53%;
+  --destructive: #a73a3a;
+  --destructive-foreground: #c8d8c0;
+  --success: #74d074;
+  --warning: #e8a338;
+  --info: #5793b6;
 
-  --border: 145 16% 28%;
-  --input: 145 16% 28%;
-  --ring: 120 43% 63%;
+  --border: #3d5848;
+  --input: #3d5848;
+  --ring: #74d074;
 
   /* Action role bridge */
-  --action-run: 120 43% 63%;
-  --action-run-soft: 120 43% 63% / 0.18;
-  --action-run-hover: 120 43% 63% / 0.32;
-  --action-run-border: 120 43% 63% / 0.7;
+  --action-run: #74d074;
+  --action-run-soft: color-mix(in srgb, var(--action-run) var(--tint-action-soft), transparent);
+  --action-run-hover: color-mix(in srgb, var(--action-run) var(--tint-action-hover), transparent);
+  --action-run-border: color-mix(in srgb, var(--action-run) var(--tint-action-border), transparent);
+  --action-run-ink: var(--action-run);
 
-  --action-stop: 0 49% 44%;
-  --action-stop-soft: 0 49% 44% / 0.20;
-  --action-stop-hover: 0 49% 44% / 0.34;
-  --action-stop-border: 0 49% 44% / 0.7;
+  --action-stop: #a73a3a;
+  --action-stop-soft: color-mix(in srgb, var(--action-stop) var(--tint-action-soft), transparent);
+  --action-stop-hover: color-mix(in srgb, var(--action-stop) var(--tint-action-hover), transparent);
+  --action-stop-border: color-mix(in srgb, var(--action-stop) var(--tint-action-border), transparent);
+  --action-stop-ink: var(--action-stop);
 
-  --action-save: 35 78% 56%;
-  --action-save-soft: 35 78% 56% / 0.20;
-  --action-save-hover: 35 78% 56% / 0.34;
-  --action-save-border: 35 78% 56% / 0.7;
+  --action-save: #e8a338;
+  --action-save-soft: color-mix(in srgb, var(--action-save) var(--tint-action-soft), transparent);
+  --action-save-hover: color-mix(in srgb, var(--action-save) var(--tint-action-hover), transparent);
+  --action-save-border: color-mix(in srgb, var(--action-save) var(--tint-action-border), transparent);
+  --action-save-ink: var(--action-save);
 
-  --action-config: 35 78% 56%;
-  --action-config-soft: 35 78% 56% / 0.18;
-  --action-config-hover: 35 78% 56% / 0.30;
-  --action-config-border: 35 78% 56% / 0.6;
+  --action-config: #e8a338;
+  --action-config-soft: color-mix(in srgb, var(--action-config) var(--tint-action-soft), transparent);
+  --action-config-hover: color-mix(in srgb, var(--action-config) var(--tint-action-hover), transparent);
+  --action-config-border: color-mix(in srgb, var(--action-config) var(--tint-action-border), transparent);
+  --action-config-ink: var(--action-config);
 
-  --action-secret: 200 36% 53%;
-  --action-secret-soft: 200 36% 53% / 0.16;
-  --action-secret-hover: 200 36% 53% / 0.30;
-  --action-secret-border: 200 36% 53% / 0.6;
+  --action-secret: #5793b6;
+  --action-secret-soft: color-mix(in srgb, var(--action-secret) var(--tint-action-soft), transparent);
+  --action-secret-hover: color-mix(in srgb, var(--action-secret) var(--tint-action-hover), transparent);
+  --action-secret-border: color-mix(in srgb, var(--action-secret) var(--tint-action-border), transparent);
+  --action-secret-ink: var(--action-secret);
 
-  --action-tools: 120 43% 63%;
-  --action-tools-soft: 120 43% 63% / 0.16;
-  --action-tools-hover: 120 43% 63% / 0.30;
-  --action-tools-border: 120 43% 63% / 0.6;
+  --action-tools: #74d074;
+  --action-tools-soft: color-mix(in srgb, var(--action-tools) var(--tint-action-soft), transparent);
+  --action-tools-hover: color-mix(in srgb, var(--action-tools) var(--tint-action-hover), transparent);
+  --action-tools-border: color-mix(in srgb, var(--action-tools) var(--tint-action-border), transparent);
+  --action-tools-ink: var(--action-tools);
 
   --tint-soft: 16%;
   --tint-border: 40%;
@@ -197,20 +203,20 @@
   color: var(--crypt);
 }
 :root[data-theme="rot"] .sq-node.selected .sq-node-box {
-  border-color: hsl(var(--accent)); box-shadow: 0 0 16px rgba(120,200,120,0.4), 0 4px 8px rgba(0,0,0,0.5);
+  border-color: var(--accent); box-shadow: 0 0 16px rgba(120,200,120,0.4), 0 4px 8px rgba(0,0,0,0.5);
 }
 :root[data-theme="rot"] .sq-node-gear { background: var(--crypt); color: var(--bone); border: none; }
 :root[data-theme="rot"] .sq-node-label { font-family: var(--font-display); color: var(--crypt); font-weight: 400; }
-:root[data-theme="rot"] .sq-node-handle.out { background: hsl(var(--accent)); box-shadow: 0 0 6px hsl(var(--accent)); }
+:root[data-theme="rot"] .sq-node-handle.out { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
 
 /* ACTIONS — guttering candleflame */
 :root[data-theme="rot"] .action-btn {
   font-family: var(--font-display); font-size: 13px; letter-spacing: 0.04em; font-weight: 400;
   border-radius: 2px; border-width: 1px;
 }
-:root[data-theme="rot"] .action-run { background: hsl(var(--success-soft)); color: hsl(var(--accent)); border-color: hsl(var(--success)); }
-:root[data-theme="rot"] .action-deploy { background: hsl(var(--info-soft)); color: hsl(var(--info)); border-color: hsl(var(--info)); }
-:root[data-theme="rot"] .action-save { background: hsl(var(--warning-soft)); color: var(--candle); border-color: var(--candle); }
+:root[data-theme="rot"] .action-run { background: var(--success-soft); color: var(--accent); border-color: var(--success); }
+:root[data-theme="rot"] .action-deploy { background: var(--info-soft); color: var(--info); border-color: var(--info); }
+:root[data-theme="rot"] .action-save { background: var(--warning-soft); color: var(--candle); border-color: var(--candle); }
 
 /* CARDS */
 :root[data-theme="rot"] .wf-card,
@@ -220,13 +226,13 @@
 :root[data-theme="rot"] .cred-card {
   background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: 2px;
 }
-:root[data-theme="rot"] .wf-card.selected { border-color: hsl(var(--accent)); background: hsl(var(--success-soft)); }
+:root[data-theme="rot"] .wf-card.selected { border-color: var(--accent); background: var(--success-soft); }
 :root[data-theme="rot"] .cat-tile { background: var(--crypt); color: var(--bone); border: 1px solid var(--border-strong); }
 :root[data-theme="rot"] .cat-name { font-family: var(--font-display); color: var(--bone); font-weight: 400; }
-:root[data-theme="rot"] .comp-ico { background: var(--bg-panel); color: hsl(var(--accent)); border: 1px solid var(--border-strong); }
+:root[data-theme="rot"] .comp-ico { background: var(--bg-panel); color: var(--accent); border: 1px solid var(--border-strong); }
 
 /* CHAT */
-:root[data-theme="rot"] .chat-msg-user { background: hsl(var(--success-soft)); border: 1px solid hsl(var(--accent)); }
+:root[data-theme="rot"] .chat-msg-user { background: var(--success-soft); border: 1px solid var(--accent); }
 :root[data-theme="rot"] .chat-msg-bot { background: var(--bg-elevated); border-left: 2px solid var(--candle); }
 
 /* STATUS BAR */
@@ -234,7 +240,7 @@
   background: var(--bg-panel); border-top: 1px solid var(--border-strong);
   font-family: var(--font-mono); color: var(--fg-muted);
 }
-:root[data-theme="rot"] .statusbar .pip { background: hsl(var(--accent)); box-shadow: 0 0 6px hsl(var(--accent)); }
+:root[data-theme="rot"] .statusbar .pip { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
 
 /* MODAL */
 :root[data-theme="rot"] .modal {
@@ -246,4 +252,4 @@
 
 /* CMDK */
 :root[data-theme="rot"] .cmdk { background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 4px; }
-:root[data-theme="rot"] .cmdk-item.active { background: var(--bg-active); color: hsl(var(--accent)); }
+:root[data-theme="rot"] .cmdk-item.active { background: var(--bg-active); color: var(--accent); }

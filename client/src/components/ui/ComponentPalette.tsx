@@ -1,5 +1,4 @@
 import React from 'react';
-import { useAppTheme } from '../../hooks/useAppTheme';
 import { useNodeAllowlist } from '../../hooks/useNodeAllowlist';
 import { ComponentPaletteProps } from '../../types/ComponentTypes';
 import { INodeTypeDescription } from '../../types/INodeProperties';
@@ -26,7 +25,6 @@ const ComponentPalette: React.FC<ComponentPaletteProps> = ({
   proMode = false,  // Default to simple mode
   specsReady = false,
 }) => {
-  const theme = useAppTheme();
   const { isBlocked, isAllowed } = useNodeAllowlist();
 
   // Backend-driven group metadata via the shared WS-in-queryFn hook.
@@ -41,10 +39,10 @@ const ComponentPalette: React.FC<ComponentPaletteProps> = ({
     // group via register_group(), the empty string surfaces the gap.
     return {
       icon: entry?.icon ?? '',
-      color: entry?.color || theme.colors.textSecondary,
+      color: entry?.color || 'var(--fg-muted)',
       label: entry?.label || category,
     };
-  }, [groupIndex, theme.colors.textSecondary]);
+  }, [groupIndex]);
 
   const categorizedComponents = React.useMemo(() => {
     const categories: Record<string, INodeTypeDescription[]> = {};

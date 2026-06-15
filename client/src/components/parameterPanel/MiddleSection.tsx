@@ -34,7 +34,6 @@ import { useWebSocket, CompactionStats } from '../../contexts/WebSocketContext';
 import { useUserSettingsQuery } from '../../hooks/useUserSettingsQuery';
 import { nodeParamsQueryKey, type NodeParametersResponse } from '../../hooks/useNodeParamsQuery';
 import { folderSkillsQueryKey, type AvailableSkill } from '../../hooks/useFolderSkills';
-import { dracula } from '../../styles/theme';
 import { queryKeys, STALE_TIME } from '../../lib/queryConfig';
 import { INodeTypeDescription, INodeProperties } from '../../types/INodeProperties';
 import { NodeIcon } from '../../assets/icons';
@@ -355,7 +354,7 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
           skillName: s.name,
           displayName: s.name,
           icon: s.metadata?.icon ?? '',
-          color: s.metadata?.color ?? dracula.purple,
+          color: s.metadata?.color ?? 'var(--node-agent)',
           description: s.description ?? '',
         }));
       },
@@ -406,7 +405,7 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
           skillName: s.name,
           displayName: s.name,
           icon: s.metadata?.icon ?? '',
-          color: s.metadata?.color ?? dracula.purple,
+          color: s.metadata?.color ?? 'var(--node-agent)',
           description: s.description ?? '',
         };
       }
@@ -435,7 +434,7 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
         type: nodeType,
         icon: def?.icon || '',
         description: def?.description || '',
-        color: (def?.defaults?.color as string) || dracula.purple,
+        color: (def?.defaults?.color as string) || 'var(--node-agent)',
       });
     }
     return skills;
@@ -477,7 +476,7 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
             type: 'masterSkill',
             icon: meta?.icon || '',
             description: meta?.description || '',
-            color: meta?.color || dracula.purple,
+            color: meta?.color || 'var(--node-agent)',
           });
         }
       }

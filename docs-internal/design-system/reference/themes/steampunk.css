@@ -1,0 +1,272 @@
+/* ============================================================================
+ * themes/steampunk.css — brass, copper, oiled leather, riveted plates.
+ *
+ * Reads like the inside of a Verne submarine.
+ * Ported from design_handoff_machinaos_themes/themes/steampunk.css.
+ * ============================================================================ */
+
+:root[data-theme="steampunk"] {
+  --bg-app: #2a1f12;
+  --bg-panel: #3a2a18;
+  --bg-canvas: #1a1208;
+  --bg-elevated: #4a3620;
+  --bg-input: #1a1208;
+  --bg-hover: rgba(200, 140, 40, 0.10);
+  --bg-active: rgba(200, 140, 40, 0.20);
+  --bg-overlay: rgba(20, 12, 6, 0.7);
+
+  --border-default: #6a4a20;
+  --border-strong: #b88838;
+  --border-focus: #d8a848;
+  --ornament-frame: none;
+
+  --fg-default: #e8d8b0;
+  --fg-muted: #b8a070;
+  --fg-faint: #786040;
+  --fg-on-accent: #2a1f12;
+  --fg-on-success: #2a1f12;
+  --fg-on-danger: #e8d8b0;
+  --fg-on-warning: #2a1f12;
+
+  --copper: #b8602a;
+  --rust: #8a3a1a;
+  --leather: #4a2818;
+  --brass: #d8a848;
+
+  --font-display: 'IM Fell English SC', 'Cinzel', serif;
+  --font-body: 'IM Fell English', 'EB Garamond', serif;
+  --font-mono: 'Special Elite', 'Courier Prime', monospace;
+  --type-scale-base: 14px;
+  --type-tracking-display: 0.10em;
+  --type-uppercase: uppercase;
+
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  --radius-pill: 999px;
+
+  --dur-fast: 110ms;
+  --dur-default: 240ms;
+  --dur-slow: 480ms;
+  --ease-default: cubic-bezier(0.5, 0, 0.4, 1.1);
+  --ease-emphasis: cubic-bezier(0.7, -0.1, 0.3, 1.2);
+  --motion-style: mechanical;
+  --sound-pack: clockwork;
+
+  /* Wave 30: copper-accent pulse — high-contrast against leather +
+   * brass canvas, matches the rivet decorations. */
+  --node-pulse-color: hsl(var(--accent));
+
+  --cursor-default: auto;
+  --cursor-pointer: pointer;
+  --scrollbar-track: #2a1f12;
+  --scrollbar-thumb: #b88838;
+
+  /* Shadcn HSL bridge */
+  --background: 28 41% 12%;
+  --foreground: 40 53% 80%;
+  --card: 31 38% 21%;
+  --card-foreground: 40 53% 80%;
+  --popover: 31 38% 21%;
+  --popover-foreground: 40 53% 80%;
+
+  --primary: 40 64% 56%;           /* brass */
+  --primary-foreground: 28 41% 12%;
+  --secondary: 30 39% 16%;
+  --secondary-foreground: 40 53% 80%;
+  --muted: 30 39% 16%;
+  --muted-foreground: 40 35% 58%;
+  --accent: 18 63% 44%;            /* copper */
+  --accent-foreground: 28 41% 12%;
+
+  --destructive: 14 68% 32%;       /* rust */
+  --destructive-foreground: 40 53% 80%;
+  --success: 79 41% 38%;
+  --warning: 40 64% 56%;
+  --info: 200 39% 47%;
+
+  --border: 33 53% 27%;
+  --input: 33 53% 27%;
+  --ring: 40 64% 56%;
+
+  /* Action role bridge */
+  --action-run: 79 41% 38%;
+  --action-run-soft: 79 41% 38% / 0.20;
+  --action-run-hover: 79 41% 38% / 0.34;
+  --action-run-border: 79 41% 38% / 0.7;
+
+  --action-stop: 14 68% 32%;
+  --action-stop-soft: 14 68% 32% / 0.20;
+  --action-stop-hover: 14 68% 32% / 0.34;
+  --action-stop-border: 14 68% 32% / 0.7;
+
+  --action-save: 40 64% 56%;
+  --action-save-soft: 40 64% 56% / 0.22;
+  --action-save-hover: 40 64% 56% / 0.36;
+  --action-save-border: 40 64% 56% / 0.7;
+
+  --action-config: 40 64% 56%;
+  --action-config-soft: 40 64% 56% / 0.18;
+  --action-config-hover: 40 64% 56% / 0.30;
+  --action-config-border: 40 64% 56% / 0.6;
+
+  --action-secret: 200 39% 47%;
+  --action-secret-soft: 200 39% 47% / 0.18;
+  --action-secret-hover: 200 39% 47% / 0.30;
+  --action-secret-border: 200 39% 47% / 0.6;
+
+  --action-tools: 18 63% 44%;
+  --action-tools-soft: 18 63% 44% / 0.20;
+  --action-tools-hover: 18 63% 44% / 0.34;
+  --action-tools-border: 18 63% 44% / 0.6;
+
+  --tint-soft: 16%;
+  --tint-border: 40%;
+
+  /* Canvas backplane — engine-room brass bolts on 80x80 tile */
+  --canvas-grid:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><g fill='%23b88838' opacity='0.10'><circle cx='40' cy='40' r='1.5'/><circle cx='10' cy='10' r='1'/><circle cx='70' cy='70' r='1'/></g></svg>");
+  --canvas-grid-opacity: 1;
+}
+
+/* Body — riveted leather grain */
+:root[data-theme="steampunk"] body {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='l'><feTurbulence baseFrequency='0.8' numOctaves='2'/><feColorMatrix values='0 0 0 0 0.16 0 0 0 0 0.10 0 0 0 0 0.04 0 0 0 0.4 0'/></filter><rect width='200' height='200' filter='url(%23l)'/></svg>"),
+    var(--bg-app);
+}
+
+:root[data-theme="steampunk"] ::selection {
+  background: rgba(216, 168, 72, 0.5);
+  color: #2a1f12;
+}
+
+/* Steampunk scrollbars — brass thumb on leather track with metallic highlight */
+:root[data-theme="steampunk"] ::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+:root[data-theme="steampunk"] ::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+:root[data-theme="steampunk"] ::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--radius-sm, 2px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+:root[data-theme="steampunk"] ::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--scrollbar-thumb) 80%, white);
+}
+
+/* ── Per-component decorations (Wave 16 port from handoff) ─────────────── */
+
+:root[data-theme="steampunk"] .toolbar,
+:root[data-theme="steampunk"] .sidebar,
+:root[data-theme="steampunk"] .palette,
+:root[data-theme="steampunk"] .chat {
+  background:
+    linear-gradient(180deg, rgba(216,168,72,0.04), transparent 30%, rgba(0,0,0,0.2)),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='l'><feTurbulence baseFrequency='0.7' numOctaves='2'/><feColorMatrix values='0 0 0 0 0.20 0 0 0 0 0.13 0 0 0 0 0.06 0 0 0 0.5 0'/></filter><rect width='200' height='200' filter='url(%23l)'/></svg>"),
+    var(--bg-panel);
+}
+/* Riveted edges */
+:root[data-theme="steampunk"] .toolbar {
+  border-bottom: 4px ridge var(--border-strong);
+  box-shadow: inset 0 -3px 0 var(--copper);
+}
+:root[data-theme="steampunk"] .sidebar { border-right: 3px solid var(--border-strong); }
+:root[data-theme="steampunk"] .palette { border-left: 3px solid var(--border-strong); }
+:root[data-theme="steampunk"] .chat    { border-top: 3px solid var(--border-strong); }
+
+/* Canvas — engine-room floor with bolt pattern */
+:root[data-theme="steampunk"] .canvas {
+  background:
+    radial-gradient(circle at 20% 20%, var(--copper) 0%, transparent 1.5%),
+    radial-gradient(circle at 80% 30%, var(--copper) 0%, transparent 1.5%),
+    radial-gradient(circle at 30% 80%, var(--copper) 0%, transparent 1.5%),
+    radial-gradient(circle at 90% 90%, var(--copper) 0%, transparent 1.5%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><g fill='%23b88838' opacity='0.10'><circle cx='40' cy='40' r='1.5'/><circle cx='10' cy='10' r='1'/><circle cx='70' cy='70' r='1'/></g></svg>"),
+    var(--bg-canvas);
+}
+
+/* Typography */
+:root[data-theme="steampunk"] body { font-family: var(--font-body); color: var(--fg-default); }
+:root[data-theme="steampunk"] h1, :root[data-theme="steampunk"] h2, :root[data-theme="steampunk"] h3,
+:root[data-theme="steampunk"] .v-display {
+  font-family: var(--font-display); letter-spacing: 0.16em; text-transform: uppercase; color: hsl(var(--accent));
+}
+
+/* Square node — riveted brass plate */
+:root[data-theme="steampunk"] .sq-node-box {
+  background: linear-gradient(180deg, hsl(var(--accent)), var(--copper));
+  border: 2px solid var(--leather); border-radius: 4px;
+  box-shadow:
+    inset 0 0 0 1px hsl(var(--accent)),
+    inset 1px 1px 2px rgba(255,220,160,0.4),
+    inset -2px -2px 4px rgba(0,0,0,0.4),
+    0 4px 0 var(--leather);
+  color: var(--leather);
+  position: relative;
+}
+:root[data-theme="steampunk"] .sq-node-box::before,
+:root[data-theme="steampunk"] .sq-node-box::after {
+  content: ''; position: absolute; width: 4px; height: 4px; border-radius: 50%;
+  background: radial-gradient(circle, var(--copper), var(--leather));
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.4);
+}
+:root[data-theme="steampunk"] .sq-node-box::before { top: 3px; left: 3px; }
+:root[data-theme="steampunk"] .sq-node-box::after { bottom: 3px; right: 3px; }
+:root[data-theme="steampunk"] .sq-node.selected .sq-node-box {
+  box-shadow: inset 0 0 0 2px hsl(var(--accent)), 0 0 12px hsl(var(--accent)), 0 4px 0 var(--leather);
+}
+:root[data-theme="steampunk"] .sq-node-gear { background: var(--copper); color: hsl(var(--accent)); border: 1px solid var(--leather); }
+:root[data-theme="steampunk"] .sq-node-label { font-family: var(--font-display); letter-spacing: 0.10em; color: hsl(var(--accent)); }
+
+/* Actions — engraved brass plates */
+:root[data-theme="steampunk"] .action-btn {
+  font-family: var(--font-display); letter-spacing: 0.12em; text-transform: uppercase;
+  border-radius: 2px; border-width: 2px;
+  background: linear-gradient(180deg, rgba(216,168,72,0.20), rgba(216,168,72,0.05));
+}
+:root[data-theme="steampunk"] .action-run { background: linear-gradient(180deg, rgba(106,138,58,0.4), rgba(106,138,58,0.1)); color: #c8e08a; border-color: hsl(var(--success)); }
+:root[data-theme="steampunk"] .action-deploy { color: hsl(var(--accent)); border-color: hsl(var(--accent)); }
+:root[data-theme="steampunk"] .action-save { color: hsl(var(--accent)); border-color: hsl(var(--accent)); }
+
+/* Panels */
+:root[data-theme="steampunk"] .wf-card,
+:root[data-theme="steampunk"] .cat,
+:root[data-theme="steampunk"] .comp,
+:root[data-theme="steampunk"] .settings-section,
+:root[data-theme="steampunk"] .cred-card {
+  background: var(--bg-elevated); border: 1px solid var(--copper); border-radius: 2px;
+  box-shadow: inset 0 1px 0 rgba(255,220,160,0.10);
+}
+:root[data-theme="steampunk"] .cat-tile { background: hsl(var(--accent)); color: var(--leather); border: 1px solid var(--leather); border-radius: 2px; }
+:root[data-theme="steampunk"] .cat-name { font-family: var(--font-display); color: hsl(var(--accent)); }
+
+/* Chat */
+:root[data-theme="steampunk"] .chat-msg-user { background: rgba(216,168,72,0.16); border: 1px solid hsl(var(--accent)); color: hsl(var(--accent)); }
+:root[data-theme="steampunk"] .chat-msg-bot { background: var(--bg-elevated); border: 1px solid var(--copper); }
+
+/* Status bar — gauge readout */
+:root[data-theme="steampunk"] .statusbar {
+  background: linear-gradient(180deg, var(--bg-panel), var(--leather));
+  border-top: 3px ridge var(--border-strong);
+  font-family: var(--font-mono); color: hsl(var(--accent)); letter-spacing: 0.10em;
+}
+:root[data-theme="steampunk"] .statusbar .pip { background: hsl(var(--success)); box-shadow: 0 0 4px hsl(var(--success)); }
+
+/* Modal */
+:root[data-theme="steampunk"] .modal {
+  background: linear-gradient(180deg, var(--bg-elevated), var(--bg-panel));
+  border: 4px ridge var(--border-strong); border-radius: 4px;
+  box-shadow: 0 0 0 2px var(--leather), 0 30px 80px rgba(0,0,0,0.6);
+}
+:root[data-theme="steampunk"] .modal-head { border-bottom: 3px ridge var(--copper); }
+:root[data-theme="steampunk"] .modal-title { font-family: var(--font-display); color: hsl(var(--accent)); letter-spacing: 0.14em; }
+
+/* CMDK */
+:root[data-theme="steampunk"] .cmdk {
+  background: var(--bg-elevated); border: 4px ridge var(--border-strong); border-radius: 4px;
+}
+:root[data-theme="steampunk"] .cmdk-item.active { background: var(--bg-active); color: hsl(var(--accent)); border-left: 3px solid var(--copper); }

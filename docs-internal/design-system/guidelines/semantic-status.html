@@ -1,0 +1,31 @@
+<!-- @dsCard group="Colors" viewport="700x150" subtitle="Status colors — Solarized in dark, deeper hues in light" name="Semantic Status" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+.row { display: grid; grid-template-columns: 80px repeat(5, 1fr); gap: 8px; align-items: center; padding: 8px 16px; }
+.sw { height: 36px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 10px; color: rgba(255,255,255,0.92); }
+.lab { font-family: var(--font-mono); font-size: 10px; color: var(--fg-muted); }
+</style>
+</head>
+<body style="background: var(--bg-app); margin: 0; padding: 8px 0;">
+<div class="row">
+  <span class="lab">light</span>
+  <div class="sw" style="background: var(--primary);">primary</div>
+  <div class="sw" style="background: var(--success);">success</div>
+  <div class="sw" style="background: var(--warning);">warning</div>
+  <div class="sw" style="background: var(--destructive);">destructive</div>
+  <div class="sw" style="background: var(--info);">info</div>
+</div>
+<div class="dark row" style="background: var(--bg-app); border-radius: 8px; margin: 0 8px;">
+  <span class="lab">dark</span>
+  <div class="sw" style="background: var(--primary);">primary</div>
+  <div class="sw" style="background: var(--success);">success</div>
+  <div class="sw" style="background: var(--warning);">warning</div>
+  <div class="sw" style="background: var(--destructive);">destructive</div>
+  <div class="sw" style="background: var(--info);">info</div>
+</div>
+</body>
+</html>

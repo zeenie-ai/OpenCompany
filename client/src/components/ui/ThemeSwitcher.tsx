@@ -68,7 +68,7 @@ export const ThemeSwitcher: React.FC<{ className?: string }> = ({ className }) =
           variant="outline"
           size="icon-sm"
           title={`Theme: ${activeMeta.label}`}
-          className="border-action-secret-border bg-action-secret-soft text-action-secret hover:bg-action-secret/25"
+          className="border-action-secret-border bg-action-secret-soft text-action-secret-ink hover:bg-action-secret-hover"
         >
           <Palette />
         </Button>

@@ -1,0 +1,247 @@
+<!-- @dsCard group="Brand" viewport="1280x860" name="Animations — All Themes" subtitle="Live motion per theme: executing pulse, easing character, pip blink, hover lift, ambient CRT/scanline" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>MachinaOS — Animations, All Themes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anonymous+Pro:wght@400;700&family=Bevan&family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:wght@400;500;600&family=Courier+Prime&family=EB+Garamond:wght@400;500;600&family=Geist:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IM+Fell+English:ital@0;1&family=JetBrains+Mono:wght@400;500;600;700&family=Lato:wght@400;700&family=Shippori+Mincho:wght@400;500;600;700&family=Space+Mono&family=Special+Elite&display=swap">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0a0c10; font-family: 'Geist', system-ui, sans-serif; color: #e6edf3; }
+  header { padding: 26px 32px 6px; }
+  header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  header p { margin: 6px 0 0; font-size: 13px; color: #8b949e; max-width: 860px; line-height: 1.5; }
+  .controls { display: flex; align-items: center; gap: 14px; padding: 14px 32px 4px; flex-wrap: wrap; }
+  .controls button { font-family: 'Geist', sans-serif; font-size: 12.5px; font-weight: 600; color: #e6edf3; background: #1c2230; border: 1px solid #2a3344; border-radius: 7px; padding: 7px 14px; cursor: pointer; }
+  .controls button:hover { border-color: #4a5568; }
+  .controls .hint { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8b949e; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px; padding: 18px 32px 60px; }
+  @media (min-width: 1680px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+
+  .tile { border-radius: 12px; overflow: hidden; border: 1px solid #21262d; background: #11151a; }
+  .tile-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 11px 16px; }
+  .tile-head .nm { font-size: 15px; font-weight: 600; }
+  .tile-head .style { font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 2px 7px; border-radius: 999px; border: 1px solid currentColor; }
+
+  .stage { position: relative; height: 246px; overflow: hidden; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+  /* canvas mini with executing node */
+  .mini { position: relative; flex: 1; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 26px; }
+  .node { position: relative; width: 50px; height: 50px; border: 2px solid; display: flex; align-items: center; justify-content: center; font-size: 21px; }
+  .node .pip { position: absolute; top: -4px; left: -4px; width: 9px; height: 9px; border-radius: 50%; }
+  .edge { position: absolute; height: 2px; top: 50%; left: 50%; transform: transl(-50%,-50%); }
+
+  /* ease lane */
+  .lane-wrap { display: flex; flex-direction: column; gap: 5px; }
+  .lane { position: relative; height: 22px; border-radius: 6px; overflow: hidden; border: 1px solid; }
+  .lane .dot { position: absolute; top: 3px; left: 4px; width: 14px; height: 14px; border-radius: 4px; }
+  .lane-meta { display: flex; justify-content: space-between; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; opacity: 0.7; }
+
+  /* interaction row */
+  .irow { display: flex; align-items: center; gap: 10px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; font-size: 11.5px; font-weight: 600; border: 1px solid; line-height: 1; cursor: pointer; }
+  .statuspip { display: inline-flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.04em; }
+  .statuspip .led { width: 7px; height: 7px; border-radius: 50%; }
+  .hoverhint { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; opacity: 0.55; margin-left: auto; }
+
+  /* ambient overlays */
+  .crt-roll { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+  .crt-roll .band { position: absolute; left: 0; right: 0; height: 26px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>MachinaOS — animation system, all 12 themes</h1>
+  <p>Live motion rendered with each theme's real timing tokens (from <code>client/src/themes/*.css</code>): the <strong>trigger "listening" pulse</strong> (armed heartbeat + lightning ⚡ badge, left node), the one-shot <strong>executing-node pulse</strong> (middle), an <strong>easing lane</strong> that shows the curve character (bouncy overshoot, steps strobe, linear scan, slow drift), the <strong>status-pip blink</strong>, button <strong>hover-lift / press</strong> (hover them), and ambient <strong>CRT flicker + rolling scanline</strong> for Cyber / Surveillance. Every glow uses a <strong>theme-contrast color</strong> so it stays visible on that background. Full system: <code>tokens/animations.css</code> · <code>guidelines/ANIMATIONS.md</code>.</p>
+</header>
+<div class="controls">
+  <button id="replay">⟳ Replay entrances</button>
+  <button id="toggle">⏸ Pause loops</button>
+  <span class="hint">Hover the buttons &amp; nodes to feel each theme's easing. Reduced-motion users see static end-states.</span>
+</div>
+<div class="grid" id="grid"></div>
+
+<script>
+const THEMES = [
+  { name:'Light', style:'smooth', bg:'#f5f7fa', mini:'#ffffff', card:'#ffffff', fg:'#1a1d21', muted:'#4b5563', border:'#d1d5db', grid:'rgba(75,85,99,0.28)',
+    body:"'Geist',sans-serif", durF:90, durD:180, durS:320, ease:'cubic-bezier(.2,.7,.3,1)', pulse:'#0891b2', pulseKf:'node', pulseDur:1.4, pulseTime:'ease-in-out',
+    node:'#bd93f9', run:'#15803d', runBg:'rgba(80,250,123,0.15)', runBc:'rgba(80,250,123,0.6)', pip:'#059669', ambient:null },
+  { name:'Dark', style:'smooth', bg:'#002b36', mini:'#002b36', card:'#073642', fg:'#f8f8f2', muted:'#94a8d6', border:'#586e75', grid:'rgba(148,168,214,0.30)',
+    body:"'Geist',sans-serif", durF:90, durD:180, durS:320, ease:'cubic-bezier(.2,.7,.3,1)', pulse:'#8be9fd', pulseKf:'node', pulseDur:1.4, pulseTime:'ease-in-out',
+    node:'#bd93f9', run:'#50fa7b', runBg:'rgba(80,250,123,0.15)', runBc:'rgba(80,250,123,0.6)', pip:'#50fa7b', ambient:null },
+  { name:'Renaissance', style:'organic', bg:'#f3e8c8', mini:'#e8d4a0', card:'#fbf3dc', fg:'#3a2008', muted:'#6a4a1c', border:'#8a5e1c', grid:'rgba(138,94,28,0.28)',
+    body:"'Cormorant Garamond',serif", durF:140, durD:280, durS:520, ease:'cubic-bezier(.4,0,.2,1)', pulse:'#2548c8', pulseKf:'ren', pulseDur:2.0, pulseTime:'ease-in-out',
+    node:'#2548c8', run:'#8a1410', runBg:'rgba(212,160,48,0.20)', runBc:'#8a5e1c', pip:'#5a6a28', ambient:'candle' },
+  { name:'Greek', style:'smooth', bg:'#ede5d0', mini:'#e6dcc2', card:'#faf6e9', fg:'#2a2415', muted:'#6a5d3c', border:'#b8a878', grid:'rgba(106,93,60,0.28)',
+    body:"'Cormorant Garamond',serif", durF:120, durD:240, durS:460, ease:'cubic-bezier(.3,.7,.4,1)', pulse:'#284b82', pulseKf:'node', pulseDur:1.4, pulseTime:'ease-in-out',
+    node:'#284b82', run:'#284b82', runBg:'rgba(40,75,130,0.12)', runBc:'#284b82', pip:'#6a7a32', ambient:null },
+  { name:'Edo', style:'organic', bg:'#f4ecd8', mini:'#ede4ca', card:'#fdf8ea', fg:'#1a1410', muted:'#6a5e48', border:'#c8b890', grid:'rgba(106,94,72,0.28)',
+    body:"'Shippori Mincho',serif", durF:90, durD:220, durS:520, ease:'cubic-bezier(.4,0,.2,1)', pulse:'#b41e1e', pulseKf:'node', pulseDur:1.6, pulseTime:'ease-in-out',
+    node:'#b41e1e', run:'#b41e1e', runBg:'rgba(180,30,30,0.08)', runBc:'#b41e1e', pip:'#4a6a3a', ambient:null },
+  { name:'Steampunk', style:'mechanical', bg:'#2a1f12', mini:'#1a1208', card:'#4a3620', fg:'#e8d8b0', muted:'#b8a070', border:'#6a4a20', grid:'rgba(184,160,112,0.25)',
+    body:"'IM Fell English',serif", durF:110, durD:240, durS:480, ease:'cubic-bezier(.5,0,.4,1.1)', pulse:'#d8a848', pulseKf:'node', pulseDur:1.4, pulseTime:'ease-in-out',
+    node:'#d8a848', run:'#d8a848', runBg:'rgba(216,168,72,0.20)', runBc:'#d8a848', pip:'#8a8a4a', ambient:null },
+  { name:'Atomic', style:'bouncy', bg:'#f0e6d2', mini:'#e8dcc0', card:'#ffffff', fg:'#2a3a4a', muted:'#5a6a7a', border:'#c8b890', grid:'rgba(90,106,122,0.28)',
+    body:"'Lato',sans-serif", durF:100, durD:200, durS:380, ease:'cubic-bezier(.34,1.6,.5,1)', pulse:'#3a9aa0', pulseKf:'node', pulseDur:1.4, pulseTime:'ease-in-out',
+    node:'#e85a26', run:'#3a9aa0', runBg:'rgba(58,154,160,0.12)', runBc:'#3a9aa0', pip:'#3a9aa0', ambient:null },
+  { name:'Cyber', style:'glitch', bg:'#050010', mini:'#03000a', card:'#15103a', fg:'#f0e0ff', muted:'#a090c0', border:'#2a1f50', grid:'rgba(160,144,192,0.30)',
+    body:"'JetBrains Mono',monospace", durF:60, durD:120, durS:240, ease:'steps(4,end)', pulse:'#1dd9e5', pulseKf:'cyber', pulseDur:1.6, pulseTime:'steps(2)',
+    node:'#f51eb6', run:'#26d97a', runBg:'rgba(38,217,122,0.14)', runBc:'#26d97a', pip:'#26d97a', ambient:'crt' },
+  { name:'Wasteland', style:'jittery', bg:'#2a2018', mini:'#1a1410', card:'#4a3826', fg:'#e8d8a8', muted:'#b89868', border:'#6a4a28', grid:'rgba(184,152,104,0.25)',
+    body:"'Special Elite',monospace", durF:60, durD:180, durS:320, ease:'cubic-bezier(.6,0,.4,1)', pulse:'#c8d038', pulseKf:'node', pulseDur:1.3, pulseTime:'ease-in-out',
+    node:'#e88a28', run:'#c8d038', runBg:'rgba(200,208,56,0.14)', runBc:'#c8d038', pip:'#c8d038', ambient:null },
+  { name:'Rot', style:'drift', bg:'#14181a', mini:'#0a0e10', card:'#242c30', fg:'#c8d8c0', muted:'#788878', border:'#2a3a30', grid:'rgba(120,136,120,0.28)',
+    body:"'EB Garamond',serif", durF:140, durD:320, durS:680, ease:'cubic-bezier(.4,0,.6,1)', pulse:'#78c878', pulseKf:'node', pulseDur:2.2, pulseTime:'ease-in-out',
+    node:'#78c878', run:'#78c878', runBg:'rgba(120,200,120,0.10)', runBc:'#78c878', pip:'#78c878', ambient:null },
+  { name:'Plague', style:'stiff', bg:'#d8d4c0', mini:'#c8c4b0', card:'#efeacf', fg:'#2a1c14', muted:'#6a5440', border:'#a89478', grid:'rgba(106,84,64,0.25)',
+    body:"'EB Garamond',serif", durF:100, durD:220, durS:460, ease:'cubic-bezier(.4,0,.6,1)', pulse:'#783c28', pulseKf:'node', pulseDur:1.6, pulseTime:'ease-in-out',
+    node:'#783c28', run:'#783c28', runBg:'rgba(120,60,40,0.12)', runBc:'#783c28', pip:'#98a838', ambient:null },
+  { name:'Surveillance', style:'scanline', bg:'#1a1c1e', mini:'#0a0c0e', card:'#2c3034', fg:'#c8ccd0', muted:'#888c90', border:'#3a3e42', grid:'rgba(136,140,144,0.28)',
+    body:"'IBM Plex Mono',monospace", durF:60, durD:140, durS:240, ease:'linear', pulse:'#e82626', pulseKf:'surv', pulseDur:1.0, pulseTime:'steps(2)',
+    node:'#e82626', run:'#6acc6a', runBg:'rgba(106,204,106,0.10)', runBc:'#6acc6a', pip:'#e82626', ambient:'scan' },
+];
+
+// Trigger fill colors (node role) per theme; the listening GLOW uses the
+// theme's contrast pulse color so it stays visible on that background.
+const TRIG = { Light:'#ff79c6', Dark:'#ff79c6', Renaissance:'#8a1410', Greek:'#7a1a18', Edo:'#b41e1e', Steampunk:'#b8602a', Atomic:'#d8a838', Cyber:'#ffd028', Wasteland:'#8a3a18', Rot:'#e8a838', Plague:'#783c28', Surveillance:'#d8a020' };
+
+// Build per-tile keyframes (unique names) so each theme's pulse uses its own color.
+let css = '';
+THEMES.forEach((t, i) => {
+  const c = t.pulse;
+  const id = 'k' + i;
+  if (t.pulseKf === 'node') {
+    css += `@keyframes ${id}-pulse {
+      0%,100% { box-shadow: 0 0 0 0 color-mix(in srgb, ${c} 80%, transparent), 0 0 12px 2px color-mix(in srgb, ${c} 50%, transparent), 0 0 24px 4px color-mix(in srgb, ${c} 24%, transparent); }
+      50% { box-shadow: 0 0 0 10px color-mix(in srgb, ${c} 42%, transparent), 0 0 28px 7px color-mix(in srgb, ${c} 62%, transparent), 0 0 48px 14px color-mix(in srgb, ${c} 28%, transparent); } }`;
+  } else if (t.pulseKf === 'ren') {
+    css += `@keyframes ${id}-pulse {
+      0%,100% { box-shadow: 0 0 0 1px ${c}, 0 0 10px 1px color-mix(in srgb, ${c} 40%, transparent); }
+      50% { box-shadow: 0 0 0 2px ${c}, 0 0 22px 5px color-mix(in srgb, ${c} 60%, transparent); } }`;
+  } else if (t.pulseKf === 'cyber') {
+    css += `@keyframes ${id}-pulse {
+      0%,49% { box-shadow: 0 0 0 1px ${c}, 0 0 8px ${c}; }
+      50%,100% { box-shadow: 0 0 0 1px ${c}, 0 0 24px ${c}, 0 0 40px color-mix(in srgb, ${c} 50%, transparent); } }`;
+  } else if (t.pulseKf === 'surv') {
+    css += `@keyframes ${id}-pulse {
+      0%,49% { box-shadow: 0 0 0 1px ${c}, 0 0 5px color-mix(in srgb, ${c} 40%, transparent); }
+      50%,100% { box-shadow: 0 0 0 1px ${c}, 0 0 16px color-mix(in srgb, ${c} 70%, transparent); } }`;
+  }
+  // ease lane: travel using the theme ease + a visible duration
+  css += `@keyframes ${id}-lane { 0% { left: 4px; } 55%,100% { left: calc(100% - 18px); } }`;
+  // trigger listening glow (contrast pulse color), gentle + slower than exec
+  css += `@keyframes ${id}-listen {
+    0%,100% { box-shadow: 0 0 0 0 transparent, 0 0 8px 1px color-mix(in srgb, ${t.pulse} 36%, transparent); }
+    50% { box-shadow: 0 0 0 5px color-mix(in srgb, ${t.pulse} 18%, transparent), 0 0 18px 4px color-mix(in srgb, ${t.pulse} 52%, transparent); } }`;
+  // pip blink: steps(2) for digital themes, smooth otherwise
+  const blinkTime = (t.pulseKf === 'cyber' || t.pulseKf === 'surv') ? 'steps(2)' : 'ease-in-out';
+  css += `@keyframes ${id}-blink { 0%,49% { opacity: 1; } 50%,100% { opacity: ${(t.pulseKf==='cyber'||t.pulseKf==='surv')?0.25:0.45}; } }
+    .${id}-blink { animation: ${id}-blink ${t.pulseKf==='surv'?1.0:1.4}s ${blinkTime} infinite; }`;
+});
+// ambient
+css += `@keyframes crt-flicker { 0%,92%,100% { opacity:1; } 93% { opacity:.82; } 94% { opacity:1; } 96% { opacity:.9; } }
+  @keyframes crt-roll { 0% { transform: translateY(-40px); } 100% { transform: translateY(260px); } }
+  @keyframes candle { 0%,100% { opacity:.10; } 50% { opacity:.2; } }`;
+// glitch hover for cyber
+css += `@keyframes hglitch { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-2px);} 40% { transform: translateX(2px);} 60% { transform: translateX(-1px);} 80% { transform: translateX(1px);} }`;
+css += `@keyframes bolt { 0%,100% { opacity:.6; transform:scale(.92);} 50% { opacity:1; transform:scale(1.08);} }`;
+const styleEl = document.createElement('style');
+styleEl.id = 'kf';
+styleEl.textContent = css;
+document.head.appendChild(styleEl);
+
+const TRIG_BOLT = { Light:'#d97706', Dark:'#ffb86c', Renaissance:'#d4a030', Greek:'#c8a040', Edo:'#d4a030', Steampunk:'#d8a848', Atomic:'#d8a838', Cyber:'#ffd028', Wasteland:'#e88a28', Rot:'#e8a838', Plague:'#98a838', Surveillance:'#d8a020' };
+
+const grid = document.getElementById('grid');
+THEMES.forEach((t, i) => {
+  const id = 'k' + i;
+  const sharp = (t.pulseKf === 'cyber' || t.pulseKf === 'surv' || t.style === 'stiff');
+  const trig = TRIG[t.name];
+  const bolt = TRIG_BOLT[t.name];
+  const tile = document.createElement('div');
+  tile.className = 'tile';
+  const ambientHtml =
+    t.ambient === 'crt' ? `<div class="crt-roll"><div class="band" style="background:linear-gradient(180deg,transparent,${t.pulse}22,transparent); animation:crt-roll 3.2s linear infinite;"></div></div>` :
+    t.ambient === 'scan' ? `<div class="crt-roll"><div class="band" style="height:18px;background:linear-gradient(180deg,transparent,${t.pulse}26,transparent); animation:crt-roll 2.4s linear infinite;"></div></div>` :
+    t.ambient === 'candle' ? `<div class="crt-roll" style="background:radial-gradient(circle at 78% 30%, ${t.pulse}, transparent 60%); animation:candle 6s ease-in-out infinite;"></div>` : '';
+  const miniAnim = t.ambient === 'crt' ? 'animation:crt-flicker 5s linear infinite;' : '';
+
+  tile.innerHTML = `
+    <div class="tile-head" style="background:${t.card}; color:${t.fg};">
+      <span class="nm" style="font-family:${t.body};">${t.name}</span>
+      <span class="style" style="color:${t.pulse};">${t.style}</span>
+    </div>
+    <div class="stage" style="background:${t.bg};">
+      <div class="mini" style="background:${t.mini}; background-image:radial-gradient(${t.grid} 1px, transparent 1px); background-size:16px 16px; ${miniAnim}">
+        ${ambientHtml}
+        <div style="position:absolute; height:2px; width:150px; left:50%; top:50%; transform:translate(-50%,-50%); background:repeating-linear-gradient(90deg, ${t.node} 0 5px, transparent 5px 11px); opacity:.55;"></div>
+        <div class="node trig-node" style="border-radius:${sharp?0:8}px; border-color:${trig}; background:linear-gradient(135deg, color-mix(in srgb, ${trig} 16%, ${t.card}), ${t.card}); color:${t.fg}; z-index:3; animation:${id}-listen 2.4s ease-in-out infinite;">
+          <span class="pip ${id}-blink" style="background:${t.pulse};"></span>
+          <span class="bolt" style="position:absolute; bottom:-4px; left:-4px; width:15px; height:15px; border-radius:${sharp?0:3}px; background:${bolt}; border:1px solid ${t.card}; display:flex; align-items:center; justify-content:center; font-size:9px; line-height:1; color:#1a1d21; animation:bolt 1.8s ease-in-out infinite;">⚡</span>
+          💬
+        </div>
+        <div class="node exec-node" style="border-radius:${sharp?0:8}px; border-color:${t.pulse}; background:linear-gradient(135deg, color-mix(in srgb, ${t.pulse} 16%, ${t.card}), ${t.card}); color:${t.fg}; z-index:3; animation:${id}-pulse ${t.pulseDur}s ${t.pulseTime} infinite;">
+          <span class="pip ${id}-blink" style="background:${t.pulse};"></span>🤖
+        </div>
+        <div class="node idle-node" style="border-radius:${sharp?0:8}px; border-color:${t.node}99; background:linear-gradient(135deg, color-mix(in srgb, ${t.node} 14%, ${t.card}), ${t.card}); color:${t.fg}; z-index:2;">
+          <span class="pip" style="background:${t.muted};"></span>📤
+        </div>
+      </div>
+
+      <div class="lane-wrap">
+        <div class="lane" style="background:${t.card}; border-color:${t.border};">
+          <div class="dot ease-dot" style="background:${t.run}; animation:${id}-lane 1.7s ${t.ease} infinite alternate;"></div>
+        </div>
+        <div class="lane-meta" style="color:${t.muted};">
+          <span style="font-family:'JetBrains Mono',monospace;">ease ${t.ease}</span>
+          <span style="font-family:'JetBrains Mono',monospace;">${t.durF}/${t.durD}/${t.durS}ms</span>
+        </div>
+      </div>
+
+      <div class="irow">
+        <button class="btn theme-btn" data-ease="${t.ease}" data-dur="${t.durD}" style="background:${t.runBg}; border-color:${t.runBc}; color:${t.run}; border-radius:${t.pulseKf==='cyber'||t.pulseKf==='surv'||t.style==='stiff'?0:7}px; font-family:${t.body}; transition:transform ${t.durF}ms ${t.ease}, box-shadow ${t.durD}ms ${t.ease};">▶ Start</button>
+        <span class="statuspip" style="color:${t.pip}; font-family:${t.body};">
+          <span class="led ${id}-blink" style="background:${t.pip};"></span>ONLINE
+        </span>
+        <span class="hoverhint" style="color:${t.muted};">hover ▶</span>
+      </div>
+    </div>`;
+  grid.appendChild(tile);
+
+  // hover interactions
+  const btn = tile.querySelector('.theme-btn');
+  btn.addEventListener('mouseenter', () => {
+    btn.style.transform = (t.style === 'glitch') ? 'none' : 'translateY(-2px)';
+    btn.style.boxShadow = `0 4px 14px color-mix(in srgb, ${t.run} 30%, transparent)`;
+    if (t.style === 'glitch') btn.style.animation = 'hglitch 0.4s steps(4)';
+  });
+  btn.addEventListener('animationend', () => { btn.style.animation = ''; });
+  btn.addEventListener('mouseleave', () => { btn.style.transform = 'none'; btn.style.boxShadow = 'none'; });
+  btn.addEventListener('mousedown', () => { btn.style.transform = 'translateY(1px)'; });
+  btn.addEventListener('mouseup', () => { btn.style.transform = 'translateY(-2px)'; });
+
+  const exec = tile.querySelector('.exec-node');
+  exec.addEventListener('mouseenter', () => { exec.style.transform = 'translateY(-2px)'; exec.style.transition = `transform ${t.durF}ms ${t.ease}`; });
+  exec.addEventListener('mouseleave', () => { exec.style.transform = 'none'; });
+});
+
+// controls
+document.getElementById('replay').addEventListener('click', () => {
+  document.querySelectorAll('.exec-node, .ease-dot, [class*="-blink"]').forEach((el) => {
+    const a = el.style.animation || getComputedStyle(el).animation;
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = '';
+  });
+});
+let paused = false;
+document.getElementById('toggle').addEventListener('click', (e) => {
+  paused = !paused;
+  document.querySelectorAll('.stage *').forEach((el) => { el.style.animationPlayState = paused ? 'paused' : 'running'; });
+  e.target.textContent = paused ? '▶ Resume loops' : '⏸ Pause loops';
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" width="100%" preserveAspectRatio="xMidYMid meet" font-family="ui-monospace, &#39;SFMono-Regular&#39;, Menlo, Consolas, monospace">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f8f8f2"></path>
+    </marker>
+    
+  </defs>
+
+  <rect class="bg" width="1200" height="720"></rect>
+
+  
+  <text x="40" y="55" class="tier-label">Tier 1</text>
+  
+  <rect class="panel panel-frontend" x="40" y="70" width="760" height="110" rx="8"></rect>
+  <text x="60" y="100" class="title">Frontend (client/)</text>
+  <text x="60" y="128" class="sub">React + TypeScript + React Flow + Zustand + Ant Design</text>
+  <text x="60" y="148" class="sub">Dracula-themed canvas, parameter panel, credentials modal</text>
+  <text x="60" y="168" class="sub">96 workflow nodes rendered via INodeProperties interface</text>
+
+  
+  <path class="conn" d="M 420 180 L 420 240" marker-end="url(#arrow)"></path>
+  <path class="conn" d="M 420 240 L 420 180" marker-end="url(#arrow)"></path>
+  <text x="435" y="215" class="label">WebSocket /ws/status</text>
+
+  
+  <text x="40" y="260" class="tier-label">Tier 2</text>
+  
+  <rect class="panel panel-backend" x="40" y="275" width="760" height="130" rx="8"></rect>
+  <text x="60" y="305" class="title">Backend (server/)</text>
+  <text x="60" y="333" class="sub">FastAPI + 89 WebSocket handlers + dependency injection container</text>
+  <text x="60" y="353" class="sub">WorkflowService (facade) -&gt; NodeExecutor -&gt; per-node handlers</text>
+  <text x="60" y="373" class="sub">ParameterResolver -&gt; template {{node.field}} substitution</text>
+  <text x="60" y="393" class="sub">AuthService -&gt; encrypted credentials (Fernet + PBKDF2)</text>
+
+  
+  <path class="conn" d="M 420 405 L 420 465" marker-end="url(#arrow)"></path>
+  <text x="435" y="440" class="label">async handlers</text>
+
+  
+  <text x="40" y="485" class="tier-label">Tier 3</text>
+  
+  <rect class="panel panel-exec" x="40" y="500" width="760" height="180" rx="8"></rect>
+  <text x="60" y="530" class="title">Execution tier</text>
+
+  
+  <rect class="small-box small-exec" x="60" y="545" width="140" height="50" rx="6"></rect>
+  <text x="130" y="568" class="sub" text-anchor="middle">Temporal</text>
+  <text x="130" y="584" class="sub" text-anchor="middle" font-size="10">distributed workers</text>
+
+  <rect class="small-box small-exec" x="215" y="545" width="140" height="50" rx="6"></rect>
+  <text x="285" y="568" class="sub" text-anchor="middle">Redis</text>
+  <text x="285" y="584" class="sub" text-anchor="middle" font-size="10">cache + locks + streams</text>
+
+  <rect class="small-box small-exec" x="370" y="545" width="140" height="50" rx="6"></rect>
+  <text x="440" y="568" class="sub" text-anchor="middle">SQLite</text>
+  <text x="440" y="584" class="sub" text-anchor="middle" font-size="10">machina.db + credentials.db</text>
+
+  <rect class="small-box small-exec" x="525" y="545" width="140" height="50" rx="6"></rect>
+  <text x="595" y="568" class="sub" text-anchor="middle">Node.js server</text>
+  <text x="595" y="584" class="sub" text-anchor="middle" font-size="10">JS/TS code executor</text>
+
+  <rect class="small-box small-exec" x="60" y="608" width="220" height="50" rx="6"></rect>
+  <text x="170" y="631" class="sub" text-anchor="middle">WhatsApp RPC (port 9400)</text>
+  <text x="170" y="647" class="sub" text-anchor="middle" font-size="10">whatsapp-rpc binary</text>
+
+  <rect class="small-box small-exec" x="295" y="608" width="220" height="50" rx="6"></rect>
+  <text x="405" y="631" class="sub" text-anchor="middle">Android relay</text>
+  <text x="405" y="647" class="sub" text-anchor="middle" font-size="10">persistent WebSocket</text>
+
+  <rect class="small-box small-exec" x="530" y="608" width="250" height="50" rx="6"></rect>
+  <text x="655" y="631" class="sub" text-anchor="middle">Temporal server</text>
+  <text x="655" y="647" class="sub" text-anchor="middle" font-size="10">ports 7233 / 8233 / 8080</text>
+
+  
+  <text x="830" y="55" class="tier-label">External</text>
+  <rect class="panel panel-ext" x="830" y="70" width="340" height="610" rx="8"></rect>
+  <text x="850" y="100" class="title">External services</text>
+
+  <text x="850" y="130" class="sub" font-weight="700" fill="#8be9fd">LLM providers (10)</text>
+  <text x="850" y="150" class="sub">OpenAI, Anthropic, Gemini, OpenRouter,</text>
+  <text x="850" y="168" class="sub">xAI, DeepSeek, Kimi, Mistral, Groq, Cerebras</text>
+
+  <text x="850" y="200" class="sub" font-weight="700" fill="#8be9fd">Google Workspace</text>
+  <text x="850" y="220" class="sub">Gmail, Calendar, Drive, Sheets,</text>
+  <text x="850" y="238" class="sub">Tasks, Contacts (unified OAuth)</text>
+
+  <text x="850" y="270" class="sub" font-weight="700" fill="#8be9fd">Social platforms</text>
+  <text x="850" y="290" class="sub">WhatsApp, Telegram, Twitter/X,</text>
+  <text x="850" y="308" class="sub">Discord, Slack, Signal (unified)</text>
+
+  <text x="850" y="340" class="sub" font-weight="700" fill="#8be9fd">Search APIs</text>
+  <text x="850" y="360" class="sub">Brave, Serper, Perplexity,</text>
+  <text x="850" y="378" class="sub">DuckDuckGo (free)</text>
+
+  <text x="850" y="410" class="sub" font-weight="700" fill="#8be9fd">Web scraping</text>
+  <text x="850" y="430" class="sub">Apify actors, Crawlee scraper,</text>
+  <text x="850" y="448" class="sub">residential proxy providers</text>
+
+  <text x="850" y="480" class="sub" font-weight="700" fill="#8be9fd">Device integration</text>
+  <text x="850" y="500" class="sub">Android via ADB relay,</text>
+  <text x="850" y="518" class="sub">16 Android service nodes</text>
+
+  <text x="850" y="550" class="sub" font-weight="700" fill="#8be9fd">Vector + RAG</text>
+  <text x="850" y="570" class="sub">ChromaDB, Qdrant, Pinecone,</text>
+  <text x="850" y="588" class="sub">HuggingFace embeddings</text>
+
+  <text x="850" y="620" class="sub" font-weight="700" fill="#8be9fd">Maps</text>
+  <text x="850" y="640" class="sub">Google Maps Geocoding,</text>
+  <text x="850" y="658" class="sub">Places nearbySearch</text>
+
+  
+  <path class="conn" d="M 800 590 L 830 590" marker-end="url(#arrow)"></path>
+  <text x="805" y="580" class="label">HTTP / SDK</text>
+</svg>

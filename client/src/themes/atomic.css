@@ -54,7 +54,7 @@
 
   /* Wave 30: turquoise pulse — matches the atomic accent + the
    * boomerang selection halo. Reads against cardstock backgrounds. */
-  --node-pulse-color: hsl(var(--accent));
+  --node-pulse-color: var(--accent);
 
   --cursor-default: auto;
   --cursor-pointer: pointer;
@@ -62,31 +62,31 @@
   --scrollbar-thumb: #2a3a4a;
 
   /* Shadcn HSL bridge */
-  --background: 41 47% 88%;
-  --foreground: 213 27% 23%;
-  --card: 0 0% 100%;
-  --card-foreground: 213 27% 23%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 213 27% 23%;
+  --background: #efe6d2;
+  --foreground: #2b394a;
+  --card: #ffffff;
+  --card-foreground: #2b394a;
+  --popover: #ffffff;
+  --popover-foreground: #2b394a;
 
-  --primary: 14 81% 53%;           /* atomic orange */
-  --primary-foreground: 41 80% 92%;
-  --secondary: 44 83% 92%;
-  --secondary-foreground: 213 27% 23%;
-  --muted: 44 83% 92%;
-  --muted-foreground: 211 14% 42%;
-  --accent: 184 46% 43%;           /* turquoise */
-  --accent-foreground: 213 27% 23%;
+  --primary: #e85326;           /* atomic orange */
+  --primary-foreground: #fbf1da;
+  --secondary: #fcf3da;
+  --secondary-foreground: #2b394a;
+  --muted: #fcf3da;
+  --muted-foreground: #5c6b7a;
+  --accent: #3b99a0;           /* turquoise */
+  --accent-foreground: #2b394a;
 
-  --destructive: 14 81% 53%;
-  --destructive-foreground: 41 80% 92%;
-  --success: 120 21% 45%;
-  --warning: 41 67% 53%;
-  --info: 184 46% 43%;
+  --destructive: #e85326;
+  --destructive-foreground: #fbf1da;
+  --success: #5b8b5b;
+  --warning: #d7a537;
+  --info: #3b99a0;
 
-  --border: 213 27% 23%;
-  --input: 40 33% 67%;
-  --ring: 14 81% 53%;
+  --border: #2b394a;
+  --input: #c7b48f;
+  --ring: #e85326;
 
   /* Action role bridge.
    * Wave 30.4: deepened text colors (raised saturation, dropped lightness)
@@ -94,35 +94,45 @@
    * read clearly against ANY underlying panel surface — including the
    * teal accent header where the previous low-saturation 16% tints
    * disappeared into the background. */
-  --action-run: 130 60% 28%;
-  --action-run-soft: 130 60% 28% / 0.40;
-  --action-run-hover: 130 60% 28% / 0.55;
-  --action-run-border: 130 60% 28% / 0.75;
+  --tint-action-soft: 40%;
+  --tint-action-hover: 55%;
+  --tint-action-border: 75%;
 
-  --action-stop: 14 90% 42%;
-  --action-stop-soft: 14 90% 42% / 0.40;
-  --action-stop-hover: 14 90% 42% / 0.55;
-  --action-stop-border: 14 90% 42% / 0.75;
+  --action-run: #1d722b;
+  --action-run-soft: color-mix(in srgb, var(--action-run) var(--tint-action-soft), transparent);
+  --action-run-hover: color-mix(in srgb, var(--action-run) var(--tint-action-hover), transparent);
+  --action-run-border: color-mix(in srgb, var(--action-run) var(--tint-action-border), transparent);
+  --action-run-ink: var(--action-run);
 
-  --action-save: 14 90% 42%;
-  --action-save-soft: 14 90% 42% / 0.40;
-  --action-save-hover: 14 90% 42% / 0.55;
-  --action-save-border: 14 90% 42% / 0.75;
+  --action-stop: #cb380b;
+  --action-stop-soft: color-mix(in srgb, var(--action-stop) var(--tint-action-soft), transparent);
+  --action-stop-hover: color-mix(in srgb, var(--action-stop) var(--tint-action-hover), transparent);
+  --action-stop-border: color-mix(in srgb, var(--action-stop) var(--tint-action-border), transparent);
+  --action-stop-ink: var(--action-stop);
 
-  --action-config: 41 80% 38%;
-  --action-config-soft: 41 80% 38% / 0.40;
-  --action-config-hover: 41 80% 38% / 0.55;
-  --action-config-border: 41 80% 38% / 0.75;
+  --action-save: #cb380b;
+  --action-save-soft: color-mix(in srgb, var(--action-save) var(--tint-action-soft), transparent);
+  --action-save-hover: color-mix(in srgb, var(--action-save) var(--tint-action-hover), transparent);
+  --action-save-border: color-mix(in srgb, var(--action-save) var(--tint-action-border), transparent);
+  --action-save-ink: var(--action-save);
 
-  --action-secret: 184 70% 30%;
-  --action-secret-soft: 184 70% 30% / 0.40;
-  --action-secret-hover: 184 70% 30% / 0.55;
-  --action-secret-border: 184 70% 30% / 0.75;
+  --action-config: #ae7d13;
+  --action-config-soft: color-mix(in srgb, var(--action-config) var(--tint-action-soft), transparent);
+  --action-config-hover: color-mix(in srgb, var(--action-config) var(--tint-action-hover), transparent);
+  --action-config-border: color-mix(in srgb, var(--action-config) var(--tint-action-border), transparent);
+  --action-config-ink: var(--action-config);
 
-  --action-tools: 184 70% 30%;
-  --action-tools-soft: 184 70% 30% / 0.40;
-  --action-tools-hover: 184 70% 30% / 0.55;
-  --action-tools-border: 184 70% 30% / 0.7;
+  --action-secret: #177b82;
+  --action-secret-soft: color-mix(in srgb, var(--action-secret) var(--tint-action-soft), transparent);
+  --action-secret-hover: color-mix(in srgb, var(--action-secret) var(--tint-action-hover), transparent);
+  --action-secret-border: color-mix(in srgb, var(--action-secret) var(--tint-action-border), transparent);
+  --action-secret-ink: var(--action-secret);
+
+  --action-tools: #177b82;
+  --action-tools-soft: color-mix(in srgb, var(--action-tools) var(--tint-action-soft), transparent);
+  --action-tools-hover: color-mix(in srgb, var(--action-tools) var(--tint-action-hover), transparent);
+  --action-tools-border: color-mix(in srgb, var(--action-tools) var(--tint-action-border), transparent);
+  --action-tools-ink: var(--action-tools);
 
   --tint-soft: 14%;
   --tint-border: 35%;
@@ -171,10 +181,10 @@
 /* Canvas — atomic starburst pattern */
 :root[data-theme="atomic"] .canvas {
   background:
-    radial-gradient(circle at 12% 15%, hsl(var(--accent)) 0%, transparent 0.8%),
+    radial-gradient(circle at 12% 15%, var(--accent) 0%, transparent 0.8%),
     radial-gradient(circle at 88% 12%, var(--turquoise) 0%, transparent 0.6%),
     radial-gradient(circle at 18% 88%, var(--mustard) 0%, transparent 0.7%),
-    radial-gradient(circle at 82% 90%, hsl(var(--accent)) 0%, transparent 0.5%),
+    radial-gradient(circle at 82% 90%, var(--accent) 0%, transparent 0.5%),
     radial-gradient(circle at 50% 50%, var(--turquoise) 0%, transparent 0.4%),
     url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><g stroke='%232a3a4a' stroke-width='0.6' fill='none' opacity='0.18'><path d='M40 80 L120 80 M80 40 L80 120 M50 50 L110 110 M110 50 L50 110'/></g></svg>"),
     var(--bg-canvas);
@@ -192,16 +202,16 @@
   background: var(--bg-elevated);
   border: 3px solid var(--slate); border-radius: 14px 2px 14px 2px;
   box-shadow: 4px 4px 0 var(--slate);
-  color: hsl(var(--accent));
+  color: var(--accent);
 }
 :root[data-theme="atomic"] .sq-node.selected .sq-node-box {
-  background: hsl(var(--accent)); color: var(--bg-elevated);
-  box-shadow: 4px 4px 0 var(--slate), 0 0 0 4px hsl(var(--warning) / 0.25);
+  background: var(--accent); color: var(--bg-elevated);
+  box-shadow: 4px 4px 0 var(--slate), 0 0 0 4px color-mix(in srgb, var(--warning) 25%, transparent);
 }
 :root[data-theme="atomic"] .sq-node-pip { border: 1.5px solid var(--slate); }
 :root[data-theme="atomic"] .sq-node-gear { background: var(--turquoise); color: var(--bg-elevated); border: 1px solid var(--slate); }
 :root[data-theme="atomic"] .sq-node-handle { border: 2px solid var(--slate); background: var(--mustard); }
-:root[data-theme="atomic"] .sq-node-handle.out { background: hsl(var(--accent)); }
+:root[data-theme="atomic"] .sq-node-handle.out { background: var(--accent); }
 :root[data-theme="atomic"] .sq-node-label { font-family: var(--font-display); letter-spacing: 0.08em; font-size: 11px; }
 
 /* Actions — chunky stamps */
@@ -210,9 +220,9 @@
   border-radius: 0; border-width: 3px; box-shadow: 3px 3px 0 var(--slate);
 }
 :root[data-theme="atomic"] .action-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--slate); }
-:root[data-theme="atomic"] .action-run { background: hsl(var(--success)); color: var(--bg-elevated); border-color: var(--slate); }
+:root[data-theme="atomic"] .action-run { background: var(--success); color: var(--bg-elevated); border-color: var(--slate); }
 :root[data-theme="atomic"] .action-deploy { background: var(--turquoise); color: var(--bg-elevated); border-color: var(--slate); }
-:root[data-theme="atomic"] .action-save { background: hsl(var(--accent)); color: var(--bg-elevated); border-color: var(--slate); }
+:root[data-theme="atomic"] .action-save { background: var(--accent); color: var(--bg-elevated); border-color: var(--slate); }
 
 /* Cards — boomerang corners */
 :root[data-theme="atomic"] .wf-card,
@@ -223,7 +233,7 @@
   background: var(--bg-elevated); border: 2px solid var(--slate); border-radius: 12px 2px 12px 2px;
   box-shadow: 3px 3px 0 var(--slate);
 }
-:root[data-theme="atomic"] .wf-card.selected { background: hsl(var(--warning-soft)); border-color: hsl(var(--accent)); }
+:root[data-theme="atomic"] .wf-card.selected { background: var(--warning-soft); border-color: var(--accent); }
 :root[data-theme="atomic"] .cat-tile { background: var(--mustard); border: 1.5px solid var(--slate); border-radius: 8px 0 8px 0; color: var(--slate); }
 :root[data-theme="atomic"] .comp-ico { background: var(--turquoise); color: var(--bg-elevated); border-radius: 6px 0 6px 0; border: 1.5px solid var(--slate); }
 :root[data-theme="atomic"] .cat-name, :root[data-theme="atomic"] .comp-name { font-family: var(--font-display); font-size: 12px; }
@@ -235,19 +245,19 @@
 
 /* Status bar */
 :root[data-theme="atomic"] .statusbar {
-  background: var(--slate); color: var(--bg-elevated); border-top: 4px solid hsl(var(--accent));
+  background: var(--slate); color: var(--bg-elevated); border-top: 4px solid var(--accent);
   font-family: var(--font-mono); letter-spacing: 0.06em;
 }
-:root[data-theme="atomic"] .statusbar .pip { background: hsl(var(--success)); }
+:root[data-theme="atomic"] .statusbar .pip { background: var(--success); }
 
 /* Modal */
 :root[data-theme="atomic"] .modal {
   background: var(--bg-elevated); border: 4px solid var(--slate); border-radius: 24px 4px 24px 4px;
   box-shadow: 8px 8px 0 var(--slate);
 }
-:root[data-theme="atomic"] .modal-head { border-bottom: 3px solid var(--slate); background: hsl(var(--accent)); color: var(--bg-elevated); }
+:root[data-theme="atomic"] .modal-head { border-bottom: 3px solid var(--slate); background: var(--accent); color: var(--bg-elevated); }
 :root[data-theme="atomic"] .modal-title { font-family: var(--font-display); color: var(--bg-elevated); letter-spacing: 0.10em; }
 
 /* CMDK */
 :root[data-theme="atomic"] .cmdk { background: var(--bg-elevated); border: 4px solid var(--slate); border-radius: 24px 4px 24px 4px; box-shadow: 8px 8px 0 var(--slate); }
-:root[data-theme="atomic"] .cmdk-item.active { background: hsl(var(--accent)); color: var(--bg-elevated); }
+:root[data-theme="atomic"] .cmdk-item.active { background: var(--accent); color: var(--bg-elevated); }

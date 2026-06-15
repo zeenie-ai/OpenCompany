@@ -1,0 +1,18 @@
+/* ============================================================================
+ * MachinaOS — motion tokens
+ * Source: client/src/themes/base.css. Motion is quick and smooth: short
+ * durations, one custom ease. Canvas nodes lift -1px on hover; executing
+ * nodes pulse a three-layer glow.
+ * ========================================================================== */
+
+:root {
+  --dur-fast: 90ms; /* @kind other */
+  --dur-default: 180ms; /* @kind other */
+  --dur-slow: 320ms; /* @kind other */
+  --ease-default: cubic-bezier(0.2, 0.7, 0.3, 1); /* @kind other */
+  --ease-emphasis: cubic-bezier(0.6, -0.05, 0.3, 1.4); /* @kind other */
+}
+
+/* The executing-node pulse, per-theme motion contracts, signature keyframes
+ * (node-pulse, cyber-*, surv-*, ren-*), and the `.machina-pulse` helper live
+ * in tokens/animations.css. See guidelines/ANIMATIONS.md for the full system. */

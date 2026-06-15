@@ -1,0 +1,10 @@
+/* ============================================================================
+ * MachinaOS — webfonts
+ *
+ * SUBSTITUTION NOTE: the app bundles Geist via @fontsource-variable/geist
+ * (npm). The binary isn't in the repo, so we load the same typeface from
+ * Google Fonts. JetBrains Mono is loaded by the app from Google Fonts
+ * directly (client/index.html), so this matches production.
+ * ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');

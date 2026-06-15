@@ -1,0 +1,24 @@
+<!-- @dsCard group="Colors" viewport="700x150" subtitle="Six toolbar intents — soft tint fill, tinted border, accent text" name="Action Intents" -->
+<!DOCTYPE html>
+<html class="dark">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+.ab { display: inline-flex; height: 32px; align-items: center; gap: 6px; border-radius: 6px; padding: 0 14px; font-size: 13px; font-weight: 600; font-family: var(--font-sans); border: 1px solid; cursor: pointer; background: none; transition: background var(--dur-default) var(--ease-default); }
+</style>
+</head>
+<body style="background: var(--bg-panel); padding: 0; margin: 0;">
+<div style="display: flex; align-items: center; justify-content: center; gap: 10px; height: 110px; flex-wrap: wrap;">
+  <button class="ab" style="background: var(--action-run-soft); border-color: var(--action-run-border); color: var(--action-run-ink);">▶ Start</button>
+  <button class="ab" style="background: var(--action-stop-soft); border-color: var(--action-stop-border); color: var(--action-stop-ink);">■ Stop</button>
+  <button class="ab" style="background: var(--action-save-soft); border-color: var(--action-save-border); color: var(--action-save-ink);">Save</button>
+  <button class="ab" style="background: var(--action-config-soft); border-color: var(--action-config-border); color: var(--action-config-ink);">Settings</button>
+  <button class="ab" style="background: var(--action-secret-soft); border-color: var(--action-secret-border); color: var(--action-secret-ink);">Credentials</button>
+  <button class="ab" style="background: var(--action-tools-soft); border-color: var(--action-tools-border); color: var(--action-tools-ink);">Components</button>
+</div>
+<div style="display: flex; justify-content: center; gap: 26px; padding-bottom: 12px; font-family: var(--font-mono); font-size: 10px; color: var(--fg-muted);">
+  <span>run</span><span>stop</span><span>save</span><span>config</span><span>secret</span><span>tools</span>
+</div>
+</body>
+</html>

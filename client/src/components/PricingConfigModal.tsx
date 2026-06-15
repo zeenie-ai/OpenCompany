@@ -17,8 +17,8 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import Modal from './ui/Modal';
+import { ActionButton } from './ui/action-button';
 import { usePricing, PricingConfig, LLMPricing } from '../hooks/usePricing';
-import { useAppTheme } from '../hooks/useAppTheme';
 
 // ============================================================================
 // TYPES
@@ -61,24 +61,19 @@ interface LLMModelRowProps {
   model: string;
   pricing: LLMPricing;
   onChange: (field: keyof LLMPricing, value: number) => void;
-  theme: ReturnType<typeof useAppTheme>;
 }
 
-const LLMModelRow: React.FC<LLMModelRowProps> = ({ model, pricing, onChange, theme }) => (
-  <div style={{
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    padding: '8px 12px',
-    borderBottom: `1px solid ${theme.colors.border}`,
-    backgroundColor: model === '_default' ? `${theme.dracula.purple}15` : 'transparent',
-  }}>
-    <div style={{
-      flex: 1,
-      fontFamily: 'monospace',
-      fontSize: 13,
-      color: model === '_default' ? theme.dracula.purple : theme.colors.text,
-    }}>
+const LLMModelRow: React.FC<LLMModelRowProps> = ({ model, pricing, onChange }) => (
+  <div
+    className={`flex items-center gap-3 border-b border-border px-3 py-2 ${
+      model === '_default' ? 'bg-node-agent-soft' : ''
+    }`}
+  >
+    <div
+      className={`flex-1 font-mono text-[13px] ${
+        model === '_default' ? 'text-node-agent' : 'text-foreground'
+      }`}
+    >
       {model === '_default' ? 'Default' : model}
     </div>
     <div className="flex items-center gap-2">
@@ -106,26 +101,15 @@ interface APIPricingRowProps {
   operation: string;
   price: number;
   onChange: (value: number) => void;
-  theme: ReturnType<typeof useAppTheme>;
 }
 
-const APIPricingRow: React.FC<APIPricingRowProps> = ({ operation, price, onChange, theme }) => {
+const APIPricingRow: React.FC<APIPricingRowProps> = ({ operation, price, onChange }) => {
   // Skip metadata keys
   if (operation.startsWith('_')) return null;
 
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: '8px 12px',
-      borderBottom: `1px solid ${theme.colors.border}`,
-    }}>
-      <div style={{
-        fontFamily: 'monospace',
-        fontSize: 13,
-        color: theme.colors.text,
-      }}>
+    <div className="flex items-center justify-between border-b border-border px-3 py-2">
+      <div className="font-mono text-[13px] text-foreground">
         {operation}
       </div>
       <MoneyInput value={price} onChange={onChange} widthClass="w-24" step={0.001} />
@@ -138,7 +122,6 @@ const APIPricingRow: React.FC<APIPricingRowProps> = ({ operation, price, onChang
 // ============================================================================
 
 const PricingConfigModal: React.FC<Props> = ({ visible, onClose }) => {
-  const theme = useAppTheme();
   const { getPricingConfig, savePricingConfig, isConnected } = usePricing();
 
   const [config, setConfig] = useState<PricingConfig | null>(null);
@@ -260,7 +243,6 @@ const PricingConfigModal: React.FC<Props> = ({ visible, onClose }) => {
                     model={model}
                     pricing={models[model]}
                     onChange={(field, value) => updateLLMPricing(provider, model, field, value)}
-                    theme={theme}
                   />
                 ))}
               </AccordionContent>
@@ -304,7 +286,7 @@ const PricingConfigModal: React.FC<Props> = ({ visible, onClose }) => {
                         href={source}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="ml-2 text-dracula-cyan"
+                        className="ml-2 text-info"
                       >
                         Source
                       </a>
@@ -320,7 +302,6 @@ const PricingConfigModal: React.FC<Props> = ({ visible, onClose }) => {
                     operation={operation}
                     price={(operations as Record<string, number>)[operation]}
                     onChange={(value) => updateAPIPricing(service, operation, value)}
-                    theme={theme}
                   />
                 ))}
               </AccordionContent>
@@ -339,31 +320,19 @@ const PricingConfigModal: React.FC<Props> = ({ visible, onClose }) => {
       maxWidth="700px"
       maxHeight="85vh"
       headerActions={
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={loadConfig} disabled={loading}>
             {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
             Reload
           </Button>
-          <Button
-            size="sm"
-            onClick={handleSave}
-            disabled={!isDirty || saving}
-            style={
-              isDirty
-                ? {
-                    backgroundColor: theme.dracula.green,
-                    borderColor: theme.dracula.green,
-                  }
-                : undefined
-            }
-          >
+          <ActionButton intent="save" onClick={handleSave} disabled={!isDirty || saving}>
             {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
             Save
-          </Button>
+          </ActionButton>
         </div>
       }
     >
-      <div style={{ padding: 16 }}>
+      <div className="p-4">
         {loading ? (
           <div className="flex items-center justify-center p-10">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -371,22 +340,14 @@ const PricingConfigModal: React.FC<Props> = ({ visible, onClose }) => {
         ) : config ? (
           <>
             {/* Version info */}
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: 16,
-              padding: '8px 12px',
-              backgroundColor: theme.colors.backgroundPanel,
-              borderRadius: theme.borderRadius.sm,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <DollarSign className="h-4 w-4" style={{ color: theme.dracula.yellow }} />
-                <span style={{ color: theme.colors.textSecondary }}>
-                  Version: <strong style={{ color: theme.colors.text }}>{config.version}</strong>
+            <div className="mb-4 flex items-center justify-between rounded-md bg-bg-panel px-3 py-2">
+              <div className="flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-warning" />
+                <span className="text-muted-foreground">
+                  Version: <strong className="text-foreground">{config.version}</strong>
                 </span>
               </div>
-              <span style={{ fontSize: 12, color: theme.colors.textSecondary }}>
+              <span className="text-xs text-muted-foreground">
                 Last updated: {config.last_updated}
               </span>
             </div>
@@ -402,7 +363,7 @@ const PricingConfigModal: React.FC<Props> = ({ visible, onClose }) => {
             </Tabs>
           </>
         ) : (
-          <div style={{ textAlign: 'center', padding: 40, color: theme.colors.textSecondary }}>
+          <div className="p-10 text-center text-muted-foreground">
             {isConnected ? 'Failed to load config' : 'Not connected'}
           </div>
         )}

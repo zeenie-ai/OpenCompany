@@ -1,0 +1,78 @@
+/* ============================================================================
+ * themes/light.css — light theme new-contract tokens.
+ *
+ * Mirrors the existing :root block in index.css (which still owns the
+ * shadcn HSL-triplet tokens). This file ADDS the new full-colour
+ * contract — surface / foreground / accent / typography / motion —
+ * scoped to `:root[data-theme="light"]` AND the unscoped `:root` so
+ * the contract is satisfied even when no data-theme attribute is set.
+ *
+ * Existing Tailwind utilities (bg-card, text-foreground, border-border,
+ * bg-action-save-soft, etc.) keep working unchanged because the shadcn
+ * tokens stay live in index.css.
+ *
+ * New utilities exposed by index.css `@theme inline`:
+ *   bg-bg-app, bg-bg-panel, bg-bg-elevated, bg-bg-canvas, bg-bg-input,
+ *   bg-bg-hover, bg-bg-active, bg-bg-overlay,
+ *   text-fg-default, text-fg-muted, text-fg-faint, text-fg-on-accent,
+ *   border-default, border-strong, border-focus,
+ *   font-display, font-body (font-mono comes from index.css),
+ *   tracking-display, rounded-pill.
+ * ============================================================================ */
+
+:root,
+:root[data-theme="light"] {
+  /* Surfaces (light mode — light grey palette consistent with existing values) */
+  --bg-app: #f5f7fa;
+  --bg-panel: #fafbfc;
+  --bg-canvas: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-input: #ffffff;
+  --bg-hover: rgba(0, 0, 0, 0.04);
+  --bg-active: rgba(0, 0, 0, 0.06);
+  --bg-overlay: rgba(0, 0, 0, 0.45);
+
+  /* Borders */
+  --border-default: #d1d5db;
+  --border-strong: #9ca3af;
+  --border-focus: #3b82f6;
+  --ornament-frame: none;
+
+  /* Foreground */
+  --fg-default: #1a1d21;
+  --fg-muted: #4b5563;
+  --fg-faint: #9ca3af;
+  --fg-on-accent: #ffffff;
+  --fg-on-success: #ffffff;
+  --fg-on-danger: #ffffff;
+  --fg-on-warning: #1a1d21;
+
+  /* Type — system stack for light/dark; Renaissance + Cyber override */
+  --font-display: 'Geist Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-body: 'Geist Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  --type-scale-base: 14px;
+  --type-tracking-display: 0;
+  --type-uppercase: none;
+
+  /* Geometry — match existing shadcn radius (0.5rem / 8px) */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-pill: 999px;
+
+  /* Motion — match base defaults (smooth) */
+  --dur-fast: 90ms;
+  --dur-default: 180ms;
+  --dur-slow: 320ms;
+  --ease-default: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --ease-emphasis: cubic-bezier(0.6, -0.05, 0.3, 1.4);
+  --motion-style: smooth;
+  --sound-pack: parchment;
+
+  /* Cursor + scrollbar */
+  --cursor-default: auto;
+  --cursor-pointer: pointer;
+  --scrollbar-track: #eef1f5;
+  --scrollbar-thumb: #d1d5db;
+}

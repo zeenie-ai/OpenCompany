@@ -1,0 +1,246 @@
+/* ============================================================================
+ * themes/edo.css — washi paper, sumi-e ink, vermillion hanko seal.
+ *
+ * Quiet, asymmetric, lots of negative space. Reads like an ink-painting on
+ * rice paper. Ported from design_handoff_machinaos_themes/themes/edo.css.
+ * ============================================================================ */
+
+:root[data-theme="edo"] {
+  --bg-app: #f4ecd8;
+  --bg-panel: #faf3e0;
+  --bg-canvas: #ede4ca;
+  --bg-elevated: #fdf8ea;
+  --bg-input: #fdf8ea;
+  --bg-hover: rgba(180, 30, 30, 0.06);
+  --bg-active: rgba(180, 30, 30, 0.14);
+  --bg-overlay: rgba(40, 30, 20, 0.55);
+
+  --border-default: #c8b890;
+  --border-strong: #1a1410;
+  --border-focus: #b41e1e;
+  --ornament-frame: none;
+
+  --fg-default: #1a1410;
+  --fg-muted: #6a5e48;
+  --fg-faint: #a89a78;
+  --fg-on-accent: #fdf8ea;
+  --fg-on-success: #fdf8ea;
+  --fg-on-danger: #fdf8ea;
+  --fg-on-warning: #1a1410;
+
+  --sumi: #1a1410;
+  --sakura: #e89aa8;
+  --bamboo: #4a6a3a;
+  --tea: #8a6a3a;
+  --vermillion: #b41e1e;
+
+  --font-display: 'Shippori Mincho', 'Sawarabi Mincho', 'Noto Serif JP', serif;
+  --font-body: 'Shippori Mincho', 'Sawarabi Mincho', 'Noto Serif JP', serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --type-scale-base: 14px;
+  --type-tracking-display: 0.06em;
+  --type-uppercase: none;
+
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-pill: 0px;
+
+  --dur-fast: 90ms;
+  --dur-default: 220ms;
+  --dur-slow: 520ms;
+  --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-emphasis: cubic-bezier(0.7, -0.1, 0.3, 1.2);
+  --motion-style: organic;
+  --sound-pack: ink;
+
+  /* Wave 30: vermillion pulse — matches hanko seal + reads against
+   * washi paper background. */
+  --node-pulse-color: hsl(var(--accent));
+
+  --cursor-default: auto;
+  --cursor-pointer: pointer;
+  --scrollbar-track: #f4ecd8;
+  --scrollbar-thumb: #c8b890;
+
+  /* Shadcn HSL bridge */
+  --background: 41 56% 90%;
+  --foreground: 24 25% 8%;
+  --card: 44 80% 96%;
+  --card-foreground: 24 25% 8%;
+  --popover: 44 80% 96%;
+  --popover-foreground: 24 25% 8%;
+
+  --primary: 0 71% 41%;            /* vermillion */
+  --primary-foreground: 44 80% 96%;
+  --secondary: 44 71% 93%;
+  --secondary-foreground: 24 25% 8%;
+  --muted: 44 71% 93%;
+  --muted-foreground: 36 19% 35%;
+  --accent: 0 71% 41%;
+  --accent-foreground: 44 80% 96%;
+
+  --destructive: 0 71% 41%;
+  --destructive-foreground: 44 80% 96%;
+  --success: 100 29% 32%;          /* bamboo */
+  --warning: 41 60% 49%;
+  --info: 24 25% 8%;               /* sumi black for info */
+
+  --border: 24 25% 8%;
+  --input: 40 35% 67%;
+  --ring: 0 71% 41%;
+
+  /* Action role bridge */
+  --action-run: 100 29% 32%;
+  --action-run-soft: 100 29% 32% / 0.14;
+  --action-run-hover: 100 29% 32% / 0.26;
+  --action-run-border: 100 29% 32% / 0.7;
+
+  --action-stop: 0 71% 41%;
+  --action-stop-soft: 0 71% 41% / 0.14;
+  --action-stop-hover: 0 71% 41% / 0.28;
+  --action-stop-border: 0 71% 41% / 0.7;
+
+  --action-save: 0 71% 41%;
+  --action-save-soft: 0 71% 41% / 0.16;
+  --action-save-hover: 0 71% 41% / 0.30;
+  --action-save-border: 0 71% 41% / 0.7;
+
+  --action-config: 41 60% 49%;
+  --action-config-soft: 41 60% 49% / 0.16;
+  --action-config-hover: 41 60% 49% / 0.28;
+  --action-config-border: 41 60% 49% / 0.6;
+
+  --action-secret: 24 25% 8%;
+  --action-secret-soft: 24 25% 8% / 0.10;
+  --action-secret-hover: 24 25% 8% / 0.20;
+  --action-secret-border: 24 25% 8% / 0.5;
+
+  --action-tools: 100 29% 32%;
+  --action-tools-soft: 100 29% 32% / 0.14;
+  --action-tools-hover: 100 29% 32% / 0.26;
+  --action-tools-border: 100 29% 32% / 0.6;
+
+  --tint-soft: 10%;
+  --tint-border: 30%;
+}
+
+/* Body washi texture */
+:root[data-theme="edo"] body {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><filter id='w'><feTurbulence baseFrequency='0.85' numOctaves='1'/><feColorMatrix values='0 0 0 0 0.65 0 0 0 0 0.55 0 0 0 0 0.35 0 0 0 0.06 0'/></filter><rect width='300' height='300' filter='url(%23w)'/></svg>"),
+    var(--bg-app);
+}
+
+:root[data-theme="edo"] ::selection {
+  background: rgba(180, 30, 30, 0.30);
+  color: #1a1410;
+}
+
+/* Edo scrollbars — square corners (woodblock-print geometry) */
+:root[data-theme="edo"] ::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+:root[data-theme="edo"] ::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+:root[data-theme="edo"] ::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 0;
+}
+:root[data-theme="edo"] ::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--scrollbar-thumb) 80%, white);
+}
+
+/* ── Per-component decorations (Wave 16 port from handoff) ─────────────── */
+
+:root[data-theme="edo"] .toolbar,
+:root[data-theme="edo"] .sidebar,
+:root[data-theme="edo"] .palette,
+:root[data-theme="edo"] .chat {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><filter id='w'><feTurbulence baseFrequency='0.95' numOctaves='1'/><feColorMatrix values='0 0 0 0 0.65 0 0 0 0 0.55 0 0 0 0 0.35 0 0 0 0.05 0'/></filter><rect width='300' height='300' filter='url(%23w)'/></svg>"),
+    var(--bg-panel);
+}
+:root[data-theme="edo"] .toolbar { border-bottom: 1px solid var(--sumi); }
+:root[data-theme="edo"] .sidebar { border-right: 1px solid var(--sumi); }
+:root[data-theme="edo"] .palette { border-left: 1px solid var(--sumi); }
+:root[data-theme="edo"] .chat    { border-top: 1px solid var(--sumi); }
+
+/* Canvas — empty rice paper with one ink-wash mountain */
+:root[data-theme="edo"] .canvas {
+  background:
+    radial-gradient(ellipse 600px 200px at 80% 90%, rgba(26,20,16,0.10), transparent 60%),
+    var(--bg-canvas);
+}
+
+/* Typography — light, generous, asymmetric */
+:root[data-theme="edo"] body { font-family: var(--font-body); color: var(--fg-default); }
+:root[data-theme="edo"] h1, :root[data-theme="edo"] h2, :root[data-theme="edo"] h3,
+:root[data-theme="edo"] .v-display { font-family: var(--font-display); font-weight: 400; letter-spacing: 0.04em; }
+
+/* Square node — hanko seal + ink calligraphy */
+:root[data-theme="edo"] .sq-node-box {
+  background: var(--bg-elevated);
+  border: 1px solid var(--sumi); border-radius: 0;
+  box-shadow: none;
+  color: var(--sumi);
+  position: relative;
+}
+:root[data-theme="edo"] .sq-node.selected .sq-node-box {
+  border: 2px solid hsl(var(--accent));
+  background: var(--bg-elevated);
+  /* Wave 29: outer halo so selection reads at any zoom level. */
+  box-shadow: 0 0 0 2px hsl(var(--accent) / 0.5), 0 4px 14px hsl(var(--accent) / 0.3);
+}
+:root[data-theme="edo"] .sq-node.selected .sq-node-box::before {
+  content: ''; position: absolute; top: 4px; right: 4px; width: 14px; height: 14px;
+  background: hsl(var(--accent)); transform: rotate(8deg);
+}
+:root[data-theme="edo"] .sq-node-pip { border-radius: 0; }
+:root[data-theme="edo"] .sq-node-gear { background: hsl(var(--accent)); color: white; border-radius: 0; border: none; }
+:root[data-theme="edo"] .sq-node-handle { border-radius: 0; }
+:root[data-theme="edo"] .sq-node-label { font-family: var(--font-display); font-weight: 500; font-size: 11px; letter-spacing: 0.04em; }
+
+/* Actions — minimal */
+:root[data-theme="edo"] .action-btn {
+  border-radius: 0; font-family: var(--font-display); font-size: 12px; letter-spacing: 0.06em; font-weight: 500;
+  border-width: 1px;
+}
+:root[data-theme="edo"] .action-run    { background: transparent; color: var(--bamboo); border-color: var(--bamboo); }
+:root[data-theme="edo"] .action-deploy { background: transparent; color: hsl(var(--accent)); border-color: hsl(var(--accent)); }
+:root[data-theme="edo"] .action-save   { background: hsl(var(--accent)); color: var(--fg-on-accent); border-color: hsl(var(--accent)); }
+
+/* Cards / panels — minimal lines */
+:root[data-theme="edo"] .wf-card,
+:root[data-theme="edo"] .cat,
+:root[data-theme="edo"] .comp,
+:root[data-theme="edo"] .settings-section,
+:root[data-theme="edo"] .cred-card {
+  border-radius: 0; background: var(--bg-elevated); border: 1px solid var(--border-default);
+}
+:root[data-theme="edo"] .wf-card.selected { border-left: 3px solid hsl(var(--accent)); }
+:root[data-theme="edo"] .cat-tile { background: transparent; border: 1px solid var(--sumi); color: var(--sumi); border-radius: 0; }
+:root[data-theme="edo"] .comp-ico { background: transparent; border: 1px solid var(--border-default); color: var(--sumi); border-radius: 0; }
+
+/* Chat */
+:root[data-theme="edo"] .chat-msg { border-radius: 0; }
+:root[data-theme="edo"] .chat-msg-user { background: transparent; border: 1px solid hsl(var(--accent)); }
+:root[data-theme="edo"] .chat-msg-bot { background: var(--bg-elevated); border-left: 3px solid var(--sumi); border-top: none; border-right: none; border-bottom: none; }
+
+/* Status bar */
+:root[data-theme="edo"] .statusbar {
+  background: var(--bg-panel); border-top: 1px solid var(--sumi);
+  font-family: var(--font-mono); color: var(--fg-muted);
+}
+:root[data-theme="edo"] .statusbar .pip { background: var(--bamboo); border-radius: 0; }
+
+/* Modal */
+:root[data-theme="edo"] .modal { background: var(--bg-elevated); border: 1px solid var(--sumi); border-radius: 0; }
+:root[data-theme="edo"] .modal-head { border-bottom: 1px solid var(--sumi); }
+:root[data-theme="edo"] .modal-title { font-family: var(--font-display); color: hsl(var(--accent)); }
+
+/* CMDK */
+:root[data-theme="edo"] .cmdk { background: var(--bg-elevated); border: 1px solid var(--sumi); border-radius: 0; }
+:root[data-theme="edo"] .cmdk-item.active { background: var(--bg-active); border-left: 3px solid hsl(var(--accent)); }

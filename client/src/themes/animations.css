@@ -1,0 +1,193 @@
+/* ============================================================================
+ * themes/animations.css — theme-scoped executing-pulse selection, trigger
+ * "armed/listening" motion, and reusable animation helper classes.
+ *
+ * Source contract: docs-internal/design-system/tokens/animations.css.
+ *
+ * The executing-pulse KEYFRAME is chosen per theme via `--pulse-keyframe`
+ * (+ `--pulse-duration` / `--pulse-timing`); base.css's executing rules read
+ * those tokens, so a theme switches its pulse by overriding one variable
+ * instead of a high-specificity `.react-flow__node.executing` rule.
+ *
+ * Per-theme `--dur-*` / `--ease-*` / `--motion-style` already live in
+ * base.css + each theme file; this file only adds the pulse-keyframe tokens
+ * and the keyframes/helpers.
+ *
+ * Glow colour is `--node-pulse-color` (a theme-chosen high-contrast accent,
+ * inherited from the active `:root[data-theme]` scope), NEVER the node's own
+ * `--node-color` fill, so the glow stays visible on any canvas.
+ * ========================================================================== */
+
+:root {
+  --pulse-keyframe: node-pulse;
+  --pulse-duration: 1.4s;
+  --pulse-timing: ease-in-out;
+}
+
+:root[data-theme="renaissance"] {
+  --pulse-keyframe: ren-pulse-exec;
+  --pulse-duration: 2s;
+  --pulse-timing: ease-in-out;
+}
+:root[data-theme="cyber"] {
+  --pulse-keyframe: cyber-pulse-exec;
+  --pulse-duration: 1.6s;
+  --pulse-timing: steps(2);
+}
+:root[data-theme="surveillance"] {
+  --pulse-keyframe: surv-pulse-exec;
+  --pulse-duration: 1s;
+  --pulse-timing: steps(2);
+}
+:root[data-theme="rot"] {
+  --pulse-duration: 2.2s;
+}
+
+/* ============================================================================
+ * Executing-pulse keyframes (relocated here as the single source of truth).
+ * node-pulse references the shared --tint-pulse-* scale (base.css); the
+ * material-specific *-pulse-exec keyframes keep their bespoke decorative
+ * alphas inline (per the design-system tokenization rule).
+ * ========================================================================== */
+
+/* Default 3-layer glow — light/dark/greek/edo/steampunk/atomic/wasteland/
+ * rot/plague all draw from this. */
+@keyframes node-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0 color-mix(in srgb, var(--node-pulse-color) var(--tint-pulse-ring), transparent),
+      0 0 14px 2px color-mix(in srgb, var(--node-pulse-color) var(--tint-pulse-halo), transparent),
+      0 0 28px 4px color-mix(in srgb, var(--node-pulse-color) var(--tint-pulse-atmos), transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 12px color-mix(in srgb, var(--node-pulse-color) var(--tint-pulse-ring-peak), transparent),
+      0 0 32px 8px color-mix(in srgb, var(--node-pulse-color) var(--tint-pulse-halo-peak), transparent),
+      0 0 56px 16px color-mix(in srgb, var(--node-pulse-color) var(--tint-pulse-atmos-peak), transparent);
+  }
+}
+
+/* Renaissance — ultramarine (lapis) candleflame glow against vellum. */
+@keyframes ren-pulse-exec {
+  0%, 100% {
+    box-shadow:
+      0 0 0 3px rgba(74, 114, 232, 0.85),
+      0 0 36px 8px rgba(74, 114, 232, 0.65),
+      0 0 72px 18px rgba(37, 72, 200, 0.40);
+  }
+  50% {
+    box-shadow:
+      0 0 0 4px rgba(74, 114, 232, 1),
+      0 0 52px 12px rgba(74, 114, 232, 0.85),
+      0 0 96px 28px rgba(37, 72, 200, 0.55);
+  }
+}
+
+/* Cyber — hard digital strobe (steps), neon-cyan glow. */
+@keyframes cyber-pulse-exec {
+  0%, 49% {
+    box-shadow:
+      0 0 0 2px var(--neon-cyan),
+      0 0 32px 4px var(--neon-cyan),
+      0 0 64px 16px color-mix(in srgb, var(--neon-cyan) 35%, transparent),
+      inset 0 0 18px rgba(29, 217, 229, 0.3);
+  }
+  50%, 100% {
+    box-shadow:
+      0 0 0 2px var(--neon-cyan),
+      0 0 14px 2px color-mix(in srgb, var(--neon-cyan) 55%, transparent),
+      0 0 28px 6px color-mix(in srgb, var(--neon-cyan) 15%, transparent),
+      inset 0 0 8px rgba(29, 217, 229, 0.12);
+  }
+}
+
+/* Surveillance — REC-red glow strobe matching the corner-LED rhythm. */
+@keyframes surv-pulse-exec {
+  0%, 49% {
+    box-shadow:
+      0 0 0 2px var(--destructive),
+      0 0 28px 4px rgba(232, 38, 38, 0.7),
+      0 0 56px 14px rgba(232, 38, 38, 0.3);
+  }
+  50%, 100% {
+    box-shadow:
+      0 0 0 2px var(--destructive),
+      0 0 12px 2px rgba(232, 38, 38, 0.45),
+      0 0 24px 6px rgba(232, 38, 38, 0.12);
+  }
+}
+
+/* ============================================================================
+ * Trigger nodes — "armed / listening" state.
+ * Triggers (whatsappReceive, telegramReceive, cronScheduler, webhookTrigger,
+ * emailReceive, …) glow CONTINUOUSLY while deployed and waiting for events —
+ * a gentle, slower heartbeat distinct from the one-shot execution pulse. Uses
+ * --node-pulse-color so it reads on any theme background.
+ * ========================================================================== */
+@keyframes trigger-listening {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0 color-mix(in srgb, var(--node-pulse-color, var(--info)) 0%, transparent),
+      0 0 9px 1px color-mix(in srgb, var(--node-pulse-color, var(--info)) 38%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 6px color-mix(in srgb, var(--node-pulse-color, var(--info)) 20%, transparent),
+      0 0 20px 4px color-mix(in srgb, var(--node-pulse-color, var(--info)) 55%, transparent);
+  }
+}
+/* One-shot bright flash the moment a trigger fires (add, remove on animationend). */
+@keyframes trigger-fire {
+  0% {
+    box-shadow:
+      0 0 0 0 color-mix(in srgb, var(--node-pulse-color, var(--info)) 90%, transparent),
+      0 0 28px 8px color-mix(in srgb, var(--node-pulse-color, var(--info)) 70%, transparent);
+  }
+  100% {
+    box-shadow:
+      0 0 0 14px color-mix(in srgb, var(--node-pulse-color, var(--info)) 0%, transparent),
+      0 0 28px 8px color-mix(in srgb, var(--node-pulse-color, var(--info)) 0%, transparent);
+  }
+}
+/* Lightning badge soft flash while armed. */
+@keyframes trigger-bolt { 0%, 100% { opacity: 0.6; transform: scale(0.94); } 50% { opacity: 1; transform: scale(1.06); } }
+
+/* Status pip blink (generic, smooth). */
+@keyframes machina-pip-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+/* ============================================================================
+ * Helper classes
+ * ========================================================================== */
+
+/* Executing node — reads the active theme's chosen keyframe + timing. */
+.machina-pulse {
+  animation: var(--pulse-keyframe, node-pulse) var(--pulse-duration, 1.4s) var(--pulse-timing, ease-in-out) infinite;
+}
+
+/* Trigger waiting for events — continuous armed heartbeat (slower than the
+ * execution pulse so the two states read as distinct). */
+.machina-trigger-armed {
+  animation: trigger-listening 2.4s ease-in-out infinite;
+}
+/* One-shot flash the moment a trigger fires (add, then remove on animationend). */
+.machina-trigger-fire {
+  animation: trigger-fire 0.6s var(--ease-default, ease-out) 1;
+}
+/* Lightning badge + listening pip pulses. */
+.machina-bolt { animation: trigger-bolt 1.8s ease-in-out infinite; }
+.machina-pip-pulse { animation: machina-pip-blink 1.4s ease-in-out infinite; }
+
+/* Ambient overlays for Cyber / Surveillance frames (cyber-flicker / cyber-roll
+ * keyframes live in their theme files and are globally available). */
+.machina-crt { animation: cyber-flicker 5s linear infinite; }
+.machina-scanline::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 50;
+  height: 12%;
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--node-pulse-color, var(--info)) 18%, transparent), transparent);
+  animation: cyber-roll 8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .machina-pulse, .machina-crt, .machina-scanline::after,
+  .machina-trigger-armed, .machina-trigger-fire, .machina-bolt, .machina-pip-pulse { animation: none !important; }
+}

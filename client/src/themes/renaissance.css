@@ -102,69 +102,81 @@
   --scrollbar-track: #e8d09a;
   --scrollbar-thumb: #8a5e1c;
 
-  /* ── Shadcn HSL-triplet bridge ─────────────────────────────────────
-   * Same colours as the new contract above, expressed as HSL triplets
-   * so Tailwind utilities like bg-card/50 (alpha composition) keep
-   * working. */
+  /* ── Shadcn bridge — hex (was HSL triplets) ──────────────────────────
+   * Same colours as the new contract above, expressed as hex so the
+   * index.css bridge (--color-X: var(--X), no HSL wrapper) resolves
+   * correctly and Tailwind alpha utilities like bg-card/50 keep working. */
 
-  --background: 40 65% 87%;            /* #f3e8c8 */
-  --foreground: 28 76% 13%;            /* #3a2008 */
-  --card: 41 79% 92%;                  /* #fbf3dc */
-  --card-foreground: 28 76% 13%;
-  --popover: 41 79% 92%;
-  --popover-foreground: 28 76% 13%;
+  --background: #f3e8c8;
+  --foreground: #3a2008;
+  --card: #fbf3dc;
+  --card-foreground: #3a2008;
+  --popover: #fbf3dc;
+  --popover-foreground: #3a2008;
 
-  --primary: 32 53% 48%;               /* #b8893c gold accent */
-  --primary-foreground: 41 79% 92%;
-  --secondary: 38 65% 76%;             /* #ead09a panel */
-  --secondary-foreground: 28 76% 13%;
-  --muted: 38 65% 76%;
-  --muted-foreground: 33 60% 26%;      /* #6a4a1c */
-  --accent: 41 65% 51%;                /* #d4a030 gold leaf */
-  --accent-foreground: 28 76% 13%;
+  --primary: #b8893c;                  /* gold accent */
+  --primary-foreground: #fbf3dc;
+  --secondary: #ead09a;                /* panel */
+  --secondary-foreground: #3a2008;
+  --muted: #ead09a;
+  --muted-foreground: #6a4a1c;
+  --accent: #d4a030;                   /* gold leaf */
+  --accent-foreground: #3a2008;
 
-  --destructive: 2 79% 30%;            /* #8a1410 crimson */
-  --destructive-foreground: 41 79% 92%;
-  --success: 78 63% 25%;               /* #4a6818 olive */
-  --warning: 35 71% 44%;               /* #c08020 amber */
-  --info: 211 56% 23%;                 /* #1a3a5a navy */
+  --destructive: #8a1410;              /* crimson */
+  --destructive-foreground: #fbf3dc;
+  --success: #4a6818;                  /* olive */
+  --warning: #c08020;                  /* amber */
+  --info: #1a3a5a;                     /* navy */
 
-  --border: 33 66% 33%;                /* #8a5e1c */
-  --input: 33 66% 33%;
-  --ring: 41 65% 51%;                  /* gold focus */
+  --border: #8a5e1c;
+  --input: #8a5e1c;
+  --ring: #d4a030;                     /* gold focus */
 
   /* Action role tokens — re-derived from Renaissance semantic palette.
-   * Keep the soft / hover / border alpha pattern so ActionButton still
-   * works without any code change. */
-  --action-run: 78 63% 25%;            /* olive (success) */
-  --action-run-soft: 78 63% 25% / 0.18;
-  --action-run-hover: 78 63% 25% / 0.30;
-  --action-run-border: 78 63% 25% / 0.6;
+   * color-mix references the semantic hex bases + the --tint-action-*
+   * scale so ActionButton works without any code change. Renaissance runs
+   * slightly stronger action tints than the shared 15/25 base (parchment
+   * needs more presence), bumped once below; border stays at the base 60%.
+   * -ink = the readable text colour, here the intent's own accent. */
+  --tint-action-soft: 18%;
+  --tint-action-hover: 30%;
 
-  --action-stop: 2 79% 30%;            /* crimson (destructive) */
-  --action-stop-soft: 2 79% 30% / 0.15;
-  --action-stop-hover: 2 79% 30% / 0.25;
-  --action-stop-border: 2 79% 30% / 0.6;
+  --action-run:           #4a6818;     /* olive (success) */
+  --action-run-soft:      color-mix(in srgb, #4a6818 var(--tint-action-soft), transparent);
+  --action-run-hover:     color-mix(in srgb, #4a6818 var(--tint-action-hover), transparent);
+  --action-run-border:    color-mix(in srgb, #4a6818 var(--tint-action-border), transparent);
+  --action-run-ink:       var(--action-run);
 
-  --action-save: 41 65% 51%;           /* gold leaf (primary action) */
-  --action-save-soft: 41 65% 51% / 0.20;
-  --action-save-hover: 41 65% 51% / 0.35;
-  --action-save-border: 32 53% 48% / 0.7;
+  --action-stop:          #8a1410;     /* crimson (destructive) */
+  --action-stop-soft:     color-mix(in srgb, #8a1410 var(--tint-action-soft), transparent);
+  --action-stop-hover:    color-mix(in srgb, #8a1410 var(--tint-action-hover), transparent);
+  --action-stop-border:   color-mix(in srgb, #8a1410 var(--tint-action-border), transparent);
+  --action-stop-ink:      var(--action-stop);
 
-  --action-config: 35 71% 44%;         /* amber (warning) */
-  --action-config-soft: 35 71% 44% / 0.18;
-  --action-config-hover: 35 71% 44% / 0.30;
-  --action-config-border: 35 71% 44% / 0.6;
+  --action-save:          #d4a030;     /* gold leaf (primary action) */
+  --action-save-soft:     color-mix(in srgb, #d4a030 var(--tint-action-soft), transparent);
+  --action-save-hover:    color-mix(in srgb, #d4a030 var(--tint-action-hover), transparent);
+  --action-save-border:   color-mix(in srgb, var(--primary) var(--tint-action-border), transparent);
+  --action-save-ink:      var(--action-save);
 
-  --action-secret: 211 56% 23%;        /* navy (info / secret) */
-  --action-secret-soft: 211 56% 23% / 0.15;
-  --action-secret-hover: 211 56% 23% / 0.25;
-  --action-secret-border: 211 56% 23% / 0.6;
+  --action-config:        #c08020;     /* amber (warning) */
+  --action-config-soft:   color-mix(in srgb, #c08020 var(--tint-action-soft), transparent);
+  --action-config-hover:  color-mix(in srgb, #c08020 var(--tint-action-hover), transparent);
+  --action-config-border: color-mix(in srgb, #c08020 var(--tint-action-border), transparent);
+  --action-config-ink:    var(--action-config);
 
-  --action-tools: 32 53% 48%;          /* gold accent */
-  --action-tools-soft: 32 53% 48% / 0.18;
-  --action-tools-hover: 32 53% 48% / 0.30;
-  --action-tools-border: 32 53% 48% / 0.6;
+  --action-secret:        #1a3a5a;     /* navy (info / secret) */
+  --action-secret-soft:   color-mix(in srgb, #1a3a5a var(--tint-action-soft), transparent);
+  --action-secret-hover:  color-mix(in srgb, #1a3a5a var(--tint-action-hover), transparent);
+  --action-secret-border: color-mix(in srgb, #1a3a5a var(--tint-action-border), transparent);
+  --action-secret-ink:    var(--action-secret);
+
+  --action-tools:         var(--primary);  /* gold accent */
+  --action-tools-soft:    color-mix(in srgb, var(--primary) var(--tint-action-soft), transparent);
+  --action-tools-hover:   color-mix(in srgb, var(--primary) var(--tint-action-hover), transparent);
+  --action-tools-border:  color-mix(in srgb, var(--primary) var(--tint-action-border), transparent);
+  --action-tools-ink:     var(--action-tools);
 
   /* Tint utilities — slightly stronger on parchment so brand-coloured
    * surfaces (provider icons, skill colours) stay legible. */
@@ -401,37 +413,14 @@
   box-shadow: 0 0 0 3px rgba(212, 160, 48, 0.5), 0 3px 0 var(--border-strong), inset 0 0 0 1px var(--gold);
 }
 
-/* Wave 29: Renaissance executing nodes flicker like candlelight using
- * ren-flicker (opacity pulse) — NOT the digital node-pulse. The gold
- * border stays steady; only the ambient glow shimmers. Higher specificity
- * than base.css's generic rule, so this wins. */
-/* Wave 30.2: dedicated executing-pulse keyframe that animates
- * BOX-SHADOW only (the original `ren-flicker` opacity-fade
- * washed the whole node). Pulses ultramarine (lapis lazuli)
- * intensity at high opacity for visibility against vellum.
- * Lapis is 180° opposite the warm cream canvas, so even at the
- * far halo (40% opacity) it reads as a luminous Marian halo
- * rather than blending into the background. Smooth ease-in-out
- * preserves the candleflame-flicker quality. */
-@keyframes ren-pulse-exec {
-  0%, 100% {
-    box-shadow:
-      0 0 0 3px rgba(74, 114, 232, 0.85),
-      0 0 36px 8px rgba(74, 114, 232, 0.65),
-      0 0 72px 18px rgba(37, 72, 200, 0.40);
-  }
-  50% {
-    box-shadow:
-      0 0 0 4px rgba(74, 114, 232, 1),
-      0 0 52px 12px rgba(74, 114, 232, 0.85),
-      0 0 96px 28px rgba(37, 72, 200, 0.55);
-  }
-}
-
+/* Renaissance executing-pulse: the ren-pulse-exec keyframe + its
+ * --pulse-keyframe/-duration/-timing tokens now live in
+ * client/src/themes/animations.css; base.css's token-driven `.executing`
+ * rule applies them. This rule keeps only the lapis border the pulse
+ * pairs with. */
 :root[data-theme="renaissance"] .sq-node[data-executing] .sq-node-box,
 :root[data-theme="renaissance"] .react-flow__node.executing .sq-node-box,
 :root[data-theme="renaissance"] .react-flow__node.executing .node {
-  animation: ren-pulse-exec 2.0s ease-in-out infinite;
   border-color: var(--lapis-bright);
 }
 :root[data-theme="renaissance"] .sq-node-pip {
@@ -601,7 +590,7 @@
   color: var(--fg-default);
 }
 :root[data-theme="renaissance"] .json-key { color: var(--crimson); font-style: italic; }
-:root[data-theme="renaissance"] .json-str { color: hsl(var(--success)); }
+:root[data-theme="renaissance"] .json-str { color: var(--success); }
 :root[data-theme="renaissance"] .json-num { color: var(--gold-bright); }
 
 /* ─── CHAT TABS ─── */
@@ -661,8 +650,8 @@
   font-style: italic;
 }
 :root[data-theme="renaissance"] .statusbar .pip {
-  background: hsl(var(--success));
-  box-shadow: 0 0 6px hsl(var(--success)), 0 0 0 1px var(--border-strong);
+  background: var(--success);
+  box-shadow: 0 0 6px var(--success), 0 0 0 1px var(--border-strong);
 }
 
 /* ─── MODAL — illuminated codex page ─── */

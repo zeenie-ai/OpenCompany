@@ -25,7 +25,7 @@ const ApiKeyStep: React.FC<ApiKeyStepProps> = ({ onOpenCredentials }) => {
     <div className="py-1">
       <div className="mb-4 text-center">
         <h4 className="m-0 mb-1 flex items-center justify-center gap-2 text-lg font-semibold">
-          <Key className="h-4 w-4 text-dracula-yellow" />
+          <Key className="h-4 w-4 text-warning" />
           API Key Setup
         </h4>
         <p className="text-xs text-muted-foreground">

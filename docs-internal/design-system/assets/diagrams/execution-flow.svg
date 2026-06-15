@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" width="100%" preserveAspectRatio="xMidYMid meet" font-family="ui-monospace, &#39;SFMono-Regular&#39;, Menlo, Consolas, monospace">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f8f8f2"></path>
+    </marker>
+    
+  </defs>
+
+  <rect class="bg" width="1200" height="800"></rect>
+
+  
+  <rect class="entry" x="460" y="30" width="280" height="60" rx="8"></rect>
+  <text x="600" y="58" class="title" text-anchor="middle">workflow.execute()</text>
+  <text x="600" y="78" class="sub" text-anchor="middle">(WorkflowService facade)</text>
+
+  
+  <path class="conn" d="M 600 90 L 600 135" marker-end="url(#arrow)"></path>
+
+  
+  <polygon class="decision" points="600,140 780,210 600,280 420,210"></polygon>
+  <text x="600" y="200" class="big" text-anchor="middle">TEMPORAL_ENABLED</text>
+  <text x="600" y="225" class="big" text-anchor="middle">and reachable?</text>
+
+  
+  <path class="conn-yes" d="M 780 210 L 950 210 L 950 320" marker-end="url(#arrow)"></path>
+  <text x="830" y="200" class="branch-label">yes</text>
+
+  
+  <path class="conn-no" d="M 420 210 L 260 210 L 260 280" marker-end="url(#arrow)"></path>
+  <text x="325" y="200" class="branch-label">no</text>
+
+  
+  <polygon class="decision" points="260,285 430,350 260,415 90,350"></polygon>
+  <text x="260" y="345" class="big" text-anchor="middle">Redis</text>
+  <text x="260" y="370" class="big" text-anchor="middle">available?</text>
+
+  
+  <path class="conn-yes" d="M 430 350 L 600 350 L 600 320" marker-end="url(#arrow)"></path>
+  <text x="475" y="340" class="branch-label">yes</text>
+
+  
+  <path class="conn-no" d="M 260 415 L 260 445" marker-end="url(#arrow)"></path>
+  <text x="200" y="440" class="branch-label">no</text>
+
+  
+  
+  <rect class="path-temporal" x="820" y="320" width="260" height="150" rx="8"></rect>
+  <text x="950" y="348" class="mode-label" text-anchor="middle">Temporal Distributed</text>
+  <text x="950" y="372" class="sub" text-anchor="middle">per-node activities</text>
+  <text x="950" y="392" class="sub" text-anchor="middle">3 retries, 10 min timeout</text>
+  <text x="950" y="412" class="sub" text-anchor="middle">horizontal scaling</text>
+  <text x="950" y="432" class="sub" text-anchor="middle">FIRST_COMPLETED scheduling</text>
+  <text x="950" y="458" class="caption" text-anchor="middle">services/temporal/</text>
+
+  
+  <rect class="path-redis" x="470" y="320" width="260" height="150" rx="8"></rect>
+  <text x="600" y="348" class="mode-label" text-anchor="middle">Parallel Local (Redis)</text>
+  <text x="600" y="372" class="sub" text-anchor="middle">decide loop + Kahn layers</text>
+  <text x="600" y="392" class="sub" text-anchor="middle">asyncio.gather() fork/join</text>
+  <text x="600" y="412" class="sub" text-anchor="middle">Prefect-style input hash cache</text>
+  <text x="600" y="432" class="sub" text-anchor="middle">DLQ + heartbeat recovery</text>
+  <text x="600" y="458" class="caption" text-anchor="middle">services/execution/</text>
+
+  
+  <rect class="path-seq" x="120" y="445" width="280" height="120" rx="8"></rect>
+  <text x="260" y="473" class="mode-label" text-anchor="middle">Sequential Fallback</text>
+  <text x="260" y="497" class="sub" text-anchor="middle">simple topological walk</text>
+  <text x="260" y="517" class="sub" text-anchor="middle">no cache, no retry, no DLQ</text>
+  <text x="260" y="537" class="sub" text-anchor="middle">minimal environments only</text>
+  <text x="260" y="558" class="caption" text-anchor="middle">_execute_sequential()</text>
+
+  
+  <path class="conn" d="M 950 470 L 950 590 L 600 590" marker-end="url(#arrow)"></path>
+  <path class="conn" d="M 600 470 L 600 590" marker-end="url(#arrow)"></path>
+  <path class="conn" d="M 260 565 L 260 590 L 600 590" marker-end="url(#arrow)"></path>
+
+  
+  <rect class="shared" x="330" y="595" width="540" height="90" rx="8"></rect>
+  <text x="600" y="625" class="title" text-anchor="middle">NodeExecutor.execute()</text>
+  <text x="600" y="648" class="sub" text-anchor="middle">registry dispatch: {node_type: handler via functools.partial}</text>
+  <text x="600" y="668" class="sub" text-anchor="middle">handlers/*.py -&gt; result dict -&gt; ExecutionContext</text>
+
+  
+  <path class="conn" d="M 600 685 L 600 715" marker-end="url(#arrow)"></path>
+
+  
+  <rect class="output" x="380" y="720" width="440" height="60" rx="8"></rect>
+  <text x="600" y="745" class="title" text-anchor="middle">Status broadcast via StatusBroadcaster</text>
+  <text x="600" y="765" class="sub" text-anchor="middle">node_status + node_output -&gt; Frontend WebSocket</text>
+</svg>

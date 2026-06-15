@@ -1,0 +1,373 @@
+/* ============================================================================
+ * themes/base.css — neutral defaults shared by every theme.
+ *
+ * These are scoped to :root (no data-theme selector) so they apply as
+ * fallbacks when a theme block omits the variable. Per-theme blocks
+ * always win via specificity (`:root[data-theme="..."]` beats `:root`).
+ *
+ * Source: design_handoff_machinaos_themes/themes/base.css.
+ * ============================================================================ */
+
+:root {
+  /* Space scale (4 / 8 / 12 / 16 / 24 / 32 / 48 / 64) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* New-contract radii — exposed as Tailwind tokens via index.css.
+   * Co-exist with shadcn `--radius` (still used by existing primitives). */
+  --radius-pill: 999px;
+
+  /* Motion */
+  --dur-fast: 90ms;
+  --dur-default: 180ms;
+  --dur-slow: 320ms;
+  --ease-default: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --ease-emphasis: cubic-bezier(0.6, -0.05, 0.3, 1.4);
+  --motion-style: smooth;
+
+  /* Sound (read by JS in a future phase) */
+  --sound-pack: none;
+
+  /* Type case toggle — themes flip between `none` / `uppercase` / `capitalize`. */
+  --type-uppercase: none;
+  --type-tracking-display: 0;
+  --type-scale-base: 14px;
+
+  /* Cursor + scrollbar */
+  --cursor-default: auto;
+  --cursor-pointer: pointer;
+
+  /* Canvas-host background pattern slot — themes override with a CSS
+   * gradient or SVG data-url. Default: no pattern. */
+  --canvas-grid: none;
+  --canvas-grid-opacity: 0.4;
+
+  /* Node execution pulse colour (Wave 30). Independent of `--node-color`
+   * (the plugin accent) so the executing-node glow stays high-contrast
+   * against the canvas background regardless of which plugin is running.
+   * Each theme overrides this to its most visible accent (Cyber neon
+   * cyan, Renaissance gold, Surveillance REC red, etc.). The default
+   * `hsl(var(--info))` resolves to a theme-tinted blue under shadcn. */
+  --node-pulse-color: hsl(var(--info));
+}
+
+/* ============================================================================
+ * Reduced-motion override — respects the user's OS-level
+ * `prefers-reduced-motion: reduce` setting (DevTools rendering panel
+ * also surfaces this).
+ *
+ * Targets every theme's per-component animation: cyber-flicker /
+ * cyber-roll / cyber-blink / cyber-glitch (Cyber), surv-blink
+ * (Surveillance), ren-flicker (Renaissance), plus any `transition`
+ * on canvas-host pseudo-elements that synthesise motion.
+ *
+ * Sounds are not motion — left enabled regardless. Settings → Audio
+ * → Sound effects is the user-facing audio toggle.
+ * ============================================================================ */
+
+/* ============================================================================
+ * Wave 33: pause every CSS animation when the tab is hidden.
+ *
+ * Browsers continue advancing CSS keyframe timing on background tabs (RAF
+ * is throttled to ~1Hz but `animation` keyframes still accumulate paused
+ * frames in the compositor queue). When the tab becomes visible, all
+ * paused frames flush at once — with W30's three-layer box-shadow
+ * `node-pulse` (peak `0 0 56px 16px color-mix(...)` × 3 layers) running
+ * on every executing node, plus Cyber theme's full-viewport
+ * `cyber-flicker` (5s opacity) + `cyber-roll` (8s viewport-height
+ * translateY), the GPU compositor stalls for 100-200ms. During the stall
+ * input events queue but don't dispatch — first click on tab return
+ * appears unresponsive.
+ *
+ * The Dashboard mounts a small `visibilitychange` listener that toggles
+ * this attribute on `<html>`. Setting `animation-play-state: paused`
+ * flushes the keyframe queue so resume has nothing to catch up on. The
+ * dashboard defers the unpause via `requestAnimationFrame` so input
+ * dispatch happens before composite.
+ * ============================================================================ */
+
+html[data-page-hidden] *,
+html[data-page-hidden] *::before,
+html[data-page-hidden] *::after {
+  animation-play-state: paused !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Cyber */
+  :root[data-theme="cyber"] .app-frame,
+  :root[data-theme="cyber"] .app-frame::before,
+  :root[data-theme="cyber"] .app-frame::after,
+  :root[data-theme="cyber"] .canvas::after,
+  :root[data-theme="cyber"] .canvas-host::after,
+  :root[data-theme="cyber"] .node::before,
+  :root[data-theme="cyber"] .sq-node.selected .sq-node-box,
+  :root[data-theme="cyber"] .row:hover::after,
+  :root[data-theme="cyber"] .statusbar .pip,
+  :root[data-theme="cyber"] .cmdk-item.active::after,
+  :root[data-theme="cyber"] .v-display:hover,
+  /* Surveillance */
+  :root[data-theme="surveillance"] .sq-node-box::before,
+  :root[data-theme="surveillance"] .statusbar .pip,
+  /* Renaissance */
+  :root[data-theme="renaissance"] .canvas .ornament,
+  /* Generic Tailwind animate-pulse used by node execution pip */
+  .animate-pulse,
+  /* Wave 21 default node pulse */
+  .react-flow__node.executing .node {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ============================================================================
+ * Default canvas-node visuals (Wave 21).
+ *
+ * Each node component sets `--node-color` inline from its plugin's
+ * accent hex (visuals.json). These rules consume that custom property
+ * to draw a sensible default border / gradient / shadow so light, dark,
+ * and any theme that doesn't define its own `.node` rule still renders
+ * correctly. Per-theme CSS in client/src/themes/<theme>.css overrides
+ * these with material-specific decorations (vellum, neon, marble, etc.).
+ * ============================================================================ */
+
+.node {
+  position: relative;
+  border-radius: 12px;
+  border: 2px solid color-mix(in srgb, var(--node-color, hsl(var(--border))) 60%, transparent);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--node-color, hsl(var(--card))) 14%, hsl(var(--card))) 0%,
+      hsl(var(--card)) 100%
+    );
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--node-color, #000) 18%, transparent);
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.node:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--node-color, #000) 28%, transparent);
+}
+
+.node.selected {
+  border-color: var(--node-color, hsl(var(--ring)));
+  box-shadow:
+    0 0 0 1px var(--node-color, hsl(var(--ring))),
+    0 4px 14px color-mix(in srgb, var(--node-color, #000) 32%, transparent);
+}
+
+/* Pulse during execution — react-flow toggles `.executing` on the wrapper
+   via canvasAnimations.ts (`.react-flow__node.executing`). The keyframe
+   uses --node-pulse-color (theme-controlled high-contrast accent) NOT
+   --node-color (plugin accent), so the glow stays visible against any
+   theme background — Cyber's near-black, Renaissance's vellum,
+   Surveillance's grey, etc. */
+.react-flow__node.executing .node {
+  animation: node-pulse 1.4s ease-in-out infinite;
+}
+
+/* Three-layer pulse for high-visibility executing-node glow:
+ *   1. inner solid ring        — definitive "this node is live" signal
+ *   2. mid soft halo           — bleeds outside the node bounds
+ *   3. outer atmospheric halo  — readable at distant canvas zoom
+ *
+ * Total reach at peak: ~52px outside the node box (12px ring +
+ * 40px outer halo). Peak intensity tuned so the glow doesn't
+ * appear blown-out or wash the surrounding canvas — the outer
+ * halo is 25% opacity, the ring is 45%. */
+@keyframes node-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 color-mix(in srgb, var(--node-pulse-color) 80%, transparent),
+      0 0 14px 2px color-mix(in srgb, var(--node-pulse-color) 50%, transparent),
+      0 0 28px 4px color-mix(in srgb, var(--node-pulse-color) 25%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 12px color-mix(in srgb, var(--node-pulse-color) 45%, transparent),
+      0 0 32px 8px color-mix(in srgb, var(--node-pulse-color) 65%, transparent),
+      0 0 56px 16px color-mix(in srgb, var(--node-pulse-color) 30%, transparent);
+  }
+}
+
+/* Square-node default visuals — outer wrapper is layout-only, the inner
+   `.sq-node-box` carries the bordered icon-square. Per-theme CSS
+   already in `client/src/themes/*.css` overrides these for material
+   identity. */
+.sq-node {
+  position: relative;
+}
+
+.sq-node-box {
+  border-radius: 10px;
+  border: 2px solid color-mix(in srgb, var(--node-color, hsl(var(--border))) 60%, transparent);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--node-color, hsl(var(--card))) 18%, hsl(var(--card))) 0%,
+      hsl(var(--card)) 100%
+    );
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--node-color, #000) 18%, transparent);
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.sq-node-box:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--node-color, #000) 28%, transparent);
+}
+
+.sq-node.selected .sq-node-box {
+  border-color: var(--node-color, hsl(var(--ring)));
+  box-shadow:
+    0 0 0 1px var(--node-color, hsl(var(--ring))),
+    0 4px 14px color-mix(in srgb, var(--node-color, #000) 32%, transparent);
+}
+
+.react-flow__node.executing .sq-node-box,
+.sq-node[data-executing] .sq-node-box {
+  animation: node-pulse 1.5s ease-in-out infinite;
+}
+
+/* ============================================================================
+ * Canvas-host background pattern + cursor (Wave 24).
+ *
+ * Themes provide per-theme decorative backgrounds via the `--canvas-grid`
+ * custom property (CSS gradient or SVG data-url) and per-theme cursors
+ * via `--cursor-default`. Both fall back to neutral defaults from `:root`.
+ *
+ * The pattern is layered on top of React Flow's own background — themes
+ * keep their canvas surface colour via shadcn `--background` tokens and
+ * this rule adds the decorative grid on top.
+ * ============================================================================ */
+
+.canvas-host {
+  background-image: var(--canvas-grid, none);
+  cursor: var(--cursor-default, auto);
+}
+
+/* ============================================================================
+ * Default canvas-node inner-element visuals (Wave 26).
+ *
+ * Status pips, gear buttons, handles, and labels — defaults that fire
+ * across all themes that don't override. Status pips are driven by
+ * `data-status` set inline by the React component; CSS picks the colour
+ * from shadcn semantic tokens. Per-theme CSS in client/src/themes/<theme>.css
+ * overrides these for material-specific identity.
+ * ============================================================================ */
+
+/* Status pip — square-node and rectangular-node variants */
+.sq-node-pip,
+.node-pip {
+  background: hsl(var(--muted-foreground));
+}
+
+.sq-node-pip[data-status="idle"],
+.node-pip[data-status="idle"] {
+  background: hsl(var(--muted-foreground));
+}
+
+.sq-node-pip[data-status="executing"],
+.sq-node-pip[data-status="waiting"],
+.node-pip[data-status="executing"],
+.node-pip[data-status="waiting"] {
+  background: var(--node-color, hsl(var(--info)));
+  box-shadow: 0 0 6px color-mix(in srgb, var(--node-color, hsl(var(--info))) 60%, transparent);
+}
+
+.sq-node-pip[data-status="success"],
+.node-pip[data-status="success"] {
+  background: hsl(var(--success));
+}
+
+.sq-node-pip[data-status="error"],
+.node-pip[data-status="error"] {
+  background: hsl(var(--destructive));
+}
+
+/* Gear button defaults */
+.sq-node-gear,
+.node-gear {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.sq-node-gear:hover,
+.node-gear:hover {
+  background: hsl(var(--accent));
+  border-color: hsl(var(--accent-foreground) / 0.2);
+}
+
+/* Handle defaults */
+.sq-node-handle,
+.node-handle {
+  background: hsl(var(--background));
+  border: 2px solid hsl(var(--muted-foreground));
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.sq-node-handle.out,
+.node-handle.out {
+  background: var(--node-color, hsl(var(--primary)));
+  border-color: var(--node-color, hsl(var(--primary)));
+}
+
+.sq-node-handle.in,
+.node-handle.in {
+  background: hsl(var(--background));
+  border-color: hsl(var(--muted-foreground));
+}
+
+/* Label defaults — picks up display typography from theme */
+.sq-node-label,
+.node-label {
+  font-family: var(--font-display, var(--font-body));
+  letter-spacing: var(--type-tracking-display, 0);
+  text-transform: var(--type-uppercase, none);
+  color: hsl(var(--foreground));
+}
+
+/* ============================================================================
+ * Status-state box glow (Wave 29).
+ *
+ * The W26 status-pip rules (.sq-node-pip[data-status="..."]) color the
+ * small status indicator. This block adds a complementary glow to the
+ * NODE BOX itself for `success` and `error` states, so post-execution
+ * outcomes are visible at canvas zoom levels where the pip is too
+ * small to read. Per-theme files override these via higher-specificity
+ * `:root[data-theme="..."] .sq-node[data-status="..."] .sq-node-box`
+ * selectors when they want a material-specific outcome glow.
+ * ============================================================================ */
+
+.sq-node[data-status="success"] .sq-node-box,
+.react-flow__node[data-status="success"] .node {
+  box-shadow:
+    0 0 0 1px hsl(var(--success)),
+    0 0 14px color-mix(in srgb, hsl(var(--success)) 60%, transparent);
+}
+
+.sq-node[data-status="error"] .sq-node-box,
+.react-flow__node[data-status="error"] .node {
+  box-shadow:
+    0 0 0 1px hsl(var(--destructive)),
+    0 0 14px color-mix(in srgb, hsl(var(--destructive)) 60%, transparent);
+}
+
+/* TODO(wave-30): mirror data-status from the pip to the outer .sq-node /
+ * .react-flow__node wrapper in each canvas-node component so the box
+ * glow rules above fire. The wave-29 selectors are pre-positioned;
+ * components currently set data-status on the pip only (W26). */

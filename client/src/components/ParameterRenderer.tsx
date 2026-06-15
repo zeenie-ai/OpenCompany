@@ -9,11 +9,24 @@ import CodeEditor from './ui/CodeEditor';
 import DynamicParameterService from '../services/dynamicParameterService';
 import { useAppStore } from '../store/useAppStore';
 import { isNodeInBackendGroup } from '../lib/nodeSpec';
-import { useAppTheme } from '../hooks/useAppTheme';
 import { API_CONFIG } from '../config/api';
 import { useWebSocket } from '../contexts/WebSocketContext';
 import { useApiKeys } from '../hooks/useApiKeys';
 import { Input as ShadcnInput } from './ui/input';
+import { Textarea } from './ui/textarea';
+import { Checkbox } from './ui/checkbox';
+import { Slider } from './ui/slider';
+import { Alert } from './ui/alert';
+import { ActionButton } from './ui/action-button';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
 import { shouldShowParameter } from '../utils/parameterVisibility';
 
 // Map node types to provider keys for AI model nodes
@@ -40,8 +53,7 @@ const CollectionRenderer: React.FC<{
   value: any;
   onChange: (value: any) => void;
   allParameters?: Record<string, any>;
-  theme: ReturnType<typeof useAppTheme>;
-}> = ({ parameter, value, onChange, allParameters, theme }) => {
+}> = ({ parameter, value, onChange, allParameters }) => {
   const [showAddOption, setShowAddOption] = useState(false);
   const currentValue = value || {};
   const addedOptions = Object.keys(currentValue).filter(key => currentValue[key] !== undefined);
@@ -74,12 +86,7 @@ const CollectionRenderer: React.FC<{
   return (
     <div>
       {addedOptions.length === 0 && (
-        <div style={{
-          fontSize: '14px',
-          color: theme.colors.textSecondary,
-          marginBottom: '12px',
-          padding: '8px 0'
-        }}>
+        <div className="text-sm text-muted-foreground mb-3 py-2">
           No properties
         </div>
       )}
@@ -89,30 +96,13 @@ const CollectionRenderer: React.FC<{
         if (!option) return null;
 
         return (
-          <div key={optionName} style={{
-            marginBottom: '16px',
-            padding: '12px',
-            border: `1px solid ${theme.colors.border}`,
-            borderRadius: '4px',
-            backgroundColor: theme.colors.backgroundAlt,
-            position: 'relative'
-          }}>
+          <div
+            key={optionName}
+            className="relative mb-4 p-3 rounded-md border border-border bg-muted"
+          >
             <button
               onClick={() => removeOption(optionName)}
-              style={{
-                position: 'absolute',
-                top: '6px',
-                right: '6px',
-                background: 'none',
-                border: 'none',
-                color: theme.colors.textSecondary,
-                cursor: 'pointer',
-                fontSize: '14px',
-                padding: '2px 4px',
-                borderRadius: '2px'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.colors.border}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              className="absolute top-1.5 right-1.5 rounded-sm px-1 py-0.5 text-sm text-muted-foreground cursor-pointer hover:bg-border"
               title="Remove"
             >
               ✕
@@ -128,77 +118,33 @@ const CollectionRenderer: React.FC<{
       })}
 
       {availableOptions.length > 0 && (
-        <div style={{ position: 'relative' }}>
+        <div className="relative">
           <button
             onClick={() => setShowAddOption(!showAddOption)}
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              border: `1px solid ${theme.colors.border}`,
-              borderRadius: '4px',
-              backgroundColor: theme.colors.backgroundAlt,
-              color: theme.colors.textSecondary,
-              cursor: 'pointer',
-              fontSize: '14px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              transition: 'all 0.2s ease'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.colors.borderHover}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = theme.colors.backgroundAlt}
+            className="flex w-full items-center justify-between rounded-md border border-border bg-muted px-3 py-2.5 text-sm text-muted-foreground cursor-pointer transition-colors hover:bg-accent"
           >
             {parameter.placeholder || 'Add Option'}
-            <span style={{
-              transform: showAddOption ? 'rotate(180deg)' : 'rotate(0deg)',
-              transition: 'transform 0.2s ease'
-            }}>
+            <span
+              className="transition-transform"
+              style={{ transform: showAddOption ? 'rotate(180deg)' : 'rotate(0deg)' }}
+            >
               ▼
             </span>
           </button>
 
           {showAddOption && (
-            <div style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              right: 0,
-              zIndex: 1000,
-              backgroundColor: theme.colors.background,
-              border: `1px solid ${theme.colors.border}`,
-              borderRadius: '4px',
-              marginTop: '2px',
-              boxShadow: `0 4px 6px -1px ${theme.colors.shadow}`,
-              maxHeight: '200px',
-              overflowY: 'auto'
-            }}>
+            <div className="absolute left-0 right-0 top-full z-[1000] mt-0.5 max-h-[200px] overflow-y-auto rounded-md border border-border bg-background shadow-sm">
               {availableOptions.map((option: any, index: number) => (
                 <button
                   key={option.name}
                   onClick={() => addOption(option.name)}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    border: 'none',
-                    backgroundColor: 'transparent',
-                    color: theme.colors.text,
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    textAlign: 'left',
-                    borderBottom: index < availableOptions.length - 1 ? `1px solid ${theme.colors.border}` : 'none'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.colors.backgroundAlt}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  className={`w-full cursor-pointer px-3 py-2.5 text-left text-sm text-foreground transition-colors hover:bg-muted ${index < availableOptions.length - 1 ? 'border-b border-border' : ''}`}
                 >
-                  <div style={{ fontWeight: '500' }}>
+                  <div className="font-medium">
                     {option.displayName}
                   </div>
                   {option.description && (
-                    <div style={{
-                      fontSize: '12px',
-                      color: theme.colors.textSecondary,
-                      marginTop: '2px'
-                    }}>
+                    <div className="mt-0.5 text-xs text-muted-foreground">
                       {option.description}
                     </div>
                   )}
@@ -219,12 +165,11 @@ const GroupIdSelector: React.FC<{
   onNameChange?: (name: string) => void;
   storedName?: string;
   placeholder?: string;
-  theme: ReturnType<typeof useAppTheme>;
   isDragOver: boolean;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
-}> = ({ value, onChange, onNameChange, storedName, placeholder, theme, isDragOver, onDragOver, onDragLeave, onDrop }) => {
+}> = ({ value, onChange, onNameChange, storedName, placeholder, isDragOver, onDragOver, onDragLeave, onDrop }) => {
   const [groups, setGroups] = useState<Array<{ jid: string; name: string; topic?: string; size?: number; is_community?: boolean }>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -294,11 +239,12 @@ const GroupIdSelector: React.FC<{
   // Display value: show group name if selected, otherwise show JID
   const displayValue = selectedGroupName || value;
   const isGroupSelected = selectedGroupName !== null && value;
+  const isTemplate = !!(value && value.includes('{{'));
 
   return (
-    <div style={{ position: 'relative' }}>
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-        <input
+    <div className="relative">
+      <div className="flex items-center gap-2">
+        <ShadcnInput
           type="text"
           value={displayValue}
           onChange={handleInputChange}
@@ -306,133 +252,48 @@ const GroupIdSelector: React.FC<{
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
-          style={{
-            flex: 1,
-            padding: '8px 12px',
-            border: isDragOver ? `2px solid ${theme.colors.focus}` : `1px solid ${theme.colors.border}`,
-            borderRadius: '6px',
-            fontSize: '14px',
-            backgroundColor: isGroupSelected ? theme.colors.backgroundAlt : (isDragOver ? theme.colors.focusRing : theme.colors.background),
-            color: isGroupSelected ? theme.colors.success : (value && value.includes('{{') ? theme.colors.templateVariable : theme.colors.text),
-            outline: 'none',
-            transition: 'all 0.2s ease',
-            fontFamily: value && value.includes('{{') ? 'monospace' : 'system-ui, sans-serif',
-            fontWeight: isGroupSelected ? '500' : 'normal'
-          }}
-          onFocus={(e) => e.target.style.borderColor = theme.colors.focus}
-          onBlur={(e) => e.target.style.borderColor = theme.colors.border}
+          className={`flex-1 ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-accent/10' : ''} ${isGroupSelected ? 'bg-muted text-success font-medium' : (isTemplate ? 'text-info font-mono' : '')}`}
         />
-        <button
+        <ActionButton
+          intent="config"
           onClick={handleLoadGroups}
           disabled={isLoading}
-          style={{
-            padding: '8px 12px',
-            border: `1px solid ${isLoading ? theme.colors.border : `${theme.colors.focus}40`}`,
-            borderRadius: '6px',
-            backgroundColor: isLoading ? 'transparent' : `${theme.colors.focus}18`,
-            color: isLoading ? theme.colors.textMuted : theme.colors.focus,
-            cursor: isLoading ? 'wait' : 'pointer',
-            fontSize: '13px',
-            fontWeight: 600,
-            transition: 'all 0.2s ease',
-            whiteSpace: 'nowrap',
-            opacity: isLoading ? 0.7 : 1
-          }}
-          onMouseEnter={(e) => {
-            if (!isLoading) {
-              e.currentTarget.style.backgroundColor = `${theme.colors.focus}30`;
-            }
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = isLoading ? 'transparent' : `${theme.colors.focus}18`;
-          }}
           title="Load WhatsApp groups"
         >
           {isLoading ? 'Loading...' : 'Load'}
-        </button>
+        </ActionButton>
       </div>
       {/* Show JID below when group name is displayed */}
       {isGroupSelected && (
-        <div style={{
-          fontSize: '11px',
-          color: theme.colors.textSecondary,
-          marginTop: '4px',
-          fontFamily: 'monospace'
-        }}>
+        <div className="mt-1 font-mono text-[11px] text-muted-foreground">
           {value}
         </div>
       )}
 
       {error && (
-        <div style={{
-          fontSize: '12px',
-          color: theme.colors.error,
-          marginTop: '4px'
-        }}>
+        <div className="mt-1 text-xs text-destructive">
           {error}
         </div>
       )}
 
       {showDropdown && groups.length > 0 && (
-        <div style={{
-          position: 'absolute',
-          top: '100%',
-          left: 0,
-          right: 0,
-          marginTop: '4px',
-          backgroundColor: theme.colors.background,
-          border: `1px solid ${theme.colors.border}`,
-          borderRadius: '6px',
-          boxShadow: `0 4px 12px ${theme.colors.shadow}`,
-          maxHeight: '200px',
-          overflowY: 'auto',
-          zIndex: 1000
-        }}>
+        <div className="absolute left-0 right-0 top-full z-[1000] mt-1 max-h-[200px] overflow-y-auto rounded-md border border-border bg-background shadow-sm">
           {groups.map((group, index) => (
             <button
               key={group.jid}
               onClick={() => handleSelectGroup(group)}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: 'none',
-                backgroundColor: 'transparent',
-                color: theme.colors.text,
-                cursor: 'pointer',
-                fontSize: '13px',
-                textAlign: 'left',
-                borderBottom: index < groups.length - 1 ? `1px solid ${theme.colors.border}` : 'none'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.colors.backgroundAlt}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              className={`w-full cursor-pointer px-3 py-2.5 text-left text-[13px] text-foreground transition-colors hover:bg-muted ${index < groups.length - 1 ? 'border-b border-border' : ''}`}
             >
-              <div style={{ fontWeight: '500' }}>{group.name}</div>
-              <div style={{
-                fontSize: '11px',
-                color: theme.colors.textSecondary,
-                marginTop: '2px',
-                fontFamily: 'monospace'
-              }}>
+              <div className="font-medium">{group.name}</div>
+              <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
                 {group.jid}
-                {group.size && <span style={{ marginLeft: '8px' }}>({group.size} members)</span>}
+                {group.size && <span className="ml-2">({group.size} members)</span>}
               </div>
             </button>
           ))}
           <button
             onClick={() => setShowDropdown(false)}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              border: 'none',
-              borderTop: `1px solid ${theme.colors.border}`,
-              backgroundColor: theme.colors.backgroundAlt,
-              color: theme.colors.textSecondary,
-              cursor: 'pointer',
-              fontSize: '12px',
-              textAlign: 'center'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.color = theme.colors.text}
-            onMouseLeave={(e) => e.currentTarget.style.color = theme.colors.textSecondary}
+            className="w-full cursor-pointer border-t border-border bg-muted px-3 py-2 text-center text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
             Close
           </button>
@@ -449,13 +310,12 @@ const SenderNumberSelector: React.FC<{
   onNameChange?: (name: string) => void;
   storedName?: string;
   placeholder?: string;
-  theme: ReturnType<typeof useAppTheme>;
   isDragOver: boolean;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
   groupId: string; // The selected group to load members from
-}> = ({ value, onChange, onNameChange, storedName, placeholder, theme, isDragOver, onDragOver, onDragLeave, onDrop, groupId }) => {
+}> = ({ value, onChange, onNameChange, storedName, placeholder, isDragOver, onDragOver, onDragLeave, onDrop, groupId }) => {
   const [members, setMembers] = useState<Array<{ phone: string; name: string; jid: string; is_admin?: boolean }>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -533,11 +393,12 @@ const SenderNumberSelector: React.FC<{
   // Display value: show member name if selected, otherwise show phone
   const displayValue = selectedMemberName || value;
   const isMemberSelected = selectedMemberName !== null && value;
+  const isTemplate = !!(value && value.includes('{{'));
 
   return (
-    <div style={{ position: 'relative' }}>
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-        <input
+    <div className="relative">
+      <div className="flex items-center gap-2">
+        <ShadcnInput
           type="text"
           value={displayValue}
           onChange={handleInputChange}
@@ -545,107 +406,39 @@ const SenderNumberSelector: React.FC<{
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
-          style={{
-            flex: 1,
-            padding: '8px 12px',
-            border: isDragOver ? `2px solid ${theme.colors.focus}` : `1px solid ${theme.colors.border}`,
-            borderRadius: '6px',
-            fontSize: '14px',
-            backgroundColor: isMemberSelected ? theme.colors.backgroundAlt : (isDragOver ? theme.colors.focusRing : theme.colors.background),
-            color: isMemberSelected ? theme.colors.success : (value && value.includes('{{') ? theme.colors.templateVariable : theme.colors.text),
-            outline: 'none',
-            transition: 'all 0.2s ease',
-            fontFamily: value && value.includes('{{') ? 'monospace' : 'system-ui, sans-serif',
-            fontWeight: isMemberSelected ? '500' : 'normal'
-          }}
-          onFocus={(e) => e.target.style.borderColor = theme.colors.focus}
-          onBlur={(e) => e.target.style.borderColor = theme.colors.border}
+          className={`flex-1 ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-accent/10' : ''} ${isMemberSelected ? 'bg-muted text-success font-medium' : (isTemplate ? 'text-info font-mono' : '')}`}
         />
-        <button
+        <ActionButton
+          intent="config"
           onClick={handleLoadMembers}
           disabled={isLoading || !groupId}
-          style={{
-            padding: '8px 12px',
-            border: `1px solid ${(isLoading || !groupId) ? theme.colors.border : `${theme.colors.focus}40`}`,
-            borderRadius: '6px',
-            backgroundColor: (isLoading || !groupId) ? 'transparent' : `${theme.colors.focus}18`,
-            color: (isLoading || !groupId) ? theme.colors.textMuted : theme.colors.focus,
-            cursor: (isLoading || !groupId) ? 'not-allowed' : 'pointer',
-            fontSize: '13px',
-            fontWeight: 600,
-            transition: 'all 0.2s ease',
-            whiteSpace: 'nowrap',
-            opacity: (isLoading || !groupId) ? 0.7 : 1
-          }}
-          onMouseEnter={(e) => {
-            if (!isLoading && groupId) {
-              e.currentTarget.style.backgroundColor = `${theme.colors.focus}30`;
-            }
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = (isLoading || !groupId) ? 'transparent' : `${theme.colors.focus}18`;
-          }}
           title={groupId ? "Load group members" : "Select a group first"}
         >
           {isLoading ? 'Loading...' : 'Load'}
-        </button>
+        </ActionButton>
       </div>
       {/* Show phone below when member name is displayed */}
       {isMemberSelected && (
-        <div style={{
-          fontSize: '11px',
-          color: theme.colors.textSecondary,
-          marginTop: '4px',
-          fontFamily: 'monospace'
-        }}>
+        <div className="mt-1 font-mono text-[11px] text-muted-foreground">
           {value}
         </div>
       )}
 
       {error && (
-        <div style={{
-          fontSize: '12px',
-          color: theme.colors.error,
-          marginTop: '4px'
-        }}>
+        <div className="mt-1 text-xs text-destructive">
           {error}
         </div>
       )}
 
       {showDropdown && members.length > 0 && (
-        <div style={{
-          position: 'absolute',
-          top: '100%',
-          left: 0,
-          right: 0,
-          marginTop: '4px',
-          backgroundColor: theme.colors.background,
-          border: `1px solid ${theme.colors.border}`,
-          borderRadius: '6px',
-          boxShadow: `0 4px 12px ${theme.colors.shadow}`,
-          maxHeight: '250px',
-          overflowY: 'auto',
-          zIndex: 1000
-        }}>
+        <div className="absolute left-0 right-0 top-full z-[1000] mt-1 max-h-[250px] overflow-y-auto rounded-md border border-border bg-background shadow-sm">
           {/* All Members option */}
           <button
             onClick={handleClearSelection}
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              border: 'none',
-              backgroundColor: !value ? theme.colors.backgroundAlt : 'transparent',
-              color: theme.colors.text,
-              cursor: 'pointer',
-              fontSize: '13px',
-              textAlign: 'left',
-              borderBottom: `1px solid ${theme.colors.border}`
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.colors.backgroundAlt}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = !value ? theme.colors.backgroundAlt : 'transparent'}
+            className={`w-full cursor-pointer border-b border-border px-3 py-2.5 text-left text-[13px] text-foreground transition-colors hover:bg-muted ${!value ? 'bg-muted' : ''}`}
           >
-            <div style={{ fontWeight: '500', color: theme.colors.textSecondary }}>All Members</div>
-            <div style={{ fontSize: '11px', color: theme.colors.textMuted, marginTop: '2px' }}>
+            <div className="font-medium text-muted-foreground">All Members</div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">
               Receive from anyone in group
             </div>
           </button>
@@ -653,49 +446,20 @@ const SenderNumberSelector: React.FC<{
             <button
               key={member.jid || member.phone}
               onClick={() => handleSelectMember(member)}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: 'none',
-                backgroundColor: value === member.phone ? theme.colors.backgroundAlt : 'transparent',
-                color: theme.colors.text,
-                cursor: 'pointer',
-                fontSize: '13px',
-                textAlign: 'left',
-                borderBottom: index < members.length - 1 ? `1px solid ${theme.colors.border}` : 'none'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.colors.backgroundAlt}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = value === member.phone ? theme.colors.backgroundAlt : 'transparent'}
+              className={`w-full cursor-pointer px-3 py-2.5 text-left text-[13px] text-foreground transition-colors hover:bg-muted ${value === member.phone ? 'bg-muted' : ''} ${index < members.length - 1 ? 'border-b border-border' : ''}`}
             >
-              <div style={{ fontWeight: '500' }}>
+              <div className="font-medium">
                 {member.name || member.phone}
-                {member.is_admin && <span style={{ marginLeft: '8px', fontSize: '10px', color: theme.colors.warning }}>(Admin)</span>}
+                {member.is_admin && <span className="ml-2 text-[10px] text-warning">(Admin)</span>}
               </div>
-              <div style={{
-                fontSize: '11px',
-                color: theme.colors.textSecondary,
-                marginTop: '2px',
-                fontFamily: 'monospace'
-              }}>
+              <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
                 {member.phone}
               </div>
             </button>
           ))}
           <button
             onClick={() => setShowDropdown(false)}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              border: 'none',
-              borderTop: `1px solid ${theme.colors.border}`,
-              backgroundColor: theme.colors.backgroundAlt,
-              color: theme.colors.textSecondary,
-              cursor: 'pointer',
-              fontSize: '12px',
-              textAlign: 'center'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.color = theme.colors.text}
-            onMouseLeave={(e) => e.currentTarget.style.color = theme.colors.textSecondary}
+            className="w-full cursor-pointer border-t border-border bg-muted px-3 py-2 text-center text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
             Close
           </button>
@@ -712,12 +476,11 @@ const ChannelJidSelector: React.FC<{
   onNameChange?: (name: string) => void;
   storedName?: string;
   placeholder?: string;
-  theme: ReturnType<typeof useAppTheme>;
   isDragOver: boolean;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
-}> = ({ value, onChange, onNameChange, storedName, placeholder, theme, isDragOver, onDragOver, onDragLeave, onDrop }) => {
+}> = ({ value, onChange, onNameChange, storedName, placeholder, isDragOver, onDragOver, onDragLeave, onDrop }) => {
   const [channels, setChannels] = useState<Array<{ jid: string; name: string; subscriber_count?: number; role?: string }>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -772,12 +535,12 @@ const ChannelJidSelector: React.FC<{
 
   const displayValue = selectedChannelName || value;
   const isSelected = selectedChannelName !== null && value;
-  const isTemplate = value && value.includes('{{');
+  const isTemplate = !!(value && value.includes('{{'));
 
   return (
-    <div style={{ position: 'relative' }}>
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-        <input
+    <div className="relative">
+      <div className="flex items-center gap-2">
+        <ShadcnInput
           type="text"
           value={displayValue}
           onChange={handleInputChange}
@@ -785,93 +548,45 @@ const ChannelJidSelector: React.FC<{
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
-          style={{
-            flex: 1,
-            padding: '8px 12px',
-            border: isDragOver ? `2px solid ${theme.colors.focus}` : `1px solid ${theme.colors.border}`,
-            borderRadius: theme.borderRadius.md,
-            fontSize: theme.fontSize.base,
-            backgroundColor: isSelected ? theme.colors.backgroundAlt : (isDragOver ? theme.colors.focusRing : theme.colors.background),
-            color: isSelected ? theme.colors.success : (isTemplate ? theme.colors.templateVariable : theme.colors.text),
-            outline: 'none',
-            transition: 'all 0.2s ease',
-            fontFamily: isTemplate ? theme.fontFamily.mono : theme.fontFamily.sans,
-            fontWeight: isSelected ? theme.fontWeight.medium : theme.fontWeight.normal
-          }}
-          onFocus={(e) => e.target.style.borderColor = theme.colors.focus}
-          onBlur={(e) => e.target.style.borderColor = theme.colors.border}
+          className={`flex-1 ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-accent/10' : ''} ${isSelected ? 'bg-muted text-success font-medium' : (isTemplate ? 'text-info font-mono' : '')}`}
         />
-        <button
+        <ActionButton
+          intent="config"
           onClick={handleLoadChannels}
           disabled={isLoading}
-          style={{
-            padding: '8px 12px',
-            border: `1px solid ${isLoading ? theme.colors.border : `${theme.colors.focus}40`}`,
-            borderRadius: theme.borderRadius.md,
-            backgroundColor: isLoading ? 'transparent' : `${theme.colors.focus}18`,
-            color: isLoading ? theme.colors.textMuted : theme.colors.focus,
-            cursor: isLoading ? 'wait' : 'pointer',
-            fontSize: theme.fontSize.sm,
-            fontWeight: theme.fontWeight.semibold,
-            fontFamily: theme.fontFamily.sans,
-            transition: 'all 0.2s ease',
-            whiteSpace: 'nowrap',
-            opacity: isLoading ? 0.7 : 1
-          }}
-          onMouseEnter={(e) => { if (!isLoading) e.currentTarget.style.backgroundColor = `${theme.colors.focus}30`; }}
-          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = isLoading ? 'transparent' : `${theme.colors.focus}18`; }}
           title="Load WhatsApp channels"
         >
           {isLoading ? 'Loading...' : 'Load'}
-        </button>
+        </ActionButton>
       </div>
       {isSelected && (
-        <div style={{ fontSize: theme.fontSize.xs, color: theme.colors.textSecondary, marginTop: '4px', fontFamily: theme.fontFamily.mono }}>
+        <div className="mt-1 font-mono text-xs text-muted-foreground">
           {value}
         </div>
       )}
       {error && (
-        <div style={{ fontSize: theme.fontSize.sm, color: theme.colors.error, marginTop: '4px', fontFamily: theme.fontFamily.sans }}>
+        <div className="mt-1 text-xs text-destructive">
           {error}
         </div>
       )}
       {showDropdown && channels.length > 0 && (
-        <div style={{
-          position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px',
-          backgroundColor: theme.colors.background, border: `1px solid ${theme.colors.border}`,
-          borderRadius: theme.borderRadius.md, boxShadow: `0 4px 12px ${theme.colors.shadow}`,
-          maxHeight: '200px', overflowY: 'auto', zIndex: 1000
-        }}>
+        <div className="absolute left-0 right-0 top-full z-[1000] mt-1 max-h-[200px] overflow-y-auto rounded-md border border-border bg-background shadow-sm">
           {channels.map((ch, i) => (
             <button
               key={ch.jid}
               onClick={() => handleSelectChannel(ch)}
-              style={{
-                width: '100%', padding: '10px 12px', border: 'none', backgroundColor: 'transparent',
-                color: theme.colors.text, cursor: 'pointer', fontSize: theme.fontSize.sm,
-                fontFamily: theme.fontFamily.sans, textAlign: 'left',
-                borderBottom: i < channels.length - 1 ? `1px solid ${theme.colors.border}` : 'none'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.colors.backgroundAlt}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              className={`w-full cursor-pointer px-3 py-2.5 text-left text-[13px] text-foreground transition-colors hover:bg-muted ${i < channels.length - 1 ? 'border-b border-border' : ''}`}
             >
-              <div style={{ fontWeight: theme.fontWeight.medium }}>{ch.name}</div>
-              <div style={{ fontSize: theme.fontSize.xs, color: theme.colors.textSecondary, marginTop: '2px', fontFamily: theme.fontFamily.mono }}>
+              <div className="font-medium">{ch.name}</div>
+              <div className="mt-0.5 font-mono text-xs text-muted-foreground">
                 {ch.jid}
-                {ch.subscriber_count != null && <span style={{ marginLeft: '8px' }}>({ch.subscriber_count} subscribers)</span>}
+                {ch.subscriber_count != null && <span className="ml-2">({ch.subscriber_count} subscribers)</span>}
               </div>
             </button>
           ))}
           <button
             onClick={() => setShowDropdown(false)}
-            style={{
-              width: '100%', padding: '8px 12px', border: 'none',
-              borderTop: `1px solid ${theme.colors.border}`, backgroundColor: theme.colors.backgroundAlt,
-              color: theme.colors.textSecondary, cursor: 'pointer', fontSize: theme.fontSize.sm,
-              fontFamily: theme.fontFamily.sans, textAlign: 'center'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.color = theme.colors.text}
-            onMouseLeave={(e) => e.currentTarget.style.color = theme.colors.textSecondary}
+            className="w-full cursor-pointer border-t border-border bg-muted px-3 py-2 text-center text-[13px] text-muted-foreground transition-colors hover:text-foreground"
           >
             Close
           </button>
@@ -887,36 +602,20 @@ const FixedCollectionRenderer: React.FC<{
   value: any;
   onChange: (value: any) => void;
   allParameters?: Record<string, any>;
-  theme: ReturnType<typeof useAppTheme>;
-}> = ({ parameter, value, onChange, allParameters, theme }) => {
+}> = ({ parameter, value, onChange, allParameters }) => {
   const currentValue = value || {};
 
   return (
-    <div style={{
-      border: `1px solid ${theme.colors.border}`,
-      borderRadius: '6px',
-      backgroundColor: theme.colors.backgroundAlt,
-      padding: '12px'
-    }}>
+    <div className="rounded-md border border-border bg-muted p-3">
       {parameter.options?.map((option: any) => {
         const optionValue = currentValue[option.name] || {};
 
         return (
-          <div key={option.name} style={{ marginBottom: '16px' }}>
-            <div style={{
-              fontSize: '14px',
-              fontWeight: '500',
-              color: theme.colors.text,
-              marginBottom: '8px'
-            }}>
+          <div key={option.name} className="mb-4">
+            <div className="mb-2 text-sm font-medium text-foreground">
               {option.displayName}
             </div>
-            <div style={{
-              border: `1px solid ${theme.colors.border}`,
-              borderRadius: '6px',
-              backgroundColor: theme.colors.background,
-              padding: '12px'
-            }}>
+            <div className="rounded-md border border-border bg-background p-3">
               {option.values?.map((valueParam: any) => {
                 // Wave 10.G.1: propagate `displayOptions.show` into nested
                 // fixedCollection renders. Without this, sub-parameters with
@@ -980,7 +679,6 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
   isLoadingParameters = false,
   connectedAgentId,
 }) => {
-  const theme = useAppTheme();
   // Don't use default while loading - wait for actual saved value to load
   // This prevents showing template code briefly before saved code appears
   const currentValue = isLoadingParameters ? (value ?? '') : (value !== undefined ? value : parameter.default);
@@ -1389,18 +1087,7 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
             // Show loading state while parameters are being fetched
             if (isLoadingParameters) {
               return (
-                <div style={{
-                  height: '100%',
-                  minHeight: '200px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: theme.colors.backgroundAlt,
-                  border: `1px solid ${theme.colors.border}`,
-                  borderRadius: theme.borderRadius.md,
-                  color: theme.colors.textMuted,
-                  fontSize: '14px'
-                }}>
+                <div className="flex h-full min-h-[200px] items-center justify-center rounded-md border border-border bg-muted text-sm text-muted-foreground">
                   Loading code...
                 </div>
               );
@@ -1418,8 +1105,9 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
           }
 
           // Regular textarea for non-code
+          const isTextareaTemplate = !!(currentValue && currentValue.includes('{{'));
           return (
-            <textarea
+            <Textarea
               value={currentValue || ''}
               onChange={(e) => onChange(e.target.value)}
               placeholder={parameter.placeholder}
@@ -1428,30 +1116,7 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: isDragOver ? `2px solid ${theme.accent.cyan}` : `1px solid ${theme.colors.border}`,
-                borderRadius: '6px',
-                fontSize: '14px',
-                backgroundColor: isDragOver ? `${theme.accent.cyan}10` : theme.colors.backgroundAlt,
-                color: currentValue && currentValue.includes('{{') ? theme.accent.yellow : theme.colors.text,
-                outline: 'none',
-                transition: 'all 0.2s ease',
-                fontFamily: currentValue && currentValue.includes('{{') ? 'monospace' : 'system-ui, sans-serif',
-                resize: 'vertical',
-                minHeight: '80px',
-                boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)',
-                lineHeight: '1.5'
-              }}
-              onFocus={(e) => {
-                e.target.style.borderColor = theme.accent.cyan;
-                e.target.style.boxShadow = `0 0 0 3px ${theme.accent.cyan}20, inset 0 1px 2px rgba(0,0,0,0.05)`;
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = theme.colors.border;
-                e.target.style.boxShadow = 'inset 0 1px 2px rgba(0,0,0,0.05)';
-              }}
+              className={`min-h-[80px] resize-y leading-relaxed ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-accent/10' : ''} ${isTextareaTemplate ? 'text-info font-mono' : ''}`}
             />
           );
         }
@@ -1499,85 +1164,57 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
           const hasFreeModels = dynamicOptions.some(opt => String(opt.label || opt.value).includes('[FREE]'));
 
           if (hasFreeModels) {
-            // Group into Free and Paid for OpenRouter using native select with optgroup
+            // Group into Free and Paid for OpenRouter using shadcn Select with groups
             const freeModels = dynamicOptions.filter(opt => String(opt.label || opt.value).includes('[FREE]'));
             const paidModels = dynamicOptions.filter(opt => !String(opt.label || opt.value).includes('[FREE]'));
 
             return (
-              <select
+              <Select
                 value={currentValue || ''}
-                onChange={(e) => onChange(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: theme.spacing.sm,
-                  border: `1px solid ${theme.colors.border}`,
-                  borderRadius: theme.borderRadius.md,
-                  fontSize: theme.fontSize.sm,
-                  outline: 'none',
-                  transition: 'border-color 0.2s ease',
-                  cursor: 'pointer',
-                  backgroundColor: theme.colors.background,
-                  color: theme.colors.text,
-                  fontFamily: 'system-ui, sans-serif'
-                }}
-                onFocus={(e) => e.target.style.borderColor = theme.colors.focus}
-                onBlur={(e) => e.target.style.borderColor = theme.colors.border}
+                onValueChange={(v) => onChange(v)}
               >
-                {!currentValue && (
-                  <option value="" disabled>
-                    Select a model...
-                  </option>
-                )}
-                <optgroup label={`Free Models (${freeModels.length})`}>
-                  {freeModels.map((option) => (
-                    <option key={String(option.value)} value={String(option.value)}>
-                      {option.label || option.name || String(option.value)}
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label={`Paid Models (${paidModels.length})`}>
-                  {paidModels.map((option) => (
-                    <option key={String(option.value)} value={String(option.value)}>
-                      {option.label || option.name || String(option.value)}
-                    </option>
-                  ))}
-                </optgroup>
-              </select>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select a model..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>{`Free Models (${freeModels.length})`}</SelectLabel>
+                    {freeModels.map((option) => (
+                      <SelectItem key={String(option.value)} value={String(option.value)}>
+                        {option.label || option.name || String(option.value)}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel>{`Paid Models (${paidModels.length})`}</SelectLabel>
+                    {paidModels.map((option) => (
+                      <SelectItem key={String(option.value)} value={String(option.value)}>
+                        {option.label || option.name || String(option.value)}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             );
           }
 
-          // Use native select for non-OpenRouter (original working code)
+          // Use shadcn Select for non-OpenRouter (original working code)
           return (
-            <select
+            <Select
               value={currentValue || ''}
-              onChange={(e) => onChange(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                border: `1px solid ${theme.colors.border}`,
-                borderRadius: '6px',
-                fontSize: '14px',
-                outline: 'none',
-                transition: 'border-color 0.2s ease',
-                cursor: 'pointer',
-                backgroundColor: theme.colors.background,
-                color: theme.colors.text,
-                fontFamily: 'system-ui, sans-serif'
-              }}
-              onFocus={(e) => e.target.style.borderColor = theme.colors.focus}
-              onBlur={(e) => e.target.style.borderColor = theme.colors.border}
+              onValueChange={(v) => onChange(v)}
             >
-              {!currentValue && (
-                <option value="" disabled>
-                  Select a model...
-                </option>
-              )}
-              {dynamicOptions.map((option) => (
-                <option key={String(option.value)} value={String(option.value)}>
-                  {option.label || option.name || String(option.value)}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a model..." />
+              </SelectTrigger>
+              <SelectContent>
+                {dynamicOptions.map((option) => (
+                  <SelectItem key={String(option.value)} value={String(option.value)}>
+                    {option.label || option.name || String(option.value)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           );
         }
 
@@ -1600,7 +1237,6 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
               onNameChange={(name) => onParameterChange?.('group_name', name)}
               storedName={storedGroupName}
               placeholder={parameter.placeholder}
-              theme={theme}
               isDragOver={isDragOver}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
@@ -1618,7 +1254,6 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
               onNameChange={(name) => onParameterChange?.('channel_display_name', name)}
               storedName={storedChannelName}
               placeholder={parameter.placeholder}
-              theme={theme}
               isDragOver={isDragOver}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
@@ -1637,7 +1272,6 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
               onNameChange={(name) => onParameterChange?.('sender_name', name)}
               storedName={storedSenderName}
               placeholder={parameter.placeholder}
-              theme={theme}
               isDragOver={isDragOver}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
@@ -1666,9 +1300,10 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
           const isAutoDeriveSentinel =
             !currentValue || currentValue === 'default';
           const displayValue = isAutoDeriveSentinel ? '' : currentValue;
+          const isSessionTemplate = !!(currentValue && currentValue.includes('{{'));
 
           return (
-            <input
+            <ShadcnInput
               type="text"
               value={displayValue}
               onChange={(e) => onChange(e.target.value)}
@@ -1676,33 +1311,14 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: isDragOver ? `2px solid ${theme.accent.cyan}` : `1px solid ${theme.colors.border}`,
-                borderRadius: '6px',
-                fontSize: '14px',
-                backgroundColor: isDragOver ? `${theme.accent.cyan}10` : theme.colors.backgroundAlt,
-                color: currentValue && currentValue.includes('{{') ? theme.accent.yellow : theme.colors.text,
-                outline: 'none',
-                transition: 'all 0.2s ease',
-                fontFamily: currentValue && currentValue.includes('{{') ? 'monospace' : 'system-ui, sans-serif',
-                boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)'
-              }}
-              onFocus={(e) => {
-                e.target.style.borderColor = theme.accent.cyan;
-                e.target.style.boxShadow = `0 0 0 3px ${theme.accent.cyan}20, inset 0 1px 2px rgba(0,0,0,0.05)`;
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = theme.colors.border;
-                e.target.style.boxShadow = 'inset 0 1px 2px rgba(0,0,0,0.05)';
-              }}
+              className={`${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-accent/10' : ''} ${isSessionTemplate ? 'text-info font-mono' : ''}`}
             />
           );
         }
 
+        const isStringTemplate = !!(currentValue && currentValue.includes('{{'));
         return (
-          <input
+          <ShadcnInput
             type={isPassword ? "password" : "text"}
             value={currentValue || ''}
             onChange={(e) => onChange(e.target.value)}
@@ -1710,34 +1326,14 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              border: isDragOver ? `2px solid ${theme.accent.cyan}` : `1px solid ${theme.colors.border}`,
-              borderRadius: '6px',
-              fontSize: '14px',
-              backgroundColor: isDragOver ? `${theme.accent.cyan}10` : theme.colors.backgroundAlt,
-              color: currentValue && currentValue.includes('{{') ? theme.accent.yellow : theme.colors.text,
-              outline: 'none',
-              transition: 'all 0.2s ease',
-              fontFamily: currentValue && currentValue.includes('{{') ? 'monospace' : 'system-ui, sans-serif',
-              boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)'
-            }}
-            onFocus={(e) => {
-              e.target.style.borderColor = theme.accent.cyan;
-              e.target.style.boxShadow = `0 0 0 3px ${theme.accent.cyan}20, inset 0 1px 2px rgba(0,0,0,0.05)`;
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = theme.colors.border;
-              e.target.style.boxShadow = 'inset 0 1px 2px rgba(0,0,0,0.05)';
-            }}
+            className={`${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-accent/10' : ''} ${isStringTemplate ? 'text-info font-mono' : ''}`}
           />
         );
 
       case 'number':
 
         return (
-          <input
+          <ShadcnInput
             type="number"
             value={currentValue !== undefined ? currentValue : (parameter.default || 0)}
             onChange={(e) => onChange(Number(e.target.value))}
@@ -1747,39 +1343,16 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              border: isDragOver ? `2px solid ${theme.colors.focus}` : `1px solid ${theme.colors.border}`,
-              borderRadius: '6px',
-              fontSize: '14px',
-              backgroundColor: isDragOver ? theme.colors.focusRing : theme.colors.background,
-              color: theme.colors.text,
-              outline: 'none',
-              transition: 'all 0.2s ease',
-              fontFamily: 'system-ui, sans-serif'
-            }}
-            onFocus={(e) => e.target.style.borderColor = theme.colors.focus}
-            onBlur={(e) => e.target.style.borderColor = theme.colors.border}
+            className={isDragOver ? 'border-ring ring-3 ring-ring/50 bg-accent/10' : ''}
           />
         );
 
       case 'boolean':
         return (
-          <label style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontFamily: 'system-ui, sans-serif',
-            color: theme.colors.text
-          }}>
-            <input
-              type="checkbox"
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+            <Checkbox
               checked={currentValue || false}
-              onChange={(e) => onChange(e.target.checked)}
-              style={{ width: '16px', height: '16px', accentColor: theme.colors.focus }}
+              onCheckedChange={(checked) => onChange(checked === true)}
             />
             {parameter.displayName}
           </label>
@@ -1794,111 +1367,62 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
         );
 
         return (
-          <select
-            value={currentValue || parameter.default}
-            onChange={(e) => onChange(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              border: `1px solid ${theme.colors.border}`,
-              borderRadius: '6px',
-              fontSize: '14px',
-              outline: 'none',
-              transition: 'all 0.2s ease',
-              cursor: 'pointer',
-              backgroundColor: theme.colors.backgroundAlt,
-              color: theme.colors.text,
-              fontFamily: 'system-ui, sans-serif',
-              boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)',
-              appearance: 'none',
-              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23657b83' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
-              backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'right 12px center',
-              paddingRight: '36px'
-            }}
-            onFocus={(e) => {
-              e.target.style.borderColor = theme.accent.cyan;
-              e.target.style.boxShadow = `0 0 0 3px ${theme.accent.cyan}20, inset 0 1px 2px rgba(0,0,0,0.05)`;
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = theme.colors.border;
-              e.target.style.boxShadow = 'inset 0 1px 2px rgba(0,0,0,0.05)';
-            }}
+          <Select
+            value={(currentValue ?? parameter.default ?? '') === '' ? undefined : String(currentValue ?? parameter.default)}
+            onValueChange={(v) => onChange(v)}
           >
-            {selectOptions.map((option) => (
-              <option key={String(option.value)} value={String(option.value)}>
-                {option.label || option.name || String(option.value)}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {selectOptions.map((option) => (
+                <SelectItem key={String(option.value)} value={String(option.value)}>
+                  {option.label || option.name || String(option.value)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         );
 
       case 'slider':
+        const sliderValue = currentValue !== undefined ? currentValue : (parameter.default || 0);
         return (
           <div>
-            <input
-              type="range"
+            <Slider
               min={getMin()}
               max={getMax()}
               step={getStep()}
-              value={currentValue !== undefined ? currentValue : (parameter.default || 0)}
-              onChange={(e) => onChange(Number(e.target.value))}
-              style={{
-                width: '100%',
-                height: '8px',
-                backgroundColor: theme.colors.backgroundAlt,
-                borderRadius: '8px',
-                outline: 'none',
-                accentColor: theme.colors.focus
-              }}
+              value={[Number(sliderValue)]}
+              onValueChange={(vals) => onChange(Number(vals[0]))}
             />
-            <div style={{
-              textAlign: 'center',
-              fontSize: '12px',
-              color: theme.colors.textSecondary,
-              marginTop: '4px',
-              fontFamily: 'system-ui, sans-serif'
-            }}>
-              {currentValue !== undefined ? currentValue : (parameter.default || 0)}
+            <div className="mt-1 text-center text-xs text-muted-foreground">
+              {sliderValue}
               {parameter.type === 'slider' ? '%' : ''}
             </div>
           </div>
         );
 
       case 'percentage':
+        const percentageValue = currentValue !== undefined ? currentValue : (parameter.default || 0);
         return (
           <div>
-            <input
-              type="range"
+            <Slider
               min={getMin()}
               max={getMax()}
               step={getStep()}
-              value={currentValue !== undefined ? currentValue : (parameter.default || 0)}
-              onChange={(e) => onChange(Number(e.target.value))}
-              style={{
-                width: '100%',
-                height: '8px',
-                backgroundColor: theme.colors.backgroundAlt,
-                borderRadius: '8px',
-                outline: 'none',
-                accentColor: theme.colors.success
-              }}
+              value={[Number(percentageValue)]}
+              onValueChange={(vals) => onChange(Number(vals[0]))}
             />
-            <div style={{
-              textAlign: 'center',
-              fontSize: '12px',
-              color: theme.colors.textSecondary,
-              marginTop: '4px',
-              fontFamily: 'system-ui, sans-serif'
-            }}>
-              {currentValue !== undefined ? currentValue : (parameter.default || 0)}%
+            <div className="mt-1 text-center text-xs text-muted-foreground">
+              {percentageValue}%
             </div>
           </div>
         );
 
       case 'text':
+        const isTextTemplate = !!(currentValue && currentValue.includes('{{'));
         return (
-          <input
+          <ShadcnInput
             type="text"
             value={currentValue || ''}
             onChange={(e) => onChange(e.target.value)}
@@ -1906,20 +1430,7 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              border: isDragOver ? `2px solid ${theme.colors.focus}` : `1px solid ${theme.colors.border}`,
-              borderRadius: '6px',
-              fontSize: '14px',
-              backgroundColor: isDragOver ? theme.colors.focusRing : theme.colors.background,
-              color: currentValue && currentValue.includes('{{') ? theme.colors.templateVariable : theme.colors.text,
-              outline: 'none',
-              transition: 'all 0.2s ease',
-              fontFamily: currentValue && currentValue.includes('{{') ? 'monospace' : 'system-ui, sans-serif'
-            }}
-            onFocus={(e) => e.target.style.borderColor = theme.colors.focus}
-            onBlur={(e) => e.target.style.borderColor = theme.colors.border}
+            className={`${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-accent/10' : ''} ${isTextTemplate ? 'text-info font-mono' : ''}`}
           />
         );
 
@@ -1968,10 +1479,11 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
           return (parameter as any).typeOptions?.accept || '*/*';
         };
 
+        const isFileTemplate = !!(currentValue && currentValue.includes?.('{{'));
         return (
           <div>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <input
+            <div className="flex items-center gap-2">
+              <ShadcnInput
                 type="text"
                 value={isUploadedFile ? `[Uploaded] ${currentValue.filename}` : (currentValue || '')}
                 onChange={(e) => onChange(e.target.value)}
@@ -1980,20 +1492,7 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
                 readOnly={isUploadedFile}
-                style={{
-                  flex: 1,
-                  padding: '8px 12px',
-                  border: isDragOver ? `2px solid ${theme.colors.focus}` : `1px solid ${theme.colors.border}`,
-                  borderRadius: '6px',
-                  fontSize: '13px',
-                  backgroundColor: isUploadedFile ? theme.colors.backgroundAlt : (isDragOver ? theme.colors.focusRing : theme.colors.background),
-                  color: isUploadedFile ? theme.colors.success : (currentValue && currentValue.includes?.('{{') ? theme.colors.templateVariable : theme.colors.text),
-                  outline: 'none',
-                  transition: 'all 0.2s ease',
-                  fontFamily: 'monospace'
-                }}
-                onFocus={(e) => e.target.style.borderColor = theme.colors.focus}
-                onBlur={(e) => e.target.style.borderColor = theme.colors.border}
+                className={`flex-1 font-mono ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-accent/10' : ''} ${isUploadedFile ? 'bg-muted text-success' : (isFileTemplate ? 'text-info' : '')}`}
               />
               <input
                 key={`file-input-${allParameters?.message_type || 'default'}`}
@@ -2003,65 +1502,27 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
                 style={{ display: 'none' }}
                 accept={getFileAcceptType()}
               />
-              <button
+              <ActionButton
+                intent="config"
                 onClick={() => fileInputRef.current?.click()}
-                style={{
-                  padding: '8px 12px',
-                  border: `1px solid ${theme.colors.focus}40`,
-                  borderRadius: '6px',
-                  backgroundColor: `${theme.colors.focus}18`,
-                  color: theme.colors.focus,
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  transition: 'all 0.2s ease',
-                  whiteSpace: 'nowrap'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = `${theme.colors.focus}30`;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = `${theme.colors.focus}18`;
-                }}
                 title="Upload file"
               >
                 Upload
-              </button>
+              </ActionButton>
               {isUploadedFile && (
-                <button
+                <ActionButton
+                  intent="stop"
                   onClick={() => {
                     onChange('');
                     if (fileInputRef.current) fileInputRef.current.value = '';
                   }}
-                  style={{
-                    padding: '8px 10px',
-                    border: `1px solid ${theme.colors.error}40`,
-                    borderRadius: '6px',
-                    backgroundColor: `${theme.colors.error}18`,
-                    color: theme.colors.error,
-                    cursor: 'pointer',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = `${theme.colors.error}30`;
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = `${theme.colors.error}18`;
-                  }}
                   title="Clear uploaded file"
                 >
                   X
-                </button>
+                </ActionButton>
               )}
             </div>
-            <div style={{
-              fontSize: '11px',
-              color: theme.colors.textSecondary,
-              marginTop: '4px',
-              fontStyle: 'italic'
-            }}>
+            <div className="mt-1 text-[11px] italic text-muted-foreground">
               {isUploadedFile
                 ? `Size: ${(currentValue.data.length * 0.75 / 1024).toFixed(1)} KB | Type: ${currentValue.mimeType}`
                 : 'Enter server path or click Upload to select a file'}
@@ -2073,69 +1534,42 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
         const arrayValue = Array.isArray(currentValue) ? currentValue : [];
         return (
           <div>
-            <div style={{
-              border: `1px solid ${theme.colors.border}`,
-              borderRadius: '6px',
-              backgroundColor: theme.colors.background,
-              maxHeight: '120px',
-              overflowY: 'auto'
-            }}>
+            <div className="max-h-[120px] overflow-y-auto rounded-md border border-border bg-background">
               {parameter.options?.map((option) => (
-                <label key={option.value} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '8px 12px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontFamily: 'system-ui, sans-serif',
-                  color: theme.colors.text,
-                  borderBottom: `1px solid ${theme.colors.border}`
-                }}>
-                  <input
-                    type="checkbox"
+                <label
+                  key={option.value}
+                  className="flex cursor-pointer items-center gap-2 border-b border-border px-3 py-2 text-sm text-foreground"
+                >
+                  <Checkbox
                     checked={arrayValue.includes(option.value)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
+                    onCheckedChange={(checked) => {
+                      if (checked === true) {
                         onChange([...arrayValue, option.value]);
                       } else {
                         onChange(arrayValue.filter((v: any) => v !== option.value));
                       }
                     }}
-                    style={{ width: '16px', height: '16px', accentColor: theme.colors.focus }}
                   />
                   {option.label}
                 </label>
               ))}
             </div>
-            <div style={{
-              fontSize: '11px',
-              color: theme.colors.textSecondary,
-              marginTop: '4px'
-            }}>
+            <div className="mt-1 text-[11px] text-muted-foreground">
               Selected: {arrayValue.length} item{arrayValue.length !== 1 ? 's' : ''}
             </div>
           </div>
         );
 
       case 'collection':
-        return <CollectionRenderer parameter={parameter} value={currentValue} onChange={onChange} allParameters={allParameters} theme={theme} />;
+        return <CollectionRenderer parameter={parameter} value={currentValue} onChange={onChange} allParameters={allParameters} />;
 
       case 'fixedCollection':
-        return <FixedCollectionRenderer parameter={parameter} value={currentValue} onChange={onChange} allParameters={allParameters} theme={theme} />;
+        return <FixedCollectionRenderer parameter={parameter} value={currentValue} onChange={onChange} allParameters={allParameters} />;
 
       case 'notice':
         // Info/notice display - shows informational text without input
         return (
-          <div style={{
-            padding: '10px 12px',
-            backgroundColor: theme.colors.backgroundAlt,
-            border: `1px solid ${theme.colors.border}`,
-            borderRadius: '6px',
-            fontSize: '13px',
-            color: theme.colors.textSecondary,
-            lineHeight: '1.5'
-          }}>
+          <div className="rounded-md border border-border bg-muted px-3 py-2.5 text-[13px] leading-relaxed text-muted-foreground">
             {parameter.default || parameter.description || ''}
           </div>
         );
@@ -2144,7 +1578,7 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
         // JSON editor - textarea for JSON input
         const jsonRows = (parameter as any).typeOptions?.rows || 6;
         return (
-          <textarea
+          <Textarea
             value={currentValue || parameter.default || '{}'}
             onChange={(e) => onChange(e.target.value)}
             placeholder={parameter.placeholder || '{}'}
@@ -2152,23 +1586,7 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              border: isDragOver ? `2px solid ${theme.colors.focus}` : `1px solid ${theme.colors.border}`,
-              borderRadius: '6px',
-              fontSize: '13px',
-              backgroundColor: isDragOver ? theme.colors.focusRing : theme.colors.background,
-              color: theme.colors.text,
-              outline: 'none',
-              resize: 'vertical',
-              minHeight: '100px',
-              fontFamily: 'monospace',
-              lineHeight: '1.5',
-              transition: 'all 0.2s ease'
-            }}
-            onFocus={(e) => e.target.style.borderColor = theme.colors.focus}
-            onBlur={(e) => e.target.style.borderColor = theme.colors.border}
+            className={`min-h-[100px] resize-y font-mono leading-relaxed ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-accent/10' : ''}`}
           />
         );
 
@@ -2207,49 +1625,31 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
         );
 
       default:
-        return <div style={{ color: theme.colors.error, fontSize: '14px', padding: '8px 12px', backgroundColor: `${theme.colors.error}15`, border: `1px solid ${theme.colors.error}30`, borderRadius: '6px' }}>Unsupported parameter type: {parameter.type}</div>;
+        return (
+          <Alert variant="destructive">
+            Unsupported parameter type: {parameter.type}
+          </Alert>
+        );
     }
   };
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div className="flex h-full flex-col">
       {parameter.type !== 'boolean' && (
-        <label style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          marginBottom: '8px',
-          fontSize: '13px',
-          fontWeight: 600,
-          color: theme.colors.text,
-          fontFamily: 'system-ui, sans-serif',
-          flexShrink: 0
-        }}>
+        <label className="mb-2 flex flex-shrink-0 items-center gap-1.5 text-[13px] font-semibold text-foreground">
           <span>{parameter.displayName}</span>
           {parameter.required && (
-            <span style={{
-              color: theme.accent.red,
-              fontSize: '14px',
-              fontWeight: 700
-            }}>*</span>
+            <span className="text-sm font-bold text-destructive">*</span>
           )}
         </label>
       )}
 
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <div className="min-h-0 flex-1">
         {renderInput()}
       </div>
 
       {parameter.description && (
-        <div style={{
-          fontSize: '12px',
-          color: theme.colors.textSecondary,
-          marginTop: '6px',
-          lineHeight: '1.5',
-          fontFamily: 'system-ui, sans-serif',
-          paddingLeft: '2px',
-          flexShrink: 0
-        }}>
+        <div className="mt-1.5 flex-shrink-0 pl-0.5 text-xs leading-relaxed text-muted-foreground">
           {parameter.description}
         </div>
       )}

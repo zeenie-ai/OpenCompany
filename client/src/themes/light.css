@@ -75,4 +75,102 @@
   --cursor-pointer: pointer;
   --scrollbar-track: #eef1f5;
   --scrollbar-thumb: #d1d5db;
+
+  /* ── shadcn semantic tokens (light) — hex; bridged to Tailwind via
+   * index.css @theme inline. These are the light defaults; dark.css
+   * overrides them under .dark / [data-theme="dark"]. ───────────────── */
+  --background: #f5f7fa;
+  --foreground: #1a1d21;
+  --card: #ffffff;
+  --card-foreground: #1a1d21;
+  --popover: #ffffff;
+  --popover-foreground: #1a1d21;
+  --surface-card: #ffffff;            /* node / data card fill */
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --secondary: #eef1f5;
+  --secondary-foreground: #1a1d21;
+  --muted: #eef1f5;
+  --muted-foreground: #4b5563;
+  --accent: #7c3aed;
+  --accent-foreground: #ffffff;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --success: #059669;
+  --warning: #d97706;
+  --info: #0891b2;
+  --border: #d1d5db;
+  --input: #d1d5db;
+  --ring: #3b82f6;
+
+  /* ── Dracula vibrant accents — identical in light + dark; defined on
+   * the bare :root so they apply globally (dark.css does not redefine
+   * them). Action / node role tokens below tint these. ──────────────── */
+  --dracula-green: #50fa7b;
+  --dracula-purple: #bd93f9;
+  --dracula-pink: #ff79c6;
+  --dracula-cyan: #8be9fd;
+  --dracula-red: #ff5555;
+  --dracula-orange: #ffb86c;
+  --dracula-yellow: #f1fa8c;
+  --dracula-selection: #44475a;
+  --dracula-current-line: #383a4a;
+  --dracula-comment: #6272a4;
+
+  /* ── Node role tokens — base + soft + border. color-mix references the
+   * dracula palette and base.css --tint-* scale; no inline %. Identical
+   * across light/dark, so defined globally here. ───────────────────── */
+  --node-agent:           var(--dracula-purple);
+  --node-agent-soft:      color-mix(in srgb, var(--dracula-purple) var(--tint-soft), transparent);
+  --node-agent-border:    color-mix(in srgb, var(--dracula-purple) var(--tint-border), transparent);
+  --node-model:           var(--dracula-cyan);
+  --node-model-soft:      color-mix(in srgb, var(--dracula-cyan) var(--tint-soft), transparent);
+  --node-model-border:    color-mix(in srgb, var(--dracula-cyan) var(--tint-border), transparent);
+  --node-skill:           var(--dracula-green);
+  --node-skill-soft:      color-mix(in srgb, var(--dracula-green) var(--tint-soft), transparent);
+  --node-skill-border:    color-mix(in srgb, var(--dracula-green) var(--tint-border), transparent);
+  --node-tool:            var(--dracula-green);
+  --node-tool-soft:       color-mix(in srgb, var(--dracula-green) var(--tint-soft), transparent);
+  --node-tool-border:     color-mix(in srgb, var(--dracula-green) var(--tint-border), transparent);
+  --node-trigger:         var(--dracula-pink);
+  --node-trigger-soft:    color-mix(in srgb, var(--dracula-pink) var(--tint-soft), transparent);
+  --node-trigger-border:  color-mix(in srgb, var(--dracula-pink) var(--tint-border), transparent);
+  --node-workflow:        var(--dracula-orange);
+  --node-workflow-soft:   color-mix(in srgb, var(--dracula-orange) var(--tint-soft), transparent);
+  --node-workflow-border: color-mix(in srgb, var(--dracula-orange) var(--tint-border), transparent);
+
+  /* ── Action role tokens — base / -soft / -hover / -border / -ink.
+   * Tints reference base.css --tint-action-*; -ink is the readable text
+   * colour (light: a darkened accent; dark.css overrides to the raw
+   * accent). ActionButton reads text-action-X-ink. ─────────────────── */
+  --action-run:           var(--dracula-green);
+  --action-run-soft:      color-mix(in srgb, var(--dracula-green) var(--tint-action-soft), transparent);
+  --action-run-hover:     color-mix(in srgb, var(--dracula-green) var(--tint-action-hover), transparent);
+  --action-run-border:    color-mix(in srgb, var(--dracula-green) var(--tint-action-border), transparent);
+  --action-run-ink:       #15803d;
+  --action-stop:          var(--dracula-pink);
+  --action-stop-soft:     color-mix(in srgb, var(--dracula-pink) var(--tint-action-soft), transparent);
+  --action-stop-hover:    color-mix(in srgb, var(--dracula-pink) var(--tint-action-hover), transparent);
+  --action-stop-border:   color-mix(in srgb, var(--dracula-pink) var(--tint-action-border), transparent);
+  --action-stop-ink:      #be185d;
+  --action-save:          var(--dracula-cyan);
+  --action-save-soft:     color-mix(in srgb, var(--dracula-cyan) var(--tint-action-soft), transparent);
+  --action-save-hover:    color-mix(in srgb, var(--dracula-cyan) var(--tint-action-hover), transparent);
+  --action-save-border:   color-mix(in srgb, var(--dracula-cyan) var(--tint-action-border), transparent);
+  --action-save-ink:      #0e7490;
+  --action-config:        var(--dracula-orange);
+  --action-config-soft:   color-mix(in srgb, var(--dracula-orange) var(--tint-action-soft), transparent);
+  --action-config-hover:  color-mix(in srgb, var(--dracula-orange) var(--tint-action-hover), transparent);
+  --action-config-border: color-mix(in srgb, var(--dracula-orange) var(--tint-action-border), transparent);
+  --action-config-ink:    #c2410c;
+  --action-secret:        var(--dracula-yellow);
+  --action-secret-soft:   color-mix(in srgb, var(--dracula-yellow) var(--tint-action-soft), transparent);
+  --action-secret-hover:  color-mix(in srgb, var(--dracula-yellow) var(--tint-action-hover), transparent);
+  --action-secret-border: color-mix(in srgb, var(--dracula-yellow) var(--tint-action-border), transparent);
+  --action-secret-ink:    #a16207;
+  --action-tools:         var(--dracula-purple);
+  --action-tools-soft:    color-mix(in srgb, var(--dracula-purple) var(--tint-action-soft), transparent);
+  --action-tools-hover:   color-mix(in srgb, var(--dracula-purple) var(--tint-action-hover), transparent);
+  --action-tools-border:  color-mix(in srgb, var(--dracula-purple) var(--tint-action-border), transparent);
+  --action-tools-ink:     #7c3aed;
 }

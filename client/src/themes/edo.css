@@ -56,7 +56,7 @@
 
   /* Wave 30: vermillion pulse — matches hanko seal + reads against
    * washi paper background. */
-  --node-pulse-color: hsl(var(--accent));
+  --node-pulse-color: var(--accent);
 
   --cursor-default: auto;
   --cursor-pointer: pointer;
@@ -64,62 +64,68 @@
   --scrollbar-thumb: #c8b890;
 
   /* Shadcn HSL bridge */
-  --background: 41 56% 90%;
-  --foreground: 24 25% 8%;
-  --card: 44 80% 96%;
-  --card-foreground: 24 25% 8%;
-  --popover: 44 80% 96%;
-  --popover-foreground: 24 25% 8%;
+  --background: #f4ecd8;
+  --foreground: #1a1410;
+  --card: #fdf8ea;
+  --card-foreground: #1a1410;
+  --popover: #fdf8ea;
+  --popover-foreground: #1a1410;
 
-  --primary: 0 71% 41%;            /* vermillion */
-  --primary-foreground: 44 80% 96%;
-  --secondary: 44 71% 93%;
-  --secondary-foreground: 24 25% 8%;
-  --muted: 44 71% 93%;
-  --muted-foreground: 36 19% 35%;
-  --accent: 0 71% 41%;
-  --accent-foreground: 44 80% 96%;
+  --primary: #b41e1e;            /* vermillion */
+  --primary-foreground: #fdf8ea;
+  --secondary: #faf3e0;
+  --secondary-foreground: #1a1410;
+  --muted: #faf3e0;
+  --muted-foreground: #6a5e48;
+  --accent: #b41e1e;
+  --accent-foreground: #fdf8ea;
 
-  --destructive: 0 71% 41%;
-  --destructive-foreground: 44 80% 96%;
-  --success: 100 29% 32%;          /* bamboo */
-  --warning: 41 60% 49%;
-  --info: 24 25% 8%;               /* sumi black for info */
+  --destructive: #b41e1e;
+  --destructive-foreground: #fdf8ea;
+  --success: #4a6a3a;          /* bamboo */
+  --warning: #c89832;
+  --info: #1a1410;               /* sumi black for info */
 
-  --border: 24 25% 8%;
-  --input: 40 35% 67%;
-  --ring: 0 71% 41%;
+  --border: #1a1410;
+  --input: #c8b890;
+  --ring: #b41e1e;
 
   /* Action role bridge */
-  --action-run: 100 29% 32%;
-  --action-run-soft: 100 29% 32% / 0.14;
-  --action-run-hover: 100 29% 32% / 0.26;
-  --action-run-border: 100 29% 32% / 0.7;
+  --action-run: #4a6a3a;
+  --action-run-soft: color-mix(in srgb, var(--action-run) var(--tint-action-soft), transparent);
+  --action-run-hover: color-mix(in srgb, var(--action-run) var(--tint-action-hover), transparent);
+  --action-run-border: color-mix(in srgb, var(--action-run) var(--tint-action-border), transparent);
+  --action-run-ink: var(--action-run);
 
-  --action-stop: 0 71% 41%;
-  --action-stop-soft: 0 71% 41% / 0.14;
-  --action-stop-hover: 0 71% 41% / 0.28;
-  --action-stop-border: 0 71% 41% / 0.7;
+  --action-stop: #b41e1e;
+  --action-stop-soft: color-mix(in srgb, var(--action-stop) var(--tint-action-soft), transparent);
+  --action-stop-hover: color-mix(in srgb, var(--action-stop) var(--tint-action-hover), transparent);
+  --action-stop-border: color-mix(in srgb, var(--action-stop) var(--tint-action-border), transparent);
+  --action-stop-ink: var(--action-stop);
 
-  --action-save: 0 71% 41%;
-  --action-save-soft: 0 71% 41% / 0.16;
-  --action-save-hover: 0 71% 41% / 0.30;
-  --action-save-border: 0 71% 41% / 0.7;
+  --action-save: #b41e1e;
+  --action-save-soft: color-mix(in srgb, var(--action-save) var(--tint-action-soft), transparent);
+  --action-save-hover: color-mix(in srgb, var(--action-save) var(--tint-action-hover), transparent);
+  --action-save-border: color-mix(in srgb, var(--action-save) var(--tint-action-border), transparent);
+  --action-save-ink: var(--action-save);
 
-  --action-config: 41 60% 49%;
-  --action-config-soft: 41 60% 49% / 0.16;
-  --action-config-hover: 41 60% 49% / 0.28;
-  --action-config-border: 41 60% 49% / 0.6;
+  --action-config: #c89832;
+  --action-config-soft: color-mix(in srgb, var(--action-config) var(--tint-action-soft), transparent);
+  --action-config-hover: color-mix(in srgb, var(--action-config) var(--tint-action-hover), transparent);
+  --action-config-border: color-mix(in srgb, var(--action-config) var(--tint-action-border), transparent);
+  --action-config-ink: var(--action-config);
 
-  --action-secret: 24 25% 8%;
-  --action-secret-soft: 24 25% 8% / 0.10;
-  --action-secret-hover: 24 25% 8% / 0.20;
-  --action-secret-border: 24 25% 8% / 0.5;
+  --action-secret: #1a1410;
+  --action-secret-soft: color-mix(in srgb, var(--action-secret) var(--tint-action-soft), transparent);
+  --action-secret-hover: color-mix(in srgb, var(--action-secret) var(--tint-action-hover), transparent);
+  --action-secret-border: color-mix(in srgb, var(--action-secret) var(--tint-action-border), transparent);
+  --action-secret-ink: var(--action-secret);
 
-  --action-tools: 100 29% 32%;
-  --action-tools-soft: 100 29% 32% / 0.14;
-  --action-tools-hover: 100 29% 32% / 0.26;
-  --action-tools-border: 100 29% 32% / 0.6;
+  --action-tools: #4a6a3a;
+  --action-tools-soft: color-mix(in srgb, var(--action-tools) var(--tint-action-soft), transparent);
+  --action-tools-hover: color-mix(in srgb, var(--action-tools) var(--tint-action-hover), transparent);
+  --action-tools-border: color-mix(in srgb, var(--action-tools) var(--tint-action-border), transparent);
+  --action-tools-ink: var(--action-tools);
 
   --tint-soft: 10%;
   --tint-border: 30%;
@@ -189,17 +195,17 @@
   position: relative;
 }
 :root[data-theme="edo"] .sq-node.selected .sq-node-box {
-  border: 2px solid hsl(var(--accent));
+  border: 2px solid var(--accent);
   background: var(--bg-elevated);
   /* Wave 29: outer halo so selection reads at any zoom level. */
-  box-shadow: 0 0 0 2px hsl(var(--accent) / 0.5), 0 4px 14px hsl(var(--accent) / 0.3);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent), 0 4px 14px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 :root[data-theme="edo"] .sq-node.selected .sq-node-box::before {
   content: ''; position: absolute; top: 4px; right: 4px; width: 14px; height: 14px;
-  background: hsl(var(--accent)); transform: rotate(8deg);
+  background: var(--accent); transform: rotate(8deg);
 }
 :root[data-theme="edo"] .sq-node-pip { border-radius: 0; }
-:root[data-theme="edo"] .sq-node-gear { background: hsl(var(--accent)); color: white; border-radius: 0; border: none; }
+:root[data-theme="edo"] .sq-node-gear { background: var(--accent); color: white; border-radius: 0; border: none; }
 :root[data-theme="edo"] .sq-node-handle { border-radius: 0; }
 :root[data-theme="edo"] .sq-node-label { font-family: var(--font-display); font-weight: 500; font-size: 11px; letter-spacing: 0.04em; }
 
@@ -209,8 +215,8 @@
   border-width: 1px;
 }
 :root[data-theme="edo"] .action-run    { background: transparent; color: var(--bamboo); border-color: var(--bamboo); }
-:root[data-theme="edo"] .action-deploy { background: transparent; color: hsl(var(--accent)); border-color: hsl(var(--accent)); }
-:root[data-theme="edo"] .action-save   { background: hsl(var(--accent)); color: var(--fg-on-accent); border-color: hsl(var(--accent)); }
+:root[data-theme="edo"] .action-deploy { background: transparent; color: var(--accent); border-color: var(--accent); }
+:root[data-theme="edo"] .action-save   { background: var(--accent); color: var(--fg-on-accent); border-color: var(--accent); }
 
 /* Cards / panels — minimal lines */
 :root[data-theme="edo"] .wf-card,
@@ -220,13 +226,13 @@
 :root[data-theme="edo"] .cred-card {
   border-radius: 0; background: var(--bg-elevated); border: 1px solid var(--border-default);
 }
-:root[data-theme="edo"] .wf-card.selected { border-left: 3px solid hsl(var(--accent)); }
+:root[data-theme="edo"] .wf-card.selected { border-left: 3px solid var(--accent); }
 :root[data-theme="edo"] .cat-tile { background: transparent; border: 1px solid var(--sumi); color: var(--sumi); border-radius: 0; }
 :root[data-theme="edo"] .comp-ico { background: transparent; border: 1px solid var(--border-default); color: var(--sumi); border-radius: 0; }
 
 /* Chat */
 :root[data-theme="edo"] .chat-msg { border-radius: 0; }
-:root[data-theme="edo"] .chat-msg-user { background: transparent; border: 1px solid hsl(var(--accent)); }
+:root[data-theme="edo"] .chat-msg-user { background: transparent; border: 1px solid var(--accent); }
 :root[data-theme="edo"] .chat-msg-bot { background: var(--bg-elevated); border-left: 3px solid var(--sumi); border-top: none; border-right: none; border-bottom: none; }
 
 /* Status bar */
@@ -239,8 +245,8 @@
 /* Modal */
 :root[data-theme="edo"] .modal { background: var(--bg-elevated); border: 1px solid var(--sumi); border-radius: 0; }
 :root[data-theme="edo"] .modal-head { border-bottom: 1px solid var(--sumi); }
-:root[data-theme="edo"] .modal-title { font-family: var(--font-display); color: hsl(var(--accent)); }
+:root[data-theme="edo"] .modal-title { font-family: var(--font-display); color: var(--accent); }
 
 /* CMDK */
 :root[data-theme="edo"] .cmdk { background: var(--bg-elevated); border: 1px solid var(--sumi); border-radius: 0; }
-:root[data-theme="edo"] .cmdk-item.active { background: var(--bg-active); border-left: 3px solid hsl(var(--accent)); }
+:root[data-theme="edo"] .cmdk-item.active { background: var(--bg-active); border-left: 3px solid var(--accent); }

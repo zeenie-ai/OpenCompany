@@ -1,0 +1,152 @@
+<!-- @dsCard group="Brand" viewport="1100x720" name="Theme Matrix" subtitle="All 12 product themes — surfaces, accents, type, radii, motion" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>MachinaOS — Theme Matrix</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anonymous+Pro:wght@400;700&family=Bevan&family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Courier+Prime&family=EB+Garamond:wght@400;500;600&family=Geist:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IM+Fell+English+SC&family=IM+Fell+English:ital@0;1&family=JetBrains+Mono:wght@400;500;600;700&family=Lato:wght@400;700&family=Major+Mono+Display&family=Pirata+One&family=Shippori+Mincho:wght@400;500;600;700&family=Space+Mono&family=Special+Elite&family=UnifrakturCook:wght@700&family=VT323&display=swap">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0d1117; font-family: 'Geist', system-ui, sans-serif; }
+  .matrix { display: flex; flex-direction: column; }
+  .theme-row {
+    display: grid;
+    grid-template-columns: 190px 200px 168px 1fr 150px;
+    gap: 18px; align-items: center;
+    padding: 16px 22px;
+    border-bottom: 1px solid rgba(128,128,128,0.25);
+  }
+  .t-name { font-size: 17px; font-weight: 700; line-height: 1.1; }
+  .t-world { font-size: 11px; opacity: 0.75; margin-top: 3px; font-family: 'Geist', sans-serif; }
+  .t-meta { font-family: 'JetBrains Mono', monospace; font-size: 9px; opacity: 0.6; margin-top: 6px; line-height: 1.5; }
+  .surfaces { display: flex; gap: 4px; }
+  .surfaces .sw { flex: 1; height: 44px; border-radius: 4px; border: 1px solid rgba(128,128,128,0.45); }
+  .surf-label { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; opacity: 0.55; margin-top: 5px; }
+  .accents { display: flex; gap: 5px; flex-wrap: wrap; }
+  .accents .chip { width: 34px; height: 34px; border-radius: 6px; border: 1px solid rgba(128,128,128,0.4); }
+  .acc-label { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; opacity: 0.55; margin-top: 5px; }
+  .type-display { font-size: 21px; line-height: 1.15; }
+  .type-body { font-size: 12.5px; margin-top: 4px; opacity: 0.9; }
+  .type-mono { font-size: 10.5px; margin-top: 5px; opacity: 0.65; }
+  .demo { display: flex; flex-direction: column; gap: 7px; align-items: flex-start; }
+  .demo-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 13px; font-size: 11px; font-weight: 600; border: 1px solid; line-height: 1; white-space: nowrap; }
+  .demo-motion { font-family: 'JetBrains Mono', monospace; font-size: 9px; opacity: 0.6; }
+  .hdr { padding: 18px 22px 10px; color: #e6edf3; }
+  .hdr h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  .hdr p { margin: 4px 0 0; font-size: 12px; color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="hdr">
+  <h1>MachinaOS theme matrix — 12 material systems, one token contract</h1>
+  <p>Each row is rendered in that theme's own tokens (from client/src/themes/*.css). Same UI, different era. Analysis: guidelines/THEMES.md</p>
+</div>
+<div class="matrix" id="matrix"></div>
+<script>
+const THEMES = [
+  { name: 'Light', world: 'Quiet grey-blue workspace (default)', bg: '#f5f7fa', panel: '#fafbfc', canvas: '#ffffff', elevated: '#ffffff', fg: '#1a1d21', muted: '#4b5563', border: '#d1d5db',
+    accents: ['#2563eb', '#7c3aed', '#059669', '#dc2626'], accNames: 'primary · accent · success · destructive',
+    display: "'Geist', sans-serif", body: "'Geist', sans-serif", mono: "'JetBrains Mono', monospace", caps: false, track: '0',
+    radius: '8px', btn: { bg: 'rgba(37,99,235,0.10)', bc: 'rgba(37,99,235,0.5)', fg: '#2563eb' },
+    motion: '90/180/320ms · smooth · snd:parchment' },
+  { name: 'Dark', world: 'Solarized teal + Dracula neon (signature)', bg: '#002b36', panel: '#073642', canvas: '#002b36', elevated: '#0d1f2d', fg: '#f8f8f2', muted: '#94a8d6', border: '#586e75',
+    accents: ['#50fa7b', '#8be9fd', '#bd93f9', '#ff79c6'], accNames: 'run · save · tools · stop',
+    display: "'Geist', sans-serif", body: "'Geist', sans-serif", mono: "'JetBrains Mono', monospace", caps: false, track: '0',
+    radius: '8px', btn: { bg: 'rgba(80,250,123,0.15)', bc: 'rgba(80,250,123,0.6)', fg: '#50fa7b' },
+    motion: '90/180/320ms · smooth · snd:terminal' },
+  { name: 'Renaissance', world: 'Illuminated codex, Florentine workshop', bg: '#f3e8c8', panel: '#ead09a', canvas: '#e8d4a0', elevated: '#fbf3dc', fg: '#3a2008', muted: '#6a4a1c', border: '#8a5e1c',
+    accents: ['#d4a030', '#8a1410', '#2548c8', '#f0c850'], accNames: 'gold · crimson · lapis · gold-bright',
+    display: "'Cinzel', serif", body: "'Cormorant Garamond', serif", mono: "'IM Fell English', serif", caps: true, track: '0.10em',
+    radius: '4px', btn: { bg: 'rgba(212,160,48,0.20)', bc: '#8a5e1c', fg: '#8a1410' },
+    motion: '140/280/520ms · organic · snd:parchment · quill cursor' },
+  { name: 'Greek', world: 'Sun-bleached marble agora', bg: '#ede5d0', panel: '#f5efde', canvas: '#e6dcc2', elevated: '#faf6e9', fg: '#2a2415', muted: '#6a5d3c', border: '#b8a878',
+    accents: ['#284b82', '#7a1a18', '#c8a040', '#6a7a32'], accNames: 'lapis · oxblood · gold · olive',
+    display: "'Cinzel', serif", body: "'Cormorant Garamond', serif", mono: "'Courier Prime', monospace", caps: true, track: '0.18em',
+    radius: '2px', btn: { bg: 'rgba(40,75,130,0.12)', bc: '#284b82', fg: '#284b82' },
+    motion: '120/240/460ms · smooth · snd:marble' },
+  { name: 'Edo', world: 'Washi paper, sumi-e ink, hanko seal', bg: '#f4ecd8', panel: '#faf3e0', canvas: '#ede4ca', elevated: '#fdf8ea', fg: '#1a1410', muted: '#6a5e48', border: '#c8b890',
+    accents: ['#b41e1e', '#1a1410', '#4a6a3a', '#e89aa8'], accNames: 'vermillion · sumi · bamboo · sakura',
+    display: "'Shippori Mincho', serif", body: "'Shippori Mincho', serif", mono: "'JetBrains Mono', monospace", caps: false, track: '0.06em',
+    radius: '0', btn: { bg: 'rgba(180,30,30,0.08)', bc: '#b41e1e', fg: '#b41e1e' },
+    motion: '90/220/520ms · organic · snd:ink' },
+  { name: 'Steampunk', world: 'Brass, copper, riveted leather — Verne', bg: '#2a1f12', panel: '#3a2a18', canvas: '#1a1208', elevated: '#4a3620', fg: '#e8d8b0', muted: '#b8a070', border: '#6a4a20',
+    accents: ['#d8a848', '#b8602a', '#8a3a1a', '#4a2818'], accNames: 'brass · copper · rust · leather',
+    display: "'IM Fell English SC', serif", body: "'IM Fell English', serif", mono: "'Special Elite', monospace", caps: true, track: '0.10em',
+    radius: '4px', btn: { bg: 'linear-gradient(180deg, rgba(216,168,72,0.25), rgba(216,168,72,0.06))', bc: '#d8a848', fg: '#d8a848' },
+    motion: '110/240/480ms · mechanical · snd:clockwork · rivets' },
+  { name: 'Atomic', world: '1962 Eames optimism, NASA brochure', bg: '#f0e6d2', panel: '#faf2dc', canvas: '#e8dcc0', elevated: '#ffffff', fg: '#2a3a4a', muted: '#5a6a7a', border: '#c8b890',
+    accents: ['#e85a26', '#3a9aa0', '#d8a838', '#2a3a4a'], accNames: 'atomic orange · turquoise · mustard · slate',
+    display: "'Bevan', serif", body: "'Lato', sans-serif", mono: "'Space Mono', monospace", caps: true, track: '0.06em',
+    radius: '4px', btn: { bg: 'rgba(232,90,38,0.12)', bc: '#e85a26', fg: '#e85a26' },
+    motion: '100/200/380ms · bouncy (1.6 overshoot) · snd:vibraphone' },
+  { name: 'Cyber', world: 'Neuromancer night market, pirate terminal', bg: '#050010', panel: '#0a0420', canvas: '#03000a', elevated: '#15103a', fg: '#f0e0ff', muted: '#a090c0', border: '#2a1f50',
+    accents: ['#f51eb6', '#1dd9e5', '#26d97a', '#ffd028'], accNames: 'neon magenta · cyan · green · yellow',
+    display: "'Major Mono Display', monospace", body: "'JetBrains Mono', monospace", mono: "'JetBrains Mono', monospace", caps: true, track: '0.18em',
+    radius: '0', btn: { bg: 'rgba(245,30,182,0.14)', bc: '#f51eb6', fg: '#f51eb6' },
+    motion: '60/120/240ms · steps(4) glitch · snd:terminal · CRT flicker + reticle cursor' },
+  { name: 'Wasteland', world: 'Irradiated dust, scrap-metal warnings', bg: '#2a2018', panel: '#3a2c1c', canvas: '#1a1410', elevated: '#4a3826', fg: '#e8d8a8', muted: '#b89868', border: '#6a4a28',
+    accents: ['#e88a28', '#8a3a18', '#c8d038', '#d8c8a0'], accNames: 'ochre · rust · rad-yellow · bone',
+    display: "'Special Elite', monospace", body: "'Special Elite', monospace", mono: "'VT323', monospace", caps: true, track: '0.10em',
+    radius: '0', btn: { bg: 'rgba(232,140,40,0.14)', bc: '#e88a28', fg: '#e88a28' },
+    motion: '60/180/320ms · jittery · snd:scrap' },
+  { name: 'Rot', world: 'Moss-overgrown crypt, guttering candles', bg: '#14181a', panel: '#1c2226', canvas: '#0a0e10', elevated: '#242c30', fg: '#c8d8c0', muted: '#788878', border: '#2a3a30',
+    accents: ['#78c878', '#e8a838', '#d8d0b8', '#4a3838'], accNames: 'moss · candle · bone · crypt',
+    display: "'Pirata One', serif", body: "'EB Garamond', serif", mono: "'JetBrains Mono', monospace", caps: false, track: '0.04em',
+    radius: '4px', btn: { bg: 'rgba(120,200,120,0.10)', bc: '#78c878', fg: '#78c878' },
+    motion: '140/320/680ms · drift (slowest) · snd:crypt' },
+  { name: 'Plague', world: 'Quarantine notices, 1349 broadsheet', bg: '#d8d4c0', panel: '#e4dfc8', canvas: '#c8c4b0', elevated: '#efeacf', fg: '#2a1c14', muted: '#6a5440', border: '#a89478',
+    accents: ['#783c28', '#98a838', '#1a1410', '#efeacf'], accNames: 'dried blood · bile · crow · linen',
+    display: "'UnifrakturCook', serif", body: "'EB Garamond', serif", mono: "'Special Elite', monospace", caps: true, track: '0.06em',
+    radius: '0', btn: { bg: 'rgba(120,60,40,0.12)', bc: '#783c28', fg: '#783c28' },
+    motion: '100/220/460ms · stiff · snd:bell' },
+  { name: 'Surveillance', world: '1970s panopticon control room', bg: '#1a1c1e', panel: '#232628', canvas: '#0a0c0e', elevated: '#2c3034', fg: '#c8ccd0', muted: '#888c90', border: '#3a3e42',
+    accents: ['#e82626', '#6acc6a', '#d8a020', '#888c90'], accNames: 'REC red · phosphor · amber · concrete',
+    display: "'Anonymous Pro', monospace", body: "'IBM Plex Mono', monospace", mono: "'IBM Plex Mono', monospace", caps: true, track: '0.10em',
+    radius: '0', btn: { bg: 'rgba(232,38,38,0.10)', bc: '#e82626', fg: '#e82626' },
+    motion: '60/140/240ms · linear scanline · snd:telex · CCTV cursor' },
+];
+
+const matrix = document.getElementById('matrix');
+THEMES.forEach((t) => {
+  const row = document.createElement('div');
+  row.className = 'theme-row';
+  row.style.background = t.bg;
+  row.style.color = t.fg;
+  const caps = t.caps ? 'text-transform: uppercase;' : '';
+  row.innerHTML = `
+    <div>
+      <div class="t-name" style="font-family: ${t.display}; ${caps} letter-spacing: ${t.track};">${t.name}</div>
+      <div class="t-world" style="color: ${t.muted};">${t.world}</div>
+      <div class="t-meta" style="color: ${t.muted};">${t.motion}</div>
+    </div>
+    <div>
+      <div class="surfaces">
+        <div class="sw" style="background: ${t.bg}; border-color: ${t.border};"></div>
+        <div class="sw" style="background: ${t.panel}; border-color: ${t.border};"></div>
+        <div class="sw" style="background: ${t.canvas}; border-color: ${t.border};"></div>
+        <div class="sw" style="background: ${t.elevated}; border-color: ${t.border};"></div>
+      </div>
+      <div class="surf-label" style="color: ${t.muted};">app · panel · canvas · elevated</div>
+    </div>
+    <div>
+      <div class="accents">
+        ${t.accents.map((a) => `<div class="chip" style="background: ${a};"></div>`).join('')}
+      </div>
+      <div class="acc-label" style="color: ${t.muted};">${t.accNames}</div>
+    </div>
+    <div>
+      <div class="type-display" style="font-family: ${t.display}; ${caps} letter-spacing: ${t.track};">Workflow deployed</div>
+      <div class="type-body" style="font-family: ${t.body};">Your own AI assistant that does real work.</div>
+      <div class="type-mono" style="font-family: ${t.mono};">ONLINE | WF: TEST | NODES: 12</div>
+    </div>
+    <div class="demo">
+      <span class="demo-btn" style="background: ${t.btn.bg}; border-color: ${t.btn.bc}; color: ${t.btn.fg}; border-radius: ${t.radius}; font-family: ${t.display}; ${caps} letter-spacing: ${t.track};">▶ Start</span>
+      <span class="demo-motion" style="color: ${t.muted};">radius ${t.radius}</span>
+    </div>`;
+  matrix.appendChild(row);
+});
+</script>
+</body>
+</html>

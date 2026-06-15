@@ -1,0 +1,371 @@
+<!-- @dsCard group="Brand" viewport="1320x880" name="Theme Comparison — Full" subtitle="Full app screen + component strip in all 12 themes" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>MachinaOS — Full Theme Comparison</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anonymous+Pro:wght@400;700&family=Bevan&family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Courier+Prime&family=EB+Garamond:wght@400;500;600&family=Geist:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IM+Fell+English+SC&family=IM+Fell+English:ital@0;1&family=JetBrains+Mono:wght@400;500;600;700&family=Lato:wght@400;700&family=Major+Mono+Display&family=Pirata+One&family=Shippori+Mincho:wght@400;500;600;700&family=Space+Mono&family=Special+Elite&family=UnifrakturCook:wght@700&family=VT323&display=swap">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0a0c10; font-family: 'Geist', system-ui, sans-serif; color: #e6edf3; }
+  header { padding: 26px 32px 4px; }
+  header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  header p { margin: 6px 0 0; font-size: 13px; color: #8b949e; max-width: 820px; line-height: 1.5; }
+  nav.jump { display: flex; flex-wrap: wrap; gap: 6px; padding: 14px 32px 4px; }
+  nav.jump a { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8b949e; text-decoration: none; border: 1px solid #21262d; border-radius: 999px; padding: 4px 10px; }
+  nav.jump a:hover { color: #e6edf3; border-color: #8b949e; }
+  .list { display: flex; flex-direction: column; gap: 28px; padding: 20px 32px 60px; }
+  .tile { border-radius: 12px; overflow: hidden; border: 1px solid #21262d; background: #11151a; }
+  .tile-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 13px 18px; }
+  .tile-head .nm { font-size: 16px; font-weight: 600; }
+  .tile-head .meta { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #8b949e; text-align: right; }
+
+  .screen-wrap { position: relative; width: 100%; }
+  .stage { position: absolute; left: 0; top: 0; width: 1280px; height: 700px; transform-origin: top left; display: flex; flex-direction: column; font-size: 13px; }
+
+  .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; height: 46px; padding: 0 12px; border-bottom: 1px solid; flex-shrink: 0; }
+  .tb-grp { display: flex; align-items: center; gap: 7px; min-width: 0; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; font-size: 12px; font-weight: 600; border: 1px solid; line-height: 1; white-space: nowrap; }
+  .btn.sq { padding: 7px 9px; }
+  .vdiv { width: 1px; height: 22px; opacity: 0.5; }
+  .main { display: flex; flex: 1; min-height: 0; }
+  .sidebar { width: 225px; border-right: 1px solid; display: flex; flex-direction: column; flex-shrink: 0; }
+  .panel-hd { padding: 13px 14px; border-bottom: 1px solid; }
+  .panel-hd .t { font-size: 14px; font-weight: 600; }
+  .panel-hd .s { font-size: 10.5px; margin-top: 2px; }
+  .wf-card { margin: 0 10px; padding: 10px 11px; border: 1px solid; }
+  .wf-card .n { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wf-card .m { display: flex; justify-content: space-between; font-size: 10px; margin-top: 5px; }
+  .center { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+  .canvas { position: relative; flex: 1; overflow: hidden; }
+  .canvas svg.edges { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .node { position: absolute; width: 58px; height: 58px; border: 2px solid; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+  .node .pip { position: absolute; top: -4px; left: -4px; width: 9px; height: 9px; border-radius: 50%; }
+  .node .gear { position: absolute; top: -9px; right: -9px; width: 19px; height: 19px; border-radius: 50%; border: 1px solid; display: flex; align-items: center; justify-content: center; font-size: 9px; }
+  .nlabel { position: absolute; font-size: 10px; font-weight: 600; white-space: nowrap; transform: translateX(-50%); }
+  .agent-node { position: absolute; width: 168px; border: 2px solid; text-align: center; padding: 12px 10px 9px; }
+  .agent-node .pip { position: absolute; top: -4px; left: -4px; width: 9px; height: 9px; border-radius: 50%; }
+  .agent-node .gear { position: absolute; top: -9px; right: -9px; width: 19px; height: 19px; border-radius: 50%; border: 1px solid; display: flex; align-items: center; justify-content: center; font-size: 9px; }
+  .agent-node .ti { font-size: 24px; line-height: 1; }
+  .agent-node .tn { font-size: 13.5px; font-weight: 600; margin-top: 5px; }
+  .agent-node .ts { font-size: 10px; margin-top: 2px; }
+  .agent-node .th { display: flex; justify-content: space-between; margin-top: 7px; font-size: 9.5px; }
+  .palette { width: 258px; border-left: 1px solid; display: flex; flex-direction: column; flex-shrink: 0; }
+  .search { display: flex; align-items: center; gap: 7px; margin-top: 9px; padding: 7px 10px; border: 1px solid; font-size: 11.5px; }
+  .cat { display: flex; align-items: center; justify-content: space-between; padding: 7px 12px 5px; font-size: 11.5px; font-weight: 600; }
+  .badge { display: inline-flex; align-items: center; padding: 2px 6px; font-size: 9.5px; font-weight: 600; border: 1px solid; line-height: 1.3; }
+  .comp { display: flex; align-items: center; gap: 9px; margin: 0 10px 7px; padding: 7px 9px; border: 1px solid; }
+  .comp .ic { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; border: 1px solid; }
+  .comp .nm2 { font-size: 11.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .comp .ds { font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .console { border-top: 1px solid; flex-shrink: 0; }
+  .ctabs { display: flex; gap: 2px; padding: 0 8px; border-bottom: 1px solid; }
+  .ctab { padding: 7px 12px; font-size: 11.5px; font-weight: 500; border-bottom: 2px solid transparent; }
+  .clog { padding: 8px 13px; display: flex; flex-direction: column; gap: 3px; font-size: 10.5px; height: 78px; overflow: hidden; }
+  .statusbar { display: flex; align-items: center; gap: 10px; height: 22px; padding: 0 12px; border-top: 1px solid; font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; flex-shrink: 0; white-space: nowrap; }
+  .statusbar .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+  .statusbar .sep { opacity: 0.4; }
+  .statusbar .right { margin-left: auto; display: flex; gap: 10px; }
+
+  .strip { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 13px 16px; border-top: 1px solid; }
+  .input { display: inline-flex; align-items: center; gap: 7px; padding: 7px 11px; border: 1px solid; font-size: 11.5px; min-width: 160px; }
+  .switch { position: relative; width: 34px; height: 19px; border-radius: 999px; border: 1px solid; flex-shrink: 0; }
+  .switch .knob { position: absolute; top: 2px; width: 13px; height: 13px; border-radius: 50%; }
+  .tabsdemo { display: flex; gap: 2px; border-bottom: 1px solid; }
+</style>
+</head>
+<body>
+<header>
+  <h1>MachinaOS — full screen, twelve themes</h1>
+  <p>The complete workspace per theme: toolbar · workflow sidebar · expanded canvas (full 6-node WhatsApp Assistant flow with rectangular AI Agent node) · component palette · console dock · status bar — plus a strip of core components (buttons, input, switch, badges, tabs) in that theme's tokens.</p>
+</header>
+<nav class="jump" id="jump"></nav>
+<div class="list" id="list"></div>
+
+<script>
+const THEMES = [
+  { name: 'Light', tag: 'default · Geist · radius 6–8 · 90/180/320ms smooth', bg: '#f5f7fa', panel: '#fafbfc', canvas: '#ffffff', card: '#ffffff', fg: '#1a1d21', muted: '#4b5563', faint: '#9ca3af', border: '#d1d5db',
+    display: "'Geist',sans-serif", body: "'Geist',sans-serif", mono: "'JetBrains Mono',monospace", caps: false, track: '0', rBtn: 6, rNode: 10, rCard: 8,
+    run: '#15803d', runBg: 'rgba(80,250,123,0.15)', runBc: 'rgba(80,250,123,0.6)', stop: '#be185d', stopBg: 'rgba(255,121,198,0.15)', stopBc: 'rgba(255,121,198,0.6)',
+    save: '#0e7490', saveBg: 'rgba(139,233,253,0.15)', saveBc: 'rgba(139,233,253,0.6)', config: '#c2410c', configBg: 'rgba(255,184,108,0.15)', configBc: 'rgba(255,184,108,0.6)',
+    tools: '#7c3aed', toolsBg: 'rgba(189,147,249,0.15)', toolsBc: 'rgba(189,147,249,0.6)',
+    nAgent: '#bd93f9', nTrig: '#ff79c6', nTool: '#50fa7b', nModel: '#8be9fd', ok: '#059669', warn: '#d97706', grid: 'rgba(75,85,99,0.30)', accent: '#7c3aed' },
+  { name: 'Dark', tag: 'signature · Solarized + Dracula · radius 6–8 · smooth', bg: '#002b36', panel: '#073642', canvas: '#002b36', card: '#073642', fg: '#f8f8f2', muted: '#94a8d6', faint: '#6272a4', border: '#586e75',
+    display: "'Geist',sans-serif", body: "'Geist',sans-serif", mono: "'JetBrains Mono',monospace", caps: false, track: '0', rBtn: 6, rNode: 10, rCard: 8,
+    run: '#50fa7b', runBg: 'rgba(80,250,123,0.15)', runBc: 'rgba(80,250,123,0.6)', stop: '#ff79c6', stopBg: 'rgba(255,121,198,0.15)', stopBc: 'rgba(255,121,198,0.6)',
+    save: '#8be9fd', saveBg: 'rgba(139,233,253,0.15)', saveBc: 'rgba(139,233,253,0.6)', config: '#ffb86c', configBg: 'rgba(255,184,108,0.15)', configBc: 'rgba(255,184,108,0.6)',
+    tools: '#bd93f9', toolsBg: 'rgba(189,147,249,0.15)', toolsBc: 'rgba(189,147,249,0.6)',
+    nAgent: '#bd93f9', nTrig: '#ff79c6', nTool: '#50fa7b', nModel: '#8be9fd', ok: '#859900', warn: '#b58900', grid: 'rgba(148,168,214,0.30)', accent: '#8be9fd' },
+  { name: 'Renaissance', tag: 'illuminated codex · Cinzel/Cormorant · UPPER .10em · 140/280/520ms', bg: '#f3e8c8', panel: '#ead09a', canvas: '#e8d4a0', card: '#fbf3dc', fg: '#3a2008', muted: '#6a4a1c', faint: '#9a7a3c', border: '#8a5e1c',
+    display: "'Cinzel',serif", body: "'Cormorant Garamond',serif", mono: "'IM Fell English',serif", caps: true, track: '0.07em', rBtn: 3, rNode: 4, rCard: 3,
+    run: '#8a1410', runBg: 'rgba(212,160,48,0.20)', runBc: '#8a5e1c', stop: '#8a1410', stopBg: 'rgba(138,20,16,0.12)', stopBc: '#8a1410',
+    save: '#2548c8', saveBg: 'rgba(37,72,200,0.10)', saveBc: '#2548c8', config: '#6a4a1c', configBg: 'rgba(106,74,28,0.12)', configBc: '#6a4a1c',
+    tools: '#d4a030', toolsBg: 'rgba(212,160,48,0.16)', toolsBc: '#8a5e1c',
+    nAgent: '#2548c8', nTrig: '#8a1410', nTool: '#d4a030', nModel: '#5a6a28', ok: '#5a6a28', warn: '#b87818', grid: 'rgba(138,94,28,0.28)', accent: '#8a1410' },
+  { name: 'Greek', tag: 'marble agora · Cinzel · UPPER .18em · radius 0–2', bg: '#ede5d0', panel: '#f5efde', canvas: '#e6dcc2', card: '#faf6e9', fg: '#2a2415', muted: '#6a5d3c', faint: '#9a8c64', border: '#b8a878',
+    display: "'Cinzel',serif", body: "'Cormorant Garamond',serif", mono: "'Courier Prime',monospace", caps: true, track: '0.12em', rBtn: 0, rNode: 2, rCard: 0,
+    run: '#284b82', runBg: 'rgba(40,75,130,0.12)', runBc: '#284b82', stop: '#7a1a18', stopBg: 'rgba(122,26,24,0.10)', stopBc: '#7a1a18',
+    save: '#284b82', saveBg: 'rgba(40,75,130,0.08)', saveBc: '#284b82', config: '#c8a040', configBg: 'rgba(200,160,64,0.14)', configBc: '#a88430', tools: '#6a7a32', toolsBg: 'rgba(106,122,50,0.12)', toolsBc: '#6a7a32',
+    nAgent: '#284b82', nTrig: '#7a1a18', nTool: '#c8a040', nModel: '#6a7a32', ok: '#6a7a32', warn: '#b87818', grid: 'rgba(106,93,60,0.28)', accent: '#284b82' },
+  { name: 'Edo', tag: 'washi + sumi-e · Shippori Mincho · radius 0 · organic', bg: '#f4ecd8', panel: '#faf3e0', canvas: '#ede4ca', card: '#fdf8ea', fg: '#1a1410', muted: '#6a5e48', faint: '#9a8c70', border: '#c8b890',
+    display: "'Shippori Mincho',serif", body: "'Shippori Mincho',serif", mono: "'JetBrains Mono',monospace", caps: false, track: '0.05em', rBtn: 0, rNode: 0, rCard: 0,
+    run: '#b41e1e', runBg: 'rgba(180,30,30,0.08)', runBc: '#b41e1e', stop: '#1a1410', stopBg: 'rgba(26,20,16,0.08)', stopBc: '#1a1410',
+    save: '#4a6a3a', saveBg: 'rgba(74,106,58,0.10)', saveBc: '#4a6a3a', config: '#6a5e48', configBg: 'rgba(106,94,72,0.10)', configBc: '#6a5e48', tools: '#b41e1e', toolsBg: 'rgba(180,30,30,0.06)', toolsBc: '#b41e1e',
+    nAgent: '#b41e1e', nTrig: '#e89aa8', nTool: '#4a6a3a', nModel: '#1a1410', ok: '#4a6a3a', warn: '#b87818', grid: 'rgba(106,94,72,0.28)', accent: '#b41e1e' },
+  { name: 'Steampunk', tag: 'brass & rivets · IM Fell English SC · UPPER · mechanical', bg: '#2a1f12', panel: '#3a2a18', canvas: '#1a1208', card: '#4a3620', fg: '#e8d8b0', muted: '#b8a070', faint: '#8a7448', border: '#6a4a20',
+    display: "'IM Fell English SC',serif", body: "'IM Fell English',serif", mono: "'Special Elite',monospace", caps: true, track: '0.07em', rBtn: 3, rNode: 4, rCard: 3,
+    run: '#d8a848', runBg: 'rgba(216,168,72,0.20)', runBc: '#d8a848', stop: '#b8602a', stopBg: 'rgba(184,96,42,0.18)', stopBc: '#b8602a',
+    save: '#d8a848', saveBg: 'rgba(216,168,72,0.12)', saveBc: '#a87830', config: '#b8602a', configBg: 'rgba(184,96,42,0.12)', configBc: '#b8602a', tools: '#8a8a4a', toolsBg: 'rgba(138,138,74,0.14)', toolsBc: '#8a8a4a',
+    nAgent: '#d8a848', nTrig: '#b8602a', nTool: '#8a8a4a', nModel: '#b8a070', ok: '#8a8a4a', warn: '#d8a848', grid: 'rgba(184,160,112,0.25)', accent: '#d8a848' },
+  { name: 'Atomic', tag: '1962 Eames · Bevan/Lato · bouncy 1.6 overshoot', bg: '#f0e6d2', panel: '#faf2dc', canvas: '#e8dcc0', card: '#ffffff', fg: '#2a3a4a', muted: '#5a6a7a', faint: '#8a96a2', border: '#c8b890',
+    display: "'Bevan',serif", body: "'Lato',sans-serif", mono: "'Space Mono',monospace", caps: true, track: '0.04em', rBtn: 2, rNode: 4, rCard: 2,
+    run: '#3a9aa0', runBg: 'rgba(58,154,160,0.12)', runBc: '#3a9aa0', stop: '#e85a26', stopBg: 'rgba(232,90,38,0.12)', stopBc: '#e85a26',
+    save: '#3a9aa0', saveBg: 'rgba(58,154,160,0.08)', saveBc: '#3a9aa0', config: '#d8a838', configBg: 'rgba(216,168,56,0.14)', configBc: '#b8882a', tools: '#e85a26', toolsBg: 'rgba(232,90,38,0.08)', toolsBc: '#e85a26',
+    nAgent: '#e85a26', nTrig: '#d8a838', nTool: '#3a9aa0', nModel: '#2a3a4a', ok: '#3a9aa0', warn: '#d8a838', grid: 'rgba(90,106,122,0.28)', accent: '#e85a26' },
+  { name: 'Cyber', tag: 'neon night market · Major Mono · UPPER .18em · steps(4)', bg: '#050010', panel: '#0a0420', canvas: '#03000a', card: '#15103a', fg: '#f0e0ff', muted: '#a090c0', faint: '#6a5a90', border: '#2a1f50',
+    display: "'Major Mono Display',monospace", body: "'JetBrains Mono',monospace", mono: "'JetBrains Mono',monospace", caps: true, track: '0.10em', rBtn: 0, rNode: 0, rCard: 0,
+    run: '#26d97a', runBg: 'rgba(38,217,122,0.14)', runBc: '#26d97a', stop: '#f51eb6', stopBg: 'rgba(245,30,182,0.14)', stopBc: '#f51eb6',
+    save: '#1dd9e5', saveBg: 'rgba(29,217,229,0.12)', saveBc: '#1dd9e5', config: '#ffd028', configBg: 'rgba(255,208,40,0.10)', configBc: '#ffd028', tools: '#f51eb6', toolsBg: 'rgba(245,30,182,0.10)', toolsBc: '#f51eb6',
+    nAgent: '#f51eb6', nTrig: '#ffd028', nTool: '#1dd9e5', nModel: '#26d97a', ok: '#26d97a', warn: '#ffd028', grid: 'rgba(160,144,192,0.30)', accent: '#1dd9e5' },
+  { name: 'Wasteland', tag: 'irradiated scrap · Special Elite/VT323 · jittery', bg: '#2a2018', panel: '#3a2c1c', canvas: '#1a1410', card: '#4a3826', fg: '#e8d8a8', muted: '#b89868', faint: '#8a7048', border: '#6a4a28',
+    display: "'Special Elite',monospace", body: "'Special Elite',monospace", mono: "'VT323',monospace", caps: true, track: '0.06em', rBtn: 0, rNode: 0, rCard: 0,
+    run: '#c8d038', runBg: 'rgba(200,208,56,0.14)', runBc: '#c8d038', stop: '#e88a28', stopBg: 'rgba(138,58,24,0.20)', stopBc: '#e88a28',
+    save: '#d8c8a0', saveBg: 'rgba(216,200,160,0.10)', saveBc: '#b8a880', config: '#e88a28', configBg: 'rgba(232,138,40,0.12)', configBc: '#e88a28', tools: '#c8d038', toolsBg: 'rgba(200,208,56,0.10)', toolsBc: '#a8b028',
+    nAgent: '#e88a28', nTrig: '#8a3a18', nTool: '#c8d038', nModel: '#d8c8a0', ok: '#c8d038', warn: '#e88a28', grid: 'rgba(184,152,104,0.25)', accent: '#e88a28' },
+  { name: 'Rot', tag: 'mossy crypt · Pirata One/EB Garamond · 680ms drift', bg: '#14181a', panel: '#1c2226', canvas: '#0a0e10', card: '#242c30', fg: '#c8d8c0', muted: '#788878', faint: '#4a5a50', border: '#2a3a30',
+    display: "'Pirata One',serif", body: "'EB Garamond',serif", mono: "'JetBrains Mono',monospace", caps: false, track: '0.03em', rBtn: 2, rNode: 4, rCard: 2,
+    run: '#78c878', runBg: 'rgba(120,200,120,0.10)', runBc: '#78c878', stop: '#e8a838', stopBg: 'rgba(232,168,56,0.10)', stopBc: '#e8a838',
+    save: '#d8d0b8', saveBg: 'rgba(216,208,184,0.08)', saveBc: '#8a8470', config: '#e8a838', configBg: 'rgba(232,168,56,0.08)', configBc: '#b8882a', tools: '#78c878', toolsBg: 'rgba(120,200,120,0.08)', toolsBc: '#588858',
+    nAgent: '#78c878', nTrig: '#e8a838', nTool: '#d8d0b8', nModel: '#788878', ok: '#78c878', warn: '#e8a838', grid: 'rgba(120,136,120,0.28)', accent: '#78c878' },
+  { name: 'Plague', tag: '1349 broadsheet · UnifrakturCook/EB Garamond · stiff', bg: '#d8d4c0', panel: '#e4dfc8', canvas: '#c8c4b0', card: '#efeacf', fg: '#2a1c14', muted: '#6a5440', faint: '#9a8468', border: '#a89478',
+    display: "'UnifrakturCook',serif", body: "'EB Garamond',serif", mono: "'Special Elite',monospace", caps: false, track: '0.04em', rBtn: 0, rNode: 0, rCard: 0,
+    run: '#783c28', runBg: 'rgba(120,60,40,0.12)', runBc: '#783c28', stop: '#1a1410', stopBg: 'rgba(26,20,16,0.10)', stopBc: '#1a1410',
+    save: '#6a5440', saveBg: 'rgba(106,84,64,0.10)', saveBc: '#6a5440', config: '#98a838', configBg: 'rgba(152,168,56,0.14)', configBc: '#788828', tools: '#783c28', toolsBg: 'rgba(120,60,40,0.08)', toolsBc: '#783c28',
+    nAgent: '#783c28', nTrig: '#1a1410', nTool: '#98a838', nModel: '#6a5440', ok: '#98a838', warn: '#b87818', grid: 'rgba(106,84,64,0.25)', accent: '#783c28' },
+  { name: 'Surveillance', tag: 'panopticon · Anonymous Pro/IBM Plex Mono · linear scanline', bg: '#1a1c1e', panel: '#232628', canvas: '#0a0c0e', card: '#2c3034', fg: '#c8ccd0', muted: '#888c90', faint: '#5a5e62', border: '#3a3e42',
+    display: "'Anonymous Pro',monospace", body: "'IBM Plex Mono',monospace", mono: "'IBM Plex Mono',monospace", caps: true, track: '0.06em', rBtn: 0, rNode: 0, rCard: 0,
+    run: '#6acc6a', runBg: 'rgba(106,204,106,0.10)', runBc: '#6acc6a', stop: '#e82626', stopBg: 'rgba(232,38,38,0.10)', stopBc: '#e82626',
+    save: '#888c90', saveBg: 'rgba(136,140,144,0.10)', saveBc: '#888c90', config: '#d8a020', configBg: 'rgba(216,160,32,0.10)', configBc: '#d8a020', tools: '#e82626', toolsBg: 'rgba(232,38,38,0.08)', toolsBc: '#e82626',
+    nAgent: '#e82626', nTrig: '#d8a020', nTool: '#6acc6a', nModel: '#888c90', ok: '#6acc6a', warn: '#d8a020', grid: 'rgba(136,140,144,0.28)', accent: '#e82626' },
+];
+
+function mix(hex, pct, baseHex) {
+  const h = (x) => [parseInt(x.slice(1,3),16), parseInt(x.slice(3,5),16), parseInt(x.slice(5,7),16)];
+  const a = h(hex), b = h(baseHex);
+  return `rgb(${a.map((v,i)=>Math.round(v*pct + b[i]*(1-pct))).join(',')})`;
+}
+
+function sqNode(t, x, y, icon, label, color, status, opts = {}) {
+  const fill = `linear-gradient(135deg, ${mix(color, 0.18, t.card)}, ${t.card})`;
+  const pip = status === 'ok' ? t.ok : (status === 'run' ? color : (status === 'err' ? '#dc2626' : t.faint));
+  const glow = status !== 'idle' ? `box-shadow:0 0 0 0 ${pip}, 0 0 10px ${pip}66, 0 2px 8px ${color}30;` : `box-shadow:0 2px 8px ${color}30;`;
+  return `
+    <div class="node" style="left:${x}px; top:${y}px; border-radius:${t.rNode}px; border-color:${color}99; background:${fill}; ${glow}">
+      <span class="pip" style="background:${pip};"></span>
+      <span class="gear" style="background:${t.card}; border-color:${t.border};">⚙️</span>${icon}
+      ${opts.outR ? `<span style="position:absolute; right:-6px; top:50%; transform:translateY(-50%); width:11px; height:11px; border-radius:50%; background:${color}; border:2px solid ${color};"></span>` : ''}
+      ${opts.inL ? `<span style="position:absolute; left:-6px; top:50%; transform:translateY(-50%); width:11px; height:11px; border-radius:50%; background:${t.bg}; border:2px solid ${t.faint};"></span>` : ''}
+      ${opts.outT ? `<span style="position:absolute; top:-6px; left:50%; transform:translateX(-50%); width:11px; height:11px; border-radius:50%; background:${color}; border:2px solid ${color};"></span>` : ''}
+    </div>
+    <div class="nlabel" style="left:${x + 29}px; top:${y + 64}px; color:${t.fg}; font-family:${t.body};">${label}</div>`;
+}
+
+function agentNode(t, x, y) {
+  const c = t.nAgent;
+  const fill = `linear-gradient(135deg, ${mix(c, 0.14, t.card)}, ${t.card})`;
+  return `
+    <div class="agent-node" style="left:${x}px; top:${y}px; border-radius:${Math.max(t.rNode, 2)}px; border-color:${c}; background:${fill}; box-shadow:0 0 0 1px ${c}, 0 4px 14px ${c}44; color:${t.fg};">
+      <span class="pip" style="background:${c}; box-shadow:0 0 8px ${c};"></span>
+      <span class="gear" style="background:${t.card}; border-color:${t.border};">⚙️</span>
+      <div class="ti">🤖</div>
+      <div class="tn">AI Agent</div>
+      <div class="ts" style="color:${c};">LangGraph Agent</div>
+      <div class="th" style="color:${t.muted};"><span>Memory</span><span>Tool</span></div>
+      <span style="position:absolute; left:-6px; top:50%; transform:translateY(-50%); width:11px; height:11px; border-radius:50%; background:${t.bg}; border:2px solid ${t.faint};"></span>
+      <span style="position:absolute; right:-6px; top:50%; transform:translateY(-50%); width:11px; height:11px; border-radius:50%; background:${c}; border:2px solid ${c};"></span>
+      <span style="position:absolute; left:24px; bottom:-6px; width:10px; height:10px; transform:rotate(45deg); background:${t.bg}; border:2px solid ${t.faint};"></span>
+      <span style="position:absolute; right:24px; bottom:-6px; width:10px; height:10px; transform:rotate(45deg); background:${t.bg}; border:2px solid ${t.faint};"></span>
+    </div>`;
+}
+
+function wfCard(t, name, nodes, when, sel) {
+  return `
+    <div class="wf-card" style="border-radius:${t.rCard}px; border-color:${sel ? t.accent : t.border}; ${sel ? `border-left:3px solid ${t.accent}; background:${mix(t.accent, 0.10, t.card)};` : `background:${t.card};`} margin-bottom:8px;">
+      <div class="n" style="color:${sel ? t.accent : t.fg};">${name}</div>
+      <div class="m" style="font-family:${t.mono}; color:${t.muted};"><span>${nodes} nodes</span><span>${when}</span></div>
+    </div>`;
+}
+
+function compItem(t, icon, nm, ds) {
+  return `
+    <div class="comp" style="border-radius:${t.rCard}px; border-color:${t.border}; background:${t.bg};">
+      <span class="ic" style="border-radius:${Math.max(t.rCard - 2, 0)}px; background:${t.card}; border-color:${t.border};">${icon}</span>
+      <span style="min-width:0;"><div class="nm2" style="color:${t.fg};">${nm}</div><div class="ds" style="color:${t.muted};">${ds}</div></span>
+    </div>`;
+}
+
+const list = document.getElementById('list');
+const jump = document.getElementById('jump');
+THEMES.forEach((t) => {
+  // Readability rule (CLAUDE.md): decorative display fonts are specimens only.
+  // UI copy renders in the theme's readable body font; mono stays mono.
+  const HARD_TO_READ = ["'Major Mono Display',monospace", "'Pirata One',serif", "'UnifrakturCook',serif", "'IM Fell English SC',serif", "'Bevan',serif"];
+  const uiFont = HARD_TO_READ.includes(t.display) ? t.body : t.display;
+  const caps = t.caps ? 'text-transform:uppercase;' : '';
+  const track = parseFloat(t.track) > 0.1 ? '0.08em' : t.track;
+  const disp = `font-family:${uiFont}; ${caps} letter-spacing:${track};`;
+  const a = document.createElement('a');
+  a.href = '#th-' + t.name; a.textContent = t.name;
+  jump.appendChild(a);
+
+  const tile = document.createElement('div');
+  tile.className = 'tile';
+  tile.id = 'th-' + t.name;
+  tile.innerHTML = `
+    <div class="tile-head">
+      <span class="nm" style="font-family:${t.display};">${t.name}</span>
+      <span class="meta">${t.tag}</span>
+    </div>
+    <div class="screen-wrap">
+      <div class="stage" style="background:${t.bg}; color:${t.fg}; font-family:${t.body};">
+
+        <div class="toolbar" style="background:${t.panel}; border-color:${t.border};">
+          <div class="tb-grp">
+            <span class="btn sq" style="background:${t.saveBg}; border-color:${t.saveBc}; color:${t.save}; border-radius:${t.rBtn}px;">☰</span>
+            <span class="vdiv" style="background:${t.border};"></span>
+            <span class="btn" style="background:${t.saveBg}; border-color:${t.saveBc}; color:${t.save}; border-radius:${t.rBtn}px; ${disp}">File ▾</span>
+          </div>
+          <div class="tb-grp" style="flex:1; justify-content:center;">
+            <span style="${disp} font-size:13.5px; font-weight:600;">WhatsApp Assistant</span>
+            <span style="color:${t.muted}; font-size:10px;">✎</span>
+          </div>
+          <div class="tb-grp">
+            <span style="display:inline-flex; border:1px solid ${t.border}; border-radius:${t.rBtn + 1}px; padding:2px; gap:2px; background:${t.card};">
+              <span class="btn" style="background:${mix(t.nTool,0.10,t.card)}; border-color:${t.nTool}55; color:${t.nTool}; border-radius:${Math.max(t.rBtn-2,0)}px; ${disp} padding:5px 9px; font-size:10.5px;">◷ Normal</span>
+              <span class="btn" style="background:transparent; border-color:transparent; color:${t.muted}; border-radius:${Math.max(t.rBtn-2,0)}px; ${disp} padding:5px 9px; font-size:10.5px;">⚡ Dev</span>
+            </span>
+            <span class="vdiv" style="background:${t.border};"></span>
+            <span class="btn sq" style="background:${t.configBg}; border-color:${t.configBc}; color:${t.config}; border-radius:${t.rBtn}px;">⚙</span>
+            <span class="btn sq" style="background:${t.configBg}; border-color:${t.configBc}; color:${t.config}; border-radius:${t.rBtn}px;">🔑</span>
+            <span class="vdiv" style="background:${t.border};"></span>
+            <span class="btn" style="background:${t.runBg}; border-color:${t.runBc}; color:${t.run}; border-radius:${t.rBtn}px; ${disp}">▶ Start</span>
+            <span class="btn" style="background:${t.saveBg}; border-color:${t.saveBc}; color:${t.save}; border-radius:${t.rBtn}px; ${disp} opacity:0.5;">Save</span>
+            <span style="display:inline-flex; align-items:center; gap:5px; font-family:${t.mono}; font-size:10.5px; color:${t.warn};"><span style="width:7px;height:7px;border-radius:50%;background:${t.warn};"></span>Modified</span>
+            <span class="vdiv" style="background:${t.border};"></span>
+            <span class="btn sq" style="background:${t.toolsBg}; border-color:${t.toolsBc}; color:${t.tools}; border-radius:${t.rBtn}px;">▦</span>
+          </div>
+        </div>
+
+        <div class="main">
+          <div class="sidebar" style="background:${t.panel}; border-color:${t.border};">
+            <div class="panel-hd" style="border-color:${t.border}; background:${t.bg};">
+              <div class="t" style="${disp}">Workflows</div>
+              <div class="s" style="font-family:${t.mono}; color:${t.muted};">3 saved</div>
+            </div>
+            <div style="padding-top:10px;">
+              ${wfCard(t, 'WhatsApp Assistant', 6, 'Jun 11, 09:14', true)}
+              ${wfCard(t, 'Daily Email Digest', 5, 'Jun 9, 18:30', false)}
+              ${wfCard(t, 'Customer Support Bot', 9, 'Jun 5, 11:02', false)}
+            </div>
+          </div>
+
+          <div class="center">
+            <div class="canvas" style="background:${t.canvas}; background-image:radial-gradient(${t.grid} 1px, transparent 1px); background-size:20px 20px;">
+              <svg class="edges">
+                <path d="M 124 154 C 200 154, 230 132, 300 132" fill="none" stroke="${t.nTrig}" stroke-width="2" stroke-dasharray="6 6" opacity="0.8"></path>
+                <path d="M 472 132 C 550 132, 580 154, 648 154" fill="none" stroke="${t.nAgent}" stroke-width="2" stroke-dasharray="6 6" opacity="0.8"></path>
+                <path d="M 330 226 C 330 270, 280 290, 247 308" fill="none" stroke="${t.nAgent}" stroke-width="2" stroke-dasharray="6 6" opacity="0.8"></path>
+                <path d="M 442 226 C 442 270, 470 290, 489 308" fill="none" stroke="${t.nTool}" stroke-width="2" stroke-dasharray="6 6" opacity="0.8"></path>
+                <path d="M 330 226 C 330 280, 180 300, 119 318" fill="none" stroke="${t.nModel}" stroke-width="2" stroke-dasharray="6 6" opacity="0.8"></path>
+              </svg>
+              ${sqNode(t, 66, 125, '💬', 'WhatsApp Receive', t.nTrig, 'ok', { outR: true })}
+              ${agentNode(t, 300, 78)}
+              ${sqNode(t, 648, 125, '📤', 'WhatsApp Send', t.nTrig, 'idle', { inL: true })}
+              ${sqNode(t, 218, 308, '🧠', 'Simple Memory', t.nAgent, 'idle', { outT: true })}
+              ${sqNode(t, 460, 308, '📱', 'Android Toolkit', t.nTool, 'run', { outT: true })}
+              ${sqNode(t, 90, 318, '🔍', 'Web Search Tool', t.nModel, 'idle', { outT: true })}
+            </div>
+
+            <div class="console" style="background:${t.panel}; border-color:${t.border};">
+              <div class="ctabs" style="border-color:${t.border};">
+                <span class="ctab" style="color:${t.muted}; ${disp} font-size:10.5px;">Chat</span>
+                <span class="ctab" style="color:${t.accent}; border-bottom-color:${t.accent}; font-weight:600; ${disp} font-size:10.5px;">Console</span>
+                <span class="ctab" style="color:${t.muted}; ${disp} font-size:10.5px;">Terminal</span>
+              </div>
+              <div class="clog" style="background:${t.bg}; font-family:${t.mono};">
+                <span><span style="color:${t.faint};">[12:01:31]</span> <span style="color:${t.muted};">Workflow "WhatsApp Assistant" loaded · 6 nodes</span></span>
+                <span><span style="color:${t.faint};">[12:01:33]</span> <span style="color:${t.ok};">Deployed — listening for incoming messages</span></span>
+                <span><span style="color:${t.faint};">[12:04:02]</span> <span style="color:${t.nModel};">WhatsApp Receive → message from +1 (555) 014-2236</span></span>
+                <span><span style="color:${t.faint};">[12:04:03]</span> <span style="color:${t.nAgent};">AI Agent → delegating to Android Toolkit</span></span>
+                <span><span style="color:${t.faint};">[12:04:05]</span> <span style="color:${t.ok};">WhatsApp Send → reply delivered (1.9s)</span></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="palette" style="background:${t.panel}; border-color:${t.border};">
+            <div class="panel-hd" style="border-color:${t.border}; background:${t.bg};">
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <span class="t" style="${disp}">Components</span>
+                <span class="badge" style="border-radius:${Math.max(t.rCard-2,2)}px; border-color:${t.border}; color:${t.muted}; background:${t.card}; font-family:${t.mono};">14</span>
+              </div>
+              <div class="search" style="border-radius:${t.rBtn}px; border-color:${t.border}; background:${t.card}; color:${t.faint};">⌕ <span>Search...</span></div>
+            </div>
+            <div style="padding-top:6px; overflow:hidden;">
+              <div class="cat" style="color:${t.fg};"><span style="${disp} font-size:10.5px;">🤖 AI</span><span class="badge" style="border-radius:${Math.max(t.rCard-2,2)}px; border-color:${t.nAgent}55; color:${t.nAgent}; background:${mix(t.nAgent,0.10,t.panel)}; font-family:${t.mono};">3</span></div>
+              ${compItem(t, '🤖', 'AI Agent', 'LangGraph agent with memory and tools')}
+              ${compItem(t, '🧠', 'Simple Memory', 'Conversation memory store')}
+              <div class="cat" style="color:${t.fg};"><span style="${disp} font-size:10.5px;">💬 Messaging</span><span class="badge" style="border-radius:${Math.max(t.rCard-2,2)}px; border-color:${t.nTrig}55; color:${t.nTrig}; background:${mix(t.nTrig,0.10,t.panel)}; font-family:${t.mono};">3</span></div>
+              ${compItem(t, '💬', 'WhatsApp Receive', 'Trigger on incoming message')}
+              ${compItem(t, '📤', 'WhatsApp Send', 'Send a WhatsApp message')}
+              <div class="cat" style="color:${t.fg};"><span style="${disp} font-size:10.5px;">📱 Android</span><span class="badge" style="border-radius:${Math.max(t.rCard-2,2)}px; border-color:${t.nTool}55; color:${t.nTool}; background:${mix(t.nTool,0.10,t.panel)}; font-family:${t.mono};">2</span></div>
+              ${compItem(t, '📱', 'Android Toolkit', '16 device services')}
+            </div>
+          </div>
+        </div>
+
+        <div class="statusbar" style="background:${t.panel}; border-color:${t.border}; color:${t.muted}; font-family:${t.mono};">
+          <span style="color:${t.ok};"><span class="dot" style="background:${t.ok};"></span>ONLINE</span>
+          <span class="sep">|</span>
+          <span>WF: <span style="color:${t.fg};">WhatsApp Assistant</span></span>
+          <span class="sep">|</span>
+          <span>NODES: <span style="color:${t.fg};">6</span></span>
+          <span class="right"><span>THEME: <span style="color:${t.fg};">${t.name.toUpperCase()}</span></span><span class="sep">|</span><span>14:02:33</span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="strip" style="background:${t.bg}; border-color:#21262d; color:${t.fg}; font-family:${t.body};">
+      <span class="btn" style="background:${t.runBg}; border-color:${t.runBc}; color:${t.run}; border-radius:${t.rBtn}px; ${disp}">▶ Start</span>
+      <span class="btn" style="background:${t.stopBg}; border-color:${t.stopBc}; color:${t.stop}; border-radius:${t.rBtn}px; ${disp}">■ Stop</span>
+      <span class="btn" style="background:${t.configBg}; border-color:${t.configBc}; color:${t.config}; border-radius:${t.rBtn}px; ${disp}">⚙ Settings</span>
+      <span class="btn" style="background:transparent; border-color:${t.border}; color:${t.fg}; border-radius:${t.rBtn}px; ${disp}">Cancel</span>
+      <span class="input" style="border-radius:${t.rBtn}px; border-color:${t.border}; background:${t.card}; color:${t.faint};">⌕ <span>Search...</span></span>
+      <span class="switch" style="background:${t.run}; border-color:transparent;"><span class="knob" style="left:18px; background:${t.bg};"></span></span>
+      <span class="switch" style="background:${mix(t.fg, 0.08, t.bg)}; border-color:${t.border};"><span class="knob" style="left:2px; background:${t.faint};"></span></span>
+      <span class="badge" style="border-radius:${Math.max(t.rCard-2,2)}px; border-color:${t.nAgent}55; color:${t.nAgent}; background:${mix(t.nAgent,0.10,t.bg)};">Agent</span>
+      <span class="badge" style="border-radius:${Math.max(t.rCard-2,2)}px; border-color:${t.nTool}55; color:${t.nTool}; background:${mix(t.nTool,0.10,t.bg)};">Tool</span>
+      <span class="badge" style="border-radius:${Math.max(t.rCard-2,2)}px; border-color:${t.nTrig}55; color:${t.nTrig}; background:${mix(t.nTrig,0.10,t.bg)};">Trigger</span>
+      <span class="tabsdemo" style="border-color:${t.border};">
+        <span class="ctab" style="color:${t.accent}; border-bottom:2px solid ${t.accent}; font-weight:600; ${disp} font-size:10.5px; padding:5px 10px;">Console</span>
+        <span class="ctab" style="color:${t.muted}; ${disp} font-size:10.5px; padding:5px 10px; border-bottom:2px solid transparent;">Terminal</span>
+      </span>
+      <span style="font-family:${t.mono}; font-size:10px; color:${t.muted}; margin-left:auto;">${t.name.toUpperCase()} · radius ${t.rBtn}px</span>
+    </div>`;
+  list.appendChild(tile);
+});
+
+function fitStages() {
+  document.querySelectorAll('.screen-wrap').forEach((wrap) => {
+    const stage = wrap.querySelector('.stage');
+    const s = wrap.clientWidth / 1280;
+    stage.style.transform = `scale(${s})`;
+    wrap.style.height = (700 * s) + 'px';
+  });
+}
+fitStages();
+window.addEventListener('resize', fitStages);
+</script>
+</body>
+</html>

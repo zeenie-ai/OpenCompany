@@ -22,6 +22,10 @@ import './themes/wasteland.css'
 import './themes/rot.css'
 import './themes/plague.css'
 import './themes/surveillance.css'
+// Animation system — pulse-keyframe tokens, trigger armed/listening motion,
+// .machina-* helpers. Loaded after the themes so its keyframes + per-theme
+// --pulse-* tokens are authoritative.
+import './themes/animations.css'
 import './index.css'
 import App from './App'
 import { ThemeProvider } from './contexts/ThemeContext'

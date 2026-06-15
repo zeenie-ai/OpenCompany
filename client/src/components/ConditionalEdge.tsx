@@ -74,7 +74,7 @@ const ConditionalEdge: React.FC<ConditionalEdgeProps> = ({
         markerEnd={markerEnd}
         style={{
           ...style,
-          stroke: hasCondition ? 'hsl(var(--accent))' : undefined,
+          stroke: hasCondition ? 'var(--accent)' : undefined,
           strokeWidth: hasCondition ? 2 : undefined,
           strokeDasharray: hasCondition ? '5 3' : undefined,
         }}
@@ -92,7 +92,7 @@ const ConditionalEdge: React.FC<ConditionalEdgeProps> = ({
               hasCondition
                 ? 'border-accent bg-accent/20 text-accent'
                 : 'border-border bg-card text-muted-foreground',
-              selected && 'shadow-[0_0_6px_hsl(var(--node-agent))]'
+              selected && 'shadow-[0_0_6px_var(--node-agent)]'
             )}
           >
             <span className="mr-1 inline-flex">

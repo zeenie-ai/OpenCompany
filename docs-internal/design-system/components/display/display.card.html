@@ -1,0 +1,71 @@
+<!-- @dsCard group="Components" viewport="700x430" name="Display" subtitle="Badge, Card, Tabs, Avatar, Kbd, LogLine, ChatBubble" -->
+<!DOCTYPE html>
+<html class="dark">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="../../_ds_bundle.js?v=3"></script>
+</head>
+<body style="background: var(--bg-panel); margin: 0; padding: 16px;">
+<div id="root"></div>
+<script type="text/babel">
+const { Badge, Card, Tabs, Avatar, Kbd, LogLine, ChatBubble } = window.MachinaOSDesignSystem_2559cf;
+
+function DisplayCard() {
+  const [tab, setTab] = React.useState('console');
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Badge mono>42</Badge>
+        <Badge variant="default">New</Badge>
+        <Badge variant="outline">MIT</Badge>
+        <Badge variant="accent" color="var(--dracula-purple)">Agent</Badge>
+        <Badge variant="accent" color="var(--dracula-green)">Tool</Badge>
+        <Badge variant="accent" color="var(--dracula-pink)">Trigger</Badge>
+        <span style={{ width: 12 }}></span>
+        <Avatar name="Claude" color="var(--dracula-orange)" />
+        <Avatar name="Open AI" color="var(--dracula-cyan)" />
+        <Avatar name="AI Agent" color="var(--node-agent)" square />
+        <span style={{ width: 12 }}></span>
+        <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}>
+          <Kbd>⌘</Kbd><Kbd>S</Kbd>
+          <span style={{ fontSize: 11, color: 'var(--fg-muted)', marginLeft: 4 }}>Save</span>
+        </span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+        <Card><div style={{ fontSize: 13, fontWeight: 600 }}>Static card</div><div style={{ fontSize: 12, color: 'var(--fg-muted)', marginTop: 4 }}>Quiet shadow, 8px radius</div></Card>
+        <Card interactive><div style={{ fontSize: 13, fontWeight: 600 }}>Interactive</div><div style={{ fontSize: 12, color: 'var(--fg-muted)', marginTop: 4 }}>Lifts on hover</div></Card>
+        <Card interactive selected><div style={{ fontSize: 13, fontWeight: 600 }}>Selected</div><div style={{ fontSize: 12, color: 'var(--fg-muted)', marginTop: 4 }}>Accent left edge</div></Card>
+      </div>
+      <div>
+        <Tabs tabs={[{id:'chat',label:'Chat'},{id:'console',label:'Console'},{id:'terminal',label:'Terminal'}]} active={tab} onChange={setTab} />
+        <div style={{ padding: '10px 12px', background: 'var(--bg-app)', borderRadius: '0 0 8px 8px', minHeight: 110 }}>
+          {tab === 'console' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <LogLine time="12:01:31">Workflow "WhatsApp Assistant" loaded · 6 nodes</LogLine>
+              <LogLine time="12:01:33" tone="success">Deployed — listening for incoming messages</LogLine>
+              <LogLine time="12:04:02" tone="model">WhatsApp Receive → message from +1 (555) 014-2236</LogLine>
+              <LogLine time="12:04:03" tone="agent">AI Agent → delegating to Web Search Tool</LogLine>
+              <LogLine time="12:04:05" tone="error">Web Search Tool → rate limited, retrying in 2s</LogLine>
+            </div>
+          ) : tab === 'chat' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <ChatBubble role="user" time="12:03:58">Summarize my unread emails every weekday at 9 AM.</ChatBubble>
+              <ChatBubble role="agent">Done — I scheduled a daily digest. Want it on WhatsApp too?</ChatBubble>
+            </div>
+          ) : (
+            <LogLine tone="var(--fg-default)"><span style={{ color: 'var(--success)' }}>$</span> machina start</LogLine>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<DisplayCard />);
+</script>
+</body>
+</html>

@@ -76,9 +76,9 @@ const LlmUsageSection: React.FC<Props> = ({ providerId, providerName }) => {
           ) : (
             <div className="flex w-full flex-col gap-4">
               <div className="flex flex-wrap gap-4">
-                <Stat label="Total Tokens" value={data.total_tokens.toLocaleString()} className="text-dracula-cyan" />
-                <Stat label="Total Cost" value={`$${data.total_cost.toFixed(4)}`} className="text-dracula-green" />
-                <Stat label="Executions" value={data.execution_count} className="text-dracula-purple" />
+                <Stat label="Total Tokens" value={data.total_tokens.toLocaleString()} className="text-info" />
+                <Stat label="Total Cost" value={`$${data.total_cost.toFixed(4)}`} className="text-success" />
+                <Stat label="Executions" value={data.execution_count} className="text-primary" />
               </div>
 
               <div className="overflow-hidden rounded-md border border-border">
@@ -87,7 +87,7 @@ const LlmUsageSection: React.FC<Props> = ({ providerId, providerName }) => {
                     <div className="text-xs text-muted-foreground">Input Tokens</div>
                     <div>
                       {data.total_input_tokens.toLocaleString()}{' '}
-                      <span className="ml-1 text-dracula-green">
+                      <span className="ml-1 text-success">
                         (${data.total_input_cost.toFixed(4)})
                       </span>
                     </div>
@@ -96,7 +96,7 @@ const LlmUsageSection: React.FC<Props> = ({ providerId, providerName }) => {
                     <div className="text-xs text-muted-foreground">Output Tokens</div>
                     <div>
                       {data.total_output_tokens.toLocaleString()}{' '}
-                      <span className="ml-1 text-dracula-green">
+                      <span className="ml-1 text-success">
                         (${data.total_output_cost.toFixed(4)})
                       </span>
                     </div>
@@ -105,7 +105,7 @@ const LlmUsageSection: React.FC<Props> = ({ providerId, providerName }) => {
                 {data.total_cache_cost > 0 && (
                   <div className="px-3 py-2 text-sm">
                     <span className="text-xs text-muted-foreground">Cache Cost: </span>
-                    <span className="text-dracula-green">${data.total_cache_cost.toFixed(4)}</span>
+                    <span className="text-success">${data.total_cache_cost.toFixed(4)}</span>
                   </div>
                 )}
               </div>
@@ -122,7 +122,7 @@ const LlmUsageSection: React.FC<Props> = ({ providerId, providerName }) => {
                         className="grid grid-cols-[1fr_auto] items-center gap-3 px-3 py-2 text-sm"
                       >
                         <code className="text-xs">{m.model}</code>
-                        <span className="text-dracula-green">
+                        <span className="text-success">
                           ${m.total_cost.toFixed(4)}
                         </span>
                       </div>

@@ -1,0 +1,249 @@
+/* ============================================================================
+ * themes/rot.css — moss-overgrown crypt lit by guttering candles.
+ *
+ * Bone whites, cold green, candleflame amber on charcoal. Reads like a
+ * grimoire. Ported from design_handoff_machinaos_themes/themes/rot.css.
+ * ============================================================================ */
+
+:root[data-theme="rot"] {
+  --bg-app: #14181a;
+  --bg-panel: #1c2226;
+  --bg-canvas: #0a0e10;
+  --bg-elevated: #242c30;
+  --bg-input: #0a0e10;
+  --bg-hover: rgba(120, 200, 120, 0.08);
+  --bg-active: rgba(120, 200, 120, 0.18);
+  --bg-overlay: rgba(0, 4, 6, 0.85);
+
+  --border-default: #2a3a30;
+  --border-strong: #4a6a4a;
+  --border-focus: #78c878;
+  --ornament-frame: none;
+
+  --fg-default: #c8d8c0;
+  --fg-muted: #788878;
+  --fg-faint: #485848;
+  --fg-on-accent: #0a0e10;
+  --fg-on-success: #0a0e10;
+  --fg-on-danger: #c8d8c0;
+  --fg-on-warning: #0a0e10;
+
+  --bone: #d8d0b8;
+  --candle: #e8a838;
+  --crypt: #4a3838;
+  --moss: #78c878;
+
+  --font-display: 'Pirata One', 'UnifrakturCook', serif;
+  --font-body: 'EB Garamond', 'Cormorant Garamond', serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --type-scale-base: 14px;
+  --type-tracking-display: 0.04em;
+  --type-uppercase: none;
+
+  --radius-sm: 1px;
+  --radius-md: 2px;
+  --radius-lg: 4px;
+  --radius-pill: 999px;
+
+  --dur-fast: 140ms;
+  --dur-default: 320ms;
+  --dur-slow: 680ms;
+  --ease-default: cubic-bezier(0.4, 0, 0.6, 1);
+  --ease-emphasis: cubic-bezier(0.4, 0, 0.6, 1);
+  --motion-style: drift;
+  --sound-pack: crypt;
+
+  /* Wave 30: phosphor-green pulse — high-contrast against the moss
+   * + crypt-brown canvas backplane. */
+  --node-pulse-color: hsl(var(--accent));
+
+  --cursor-default: auto;
+  --cursor-pointer: pointer;
+  --scrollbar-track: #14181a;
+  --scrollbar-thumb: #4a6a4a;
+
+  /* Shadcn HSL bridge */
+  --background: 200 13% 9%;
+  --foreground: 90 22% 80%;
+  --card: 199 14% 17%;
+  --card-foreground: 90 22% 80%;
+  --popover: 199 14% 17%;
+  --popover-foreground: 90 22% 80%;
+
+  --primary: 120 43% 63%;          /* moss bloom */
+  --primary-foreground: 200 25% 5%;
+  --secondary: 198 16% 13%;
+  --secondary-foreground: 90 22% 80%;
+  --muted: 198 16% 13%;
+  --muted-foreground: 120 6% 50%;
+  --accent: 35 78% 56%;            /* candleflame amber */
+  --accent-foreground: 200 25% 5%;
+
+  --destructive: 0 49% 44%;
+  --destructive-foreground: 90 22% 80%;
+  --success: 120 43% 63%;
+  --warning: 35 78% 56%;
+  --info: 200 36% 53%;
+
+  --border: 145 16% 28%;
+  --input: 145 16% 28%;
+  --ring: 120 43% 63%;
+
+  /* Action role bridge */
+  --action-run: 120 43% 63%;
+  --action-run-soft: 120 43% 63% / 0.18;
+  --action-run-hover: 120 43% 63% / 0.32;
+  --action-run-border: 120 43% 63% / 0.7;
+
+  --action-stop: 0 49% 44%;
+  --action-stop-soft: 0 49% 44% / 0.20;
+  --action-stop-hover: 0 49% 44% / 0.34;
+  --action-stop-border: 0 49% 44% / 0.7;
+
+  --action-save: 35 78% 56%;
+  --action-save-soft: 35 78% 56% / 0.20;
+  --action-save-hover: 35 78% 56% / 0.34;
+  --action-save-border: 35 78% 56% / 0.7;
+
+  --action-config: 35 78% 56%;
+  --action-config-soft: 35 78% 56% / 0.18;
+  --action-config-hover: 35 78% 56% / 0.30;
+  --action-config-border: 35 78% 56% / 0.6;
+
+  --action-secret: 200 36% 53%;
+  --action-secret-soft: 200 36% 53% / 0.16;
+  --action-secret-hover: 200 36% 53% / 0.30;
+  --action-secret-border: 200 36% 53% / 0.6;
+
+  --action-tools: 120 43% 63%;
+  --action-tools-soft: 120 43% 63% / 0.16;
+  --action-tools-hover: 120 43% 63% / 0.30;
+  --action-tools-border: 120 43% 63% / 0.6;
+
+  --tint-soft: 16%;
+  --tint-border: 40%;
+
+  /* Canvas backplane — flagstone crypt floor on 80x80 tile */
+  --canvas-grid:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><g stroke='%234a6a4a' stroke-width='0.4' fill='none' opacity='0.25'><path d='M0 30 H80 M30 0 V80 M0 60 H80 M60 0 V80'/></g></svg>");
+  --canvas-grid-opacity: 1;
+}
+
+/* Body — moss + damp stone */
+:root[data-theme="rot"] body {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(120,200,120,0.04), transparent 60%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><filter id='m'><feTurbulence baseFrequency='0.6' numOctaves='2'/><feColorMatrix values='0 0 0 0 0.05 0 0 0 0 0.10 0 0 0 0 0.05 0 0 0 0.4 0'/></filter><rect width='300' height='300' filter='url(%23m)'/></svg>"),
+    var(--bg-app);
+}
+
+:root[data-theme="rot"] ::selection {
+  background: rgba(120, 200, 120, 0.4);
+  color: #14181a;
+}
+
+/* Rot scrollbars — mossy thumb on swamp track */
+:root[data-theme="rot"] ::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+:root[data-theme="rot"] ::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+:root[data-theme="rot"] ::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--radius-sm, 1px);
+}
+:root[data-theme="rot"] ::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--scrollbar-thumb) 80%, white);
+}
+
+/* ── Per-component decorations (Wave 16 port from handoff) ─── */
+
+:root[data-theme="rot"] .toolbar,
+:root[data-theme="rot"] .sidebar,
+:root[data-theme="rot"] .palette,
+:root[data-theme="rot"] .chat {
+  background:
+    linear-gradient(180deg, rgba(120,200,120,0.02), transparent),
+    var(--bg-panel);
+}
+:root[data-theme="rot"] .toolbar { border-bottom: 1px solid var(--border-strong); }
+:root[data-theme="rot"] .sidebar { border-right: 1px solid var(--border-strong); }
+:root[data-theme="rot"] .palette { border-left: 1px solid var(--border-strong); }
+:root[data-theme="rot"] .chat    { border-top: 1px solid var(--border-strong); }
+
+/* CANVAS — flagstone crypt floor, candlelight pools */
+:root[data-theme="rot"] .canvas {
+  background:
+    radial-gradient(circle 200px at 25% 30%, rgba(232,168,56,0.06), transparent 70%),
+    radial-gradient(circle 180px at 78% 65%, rgba(232,168,56,0.05), transparent 70%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><g stroke='%234a6a4a' stroke-width='0.4' fill='none' opacity='0.25'><path d='M0 30 H80 M30 0 V80 M0 60 H80 M60 0 V80'/></g></svg>"),
+    var(--bg-canvas);
+}
+
+/* TYPOGRAPHY — gothic */
+:root[data-theme="rot"] body { font-family: var(--font-body); color: var(--fg-default); font-size: 14px; line-height: 1.55; }
+:root[data-theme="rot"] h1, :root[data-theme="rot"] h2, :root[data-theme="rot"] h3,
+:root[data-theme="rot"] .v-display {
+  font-family: var(--font-display); letter-spacing: 0.04em; color: var(--bone); font-weight: 400;
+}
+
+/* SQUARE NODE — bone-pale tombstone */
+:root[data-theme="rot"] .sq-node-box {
+  background: linear-gradient(180deg, var(--bone), #a8a088);
+  border: 1px solid #2a2418; border-radius: 4px 4px 2px 2px;
+  box-shadow: inset 0 -2px 0 rgba(0,0,0,0.2), 0 4px 8px rgba(0,0,0,0.5);
+  color: var(--crypt);
+}
+:root[data-theme="rot"] .sq-node.selected .sq-node-box {
+  border-color: hsl(var(--accent)); box-shadow: 0 0 16px rgba(120,200,120,0.4), 0 4px 8px rgba(0,0,0,0.5);
+}
+:root[data-theme="rot"] .sq-node-gear { background: var(--crypt); color: var(--bone); border: none; }
+:root[data-theme="rot"] .sq-node-label { font-family: var(--font-display); color: var(--crypt); font-weight: 400; }
+:root[data-theme="rot"] .sq-node-handle.out { background: hsl(var(--accent)); box-shadow: 0 0 6px hsl(var(--accent)); }
+
+/* ACTIONS — guttering candleflame */
+:root[data-theme="rot"] .action-btn {
+  font-family: var(--font-display); font-size: 13px; letter-spacing: 0.04em; font-weight: 400;
+  border-radius: 2px; border-width: 1px;
+}
+:root[data-theme="rot"] .action-run { background: hsl(var(--success-soft)); color: hsl(var(--accent)); border-color: hsl(var(--success)); }
+:root[data-theme="rot"] .action-deploy { background: hsl(var(--info-soft)); color: hsl(var(--info)); border-color: hsl(var(--info)); }
+:root[data-theme="rot"] .action-save { background: hsl(var(--warning-soft)); color: var(--candle); border-color: var(--candle); }
+
+/* CARDS */
+:root[data-theme="rot"] .wf-card,
+:root[data-theme="rot"] .cat,
+:root[data-theme="rot"] .comp,
+:root[data-theme="rot"] .settings-section,
+:root[data-theme="rot"] .cred-card {
+  background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: 2px;
+}
+:root[data-theme="rot"] .wf-card.selected { border-color: hsl(var(--accent)); background: hsl(var(--success-soft)); }
+:root[data-theme="rot"] .cat-tile { background: var(--crypt); color: var(--bone); border: 1px solid var(--border-strong); }
+:root[data-theme="rot"] .cat-name { font-family: var(--font-display); color: var(--bone); font-weight: 400; }
+:root[data-theme="rot"] .comp-ico { background: var(--bg-panel); color: hsl(var(--accent)); border: 1px solid var(--border-strong); }
+
+/* CHAT */
+:root[data-theme="rot"] .chat-msg-user { background: hsl(var(--success-soft)); border: 1px solid hsl(var(--accent)); }
+:root[data-theme="rot"] .chat-msg-bot { background: var(--bg-elevated); border-left: 2px solid var(--candle); }
+
+/* STATUS BAR */
+:root[data-theme="rot"] .statusbar {
+  background: var(--bg-panel); border-top: 1px solid var(--border-strong);
+  font-family: var(--font-mono); color: var(--fg-muted);
+}
+:root[data-theme="rot"] .statusbar .pip { background: hsl(var(--accent)); box-shadow: 0 0 6px hsl(var(--accent)); }
+
+/* MODAL */
+:root[data-theme="rot"] .modal {
+  background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 4px;
+  box-shadow: 0 0 0 1px rgba(120,200,120,0.10), 0 30px 80px rgba(0,0,0,0.8);
+}
+:root[data-theme="rot"] .modal-head { border-bottom: 1px solid var(--border-default); }
+:root[data-theme="rot"] .modal-title { font-family: var(--font-display); color: var(--bone); font-weight: 400; }
+
+/* CMDK */
+:root[data-theme="rot"] .cmdk { background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 4px; }
+:root[data-theme="rot"] .cmdk-item.active { background: var(--bg-active); color: hsl(var(--accent)); }

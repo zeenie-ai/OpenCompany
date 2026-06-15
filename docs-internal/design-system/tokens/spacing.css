@@ -1,0 +1,45 @@
+/* ============================================================================
+ * MachinaOS — spacing, radius, shadow tokens
+ * Source: client/src/themes/base.css (space scale) + light.css (radii)
+ * ========================================================================== */
+
+:root {
+  /* Space scale: 4 / 8 / 12 / 16 / 24 / 32 / 48 / 64 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* Radii — shadcn-derived. Buttons/inputs 8px, chips 6px, nodes 10–12px */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-node: 10px;   /* square canvas nodes */
+  --radius-pill: 999px;
+
+  /* Fixed chrome heights */
+  --h-toolbar: 48px;     /* top toolbar */
+  --h-statusbar: 24px;   /* bottom status line */
+  --h-control: 32px;     /* buttons, inputs, selects */
+  --w-sidebar: 280px;    /* workflow sidebar */
+  --w-palette: 320px;    /* component palette */
+
+  /* Shadows — quiet, layered. Cards barely lift; glows come from accents. */
+  --shadow-card: 0 2px 8px rgb(0 0 0 / 0.06), 0 1px 2px rgb(0 0 0 / 0.04);
+  --shadow-card-hover: 0 4px 14px rgb(0 0 0 / 0.10);
+  --shadow-modal: 0 12px 40px rgb(0 0 0 / 0.18);
+  /* Accent glow used by canvas nodes — pair with a node color:
+     box-shadow: 0 2px 8px color-mix(in srgb, <color> 18%, transparent) */
+}
+
+.dark,
+[data-theme="dark"] {
+  --shadow-card: 0 4px 12px rgb(0 0 0 / 0.3);
+  --shadow-card-hover: 0 6px 18px rgb(0 0 0 / 0.4);
+  --shadow-modal: 0 16px 48px rgb(0 0 0 / 0.55);
+}

@@ -9,6 +9,8 @@ Selected at runtime via `<html data-theme="...">`. The system is purely CSS-vari
 
 This document is the playbook for working in the design system: token taxonomy, decorative-layer wrappers, per-theme sound + canvas packs, migration recipe, anti-patterns, and where each piece lives.
 
+> **Canonical reference + token format.** The vendored [Design System Bundle](./design-system/IMPLEMENTATION.md) (`docs-internal/design-system/`) is the canonical spec; its `tokens/*.css` carry the authoritative values — copy them verbatim, never re-derive by eye. **Token colors are `hex` + `color-mix()`** (e.g. `--primary: #2563eb`, `--action-run-soft: color-mix(in srgb, var(--dracula-green) 15%, transparent)`), NOT HSL-triplets. The Tailwind v4 `@theme inline` bridge maps `--color-X: var(--X)` directly (no `hsl()` wrapper); the `/opacity` modifier still works because v4 compiles it to `color-mix`. Action intents additionally expose an `--action-X-ink` readable-text variant (light: a darkened accent; dark: the raw accent) consumed by `ActionButton` via `text-action-X-ink`.
+
 ## Architecture at a glance
 
 ```

@@ -64,7 +64,7 @@
 
   /* Wave 30: lapis-accent pulse — high-contrast against marble +
    * matches the temple-floor selection halo. */
-  --node-pulse-color: hsl(var(--accent));
+  --node-pulse-color: var(--accent);
 
   --cursor-default: auto;
   --cursor-pointer: pointer;
@@ -73,63 +73,69 @@
 
   /* ── Shadcn HSL bridge ────────────────────────────────────────────── */
 
-  --background: 42 38% 87%;
-  --foreground: 38 33% 12%;
-  --card: 46 71% 95%;
-  --card-foreground: 38 33% 12%;
-  --popover: 46 71% 95%;
-  --popover-foreground: 38 33% 12%;
+  --background: #ede5d0;
+  --foreground: #292115;
+  --card: #faf6e9;
+  --card-foreground: #292115;
+  --popover: #faf6e9;
+  --popover-foreground: #292115;
 
-  --primary: 217 53% 33%;          /* lapis */
-  --primary-foreground: 46 71% 95%;
-  --secondary: 44 60% 91%;
-  --secondary-foreground: 38 33% 12%;
-  --muted: 44 60% 91%;
-  --muted-foreground: 40 28% 33%;
-  --accent: 41 56% 52%;            /* gold for shadcn accent (overrides new-contract --accent string above for HSL only — Tailwind utilities) */
-  --accent-foreground: 38 33% 12%;
+  --primary: #284a81;          /* lapis */
+  --primary-foreground: #faf6e9;
+  --secondary: #f6eeda;
+  --secondary-foreground: #292115;
+  --muted: #f6eeda;
+  --muted-foreground: #6c5c3d;
+  --accent: #c99e40;            /* gold for shadcn accent (overrides new-contract --accent string above for HSL only — Tailwind utilities) */
+  --accent-foreground: #292115;
 
-  --destructive: 1 66% 29%;        /* oxblood */
-  --destructive-foreground: 46 71% 95%;
-  --success: 71 41% 33%;           /* olive */
-  --warning: 41 56% 52%;           /* gold */
-  --info: 217 53% 33%;             /* lapis */
+  --destructive: #7b1b19;        /* oxblood */
+  --destructive-foreground: #faf6e9;
+  --success: #6a7732;           /* olive */
+  --warning: #c99e40;           /* gold */
+  --info: #284a81;             /* lapis */
 
-  --border: 33 51% 19%;            /* border-strong drives the visible borders */
-  --input: 40 33% 60%;
-  --ring: 217 53% 33%;
+  --border: #493318;            /* border-strong drives the visible borders */
+  --input: #bba477;
+  --ring: #284a81;
 
   /* ── Action role bridge ───────────────────────────────────────────── */
 
-  --action-run: 71 41% 33%;
-  --action-run-soft: 71 41% 33% / 0.18;
-  --action-run-hover: 71 41% 33% / 0.30;
-  --action-run-border: 71 41% 33% / 0.7;
+  --action-run: #6a7732;
+  --action-run-soft: color-mix(in srgb, var(--action-run) var(--tint-action-soft), transparent);
+  --action-run-hover: color-mix(in srgb, var(--action-run) var(--tint-action-hover), transparent);
+  --action-run-border: color-mix(in srgb, var(--action-run) var(--tint-action-border), transparent);
+  --action-run-ink: var(--action-run);
 
-  --action-stop: 1 66% 29%;
-  --action-stop-soft: 1 66% 29% / 0.16;
-  --action-stop-hover: 1 66% 29% / 0.28;
-  --action-stop-border: 1 66% 29% / 0.7;
+  --action-stop: #7b1b19;
+  --action-stop-soft: color-mix(in srgb, var(--action-stop) var(--tint-action-soft), transparent);
+  --action-stop-hover: color-mix(in srgb, var(--action-stop) var(--tint-action-hover), transparent);
+  --action-stop-border: color-mix(in srgb, var(--action-stop) var(--tint-action-border), transparent);
+  --action-stop-ink: var(--action-stop);
 
-  --action-save: 41 56% 52%;
-  --action-save-soft: 41 56% 52% / 0.20;
-  --action-save-hover: 41 56% 52% / 0.35;
-  --action-save-border: 41 56% 52% / 0.7;
+  --action-save: #c99e40;
+  --action-save-soft: color-mix(in srgb, var(--action-save) var(--tint-action-soft), transparent);
+  --action-save-hover: color-mix(in srgb, var(--action-save) var(--tint-action-hover), transparent);
+  --action-save-border: color-mix(in srgb, var(--action-save) var(--tint-action-border), transparent);
+  --action-save-ink: var(--action-save);
 
-  --action-config: 41 56% 52%;
-  --action-config-soft: 41 56% 52% / 0.18;
-  --action-config-hover: 41 56% 52% / 0.30;
-  --action-config-border: 41 56% 52% / 0.6;
+  --action-config: #c99e40;
+  --action-config-soft: color-mix(in srgb, var(--action-config) var(--tint-action-soft), transparent);
+  --action-config-hover: color-mix(in srgb, var(--action-config) var(--tint-action-hover), transparent);
+  --action-config-border: color-mix(in srgb, var(--action-config) var(--tint-action-border), transparent);
+  --action-config-ink: var(--action-config);
 
-  --action-secret: 217 53% 33%;
-  --action-secret-soft: 217 53% 33% / 0.14;
-  --action-secret-hover: 217 53% 33% / 0.26;
-  --action-secret-border: 217 53% 33% / 0.7;
+  --action-secret: #284a81;
+  --action-secret-soft: color-mix(in srgb, var(--action-secret) var(--tint-action-soft), transparent);
+  --action-secret-hover: color-mix(in srgb, var(--action-secret) var(--tint-action-hover), transparent);
+  --action-secret-border: color-mix(in srgb, var(--action-secret) var(--tint-action-border), transparent);
+  --action-secret-ink: var(--action-secret);
 
-  --action-tools: 217 53% 33%;
-  --action-tools-soft: 217 53% 33% / 0.14;
-  --action-tools-hover: 217 53% 33% / 0.26;
-  --action-tools-border: 217 53% 33% / 0.7;
+  --action-tools: #284a81;
+  --action-tools-soft: color-mix(in srgb, var(--action-tools) var(--tint-action-soft), transparent);
+  --action-tools-hover: color-mix(in srgb, var(--action-tools) var(--tint-action-hover), transparent);
+  --action-tools-border: color-mix(in srgb, var(--action-tools) var(--tint-action-border), transparent);
+  --action-tools-ink: var(--action-tools);
 
   --tint-soft: 14%;
   --tint-border: 35%;
@@ -219,10 +225,10 @@
   border: 2px solid var(--border-strong);
   border-radius: 0;
   box-shadow: 0 3px 0 var(--border-strong), inset 0 0 0 1px var(--gold);
-  color: hsl(var(--accent));
+  color: var(--accent);
 }
 :root[data-theme="greek"] .sq-node.selected .sq-node-box {
-  border-color: hsl(var(--accent)); box-shadow: 0 0 0 3px hsl(var(--info) / 0.25), 0 3px 0 var(--border-strong), inset 0 0 0 1px var(--gold);
+  border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--info) 25%, transparent), 0 3px 0 var(--border-strong), inset 0 0 0 1px var(--gold);
 }
 :root[data-theme="greek"] .sq-node-pip { border-radius: 0; box-shadow: 0 0 0 1px var(--border-strong); }
 :root[data-theme="greek"] .sq-node-gear { background: var(--gold); color: var(--border-strong); border: 1px solid var(--border-strong); border-radius: 0; }
@@ -238,9 +244,9 @@
   border-radius: 0; font-family: var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; font-size: 11px;
   border-width: 2px;
 }
-:root[data-theme="greek"] .action-run    { background: hsl(var(--success-soft)); color: hsl(var(--success)); border-color: hsl(var(--success)); }
-:root[data-theme="greek"] .action-deploy { background: hsl(var(--info-soft));    color: hsl(var(--accent));  border-color: hsl(var(--accent)); }
-:root[data-theme="greek"] .action-save   { background: hsl(var(--warning-soft)); color: var(--oxblood); border-color: var(--gold); }
+:root[data-theme="greek"] .action-run    { background: var(--success-soft); color: var(--success); border-color: var(--success); }
+:root[data-theme="greek"] .action-deploy { background: var(--info-soft);    color: var(--accent);  border-color: var(--accent); }
+:root[data-theme="greek"] .action-save   { background: var(--warning-soft); color: var(--oxblood); border-color: var(--gold); }
 
 /* Panels */
 :root[data-theme="greek"] .palette h2,
@@ -251,24 +257,24 @@
 
 /* Workflow cards */
 :root[data-theme="greek"] .wf-card { background: var(--bg-elevated); border: 2px solid var(--border-default); border-radius: 0; }
-:root[data-theme="greek"] .wf-card.selected { border-color: hsl(var(--accent)); background: hsl(var(--info-soft)); }
+:root[data-theme="greek"] .wf-card.selected { border-color: var(--accent); background: var(--info-soft); }
 :root[data-theme="greek"] .wf-card-name { font-family: var(--font-display); letter-spacing: 0.10em; }
 
 /* Palette categories */
 :root[data-theme="greek"] .cat { background: var(--bg-elevated); border: 2px solid var(--border-default); border-radius: 0; }
 :root[data-theme="greek"] .cat-tile { background: var(--gold); border: 1px solid var(--border-strong); border-radius: 0; color: var(--border-strong); }
-:root[data-theme="greek"] .cat-name { font-family: var(--font-display); letter-spacing: 0.16em; color: hsl(var(--accent)); }
+:root[data-theme="greek"] .cat-name { font-family: var(--font-display); letter-spacing: 0.16em; color: var(--accent); }
 :root[data-theme="greek"] .cat-count { background: var(--bg-active); border: 1px solid var(--border-default); border-radius: 0; }
 
 /* Comp items */
 :root[data-theme="greek"] .comp { background: var(--bg-panel); border: 1px solid var(--border-default); border-radius: 0; }
-:root[data-theme="greek"] .comp:hover { border-color: hsl(var(--accent)); }
-:root[data-theme="greek"] .comp-ico { background: var(--bg-elevated); border: 1px solid var(--border-default); color: hsl(var(--accent)); border-radius: 0; }
+:root[data-theme="greek"] .comp:hover { border-color: var(--accent); }
+:root[data-theme="greek"] .comp-ico { background: var(--bg-elevated); border: 1px solid var(--border-default); color: var(--accent); border-radius: 0; }
 :root[data-theme="greek"] .comp-name { font-family: var(--font-display); font-size: 12px; letter-spacing: 0.10em; }
 
 /* Chat */
 :root[data-theme="greek"] .chat-msg { border-radius: 0; }
-:root[data-theme="greek"] .chat-msg-user { background: hsl(var(--info-soft)); border: 2px solid hsl(var(--accent)); }
+:root[data-theme="greek"] .chat-msg-user { background: var(--info-soft); border: 2px solid var(--accent); }
 :root[data-theme="greek"] .chat-msg-bot { background: var(--bg-elevated); border: 2px solid var(--border-default); }
 
 /* Status bar */
@@ -276,7 +282,7 @@
   background: var(--bg-panel); border-top: 2px solid var(--border-strong);
   font-family: var(--font-mono); color: var(--fg-muted); letter-spacing: 0.06em;
 }
-:root[data-theme="greek"] .statusbar .pip { background: hsl(var(--success)); border-radius: 0; }
+:root[data-theme="greek"] .statusbar .pip { background: var(--success); border-radius: 0; }
 
 /* Modal — temple inscription */
 :root[data-theme="greek"] .modal {
@@ -284,10 +290,10 @@
   box-shadow: 0 30px 80px rgba(60, 50, 30, 0.4);
 }
 :root[data-theme="greek"] .modal-head { border-bottom: 3px solid var(--border-strong); }
-:root[data-theme="greek"] .modal-title { font-family: var(--font-display); letter-spacing: 0.18em; color: hsl(var(--accent)); }
+:root[data-theme="greek"] .modal-title { font-family: var(--font-display); letter-spacing: 0.18em; color: var(--accent); }
 
 /* Command palette */
 :root[data-theme="greek"] .cmdk { background: var(--bg-elevated); border: 4px double var(--border-strong); border-radius: 0; }
 :root[data-theme="greek"] .cmdk input { font-family: var(--font-display); letter-spacing: 0.12em; }
-:root[data-theme="greek"] .cmdk-item.active { background: hsl(var(--info-soft)); color: hsl(var(--accent)); }
+:root[data-theme="greek"] .cmdk-item.active { background: var(--info-soft); color: var(--accent); }
 :root[data-theme="greek"] .cmdk-item.active::before { content: '◆ '; color: var(--gold); }

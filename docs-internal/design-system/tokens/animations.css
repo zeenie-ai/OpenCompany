@@ -1,0 +1,214 @@
+/* ============================================================================
+ * MachinaOS — animation system (all 12 themes)
+ *
+ * Source: client/src/themes/base.css + each theme file's Motion block and
+ * decorative keyframes. This file declares:
+ *   1. Per-theme motion scopes — dur/ease/motion-style by [data-theme].
+ *   2. The signature keyframes every theme draws from.
+ *   3. Reusable helper classes (pulse, blink, ambient overlays).
+ *
+ * Motion personality lives in the EASING FUNCTION, not just duration:
+ *   smooth (light/dark/greek) · organic (renaissance/edo) ·
+ *   mechanical (steampunk) · bouncy 1.6 overshoot (atomic) ·
+ *   glitch steps(4) (cyber) · jittery (wasteland) · drift 680ms (rot) ·
+ *   stiff (plague) · scanline linear (surveillance).
+ *
+ * The executing-node pulse uses --node-pulse-color (a theme-chosen high
+ * contrast accent), NEVER the node's own role color, so the glow stays
+ * visible on any canvas.
+ * ========================================================================== */
+
+/* ---- Base defaults (light / dark inherit these) ----
+ * Durations + eases are declared in tokens/motion.css; here we add only the
+ * motion-style label and the executing-pulse selectors. */
+:root {
+  --motion-style: smooth; /* @kind other */
+  --pulse-keyframe: node-pulse; /* @kind other */
+  --pulse-duration: 1.4s; /* @kind other */
+  --pulse-timing: ease-in-out; /* @kind other */
+}
+
+/* ---- Per-theme motion contracts ---- */
+[data-theme="renaissance"] {
+  --dur-fast: 140ms; /* @kind other */ --dur-default: 280ms; /* @kind other */ --dur-slow: 520ms; /* @kind other */
+  --ease-default: cubic-bezier(0.4, 0, 0.2, 1); /* @kind other */
+  --ease-emphasis: cubic-bezier(0.7, -0.1, 0.3, 1.2); /* @kind other */
+  --motion-style: organic; /* @kind other */
+  --pulse-keyframe: ren-pulse-exec; /* @kind other */ --pulse-duration: 2s; /* @kind other */ --pulse-timing: ease-in-out; /* @kind other */
+}
+[data-theme="greek"] {
+  --dur-fast: 120ms; /* @kind other */ --dur-default: 240ms; /* @kind other */ --dur-slow: 460ms; /* @kind other */
+  --ease-default: cubic-bezier(0.3, 0.7, 0.4, 1); /* @kind other */
+  --ease-emphasis: cubic-bezier(0.6, -0.05, 0.3, 1.4); /* @kind other */
+  --motion-style: smooth; /* @kind other */
+}
+[data-theme="edo"] {
+  --dur-fast: 90ms; /* @kind other */ --dur-default: 220ms; /* @kind other */ --dur-slow: 520ms; /* @kind other */
+  --ease-default: cubic-bezier(0.4, 0, 0.2, 1); /* @kind other */
+  --ease-emphasis: cubic-bezier(0.7, -0.1, 0.3, 1.2); /* @kind other */
+  --motion-style: organic; /* @kind other */
+}
+[data-theme="steampunk"] {
+  --dur-fast: 110ms; /* @kind other */ --dur-default: 240ms; /* @kind other */ --dur-slow: 480ms; /* @kind other */
+  --ease-default: cubic-bezier(0.5, 0, 0.4, 1.1); /* @kind other */
+  --ease-emphasis: cubic-bezier(0.7, -0.1, 0.3, 1.2); /* @kind other */
+  --motion-style: mechanical; /* @kind other */
+}
+[data-theme="atomic"] {
+  --dur-fast: 100ms; /* @kind other */ --dur-default: 200ms; /* @kind other */ --dur-slow: 380ms; /* @kind other */
+  --ease-default: cubic-bezier(0.34, 1.6, 0.5, 1); /* @kind other */
+  --ease-emphasis: cubic-bezier(0.34, 1.6, 0.5, 1); /* @kind other */
+  --motion-style: bouncy; /* @kind other */
+}
+[data-theme="cyber"] {
+  --dur-fast: 60ms; /* @kind other */ --dur-default: 120ms; /* @kind other */ --dur-slow: 240ms; /* @kind other */
+  --ease-default: steps(4, end); /* @kind other */
+  --ease-emphasis: steps(8, end); /* @kind other */
+  --motion-style: glitch; /* @kind other */
+  --pulse-keyframe: cyber-pulse-exec; /* @kind other */ --pulse-duration: 1.6s; /* @kind other */ --pulse-timing: steps(2); /* @kind other */
+}
+[data-theme="wasteland"] {
+  --dur-fast: 60ms; /* @kind other */ --dur-default: 180ms; /* @kind other */ --dur-slow: 320ms; /* @kind other */
+  --ease-default: cubic-bezier(0.6, 0, 0.4, 1); /* @kind other */
+  --ease-emphasis: cubic-bezier(0.6, 0, 0.4, 1); /* @kind other */
+  --motion-style: jittery; /* @kind other */
+}
+[data-theme="rot"] {
+  --dur-fast: 140ms; /* @kind other */ --dur-default: 320ms; /* @kind other */ --dur-slow: 680ms; /* @kind other */
+  --ease-default: cubic-bezier(0.4, 0, 0.6, 1); /* @kind other */
+  --ease-emphasis: cubic-bezier(0.4, 0, 0.6, 1); /* @kind other */
+  --motion-style: drift; /* @kind other */
+  --pulse-duration: 2.2s; /* @kind other */
+}
+[data-theme="plague"] {
+  --dur-fast: 100ms; /* @kind other */ --dur-default: 220ms; /* @kind other */ --dur-slow: 460ms; /* @kind other */
+  --ease-default: cubic-bezier(0.4, 0, 0.6, 1); /* @kind other */
+  --ease-emphasis: cubic-bezier(0.4, 0, 0.6, 1); /* @kind other */
+  --motion-style: stiff; /* @kind other */
+}
+[data-theme="surveillance"] {
+  --dur-fast: 60ms; /* @kind other */ --dur-default: 140ms; /* @kind other */ --dur-slow: 240ms; /* @kind other */
+  --ease-default: linear; /* @kind other */
+  --ease-emphasis: linear; /* @kind other */
+  --motion-style: scanline; /* @kind other */
+  --pulse-keyframe: surv-pulse-exec; /* @kind other */ --pulse-duration: 1s; /* @kind other */ --pulse-timing: steps(2); /* @kind other */
+}
+
+/* ============================================================================
+ * Signature keyframes
+ * ========================================================================== */
+
+/* Default 3-layer executing pulse (light/dark/greek/edo/steampunk/atomic/
+ * wasteland/rot/plague). Glow scales out and back. */
+@keyframes node-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0 color-mix(in srgb, var(--node-pulse-color, var(--info)) 80%, transparent),
+      0 0 14px 2px color-mix(in srgb, var(--node-pulse-color, var(--info)) 50%, transparent),
+      0 0 28px 4px color-mix(in srgb, var(--node-pulse-color, var(--info)) 25%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 12px color-mix(in srgb, var(--node-pulse-color, var(--info)) 45%, transparent),
+      0 0 32px 8px color-mix(in srgb, var(--node-pulse-color, var(--info)) 65%, transparent),
+      0 0 56px 16px color-mix(in srgb, var(--node-pulse-color, var(--info)) 30%, transparent);
+  }
+}
+
+/* Renaissance — candle-flame pulse (smooth, never fully dark). */
+@keyframes ren-pulse-exec {
+  0%, 100% { box-shadow: 0 0 0 1px var(--node-pulse-color, #2548c8), 0 0 10px 1px color-mix(in srgb, var(--node-pulse-color, #2548c8) 40%, transparent); }
+  50% { box-shadow: 0 0 0 2px var(--node-pulse-color, #2548c8), 0 0 22px 5px color-mix(in srgb, var(--node-pulse-color, #2548c8) 60%, transparent); }
+}
+@keyframes ren-flicker { 0%, 100% { opacity: 0.5; } 50% { opacity: 0.8; } }
+
+/* Cyber — hard digital strobe (steps), CRT flicker + rolling scanline. */
+@keyframes cyber-pulse-exec {
+  0%, 49% { box-shadow: 0 0 0 1px var(--node-pulse-color, #1dd9e5), 0 0 10px var(--node-pulse-color, #1dd9e5); }
+  50%, 100% { box-shadow: 0 0 0 1px var(--node-pulse-color, #1dd9e5), 0 0 26px var(--node-pulse-color, #1dd9e5), 0 0 44px color-mix(in srgb, var(--node-pulse-color, #1dd9e5) 50%, transparent); }
+}
+@keyframes cyber-flicker { 0%, 92%, 100% { opacity: 1; } 93% { opacity: 0.88; } 94% { opacity: 1; } 96% { opacity: 0.92; } }
+@keyframes cyber-roll { 0% { transform: translateY(-100%); } 100% { transform: translateY(900%); } }
+@keyframes cyber-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0.4; } }
+@keyframes cyber-glitch {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-2px); }
+  40% { transform: translateX(2px); }
+  60% { transform: translateX(-1px); }
+  80% { transform: translateX(1px); }
+}
+
+/* Surveillance — REC-red glow strobe + status LED blink. */
+@keyframes surv-pulse-exec {
+  0%, 49% { box-shadow: 0 0 0 1px var(--node-pulse-color, #e82626), 0 0 6px color-mix(in srgb, var(--node-pulse-color, #e82626) 40%, transparent); }
+  50%, 100% { box-shadow: 0 0 0 1px var(--node-pulse-color, #e82626), 0 0 18px color-mix(in srgb, var(--node-pulse-color, #e82626) 70%, transparent); }
+}
+@keyframes surv-blink { 50% { opacity: 0.2; } }
+
+/* ---- Trigger nodes: "listening / armed" state ----
+ * Triggers (whatsappReceive, cronScheduler, webhookTrigger, start) glow
+ * CONTINUOUSLY while waiting for events — distinct from the one-shot
+ * execution pulse. The breathing is gentler and slower (an idle-but-armed
+ * heartbeat) and uses --node-pulse-color (theme-contrast), so it reads on
+ * any background. Pair with the lightning badge. */
+@keyframes trigger-listening {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0 color-mix(in srgb, var(--node-pulse-color, #ff79c6) 0%, transparent),
+      0 0 9px 1px color-mix(in srgb, var(--node-pulse-color, #ff79c6) 38%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 6px color-mix(in srgb, var(--node-pulse-color, #ff79c6) 20%, transparent),
+      0 0 20px 4px color-mix(in srgb, var(--node-pulse-color, #ff79c6) 55%, transparent);
+  }
+}
+/* When a trigger fires — a single bright flash before handing off. */
+@keyframes trigger-fire {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--node-pulse-color, #ff79c6) 90%, transparent), 0 0 28px 8px color-mix(in srgb, var(--node-pulse-color, #ff79c6) 70%, transparent); }
+  100% { box-shadow: 0 0 0 14px color-mix(in srgb, var(--node-pulse-color, #ff79c6) 0%, transparent), 0 0 28px 8px color-mix(in srgb, var(--node-pulse-color, #ff79c6) 0%, transparent); }
+}
+/* Lightning badge soft flash while armed. */
+@keyframes trigger-bolt { 0%, 100% { opacity: 0.6; transform: scale(0.94); } 50% { opacity: 1; transform: scale(1.06); } }
+
+/* Status pip blink (generic, smooth). */
+@keyframes machina-pip-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+/* Spinner. */
+@keyframes machina-spin { to { transform: rotate(360deg); } }
+
+/* ============================================================================
+ * Helper classes
+ * ========================================================================== */
+
+/* Apply to an executing node; reads the theme's chosen keyframe + timing. */
+.machina-pulse {
+  animation: var(--pulse-keyframe, node-pulse) var(--pulse-duration, 1.4s) var(--pulse-timing, ease-in-out) infinite;
+}
+
+/* Trigger node waiting for events — continuous armed heartbeat. Slower than
+ * the execution pulse so the two read as distinct states. */
+.machina-trigger-armed {
+  animation: trigger-listening 2.4s ease-in-out infinite;
+}
+/* One-shot flash the moment a trigger fires (add, then remove on animationend). */
+.machina-trigger-fire {
+  animation: trigger-fire 0.6s var(--ease-default, ease-out) 1;
+}
+/* Lightning badge + listening pip pulses. */
+.machina-bolt { animation: trigger-bolt 1.8s ease-in-out infinite; }
+.machina-pip-pulse { animation: machina-pip-blink 1.4s ease-in-out infinite; }
+
+/* Ambient overlays — add once at the app frame for cyber / surveillance. */
+.machina-scanline::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 50;
+  height: 12%;
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--node-pulse-color, #1dd9e5) 18%, transparent), transparent);
+  animation: cyber-roll 8s linear infinite;
+}
+.machina-crt { animation: cyber-flicker 5s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .machina-pulse, .machina-crt, .machina-scanline::after,
+  .machina-trigger-armed, .machina-trigger-fire, .machina-bolt, .machina-pip-pulse { animation: none !important; }
+}

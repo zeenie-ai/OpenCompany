@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 800" width="100%" preserveAspectRatio="xMidYMid meet" font-family="ui-monospace, &#39;SFMono-Regular&#39;, Menlo, Consolas, monospace">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f8f8f2"></path>
+    </marker>
+    
+  </defs>
+
+  <rect class="bg" width="1400" height="800"></rect>
+
+  
+  <text x="700" y="35" class="title" text-anchor="middle" font-size="20">Anatomy of a Workflow Node</text>
+  <text x="700" y="58" class="col-sub" text-anchor="middle" font-size="12">Where to touch code when adding a new node</text>
+
+  
+  <text x="230" y="100" class="col-header" text-anchor="middle">Frontend (client/)</text>
+  <text x="230" y="118" class="col-sub" text-anchor="middle">TypeScript + React</text>
+
+  <text x="700" y="100" class="col-header" text-anchor="middle">Communication</text>
+  <text x="700" y="118" class="col-sub" text-anchor="middle">WebSocket</text>
+
+  <text x="1170" y="100" class="col-header" text-anchor="middle">Backend (server/)</text>
+  <text x="1170" y="118" class="col-sub" text-anchor="middle">Python + FastAPI</text>
+
+  
+  
+  <rect class="fe-box" x="50" y="145" width="360" height="85" rx="8"></rect>
+  <text x="70" y="170" class="title">1. Node definition</text>
+  <text x="70" y="190" class="path">server/nodes/&lt;category&gt;/&lt;node&gt;.py</text>
+  <text x="70" y="210" class="sub">INodeProperties: displayName, group, inputs,</text>
+  <text x="70" y="224" class="sub">outputs, properties[], displayOptions.show</text>
+
+  
+  <rect class="fe-box" x="50" y="255" width="360" height="85" rx="8"></rect>
+  <text x="70" y="280" class="title">2. Parameter panel</text>
+  <text x="70" y="300" class="path">client/src/components/ParameterRenderer.tsx</text>
+  <text x="70" y="320" class="sub">Renders parameters, conditional display,</text>
+  <text x="70" y="334" class="sub">drag-and-drop template variables</text>
+
+  
+  <rect class="fe-box" x="50" y="365" width="360" height="85" rx="8"></rect>
+  <text x="70" y="390" class="title">3. Canvas &amp; Run button</text>
+  <text x="70" y="410" class="path">client/src/Dashboard.tsx</text>
+  <text x="70" y="430" class="sub">React Flow canvas, useExecution hook,</text>
+  <text x="70" y="444" class="sub">sends execute_node via WebSocket</text>
+
+  
+  <rect class="fe-box" x="50" y="475" width="360" height="85" rx="8"></rect>
+  <text x="70" y="500" class="title">4. Credentials (if needed)</text>
+  <text x="70" y="520" class="path">client/src/components/CredentialsModal.tsx</text>
+  <text x="70" y="540" class="sub">API key entry + OAuth flows</text>
+  <text x="70" y="554" class="sub">via useApiKeys hook</text>
+
+  
+  <rect class="comm-box" x="530" y="255" width="340" height="250" rx="8"></rect>
+  <text x="700" y="290" class="title" text-anchor="middle">WebSocket /ws/status</text>
+  <text x="700" y="315" class="sub" text-anchor="middle">Single persistent connection</text>
+  <text x="700" y="335" class="sub" text-anchor="middle">between UI and backend</text>
+
+  
+  <text x="700" y="375" class="label" text-anchor="middle">execute_node</text>
+  <path class="conn" d="M 570 385 L 830 385" marker-end="url(#arrow)"></path>
+
+  <text x="700" y="420" class="label" text-anchor="middle">node_status</text>
+  <path class="conn" d="M 830 430 L 570 430" marker-end="url(#arrow)"></path>
+
+  <text x="700" y="465" class="label" text-anchor="middle">node_output</text>
+  <path class="conn" d="M 830 475 L 570 475" marker-end="url(#arrow)"></path>
+
+  <text x="700" y="495" class="sub" text-anchor="middle" fill="#6272a4" font-size="10">89 handler message types</text>
+
+  
+  <path class="conn" d="M 410 405 L 530 385" marker-end="url(#arrow)"></path>
+
+  
+  
+  <rect class="be-box" x="990" y="145" width="360" height="85" rx="8"></rect>
+  <text x="1010" y="170" class="title">A. Router / dispatch</text>
+  <text x="1010" y="190" class="path-be">server/routers/websocket.py</text>
+  <text x="1010" y="210" class="sub">@ws_handler decorators, dispatches</text>
+  <text x="1010" y="224" class="sub">incoming messages to handlers</text>
+
+  
+  <rect class="be-box" x="990" y="255" width="360" height="85" rx="8"></rect>
+  <text x="1010" y="280" class="title">B. Registry dispatch</text>
+  <text x="1010" y="300" class="path-be">server/services/node_executor.py</text>
+  <text x="1010" y="320" class="sub">Dict[node_type, handler] via</text>
+  <text x="1010" y="334" class="sub">functools.partial dependency injection</text>
+
+  
+  <rect class="be-box" x="990" y="365" width="360" height="85" rx="8"></rect>
+  <text x="1010" y="390" class="title">C. Business logic</text>
+  <text x="1010" y="410" class="path-be">server/services/handlers/&lt;name&gt;.py</text>
+  <text x="1010" y="430" class="sub">handle_&lt;name&gt;(node_id, parameters,</text>
+  <text x="1010" y="444" class="sub">context, ...) -&gt; result dict</text>
+
+  
+  <rect class="ai-box" x="990" y="475" width="360" height="85" rx="8"></rect>
+  <text x="1010" y="500" class="title">D. AI layer (for AI nodes)</text>
+  <text x="1010" y="520" class="path-be">server/services/ai.py + llm/</text>
+  <text x="1010" y="540" class="sub">Native SDK path or LangChain agent loop</text>
+  <text x="1010" y="554" class="sub">with tool calling</text>
+
+  
+  <path class="conn" d="M 1170 230 L 1170 255" marker-end="url(#arrow)"></path>
+  <path class="conn" d="M 1170 340 L 1170 365" marker-end="url(#arrow)"></path>
+  <path class="conn" d="M 1170 450 L 1170 475" marker-end="url(#arrow)"></path>
+
+  
+  <path class="conn" d="M 870 385 L 990 185" marker-end="url(#arrow)"></path>
+
+  
+  <rect class="be-box" x="450" y="590" width="520" height="80" rx="8" fill="#282a36" stroke="#ff79c6"></rect>
+  <text x="710" y="615" class="title" text-anchor="middle" fill="#ff79c6">Register the handler</text>
+  <text x="710" y="635" class="sub" text-anchor="middle">Add entry to registry dict in services/node_executor.py:</text>
+  <text x="710" y="655" class="path-be" text-anchor="middle">registry[&#39;yourNode&#39;] = partial(handle_your_node, database=self.database)</text>
+
+  
+  <text x="50" y="710" class="step">Contribution checklist</text>
+  <text x="50" y="732" class="sub">1. Define node in TypeScript (left col)  -&gt;  2. Write handler in Python (right col)</text>
+  <text x="50" y="750" class="sub">3. Register in node_executor.py  -&gt;  4. Restart dev server  -&gt;  Node appears in palette</text>
+  <text x="50" y="770" class="sub" fill="#6272a4">Full step-by-step guide: docs-internal/node_creation.md</text>
+</svg>

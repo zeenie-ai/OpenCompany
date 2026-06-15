@@ -1,0 +1,70 @@
+/* ============================================================================
+ * themes/dark.css — dark theme new-contract tokens.
+ *
+ * Scoped to BOTH `.dark` (so existing Tailwind `dark:` variants and the
+ * legacy `<html class="dark">` toggle continue to work) AND
+ * `:root[data-theme="dark"]` (the explicit theme name).
+ *
+ * Mirrors the existing `.dark` block in index.css for shadcn HSL-triplet
+ * tokens; this file only adds the new full-colour contract.
+ *
+ * Source palette: Solarized dark + Dracula accents (matches existing
+ * dark theme in client/src/styles/theme.ts).
+ * ============================================================================ */
+
+.dark,
+:root[data-theme="dark"] {
+  /* Surfaces — Solarized dark base + Dracula highlights */
+  --bg-app: #002b36;          /* base03 */
+  --bg-panel: #073642;        /* base02 */
+  --bg-canvas: #002b36;
+  --bg-elevated: #0d1f2d;
+  --bg-input: #073642;
+  --bg-hover: rgba(248, 248, 242, 0.06);
+  --bg-active: rgba(189, 147, 249, 0.18);
+  --bg-overlay: rgba(0, 0, 0, 0.7);
+
+  /* Borders */
+  --border-default: #586e75;  /* base01 */
+  --border-strong: #93a1a1;
+  --border-focus: #268bd2;    /* solarized blue */
+  --ornament-frame: none;
+
+  /* Foreground — Dracula light foreground for readability over Solarized dark */
+  --fg-default: #f8f8f2;
+  --fg-muted: #6272a4;        /* dracula comment */
+  --fg-faint: #586e75;
+  --fg-on-accent: #002b36;
+  --fg-on-success: #002b36;
+  --fg-on-danger: #f8f8f2;
+  --fg-on-warning: #002b36;
+
+  /* Type — same as light (system stack) */
+  --font-display: 'Geist Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-body: 'Geist Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  --type-scale-base: 14px;
+  --type-tracking-display: 0;
+  --type-uppercase: none;
+
+  /* Geometry — same scale as light */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-pill: 999px;
+
+  /* Motion */
+  --dur-fast: 90ms;
+  --dur-default: 180ms;
+  --dur-slow: 320ms;
+  --ease-default: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --ease-emphasis: cubic-bezier(0.6, -0.05, 0.3, 1.4);
+  --motion-style: smooth;
+  --sound-pack: terminal;
+
+  /* Cursor + scrollbar */
+  --cursor-default: auto;
+  --cursor-pointer: pointer;
+  --scrollbar-track: #073642;
+  --scrollbar-thumb: #586e75;
+}

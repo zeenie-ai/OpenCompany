@@ -1,0 +1,179 @@
+<!-- @dsCard group="Brand" viewport="1280x900" name="Theme Comparison" subtitle="Same app screen rendered in all 12 themes — single file" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>MachinaOS — Theme Comparison</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anonymous+Pro:wght@400;700&family=Bevan&family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Courier+Prime&family=EB+Garamond:wght@400;500;600&family=Geist:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IM+Fell+English+SC&family=IM+Fell+English:ital@0;1&family=JetBrains+Mono:wght@400;500;600;700&family=Lato:wght@400;700&family=Major+Mono+Display&family=Pirata+One&family=Shippori+Mincho:wght@400;500;600;700&family=Space+Mono&family=Special+Elite&family=UnifrakturCook:wght@700&family=VT323&display=swap">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0a0c10; font-family: 'Geist', system-ui, sans-serif; color: #e6edf3; }
+  header { padding: 26px 32px 6px; }
+  header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  header p { margin: 6px 0 0; font-size: 13px; color: #8b949e; max-width: 760px; line-height: 1.5; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; padding: 24px 32px 48px; }
+  @media (min-width: 1700px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+
+  .tile { border-radius: 10px; overflow: hidden; border: 1px solid #21262d; background: #11151a; }
+  .tile-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 12px 16px; }
+  .tile-head .nm { font-size: 14px; font-weight: 600; }
+  .tile-head .meta { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #8b949e; text-align: right; }
+
+  /* ---- mini app screen ---- */
+  .screen { display: flex; flex-direction: column; height: 330px; font-size: 12px; }
+  .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 40px; padding: 0 10px; border-bottom: 1px solid; flex-shrink: 0; }
+  .tb-left, .tb-right { display: flex; align-items: center; gap: 6px; }
+  .wfname { font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; font-size: 10.5px; font-weight: 600; border: 1px solid; line-height: 1; white-space: nowrap; }
+  .canvas { position: relative; flex: 1; overflow: hidden; }
+  .stage { position: absolute; left: 50%; top: 0; width: 540px; height: 250px; transform-origin: top center; }
+  .stage svg.edges { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .node { position: absolute; width: 52px; height: 52px; border: 2px solid; display: flex; align-items: center; justify-content: center; font-size: 21px; }
+  .node .pip { position: absolute; top: -4px; left: -4px; width: 8px; height: 8px; border-radius: 50%; }
+  .nlabel { position: absolute; font-size: 9px; font-weight: 600; white-space: nowrap; transform: translateX(-50%); }
+  .statusbar { display: flex; align-items: center; gap: 8px; height: 21px; padding: 0 10px; border-top: 1px solid; font-size: 9px; letter-spacing: 0.04em; text-transform: uppercase; flex-shrink: 0; white-space: nowrap; overflow: hidden; }
+  .statusbar .dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+  .statusbar .sep { opacity: 0.4; }
+  .statusbar .right { margin-left: auto; display: flex; gap: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>MachinaOS — one screen, twelve themes</h1>
+  <p>The same workflow view (toolbar · node canvas · status bar) rendered with each theme's real tokens from <code>client/src/themes/*.css</code>: surfaces, accents, typeface trio, letter case &amp; tracking, radii, canvas grid. Light + Dark are encoded live in this design system's <code>tokens/</code>; the ten skins are sourced in <code>reference/themes/</code>.</p>
+</header>
+<div class="grid" id="grid"></div>
+
+<script>
+const THEMES = [
+  { name: 'Light', tag: 'default · Geist · radius 6–8 · 90/180/320ms smooth', bg: '#f5f7fa', panel: '#fafbfc', canvas: '#ffffff', card: '#ffffff', fg: '#1a1d21', muted: '#4b5563', border: '#d1d5db',
+    display: "'Geist',sans-serif", body: "'Geist',sans-serif", mono: "'JetBrains Mono',monospace", caps: false, track: '0', rBtn: 6, rNode: 10,
+    run: '#15803d', runBg: 'rgba(80,250,123,0.15)', runBc: 'rgba(80,250,123,0.6)', stop: '#be185d', stopBg: 'rgba(255,121,198,0.15)', stopBc: 'rgba(255,121,198,0.6)',
+    nAgent: '#bd93f9', nTrig: '#ff79c6', nTool: '#50fa7b', ok: '#059669', grid: 'rgba(75,85,99,0.30)' },
+  { name: 'Dark', tag: 'signature · Solarized + Dracula · radius 6–8 · smooth', bg: '#002b36', panel: '#073642', canvas: '#002b36', card: '#073642', fg: '#f8f8f2', muted: '#94a8d6', border: '#586e75',
+    display: "'Geist',sans-serif", body: "'Geist',sans-serif", mono: "'JetBrains Mono',monospace", caps: false, track: '0', rBtn: 6, rNode: 10,
+    run: '#50fa7b', runBg: 'rgba(80,250,123,0.15)', runBc: 'rgba(80,250,123,0.6)', stop: '#ff79c6', stopBg: 'rgba(255,121,198,0.15)', stopBc: 'rgba(255,121,198,0.6)',
+    nAgent: '#bd93f9', nTrig: '#ff79c6', nTool: '#50fa7b', ok: '#859900', grid: 'rgba(148,168,214,0.30)' },
+  { name: 'Renaissance', tag: 'illuminated codex · Cinzel/Cormorant · UPPER .10em · 140/280/520ms', bg: '#f3e8c8', panel: '#ead09a', canvas: '#e8d4a0', card: '#fbf3dc', fg: '#3a2008', muted: '#6a4a1c', border: '#8a5e1c',
+    display: "'Cinzel',serif", body: "'Cormorant Garamond',serif", mono: "'IM Fell English',serif", caps: true, track: '0.08em', rBtn: 3, rNode: 4,
+    run: '#8a1410', runBg: 'rgba(212,160,48,0.20)', runBc: '#8a5e1c', stop: '#8a1410', stopBg: 'rgba(138,20,16,0.12)', stopBc: '#8a1410',
+    nAgent: '#2548c8', nTrig: '#8a1410', nTool: '#d4a030', ok: '#5a6a28', grid: 'rgba(138,94,28,0.28)' },
+  { name: 'Greek', tag: 'marble agora · Cinzel · UPPER .18em · radius 0–2', bg: '#ede5d0', panel: '#f5efde', canvas: '#e6dcc2', card: '#faf6e9', fg: '#2a2415', muted: '#6a5d3c', border: '#b8a878',
+    display: "'Cinzel',serif", body: "'Cormorant Garamond',serif", mono: "'Courier Prime',monospace", caps: true, track: '0.14em', rBtn: 0, rNode: 2,
+    run: '#284b82', runBg: 'rgba(40,75,130,0.12)', runBc: '#284b82', stop: '#7a1a18', stopBg: 'rgba(122,26,24,0.10)', stopBc: '#7a1a18',
+    nAgent: '#284b82', nTrig: '#7a1a18', nTool: '#c8a040', ok: '#6a7a32', grid: 'rgba(106,93,60,0.28)' },
+  { name: 'Edo', tag: 'washi + sumi-e · Shippori Mincho · radius 0 · 90/220/520ms organic', bg: '#f4ecd8', panel: '#faf3e0', canvas: '#ede4ca', card: '#fdf8ea', fg: '#1a1410', muted: '#6a5e48', border: '#c8b890',
+    display: "'Shippori Mincho',serif", body: "'Shippori Mincho',serif", mono: "'JetBrains Mono',monospace", caps: false, track: '0.06em', rBtn: 0, rNode: 0,
+    run: '#b41e1e', runBg: 'rgba(180,30,30,0.08)', runBc: '#b41e1e', stop: '#1a1410', stopBg: 'rgba(26,20,16,0.08)', stopBc: '#1a1410',
+    nAgent: '#b41e1e', nTrig: '#e89aa8', nTool: '#4a6a3a', ok: '#4a6a3a', grid: 'rgba(106,94,72,0.28)' },
+  { name: 'Steampunk', tag: 'brass & rivets · IM Fell English SC · UPPER .10em · mechanical', bg: '#2a1f12', panel: '#3a2a18', canvas: '#1a1208', card: '#4a3620', fg: '#e8d8b0', muted: '#b8a070', border: '#6a4a20',
+    display: "'IM Fell English SC',serif", body: "'IM Fell English',serif", mono: "'Special Elite',monospace", caps: true, track: '0.08em', rBtn: 3, rNode: 4,
+    run: '#d8a848', runBg: 'rgba(216,168,72,0.20)', runBc: '#d8a848', stop: '#b8602a', stopBg: 'rgba(184,96,42,0.18)', stopBc: '#b8602a',
+    nAgent: '#d8a848', nTrig: '#b8602a', nTool: '#8a8a4a', ok: '#8a8a4a', grid: 'rgba(184,160,112,0.25)' },
+  { name: 'Atomic', tag: '1962 Eames · Bevan/Lato · bouncy 1.6 overshoot', bg: '#f0e6d2', panel: '#faf2dc', canvas: '#e8dcc0', card: '#ffffff', fg: '#2a3a4a', muted: '#5a6a7a', border: '#c8b890',
+    display: "'Bevan',serif", body: "'Lato',sans-serif", mono: "'Space Mono',monospace", caps: true, track: '0.05em', rBtn: 2, rNode: 4,
+    run: '#3a9aa0', runBg: 'rgba(58,154,160,0.12)', runBc: '#3a9aa0', stop: '#e85a26', stopBg: 'rgba(232,90,38,0.12)', stopBc: '#e85a26',
+    nAgent: '#e85a26', nTrig: '#d8a838', nTool: '#3a9aa0', ok: '#3a9aa0', grid: 'rgba(90,106,122,0.28)' },
+  { name: 'Cyber', tag: 'neon night market · Major Mono · UPPER .18em · steps(4) glitch', bg: '#050010', panel: '#0a0420', canvas: '#03000a', card: '#15103a', fg: '#f0e0ff', muted: '#a090c0', border: '#2a1f50',
+    display: "'Major Mono Display',monospace", body: "'JetBrains Mono',monospace", mono: "'JetBrains Mono',monospace", caps: true, track: '0.12em', rBtn: 0, rNode: 0,
+    run: '#26d97a', runBg: 'rgba(38,217,122,0.14)', runBc: '#26d97a', stop: '#f51eb6', stopBg: 'rgba(245,30,182,0.14)', stopBc: '#f51eb6',
+    nAgent: '#f51eb6', nTrig: '#ffd028', nTool: '#1dd9e5', ok: '#26d97a', grid: 'rgba(160,144,192,0.30)' },
+  { name: 'Wasteland', tag: 'irradiated scrap · Special Elite/VT323 · UPPER · jittery', bg: '#2a2018', panel: '#3a2c1c', canvas: '#1a1410', card: '#4a3826', fg: '#e8d8a8', muted: '#b89868', border: '#6a4a28',
+    display: "'Special Elite',monospace", body: "'Special Elite',monospace", mono: "'VT323',monospace", caps: true, track: '0.08em', rBtn: 0, rNode: 0,
+    run: '#c8d038', runBg: 'rgba(200,208,56,0.14)', runBc: '#c8d038', stop: '#8a3a18', stopBg: 'rgba(138,58,24,0.20)', stopBc: '#e88a28',
+    nAgent: '#e88a28', nTrig: '#8a3a18', nTool: '#c8d038', ok: '#c8d038', grid: 'rgba(184,152,104,0.25)' },
+  { name: 'Rot', tag: 'mossy crypt · Pirata One/EB Garamond · 140/320/680ms drift', bg: '#14181a', panel: '#1c2226', canvas: '#0a0e10', card: '#242c30', fg: '#c8d8c0', muted: '#788878', border: '#2a3a30',
+    display: "'Pirata One',serif", body: "'EB Garamond',serif", mono: "'JetBrains Mono',monospace", caps: false, track: '0.04em', rBtn: 2, rNode: 4,
+    run: '#78c878', runBg: 'rgba(120,200,120,0.10)', runBc: '#78c878', stop: '#e8a838', stopBg: 'rgba(232,168,56,0.10)', stopBc: '#e8a838',
+    nAgent: '#78c878', nTrig: '#e8a838', nTool: '#d8d0b8', ok: '#78c878', grid: 'rgba(120,136,120,0.28)' },
+  { name: 'Plague', tag: '1349 broadsheet · UnifrakturCook/EB Garamond · UPPER · stiff', bg: '#d8d4c0', panel: '#e4dfc8', canvas: '#c8c4b0', card: '#efeacf', fg: '#2a1c14', muted: '#6a5440', border: '#a89478',
+    display: "'UnifrakturCook',serif", body: "'EB Garamond',serif", mono: "'Special Elite',monospace", caps: false, track: '0.05em', rBtn: 0, rNode: 0,
+    run: '#783c28', runBg: 'rgba(120,60,40,0.12)', runBc: '#783c28', stop: '#1a1410', stopBg: 'rgba(26,20,16,0.10)', stopBc: '#1a1410',
+    nAgent: '#783c28', nTrig: '#1a1410', nTool: '#98a838', ok: '#98a838', grid: 'rgba(106,84,64,0.25)' },
+  { name: 'Surveillance', tag: 'panopticon · Anonymous Pro/IBM Plex Mono · linear scanline', bg: '#1a1c1e', panel: '#232628', canvas: '#0a0c0e', card: '#2c3034', fg: '#c8ccd0', muted: '#888c90', border: '#3a3e42',
+    display: "'Anonymous Pro',monospace", body: "'IBM Plex Mono',monospace", mono: "'IBM Plex Mono',monospace", caps: true, track: '0.08em', rBtn: 0, rNode: 0,
+    run: '#6acc6a', runBg: 'rgba(106,204,106,0.10)', runBc: '#6acc6a', stop: '#e82626', stopBg: 'rgba(232,38,38,0.10)', stopBc: '#e82626',
+    nAgent: '#e82626', nTrig: '#d8a020', nTool: '#6acc6a', ok: '#6acc6a', grid: 'rgba(136,140,144,0.28)' },
+];
+
+function mix(hex, pct, baseHex) {
+  // simple srgb mix of hex accent into base card color
+  const h = (x) => [parseInt(x.slice(1,3),16), parseInt(x.slice(3,5),16), parseInt(x.slice(5,7),16)];
+  const a = h(hex), b = h(baseHex);
+  const m = a.map((v, i) => Math.round(v * pct + b[i] * (1 - pct)));
+  return `rgb(${m[0]},${m[1]},${m[2]})`;
+}
+
+function nodeHtml(t, x, y, icon, label, color, status) {
+  const fill = `linear-gradient(135deg, ${mix(color, 0.18, t.card)}, ${t.card})`;
+  const pip = status === 'ok' ? t.ok : (status === 'run' ? color : t.muted);
+  return `
+    <div class="node" style="left:${x}px; top:${y}px; border-radius:${t.rNode}px; border-color:${color}99; background:${fill}; box-shadow:0 2px 8px ${color}30;">
+      <span class="pip" style="background:${pip}; box-shadow:${status !== 'idle' ? `0 0 6px ${pip}` : 'none'};"></span>${icon}
+    </div>
+    <div class="nlabel" style="left:${x + 26}px; top:${y + 58}px; color:${t.fg}; font-family:${t.body};">${label}</div>`;
+}
+
+const grid = document.getElementById('grid');
+THEMES.forEach((t) => {
+  const caps = t.caps ? 'text-transform:uppercase;' : '';
+  const dispStyle = `font-family:${t.display}; ${caps} letter-spacing:${t.track};`;
+  const tile = document.createElement('div');
+  tile.className = 'tile';
+  tile.innerHTML = `
+    <div class="tile-head">
+      <span class="nm" style="font-family:${t.display};">${t.name}</span>
+      <span class="meta">${t.tag}</span>
+    </div>
+    <div class="screen" style="background:${t.bg}; color:${t.fg}; font-family:${t.body};">
+      <div class="toolbar" style="background:${t.panel}; border-color:${t.border};">
+        <div class="tb-left">
+          <span class="wfname" style="${dispStyle} font-size:11.5px;">WhatsApp Assistant</span>
+        </div>
+        <div class="tb-right">
+          <span class="btn" style="background:${t.runBg}; border-color:${t.runBc}; color:${t.run}; border-radius:${t.rBtn}px; ${dispStyle}">▶ Start</span>
+          <span class="btn" style="background:${t.stopBg}; border-color:${t.stopBc}; color:${t.stop}; border-radius:${t.rBtn}px; ${dispStyle}">■ Stop</span>
+        </div>
+      </div>
+      <div class="canvas" style="background:${t.canvas}; background-image:radial-gradient(${t.grid} 1px, transparent 1px); background-size:16px 16px;">
+        <div class="stage">
+        <svg class="edges">
+          <path d="M 92 96 C 150 96, 170 80, 228 80" fill="none" stroke="${t.nTrig}" stroke-width="2" stroke-dasharray="5 5" opacity="0.8"></path>
+          <path d="M 282 80 C 350 80, 370 96, 430 96" fill="none" stroke="${t.nAgent}" stroke-width="2" stroke-dasharray="5 5" opacity="0.8"></path>
+          <path d="M 255 108 C 255 140, 200 150, 165 170" fill="none" stroke="${t.nAgent}" stroke-width="2" stroke-dasharray="5 5" opacity="0.8"></path>
+          <path d="M 255 108 C 255 140, 310 150, 345 170" fill="none" stroke="${t.nTool}" stroke-width="2" stroke-dasharray="5 5" opacity="0.8"></path>
+        </svg>
+        ${nodeHtml(t, 40, 70, '💬', 'WhatsApp Receive', t.nTrig, 'ok')}
+        ${nodeHtml(t, 228, 54, '🤖', 'AI Agent', t.nAgent, 'run')}
+        ${nodeHtml(t, 430, 70, '📤', 'WhatsApp Send', t.nTrig, 'idle')}
+        ${nodeHtml(t, 130, 170, '🧠', 'Memory', t.nAgent, 'idle')}
+        ${nodeHtml(t, 320, 170, '🔍', 'Web Search', t.nTool, 'idle')}
+        </div>
+      </div>
+      <div class="statusbar" style="background:${t.panel}; border-color:${t.border}; color:${t.muted}; font-family:${t.mono};">
+        <span style="color:${t.ok};"><span class="dot" style="background:${t.ok};"></span>ONLINE</span>
+        <span class="sep">|</span>
+        <span>WF: <span style="color:${t.fg};">Test</span></span>
+        <span class="sep">|</span>
+        <span>NODES: <span style="color:${t.fg};">5</span></span>
+        <span class="right"><span>THEME: <span style="color:${t.fg};">${t.name.toUpperCase()}</span></span><span class="sep">|</span><span>14:02:33</span></span>
+      </div>
+    </div>`;
+  grid.appendChild(tile);
+});
+
+function fitStages() {
+  document.querySelectorAll('.canvas').forEach((cv) => {
+    const stage = cv.querySelector('.stage');
+    if (!stage) return;
+    const s = Math.min(1, (cv.clientWidth - 8) / 540, (cv.clientHeight - 4) / 250);
+    stage.style.transform = `translateX(-50%) scale(${s})`;
+  });
+}
+fitStages();
+window.addEventListener('resize', fitStages);
+</script>
+</body>
+</html>

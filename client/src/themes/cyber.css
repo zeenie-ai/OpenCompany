@@ -47,6 +47,7 @@
   --neon-magenta: #f51eb6;
   --neon-yellow: #ffd028;
   --neon-green: #26d97a;
+  --neon-red: #ff2050;
 
   /* Type — Major Mono Display + JetBrains Mono everywhere */
   --font-display: 'Major Mono Display', 'Audiowide', monospace;
@@ -88,66 +89,77 @@
   --scrollbar-track: #0a0420;
   --scrollbar-thumb: #f51eb6;
 
-  /* ── Shadcn HSL-triplet bridge ───────────────────────────────────── */
+  /* ── Shadcn bridge — hex (was HSL triplets) ──────────────────────── */
 
-  --background: 247 100% 4%;           /* #050010 */
-  --foreground: 267 100% 94%;          /* #f0e0ff */
-  --card: 247 57% 15%;                 /* #15103a */
-  --card-foreground: 267 100% 94%;
-  --popover: 253 80% 7%;               /* #0a0420 */
-  --popover-foreground: 267 100% 94%;
+  --background: #050010;
+  --foreground: #f0e0ff;
+  --card: #15103a;
+  --card-foreground: #f0e0ff;
+  --popover: #0a0420;
+  --popover-foreground: #f0e0ff;
 
-  --primary: 316 92% 54%;              /* #f51eb6 neon magenta */
-  --primary-foreground: 247 100% 4%;
-  --secondary: 253 80% 7%;             /* panel */
-  --secondary-foreground: 267 100% 94%;
-  --muted: 253 80% 7%;
-  --muted-foreground: 260 25% 66%;     /* #a090c0 */
-  --accent: 184 79% 51%;               /* #1dd9e5 neon cyan */
-  --accent-foreground: 247 100% 4%;
+  --primary: #f51eb6;                  /* neon magenta */
+  --primary-foreground: #050010;
+  --secondary: #0a0420;                /* panel */
+  --secondary-foreground: #f0e0ff;
+  --muted: #0a0420;
+  --muted-foreground: #a090c0;
+  --accent: #1dd9e5;                   /* neon cyan */
+  --accent-foreground: #050010;
 
-  --destructive: 347 100% 56%;         /* #ff2050 */
-  --destructive-foreground: 0 0% 100%;
-  --success: 147 71% 50%;              /* #26d97a neon green */
-  --warning: 46 100% 58%;              /* #ffd028 neon yellow */
-  --info: 184 79% 51%;                 /* neon cyan */
+  --destructive: #ff2050;
+  --destructive-foreground: #ffffff;
+  --success: #26d97a;                  /* neon green */
+  --warning: #ffd028;                  /* neon yellow */
+  --info: #1dd9e5;                     /* neon cyan */
 
-  --border: 253 44% 22%;               /* #2a1f50 */
-  --input: 253 44% 22%;
-  --ring: 184 79% 51%;                 /* cyan focus */
+  --border: #2a1f50;
+  --input: #2a1f50;
+  --ring: #1dd9e5;                     /* cyan focus */
 
-  /* Action role tokens — neon equivalents */
-  --action-run: 147 71% 50%;           /* neon green */
-  --action-run-soft: 147 71% 50% / 0.15;
-  --action-run-hover: 147 71% 50% / 0.30;
-  --action-run-border: 147 71% 50% / 0.7;
+  /* Action role tokens — neon equivalents. color-mix references the neon
+   * accents + the --tint-action-* scale; Cyber bumps hover/border alpha
+   * (neon needs more presence on void). -ink = raw accent (dark family). */
+  --tint-action-hover: 30%;
+  --tint-action-border: 70%;
 
-  --action-stop: 347 100% 56%;         /* danger red */
-  --action-stop-soft: 347 100% 56% / 0.15;
-  --action-stop-hover: 347 100% 56% / 0.30;
-  --action-stop-border: 347 100% 56% / 0.7;
+  --action-run:           var(--neon-green);
+  --action-run-soft:      color-mix(in srgb, var(--neon-green) var(--tint-action-soft), transparent);
+  --action-run-hover:     color-mix(in srgb, var(--neon-green) var(--tint-action-hover), transparent);
+  --action-run-border:    color-mix(in srgb, var(--neon-green) var(--tint-action-border), transparent);
+  --action-run-ink:       var(--neon-green);
 
-  --action-save: 184 79% 51%;          /* neon cyan */
-  --action-save-soft: 184 79% 51% / 0.15;
-  --action-save-hover: 184 79% 51% / 0.30;
-  --action-save-border: 184 79% 51% / 0.7;
+  --action-stop:          var(--neon-red);
+  --action-stop-soft:     color-mix(in srgb, var(--neon-red) var(--tint-action-soft), transparent);
+  --action-stop-hover:    color-mix(in srgb, var(--neon-red) var(--tint-action-hover), transparent);
+  --action-stop-border:   color-mix(in srgb, var(--neon-red) var(--tint-action-border), transparent);
+  --action-stop-ink:      var(--neon-red);
 
-  --action-config: 46 100% 58%;        /* neon yellow */
-  --action-config-soft: 46 100% 58% / 0.15;
-  --action-config-hover: 46 100% 58% / 0.30;
-  --action-config-border: 46 100% 58% / 0.7;
+  --action-save:          var(--neon-cyan);
+  --action-save-soft:     color-mix(in srgb, var(--neon-cyan) var(--tint-action-soft), transparent);
+  --action-save-hover:    color-mix(in srgb, var(--neon-cyan) var(--tint-action-hover), transparent);
+  --action-save-border:   color-mix(in srgb, var(--neon-cyan) var(--tint-action-border), transparent);
+  --action-save-ink:      var(--neon-cyan);
 
-  --action-secret: 316 92% 54%;        /* neon magenta */
-  --action-secret-soft: 316 92% 54% / 0.15;
-  --action-secret-hover: 316 92% 54% / 0.30;
-  --action-secret-border: 316 92% 54% / 0.7;
+  --action-config:        var(--neon-yellow);
+  --action-config-soft:   color-mix(in srgb, var(--neon-yellow) var(--tint-action-soft), transparent);
+  --action-config-hover:  color-mix(in srgb, var(--neon-yellow) var(--tint-action-hover), transparent);
+  --action-config-border: color-mix(in srgb, var(--neon-yellow) var(--tint-action-border), transparent);
+  --action-config-ink:    var(--neon-yellow);
 
-  --action-tools: 316 92% 54%;         /* magenta */
-  --action-tools-soft: 316 92% 54% / 0.15;
-  --action-tools-hover: 316 92% 54% / 0.30;
-  --action-tools-border: 316 92% 54% / 0.7;
+  --action-secret:        var(--neon-magenta);
+  --action-secret-soft:   color-mix(in srgb, var(--neon-magenta) var(--tint-action-soft), transparent);
+  --action-secret-hover:  color-mix(in srgb, var(--neon-magenta) var(--tint-action-hover), transparent);
+  --action-secret-border: color-mix(in srgb, var(--neon-magenta) var(--tint-action-border), transparent);
+  --action-secret-ink:    var(--neon-magenta);
 
-  /* Stronger tint alpha — neon brand colours need more presence on void */
+  --action-tools:         var(--neon-magenta);
+  --action-tools-soft:    color-mix(in srgb, var(--neon-magenta) var(--tint-action-soft), transparent);
+  --action-tools-hover:   color-mix(in srgb, var(--neon-magenta) var(--tint-action-hover), transparent);
+  --action-tools-border:  color-mix(in srgb, var(--neon-magenta) var(--tint-action-border), transparent);
+  --action-tools-ink:     var(--neon-magenta);
+
+  /* Stronger node tint alpha — neon brand colours need more presence on void */
   --tint-soft: 16%;
   --tint-border: 50%;
 }
@@ -430,39 +442,14 @@
   animation: cyber-blink 1.6s steps(2) infinite;
 }
 
-/* Wave 29: Cyber executing nodes pulse with the cyber-blink keyframe
- * (steps animation = digital strobe), not the smooth node-pulse default.
- * Targets BOTH React Flow's wrapper class and our data-attribute so
- * either drives the animation. Higher specificity than base.css's
- * generic .react-flow__node.executing .sq-node-box rule, so this wins. */
-/* Wave 30.1: dedicated executing-pulse keyframe that animates
- * BOX-SHADOW only — not opacity. The original `cyber-blink`
- * keyframe (used for LED, status pip, cmdk arrow) animates
- * opacity 1 → 0.4, which when applied to whole nodes faded the
- * entire node icon + content. This keyframe pulses the neon glow
- * intensity while the node body stays solid. Steps(2) timing
- * preserves the digital strobe character. */
-@keyframes cyber-pulse-exec {
-  0%, 49% {
-    box-shadow:
-      0 0 0 2px var(--neon-cyan),
-      0 0 32px 4px var(--neon-cyan),
-      0 0 64px 16px color-mix(in srgb, var(--neon-cyan) 35%, transparent),
-      inset 0 0 18px rgba(29, 217, 229, 0.3);
-  }
-  50%, 100% {
-    box-shadow:
-      0 0 0 2px var(--neon-cyan),
-      0 0 14px 2px color-mix(in srgb, var(--neon-cyan) 55%, transparent),
-      0 0 28px 6px color-mix(in srgb, var(--neon-cyan) 15%, transparent),
-      inset 0 0 8px rgba(29, 217, 229, 0.12);
-  }
-}
-
+/* Cyber executing-pulse: the cyber-pulse-exec keyframe + its
+ * --pulse-keyframe/-duration/-timing tokens now live in
+ * client/src/themes/animations.css; base.css's token-driven `.executing`
+ * rule applies them. This rule keeps only the neon-cyan border the pulse
+ * pairs with. */
 :root[data-theme="cyber"] .sq-node[data-executing] .sq-node-box,
 :root[data-theme="cyber"] .react-flow__node.executing .sq-node-box,
 :root[data-theme="cyber"] .react-flow__node.executing .node {
-  animation: cyber-pulse-exec 1.6s steps(2) infinite;
   border-color: var(--neon-cyan);
 }
 :root[data-theme="cyber"] .sq-node-pip {

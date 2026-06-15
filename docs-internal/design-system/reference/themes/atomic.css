@@ -1,0 +1,253 @@
+/* ============================================================================
+ * themes/atomic.css — 1962 Eames optimism. Cream, atomic orange, turquoise,
+ * slate. Boomerangs and starbursts. Reads like a vintage NASA brochure.
+ * Ported from design_handoff_machinaos_themes/themes/atomic.css.
+ * ============================================================================ */
+
+:root[data-theme="atomic"] {
+  --bg-app: #f0e6d2;
+  --bg-panel: #faf2dc;
+  --bg-canvas: #e8dcc0;
+  --bg-elevated: #ffffff;
+  --bg-input: #ffffff;
+  --bg-hover: rgba(232, 90, 38, 0.08);
+  --bg-active: rgba(232, 90, 38, 0.18);
+  --bg-overlay: rgba(40, 30, 20, 0.5);
+
+  --border-default: #c8b890;
+  --border-strong: #2a3a4a;
+  --border-focus: #e85a26;
+  --ornament-frame: none;
+
+  --fg-default: #2a3a4a;
+  --fg-muted: #5a6a7a;
+  --fg-faint: #8a9aaa;
+  --fg-on-accent: #faf2dc;
+  --fg-on-success: #faf2dc;
+  --fg-on-danger: #faf2dc;
+  --fg-on-warning: #2a3a4a;
+
+  --turquoise: #3a9aa0;
+  --mustard: #d8a838;
+  --slate: #2a3a4a;
+  --atomic-orange: #e85a26;
+
+  --font-display: 'Bevan', 'Alfa Slab One', serif;
+  --font-body: 'Lato', 'Helvetica Neue', sans-serif;
+  --font-mono: 'Space Mono', 'JetBrains Mono', monospace;
+  --type-scale-base: 14px;
+  --type-tracking-display: 0.06em;
+  --type-uppercase: uppercase;
+
+  --radius-sm: 0px;
+  --radius-md: 2px;
+  --radius-lg: 4px;
+  --radius-pill: 999px;
+
+  --dur-fast: 100ms;
+  --dur-default: 200ms;
+  --dur-slow: 380ms;
+  --ease-default: cubic-bezier(0.34, 1.6, 0.5, 1);
+  --ease-emphasis: cubic-bezier(0.34, 1.6, 0.5, 1);
+  --motion-style: bouncy;
+  --sound-pack: vibraphone;
+
+  /* Wave 30: turquoise pulse — matches the atomic accent + the
+   * boomerang selection halo. Reads against cardstock backgrounds. */
+  --node-pulse-color: hsl(var(--accent));
+
+  --cursor-default: auto;
+  --cursor-pointer: pointer;
+  --scrollbar-track: #f0e6d2;
+  --scrollbar-thumb: #2a3a4a;
+
+  /* Shadcn HSL bridge */
+  --background: 41 47% 88%;
+  --foreground: 213 27% 23%;
+  --card: 0 0% 100%;
+  --card-foreground: 213 27% 23%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 213 27% 23%;
+
+  --primary: 14 81% 53%;           /* atomic orange */
+  --primary-foreground: 41 80% 92%;
+  --secondary: 44 83% 92%;
+  --secondary-foreground: 213 27% 23%;
+  --muted: 44 83% 92%;
+  --muted-foreground: 211 14% 42%;
+  --accent: 184 46% 43%;           /* turquoise */
+  --accent-foreground: 213 27% 23%;
+
+  --destructive: 14 81% 53%;
+  --destructive-foreground: 41 80% 92%;
+  --success: 120 21% 45%;
+  --warning: 41 67% 53%;
+  --info: 184 46% 43%;
+
+  --border: 213 27% 23%;
+  --input: 40 33% 67%;
+  --ring: 14 81% 53%;
+
+  /* Action role bridge.
+   * Wave 30.4: deepened text colors (raised saturation, dropped lightness)
+   * and bumped soft-fill opacity from 0.16 -> 0.40 so action buttons
+   * read clearly against ANY underlying panel surface — including the
+   * teal accent header where the previous low-saturation 16% tints
+   * disappeared into the background. */
+  --action-run: 130 60% 28%;
+  --action-run-soft: 130 60% 28% / 0.40;
+  --action-run-hover: 130 60% 28% / 0.55;
+  --action-run-border: 130 60% 28% / 0.75;
+
+  --action-stop: 14 90% 42%;
+  --action-stop-soft: 14 90% 42% / 0.40;
+  --action-stop-hover: 14 90% 42% / 0.55;
+  --action-stop-border: 14 90% 42% / 0.75;
+
+  --action-save: 14 90% 42%;
+  --action-save-soft: 14 90% 42% / 0.40;
+  --action-save-hover: 14 90% 42% / 0.55;
+  --action-save-border: 14 90% 42% / 0.75;
+
+  --action-config: 41 80% 38%;
+  --action-config-soft: 41 80% 38% / 0.40;
+  --action-config-hover: 41 80% 38% / 0.55;
+  --action-config-border: 41 80% 38% / 0.75;
+
+  --action-secret: 184 70% 30%;
+  --action-secret-soft: 184 70% 30% / 0.40;
+  --action-secret-hover: 184 70% 30% / 0.55;
+  --action-secret-border: 184 70% 30% / 0.75;
+
+  --action-tools: 184 70% 30%;
+  --action-tools-soft: 184 70% 30% / 0.40;
+  --action-tools-hover: 184 70% 30% / 0.55;
+  --action-tools-border: 184 70% 30% / 0.7;
+
+  --tint-soft: 14%;
+  --tint-border: 35%;
+
+  /* Canvas backplane — mid-century starburst on 160x160 tile */
+  --canvas-grid:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><g stroke='%232a3a4a' stroke-width='0.6' fill='none' opacity='0.18'><path d='M40 80 L120 80 M80 40 L80 120 M50 50 L110 110 M110 50 L50 110'/></g></svg>");
+  --canvas-grid-opacity: 1;
+}
+
+/* Body — clean cardstock; starburst lives on canvas in W2 wrapper */
+:root[data-theme="atomic"] body {
+  background: var(--bg-app);
+}
+
+:root[data-theme="atomic"] ::selection {
+  background: rgba(232, 90, 38, 0.4);
+  color: #2a3a4a;
+}
+
+/* Atomic scrollbars — square corners (mid-century geometric) */
+:root[data-theme="atomic"] ::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+:root[data-theme="atomic"] ::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+:root[data-theme="atomic"] ::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 0;
+}
+:root[data-theme="atomic"] ::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--scrollbar-thumb) 80%, white);
+}
+
+/* ── Per-component decorations (Wave 16 port from handoff) ─────────────── */
+
+:root[data-theme="atomic"] .toolbar, :root[data-theme="atomic"] .sidebar,
+:root[data-theme="atomic"] .palette, :root[data-theme="atomic"] .chat { background: var(--bg-panel); }
+:root[data-theme="atomic"] .toolbar { border-bottom: 4px solid var(--slate); }
+:root[data-theme="atomic"] .sidebar { border-right: 4px solid var(--slate); }
+:root[data-theme="atomic"] .palette { border-left: 4px solid var(--slate); }
+:root[data-theme="atomic"] .chat    { border-top: 4px solid var(--slate); }
+
+/* Canvas — atomic starburst pattern */
+:root[data-theme="atomic"] .canvas {
+  background:
+    radial-gradient(circle at 12% 15%, hsl(var(--accent)) 0%, transparent 0.8%),
+    radial-gradient(circle at 88% 12%, var(--turquoise) 0%, transparent 0.6%),
+    radial-gradient(circle at 18% 88%, var(--mustard) 0%, transparent 0.7%),
+    radial-gradient(circle at 82% 90%, hsl(var(--accent)) 0%, transparent 0.5%),
+    radial-gradient(circle at 50% 50%, var(--turquoise) 0%, transparent 0.4%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><g stroke='%232a3a4a' stroke-width='0.6' fill='none' opacity='0.18'><path d='M40 80 L120 80 M80 40 L80 120 M50 50 L110 110 M110 50 L50 110'/></g></svg>"),
+    var(--bg-canvas);
+}
+
+/* Typography */
+:root[data-theme="atomic"] body { font-family: var(--font-body); color: var(--fg-default); }
+:root[data-theme="atomic"] h1, :root[data-theme="atomic"] h2, :root[data-theme="atomic"] h3,
+:root[data-theme="atomic"] .v-display {
+  font-family: var(--font-display); letter-spacing: 0.06em; text-transform: uppercase; color: var(--slate);
+}
+
+/* Square node — boomerang card */
+:root[data-theme="atomic"] .sq-node-box {
+  background: var(--bg-elevated);
+  border: 3px solid var(--slate); border-radius: 14px 2px 14px 2px;
+  box-shadow: 4px 4px 0 var(--slate);
+  color: hsl(var(--accent));
+}
+:root[data-theme="atomic"] .sq-node.selected .sq-node-box {
+  background: hsl(var(--accent)); color: var(--bg-elevated);
+  box-shadow: 4px 4px 0 var(--slate), 0 0 0 4px hsl(var(--warning) / 0.25);
+}
+:root[data-theme="atomic"] .sq-node-pip { border: 1.5px solid var(--slate); }
+:root[data-theme="atomic"] .sq-node-gear { background: var(--turquoise); color: var(--bg-elevated); border: 1px solid var(--slate); }
+:root[data-theme="atomic"] .sq-node-handle { border: 2px solid var(--slate); background: var(--mustard); }
+:root[data-theme="atomic"] .sq-node-handle.out { background: hsl(var(--accent)); }
+:root[data-theme="atomic"] .sq-node-label { font-family: var(--font-display); letter-spacing: 0.08em; font-size: 11px; }
+
+/* Actions — chunky stamps */
+:root[data-theme="atomic"] .action-btn {
+  font-family: var(--font-display); letter-spacing: 0.08em; text-transform: uppercase;
+  border-radius: 0; border-width: 3px; box-shadow: 3px 3px 0 var(--slate);
+}
+:root[data-theme="atomic"] .action-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--slate); }
+:root[data-theme="atomic"] .action-run { background: hsl(var(--success)); color: var(--bg-elevated); border-color: var(--slate); }
+:root[data-theme="atomic"] .action-deploy { background: var(--turquoise); color: var(--bg-elevated); border-color: var(--slate); }
+:root[data-theme="atomic"] .action-save { background: hsl(var(--accent)); color: var(--bg-elevated); border-color: var(--slate); }
+
+/* Cards — boomerang corners */
+:root[data-theme="atomic"] .wf-card,
+:root[data-theme="atomic"] .cat,
+:root[data-theme="atomic"] .comp,
+:root[data-theme="atomic"] .settings-section,
+:root[data-theme="atomic"] .cred-card {
+  background: var(--bg-elevated); border: 2px solid var(--slate); border-radius: 12px 2px 12px 2px;
+  box-shadow: 3px 3px 0 var(--slate);
+}
+:root[data-theme="atomic"] .wf-card.selected { background: hsl(var(--warning-soft)); border-color: hsl(var(--accent)); }
+:root[data-theme="atomic"] .cat-tile { background: var(--mustard); border: 1.5px solid var(--slate); border-radius: 8px 0 8px 0; color: var(--slate); }
+:root[data-theme="atomic"] .comp-ico { background: var(--turquoise); color: var(--bg-elevated); border-radius: 6px 0 6px 0; border: 1.5px solid var(--slate); }
+:root[data-theme="atomic"] .cat-name, :root[data-theme="atomic"] .comp-name { font-family: var(--font-display); font-size: 12px; }
+
+/* Chat */
+:root[data-theme="atomic"] .chat-msg { border-radius: 14px 4px 14px 4px; border-width: 2px; }
+:root[data-theme="atomic"] .chat-msg-user { background: var(--mustard); color: var(--slate); border-color: var(--slate); }
+:root[data-theme="atomic"] .chat-msg-bot { background: var(--turquoise); color: var(--bg-elevated); border-color: var(--slate); }
+
+/* Status bar */
+:root[data-theme="atomic"] .statusbar {
+  background: var(--slate); color: var(--bg-elevated); border-top: 4px solid hsl(var(--accent));
+  font-family: var(--font-mono); letter-spacing: 0.06em;
+}
+:root[data-theme="atomic"] .statusbar .pip { background: hsl(var(--success)); }
+
+/* Modal */
+:root[data-theme="atomic"] .modal {
+  background: var(--bg-elevated); border: 4px solid var(--slate); border-radius: 24px 4px 24px 4px;
+  box-shadow: 8px 8px 0 var(--slate);
+}
+:root[data-theme="atomic"] .modal-head { border-bottom: 3px solid var(--slate); background: hsl(var(--accent)); color: var(--bg-elevated); }
+:root[data-theme="atomic"] .modal-title { font-family: var(--font-display); color: var(--bg-elevated); letter-spacing: 0.10em; }
+
+/* CMDK */
+:root[data-theme="atomic"] .cmdk { background: var(--bg-elevated); border: 4px solid var(--slate); border-radius: 24px 4px 24px 4px; box-shadow: 8px 8px 0 var(--slate); }
+:root[data-theme="atomic"] .cmdk-item.active { background: hsl(var(--accent)); color: var(--bg-elevated); }

@@ -5,7 +5,14 @@
  * fallbacks when a theme block omits the variable. Per-theme blocks
  * always win via specificity (`:root[data-theme="..."]` beats `:root`).
  *
- * Source: design_handoff_machinaos_themes/themes/base.css.
+ * This file owns the THEME-AGNOSTIC scalars: space / radius / chrome /
+ * shadow / type scales, motion, and the tint-alpha scale. Literal COLOR
+ * values live in the per-theme files (light.css / dark.css / skins);
+ * literal PERCENTAGES live only in the `--tint-*` block below. Every
+ * consumer rule references a var() — no bare hex or % outside these
+ * token blocks.
+ *
+ * Source: design-system bundle tokens/{spacing,motion,typography}.css.
  * ============================================================================ */
 
 :root {
@@ -20,8 +27,80 @@
   --space-8: 64px;
 
   /* New-contract radii — exposed as Tailwind tokens via index.css.
-   * Co-exist with shadcn `--radius` (still used by existing primitives). */
+   * Co-exist with shadcn `--radius` (still used by existing primitives).
+   * --radius-sm/md/lg/xl are also registered in index.css @theme inline
+   * (same values: 4/6/8/12px); --radius-node is the canvas-node radius. */
+  --radius-node: 10px;
+  --radius-xl: 12px;
   --radius-pill: 999px;
+  /* shadcn base radius — consumed by index.css @theme inline radius calcs. */
+  --radius: 0.5rem;
+
+  /* Fixed chrome dimensions (design-system bundle: tokens/spacing.css).
+   * Formalized for var() consumption; components historically hardcode
+   * these — adopt incrementally. */
+  --h-toolbar: 48px;
+  --h-statusbar: 24px;
+  --h-control: 32px;
+  --w-sidebar: 280px;
+  --w-palette: 320px;
+
+  /* Shadows — quiet, layered (dark overrides in dark.css). */
+  --shadow-card: 0 2px 8px rgb(0 0 0 / 0.06), 0 1px 2px rgb(0 0 0 / 0.04);
+  --shadow-card-hover: 0 4px 14px rgb(0 0 0 / 0.10);
+  --shadow-modal: 0 12px 40px rgb(0 0 0 / 0.18);
+
+  /* Type scale (14px base, dense desktop) + weights + leading + label tracking. */
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 16px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+  --text-2xl: 32px;
+  --text-3xl: 44px;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+  --tracking-label: 0.04em;
+
+  /* ── Tint / alpha scale ──────────────────────────────────────────────
+   * The SINGLE home for color-mix percentages. Every token definition
+   * (action / node role tokens in the theme files) and every consumer
+   * rule references these — no bare % appears anywhere else. Themes may
+   * override any of these in their own scope to retune the whole system
+   * from one place. */
+  /* Surface fills */
+  --tint-soft:            8%;    /* node-X-soft surface; brand bg-tint-soft */
+  --tint-node-fill:       14%;   /* rectangular-node gradient accent */
+  --tint-node-fill-sq:    18%;   /* square-node gradient accent */
+  /* Action-button fills */
+  --tint-action-soft:     15%;   /* resting fill */
+  --tint-action-hover:    25%;   /* hover fill */
+  --tint-action-border:   60%;   /* outline */
+  /* Borders / outlines */
+  --tint-border:          30%;   /* node-X-border; brand border-tint */
+  --tint-node-edge:       60%;   /* node-color border ring */
+  --tint-gear-hover:      20%;   /* gear button hover border */
+  /* Shadows / glows */
+  --tint-shadow:          18%;   /* resting node accent shadow */
+  --tint-shadow-hover:    28%;   /* hover node accent shadow */
+  --tint-shadow-selected: 32%;   /* selected node accent shadow */
+  --tint-glow:            60%;   /* status-pip + status-box glow */
+  /* Executing-pulse keyframe (three layers: ring / halo / atmosphere) */
+  --tint-pulse-ring:       80%;
+  --tint-pulse-halo:       50%;
+  --tint-pulse-atmos:      25%;
+  --tint-pulse-ring-peak:  45%;
+  --tint-pulse-halo-peak:  65%;
+  --tint-pulse-atmos-peak: 30%;
+  /* Neutral base mixed into accent node shadows when --node-color unset. */
+  --node-shadow-base: #000;
 
   /* Motion */
   --dur-fast: 90ms;
@@ -53,8 +132,8 @@
    * against the canvas background regardless of which plugin is running.
    * Each theme overrides this to its most visible accent (Cyber neon
    * cyan, Renaissance gold, Surveillance REC red, etc.). The default
-   * `hsl(var(--info))` resolves to a theme-tinted blue under shadcn. */
-  --node-pulse-color: hsl(var(--info));
+   * resolves to the theme's `--info` accent. */
+  --node-pulse-color: var(--info);
 }
 
 /* ============================================================================
@@ -138,31 +217,31 @@ html[data-page-hidden] *::after {
 
 .node {
   position: relative;
-  border-radius: 12px;
-  border: 2px solid color-mix(in srgb, var(--node-color, hsl(var(--border))) 60%, transparent);
+  border-radius: var(--radius-xl);
+  border: 2px solid color-mix(in srgb, var(--node-color, var(--border)) var(--tint-node-edge), transparent);
   background:
     linear-gradient(
       135deg,
-      color-mix(in srgb, var(--node-color, hsl(var(--card))) 14%, hsl(var(--card))) 0%,
-      hsl(var(--card)) 100%
+      color-mix(in srgb, var(--node-color, var(--card)) var(--tint-node-fill), var(--card)) 0%,
+      var(--card) 100%
     );
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--node-color, #000) 18%, transparent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--node-color, var(--node-shadow-base)) var(--tint-shadow), transparent);
   transition:
-    transform 0.15s ease,
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
+    transform var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
 }
 
 .node:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--node-color, #000) 28%, transparent);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--node-color, var(--node-shadow-base)) var(--tint-shadow-hover), transparent);
 }
 
 .node.selected {
-  border-color: var(--node-color, hsl(var(--ring)));
+  border-color: var(--node-color, var(--ring));
   box-shadow:
-    0 0 0 1px var(--node-color, hsl(var(--ring))),
-    0 4px 14px color-mix(in srgb, var(--node-color, #000) 32%, transparent);
+    0 0 0 1px var(--node-color, var(--ring)),
+    0 4px 14px color-mix(in srgb, var(--node-color, var(--node-shadow-base)) var(--tint-shadow-selected), transparent);
 }
 
 /* Pulse during execution — react-flow toggles `.executing` on the wrapper
@@ -172,33 +251,15 @@ html[data-page-hidden] *::after {
    theme background — Cyber's near-black, Renaissance's vellum,
    Surveillance's grey, etc. */
 .react-flow__node.executing .node {
-  animation: node-pulse 1.4s ease-in-out infinite;
+  animation: var(--pulse-keyframe, node-pulse) var(--pulse-duration, 1.4s) var(--pulse-timing, ease-in-out) infinite;
 }
 
-/* Three-layer pulse for high-visibility executing-node glow:
- *   1. inner solid ring        — definitive "this node is live" signal
- *   2. mid soft halo           — bleeds outside the node bounds
- *   3. outer atmospheric halo  — readable at distant canvas zoom
- *
- * Total reach at peak: ~52px outside the node box (12px ring +
- * 40px outer halo). Peak intensity tuned so the glow doesn't
- * appear blown-out or wash the surrounding canvas — the outer
- * halo is 25% opacity, the ring is 45%. */
-@keyframes node-pulse {
-  0%,
-  100% {
-    box-shadow:
-      0 0 0 0 color-mix(in srgb, var(--node-pulse-color) 80%, transparent),
-      0 0 14px 2px color-mix(in srgb, var(--node-pulse-color) 50%, transparent),
-      0 0 28px 4px color-mix(in srgb, var(--node-pulse-color) 25%, transparent);
-  }
-  50% {
-    box-shadow:
-      0 0 0 12px color-mix(in srgb, var(--node-pulse-color) 45%, transparent),
-      0 0 32px 8px color-mix(in srgb, var(--node-pulse-color) 65%, transparent),
-      0 0 56px 16px color-mix(in srgb, var(--node-pulse-color) 30%, transparent);
-  }
-}
+/* The executing-pulse keyframes (node-pulse + the per-theme *-pulse-exec
+ * variants) and the per-theme --pulse-keyframe/-duration/-timing tokens live
+ * in client/src/themes/animations.css. The rule above reads those tokens, so
+ * each theme selects its pulse by overriding --pulse-keyframe — no
+ * high-specificity per-theme `.executing` animation rule needed. The
+ * --tint-pulse-* alpha scale node-pulse consumes is defined in :root above. */
 
 /* Square-node default visuals — outer wrapper is layout-only, the inner
    `.sq-node-box` carries the bordered icon-square. Per-theme CSS
@@ -209,36 +270,36 @@ html[data-page-hidden] *::after {
 }
 
 .sq-node-box {
-  border-radius: 10px;
-  border: 2px solid color-mix(in srgb, var(--node-color, hsl(var(--border))) 60%, transparent);
+  border-radius: var(--radius-node);
+  border: 2px solid color-mix(in srgb, var(--node-color, var(--border)) var(--tint-node-edge), transparent);
   background:
     linear-gradient(
       135deg,
-      color-mix(in srgb, var(--node-color, hsl(var(--card))) 18%, hsl(var(--card))) 0%,
-      hsl(var(--card)) 100%
+      color-mix(in srgb, var(--node-color, var(--card)) var(--tint-node-fill-sq), var(--card)) 0%,
+      var(--card) 100%
     );
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--node-color, #000) 18%, transparent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--node-color, var(--node-shadow-base)) var(--tint-shadow), transparent);
   transition:
-    transform 0.15s ease,
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
+    transform var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
 }
 
 .sq-node-box:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--node-color, #000) 28%, transparent);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--node-color, var(--node-shadow-base)) var(--tint-shadow-hover), transparent);
 }
 
 .sq-node.selected .sq-node-box {
-  border-color: var(--node-color, hsl(var(--ring)));
+  border-color: var(--node-color, var(--ring));
   box-shadow:
-    0 0 0 1px var(--node-color, hsl(var(--ring))),
-    0 4px 14px color-mix(in srgb, var(--node-color, #000) 32%, transparent);
+    0 0 0 1px var(--node-color, var(--ring)),
+    0 4px 14px color-mix(in srgb, var(--node-color, var(--node-shadow-base)) var(--tint-shadow-selected), transparent);
 }
 
 .react-flow__node.executing .sq-node-box,
 .sq-node[data-executing] .sq-node-box {
-  animation: node-pulse 1.5s ease-in-out infinite;
+  animation: var(--pulse-keyframe, node-pulse) var(--pulse-duration, 1.4s) var(--pulse-timing, ease-in-out) infinite;
 }
 
 /* ============================================================================
@@ -271,65 +332,65 @@ html[data-page-hidden] *::after {
 /* Status pip — square-node and rectangular-node variants */
 .sq-node-pip,
 .node-pip {
-  background: hsl(var(--muted-foreground));
+  background: var(--muted-foreground);
 }
 
 .sq-node-pip[data-status="idle"],
 .node-pip[data-status="idle"] {
-  background: hsl(var(--muted-foreground));
+  background: var(--muted-foreground);
 }
 
 .sq-node-pip[data-status="executing"],
 .sq-node-pip[data-status="waiting"],
 .node-pip[data-status="executing"],
 .node-pip[data-status="waiting"] {
-  background: var(--node-color, hsl(var(--info)));
-  box-shadow: 0 0 6px color-mix(in srgb, var(--node-color, hsl(var(--info))) 60%, transparent);
+  background: var(--node-color, var(--info));
+  box-shadow: 0 0 6px color-mix(in srgb, var(--node-color, var(--info)) var(--tint-glow), transparent);
 }
 
 .sq-node-pip[data-status="success"],
 .node-pip[data-status="success"] {
-  background: hsl(var(--success));
+  background: var(--success);
 }
 
 .sq-node-pip[data-status="error"],
 .node-pip[data-status="error"] {
-  background: hsl(var(--destructive));
+  background: var(--destructive);
 }
 
 /* Gear button defaults */
 .sq-node-gear,
 .node-gear {
-  background: hsl(var(--card));
-  border: 1px solid hsl(var(--border));
-  color: hsl(var(--muted-foreground));
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--muted-foreground);
+  transition: background-color var(--dur-fast) ease, border-color var(--dur-fast) ease;
 }
 
 .sq-node-gear:hover,
 .node-gear:hover {
-  background: hsl(var(--accent));
-  border-color: hsl(var(--accent-foreground) / 0.2);
+  background: var(--accent);
+  border-color: color-mix(in srgb, var(--accent-foreground) var(--tint-gear-hover), transparent);
 }
 
 /* Handle defaults */
 .sq-node-handle,
 .node-handle {
-  background: hsl(var(--background));
-  border: 2px solid hsl(var(--muted-foreground));
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  background: var(--background);
+  border: 2px solid var(--muted-foreground);
+  transition: background-color var(--dur-fast) ease, border-color var(--dur-fast) ease;
 }
 
 .sq-node-handle.out,
 .node-handle.out {
-  background: var(--node-color, hsl(var(--primary)));
-  border-color: var(--node-color, hsl(var(--primary)));
+  background: var(--node-color, var(--primary));
+  border-color: var(--node-color, var(--primary));
 }
 
 .sq-node-handle.in,
 .node-handle.in {
-  background: hsl(var(--background));
-  border-color: hsl(var(--muted-foreground));
+  background: var(--background);
+  border-color: var(--muted-foreground);
 }
 
 /* Label defaults — picks up display typography from theme */
@@ -338,7 +399,7 @@ html[data-page-hidden] *::after {
   font-family: var(--font-display, var(--font-body));
   letter-spacing: var(--type-tracking-display, 0);
   text-transform: var(--type-uppercase, none);
-  color: hsl(var(--foreground));
+  color: var(--foreground);
 }
 
 /* ============================================================================
@@ -356,15 +417,15 @@ html[data-page-hidden] *::after {
 .sq-node[data-status="success"] .sq-node-box,
 .react-flow__node[data-status="success"] .node {
   box-shadow:
-    0 0 0 1px hsl(var(--success)),
-    0 0 14px color-mix(in srgb, hsl(var(--success)) 60%, transparent);
+    0 0 0 1px var(--success),
+    0 0 14px color-mix(in srgb, var(--success) var(--tint-glow), transparent);
 }
 
 .sq-node[data-status="error"] .sq-node-box,
 .react-flow__node[data-status="error"] .node {
   box-shadow:
-    0 0 0 1px hsl(var(--destructive)),
-    0 0 14px color-mix(in srgb, hsl(var(--destructive)) 60%, transparent);
+    0 0 0 1px var(--destructive),
+    0 0 14px color-mix(in srgb, var(--destructive) var(--tint-glow), transparent);
 }
 
 /* TODO(wave-30): mirror data-status from the pip to the outer .sq-node /

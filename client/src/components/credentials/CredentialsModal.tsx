@@ -98,7 +98,7 @@ const CredentialsModal: React.FC<Props> = ({ visible, onClose }) => {
   const headerActions = (
     <div className="flex items-center gap-3">
       <div className="flex items-center gap-2 text-base font-semibold">
-        <ShieldCheck className="h-4 w-4 text-dracula-yellow" />
+        <ShieldCheck className="h-4 w-4 text-warning" />
         <span>API Credentials</span>
       </div>
       {rehydrated && (

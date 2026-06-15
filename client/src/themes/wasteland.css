@@ -54,7 +54,7 @@
 
   /* Wave 30: radioactive-yellow pulse — high-contrast against ochre
    * dust + matches the rust-belt accent palette. */
-  --node-pulse-color: hsl(var(--accent));
+  --node-pulse-color: var(--accent);
 
   --cursor-default: auto;
   --cursor-pointer: pointer;
@@ -62,62 +62,68 @@
   --scrollbar-thumb: #8a3a18;
 
   /* Shadcn HSL bridge */
-  --background: 30 28% 13%;
-  --foreground: 41 53% 78%;
-  --card: 28 32% 22%;
-  --card-foreground: 41 53% 78%;
-  --popover: 28 32% 22%;
-  --popover-foreground: 41 53% 78%;
+  --background: #2a2118;
+  --foreground: #e5d2a9;
+  --card: #4a3726;
+  --card-foreground: #e5d2a9;
+  --popover: #4a3726;
+  --popover-foreground: #e5d2a9;
 
-  --primary: 28 80% 53%;           /* ochre */
-  --primary-foreground: 24 28% 8%;
-  --secondary: 28 36% 17%;
-  --secondary-foreground: 41 53% 78%;
-  --muted: 28 36% 17%;
-  --muted-foreground: 35 36% 56%;
-  --accent: 64 56% 51%;            /* radioactive */
-  --accent-foreground: 24 28% 8%;
+  --primary: #e78127;           /* ochre */
+  --primary-foreground: #1a130f;
+  --secondary: #3b2a1c;
+  --secondary-foreground: #e5d2a9;
+  --muted: #3b2a1c;
+  --muted-foreground: #b79666;
+  --accent: #bfc83c;            /* radioactive */
+  --accent-foreground: #1a130f;
 
-  --destructive: 6 75% 41%;
-  --destructive-foreground: 41 53% 78%;
-  --success: 64 56% 41%;
-  --warning: 64 56% 51%;
-  --info: 28 80% 53%;
+  --destructive: #b72a1a;
+  --destructive-foreground: #e5d2a9;
+  --success: #9ba32e;
+  --warning: #bfc83c;
+  --info: #e78127;
 
-  --border: 32 47% 28%;
-  --input: 32 47% 28%;
-  --ring: 28 80% 53%;
+  --border: #694a26;
+  --input: #694a26;
+  --ring: #e78127;
 
   /* Action role bridge */
-  --action-run: 64 56% 41%;
-  --action-run-soft: 64 56% 41% / 0.20;
-  --action-run-hover: 64 56% 41% / 0.34;
-  --action-run-border: 64 56% 41% / 0.7;
+  --action-run: #9ba32e;
+  --action-run-soft:   color-mix(in srgb, var(--action-run) var(--tint-action-soft), transparent);
+  --action-run-hover:  color-mix(in srgb, var(--action-run) var(--tint-action-hover), transparent);
+  --action-run-border: color-mix(in srgb, var(--action-run) var(--tint-action-border), transparent);
+  --action-run-ink: var(--action-run);
 
-  --action-stop: 6 75% 41%;
-  --action-stop-soft: 6 75% 41% / 0.22;
-  --action-stop-hover: 6 75% 41% / 0.36;
-  --action-stop-border: 6 75% 41% / 0.7;
+  --action-stop: #b72a1a;
+  --action-stop-soft:   color-mix(in srgb, var(--action-stop) var(--tint-action-soft), transparent);
+  --action-stop-hover:  color-mix(in srgb, var(--action-stop) var(--tint-action-hover), transparent);
+  --action-stop-border: color-mix(in srgb, var(--action-stop) var(--tint-action-border), transparent);
+  --action-stop-ink: var(--action-stop);
 
-  --action-save: 28 80% 53%;
-  --action-save-soft: 28 80% 53% / 0.20;
-  --action-save-hover: 28 80% 53% / 0.34;
-  --action-save-border: 28 80% 53% / 0.7;
+  --action-save: #e78127;
+  --action-save-soft:   color-mix(in srgb, var(--action-save) var(--tint-action-soft), transparent);
+  --action-save-hover:  color-mix(in srgb, var(--action-save) var(--tint-action-hover), transparent);
+  --action-save-border: color-mix(in srgb, var(--action-save) var(--tint-action-border), transparent);
+  --action-save-ink: var(--action-save);
 
-  --action-config: 64 56% 51%;
-  --action-config-soft: 64 56% 51% / 0.18;
-  --action-config-hover: 64 56% 51% / 0.32;
-  --action-config-border: 64 56% 51% / 0.6;
+  --action-config: #bfc83c;
+  --action-config-soft:   color-mix(in srgb, var(--action-config) var(--tint-action-soft), transparent);
+  --action-config-hover:  color-mix(in srgb, var(--action-config) var(--tint-action-hover), transparent);
+  --action-config-border: color-mix(in srgb, var(--action-config) var(--tint-action-border), transparent);
+  --action-config-ink: var(--action-config);
 
-  --action-secret: 28 80% 53%;
-  --action-secret-soft: 28 80% 53% / 0.16;
-  --action-secret-hover: 28 80% 53% / 0.30;
-  --action-secret-border: 28 80% 53% / 0.6;
+  --action-secret: #e78127;
+  --action-secret-soft:   color-mix(in srgb, var(--action-secret) var(--tint-action-soft), transparent);
+  --action-secret-hover:  color-mix(in srgb, var(--action-secret) var(--tint-action-hover), transparent);
+  --action-secret-border: color-mix(in srgb, var(--action-secret) var(--tint-action-border), transparent);
+  --action-secret-ink: var(--action-secret);
 
-  --action-tools: 64 56% 51%;
-  --action-tools-soft: 64 56% 51% / 0.18;
-  --action-tools-hover: 64 56% 51% / 0.32;
-  --action-tools-border: 64 56% 51% / 0.6;
+  --action-tools: #bfc83c;
+  --action-tools-soft:   color-mix(in srgb, var(--action-tools) var(--tint-action-soft), transparent);
+  --action-tools-hover:  color-mix(in srgb, var(--action-tools) var(--tint-action-hover), transparent);
+  --action-tools-border: color-mix(in srgb, var(--action-tools) var(--tint-action-border), transparent);
+  --action-tools-ink: var(--action-tools);
 
   --tint-soft: 18%;
   --tint-border: 45%;
@@ -167,7 +173,7 @@
     url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><filter id='r'><feTurbulence baseFrequency='0.5' numOctaves='2'/><feColorMatrix values='0 0 0 0 0.54 0 0 0 0 0.22 0 0 0 0 0.10 0 0 0 0.18 0'/></filter><rect width='300' height='300' filter='url(%23r)'/></svg>"),
     var(--bg-panel);
 }
-:root[data-theme="wasteland"] .toolbar { border-bottom: 2px solid var(--rust); box-shadow: inset 0 -1px 0 hsl(var(--accent)); }
+:root[data-theme="wasteland"] .toolbar { border-bottom: 2px solid var(--rust); box-shadow: inset 0 -1px 0 var(--accent); }
 :root[data-theme="wasteland"] .sidebar { border-right: 2px solid var(--rust); }
 :root[data-theme="wasteland"] .palette { border-left: 2px solid var(--rust); }
 :root[data-theme="wasteland"] .chat    { border-top: 2px solid var(--rust); }
@@ -183,7 +189,7 @@
 :root[data-theme="wasteland"] body { font-family: var(--font-body); color: var(--fg-default); }
 :root[data-theme="wasteland"] h1, :root[data-theme="wasteland"] h2, :root[data-theme="wasteland"] h3,
 :root[data-theme="wasteland"] .v-display {
-  font-family: var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; color: hsl(var(--accent));
+  font-family: var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent);
 }
 
 /* SQUARE NODE — scrap metal plate, hand-stenciled */
@@ -193,7 +199,7 @@
     var(--bg-elevated);
   border: 2px solid var(--rust); border-radius: 0;
   box-shadow: inset 0 0 0 1px rgba(0,0,0,0.4), 2px 2px 0 var(--rust);
-  color: hsl(var(--accent));
+  color: var(--accent);
   position: relative;
 }
 :root[data-theme="wasteland"] .sq-node-box::before {
@@ -201,9 +207,9 @@
   background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><filter id='s'><feTurbulence baseFrequency='2' numOctaves='1'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.18 0'/></filter><rect width='100' height='100' filter='url(%23s)'/></svg>");
   pointer-events: none;
 }
-:root[data-theme="wasteland"] .sq-node.selected .sq-node-box { border-color: hsl(var(--accent)); box-shadow: 0 0 0 2px hsl(var(--info) / 0.25), 2px 2px 0 var(--rust); }
-:root[data-theme="wasteland"] .sq-node-gear { background: var(--rust); color: hsl(var(--accent)); border: 1px solid hsl(var(--accent)); border-radius: 0; }
-:root[data-theme="wasteland"] .sq-node-handle.out { background: hsl(var(--accent)); }
+:root[data-theme="wasteland"] .sq-node.selected .sq-node-box { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--info) 25%, transparent), 2px 2px 0 var(--rust); }
+:root[data-theme="wasteland"] .sq-node-gear { background: var(--rust); color: var(--accent); border: 1px solid var(--accent); border-radius: 0; }
+:root[data-theme="wasteland"] .sq-node-handle.out { background: var(--accent); }
 :root[data-theme="wasteland"] .sq-node-label { font-family: var(--font-display); letter-spacing: 0.10em; }
 
 /* ACTIONS — stenciled */
@@ -211,10 +217,10 @@
   font-family: var(--font-display); letter-spacing: 0.10em; text-transform: uppercase;
   border-radius: 0; border-width: 2px; border-style: dashed;
 }
-:root[data-theme="wasteland"] .action-run { background: hsl(var(--success-soft)); color: hsl(var(--success)); border-color: hsl(var(--success)); border-style: solid; }
-:root[data-theme="wasteland"] .action-deploy { background: hsl(var(--info-soft)); color: hsl(var(--accent)); border-color: hsl(var(--accent)); border-style: solid; }
-:root[data-theme="wasteland"] .action-save { background: hsl(var(--warning-soft)); color: hsl(var(--warning)); border-color: hsl(var(--warning)); border-style: solid; }
-:root[data-theme="wasteland"] .action-stop { background: hsl(var(--danger-soft)); color: hsl(var(--danger)); border-color: hsl(var(--danger)); border-style: solid; }
+:root[data-theme="wasteland"] .action-run { background: var(--success-soft); color: var(--success); border-color: var(--success); border-style: solid; }
+:root[data-theme="wasteland"] .action-deploy { background: var(--info-soft); color: var(--accent); border-color: var(--accent); border-style: solid; }
+:root[data-theme="wasteland"] .action-save { background: var(--warning-soft); color: var(--warning); border-color: var(--warning); border-style: solid; }
+:root[data-theme="wasteland"] .action-stop { background: var(--danger-soft); color: var(--danger); border-color: var(--danger); border-style: solid; }
 
 /* CARDS */
 :root[data-theme="wasteland"] .wf-card,
@@ -224,27 +230,27 @@
 :root[data-theme="wasteland"] .cred-card {
   background: var(--bg-elevated); border: 1px solid var(--rust); border-radius: 0;
 }
-:root[data-theme="wasteland"] .wf-card.selected { border-color: hsl(var(--accent)); box-shadow: inset 3px 0 0 hsl(var(--accent)); }
-:root[data-theme="wasteland"] .cat-tile { background: var(--rust); color: hsl(var(--accent)); border-radius: 0; }
-:root[data-theme="wasteland"] .comp-ico { background: var(--bg-input); color: hsl(var(--accent)); border: 1px solid var(--rust); border-radius: 0; }
+:root[data-theme="wasteland"] .wf-card.selected { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+:root[data-theme="wasteland"] .cat-tile { background: var(--rust); color: var(--accent); border-radius: 0; }
+:root[data-theme="wasteland"] .comp-ico { background: var(--bg-input); color: var(--accent); border: 1px solid var(--rust); border-radius: 0; }
 
 /* CHAT */
 :root[data-theme="wasteland"] .chat-msg { border-radius: 0; }
-:root[data-theme="wasteland"] .chat-msg-user { background: hsl(var(--info-soft)); border: 1px solid hsl(var(--accent)); }
+:root[data-theme="wasteland"] .chat-msg-user { background: var(--info-soft); border: 1px solid var(--accent); }
 :root[data-theme="wasteland"] .chat-msg-bot { background: var(--bg-elevated); border: 1px solid var(--rust); }
 
 /* STATUS BAR */
 :root[data-theme="wasteland"] .statusbar {
-  background: var(--bg-input); color: hsl(var(--accent)); border-top: 2px dashed var(--rust);
+  background: var(--bg-input); color: var(--accent); border-top: 2px dashed var(--rust);
   font-family: var(--font-mono); letter-spacing: 0.10em;
 }
 :root[data-theme="wasteland"] .statusbar .pip { background: var(--rad); box-shadow: 0 0 6px var(--rad); border-radius: 0; }
 
 /* MODAL */
-:root[data-theme="wasteland"] .modal { background: var(--bg-elevated); border: 3px solid hsl(var(--accent)); border-radius: 0; box-shadow: 6px 6px 0 var(--rust); }
+:root[data-theme="wasteland"] .modal { background: var(--bg-elevated); border: 3px solid var(--accent); border-radius: 0; box-shadow: 6px 6px 0 var(--rust); }
 :root[data-theme="wasteland"] .modal-head { border-bottom: 2px dashed var(--rust); background: var(--bg-panel); }
-:root[data-theme="wasteland"] .modal-title { font-family: var(--font-display); color: hsl(var(--accent)); letter-spacing: 0.12em; }
+:root[data-theme="wasteland"] .modal-title { font-family: var(--font-display); color: var(--accent); letter-spacing: 0.12em; }
 
 /* CMDK */
-:root[data-theme="wasteland"] .cmdk { background: var(--bg-elevated); border: 3px solid hsl(var(--accent)); border-radius: 0; }
-:root[data-theme="wasteland"] .cmdk-item.active { background: var(--bg-active); color: hsl(var(--accent)); border-left: 3px solid var(--rust); }
+:root[data-theme="wasteland"] .cmdk { background: var(--bg-elevated); border: 3px solid var(--accent); border-radius: 0; }
+:root[data-theme="wasteland"] .cmdk-item.active { background: var(--bg-active); color: var(--accent); border-left: 3px solid var(--rust); }

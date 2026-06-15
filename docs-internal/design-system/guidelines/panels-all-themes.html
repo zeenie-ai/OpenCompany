@@ -1,0 +1,582 @@
+<!-- @dsCard group="Brand" viewport="1320x900" name="Panels × Themes" subtitle="Every panel — toolbar, sidebar, palette, console, status bar, Node Config, Settings, Credentials — in all 12 themes" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>MachinaOS — All Panels × All Themes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anonymous+Pro:wght@400;700&family=Bevan&family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Courier+Prime&family=EB+Garamond:wght@400;500;600&family=Geist:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IM+Fell+English:ital@0;1&family=JetBrains+Mono:wght@400;500;600;700&family=Lato:wght@400;700&family=Shippori+Mincho:wght@400;500;600;700&family=Space+Mono&family=Special+Elite&family=VT323&display=swap">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0a0c10; font-family: 'Geist', system-ui, sans-serif; color: #e6edf3; }
+  header { padding: 26px 32px 4px; }
+  header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  header p { margin: 6px 0 0; font-size: 13px; color: #8b949e; max-width: 860px; line-height: 1.5; }
+  nav.jump { display: flex; flex-wrap: wrap; gap: 6px; padding: 14px 32px 4px; position: sticky; top: 0; background: rgba(10,12,16,0.92); z-index: 50; backdrop-filter: blur(4px); border-bottom: 1px solid #21262d; padding-bottom: 12px; }
+  nav.jump a { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8b949e; text-decoration: none; border: 1px solid #21262d; border-radius: 999px; padding: 4px 10px; }
+  nav.jump a:hover { color: #e6edf3; border-color: #8b949e; }
+  .list { display: flex; flex-direction: column; gap: 30px; padding: 22px 32px 60px; }
+  .tile { border-radius: 12px; overflow: hidden; border: 1px solid #21262d; background: #11151a; }
+  .tile-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 13px 18px; }
+  .tile-head .nm { font-size: 16px; font-weight: 600; }
+  .tile-head .meta { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #8b949e; text-align: right; }
+  .screen-wrap { position: relative; width: 100%; }
+  .stage { position: absolute; left: 0; top: 0; width: 1380px; display: flex; flex-direction: column; gap: 20px; transform-origin: top left; font-size: 13px; padding: 18px; }
+
+  .pmodal { border: 1px solid; display: flex; flex-direction: column; overflow: hidden; }
+  .phead { position: relative; display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 8px 18px; border-bottom: 1px solid; flex-shrink: 0; }
+  .phead .ttl { position: absolute; left: 16px; display: flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 600; }
+  .phead .x { position: absolute; right: 14px; opacity: 0.6; font-size: 14px; }
+  .phead .acts { display: flex; align-items: center; gap: 8px; }
+  .btn { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; font-size: 11.5px; font-weight: 600; border: 1px solid; line-height: 1; white-space: nowrap; }
+  .colhead { display: flex; align-items: center; gap: 7px; padding: 8px 12px; border-bottom: 1px solid; font-size: 11.5px; font-weight: 600; flex-shrink: 0; }
+  .datacard { border: 1px solid; border-left-width: 4px; padding: 10px; }
+  .dc-head { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; font-size: 11.5px; font-weight: 600; }
+  .chip { display: inline-flex; align-items: center; height: 17px; padding: 0 6px; font-size: 9.5px; font-weight: 500; border: 1px solid; white-space: nowrap; }
+  .jsonblk { border: 1px solid; overflow: hidden; }
+  .jsonblk .lbl { padding: 5px 10px; font-size: 10px; font-weight: 600; border-bottom: 1px solid; }
+  .jsonblk pre { margin: 0; padding: 9px 10px; font-size: 10.5px; line-height: 1.45; white-space: pre-wrap; }
+  .flabel { display: block; font-size: 11px; font-weight: 500; margin-bottom: 4px; }
+  .finput { display: flex; align-items: center; justify-content: space-between; height: 28px; padding: 0 10px; border: 1px solid; font-size: 11px; }
+  .ftext { padding: 8px 10px; border: 1px solid; font-size: 10.5px; line-height: 1.5; }
+  .slider { position: relative; height: 16px; display: flex; align-items: center; }
+  .slider .tr { position: absolute; left: 0; right: 0; height: 5px; border-radius: 99px; border: 1px solid; }
+  .slider .fl { position: absolute; left: 0; height: 5px; border-radius: 99px; }
+  .slider .th { position: absolute; width: 13px; height: 13px; border-radius: 50%; border: 2px solid; }
+  .acc { border: 1px solid; overflow: hidden; }
+  .acc .ahead { display: flex; align-items: center; gap: 7px; padding: 9px 12px; font-size: 11.5px; font-weight: 600; }
+  .acc .abody { padding: 10px 12px; border-top: 1px solid; }
+  .prog { height: 7px; border-radius: 99px; overflow: hidden; border: 1px solid; }
+  .prog .pf { height: 100%; }
+  .stat .st { font-size: 9.5px; }
+  .stat .sv { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .skcard { display: flex; align-items: flex-start; gap: 9px; border: 1px solid; border-left-width: 3px; padding: 8px 10px; }
+  .skcard .ictile { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+  .switch { position: relative; width: 30px; height: 17px; border-radius: 999px; border: 1px solid; flex-shrink: 0; }
+  .switch .knob { position: absolute; top: 2px; width: 11px; height: 11px; border-radius: 50%; }
+  .srow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; }
+  .srow .sl { font-size: 11.5px; font-weight: 500; }
+  .srow .sd { font-size: 9.5px; margin-top: 1px; line-height: 1.35; }
+  .sect { border: 1px solid; padding: 12px; }
+  .sect-h { display: flex; align-items: center; gap: 7px; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid; font-size: 12.5px; font-weight: 600; }
+  .sect-h .it { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .skrow { display: flex; align-items: center; gap: 7px; padding: 6px 10px; border-left: 3px solid transparent; font-size: 11px; }
+  .cb { width: 13px; height: 13px; border: 1px solid; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; flex-shrink: 0; }
+  .avat { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+  .toast { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border: 1px solid; font-size: 11px; font-weight: 500; }
+</style>
+</head>
+<body>
+<header>
+  <h1>MachinaOS — every workspace panel, all twelve themes</h1>
+  <p>Every surface per theme — the <b>workspace chrome</b> (top toolbar, workflow sidebar, component palette, console dock, status bar), the three-column <b>Node Configuration</b> panel (Input · Parameters with Token Usage + Connected Skills · Output), the split <b>Master Skill Editor</b>, the <b>Settings</b> panel, <b>API Credentials</b>, and the <b>Clear Memory</b> dialog + toasts. UI copy uses each theme's readable body font; decorative display faces appear only in tile headers.</p>
+</header>
+<nav class="jump" id="jump"></nav>
+<div class="list" id="list"></div>
+
+<script>
+const THEMES = [
+  { name: 'Light', tag: 'default · Geist · radius 6–8', bg: '#f5f7fa', panel: '#fafbfc', card: '#ffffff', elevated: '#ffffff', fg: '#1a1d21', muted: '#4b5563', faint: '#9ca3af', border: '#d1d5db',
+    body: "'Geist',sans-serif", mono: "'JetBrains Mono',monospace", r: 6,
+    run: '#15803d', runBg: 'rgba(80,250,123,0.15)', runBc: 'rgba(80,250,123,0.6)', stop: '#be185d', stopBg: 'rgba(255,121,198,0.15)', stopBc: 'rgba(255,121,198,0.6)',
+    save: '#0e7490', saveBg: 'rgba(139,233,253,0.15)', saveBc: 'rgba(139,233,253,0.6)', config: '#c2410c', configBg: 'rgba(255,184,108,0.15)', configBc: 'rgba(255,184,108,0.6)',
+    tools: '#7c3aed', toolsBg: 'rgba(189,147,249,0.15)', toolsBc: 'rgba(189,147,249,0.6)',
+    primary: '#2563eb', onPrimary: '#ffffff', agent: '#bd93f9', model: '#8be9fd', tool: '#50fa7b', trig: '#ff79c6', ok: '#059669', warn: '#d97706', err: '#dc2626', info: '#0891b2',
+    display: "'Geist',sans-serif" },
+  { name: 'Dark', tag: 'signature · Solarized + Dracula', bg: '#002b36', panel: '#073642', card: '#073642', elevated: '#0d1f2d', fg: '#f8f8f2', muted: '#94a8d6', faint: '#6272a4', border: '#586e75',
+    body: "'Geist',sans-serif", mono: "'JetBrains Mono',monospace", r: 6,
+    run: '#50fa7b', runBg: 'rgba(80,250,123,0.15)', runBc: 'rgba(80,250,123,0.6)', stop: '#ff79c6', stopBg: 'rgba(255,121,198,0.15)', stopBc: 'rgba(255,121,198,0.6)',
+    save: '#8be9fd', saveBg: 'rgba(139,233,253,0.15)', saveBc: 'rgba(139,233,253,0.6)', config: '#ffb86c', configBg: 'rgba(255,184,108,0.15)', configBc: 'rgba(255,184,108,0.6)',
+    tools: '#bd93f9', toolsBg: 'rgba(189,147,249,0.15)', toolsBc: 'rgba(189,147,249,0.6)',
+    primary: '#268bd2', onPrimary: '#f8f8f2', agent: '#bd93f9', model: '#8be9fd', tool: '#50fa7b', trig: '#ff79c6', ok: '#859900', warn: '#b58900', err: '#dc322f', info: '#2aa198',
+    display: "'Geist',sans-serif" },
+  { name: 'Renaissance', tag: 'illuminated codex · Cormorant body', bg: '#f3e8c8', panel: '#ead09a', card: '#fbf3dc', elevated: '#fbf3dc', fg: '#3a2008', muted: '#6a4a1c', faint: '#9a7a3c', border: '#8a5e1c',
+    body: "'Cormorant Garamond',serif", mono: "'IM Fell English',serif", r: 3,
+    run: '#8a1410', runBg: 'rgba(212,160,48,0.20)', runBc: '#8a5e1c', stop: '#8a1410', stopBg: 'rgba(138,20,16,0.12)', stopBc: '#8a1410',
+    save: '#2548c8', saveBg: 'rgba(37,72,200,0.10)', saveBc: '#2548c8', config: '#6a4a1c', configBg: 'rgba(106,74,28,0.12)', configBc: '#6a4a1c',
+    tools: '#d4a030', toolsBg: 'rgba(212,160,48,0.16)', toolsBc: '#8a5e1c',
+    primary: '#2548c8', onPrimary: '#fbf3dc', agent: '#2548c8', model: '#5a6a28', tool: '#d4a030', trig: '#8a1410', ok: '#5a6a28', warn: '#b87818', err: '#8a1410', info: '#2548c8',
+    display: "'Cinzel',serif" },
+  { name: 'Greek', tag: 'marble agora · Cormorant body', bg: '#ede5d0', panel: '#f5efde', card: '#faf6e9', elevated: '#faf6e9', fg: '#2a2415', muted: '#6a5d3c', faint: '#9a8c64', border: '#b8a878',
+    body: "'Cormorant Garamond',serif", mono: "'Courier Prime',monospace", r: 1,
+    run: '#284b82', runBg: 'rgba(40,75,130,0.12)', runBc: '#284b82', stop: '#7a1a18', stopBg: 'rgba(122,26,24,0.10)', stopBc: '#7a1a18',
+    save: '#284b82', saveBg: 'rgba(40,75,130,0.08)', saveBc: '#284b82', config: '#a88430', configBg: 'rgba(200,160,64,0.14)', configBc: '#a88430',
+    tools: '#6a7a32', toolsBg: 'rgba(106,122,50,0.12)', toolsBc: '#6a7a32',
+    primary: '#284b82', onPrimary: '#faf6e9', agent: '#284b82', model: '#6a7a32', tool: '#c8a040', trig: '#7a1a18', ok: '#6a7a32', warn: '#b87818', err: '#7a1a18', info: '#284b82',
+    display: "'Cinzel',serif" },
+  { name: 'Edo', tag: 'washi + sumi-e · Shippori Mincho', bg: '#f4ecd8', panel: '#faf3e0', card: '#fdf8ea', elevated: '#fdf8ea', fg: '#1a1410', muted: '#6a5e48', faint: '#9a8c70', border: '#c8b890',
+    body: "'Shippori Mincho',serif", mono: "'JetBrains Mono',monospace", r: 0,
+    run: '#b41e1e', runBg: 'rgba(180,30,30,0.08)', runBc: '#b41e1e', stop: '#1a1410', stopBg: 'rgba(26,20,16,0.08)', stopBc: '#1a1410',
+    save: '#4a6a3a', saveBg: 'rgba(74,106,58,0.10)', saveBc: '#4a6a3a', config: '#6a5e48', configBg: 'rgba(106,94,72,0.10)', configBc: '#6a5e48',
+    tools: '#b41e1e', toolsBg: 'rgba(180,30,30,0.06)', toolsBc: '#b41e1e',
+    primary: '#b41e1e', onPrimary: '#fdf8ea', agent: '#b41e1e', model: '#4a6a3a', tool: '#4a6a3a', trig: '#e89aa8', ok: '#4a6a3a', warn: '#b87818', err: '#b41e1e', info: '#4a6a3a',
+    display: "'Shippori Mincho',serif" },
+  { name: 'Steampunk', tag: 'brass & rivets · IM Fell body', bg: '#2a1f12', panel: '#3a2a18', card: '#4a3620', elevated: '#4a3620', fg: '#e8d8b0', muted: '#b8a070', faint: '#8a7448', border: '#6a4a20',
+    body: "'IM Fell English',serif", mono: "'Special Elite',monospace", r: 3,
+    run: '#d8a848', runBg: 'rgba(216,168,72,0.20)', runBc: '#d8a848', stop: '#b8602a', stopBg: 'rgba(184,96,42,0.18)', stopBc: '#b8602a',
+    save: '#d8a848', saveBg: 'rgba(216,168,72,0.12)', saveBc: '#a87830', config: '#b8602a', configBg: 'rgba(184,96,42,0.12)', configBc: '#b8602a',
+    tools: '#8a8a4a', toolsBg: 'rgba(138,138,74,0.14)', toolsBc: '#8a8a4a',
+    primary: '#d8a848', onPrimary: '#2a1f12', agent: '#d8a848', model: '#b8a070', tool: '#8a8a4a', trig: '#b8602a', ok: '#8a8a4a', warn: '#d8a848', err: '#b8602a', info: '#b8a070',
+    display: "'IM Fell English',serif" },
+  { name: 'Atomic', tag: '1962 Eames · Lato body', bg: '#f0e6d2', panel: '#faf2dc', card: '#ffffff', elevated: '#ffffff', fg: '#2a3a4a', muted: '#5a6a7a', faint: '#8a96a2', border: '#c8b890',
+    body: "'Lato',sans-serif", mono: "'Space Mono',monospace", r: 2,
+    run: '#3a9aa0', runBg: 'rgba(58,154,160,0.12)', runBc: '#3a9aa0', stop: '#e85a26', stopBg: 'rgba(232,90,38,0.12)', stopBc: '#e85a26',
+    save: '#3a9aa0', saveBg: 'rgba(58,154,160,0.08)', saveBc: '#3a9aa0', config: '#b8882a', configBg: 'rgba(216,168,56,0.14)', configBc: '#b8882a',
+    tools: '#e85a26', toolsBg: 'rgba(232,90,38,0.08)', toolsBc: '#e85a26',
+    primary: '#3a9aa0', onPrimary: '#ffffff', agent: '#e85a26', model: '#3a9aa0', tool: '#3a9aa0', trig: '#d8a838', ok: '#3a9aa0', warn: '#d8a838', err: '#e85a26', info: '#3a9aa0',
+    display: "'Lato',sans-serif" },
+  { name: 'Cyber', tag: 'neon market · JetBrains body', bg: '#050010', panel: '#0a0420', card: '#15103a', elevated: '#15103a', fg: '#f0e0ff', muted: '#a090c0', faint: '#6a5a90', border: '#2a1f50',
+    body: "'JetBrains Mono',monospace", mono: "'JetBrains Mono',monospace", r: 0,
+    run: '#26d97a', runBg: 'rgba(38,217,122,0.14)', runBc: '#26d97a', stop: '#f51eb6', stopBg: 'rgba(245,30,182,0.14)', stopBc: '#f51eb6',
+    save: '#1dd9e5', saveBg: 'rgba(29,217,229,0.12)', saveBc: '#1dd9e5', config: '#ffd028', configBg: 'rgba(255,208,40,0.10)', configBc: '#ffd028',
+    tools: '#f51eb6', toolsBg: 'rgba(245,30,182,0.10)', toolsBc: '#f51eb6',
+    primary: '#1dd9e5', onPrimary: '#050010', agent: '#f51eb6', model: '#1dd9e5', tool: '#26d97a', trig: '#ffd028', ok: '#26d97a', warn: '#ffd028', err: '#f51eb6', info: '#1dd9e5',
+    display: "'JetBrains Mono',monospace" },
+  { name: 'Wasteland', tag: 'irradiated scrap · Special Elite', bg: '#2a2018', panel: '#3a2c1c', card: '#4a3826', elevated: '#4a3826', fg: '#e8d8a8', muted: '#b89868', faint: '#8a7048', border: '#6a4a28',
+    body: "'Special Elite',monospace", mono: "'VT323',monospace", r: 0,
+    run: '#c8d038', runBg: 'rgba(200,208,56,0.14)', runBc: '#c8d038', stop: '#e88a28', stopBg: 'rgba(138,58,24,0.20)', stopBc: '#e88a28',
+    save: '#d8c8a0', saveBg: 'rgba(216,200,160,0.10)', saveBc: '#b8a880', config: '#e88a28', configBg: 'rgba(232,138,40,0.12)', configBc: '#e88a28',
+    tools: '#c8d038', toolsBg: 'rgba(200,208,56,0.10)', toolsBc: '#a8b028',
+    primary: '#e88a28', onPrimary: '#2a2018', agent: '#e88a28', model: '#d8c8a0', tool: '#c8d038', trig: '#8a3a18', ok: '#c8d038', warn: '#e88a28', err: '#8a3a18', info: '#d8c8a0',
+    display: "'Special Elite',monospace" },
+  { name: 'Rot', tag: 'mossy crypt · EB Garamond body', bg: '#14181a', panel: '#1c2226', card: '#242c30', elevated: '#242c30', fg: '#c8d8c0', muted: '#788878', faint: '#4a5a50', border: '#2a3a30',
+    body: "'EB Garamond',serif", mono: "'JetBrains Mono',monospace", r: 2,
+    run: '#78c878', runBg: 'rgba(120,200,120,0.10)', runBc: '#78c878', stop: '#e8a838', stopBg: 'rgba(232,168,56,0.10)', stopBc: '#e8a838',
+    save: '#d8d0b8', saveBg: 'rgba(216,208,184,0.08)', saveBc: '#8a8470', config: '#b8882a', configBg: 'rgba(232,168,56,0.08)', configBc: '#b8882a',
+    tools: '#78c878', toolsBg: 'rgba(120,200,120,0.08)', toolsBc: '#588858',
+    primary: '#78c878', onPrimary: '#14181a', agent: '#78c878', model: '#788878', tool: '#d8d0b8', trig: '#e8a838', ok: '#78c878', warn: '#e8a838', err: '#c85040', info: '#78c878',
+    display: "'EB Garamond',serif" },
+  { name: 'Plague', tag: '1349 broadsheet · EB Garamond', bg: '#d8d4c0', panel: '#e4dfc8', card: '#efeacf', elevated: '#efeacf', fg: '#2a1c14', muted: '#6a5440', faint: '#9a8468', border: '#a89478',
+    body: "'EB Garamond',serif", mono: "'Special Elite',monospace", r: 0,
+    run: '#783c28', runBg: 'rgba(120,60,40,0.12)', runBc: '#783c28', stop: '#1a1410', stopBg: 'rgba(26,20,16,0.10)', stopBc: '#1a1410',
+    save: '#6a5440', saveBg: 'rgba(106,84,64,0.10)', saveBc: '#6a5440', config: '#788828', configBg: 'rgba(152,168,56,0.14)', configBc: '#788828',
+    tools: '#783c28', toolsBg: 'rgba(120,60,40,0.08)', toolsBc: '#783c28',
+    primary: '#783c28', onPrimary: '#efeacf', agent: '#783c28', model: '#6a5440', tool: '#98a838', trig: '#1a1410', ok: '#98a838', warn: '#b87818', err: '#783c28', info: '#6a5440',
+    display: "'EB Garamond',serif" },
+  { name: 'Surveillance', tag: 'panopticon · IBM Plex Mono', bg: '#1a1c1e', panel: '#232628', card: '#2c3034', elevated: '#2c3034', fg: '#c8ccd0', muted: '#888c90', faint: '#5a5e62', border: '#3a3e42',
+    body: "'IBM Plex Mono',monospace", mono: "'IBM Plex Mono',monospace", r: 0,
+    run: '#6acc6a', runBg: 'rgba(106,204,106,0.10)', runBc: '#6acc6a', stop: '#e82626', stopBg: 'rgba(232,38,38,0.10)', stopBc: '#e82626',
+    save: '#888c90', saveBg: 'rgba(136,140,144,0.10)', saveBc: '#888c90', config: '#d8a020', configBg: 'rgba(216,160,32,0.10)', configBc: '#d8a020',
+    tools: '#e82626', toolsBg: 'rgba(232,38,38,0.08)', toolsBc: '#e82626',
+    primary: '#6acc6a', onPrimary: '#1a1c1e', agent: '#e82626', model: '#888c90', tool: '#6acc6a', trig: '#d8a020', ok: '#6acc6a', warn: '#d8a020', err: '#e82626', info: '#6acc6a',
+    display: "'Anonymous Pro',monospace" },
+];
+
+function mix(hex, pct, baseHex) {
+  const h = (x) => [parseInt(x.slice(1,3),16), parseInt(x.slice(3,5),16), parseInt(x.slice(5,7),16)];
+  const a = h(hex), b = h(baseHex);
+  return `rgb(${a.map((v,i)=>Math.round(v*pct + b[i]*(1-pct))).join(',')})`;
+}
+
+const btn = (t, kind, label) =>
+  `<span class="btn" style="background:${t[kind+'Bg']}; border-color:${t[kind+'Bc']}; color:${t[kind]}; border-radius:${t.r}px;">${label}</span>`;
+const solidBtn = (t, label) =>
+  `<span class="btn" style="background:${t.primary}; border-color:transparent; color:${t.onPrimary}; border-radius:${t.r}px;">${label}</span>`;
+const validBtn = (t) =>
+  `<span class="btn" style="background:${mix(t.ok,0.12,t.card)}; border-color:${mix(t.ok,0.4,t.card)}; color:${t.ok}; border-radius:${t.r}px;">✓ Valid</span>`;
+const chip = (t, color, label) =>
+  `<span class="chip" style="background:${mix(color,0.12,t.card)}; border-color:${mix(color,0.35,t.card)}; color:${color}; border-radius:${Math.max(t.r-1,2)}px;">${label}</span>`;
+const sw = (t, on) =>
+  `<span class="switch" style="background:${on ? t.primary : mix(t.fg,0.08,t.bg)}; border-color:${on ? 'transparent' : t.border};"><span class="knob" style="left:${on?16:2}px; background:${on ? t.onPrimary : t.faint};"></span></span>`;
+const cbx = (t, on) =>
+  `<span class="cb" style="border-radius:${Math.min(t.r,3)}px; border-color:${on?t.primary:t.faint}; background:${on?t.primary:t.elevated}; color:${t.onPrimary};">${on?'✓':''}</span>`;
+const slider = (t, pct, color) => `
+  <span class="slider" style="display:block;">
+    <span class="tr" style="background:${mix(t.fg,0.06,t.bg)}; border-color:${t.border};"></span>
+    <span class="fl" style="width:${pct}%; background:${color};"></span>
+    <span class="th" style="left:calc(${pct}% - 7px); background:${t.elevated}; border-color:${color};"></span>
+  </span>`;
+const jsonBlk = (t, label, body, bodyColor) => `
+  <div class="jsonblk" style="border-color:${t.border}; border-radius:${t.r}px;">
+    <div class="lbl" style="background:${mix(t.fg,0.05,t.card)}; border-color:${t.border}; color:${t.muted}; font-family:${t.body};">${label}</div>
+    <pre style="font-family:${t.mono}; color:${bodyColor || t.fg}; background:${mix(t.fg,0.02,t.card)};">${body}</pre>
+  </div>`;
+const dataCard = (t, tone, title, badgeTxt, blkLabel, blkBody) => `
+  <div class="datacard" style="border-color:${t.border}; border-left-color:${tone}; background:${t.card}; border-radius:${t.r}px;">
+    <div class="dc-head" style="color:${t.fg}; font-family:${t.body};">
+      <span style="color:${tone};">▣</span> ${title} ${badgeTxt ? chip(t, tone, badgeTxt) : ''}
+      <span style="margin-left:auto; color:${t.muted}; font-weight:500; font-size:10px;">⧉ Copy</span>
+    </div>
+    ${jsonBlk(t, blkLabel, blkBody)}
+  </div>`;
+const phead = (t, icon, title, actsHtml) => `
+  <div class="phead" style="background:${t.panel}; border-color:${t.border};">
+    <span class="ttl" style="color:${t.fg}; font-family:${t.body};"><span style="opacity:0.65;">${icon}</span> ${title}</span>
+    <span class="acts">${actsHtml}</span>
+    <span class="x" style="color:${t.muted};">✕</span>
+  </div>`;
+const colhead = (t, icon, text) =>
+  `<div class="colhead" style="background:${t.panel}; border-color:${t.border}; color:${t.fg}; font-family:${t.body};">${icon} ${text}</div>`;
+const accHead = (t, icon, title, right) => `
+  <div class="ahead" style="background:${t.elevated}; color:${t.fg}; font-family:${t.body};">${icon} ${title}<span style="margin-left:auto; display:flex; align-items:center; gap:6px;">${right || ''}<span style="color:${t.muted};">⌄</span></span></div>`;
+const stat = (t, title, value) =>
+  `<span class="stat" style="display:flex; flex-direction:column;"><span class="st" style="color:${t.muted};">${title}</span><span class="sv" style="color:${t.fg}; font-family:${t.mono};">${value}</span></span>`;
+const skCard = (t, color, icon, name, desc) => `
+  <div class="skcard" style="border-color:${t.border}; border-left-color:${color}; background:${mix(t.fg,0.03,t.card)}; border-radius:${t.r}px;">
+    <span class="ictile" style="background:${mix(color,0.12,t.card)}; color:${color}; border-radius:${t.r}px;">${icon}</span>
+    <span style="min-width:0; flex:1;">
+      <div style="font-size:11px; font-weight:600; color:${t.fg}; font-family:${t.body};">${name}</div>
+      <div style="font-size:9.5px; color:${t.muted}; font-family:${t.body}; line-height:1.35;">${desc}</div>
+    </span>
+    ${chip(t, t.ok, 'Active')}
+  </div>`;
+const skRow = (t, on, icon, name, opts = {}) => `
+  <div class="skrow" style="font-family:${t.body}; color:${on ? t.fg : t.muted}; ${opts.sel ? `background:${mix(opts.color || t.tools, 0.10, t.elevated)}; border-left-color:${opts.color || t.tools}; font-weight:600;` : ''} border-bottom:1px solid ${mix(t.border,0.5,t.elevated)};">
+    ${cbx(t, on)} <span>${icon}</span> <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${name}</span>
+    ${opts.customized ? `<span style="width:7px; height:7px; border-radius:99px; background:${t.warn}; flex-shrink:0;" title="Customized"></span>` : ''}
+    ${opts.custom ? chip(t, t.info, 'Custom') : ''}
+  </div>`;
+const srow = (t, label, desc, ctrl) => `
+  <div class="srow">
+    <span style="min-width:0;"><div class="sl" style="color:${t.fg}; font-family:${t.body};">${label}</div><div class="sd" style="color:${t.muted}; font-family:${t.body};">${desc}</div></span>
+    ${ctrl}
+  </div>`;
+const sectH = (t, color, icon, title) => `
+  <div class="sect-h" style="border-color:${t.border}; color:${t.fg}; font-family:${t.body};">
+    <span class="it" style="background:${mix(color,0.1,t.elevated)}; color:${color}; border-radius:${t.r}px;">${icon}</span> ${title}
+  </div>`;
+
+function nodeConfigPanel(t) {
+  return `
+  <div class="pmodal" style="border-color:${t.border}; background:${t.bg}; border-radius:${t.r+2}px; height:560px;">
+    ${phead(t, '⚙', 'Node Configuration', `
+      <span style="display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; color:${t.fg}; font-family:${t.body}; margin-right:10px;">🤖 AI Agent <span style="color:${t.warn};">*</span></span>
+      ${btn(t,'run','▶ Run')} ${btn(t,'tools','Save')} ${btn(t,'stop','✕ Cancel')}`)}
+    <div style="display:flex; flex:1; min-height:0;">
+      <div style="flex:0 0 300px; display:flex; flex-direction:column; border-right:1px solid ${t.border};">
+        ${colhead(t, '🔗', 'Input Data (1 item)')}
+        <div style="flex:1; padding:10px; overflow:hidden;">
+          ${dataCard(t, t.ok, 'Item 1', 'from WhatsApp Receive', 'Received Data', '{\n  "message": "What is on my\n   calendar today?",\n  "from": "+1 555 014 2236"\n}')}
+        </div>
+        <div style="padding:7px 12px; border-top:1px solid ${t.border}; font-size:9.5px; color:${t.muted}; font-family:${t.body};">Shows actual data received by this node during execution</div>
+      </div>
+      <div style="flex:1; min-width:0; display:flex; flex-direction:column;">
+        ${colhead(t, '🎛', 'Parameters')}
+        <div style="padding:8px 14px 4px; border-bottom:1px solid ${t.border}; background:${t.panel}; font-size:10.5px; color:${t.muted}; font-family:${t.body};">LangGraph agent with memory, skills and tool delegation</div>
+        <div style="flex:1; min-height:0; overflow:hidden; padding:12px 14px; display:flex; flex-direction:column; gap:10px;">
+          <div class="sect" style="border-color:${t.border}; background:${t.elevated}; border-radius:${t.r}px; display:flex; flex-direction:column; gap:9px;">
+            <span><span class="flabel" style="color:${t.fg}; font-family:${t.body};">Model</span>
+            <span class="finput" style="border-color:${t.border}; background:${mix(t.fg,0.02,t.elevated)}; color:${t.fg}; font-family:${t.body}; border-radius:${t.r}px;">claude-sonnet-4-5 <span style="color:${t.muted};">⌄</span></span></span>
+            <span><span class="flabel" style="color:${t.fg}; font-family:${t.body};">System Prompt</span>
+            <span class="ftext" style="display:block; border-color:${t.border}; background:${mix(t.fg,0.02,t.elevated)}; color:${t.fg}; font-family:${t.body}; border-radius:${t.r}px;">You are a personal assistant with access to my calendar, email, and messages. Answer briefly and take action when asked.</span></span>
+            <span><span style="display:flex; justify-content:space-between;"><span class="flabel" style="color:${t.fg}; font-family:${t.body};">Temperature</span><span style="font-family:${t.mono}; font-size:10.5px; color:${t.model};">0.70</span></span>
+            ${slider(t, 70, t.model)}</span>
+          </div>
+          <div class="acc" style="border-color:${t.border}; border-radius:${t.r}px;">
+            ${accHead(t, '⚡', 'Token Usage', `<span style="font-size:9.5px; color:${t.muted}; font-family:${t.mono};">82K / 200K context</span>`)}
+            <div class="abody" style="border-color:${t.border}; background:${t.card};">
+              <div class="prog" style="background:${mix(t.fg,0.06,t.card)}; border-color:${t.border};"><div class="pf" style="width:41%; background:${t.model};"></div></div>
+              <div style="font-size:9px; color:${t.muted}; margin-top:3px; font-family:${t.body};">Compaction at 160K (80% of context)</div>
+              <div style="display:flex; gap:26px; margin-top:8px;">
+                ${stat(t,'Total','82,114')} ${stat(t,'Threshold ✎','160,000')} ${stat(t,'Compactions','2')} ${stat(t,'Context','200K')}
+              </div>
+              <div style="font-size:9px; color:${t.muted}; margin-top:6px; font-family:${t.mono};">Session: agent_2YxK</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="flex:0 0 300px; display:flex; flex-direction:column; border-left:1px solid ${t.border};">
+        ${colhead(t, '➡', 'Output')}
+        <div style="flex:1; padding:10px; display:flex; flex-direction:column; gap:10px; overflow:hidden;">
+          ${dataCard(t, t.ok, 'Execution Result', 'Success · 1.9s', 'Response', '{\n  "response": "You have 2\n   events today: standup at\n   10:00, dentist at 15:30."\n}')}
+          <div class="acc" style="border-color:${t.border}; border-radius:${t.r}px;">
+            ${accHead(t, '✦', 'Connected Skills', chip(t, t.tools, '2'))}
+            <div class="abody" style="border-color:${t.border}; background:${t.card}; display:flex; flex-direction:column; gap:7px;">
+              ${skCard(t, t.tool, '🔍', 'Web Search', 'Search the web via DuckDuckGo')}
+              ${skCard(t, t.tool, '📱', 'Android Toolkit', '16 device services')}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function masterSkillPanel(t) {
+  return `
+  <div class="pmodal" style="border-color:${t.border}; background:${t.bg}; border-radius:${t.r+2}px; height:430px;">
+    ${phead(t, '⚙', 'Node Configuration', `
+      <span style="display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; color:${t.fg}; font-family:${t.body}; margin-right:10px;">📚 Master Skill</span>
+      ${btn(t,'run','▶ Run')} ${btn(t,'tools','Save')} ${btn(t,'stop','✕ Cancel')}`)}
+    <div style="display:flex; flex:1; min-height:0; gap:10px; padding:10px;">
+      <div style="flex:0 0 250px; display:flex; flex-direction:column; border:1px solid ${t.border}; background:${t.elevated}; border-radius:${t.r}px; overflow:hidden;">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:7px 10px; border-bottom:1px solid ${t.border}; background:${t.panel};">
+          <span style="font-size:11.5px; font-weight:600; color:${t.fg}; font-family:${t.body};">Skills</span>
+          <span style="display:flex; gap:5px; align-items:center;">
+            <span style="min-width:17px; height:17px; border-radius:99px; background:${t.tools}; color:${t.bg}; font-size:9.5px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; padding:0 4px; font-family:${t.mono};">3</span>
+            ${btn(t,'tools','+')}
+          </span>
+        </div>
+        <div style="padding:7px; border-bottom:1px solid ${t.border};"><span class="finput" style="border-color:${t.border}; background:${mix(t.fg,0.02,t.elevated)}; color:${t.faint}; font-family:${t.body}; border-radius:${t.r}px;">⌕ Search skills...</span></div>
+        <div style="padding:7px; border-bottom:1px solid ${t.border};"><span class="finput" style="border-color:${t.border}; background:${mix(t.fg,0.02,t.elevated)}; color:${t.fg}; font-family:${t.body}; border-radius:${t.r}px;">🗀 assistant (12) <span style="color:${t.muted};">⌄</span></span></div>
+        <div style="flex:1; overflow:hidden;">
+          ${skRow(t, true, '📅', 'calendar-skill', { sel: true, color: t.tools, customized: true })}
+          ${skRow(t, true, '✉️', 'email-skill')}
+          ${skRow(t, true, '💬', 'whatsapp-skill')}
+          ${skRow(t, false, '🌐', 'browser-skill')}
+          ${skRow(t, false, '🗂️', 'files-skill')}
+          ${skRow(t, false, '🧪', 'my-research-skill', { custom: true })}
+        </div>
+      </div>
+      <div style="flex:1; min-width:0; display:flex; flex-direction:column; border:1px solid ${t.border}; background:${t.elevated}; border-radius:${t.r}px; overflow:hidden;">
+        <div style="display:flex; align-items:center; gap:9px; padding:8px 11px; border-bottom:1px solid ${t.border}; background:${t.panel};">
+          <span style="font-size:16px;">📅</span>
+          <span style="flex:1;">
+            <div style="font-size:11.5px; font-weight:600; color:${t.fg}; font-family:${t.body}; display:flex; align-items:center; gap:6px;">calendar-skill ${chip(t, t.warn, 'Customized')}</div>
+            <div style="font-size:9.5px; color:${t.muted}; font-family:${t.body};">Read and create calendar events</div>
+          </span>
+          ${btn(t,'config','↺ Reset')}
+        </div>
+        <div style="flex:1; min-height:0; padding:9px; display:flex; flex-direction:column; gap:8px;">
+          <div style="flex:1; border:1px solid ${t.border}; background:${mix(t.fg,0.02,t.elevated)}; border-radius:${t.r}px; padding:9px 11px; font-family:${t.mono}; font-size:10.5px; line-height:1.55; color:${t.fg}; overflow:hidden;"># Calendar Skill
+
+When the user asks about their schedule:
+1. Call \`calendar.list_events\` with the date range
+2. Summarize events chronologically, flag conflicts
+3. For new events, confirm title + time before creating</div>
+          <div class="toast" style="background:${mix(t.info,0.08,t.elevated)}; border-color:${mix(t.info,0.35,t.elevated)}; color:${t.fg}; font-family:${t.body}; border-radius:${t.r}px;">
+            <span style="color:${t.info};">ⓘ</span> Enable this skill to include it when running the AI Agent.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function settingsPanel(t) {
+  return `
+  <div class="pmodal" style="border-color:${t.border}; background:${t.bg}; border-radius:${t.r+2}px; height:430px;">
+    ${phead(t, '⚙', 'Settings', `${btn(t,'config','↺ Reset')} ${btn(t,'run','Save')} ${btn(t,'stop','✕ Close')}`)}
+    <div style="flex:1; min-height:0; overflow:hidden; padding:11px; display:flex; flex-direction:column; gap:10px;">
+      <div class="sect" style="border-color:${t.border}; background:${t.elevated}; border-radius:${t.r}px;">
+        ${sectH(t, t.agent, '🖥', 'UI Defaults')}
+        ${srow(t, 'Sidebar Open by Default', 'Show the sidebar panel when the application starts', sw(t,true))}
+        ${srow(t, 'Auto-add Skill for Connected Tools', 'Enable the matching skill when a tool node connects to an agent', sw(t,true))}
+      </div>
+      <div class="sect" style="border-color:${t.border}; background:${t.elevated}; border-radius:${t.r}px;">
+        ${sectH(t, t.model, '💾', 'Auto-save')}
+        ${srow(t, 'Enable Auto-save', 'Automatically save the workflow at regular intervals', sw(t,true))}
+        ${srow(t, 'Auto-save Interval', 'How often to auto-save (10-300 seconds)', `<span class="finput" style="width:70px; border-color:${t.border}; background:${mix(t.fg,0.02,t.elevated)}; color:${t.fg}; font-family:${t.mono}; border-radius:${t.r}px;">30 <span style="color:${t.muted}; font-size:9px;">s</span></span>`)}
+      </div>
+      <div class="sect" style="border-color:${t.border}; background:${t.elevated}; border-radius:${t.r}px;">
+        ${sectH(t, t.agent, '🧠', 'Memory & Compaction')}
+        <div style="display:flex; justify-content:space-between; align-items:baseline;">
+          <span class="sl" style="color:${t.fg}; font-family:${t.body}; font-size:11.5px; font-weight:500;">Compaction Ratio</span>
+          <span style="font-family:${t.mono}; font-size:11.5px; font-weight:600; color:${t.model};">80%</span>
+        </div>
+        <div style="margin:8px 0 3px;">${slider(t, 80, t.model)}</div>
+        <div style="display:flex; justify-content:space-between; font-size:8.5px; color:${t.muted}; font-family:${t.mono};"><span>5%</span><span>50%</span><span>95%</span></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function credsPanel(t) {
+  const row = (letter, color, name, masked, stored) => `
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span class="avat" style="background:${mix(color,0.15,t.card)}; color:${color}; border-radius:${t.r}px;">${letter}</span>
+      <span style="width:64px; font-size:11px; font-weight:500; color:${t.fg}; font-family:${t.body}; flex-shrink:0;">${name}</span>
+      <span class="finput" style="flex:1; border-color:${t.border}; background:${mix(t.fg,0.02,t.card)}; color:${stored ? t.fg : t.faint}; font-family:${t.mono}; border-radius:${t.r}px;">${masked} <span style="color:${t.faint};">👁</span></span>
+      ${stored ? validBtn(t) : solidBtn(t, 'Validate')}
+      ${stored ? `<span class="btn" style="background:${mix(t.err,0.1,t.card)}; border-color:transparent; color:${t.err}; border-radius:${t.r}px; padding:6px 8px;">🗑</span>` : ''}
+    </div>`;
+  return `
+  <div class="pmodal" style="border-color:${t.border}; background:${t.bg}; border-radius:${t.r+2}px; height:430px;">
+    ${phead(t, '🔑', 'API Credentials', btn(t,'stop','✕ Close'))}
+    <div style="flex:1; padding:12px; display:flex; flex-direction:column; gap:10px; overflow:hidden;">
+      <div style="font-size:10px; color:${t.muted}; font-family:${t.body}; line-height:1.45;">Bring your own keys — stored locally, never leave your machine.</div>
+      ${row('A', t.config, 'Anthropic', '••••••••••••••••3f2a', true)}
+      ${row('O', t.model, 'Open AI', 'Enter API key...', false)}
+      ${row('G', t.trig, 'Groq', 'Enter API key...', false)}
+      ${row('G', t.tool, 'Google', '••••••••••••••••9c1d', true)}
+      <div style="border-top:1px solid ${t.border}; padding-top:9px; margin-top:2px; display:flex; flex-direction:column; gap:8px;">
+        <div class="toast" style="background:${mix(t.ok,0.08,t.card)}; border-color:${mix(t.ok,0.35,t.card)}; color:${t.fg}; font-family:${t.body}; border-radius:${t.r}px;">
+          <span style="color:${t.ok};">✓</span> Anthropic key validated
+        </div>
+        <div class="toast" style="background:${mix(t.err,0.08,t.card)}; border-color:${mix(t.err,0.35,t.card)}; color:${t.fg}; font-family:${t.body}; border-radius:${t.r}px;">
+          <span style="color:${t.err};">✕</span> Groq validation failed — check the key
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function alertDialog(t) {
+  return `
+  <div class="pmodal" style="border-color:${t.border}; background:${t.elevated}; border-radius:${t.r+2}px; height:430px; justify-content:center; align-items:center; background:${mix(t.fg, 0.04, t.bg)};">
+    <div style="width:300px; border:1px solid ${t.border}; background:${t.elevated}; border-radius:${t.r+2}px; padding:16px; box-shadow:0 14px 40px rgba(0,0,0,0.3);">
+      <div style="font-size:13px; font-weight:600; color:${t.fg}; font-family:${t.body};">Clear Conversation Memory</div>
+      <div style="font-size:10.5px; color:${t.muted}; font-family:${t.body}; line-height:1.5; margin-top:6px;">This will reset the conversation history to its initial state. This action cannot be undone.</div>
+      <div style="display:flex; align-items:center; gap:7px; margin-top:11px; font-size:10.5px; color:${t.fg}; font-family:${t.body};">
+        ${cbx(t, false)} Also clear long-term memory (vector store)
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:7px; margin-top:15px;">
+        <span class="btn" style="background:transparent; border-color:${t.border}; color:${t.fg}; border-radius:${t.r}px; font-family:${t.body};">Cancel</span>
+        <span class="btn" style="background:${t.err}; border-color:transparent; color:${t.onPrimary === t.fg ? t.bg : '#fff'}; border-radius:${t.r}px; font-family:${t.body};">Clear Memory</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+const list = document.getElementById('list');
+const jump = document.getElementById('jump');
+
+// ---- Workspace chrome panels (top toolbar, sidebar, palette, console, status) ----
+const wfCard = (t, name, nodes, when, sel) => `
+  <div style="border:1px solid ${sel?t.primary:t.border}; ${sel?`border-left:3px solid ${t.primary}; background:${mix(t.primary,0.1,t.card)};`:`background:${t.card};`} border-radius:${t.r}px; padding:8px 10px;">
+    <div style="display:flex; align-items:center; gap:7px;">
+      <span style="width:22px;height:22px;border:1px solid ${sel?t.primary:t.border}; border-radius:${Math.max(t.r-2,0)}px; display:flex;align-items:center;justify-content:center;color:${sel?t.primary:t.muted}; font-size:10px;">‹›</span>
+      <span style="flex:1; font-size:11.5px; font-weight:500; color:${sel?t.primary:t.fg}; font-family:${t.body}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${name}</span>
+    </div>
+    <div style="display:flex; justify-content:space-between; margin-top:5px; font-size:9.5px; color:${t.muted}; font-family:${t.mono};"><span>${nodes} nodes</span><span>${when}</span></div>
+  </div>`;
+const compItem = (t, icon, name, desc) => `
+  <div style="display:flex; align-items:center; gap:8px; padding:7px 9px; border:1px solid ${t.border}; background:${t.bg}; border-radius:${t.r}px;">
+    <span style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;border:1px solid ${t.border}; background:${t.card}; border-radius:${Math.max(t.r-1,0)}px;">${icon}</span>
+    <span style="min-width:0;"><div style="font-size:11px; font-weight:500; color:${t.fg}; font-family:${t.body}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${name}</div><div style="font-size:9px; color:${t.muted}; font-family:${t.body}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${desc}</div></span>
+  </div>`;
+const vdiv = (t) => `<span style="width:1px; height:22px; background:${t.border};"></span>`;
+
+function toolbarPanel(t) {
+  return `
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; height:46px; padding:0 12px; background:${t.panel}; border:1px solid ${t.border}; border-radius:${t.r+2}px;">
+    <span style="display:flex; align-items:center; gap:7px;">
+      ${btn(t,'save','☰')} ${vdiv(t)} ${btn(t,'save','▤ File ⌄')}
+    </span>
+    <span style="display:flex; align-items:center; gap:6px;">
+      <span style="font-size:13px; font-weight:600; color:${t.fg}; font-family:${t.body};">WhatsApp Assistant</span>
+      <span style="color:${t.muted}; font-size:10px;">✎</span>
+    </span>
+    <span style="display:flex; align-items:center; gap:6px;">
+      <span style="display:inline-flex; border:1px solid ${t.border}; border-radius:${t.r+1}px; padding:2px; gap:2px; background:${t.card};">
+        <span class="btn" style="background:${mix(t.tool,0.1,t.card)}; border-color:${mix(t.tool,0.35,t.card)}; color:${t.tool}; border-radius:${Math.max(t.r-2,0)}px; padding:5px 9px; font-size:10.5px;">◷ Normal</span>
+        <span class="btn" style="background:transparent; border-color:transparent; color:${t.muted}; border-radius:${Math.max(t.r-2,0)}px; padding:5px 9px; font-size:10.5px;">⚡ Dev</span>
+      </span>
+      ${vdiv(t)}
+      ${btn(t,'config','⚙')} ${btn(t,'config','🔑')}
+      ${vdiv(t)}
+      ${btn(t,'run','▶ Start')} ${btn(t,'save','Save')}
+      <span style="display:inline-flex; align-items:center; gap:5px; font-family:${t.mono}; font-size:10.5px; color:${t.warn};"><span style="width:7px;height:7px;border-radius:50%;background:${t.warn};"></span>Modified</span>
+      ${vdiv(t)}
+      ${btn(t,'tools','▦')}
+    </span>
+  </div>`;
+}
+
+function sidebarPanel(t) {
+  return `
+  <div class="pmodal" style="border-color:${t.border}; background:${t.panel}; border-radius:${t.r+2}px; height:236px;">
+    <div style="padding:11px 13px; border-bottom:1px solid ${t.border}; background:${t.bg};">
+      <div style="font-size:13px; font-weight:600; color:${t.fg}; font-family:${t.body};">Workflows</div>
+      <div style="font-size:9.5px; color:${t.muted}; font-family:${t.mono};">3 saved</div>
+    </div>
+    <div style="padding:9px; display:flex; flex-direction:column; gap:7px;">
+      ${wfCard(t,'WhatsApp Assistant',6,'Jun 11, 09:14',true)}
+      ${wfCard(t,'Daily Email Digest',5,'Jun 9, 18:30',false)}
+      ${wfCard(t,'Customer Support Bot',9,'Jun 5, 11:02',false)}
+    </div>
+  </div>`;
+}
+
+function palettePanel(t) {
+  return `
+  <div class="pmodal" style="border-color:${t.border}; background:${t.panel}; border-radius:${t.r+2}px; height:236px;">
+    <div style="padding:11px 13px; border-bottom:1px solid ${t.border}; background:${t.bg};">
+      <div style="display:flex; align-items:center; justify-content:space-between;"><span style="font-size:13px; font-weight:600; color:${t.fg}; font-family:${t.body};">Components</span>${chip(t,t.tools,'14')}</div>
+      <div style="margin-top:8px;"><span class="finput" style="border-color:${t.border}; background:${t.card}; color:${t.faint}; font-family:${t.body}; border-radius:${t.r}px;">⌕ Search... <span></span></span></div>
+    </div>
+    <div style="padding:9px; display:flex; flex-direction:column; gap:7px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; font-size:10.5px; font-weight:600; color:${t.fg}; font-family:${t.body}; padding:0 2px;"><span>🤖 AI</span>${chip(t,t.agent,'3')}</div>
+      ${compItem(t,'🤖','AI Agent','LangGraph agent with memory')}
+      ${compItem(t,'💬','WhatsApp Send','Send a WhatsApp message')}
+    </div>
+  </div>`;
+}
+
+function consolePanel(t) {
+  const line = (time, color, txt) => `<span><span style="color:${t.faint};">[${time}]</span> <span style="color:${color};">${txt}</span></span>`;
+  return `
+  <div class="pmodal" style="border-color:${t.border}; background:${t.panel}; border-radius:${t.r+2}px; height:236px;">
+    <div style="display:flex; gap:2px; padding:0 8px; border-bottom:1px solid ${t.border};">
+      <span style="padding:9px 11px; font-size:11px; color:${t.muted}; font-family:${t.body};">Chat</span>
+      <span style="padding:9px 11px; font-size:11px; font-weight:600; color:${t.info}; border-bottom:2px solid ${t.info}; font-family:${t.body};">Console</span>
+      <span style="padding:9px 11px; font-size:11px; color:${t.muted}; font-family:${t.body};">Terminal</span>
+    </div>
+    <div style="flex:1; padding:9px 12px; background:${t.bg}; display:flex; flex-direction:column; gap:4px; font-family:${t.mono}; font-size:10px; line-height:1.5; overflow:hidden;">
+      ${line('12:01:31', t.muted, 'Workflow "WhatsApp Assistant" loaded · 6 nodes')}
+      ${line('12:01:33', t.ok, 'Deployed — listening for incoming messages')}
+      ${line('12:04:02', t.model, 'WhatsApp Receive → message from +1 (555) 014-2236')}
+      ${line('12:04:03', t.agent, 'AI Agent → delegating to Android Toolkit')}
+      ${line('12:04:05', t.ok, 'WhatsApp Send → reply delivered (1.9s)')}
+    </div>
+  </div>`;
+}
+
+function statusBar(t) {
+  return `
+  <div style="display:flex; align-items:center; gap:10px; height:24px; padding:0 12px; background:${t.panel}; border:1px solid ${t.border}; border-radius:${t.r}px; font-family:${t.mono}; font-size:10px; letter-spacing:0.04em; text-transform:uppercase; color:${t.muted}; white-space:nowrap;">
+    <span style="color:${t.ok}; display:flex; align-items:center;"><span style="width:6px;height:6px;border-radius:50%;background:${t.ok}; margin-right:5px;"></span>ONLINE</span>
+    <span style="opacity:0.4;">|</span><span>WF: <span style="color:${t.fg};">WhatsApp Assistant</span></span>
+    <span style="opacity:0.4;">|</span><span>NODES: <span style="color:${t.fg};">6</span></span>
+    <span style="margin-left:auto; display:flex; gap:10px;"><span>THEME: <span style="color:${t.fg};">${t.name.toUpperCase()}</span></span><span style="opacity:0.4;">|</span><span>14:02:33</span></span>
+  </div>`;
+}
+
+const sectionLabel = (txt) => `<div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:0.08em; text-transform:uppercase; opacity:0.7; color:currentColor;">${txt}</div>`;
+
+THEMES.forEach((t) => {
+  const a = document.createElement('a');
+  a.href = '#pt-' + t.name; a.textContent = t.name;
+  jump.appendChild(a);
+
+  const tile = document.createElement('div');
+  tile.className = 'tile';
+  tile.id = 'pt-' + t.name;
+  tile.innerHTML = `
+    <div class="tile-head">
+      <span class="nm" style="font-family:${t.display};">${t.name}</span>
+      <span class="meta">${t.tag}</span>
+    </div>
+    <div class="screen-wrap">
+      <div class="stage" style="background:${mix(t.fg, 0.03, t.bg)}; color:${t.muted};">
+        ${sectionLabel('Top toolbar')}
+        ${toolbarPanel(t)}
+        ${sectionLabel('Workflow sidebar · component palette · console dock')}
+        <div style="display:grid; grid-template-columns: 0.85fr 1fr 1.15fr; gap:20px;">
+          ${sidebarPanel(t)}
+          ${palettePanel(t)}
+          ${consolePanel(t)}
+        </div>
+        ${statusBar(t)}
+        ${sectionLabel('Node configuration panel')}
+        ${nodeConfigPanel(t)}
+        ${sectionLabel('Master skill editor · settings')}
+        <div style="display:grid; grid-template-columns: 1.45fr 1fr; gap:20px;">
+          ${masterSkillPanel(t)}
+          ${settingsPanel(t)}
+        </div>
+        ${sectionLabel('API credentials · confirm dialog')}
+        <div style="display:grid; grid-template-columns: 1.45fr 1fr; gap:20px;">
+          ${credsPanel(t)}
+          ${alertDialog(t)}
+        </div>
+      </div>
+    </div>`;
+  list.appendChild(tile);
+});
+
+function fitStages() {
+  document.querySelectorAll('.screen-wrap').forEach((wrap) => {
+    const stage = wrap.querySelector('.stage');
+    const s = wrap.clientWidth / 1380;
+    stage.style.transform = `scale(${s})`;
+    wrap.style.height = (stage.offsetHeight * s) + 'px';
+  });
+}
+fitStages();
+window.addEventListener('resize', fitStages);
+window.addEventListener('load', fitStages);
+</script>
+</body>
+</html>

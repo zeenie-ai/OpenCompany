@@ -56,7 +56,7 @@
 
   /* Wave 30: REC-red executing pulse — matches the surv-blink LED
    * rhythm and reads against the grey CCTV canvas. */
-  --node-pulse-color: hsl(var(--destructive));
+  --node-pulse-color: var(--destructive);
 
   /* Cursor — CCTV snooper reticle (REC-red crosshair with center dot) */
   --cursor-default: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><g stroke='%23e82626' stroke-width='1' fill='none'><circle cx='12' cy='12' r='8'/><path d='M12 1 L12 6 M12 18 L12 23 M1 12 L6 12 M18 12 L23 12'/><circle cx='12' cy='12' r='1.5' fill='%23e82626'/></g></svg>") 12 12, crosshair;
@@ -73,62 +73,68 @@
   --scrollbar-thumb: #5a5e62;
 
   /* Shadcn HSL bridge */
-  --background: 210 6% 11%;
-  --foreground: 210 8% 80%;
-  --card: 210 7% 19%;
-  --card-foreground: 210 8% 80%;
-  --popover: 210 7% 19%;
-  --popover-foreground: 210 8% 80%;
+  --background: #1a1c1e;
+  --foreground: #c8ccd0;
+  --card: #2d3034;
+  --card-foreground: #c8ccd0;
+  --popover: #2d3034;
+  --popover-foreground: #c8ccd0;
 
-  --primary: 0 81% 53%;            /* REC red */
-  --primary-foreground: 0 0% 100%;
-  --secondary: 210 6% 16%;
-  --secondary-foreground: 210 8% 80%;
-  --muted: 210 6% 16%;
-  --muted-foreground: 210 3% 56%;
-  --accent: 120 49% 61%;           /* phosphor green */
-  --accent-foreground: 210 8% 5%;
+  --primary: #e82626;            /* REC red */
+  --primary-foreground: #ffffff;
+  --secondary: #26292b;
+  --secondary-foreground: #c8ccd0;
+  --muted: #26292b;
+  --muted-foreground: #8b8f92;
+  --accent: #6bcc6b;           /* phosphor green */
+  --accent-foreground: #0c0d0e;
 
-  --destructive: 0 81% 53%;
-  --destructive-foreground: 0 0% 100%;
-  --success: 120 49% 61%;
-  --warning: 41 74% 49%;
-  --info: 213 51% 56%;
+  --destructive: #e82626;
+  --destructive-foreground: #ffffff;
+  --success: #6bcc6b;
+  --warning: #d99f20;
+  --info: #5689c8;
 
-  --border: 213 5% 36%;
-  --input: 213 5% 36%;
-  --ring: 0 81% 53%;
+  --border: #575b60;
+  --input: #575b60;
+  --ring: #e82626;
 
   /* Action role bridge */
-  --action-run: 120 49% 61%;
-  --action-run-soft: 120 49% 61% / 0.16;
-  --action-run-hover: 120 49% 61% / 0.30;
-  --action-run-border: 120 49% 61% / 0.7;
+  --action-run: #6bcc6b;
+  --action-run-soft: color-mix(in srgb, var(--action-run) var(--tint-action-soft), transparent);
+  --action-run-hover: color-mix(in srgb, var(--action-run) var(--tint-action-hover), transparent);
+  --action-run-border: color-mix(in srgb, var(--action-run) var(--tint-action-border), transparent);
+  --action-run-ink: var(--action-run);
 
-  --action-stop: 0 81% 53%;
-  --action-stop-soft: 0 81% 53% / 0.18;
-  --action-stop-hover: 0 81% 53% / 0.32;
-  --action-stop-border: 0 81% 53% / 0.7;
+  --action-stop: #e82626;
+  --action-stop-soft: color-mix(in srgb, var(--action-stop) var(--tint-action-soft), transparent);
+  --action-stop-hover: color-mix(in srgb, var(--action-stop) var(--tint-action-hover), transparent);
+  --action-stop-border: color-mix(in srgb, var(--action-stop) var(--tint-action-border), transparent);
+  --action-stop-ink: var(--action-stop);
 
-  --action-save: 120 49% 61%;
-  --action-save-soft: 120 49% 61% / 0.18;
-  --action-save-hover: 120 49% 61% / 0.32;
-  --action-save-border: 120 49% 61% / 0.7;
+  --action-save: #6bcc6b;
+  --action-save-soft: color-mix(in srgb, var(--action-save) var(--tint-action-soft), transparent);
+  --action-save-hover: color-mix(in srgb, var(--action-save) var(--tint-action-hover), transparent);
+  --action-save-border: color-mix(in srgb, var(--action-save) var(--tint-action-border), transparent);
+  --action-save-ink: var(--action-save);
 
-  --action-config: 41 74% 49%;
-  --action-config-soft: 41 74% 49% / 0.16;
-  --action-config-hover: 41 74% 49% / 0.30;
-  --action-config-border: 41 74% 49% / 0.6;
+  --action-config: #d99f20;
+  --action-config-soft: color-mix(in srgb, var(--action-config) var(--tint-action-soft), transparent);
+  --action-config-hover: color-mix(in srgb, var(--action-config) var(--tint-action-hover), transparent);
+  --action-config-border: color-mix(in srgb, var(--action-config) var(--tint-action-border), transparent);
+  --action-config-ink: var(--action-config);
 
-  --action-secret: 0 81% 53%;
-  --action-secret-soft: 0 81% 53% / 0.16;
-  --action-secret-hover: 0 81% 53% / 0.30;
-  --action-secret-border: 0 81% 53% / 0.6;
+  --action-secret: #e82626;
+  --action-secret-soft: color-mix(in srgb, var(--action-secret) var(--tint-action-soft), transparent);
+  --action-secret-hover: color-mix(in srgb, var(--action-secret) var(--tint-action-hover), transparent);
+  --action-secret-border: color-mix(in srgb, var(--action-secret) var(--tint-action-border), transparent);
+  --action-secret-ink: var(--action-secret);
 
-  --action-tools: 213 51% 56%;
-  --action-tools-soft: 213 51% 56% / 0.16;
-  --action-tools-hover: 213 51% 56% / 0.30;
-  --action-tools-border: 213 51% 56% / 0.6;
+  --action-tools: #5689c8;
+  --action-tools-soft: color-mix(in srgb, var(--action-tools) var(--tint-action-soft), transparent);
+  --action-tools-hover: color-mix(in srgb, var(--action-tools) var(--tint-action-hover), transparent);
+  --action-tools-border: color-mix(in srgb, var(--action-tools) var(--tint-action-border), transparent);
+  --action-tools-ink: var(--action-tools);
 
   --tint-soft: 16%;
   --tint-border: 45%;
@@ -197,47 +203,28 @@
 }
 :root[data-theme="surveillance"] .sq-node-box::before {
   content: ''; position: absolute; top: 4px; right: 4px; width: 6px; height: 6px;
-  background: hsl(var(--primary)); border-radius: 50%; box-shadow: 0 0 4px hsl(var(--primary));
+  background: var(--primary); border-radius: 50%; box-shadow: 0 0 4px var(--primary);
   animation: surv-blink 1.4s steps(2) infinite;
 }
 @keyframes surv-blink { 50% { opacity: 0.2; } }
 :root[data-theme="surveillance"] .sq-node.selected .sq-node-box {
-  border: 1px solid hsl(var(--primary)); box-shadow: 0 0 0 1px hsl(var(--primary)), 0 0 8px rgba(232,38,38,0.4);
+  border: 1px solid var(--primary); box-shadow: 0 0 0 1px var(--primary), 0 0 8px rgba(232,38,38,0.4);
 }
 
-/* Wave 29: Surveillance executing nodes blink the REC red glow, matching
- * the corner LED's surv-blink rhythm. Mirrors the analog-camera "live"
- * indicator language. Higher specificity than base.css's generic rule. */
-/* Wave 30.1: dedicated executing-pulse keyframe that animates
- * BOX-SHADOW only. The original `surv-blink` keyframe (LED corner
- * dot) animates opacity to 0.2, which when applied to whole nodes
- * faded the entire node body. This pulses the REC-red glow
- * intensity while the node stays solid. */
-@keyframes surv-pulse-exec {
-  0%, 49% {
-    box-shadow:
-      0 0 0 2px hsl(var(--destructive)),
-      0 0 28px 4px rgba(232, 38, 38, 0.7),
-      0 0 56px 14px rgba(232, 38, 38, 0.3);
-  }
-  50%, 100% {
-    box-shadow:
-      0 0 0 2px hsl(var(--destructive)),
-      0 0 12px 2px rgba(232, 38, 38, 0.45),
-      0 0 24px 6px rgba(232, 38, 38, 0.12);
-  }
-}
-
+/* Surveillance executing-pulse: the surv-pulse-exec keyframe + its
+ * --pulse-keyframe/-duration/-timing tokens now live in
+ * client/src/themes/animations.css; base.css's token-driven `.executing`
+ * rule applies them. This rule keeps only the REC-red border the pulse
+ * pairs with. */
 :root[data-theme="surveillance"] .sq-node[data-executing] .sq-node-box,
 :root[data-theme="surveillance"] .react-flow__node.executing .sq-node-box,
 :root[data-theme="surveillance"] .react-flow__node.executing .node {
-  animation: surv-pulse-exec 1.0s steps(2) infinite;
-  border: 1px solid hsl(var(--destructive));
+  border: 1px solid var(--destructive);
 }
 :root[data-theme="surveillance"] .sq-node-pip { border-radius: 0; }
-:root[data-theme="surveillance"] .sq-node-gear { background: hsl(var(--primary)); color: white; border-radius: 0; border: none; }
+:root[data-theme="surveillance"] .sq-node-gear { background: var(--primary); color: white; border-radius: 0; border: none; }
 :root[data-theme="surveillance"] .sq-node-handle { border-radius: 0; background: var(--phosphor); }
-:root[data-theme="surveillance"] .sq-node-handle.out { background: hsl(var(--primary)); }
+:root[data-theme="surveillance"] .sq-node-handle.out { background: var(--primary); }
 :root[data-theme="surveillance"] .sq-node-label { font-family: var(--font-display); letter-spacing: 0.10em; font-size: 10px; text-transform: uppercase; }
 
 /* ACTIONS — terminal command */
@@ -246,9 +233,9 @@
   border-radius: 0; border-width: 1px;
 }
 :root[data-theme="surveillance"] .action-run    { background: transparent; color: var(--phosphor); border-color: var(--phosphor); }
-:root[data-theme="surveillance"] .action-deploy { background: hsl(var(--primary)); color: white; border-color: hsl(var(--primary)); }
+:root[data-theme="surveillance"] .action-deploy { background: var(--primary); color: white; border-color: var(--primary); }
 :root[data-theme="surveillance"] .action-save   { background: transparent; color: var(--amber); border-color: var(--amber); }
-:root[data-theme="surveillance"] .action-stop   { background: hsl(var(--primary)); color: white; border-color: hsl(var(--primary)); }
+:root[data-theme="surveillance"] .action-stop   { background: var(--primary); color: white; border-color: var(--primary); }
 
 /* CARDS */
 :root[data-theme="surveillance"] .wf-card,
@@ -258,32 +245,32 @@
 :root[data-theme="surveillance"] .cred-card {
   background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: 0;
 }
-:root[data-theme="surveillance"] .wf-card.selected { border: 1px solid hsl(var(--primary)); background: hsl(var(--danger-soft)); }
-:root[data-theme="surveillance"] .cat-tile { background: hsl(var(--primary)); color: white; border-radius: 0; }
+:root[data-theme="surveillance"] .wf-card.selected { border: 1px solid var(--primary); background: var(--danger-soft); }
+:root[data-theme="surveillance"] .cat-tile { background: var(--primary); color: white; border-radius: 0; }
 :root[data-theme="surveillance"] .cat-name { font-family: var(--font-display); }
 :root[data-theme="surveillance"] .comp-ico { background: var(--bg-panel); color: var(--phosphor); border: 1px solid var(--border-strong); border-radius: 0; }
 
 /* CHAT */
 :root[data-theme="surveillance"] .chat-msg { border-radius: 0; }
-:root[data-theme="surveillance"] .chat-msg-user { background: var(--bg-panel); border: 1px solid hsl(var(--primary)); }
+:root[data-theme="surveillance"] .chat-msg-user { background: var(--bg-panel); border: 1px solid var(--primary); }
 :root[data-theme="surveillance"] .chat-msg-bot { background: var(--bg-elevated); border-left: 3px solid var(--phosphor); border-top: 1px solid var(--border-default); border-right: 1px solid var(--border-default); border-bottom: 1px solid var(--border-default); }
 
 /* STATUS BAR */
 :root[data-theme="surveillance"] .statusbar {
-  background: hsl(var(--primary)); color: white; border-top: none;
+  background: var(--primary); color: white; border-top: none;
   font-family: var(--font-mono); letter-spacing: 0.10em; text-transform: uppercase;
 }
 :root[data-theme="surveillance"] .statusbar .pip { background: white; box-shadow: 0 0 4px white; border-radius: 0; }
 
 /* MODAL */
 :root[data-theme="surveillance"] .modal {
-  background: var(--bg-elevated); border: 1px solid hsl(var(--primary)); border-radius: 0;
+  background: var(--bg-elevated); border: 1px solid var(--primary); border-radius: 0;
   box-shadow: 0 0 0 4px rgba(232,38,38,0.08), 0 30px 80px rgba(0,0,0,0.8);
 }
-:root[data-theme="surveillance"] .modal-head { border-bottom: 1px solid hsl(var(--primary)); background: var(--bg-panel); }
-:root[data-theme="surveillance"] .modal-title { font-family: var(--font-display); color: hsl(var(--primary)); letter-spacing: 0.14em; }
+:root[data-theme="surveillance"] .modal-head { border-bottom: 1px solid var(--primary); background: var(--bg-panel); }
+:root[data-theme="surveillance"] .modal-title { font-family: var(--font-display); color: var(--primary); letter-spacing: 0.14em; }
 
 /* CMDK */
-:root[data-theme="surveillance"] .cmdk { background: var(--bg-elevated); border: 1px solid hsl(var(--primary)); border-radius: 0; }
-:root[data-theme="surveillance"] .cmdk-item.active { background: hsl(var(--primary)); color: white; }
+:root[data-theme="surveillance"] .cmdk { background: var(--bg-elevated); border: 1px solid var(--primary); border-radius: 0; }
+:root[data-theme="surveillance"] .cmdk-item.active { background: var(--primary); color: white; }
 :root[data-theme="surveillance"] .cmdk-item.active::before { content: '> '; }

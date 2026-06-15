@@ -5,14 +5,19 @@
  *
  * The `intent` prop is a semantic role (run / stop / save / ...), not a
  * palette color, so themes can re-skin without touching call sites.
- * Each intent reads the matching --action-X / --action-X-soft /
- * --action-X-border CSS triplet defined in index.css; pressed +
- * disabled state are baked into the variant so call sites never do
- * opacity arithmetic.
+ * Each intent reads the matching --action-X-soft (resting fill) /
+ * --action-X-hover (hover fill) / --action-X-border (outline) /
+ * --action-X-ink (readable label colour). These are hex / color-mix()
+ * values owned by the per-theme files (client/src/themes/light.css,
+ * dark.css, + skins); -ink is the legibility fix so the label stays
+ * readable on the soft fill (light: a darkened accent; dark: the raw
+ * accent). Disabled state is the shadcn-idiomatic disabled:opacity-50
+ * on the base class so call sites never do opacity arithmetic.
  *
- * Adding a new intent: add the --action-NAME triplet to index.css,
- * expose the three Tailwind tokens in the @theme inline block, then
- * add a case to `actionButtonVariants` below.
+ * Adding a new intent: add the --action-NAME-{soft,hover,border,ink}
+ * tokens to the theme files, expose the matching Tailwind tokens in the
+ * index.css @theme inline block, then add a case to
+ * `actionButtonVariants` below.
  */
 
 import * as React from 'react';
@@ -33,17 +38,17 @@ export const actionButtonVariants = cva(
     variants: {
       intent: {
         run:
-          'border-action-run-border bg-action-run-soft text-action-run hover:bg-action-run-hover',
+          'border-action-run-border bg-action-run-soft text-action-run-ink hover:bg-action-run-hover',
         stop:
-          'border-action-stop-border bg-action-stop-soft text-action-stop hover:bg-action-stop-hover',
+          'border-action-stop-border bg-action-stop-soft text-action-stop-ink hover:bg-action-stop-hover',
         save:
-          'border-action-save-border bg-action-save-soft text-action-save hover:bg-action-save-hover',
+          'border-action-save-border bg-action-save-soft text-action-save-ink hover:bg-action-save-hover',
         config:
-          'border-action-config-border bg-action-config-soft text-action-config hover:bg-action-config-hover',
+          'border-action-config-border bg-action-config-soft text-action-config-ink hover:bg-action-config-hover',
         secret:
-          'border-action-secret-border bg-action-secret-soft text-action-secret hover:bg-action-secret-hover',
+          'border-action-secret-border bg-action-secret-soft text-action-secret-ink hover:bg-action-secret-hover',
         tools:
-          'border-action-tools-border bg-action-tools-soft text-action-tools hover:bg-action-tools-hover',
+          'border-action-tools-border bg-action-tools-soft text-action-tools-ink hover:bg-action-tools-hover',
       },
     },
     defaultVariants: { intent: 'save' },

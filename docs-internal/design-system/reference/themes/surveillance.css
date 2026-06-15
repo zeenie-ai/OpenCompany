@@ -1,0 +1,289 @@
+/* ============================================================================
+ * themes/surveillance.css — institutional grey, CCTV crosshair overlays.
+ *
+ * Bureaucratic, cold, all corners and IDs. Reads like a 1970s panopticon
+ * control room. Ported from
+ * design_handoff_machinaos_themes/themes/surveillance.css.
+ * ============================================================================ */
+
+:root[data-theme="surveillance"] {
+  --bg-app: #1a1c1e;
+  --bg-panel: #232628;
+  --bg-canvas: #0a0c0e;
+  --bg-elevated: #2c3034;
+  --bg-input: #0a0c0e;
+  --bg-hover: rgba(232, 38, 38, 0.08);
+  --bg-active: rgba(232, 38, 38, 0.18);
+  --bg-overlay: rgba(0, 0, 0, 0.85);
+
+  --border-default: #3a3e42;
+  --border-strong: #5a5e62;
+  --border-focus: #e82626;
+  --ornament-frame: none;
+
+  --fg-default: #c8ccd0;
+  --fg-muted: #888c90;
+  --fg-faint: #585c60;
+  --fg-on-accent: #ffffff;
+  --fg-on-success: #0a0c0e;
+  --fg-on-danger: #ffffff;
+  --fg-on-warning: #0a0c0e;
+
+  --phosphor: #6acc6a;
+  --amber: #d8a020;
+  --concrete: #888c90;
+  --rec-red: #e82626;
+
+  --font-display: 'Anonymous Pro', 'IBM Plex Mono', monospace;
+  --font-body: 'IBM Plex Mono', 'Anonymous Pro', monospace;
+  --font-mono: 'IBM Plex Mono', monospace;
+  --type-scale-base: 13px;
+  --type-tracking-display: 0.10em;
+  --type-uppercase: uppercase;
+
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-pill: 0px;
+
+  --dur-fast: 60ms;
+  --dur-default: 140ms;
+  --dur-slow: 240ms;
+  --ease-default: linear;
+  --ease-emphasis: linear;
+  --motion-style: scanline;
+  --sound-pack: telex;
+
+  /* Wave 30: REC-red executing pulse — matches the surv-blink LED
+   * rhythm and reads against the grey CCTV canvas. */
+  --node-pulse-color: hsl(var(--destructive));
+
+  /* Cursor — CCTV snooper reticle (REC-red crosshair with center dot) */
+  --cursor-default: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><g stroke='%23e82626' stroke-width='1' fill='none'><circle cx='12' cy='12' r='8'/><path d='M12 1 L12 6 M12 18 L12 23 M1 12 L6 12 M18 12 L23 12'/><circle cx='12' cy='12' r='1.5' fill='%23e82626'/></g></svg>") 12 12, crosshair;
+  --cursor-pointer: pointer;
+
+  /* Canvas backplane — CCTV crosshair + corner brackets + 40px grain grid */
+  --canvas-grid:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1920' height='1080'><g stroke='%23e82626' stroke-width='1' fill='none' opacity='0.18'><path d='M40 40 H120 M40 40 V120 M1880 40 H1800 M1880 40 V120 M40 1040 H120 M40 1040 V960 M1880 1040 H1800 M1880 1040 V960'/><circle cx='960' cy='540' r='40' opacity='0.2'/><path d='M960 480 V600 M900 540 H1020' opacity='0.25'/></g></svg>"),
+    repeating-linear-gradient(0deg, transparent 0 3px, rgba(106,204,106,0.04) 3px 4px),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40'><g stroke='%23888c90' stroke-width='0.4' fill='none' opacity='0.12'><path d='M0 20 H40 M20 0 V40'/></g></svg>");
+  --canvas-grid-opacity: 1;
+
+  --scrollbar-track: #1a1c1e;
+  --scrollbar-thumb: #5a5e62;
+
+  /* Shadcn HSL bridge */
+  --background: 210 6% 11%;
+  --foreground: 210 8% 80%;
+  --card: 210 7% 19%;
+  --card-foreground: 210 8% 80%;
+  --popover: 210 7% 19%;
+  --popover-foreground: 210 8% 80%;
+
+  --primary: 0 81% 53%;            /* REC red */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 6% 16%;
+  --secondary-foreground: 210 8% 80%;
+  --muted: 210 6% 16%;
+  --muted-foreground: 210 3% 56%;
+  --accent: 120 49% 61%;           /* phosphor green */
+  --accent-foreground: 210 8% 5%;
+
+  --destructive: 0 81% 53%;
+  --destructive-foreground: 0 0% 100%;
+  --success: 120 49% 61%;
+  --warning: 41 74% 49%;
+  --info: 213 51% 56%;
+
+  --border: 213 5% 36%;
+  --input: 213 5% 36%;
+  --ring: 0 81% 53%;
+
+  /* Action role bridge */
+  --action-run: 120 49% 61%;
+  --action-run-soft: 120 49% 61% / 0.16;
+  --action-run-hover: 120 49% 61% / 0.30;
+  --action-run-border: 120 49% 61% / 0.7;
+
+  --action-stop: 0 81% 53%;
+  --action-stop-soft: 0 81% 53% / 0.18;
+  --action-stop-hover: 0 81% 53% / 0.32;
+  --action-stop-border: 0 81% 53% / 0.7;
+
+  --action-save: 120 49% 61%;
+  --action-save-soft: 120 49% 61% / 0.18;
+  --action-save-hover: 120 49% 61% / 0.32;
+  --action-save-border: 120 49% 61% / 0.7;
+
+  --action-config: 41 74% 49%;
+  --action-config-soft: 41 74% 49% / 0.16;
+  --action-config-hover: 41 74% 49% / 0.30;
+  --action-config-border: 41 74% 49% / 0.6;
+
+  --action-secret: 0 81% 53%;
+  --action-secret-soft: 0 81% 53% / 0.16;
+  --action-secret-hover: 0 81% 53% / 0.30;
+  --action-secret-border: 0 81% 53% / 0.6;
+
+  --action-tools: 213 51% 56%;
+  --action-tools-soft: 213 51% 56% / 0.16;
+  --action-tools-hover: 213 51% 56% / 0.30;
+  --action-tools-border: 213 51% 56% / 0.6;
+
+  --tint-soft: 16%;
+  --tint-border: 45%;
+}
+
+/* Body — monitor scanlines */
+:root[data-theme="surveillance"] body {
+  background:
+    repeating-linear-gradient(0deg, transparent 0, transparent 2px, rgba(0,0,0,0.18) 2px, rgba(0,0,0,0.18) 3px),
+    var(--bg-app);
+}
+
+:root[data-theme="surveillance"] ::selection {
+  background: rgba(232, 38, 38, 0.5);
+  color: #ffffff;
+}
+
+/* Phosphor scrollbars */
+:root[data-theme="surveillance"] ::-webkit-scrollbar-thumb {
+  background: #5a5e62;
+}
+
+/* ── Per-component decorations (Wave 16 port from handoff) ─── */
+
+:root[data-theme="surveillance"] .toolbar,
+:root[data-theme="surveillance"] .sidebar,
+:root[data-theme="surveillance"] .palette,
+:root[data-theme="surveillance"] .chat { background: var(--bg-panel); }
+:root[data-theme="surveillance"] .toolbar { border-bottom: 1px solid var(--border-strong); }
+:root[data-theme="surveillance"] .sidebar { border-right: 1px solid var(--border-strong); }
+:root[data-theme="surveillance"] .palette { border-left: 1px solid var(--border-strong); }
+:root[data-theme="surveillance"] .chat    { border-top: 1px solid var(--border-strong); }
+
+/* CANVAS — CCTV grid + crosshair.
+ *
+ * NOTE: the corner-bracket / centre-reticle / REC-text SVG is declared at a
+ * fixed 1920x1080 viewport (matches the upstream handoff). On viewports
+ * larger than 1920x1080 it tiles; on smaller viewports it's clipped to
+ * canvas bounds. The CCTV-monitor framing reads as intentional at typical
+ * desktop sizes. Replacing it with a `preserveAspectRatio="xMidYMid slice"`
+ * SVG that scales would lose the pixel-pitch authenticity the design calls
+ * for, so this is a known limitation, not a bug. The 40px crosshair grid
+ * (third layer) is correctly tiled across the full canvas at any size. */
+:root[data-theme="surveillance"] .canvas {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1920' height='1080'><g stroke='%23e82626' stroke-width='1' fill='none' opacity='0.18'><path d='M40 40 H120 M40 40 V120 M1880 40 H1800 M1880 40 V120 M40 1040 H120 M40 1040 V960 M1880 1040 H1800 M1880 1040 V960'/><circle cx='960' cy='540' r='40' opacity='0.2'/><path d='M960 480 V600 M900 540 H1020' opacity='0.25'/></g><text x='80' y='80' fill='%23e82626' font-family='monospace' font-size='14' opacity='0.5'>● REC</text><text x='80' y='1020' fill='%23e82626' font-family='monospace' font-size='12' opacity='0.4'>CAM-04 / 19:42:08</text></svg>"),
+    repeating-linear-gradient(0deg, transparent 0, transparent 3px, rgba(106,204,106,0.04) 3px, rgba(106,204,106,0.04) 4px),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40'><g stroke='%23888c90' stroke-width='0.4' fill='none' opacity='0.12'><path d='M0 20 H40 M20 0 V40'/></g></svg>"),
+    var(--bg-canvas);
+}
+
+/* TYPOGRAPHY */
+:root[data-theme="surveillance"] body { font-family: var(--font-body); color: var(--fg-default); font-size: 13px; }
+:root[data-theme="surveillance"] h1, :root[data-theme="surveillance"] h2, :root[data-theme="surveillance"] h3,
+:root[data-theme="surveillance"] .v-display {
+  font-family: var(--font-display); letter-spacing: 0.10em; text-transform: uppercase; color: var(--fg-default);
+}
+
+/* SQUARE NODE — case file dossier */
+:root[data-theme="surveillance"] .sq-node-box {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong); border-radius: 0;
+  box-shadow: none;
+  color: var(--fg-default);
+  position: relative;
+}
+:root[data-theme="surveillance"] .sq-node-box::before {
+  content: ''; position: absolute; top: 4px; right: 4px; width: 6px; height: 6px;
+  background: hsl(var(--primary)); border-radius: 50%; box-shadow: 0 0 4px hsl(var(--primary));
+  animation: surv-blink 1.4s steps(2) infinite;
+}
+@keyframes surv-blink { 50% { opacity: 0.2; } }
+:root[data-theme="surveillance"] .sq-node.selected .sq-node-box {
+  border: 1px solid hsl(var(--primary)); box-shadow: 0 0 0 1px hsl(var(--primary)), 0 0 8px rgba(232,38,38,0.4);
+}
+
+/* Wave 29: Surveillance executing nodes blink the REC red glow, matching
+ * the corner LED's surv-blink rhythm. Mirrors the analog-camera "live"
+ * indicator language. Higher specificity than base.css's generic rule. */
+/* Wave 30.1: dedicated executing-pulse keyframe that animates
+ * BOX-SHADOW only. The original `surv-blink` keyframe (LED corner
+ * dot) animates opacity to 0.2, which when applied to whole nodes
+ * faded the entire node body. This pulses the REC-red glow
+ * intensity while the node stays solid. */
+@keyframes surv-pulse-exec {
+  0%, 49% {
+    box-shadow:
+      0 0 0 2px hsl(var(--destructive)),
+      0 0 28px 4px rgba(232, 38, 38, 0.7),
+      0 0 56px 14px rgba(232, 38, 38, 0.3);
+  }
+  50%, 100% {
+    box-shadow:
+      0 0 0 2px hsl(var(--destructive)),
+      0 0 12px 2px rgba(232, 38, 38, 0.45),
+      0 0 24px 6px rgba(232, 38, 38, 0.12);
+  }
+}
+
+:root[data-theme="surveillance"] .sq-node[data-executing] .sq-node-box,
+:root[data-theme="surveillance"] .react-flow__node.executing .sq-node-box,
+:root[data-theme="surveillance"] .react-flow__node.executing .node {
+  animation: surv-pulse-exec 1.0s steps(2) infinite;
+  border: 1px solid hsl(var(--destructive));
+}
+:root[data-theme="surveillance"] .sq-node-pip { border-radius: 0; }
+:root[data-theme="surveillance"] .sq-node-gear { background: hsl(var(--primary)); color: white; border-radius: 0; border: none; }
+:root[data-theme="surveillance"] .sq-node-handle { border-radius: 0; background: var(--phosphor); }
+:root[data-theme="surveillance"] .sq-node-handle.out { background: hsl(var(--primary)); }
+:root[data-theme="surveillance"] .sq-node-label { font-family: var(--font-display); letter-spacing: 0.10em; font-size: 10px; text-transform: uppercase; }
+
+/* ACTIONS — terminal command */
+:root[data-theme="surveillance"] .action-btn {
+  font-family: var(--font-display); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+  border-radius: 0; border-width: 1px;
+}
+:root[data-theme="surveillance"] .action-run    { background: transparent; color: var(--phosphor); border-color: var(--phosphor); }
+:root[data-theme="surveillance"] .action-deploy { background: hsl(var(--primary)); color: white; border-color: hsl(var(--primary)); }
+:root[data-theme="surveillance"] .action-save   { background: transparent; color: var(--amber); border-color: var(--amber); }
+:root[data-theme="surveillance"] .action-stop   { background: hsl(var(--primary)); color: white; border-color: hsl(var(--primary)); }
+
+/* CARDS */
+:root[data-theme="surveillance"] .wf-card,
+:root[data-theme="surveillance"] .cat,
+:root[data-theme="surveillance"] .comp,
+:root[data-theme="surveillance"] .settings-section,
+:root[data-theme="surveillance"] .cred-card {
+  background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: 0;
+}
+:root[data-theme="surveillance"] .wf-card.selected { border: 1px solid hsl(var(--primary)); background: hsl(var(--danger-soft)); }
+:root[data-theme="surveillance"] .cat-tile { background: hsl(var(--primary)); color: white; border-radius: 0; }
+:root[data-theme="surveillance"] .cat-name { font-family: var(--font-display); }
+:root[data-theme="surveillance"] .comp-ico { background: var(--bg-panel); color: var(--phosphor); border: 1px solid var(--border-strong); border-radius: 0; }
+
+/* CHAT */
+:root[data-theme="surveillance"] .chat-msg { border-radius: 0; }
+:root[data-theme="surveillance"] .chat-msg-user { background: var(--bg-panel); border: 1px solid hsl(var(--primary)); }
+:root[data-theme="surveillance"] .chat-msg-bot { background: var(--bg-elevated); border-left: 3px solid var(--phosphor); border-top: 1px solid var(--border-default); border-right: 1px solid var(--border-default); border-bottom: 1px solid var(--border-default); }
+
+/* STATUS BAR */
+:root[data-theme="surveillance"] .statusbar {
+  background: hsl(var(--primary)); color: white; border-top: none;
+  font-family: var(--font-mono); letter-spacing: 0.10em; text-transform: uppercase;
+}
+:root[data-theme="surveillance"] .statusbar .pip { background: white; box-shadow: 0 0 4px white; border-radius: 0; }
+
+/* MODAL */
+:root[data-theme="surveillance"] .modal {
+  background: var(--bg-elevated); border: 1px solid hsl(var(--primary)); border-radius: 0;
+  box-shadow: 0 0 0 4px rgba(232,38,38,0.08), 0 30px 80px rgba(0,0,0,0.8);
+}
+:root[data-theme="surveillance"] .modal-head { border-bottom: 1px solid hsl(var(--primary)); background: var(--bg-panel); }
+:root[data-theme="surveillance"] .modal-title { font-family: var(--font-display); color: hsl(var(--primary)); letter-spacing: 0.14em; }
+
+/* CMDK */
+:root[data-theme="surveillance"] .cmdk { background: var(--bg-elevated); border: 1px solid hsl(var(--primary)); border-radius: 0; }
+:root[data-theme="surveillance"] .cmdk-item.active { background: hsl(var(--primary)); color: white; }
+:root[data-theme="surveillance"] .cmdk-item.active::before { content: '> '; }

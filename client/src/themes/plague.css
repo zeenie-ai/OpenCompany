@@ -56,7 +56,7 @@
 
   /* Wave 30: bile-red pulse — matches the broadsheet warning palette
    * + reads against parchment. */
-  --node-pulse-color: hsl(var(--destructive));
+  --node-pulse-color: var(--destructive);
 
   --cursor-default: auto;
   --cursor-pointer: pointer;
@@ -64,62 +64,68 @@
   --scrollbar-thumb: #2a1c14;
 
   /* Shadcn HSL bridge */
-  --background: 49 25% 80%;
-  --foreground: 24 35% 12%;
-  --card: 47 53% 88%;
-  --card-foreground: 24 35% 12%;
-  --popover: 47 53% 88%;
-  --popover-foreground: 24 35% 12%;
+  --background: #d3cdba;
+  --foreground: #29190f;
+  --card: #f0e9cd;
+  --card-foreground: #29190f;
+  --popover: #f0e9cd;
+  --popover-foreground: #29190f;
 
-  --primary: 14 50% 31%;           /* dried blood */
-  --primary-foreground: 47 53% 88%;
-  --secondary: 49 35% 84%;
-  --secondary-foreground: 24 35% 12%;
-  --muted: 49 35% 84%;
-  --muted-foreground: 28 26% 33%;
-  --accent: 65 49% 44%;            /* bile */
-  --accent-foreground: 24 35% 12%;
+  --primary: #773d27;           /* dried blood */
+  --primary-foreground: #f0e9cd;
+  --secondary: #e2dac2;
+  --secondary-foreground: #29190f;
+  --muted: #e2dac2;
+  --muted-foreground: #6a564a;
+  --accent: #a6a738;            /* bile */
+  --accent-foreground: #29190f;
 
-  --destructive: 14 50% 31%;
-  --destructive-foreground: 47 53% 88%;
-  --success: 75 47% 30%;
-  --warning: 65 49% 44%;
-  --info: 213 17% 35%;
+  --destructive: #773d27;
+  --destructive-foreground: #f0e9cd;
+  --success: #647016;
+  --warning: #a6a738;
+  --info: #4a5666;
 
-  --border: 24 35% 12%;
-  --input: 33 30% 56%;
-  --ring: 14 50% 31%;
+  --border: #29190f;
+  --input: #b0916c;
+  --ring: #773d27;
 
   /* Action role bridge */
-  --action-run: 75 47% 30%;
-  --action-run-soft: 75 47% 30% / 0.20;
-  --action-run-hover: 75 47% 30% / 0.34;
-  --action-run-border: 75 47% 30% / 0.7;
+  --action-run: #647016;
+  --action-run-soft:   color-mix(in srgb, var(--action-run) var(--tint-action-soft), transparent);
+  --action-run-hover:  color-mix(in srgb, var(--action-run) var(--tint-action-hover), transparent);
+  --action-run-border: color-mix(in srgb, var(--action-run) var(--tint-action-border), transparent);
+  --action-run-ink: var(--action-run);
 
-  --action-stop: 14 50% 31%;
-  --action-stop-soft: 14 50% 31% / 0.20;
-  --action-stop-hover: 14 50% 31% / 0.34;
-  --action-stop-border: 14 50% 31% / 0.7;
+  --action-stop: #773d27;
+  --action-stop-soft:   color-mix(in srgb, var(--action-stop) var(--tint-action-soft), transparent);
+  --action-stop-hover:  color-mix(in srgb, var(--action-stop) var(--tint-action-hover), transparent);
+  --action-stop-border: color-mix(in srgb, var(--action-stop) var(--tint-action-border), transparent);
+  --action-stop-ink: var(--action-stop);
 
-  --action-save: 14 50% 31%;
-  --action-save-soft: 14 50% 31% / 0.18;
-  --action-save-hover: 14 50% 31% / 0.32;
-  --action-save-border: 14 50% 31% / 0.7;
+  --action-save: #773d27;
+  --action-save-soft:   color-mix(in srgb, var(--action-save) var(--tint-action-soft), transparent);
+  --action-save-hover:  color-mix(in srgb, var(--action-save) var(--tint-action-hover), transparent);
+  --action-save-border: color-mix(in srgb, var(--action-save) var(--tint-action-border), transparent);
+  --action-save-ink: var(--action-save);
 
-  --action-config: 65 49% 44%;
-  --action-config-soft: 65 49% 44% / 0.20;
-  --action-config-hover: 65 49% 44% / 0.34;
-  --action-config-border: 65 49% 44% / 0.6;
+  --action-config: #a6a738;
+  --action-config-soft:   color-mix(in srgb, var(--action-config) var(--tint-action-soft), transparent);
+  --action-config-hover:  color-mix(in srgb, var(--action-config) var(--tint-action-hover), transparent);
+  --action-config-border: color-mix(in srgb, var(--action-config) var(--tint-action-border), transparent);
+  --action-config-ink: var(--action-config);
 
-  --action-secret: 213 17% 35%;
-  --action-secret-soft: 213 17% 35% / 0.16;
-  --action-secret-hover: 213 17% 35% / 0.30;
-  --action-secret-border: 213 17% 35% / 0.7;
+  --action-secret: #4a5666;
+  --action-secret-soft:   color-mix(in srgb, var(--action-secret) var(--tint-action-soft), transparent);
+  --action-secret-hover:  color-mix(in srgb, var(--action-secret) var(--tint-action-hover), transparent);
+  --action-secret-border: color-mix(in srgb, var(--action-secret) var(--tint-action-border), transparent);
+  --action-secret-ink: var(--action-secret);
 
-  --action-tools: 14 50% 31%;
-  --action-tools-soft: 14 50% 31% / 0.16;
-  --action-tools-hover: 14 50% 31% / 0.30;
-  --action-tools-border: 14 50% 31% / 0.6;
+  --action-tools: #773d27;
+  --action-tools-soft:   color-mix(in srgb, var(--action-tools) var(--tint-action-soft), transparent);
+  --action-tools-hover:  color-mix(in srgb, var(--action-tools) var(--tint-action-hover), transparent);
+  --action-tools-border: color-mix(in srgb, var(--action-tools) var(--tint-action-border), transparent);
+  --action-tools-ink: var(--action-tools);
 
   --tint-soft: 16%;
   --tint-border: 40%;
@@ -180,7 +186,7 @@
 :root[data-theme="plague"] body { font-family: var(--font-body); color: var(--fg-default); }
 :root[data-theme="plague"] h1, :root[data-theme="plague"] h2, :root[data-theme="plague"] h3,
 :root[data-theme="plague"] .v-display {
-  font-family: var(--font-display); letter-spacing: 0.04em; text-transform: uppercase; color: hsl(var(--accent));
+  font-family: var(--font-display); letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent);
 }
 
 /* SQUARE NODE — quarantine notice nailed up */
@@ -197,23 +203,23 @@
 }
 /* Wave 29: outer halo so selection reads at any zoom level. */
 :root[data-theme="plague"] .sq-node.selected .sq-node-box {
-  border-color: hsl(var(--accent));
-  background: hsl(var(--destructive) / 0.2);
-  box-shadow: 0 0 0 2px hsl(var(--accent)), 0 0 14px hsl(var(--destructive) / 0.4);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--destructive) 20%, transparent);
+  box-shadow: 0 0 0 2px var(--accent), 0 0 14px color-mix(in srgb, var(--destructive) 40%, transparent);
 }
-:root[data-theme="plague"] .sq-node-gear { background: hsl(var(--accent)); color: var(--linen); border: none; border-radius: 0; }
+:root[data-theme="plague"] .sq-node-gear { background: var(--accent); color: var(--linen); border: none; border-radius: 0; }
 :root[data-theme="plague"] .sq-node-handle { border-radius: 0; }
-:root[data-theme="plague"] .sq-node-handle.out { background: hsl(var(--accent)); }
-:root[data-theme="plague"] .sq-node-label { font-family: var(--font-display); letter-spacing: 0.06em; color: hsl(var(--accent)); font-weight: 400; }
+:root[data-theme="plague"] .sq-node-handle.out { background: var(--accent); }
+:root[data-theme="plague"] .sq-node-label { font-family: var(--font-display); letter-spacing: 0.06em; color: var(--accent); font-weight: 400; }
 
 /* ACTIONS — official stamps */
 :root[data-theme="plague"] .action-btn {
   font-family: var(--font-display); font-size: 12px; letter-spacing: 0.10em; text-transform: uppercase;
   border-radius: 0; border-width: 2px; font-weight: 400;
 }
-:root[data-theme="plague"] .action-run { background: hsl(var(--success-soft)); color: hsl(var(--success)); border-color: hsl(var(--success)); }
-:root[data-theme="plague"] .action-deploy { background: hsl(var(--danger-soft)); color: hsl(var(--accent)); border-color: hsl(var(--accent)); }
-:root[data-theme="plague"] .action-save { background: hsl(var(--warning-soft)); color: var(--bile); border-color: var(--bile); }
+:root[data-theme="plague"] .action-run { background: var(--success-soft); color: var(--success); border-color: var(--success); }
+:root[data-theme="plague"] .action-deploy { background: var(--danger-soft); color: var(--accent); border-color: var(--accent); }
+:root[data-theme="plague"] .action-save { background: var(--warning-soft); color: var(--bile); border-color: var(--bile); }
 
 /* CARDS */
 :root[data-theme="plague"] .wf-card,
@@ -223,18 +229,18 @@
 :root[data-theme="plague"] .cred-card {
   background: var(--linen); border: 1px solid var(--crow); border-radius: 0; box-shadow: 2px 2px 0 var(--border-default);
 }
-:root[data-theme="plague"] .wf-card.selected { background: hsl(var(--danger-soft)); border: 2px solid hsl(var(--accent)); }
+:root[data-theme="plague"] .wf-card.selected { background: var(--danger-soft); border: 2px solid var(--accent); }
 :root[data-theme="plague"] .cat-tile { background: var(--crow); color: var(--linen); border-radius: 0; }
 :root[data-theme="plague"] .cat-name { font-family: var(--font-display); }
-:root[data-theme="plague"] .comp-ico { background: var(--bg-panel); color: hsl(var(--accent)); border: 1px solid var(--crow); border-radius: 0; }
+:root[data-theme="plague"] .comp-ico { background: var(--bg-panel); color: var(--accent); border: 1px solid var(--crow); border-radius: 0; }
 
 /* CHAT */
-:root[data-theme="plague"] .chat-msg-user { background: hsl(var(--danger-soft)); border: 1px solid hsl(var(--accent)); border-radius: 0; }
+:root[data-theme="plague"] .chat-msg-user { background: var(--danger-soft); border: 1px solid var(--accent); border-radius: 0; }
 :root[data-theme="plague"] .chat-msg-bot { background: var(--linen); border: 1px solid var(--crow); border-radius: 0; }
 
 /* STATUS BAR */
 :root[data-theme="plague"] .statusbar {
-  background: var(--crow); color: var(--linen); border-top: 3px solid hsl(var(--accent));
+  background: var(--crow); color: var(--linen); border-top: 3px solid var(--accent);
   font-family: var(--font-mono); letter-spacing: 0.08em;
 }
 :root[data-theme="plague"] .statusbar .pip { background: var(--bile); border-radius: 0; }
@@ -242,12 +248,12 @@
 /* MODAL */
 :root[data-theme="plague"] .modal {
   background: var(--linen); border: 4px double var(--crow); border-radius: 0;
-  box-shadow: 8px 8px 0 hsl(var(--accent));
+  box-shadow: 8px 8px 0 var(--accent);
 }
 :root[data-theme="plague"] .modal-head { border-bottom: 3px double var(--crow); }
-:root[data-theme="plague"] .modal-title { font-family: var(--font-display); color: hsl(var(--accent)); }
+:root[data-theme="plague"] .modal-title { font-family: var(--font-display); color: var(--accent); }
 
 /* CMDK */
 :root[data-theme="plague"] .cmdk { background: var(--linen); border: 4px double var(--crow); border-radius: 0; }
-:root[data-theme="plague"] .cmdk-item.active { background: hsl(var(--danger-soft)); color: hsl(var(--accent)); }
-:root[data-theme="plague"] .cmdk-item.active::before { content: '† '; color: hsl(var(--accent)); }
+:root[data-theme="plague"] .cmdk-item.active { background: var(--danger-soft); color: var(--accent); }
+:root[data-theme="plague"] .cmdk-item.active::before { content: '† '; color: var(--accent); }

@@ -8,177 +8,19 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ============================================================================
- * Theme tokens — MachinaOs palette mapped to shadcn variable names so both
- * shadcn components and our own code resolve to the same CSS vars.
+ * Base resets + Tailwind v4 plumbing.
  *
- * Values are HSL triplets (no hsl() wrapper) so Tailwind utilities can
- * compose alpha via `bg-primary/50`, `text-foreground/80`, etc.
- *
- * Source palette: client/src/styles/theme.ts (Solarized + Dracula).
- * theme.ts is deleted in Phase 7 once nothing imports it.
+ * Token VALUES live in the per-theme files (client/src/themes/*.css):
+ * light.css / dark.css own the shadcn + dracula + node + action colour
+ * hex; base.css owns the shared scale / chrome / shadow / type / tint
+ * tokens. This file holds only the global resets and the `@theme inline`
+ * bridge that maps `--color-X: var(--X)` so Tailwind utilities resolve
+ * against whichever theme is active. Colours are hex / color-mix, so the
+ * bridge uses bare var() (no hsl() wrapper); Tailwind v4 still composes
+ * `/opacity` via color-mix().
  * ============================================================================ */
 
 @layer base {
-  :root {
-    /* Surfaces */
-    --background: 218 22% 97%;            /* #f5f7fa */
-    --foreground: 214 11% 12%;            /* #1a1d21 */
-    --card: 0 0% 100%;
-    --card-foreground: 214 11% 12%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 214 11% 12%;
-
-    /* Primary */
-    --primary: 221 83% 53%;               /* #2563eb */
-    --primary-foreground: 0 0% 100%;
-
-    /* Secondary / muted / accent */
-    --secondary: 215 18% 95%;             /* #eef1f5 */
-    --secondary-foreground: 214 11% 12%;
-    --muted: 215 18% 95%;
-    --muted-foreground: 217 12% 34%;      /* #4b5563 */
-    --accent: 262 83% 58%;                /* #7c3aed */
-    --accent-foreground: 0 0% 100%;
-
-    /* Semantic */
-    --destructive: 0 74% 51%;             /* #dc2626 */
-    --destructive-foreground: 0 0% 100%;
-    --success: 161 94% 30%;               /* #059669 */
-    --warning: 32 95% 44%;                /* #d97706 */
-    --info: 192 91% 36%;                  /* #0891b2 */
-
-    /* Borders / focus */
-    --border: 216 12% 84%;                /* #d1d5db */
-    --input: 216 12% 84%;
-    --ring: 217 91% 60%;                  /* #3b82f6 */
-
-    --radius: 0.5rem;
-
-    /* Dracula vibrant accents — same in both themes, used for action buttons */
-    --dracula-green: 135 94% 65%;         /* #50fa7b */
-    --dracula-purple: 265 89% 78%;        /* #bd93f9 */
-    --dracula-pink: 326 100% 74%;         /* #ff79c6 */
-    --dracula-cyan: 191 97% 77%;          /* #8be9fd */
-    --dracula-red: 0 100% 67%;            /* #ff5555 */
-    --dracula-orange: 27 100% 71%;        /* #ffb86c */
-    --dracula-yellow: 65 92% 76%;         /* #f1fa8c */
-    --dracula-selection: 232 14% 31%;     /* #44475a */
-    --dracula-current-line: 232 14% 25%;  /* #383a4a */
-    --dracula-comment: 225 27% 51%;       /* #6272a4 */
-
-    /* Node-type semantic tokens — role-based. Themes redefine these in
-     * their own scope without touching call sites.
-     *
-     * Each role exposes three variants so call sites never use opacity
-     * arithmetic (`bg-node-agent/10`) — themes own the exact tints:
-     *   --node-X         base solid color (badges, icons)
-     *   --node-X-soft    tinted surface (card backgrounds)
-     *   --node-X-border  tinted outline (card / chip borders) */
-    --node-agent:           265 89% 78%;
-    --node-agent-soft:      265 89% 78% / 0.08;
-    --node-agent-border:    265 89% 78% / 0.3;
-
-    --node-model:           191 97% 77%;
-    --node-model-soft:      191 97% 77% / 0.08;
-    --node-model-border:    191 97% 77% / 0.3;
-
-    --node-skill:           135 94% 65%;
-    --node-skill-soft:      135 94% 65% / 0.08;
-    --node-skill-border:    135 94% 65% / 0.3;
-
-    --node-tool:            135 94% 65%;
-    --node-tool-soft:       135 94% 65% / 0.08;
-    --node-tool-border:     135 94% 65% / 0.3;
-
-    --node-trigger:         326 100% 74%;
-    --node-trigger-soft:    326 100% 74% / 0.08;
-    --node-trigger-border:  326 100% 74% / 0.3;
-
-    --node-workflow:        27 100% 71%;
-    --node-workflow-soft:   27 100% 71% / 0.08;
-    --node-workflow-border: 27 100% 71% / 0.3;
-
-    /* Brand-color tint alphas — same scale as the node-X-soft / -border
-     * variants above, but exposed as standalone variables so utilities
-     * can mix them against `currentColor` (data-driven brand colors
-     * like provider.color / definition.defaults.color, which can't use
-     * the role tokens). Themes redefine these in their own scope to
-     * change the canonical alphas without touching call sites. */
-    --tint-soft:   8%;
-    --tint-border: 30%;
-
-    /* Toolbar / action role tokens — semantic names so call sites read
-     * `bg-action-run` instead of a palette color. Themes redefine these
-     * in their own scope; no component imports a palette name directly.
-     * Each role exposes the base + a -soft (tinted bg) + a -border
-     * (tinted outline) variant so opacity arithmetic stays out of the
-     * call site (mirrors the --node-X / --node-X-soft / -border
-     * convention). */
-    --action-run:           135 94% 65%;        /* primary CTA: deploy / run */
-    --action-run-soft:      135 94% 65% / 0.15;
-    --action-run-hover:     135 94% 65% / 0.25;
-    --action-run-border:    135 94% 65% / 0.6;
-
-    --action-stop:          326 100% 74%;       /* destructive: stop / cancel / logout */
-    --action-stop-soft:     326 100% 74% / 0.15;
-    --action-stop-hover:    326 100% 74% / 0.25;
-    --action-stop-border:   326 100% 74% / 0.6;
-
-    --action-save:          191 97% 77%;        /* commit / save / panel toggle */
-    --action-save-soft:     191 97% 77% / 0.15;
-    --action-save-hover:    191 97% 77% / 0.25;
-    --action-save-border:   191 97% 77% / 0.6;
-
-    --action-config:        27 100% 71%;        /* settings / config / warning */
-    --action-config-soft:   27 100% 71% / 0.15;
-    --action-config-hover:  27 100% 71% / 0.25;
-    --action-config-border: 27 100% 71% / 0.6;
-
-    --action-secret:        65 92% 76%;         /* credentials / theme toggle */
-    --action-secret-soft:   65 92% 76% / 0.15;
-    --action-secret-hover:  65 92% 76% / 0.25;
-    --action-secret-border: 65 92% 76% / 0.6;
-
-    --action-tools:         265 89% 78%;        /* component palette / creative */
-    --action-tools-soft:    265 89% 78% / 0.15;
-    --action-tools-hover:   265 89% 78% / 0.25;
-    --action-tools-border:  265 89% 78% / 0.6;
-  }
-
-  .dark {
-    /* Surfaces (Solarized dark) */
-    --background: 192 100% 11%;           /* #002b36 base03 */
-    --foreground: 60 30% 96%;             /* #f8f8f2 dracula fg */
-    --card: 192 81% 14%;                  /* #073642 base02 */
-    --card-foreground: 60 30% 96%;
-    --popover: 206 55% 12%;               /* #0d1f2d */
-    --popover-foreground: 60 30% 96%;
-
-    /* Primary */
-    --primary: 205 69% 49%;               /* #268bd2 solarized blue */
-    --primary-foreground: 60 30% 96%;
-
-    /* Secondary / muted / accent */
-    --secondary: 192 81% 14%;
-    --secondary-foreground: 60 30% 96%;
-    --muted: 192 81% 14%;
-    --muted-foreground: 225 27% 51%;      /* #6272a4 dracula comment */
-    --accent: 191 97% 77%;                /* dracula cyan */
-    --accent-foreground: 192 100% 11%;
-
-    /* Semantic (Solarized) */
-    --destructive: 1 71% 52%;             /* #dc322f */
-    --destructive-foreground: 60 30% 96%;
-    --success: 68 100% 30%;               /* #859900 */
-    --warning: 45 100% 35%;               /* #b58900 */
-    --info: 175 59% 40%;                  /* #2aa198 */
-
-    /* Borders / focus */
-    --border: 194 14% 40%;                /* #586e75 base01 */
-    --input: 194 14% 40%;
-    --ring: 205 69% 49%;
-  }
-
   * {
     @apply border-border outline-ring/50;
     box-sizing: border-box;
@@ -210,89 +52,99 @@
  * ============================================================================ */
 
 @theme inline {
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
-  --color-popover: hsl(var(--popover));
-  --color-popover-foreground: hsl(var(--popover-foreground));
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
-  --color-secondary: hsl(var(--secondary));
-  --color-secondary-foreground: hsl(var(--secondary-foreground));
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
-  --color-destructive: hsl(var(--destructive));
-  --color-destructive-foreground: hsl(var(--destructive-foreground));
-  --color-success: hsl(var(--success));
-  --color-warning: hsl(var(--warning));
-  --color-info: hsl(var(--info));
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
+  /* Color tokens are now hex / color-mix (not HSL triplets), so the bridge
+   * maps `--color-X: var(--X)` directly — NO hsl() wrapper. Tailwind v4
+   * still composes `/opacity` (e.g. bg-primary/50) by wrapping any color
+   * in color-mix(), so utilities keep working against hex values. */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
 
-  --color-dracula-green: hsl(var(--dracula-green));
-  --color-dracula-purple: hsl(var(--dracula-purple));
-  --color-dracula-pink: hsl(var(--dracula-pink));
-  --color-dracula-cyan: hsl(var(--dracula-cyan));
-  --color-dracula-red: hsl(var(--dracula-red));
-  --color-dracula-orange: hsl(var(--dracula-orange));
-  --color-dracula-yellow: hsl(var(--dracula-yellow));
-  --color-dracula-selection: hsl(var(--dracula-selection));
-  --color-dracula-current-line: hsl(var(--dracula-current-line));
-  --color-dracula-comment: hsl(var(--dracula-comment));
+  --color-dracula-green: var(--dracula-green);
+  --color-dracula-purple: var(--dracula-purple);
+  --color-dracula-pink: var(--dracula-pink);
+  --color-dracula-cyan: var(--dracula-cyan);
+  --color-dracula-red: var(--dracula-red);
+  --color-dracula-orange: var(--dracula-orange);
+  --color-dracula-yellow: var(--dracula-yellow);
+  --color-dracula-selection: var(--dracula-selection);
+  --color-dracula-current-line: var(--dracula-current-line);
+  --color-dracula-comment: var(--dracula-comment);
 
   /* Node-type tokens — base + soft (tinted bg) + border (tinted outline).
    * Use bg-node-X / bg-node-X-soft / border-node-X-border directly,
    * never with /N opacity arithmetic. */
-  --color-node-agent:           hsl(var(--node-agent));
-  --color-node-agent-soft:      hsl(var(--node-agent-soft));
-  --color-node-agent-border:    hsl(var(--node-agent-border));
-  --color-node-model:           hsl(var(--node-model));
-  --color-node-model-soft:      hsl(var(--node-model-soft));
-  --color-node-model-border:    hsl(var(--node-model-border));
-  --color-node-skill:           hsl(var(--node-skill));
-  --color-node-skill-soft:      hsl(var(--node-skill-soft));
-  --color-node-skill-border:    hsl(var(--node-skill-border));
-  --color-node-tool:            hsl(var(--node-tool));
-  --color-node-tool-soft:       hsl(var(--node-tool-soft));
-  --color-node-tool-border:     hsl(var(--node-tool-border));
-  --color-node-trigger:         hsl(var(--node-trigger));
-  --color-node-trigger-soft:    hsl(var(--node-trigger-soft));
-  --color-node-trigger-border:  hsl(var(--node-trigger-border));
-  --color-node-workflow:        hsl(var(--node-workflow));
-  --color-node-workflow-soft:   hsl(var(--node-workflow-soft));
-  --color-node-workflow-border: hsl(var(--node-workflow-border));
+  --color-node-agent:           var(--node-agent);
+  --color-node-agent-soft:      var(--node-agent-soft);
+  --color-node-agent-border:    var(--node-agent-border);
+  --color-node-model:           var(--node-model);
+  --color-node-model-soft:      var(--node-model-soft);
+  --color-node-model-border:    var(--node-model-border);
+  --color-node-skill:           var(--node-skill);
+  --color-node-skill-soft:      var(--node-skill-soft);
+  --color-node-skill-border:    var(--node-skill-border);
+  --color-node-tool:            var(--node-tool);
+  --color-node-tool-soft:       var(--node-tool-soft);
+  --color-node-tool-border:     var(--node-tool-border);
+  --color-node-trigger:         var(--node-trigger);
+  --color-node-trigger-soft:    var(--node-trigger-soft);
+  --color-node-trigger-border:  var(--node-trigger-border);
+  --color-node-workflow:        var(--node-workflow);
+  --color-node-workflow-soft:   var(--node-workflow-soft);
+  --color-node-workflow-border: var(--node-workflow-border);
 
-  /* Toolbar / action role tokens — same triplet pattern as --node-X.
-   * Use bg-action-X-soft + text-action-X + border-action-X-border for
+  /* Toolbar / action role tokens — base + -soft + -hover + -border + -ink.
+   * Use bg-action-X-soft + text-action-X-ink + border-action-X-border for
    * the standard "soft tinted button" look (see ActionButton CVA). */
-  --color-action-run:           hsl(var(--action-run));
-  --color-action-run-soft:      hsl(var(--action-run-soft));
-  --color-action-run-hover:     hsl(var(--action-run-hover));
-  --color-action-run-border:    hsl(var(--action-run-border));
-  --color-action-stop:          hsl(var(--action-stop));
-  --color-action-stop-soft:     hsl(var(--action-stop-soft));
-  --color-action-stop-hover:    hsl(var(--action-stop-hover));
-  --color-action-stop-border:   hsl(var(--action-stop-border));
-  --color-action-save:          hsl(var(--action-save));
-  --color-action-save-soft:     hsl(var(--action-save-soft));
-  --color-action-save-hover:    hsl(var(--action-save-hover));
-  --color-action-save-border:   hsl(var(--action-save-border));
-  --color-action-config:        hsl(var(--action-config));
-  --color-action-config-soft:   hsl(var(--action-config-soft));
-  --color-action-config-hover:  hsl(var(--action-config-hover));
-  --color-action-config-border: hsl(var(--action-config-border));
-  --color-action-secret:        hsl(var(--action-secret));
-  --color-action-secret-soft:   hsl(var(--action-secret-soft));
-  --color-action-secret-hover:  hsl(var(--action-secret-hover));
-  --color-action-secret-border: hsl(var(--action-secret-border));
-  --color-action-tools:         hsl(var(--action-tools));
-  --color-action-tools-soft:    hsl(var(--action-tools-soft));
-  --color-action-tools-hover:   hsl(var(--action-tools-hover));
-  --color-action-tools-border:  hsl(var(--action-tools-border));
+  --color-action-run:           var(--action-run);
+  --color-action-run-soft:      var(--action-run-soft);
+  --color-action-run-hover:     var(--action-run-hover);
+  --color-action-run-border:    var(--action-run-border);
+  --color-action-run-ink:       var(--action-run-ink);
+  --color-action-stop:          var(--action-stop);
+  --color-action-stop-soft:     var(--action-stop-soft);
+  --color-action-stop-hover:    var(--action-stop-hover);
+  --color-action-stop-border:   var(--action-stop-border);
+  --color-action-stop-ink:      var(--action-stop-ink);
+  --color-action-save:          var(--action-save);
+  --color-action-save-soft:     var(--action-save-soft);
+  --color-action-save-hover:    var(--action-save-hover);
+  --color-action-save-border:   var(--action-save-border);
+  --color-action-save-ink:      var(--action-save-ink);
+  --color-action-config:        var(--action-config);
+  --color-action-config-soft:   var(--action-config-soft);
+  --color-action-config-hover:  var(--action-config-hover);
+  --color-action-config-border: var(--action-config-border);
+  --color-action-config-ink:    var(--action-config-ink);
+  --color-action-secret:        var(--action-secret);
+  --color-action-secret-soft:   var(--action-secret-soft);
+  --color-action-secret-hover:  var(--action-secret-hover);
+  --color-action-secret-border: var(--action-secret-border);
+  --color-action-secret-ink:    var(--action-secret-ink);
+  --color-action-tools:         var(--action-tools);
+  --color-action-tools-soft:    var(--action-tools-soft);
+  --color-action-tools-hover:   var(--action-tools-hover);
+  --color-action-tools-border:  var(--action-tools-border);
+  --color-action-tools-ink:     var(--action-tools-ink);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -362,13 +214,13 @@
  * property). */
 
 .react-flow__background pattern circle {
-  fill: hsl(var(--muted-foreground) / 0.3) !important;
+  fill: color-mix(in srgb, var(--muted-foreground) 30%, transparent) !important;
 }
 
 .react-flow__controls,
 .react-flow__minimap {
-  background: hsl(var(--card));
-  border: 1px solid hsl(var(--border));
+  background: var(--card);
+  border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 2px 8px rgb(0 0 0 / 0.06), 0 1px 2px rgb(0 0 0 / 0.04);
 }
@@ -379,10 +231,10 @@
 }
 
 .react-flow__controls button {
-  background: hsl(var(--card));
+  background: var(--card);
   border: none;
-  border-bottom: 1px solid hsl(var(--border));
-  color: hsl(var(--foreground));
+  border-bottom: 1px solid var(--border);
+  color: var(--foreground);
 }
 
 .react-flow__controls button:last-child {
@@ -390,26 +242,26 @@
 }
 
 .react-flow__controls button:hover {
-  background: hsl(var(--muted));
+  background: var(--muted);
 }
 
 .react-flow__controls button svg,
 .react-flow__controls button svg path {
-  fill: hsl(var(--foreground)) !important;
+  fill: var(--foreground) !important;
 }
 
 .react-flow__attribution {
-  background: hsl(var(--card) / 0.9);
-  color: hsl(var(--muted-foreground));
+  background: color-mix(in srgb, var(--card) 90%, transparent);
+  color: var(--muted-foreground);
 }
 
 .react-flow__selection {
-  background: hsl(var(--primary) / 0.08);
-  border: 1px solid hsl(var(--primary) / 0.4);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, transparent);
 }
 
 .react-flow__connection-line {
-  stroke: hsl(var(--muted-foreground));
+  stroke: var(--muted-foreground);
   stroke-width: 2;
 }
 
@@ -440,26 +292,26 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: hsl(var(--muted));
+  background: var(--muted);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--border));
+  background: var(--border);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground));
+  background: var(--muted-foreground);
 }
 
 ::-webkit-scrollbar-corner {
-  background: hsl(var(--muted));
+  background: var(--muted);
 }
 
 html {
   scrollbar-width: thin;
-  scrollbar-color: hsl(var(--border)) hsl(var(--muted));
+  scrollbar-color: var(--border) var(--muted);
 }
 
 /* ============================================================================
@@ -481,13 +333,13 @@ html {
  * Static CSS vars; dark-mode overrides via `.dark` cascade.
  * ============================================================================ */
 
-.console-json-output .token.string { color: hsl(var(--dracula-yellow)); }
+.console-json-output .token.string { color: var(--dracula-yellow); }
 .console-json-output .token.number,
 .console-json-output .token.boolean,
-.console-json-output .token.null { color: hsl(var(--dracula-purple)); }
-.console-json-output .token.property { color: hsl(var(--dracula-cyan)); }
-.console-json-output .token.punctuation { color: hsl(var(--foreground)); }
-.console-json-output .token.operator { color: hsl(var(--dracula-pink)); }
+.console-json-output .token.null { color: var(--dracula-purple); }
+.console-json-output .token.property { color: var(--dracula-cyan); }
+.console-json-output .token.punctuation { color: var(--foreground); }
+.console-json-output .token.operator { color: var(--dracula-pink); }
 
 .chat-markdown p { margin: 0 0 8px 0; }
 .chat-markdown p:last-child { margin-bottom: 0; }
@@ -496,7 +348,7 @@ html {
 .chat-markdown h3 {
   margin: 12px 0 8px 0;
   font-weight: 600;
-  color: hsl(var(--foreground));
+  color: var(--foreground);
 }
 .chat-markdown h1:first-child,
 .chat-markdown h2:first-child,
@@ -504,30 +356,30 @@ html {
 .chat-markdown h1 { font-size: 1.25em; }
 .chat-markdown h2 { font-size: 1.1em; }
 .chat-markdown h3 { font-size: 1em; }
-.chat-markdown strong { font-weight: 600; color: hsl(var(--foreground)); }
+.chat-markdown strong { font-weight: 600; color: var(--foreground); }
 .chat-markdown em { font-style: italic; }
 .chat-markdown ul,
 .chat-markdown ol { margin: 8px 0; padding-left: 20px; }
 .chat-markdown li { margin: 4px 0; }
 .chat-markdown code {
-  background-color: hsl(var(--border) / 0.3);
+  background-color: color-mix(in srgb, var(--border) 30%, transparent);
   padding: 2px 6px;
   border-radius: 4px;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
   font-size: 0.9em;
 }
 .dark .chat-markdown code {
-  background-color: hsl(var(--dracula-current-line));
+  background-color: var(--dracula-current-line);
 }
 .chat-markdown pre {
-  background-color: hsl(var(--card));
+  background-color: var(--card);
   padding: 12px;
   border-radius: 6px;
   overflow-x: auto;
   margin: 8px 0;
 }
 .dark .chat-markdown pre {
-  background-color: hsl(var(--dracula-current-line));
+  background-color: var(--dracula-current-line);
 }
 .chat-markdown pre code { background: none; padding: 0; }
 .chat-markdown table {
@@ -538,45 +390,45 @@ html {
 }
 .chat-markdown th,
 .chat-markdown td {
-  border: 1px solid hsl(var(--border));
+  border: 1px solid var(--border);
   padding: 6px 10px;
   text-align: left;
 }
 .dark .chat-markdown th,
 .dark .chat-markdown td {
-  border-color: hsl(var(--dracula-selection));
+  border-color: var(--dracula-selection);
 }
 .chat-markdown th {
-  background-color: hsl(var(--card));
+  background-color: var(--card);
   font-weight: 600;
 }
 .dark .chat-markdown th {
-  background-color: hsl(var(--dracula-current-line));
+  background-color: var(--dracula-current-line);
 }
 .chat-markdown blockquote {
-  border-left: 3px solid hsl(var(--primary));
+  border-left: 3px solid var(--primary);
   margin: 8px 0;
   padding: 4px 12px;
-  color: hsl(var(--muted-foreground));
+  color: var(--muted-foreground);
 }
 .dark .chat-markdown blockquote {
-  border-left-color: hsl(var(--dracula-purple));
+  border-left-color: var(--dracula-purple);
 }
 .chat-markdown a {
-  color: hsl(var(--primary));
+  color: var(--primary);
   text-decoration: none;
 }
 .dark .chat-markdown a {
-  color: hsl(var(--dracula-cyan));
+  color: var(--dracula-cyan);
 }
 .chat-markdown a:hover { text-decoration: underline; }
 .chat-markdown hr {
   border: none;
-  border-top: 1px solid hsl(var(--border));
+  border-top: 1px solid var(--border);
   margin: 12px 0;
 }
 .dark .chat-markdown hr {
-  border-top-color: hsl(var(--dracula-selection));
+  border-top-color: var(--dracula-selection);
 }
 
 /* ============================================================================
@@ -598,15 +450,15 @@ html {
   --prism-punctuation: var(--foreground);
 }
 
-.code-editor-container .token.comment     { color: hsl(var(--prism-comment)); }
-.code-editor-container .token.string      { color: hsl(var(--prism-string)); }
-.code-editor-container .token.keyword     { color: hsl(var(--prism-keyword)); }
-.code-editor-container .token.function    { color: hsl(var(--prism-function)); }
-.code-editor-container .token.number      { color: hsl(var(--prism-number)); }
-.code-editor-container .token.operator    { color: hsl(var(--prism-operator)); }
-.code-editor-container .token.class-name  { color: hsl(var(--prism-class-name)); }
-.code-editor-container .token.builtin     { color: hsl(var(--prism-builtin)); }
-.code-editor-container .token.boolean     { color: hsl(var(--prism-boolean)); }
-.code-editor-container .token.punctuation { color: hsl(var(--prism-punctuation)); }
-.code-editor-container textarea           { outline: none !important; caret-color: hsl(var(--foreground)); }
-.code-editor-container textarea::placeholder { color: hsl(var(--muted-foreground)); }
+.code-editor-container .token.comment     { color: var(--prism-comment); }
+.code-editor-container .token.string      { color: var(--prism-string); }
+.code-editor-container .token.keyword     { color: var(--prism-keyword); }
+.code-editor-container .token.function    { color: var(--prism-function); }
+.code-editor-container .token.number      { color: var(--prism-number); }
+.code-editor-container .token.operator    { color: var(--prism-operator); }
+.code-editor-container .token.class-name  { color: var(--prism-class-name); }
+.code-editor-container .token.builtin     { color: var(--prism-builtin); }
+.code-editor-container .token.boolean     { color: var(--prism-boolean); }
+.code-editor-container .token.punctuation { color: var(--prism-punctuation); }
+.code-editor-container textarea           { outline: none !important; caret-color: var(--foreground); }
+.code-editor-container textarea::placeholder { color: var(--muted-foreground); }

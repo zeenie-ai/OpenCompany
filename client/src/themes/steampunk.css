@@ -55,7 +55,7 @@
 
   /* Wave 30: copper-accent pulse — high-contrast against leather +
    * brass canvas, matches the rivet decorations. */
-  --node-pulse-color: hsl(var(--accent));
+  --node-pulse-color: var(--accent);
 
   --cursor-default: auto;
   --cursor-pointer: pointer;
@@ -63,62 +63,68 @@
   --scrollbar-thumb: #b88838;
 
   /* Shadcn HSL bridge */
-  --background: 28 41% 12%;
-  --foreground: 40 53% 80%;
-  --card: 31 38% 21%;
-  --card-foreground: 40 53% 80%;
-  --popover: 31 38% 21%;
-  --popover-foreground: 40 53% 80%;
+  --background: #2b1e12;
+  --foreground: #e7d5b1;
+  --card: #4a3621;
+  --card-foreground: #e7d5b1;
+  --popover: #4a3621;
+  --popover-foreground: #e7d5b1;
 
-  --primary: 40 64% 56%;           /* brass */
-  --primary-foreground: 28 41% 12%;
-  --secondary: 30 39% 16%;
-  --secondary-foreground: 40 53% 80%;
-  --muted: 30 39% 16%;
-  --muted-foreground: 40 35% 58%;
-  --accent: 18 63% 44%;            /* copper */
-  --accent-foreground: 28 41% 12%;
+  --primary: #d7a747;           /* brass */
+  --primary-foreground: #2b1e12;
+  --secondary: #392919;
+  --secondary-foreground: #e7d5b1;
+  --muted: #392919;
+  --muted-foreground: #b9a06e;
+  --accent: #b7542a;            /* copper */
+  --accent-foreground: #2b1e12;
 
-  --destructive: 14 68% 32%;       /* rust */
-  --destructive-foreground: 40 53% 80%;
-  --success: 79 41% 38%;
-  --warning: 40 64% 56%;
-  --info: 200 39% 47%;
+  --destructive: #89341a;       /* rust */
+  --destructive-foreground: #e7d5b1;
+  --success: #6f8939;
+  --warning: #d7a747;
+  --info: #4987a7;
 
-  --border: 33 53% 27%;
-  --input: 33 53% 27%;
-  --ring: 40 64% 56%;
+  --border: #694820;
+  --input: #694820;
+  --ring: #d7a747;
 
   /* Action role bridge */
-  --action-run: 79 41% 38%;
-  --action-run-soft: 79 41% 38% / 0.20;
-  --action-run-hover: 79 41% 38% / 0.34;
-  --action-run-border: 79 41% 38% / 0.7;
+  --action-run: #6f8939;
+  --action-run-soft:   color-mix(in srgb, var(--action-run) var(--tint-action-soft), transparent);
+  --action-run-hover:  color-mix(in srgb, var(--action-run) var(--tint-action-hover), transparent);
+  --action-run-border: color-mix(in srgb, var(--action-run) var(--tint-action-border), transparent);
+  --action-run-ink: var(--action-run);
 
-  --action-stop: 14 68% 32%;
-  --action-stop-soft: 14 68% 32% / 0.20;
-  --action-stop-hover: 14 68% 32% / 0.34;
-  --action-stop-border: 14 68% 32% / 0.7;
+  --action-stop: #89341a;
+  --action-stop-soft:   color-mix(in srgb, var(--action-stop) var(--tint-action-soft), transparent);
+  --action-stop-hover:  color-mix(in srgb, var(--action-stop) var(--tint-action-hover), transparent);
+  --action-stop-border: color-mix(in srgb, var(--action-stop) var(--tint-action-border), transparent);
+  --action-stop-ink: var(--action-stop);
 
-  --action-save: 40 64% 56%;
-  --action-save-soft: 40 64% 56% / 0.22;
-  --action-save-hover: 40 64% 56% / 0.36;
-  --action-save-border: 40 64% 56% / 0.7;
+  --action-save: #d7a747;
+  --action-save-soft:   color-mix(in srgb, var(--action-save) var(--tint-action-soft), transparent);
+  --action-save-hover:  color-mix(in srgb, var(--action-save) var(--tint-action-hover), transparent);
+  --action-save-border: color-mix(in srgb, var(--action-save) var(--tint-action-border), transparent);
+  --action-save-ink: var(--action-save);
 
-  --action-config: 40 64% 56%;
-  --action-config-soft: 40 64% 56% / 0.18;
-  --action-config-hover: 40 64% 56% / 0.30;
-  --action-config-border: 40 64% 56% / 0.6;
+  --action-config: #d7a747;
+  --action-config-soft:   color-mix(in srgb, var(--action-config) var(--tint-action-soft), transparent);
+  --action-config-hover:  color-mix(in srgb, var(--action-config) var(--tint-action-hover), transparent);
+  --action-config-border: color-mix(in srgb, var(--action-config) var(--tint-action-border), transparent);
+  --action-config-ink: var(--action-config);
 
-  --action-secret: 200 39% 47%;
-  --action-secret-soft: 200 39% 47% / 0.18;
-  --action-secret-hover: 200 39% 47% / 0.30;
-  --action-secret-border: 200 39% 47% / 0.6;
+  --action-secret: #4987a7;
+  --action-secret-soft:   color-mix(in srgb, var(--action-secret) var(--tint-action-soft), transparent);
+  --action-secret-hover:  color-mix(in srgb, var(--action-secret) var(--tint-action-hover), transparent);
+  --action-secret-border: color-mix(in srgb, var(--action-secret) var(--tint-action-border), transparent);
+  --action-secret-ink: var(--action-secret);
 
-  --action-tools: 18 63% 44%;
-  --action-tools-soft: 18 63% 44% / 0.20;
-  --action-tools-hover: 18 63% 44% / 0.34;
-  --action-tools-border: 18 63% 44% / 0.6;
+  --action-tools: #b7542a;
+  --action-tools-soft:   color-mix(in srgb, var(--action-tools) var(--tint-action-soft), transparent);
+  --action-tools-hover:  color-mix(in srgb, var(--action-tools) var(--tint-action-hover), transparent);
+  --action-tools-border: color-mix(in srgb, var(--action-tools) var(--tint-action-border), transparent);
+  --action-tools-ink: var(--action-tools);
 
   --tint-soft: 16%;
   --tint-border: 40%;
@@ -193,15 +199,15 @@
 :root[data-theme="steampunk"] body { font-family: var(--font-body); color: var(--fg-default); }
 :root[data-theme="steampunk"] h1, :root[data-theme="steampunk"] h2, :root[data-theme="steampunk"] h3,
 :root[data-theme="steampunk"] .v-display {
-  font-family: var(--font-display); letter-spacing: 0.16em; text-transform: uppercase; color: hsl(var(--accent));
+  font-family: var(--font-display); letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent);
 }
 
 /* Square node — riveted brass plate */
 :root[data-theme="steampunk"] .sq-node-box {
-  background: linear-gradient(180deg, hsl(var(--accent)), var(--copper));
+  background: linear-gradient(180deg, var(--accent), var(--copper));
   border: 2px solid var(--leather); border-radius: 4px;
   box-shadow:
-    inset 0 0 0 1px hsl(var(--accent)),
+    inset 0 0 0 1px var(--accent),
     inset 1px 1px 2px rgba(255,220,160,0.4),
     inset -2px -2px 4px rgba(0,0,0,0.4),
     0 4px 0 var(--leather);
@@ -217,10 +223,10 @@
 :root[data-theme="steampunk"] .sq-node-box::before { top: 3px; left: 3px; }
 :root[data-theme="steampunk"] .sq-node-box::after { bottom: 3px; right: 3px; }
 :root[data-theme="steampunk"] .sq-node.selected .sq-node-box {
-  box-shadow: inset 0 0 0 2px hsl(var(--accent)), 0 0 12px hsl(var(--accent)), 0 4px 0 var(--leather);
+  box-shadow: inset 0 0 0 2px var(--accent), 0 0 12px var(--accent), 0 4px 0 var(--leather);
 }
-:root[data-theme="steampunk"] .sq-node-gear { background: var(--copper); color: hsl(var(--accent)); border: 1px solid var(--leather); }
-:root[data-theme="steampunk"] .sq-node-label { font-family: var(--font-display); letter-spacing: 0.10em; color: hsl(var(--accent)); }
+:root[data-theme="steampunk"] .sq-node-gear { background: var(--copper); color: var(--accent); border: 1px solid var(--leather); }
+:root[data-theme="steampunk"] .sq-node-label { font-family: var(--font-display); letter-spacing: 0.10em; color: var(--accent); }
 
 /* Actions — engraved brass plates */
 :root[data-theme="steampunk"] .action-btn {
@@ -228,9 +234,9 @@
   border-radius: 2px; border-width: 2px;
   background: linear-gradient(180deg, rgba(216,168,72,0.20), rgba(216,168,72,0.05));
 }
-:root[data-theme="steampunk"] .action-run { background: linear-gradient(180deg, rgba(106,138,58,0.4), rgba(106,138,58,0.1)); color: #c8e08a; border-color: hsl(var(--success)); }
-:root[data-theme="steampunk"] .action-deploy { color: hsl(var(--accent)); border-color: hsl(var(--accent)); }
-:root[data-theme="steampunk"] .action-save { color: hsl(var(--accent)); border-color: hsl(var(--accent)); }
+:root[data-theme="steampunk"] .action-run { background: linear-gradient(180deg, rgba(106,138,58,0.4), rgba(106,138,58,0.1)); color: #c8e08a; border-color: var(--success); }
+:root[data-theme="steampunk"] .action-deploy { color: var(--accent); border-color: var(--accent); }
+:root[data-theme="steampunk"] .action-save { color: var(--accent); border-color: var(--accent); }
 
 /* Panels */
 :root[data-theme="steampunk"] .wf-card,
@@ -241,20 +247,20 @@
   background: var(--bg-elevated); border: 1px solid var(--copper); border-radius: 2px;
   box-shadow: inset 0 1px 0 rgba(255,220,160,0.10);
 }
-:root[data-theme="steampunk"] .cat-tile { background: hsl(var(--accent)); color: var(--leather); border: 1px solid var(--leather); border-radius: 2px; }
-:root[data-theme="steampunk"] .cat-name { font-family: var(--font-display); color: hsl(var(--accent)); }
+:root[data-theme="steampunk"] .cat-tile { background: var(--accent); color: var(--leather); border: 1px solid var(--leather); border-radius: 2px; }
+:root[data-theme="steampunk"] .cat-name { font-family: var(--font-display); color: var(--accent); }
 
 /* Chat */
-:root[data-theme="steampunk"] .chat-msg-user { background: rgba(216,168,72,0.16); border: 1px solid hsl(var(--accent)); color: hsl(var(--accent)); }
+:root[data-theme="steampunk"] .chat-msg-user { background: rgba(216,168,72,0.16); border: 1px solid var(--accent); color: var(--accent); }
 :root[data-theme="steampunk"] .chat-msg-bot { background: var(--bg-elevated); border: 1px solid var(--copper); }
 
 /* Status bar — gauge readout */
 :root[data-theme="steampunk"] .statusbar {
   background: linear-gradient(180deg, var(--bg-panel), var(--leather));
   border-top: 3px ridge var(--border-strong);
-  font-family: var(--font-mono); color: hsl(var(--accent)); letter-spacing: 0.10em;
+  font-family: var(--font-mono); color: var(--accent); letter-spacing: 0.10em;
 }
-:root[data-theme="steampunk"] .statusbar .pip { background: hsl(var(--success)); box-shadow: 0 0 4px hsl(var(--success)); }
+:root[data-theme="steampunk"] .statusbar .pip { background: var(--success); box-shadow: 0 0 4px var(--success); }
 
 /* Modal */
 :root[data-theme="steampunk"] .modal {
@@ -263,10 +269,10 @@
   box-shadow: 0 0 0 2px var(--leather), 0 30px 80px rgba(0,0,0,0.6);
 }
 :root[data-theme="steampunk"] .modal-head { border-bottom: 3px ridge var(--copper); }
-:root[data-theme="steampunk"] .modal-title { font-family: var(--font-display); color: hsl(var(--accent)); letter-spacing: 0.14em; }
+:root[data-theme="steampunk"] .modal-title { font-family: var(--font-display); color: var(--accent); letter-spacing: 0.14em; }
 
 /* CMDK */
 :root[data-theme="steampunk"] .cmdk {
   background: var(--bg-elevated); border: 4px ridge var(--border-strong); border-radius: 4px;
 }
-:root[data-theme="steampunk"] .cmdk-item.active { background: var(--bg-active); color: hsl(var(--accent)); border-left: 3px solid var(--copper); }
+:root[data-theme="steampunk"] .cmdk-item.active { background: var(--bg-active); color: var(--accent); border-left: 3px solid var(--copper); }
