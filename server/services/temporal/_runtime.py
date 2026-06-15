@@ -118,6 +118,22 @@ class TemporalServerRuntime(BaseProcessSupervisor):
         #   --metrics-port   0 disables the Prometheus endpoint
         #   --log-level      warn keeps the supervisor log readable
         #   --namespace      default namespace bootstrapped at start
+        #   --sqlite-pragma  SQLite tuning, repeatable PRAGMA=VALUE.
+        #                    journal_mode=WAL + synchronous=NORMAL +
+        #                    busy_timeout let the single-writer SQLite
+        #                    store survive the boot-time burst of
+        #                    DeleteHistoryEvent (retention GC) timer
+        #                    tasks that all come due at once after a
+        #                    long downtime — otherwise the rollback
+        #                    journal serialises every write and the
+        #                    burst fails with "Failed to start
+        #                    transaction / context deadline exceeded".
+        #                    This exact trio is what temporalio/cli's
+        #                    own TestServer_StartDev_SQLitePragma
+        #                    asserts the dev server runs cleanly under;
+        #                    WAL is durable and synchronous=NORMAL is
+        #                    WAL-safe (no corruption). See SQLite WAL
+        #                    docs + https://docs.temporal.io/cli/server.
         return [
             str(self.binary_path()),
             "server",
@@ -134,6 +150,12 @@ class TemporalServerRuntime(BaseProcessSupervisor):
             "warn",
             "--namespace",
             self.settings.temporal_namespace,
+            "--sqlite-pragma",
+            "journal_mode=WAL",
+            "--sqlite-pragma",
+            "synchronous=NORMAL",
+            "--sqlite-pragma",
+            "busy_timeout=5000",
         ]
 
     def cwd(self) -> Path:
