@@ -127,7 +127,7 @@ const AIAgentNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
         fontWeight: theme.fontWeight.medium,
         textAlign: 'center',
         cursor: 'pointer',
-        transition: 'all 0.3s ease',
+        transition: 'transform 0.3s ease, border-color 0.3s ease, opacity 0.3s ease',
         overflow: 'visible',
         display: 'flex',
         flexDirection: 'column',

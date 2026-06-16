@@ -120,7 +120,7 @@ const GenericNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
         fontWeight: '600',
         textAlign: 'center',
         cursor: 'pointer',
-        transition: 'all 0.2s ease',
+        transition: 'transform 0.2s ease, border-color 0.2s ease, opacity 0.2s ease',
         overflow: 'visible',
         opacity: isDisabled ? 0.5 : 1,
       } as NodeStyle}

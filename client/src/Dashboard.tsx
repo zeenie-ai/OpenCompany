@@ -594,6 +594,11 @@ const DashboardContent: React.FC = () => {
     strokeWidth: 2
   }), [theme.dracula.cyan]);
 
+  // Memoize the injected canvas <style> so the stylesheet isn't
+  // regenerated + re-parsed (a full-document style recalc) on every
+  // Dashboard render — only when the theme palette actually changes.
+  const canvasCss = React.useMemo(() => buildCanvasStyles(theme.colors), [theme.colors]);
+
   // `.react-flow` is intentionally transparent so the parent
   // `.canvas-host` / `.canvas` background-image (per-theme
   // `--canvas-grid` + multi-layer gradient stack from
@@ -1197,7 +1202,7 @@ const DashboardContent: React.FC = () => {
 
   return (
     <>
-      <style>{buildCanvasStyles(theme.colors)}</style>
+      <style>{canvasCss}</style>
       {/* `app-frame` is the decorative-layer hook from the design handoff —
           per-theme CSS files target this class for outer ornaments
           (gilded corners under Renaissance, scanline overlay + corner
@@ -1319,6 +1324,7 @@ const DashboardContent: React.FC = () => {
                   nodesFocusable={!isCurrentWorkflowLocked}
                   elementsSelectable={!isCurrentWorkflowLocked}
                   selectNodesOnDrag={false}
+                  onlyRenderVisibleElements={true}
                   selectionOnDrag={true}
                   selectionMode={SelectionMode.Partial}
                   selectionKeyCode="Control"

@@ -285,7 +285,7 @@ const SquareNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectab
           color: theme.colors.text,
           fontSize: theme.nodeSize.squareIcon,
           fontWeight: '600',
-          transition: 'all 0.2s ease',
+          transition: 'transform 0.2s ease, border-color 0.2s ease, opacity 0.2s ease',
           opacity: isDisabled ? 0.5 : 1,
         } as NodeStyle}
       >

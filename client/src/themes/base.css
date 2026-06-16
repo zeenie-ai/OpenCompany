@@ -228,8 +228,7 @@ html[data-page-hidden] *::after {
   box-shadow: 0 2px 8px color-mix(in srgb, var(--node-color, var(--node-shadow-base)) var(--tint-shadow), transparent);
   transition:
     transform var(--dur-fast) ease,
-    border-color var(--dur-fast) ease,
-    box-shadow var(--dur-fast) ease;
+    border-color var(--dur-fast) ease;
 }
 
 .node:hover {
@@ -281,8 +280,7 @@ html[data-page-hidden] *::after {
   box-shadow: 0 2px 8px color-mix(in srgb, var(--node-color, var(--node-shadow-base)) var(--tint-shadow), transparent);
   transition:
     transform var(--dur-fast) ease,
-    border-color var(--dur-fast) ease,
-    box-shadow var(--dur-fast) ease;
+    border-color var(--dur-fast) ease;
 }
 
 .sq-node-box:hover {
