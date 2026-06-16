@@ -1,6 +1,6 @@
 {
-  "version": "2026.05",
-  "last_updated": "2026-05-02",
+  "version": "2026.06",
+  "last_updated": "2026-06-16",
   "_description": "LLM provider defaults. Connection config (base_url, models_endpoint) drives both native SDK and LangChain paths. Model specs auto-enriched by model_registry.json (OpenRouter cache).",
 
   "agent": {
@@ -23,47 +23,47 @@
       "max_output_tokens": {
         "gpt-5.5": 128000,
         "gpt-5.4": 128000,
-        "gpt-5.3-chat": 16384,
         "gpt-5.2": 128000,
         "o4-mini": 100000,
+        "o3": 100000,
         "gpt-4.1": 32768,
         "_default": 16384
       },
       "context_length": {
         "gpt-5.5": 1050000,
         "gpt-5.4": 1050000,
-        "gpt-5.3-chat": 128000,
         "gpt-5.2": 400000,
         "o4-mini": 200000,
+        "o3": 200000,
         "gpt-4.1": 1047576,
         "_default": 128000
       },
-      "reasoning_models": ["o4-mini"],
+      "reasoning_models": ["o4-mini", "o3"],
       "thinking_models": ["gpt-5"],
       "thinking_type": "effort",
       "temperature_range": [0.0, 2.0]
     },
     "anthropic": {
-      "default_model": "claude-sonnet-4-6",
+      "default_model": "claude-opus-4-8",
       "detection_patterns": ["claude", "anthropic"],
       "base_url": "https://api.anthropic.com/v1",
       "models_endpoint": "https://api.anthropic.com/v1/models",
       "api_key_param": "anthropic_api_key",
       "max_tokens_param": "max_tokens",
       "max_output_tokens": {
-        "claude-opus-4-6": 128000,
-        "claude-sonnet-4-6": 128000,
+        "claude-fable-5": 128000,
+        "claude-opus-4-8": 128000,
+        "claude-opus-4-7": 128000,
+        "claude-sonnet-4-6": 64000,
         "claude-haiku-4-5": 64000,
-        "claude-sonnet-4-0": 64000,
-        "claude-opus-4-0": 32000,
         "_default": 8192
       },
       "context_length": {
-        "claude-opus-4-6": 200000,
-        "claude-sonnet-4-6": 200000,
+        "claude-fable-5": 1048576,
+        "claude-opus-4-8": 1048576,
+        "claude-opus-4-7": 1048576,
+        "claude-sonnet-4-6": 1048576,
         "claude-haiku-4-5": 200000,
-        "claude-sonnet-4-0": 200000,
-        "claude-opus-4-0": 200000,
         "_default": 200000
       },
       "thinking_type": "budget",
@@ -120,23 +120,23 @@
       "temperature_range": [0.0, 2.0]
     },
     "groq": {
-      "default_model": "meta-llama/llama-4-scout-17b-16e-instruct",
+      "default_model": "llama-3.3-70b-versatile",
       "detection_patterns": ["groq"],
       "base_url": "https://api.groq.com/openai/v1",
       "models_endpoint": "https://api.groq.com/openai/v1/models",
       "api_key_param": "api_key",
       "max_tokens_param": "max_tokens",
       "max_output_tokens": {
-        "meta-llama/llama-4-scout-17b-16e-instruct": 8192,
-        "meta-llama/llama-4-maverick-17b-128e-instruct": 16384,
+        "openai/gpt-oss-120b": 65536,
+        "openai/gpt-oss-20b": 65536,
         "llama-3.3-70b-versatile": 32768,
         "llama-3.1-8b-instant": 131072,
         "qwen/qwen3-32b": 40960,
         "_default": 8192
       },
       "context_length": {
-        "meta-llama/llama-4-scout-17b-16e-instruct": 131072,
-        "meta-llama/llama-4-maverick-17b-128e-instruct": 131072,
+        "openai/gpt-oss-120b": 131072,
+        "openai/gpt-oss-20b": 131072,
         "llama-3.3-70b-versatile": 131072,
         "llama-3.1-8b-instant": 131072,
         "qwen/qwen3-32b": 131072,
@@ -148,48 +148,50 @@
     },
     "cerebras": {
       "default_model": "gpt-oss-120b",
-      "detection_patterns": ["cerebras", "gpt-oss", "llama3.1", "qwen-3-235b"],
+      "detection_patterns": ["cerebras", "gpt-oss", "qwen-3-235b", "zai-glm"],
       "base_url": "https://api.cerebras.ai/v1",
       "models_endpoint": "https://api.cerebras.ai/v1/models",
       "api_key_param": "api_key",
       "max_tokens_param": "max_tokens",
       "max_output_tokens": {
-        "gpt-oss-120b": 8192,
-        "qwen-3-235b": 8192,
-        "llama3.1-8b": 8192,
+        "gpt-oss-120b": 65536,
+        "qwen-3-235b": 40960,
+        "zai-glm-4.7": 40960,
         "_default": 8192
       },
       "context_length": {
-        "gpt-oss-120b": 128000,
-        "qwen-3-235b": 32768,
-        "llama3.1-8b": 128000,
-        "_default": 128000
+        "gpt-oss-120b": 131072,
+        "qwen-3-235b": 131072,
+        "zai-glm-4.7": 131072,
+        "_default": 131072
       },
       "thinking_models": ["qwen-3-235b"],
       "thinking_type": "budget",
       "temperature_range": [0.0, 1.5]
     },
     "xai": {
-      "default_model": "grok-4.3",
+      "default_model": "grok-4.20",
       "detection_patterns": ["grok", "xai"],
       "base_url": "https://api.x.ai/v1",
       "models_endpoint": "https://api.x.ai/v1/models",
       "api_key_param": "api_key",
       "max_tokens_param": "max_tokens",
       "max_output_tokens": {
+        "grok-4.20": 131072,
         "grok-4.3": 131072,
         "grok-3": 131072,
         "_default": 8192
       },
       "context_length": {
-        "grok-4.3": 256000,
+        "grok-4.20": 2000000,
+        "grok-4.3": 1000000,
         "grok-3": 131072,
         "_default": 131072
       },
       "temperature_range": [0.0, 2.0]
     },
     "deepseek": {
-      "default_model": "deepseek-chat",
+      "default_model": "deepseek-v4-flash",
       "detection_patterns": ["deepseek"],
       "base_url": "https://api.deepseek.com",
       "models_endpoint": "https://api.deepseek.com/models",
@@ -197,11 +199,15 @@
       "max_tokens_param": "max_tokens",
       "supported_params": ["temperature", "max_tokens", "top_p", "frequency_penalty", "presence_penalty", "stop", "seed", "tools", "tool_choice", "response_format"],
       "max_output_tokens": {
+        "deepseek-v4-flash": 65536,
+        "deepseek-v4-pro": 65536,
         "deepseek-chat": 8192,
         "deepseek-reasoner": 65536,
         "_default": 8192
       },
       "context_length": {
+        "deepseek-v4-flash": 1048576,
+        "deepseek-v4-pro": 1048576,
         "deepseek-chat": 131072,
         "deepseek-reasoner": 131072,
         "_default": 131072
@@ -217,18 +223,18 @@
       "api_key_param": "api_key",
       "max_tokens_param": "max_tokens",
       "supported_params": ["temperature", "max_tokens", "top_p", "frequency_penalty", "presence_penalty", "stop", "seed", "tools", "tool_choice", "response_format"],
-      "thinking_default_on": ["kimi-k2.6", "kimi-k2.5", "kimi-k2-thinking", "kimi-k2-0905-preview"],
-      "fixed_temperature": {"kimi-k2.6": 0.6, "kimi-k2.5": 0.6, "kimi-k2-thinking": 1.0, "kimi-k2-0905-preview": 0.6},
+      "thinking_default_on": ["kimi-k2.6", "kimi-k2.5", "kimi-k2.7-code"],
+      "fixed_temperature": {"kimi-k2.6": 0.6, "kimi-k2.5": 0.6, "kimi-k2.7-code": 0.6},
       "max_output_tokens": {
         "kimi-k2.6": 32768,
         "kimi-k2.5": 98304,
-        "kimi-k2-thinking": 98304,
+        "kimi-k2.7-code": 98304,
         "_default": 8192
       },
       "context_length": {
         "kimi-k2.6": 262144,
         "kimi-k2.5": 262144,
-        "kimi-k2-thinking": 262144,
+        "kimi-k2.7-code": 262144,
         "_default": 262144
       },
       "temperature_range": [0.0, 1.0]
@@ -243,12 +249,14 @@
       "supported_params": ["temperature", "max_tokens", "top_p", "frequency_penalty", "presence_penalty", "stop", "seed", "tools", "tool_choice", "response_format"],
       "max_output_tokens": {
         "mistral-large-latest": 131072,
+        "mistral-medium-latest": 131072,
         "mistral-small-latest": 32768,
         "codestral-latest": 131072,
         "_default": 8192
       },
       "context_length": {
         "mistral-large-latest": 262144,
+        "mistral-medium-latest": 262144,
         "mistral-small-latest": 32768,
         "codestral-latest": 256000,
         "_default": 131072

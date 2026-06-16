@@ -457,7 +457,7 @@ if memory_data and memory_data.get('session_id'):
 
 3. **Per-Session State**: Each memory session has independent token tracking and thresholds. This allows different agents to have different compaction settings.
 
-4. **Model-Aware Threshold**: Threshold is `compaction_ratio` x the model's context window (default ratio **0.8** = 80%). For example, Claude Opus 4.6 (1M context) gets an 800K threshold, GPT-5.2 (400K) gets 320K, Groq models (131K) get ~105K. Ratio precedence: per-session `custom_threshold` > per-user `UserSettings.compaction_ratio` > env `Settings.compaction_ratio` (`COMPACTION_RATIO`, default 0.8) > JSON `llm_defaults.json:agent.compaction.ratio` fallback.
+4. **Model-Aware Threshold**: Threshold is `compaction_ratio` x the model's context window (default ratio **0.8** = 80%). For example, Claude Opus 4.8 (1M context) gets an 800K threshold, GPT-5.2 (400K) gets 320K, Groq models (131K) get ~105K. Ratio precedence: per-session `custom_threshold` > per-user `UserSettings.compaction_ratio` > env `Settings.compaction_ratio` (`COMPACTION_RATIO`, default 0.8) > JSON `llm_defaults.json:agent.compaction.ratio` fallback.
 
 5. **Singleton Pattern**: Service accessible via `get_compaction_service()` for easy integration anywhere in the codebase.
 

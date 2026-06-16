@@ -103,7 +103,7 @@ flowchart TD
 - **Model ID format**: Anthropic API uses hyphens (`claude-sonnet-4-6`), NOT dots. Dotted IDs (as used by OpenRouter or Gemini) will 404. The frontend model list already uses the correct form, but template-substituted or hand-entered IDs with dots will fail.
 - **`maxTokens > thinkingBudget` required**: if thinking is enabled and `maxTokens <= thinkingBudget`, the Anthropic API rejects the request. The handler does not pre-validate this; the resulting error becomes the envelope's `error` field.
 - **Temperature forced to 1 when thinking enabled**: regardless of user input.
-- **1M context beta**: Opus 4.6 / Sonnet 4.x support 1M context tokens via a beta header; configured in `llm_defaults.json` rather than the node.
+- **1M context**: current Claude models (Fable 5, Opus 4.x, Sonnet 4.6) support a 1M context window; configured in `llm_defaults.json` rather than the node.
 - **Errors swallowed into envelope**: handler never raises; all failures surface as `success=false`.
 - **No streaming** / **no pricing tracking** on standalone chat nodes.
 

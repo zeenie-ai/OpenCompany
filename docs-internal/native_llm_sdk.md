@@ -170,7 +170,7 @@ Adding a new OpenAI-compatible provider is a pure config change:
 
 ```json
 "deepseek": {
-  "default_model": "deepseek-chat",
+  "default_model": "deepseek-v4-flash",
   "detection_patterns": ["deepseek"],
   "models_endpoint": "https://api.deepseek.com/v1/models",
   "base_url": "https://api.deepseek.com/v1",

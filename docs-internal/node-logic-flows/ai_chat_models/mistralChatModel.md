@@ -11,7 +11,7 @@
 
 ## Purpose
 
-Mistral AI models (`mistral-large-latest`, `mistral-small-latest`, `codestral-latest`). Up to 256K context, 131K output. No thinking/reasoning support. Uses OpenAI-compatible Mistral endpoint via native path. Shares `handle_ai_chat_model`.
+Mistral AI models (`mistral-large-latest`, `mistral-medium-latest`, `mistral-small-latest`, `codestral-latest`). Up to 256K context, 131K output. No thinking/reasoning support. Uses OpenAI-compatible Mistral endpoint via native path. Shares `handle_ai_chat_model`.
 
 ## Inputs (handles)
 
@@ -25,7 +25,7 @@ Mistral AI models (`mistral-large-latest`, `mistral-small-latest`, `codestral-la
 |------|------|---------|----------|---------------------|-------------|
 | `prompt` | string | `""` | yes | - | User message |
 | `systemMessage` | string | `""` | no | - | System prompt |
-| `model` | string | injected | no | - | `mistral-large-latest`, `mistral-small-latest`, `codestral-latest` |
+| `model` | string | injected | no | - | `mistral-large-latest`, `mistral-medium-latest`, `mistral-small-latest`, `codestral-latest` |
 | `temperature` | number | 0-1.5 | no | - | Narrower range than OpenAI (0-1.5) |
 | `maxTokens` | number | up to 131K | no | - | |
 | `topP` | number | - | no | - | |

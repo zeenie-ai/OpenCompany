@@ -104,13 +104,13 @@ RAG pipeline out of the box: parse PDFs and HTML, chunk into searchable pieces, 
 | Provider     | Notes                                                                    |
 |--------------|--------------------------------------------------------------------------|
 | OpenAI       | GPT-5 family, GPT-4.1, o-series reasoning models, GPT-4o                 |
-| Anthropic    | Claude Opus 4.x, Sonnet 4.x, Haiku 4.5 — with extended thinking          |
+| Anthropic    | Claude Fable 5, Opus 4.x, Sonnet 4.6, Haiku 4.5 — with extended thinking |
 | Google       | Gemini 3 Pro/Flash, 2.5 Pro/Flash — with reasoning budgets               |
-| DeepSeek     | DeepSeek V3, DeepSeek Reasoner                                           |
-| Kimi         | Kimi K2.5, Kimi K2 Thinking                                              |
-| Mistral      | Mistral Large/Small, Codestral                                           |
-| Groq         | Llama 3/4, Qwen3, GPT-OSS (ultra-fast inference)                         |
-| Cerebras     | Llama 3.1, Qwen-3-235b (custom AI hardware)                              |
+| DeepSeek     | DeepSeek V4 (Flash/Pro); chat/reasoner legacy aliases                    |
+| Kimi         | Kimi K2.6, K2.5, K2.7-Code                                               |
+| Mistral      | Mistral Large/Medium/Small, Codestral                                   |
+| Groq         | Llama 3.x, Qwen3, GPT-OSS (ultra-fast inference)                         |
+| Cerebras     | GPT-OSS-120b, Qwen-3-235b, GLM-4.7 (custom AI hardware)                  |
 | OpenRouter   | 200+ models via one unified API                                          |
 | **Ollama**   | Run any local model on your machine — free, private, offline             |
 | **LM Studio**| Run any local model with a desktop app — free, private, offline          |

@@ -85,8 +85,8 @@ A workflow JSON document contains:
 - `openrouterChatModel` - OpenRouter unified API (200+ models)
 - `groqChatModel` - Groq ultra-fast inference (Llama, Qwen3, GPT-OSS)
 - `cerebrasChatModel` - Cerebras custom AI hardware (Llama, Qwen)
-- `deepseekChatModel` - DeepSeek V3 (chat + reasoner with Chain-of-Thought)
-- `kimiChatModel` - Moonshot Kimi K2.5 / K2-thinking
+- `deepseekChatModel` - DeepSeek V4 (deepseek-v4-flash / deepseek-v4-pro; chat/reasoner legacy aliases)
+- `kimiChatModel` - Moonshot Kimi K2.6 / K2.5 / K2.7-code
 - `mistralChatModel` - Mistral Large / Small / Codestral
 
 ### AI Agents and Memory (3 nodes)

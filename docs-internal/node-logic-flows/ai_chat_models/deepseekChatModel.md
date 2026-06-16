@@ -11,7 +11,7 @@
 
 ## Purpose
 
-DeepSeek V3 models (`deepseek-chat`, `deepseek-reasoner`). Uses the OpenAI-compatible DeepSeek endpoint via the `services/llm/providers` layer (native path). Shares `handle_ai_chat_model`.
+DeepSeek V4 models (`deepseek-v4-flash`, `deepseek-v4-pro`); `deepseek-chat` / `deepseek-reasoner` remain as legacy aliases (deprecate 2026-07-24). Uses the OpenAI-compatible DeepSeek endpoint via the `services/llm/providers` layer (native path). Shares `handle_ai_chat_model`.
 
 ## Inputs (handles)
 
@@ -25,7 +25,7 @@ DeepSeek V3 models (`deepseek-chat`, `deepseek-reasoner`). Uses the OpenAI-compa
 |------|------|---------|----------|---------------------|-------------|
 | `prompt` | string | `""` | yes | - | User message |
 | `systemMessage` | string | `""` | no | - | System prompt |
-| `model` | string | injected | no | - | `deepseek-chat` (V3) or `deepseek-reasoner` (always-on CoT) |
+| `model` | string | injected | no | - | `deepseek-v4-flash` / `deepseek-v4-pro`; `deepseek-chat` / `deepseek-reasoner` legacy aliases (reasoner = always-on CoT) |
 | `temperature` | number | 0-2 | no | - | |
 | `maxTokens` | number | 8-64K | no | - | |
 | `topP` | number | - | no | - | |

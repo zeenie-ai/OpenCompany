@@ -11,7 +11,7 @@
 
 ## Purpose
 
-Kimi K2 models by Moonshot AI (`kimi-k2.5`, `kimi-k2-thinking`). 256K context, 96K output. Uses OpenAI-compatible Moonshot endpoint via the native path. Shares `handle_ai_chat_model`.
+Kimi models by Moonshot AI (`kimi-k2.6`, `kimi-k2.5`, `kimi-k2.7-code`). 256K context, 96K output. Uses OpenAI-compatible Moonshot endpoint via the native path. Shares `handle_ai_chat_model`.
 
 ## Inputs (handles)
 
@@ -25,7 +25,7 @@ Kimi K2 models by Moonshot AI (`kimi-k2.5`, `kimi-k2-thinking`). 256K context, 9
 |------|------|---------|----------|---------------------|-------------|
 | `prompt` | string | `""` | yes | - | User message |
 | `systemMessage` | string | `""` | no | - | System prompt |
-| `model` | string | injected | no | - | `kimi-k2.5` (instant) or `kimi-k2-thinking` |
+| `model` | string | injected | no | - | `kimi-k2.6`, `kimi-k2.5`, or `kimi-k2.7-code` |
 | `temperature` | number | **fixed** | no | - | Fixed at 0.6 (instant) or 1.0 (thinking). Input is ignored. |
 | `maxTokens` | number | up to 96K | no | - | |
 | `thinkingEnabled` | boolean | true for k2.5 | no | - | ON by default for k2.5; explicitly disabled for tool-calling agents |
