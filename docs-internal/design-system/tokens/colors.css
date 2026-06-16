@@ -1,8 +1,8 @@
 /* ============================================================================
  * MachinaOS — color tokens
  * Source: zeenie-ai/MachinaOS client/src/index.css + client/src/themes/{light,dark}.css
- * Light = grey-blue "paper" workspace. Dark = Solarized dark surfaces with
- * Dracula vibrant accents (the brand's signature look).
+ * Light = grey-blue "paper" workspace. Dark = neutral slate dark (the same
+ * family inverted, NOT Solarized teal) with Dracula vibrant accents.
  * Toggle dark mode with class="dark" or data-theme="dark" on <html>.
  * ========================================================================== */
 
@@ -127,40 +127,40 @@
 }
 
 /* ============================================================================
- * Dark theme — Solarized dark surfaces + Dracula foreground/accents.
- * This is MachinaOS's signature look (canvas screenshots, demo videos).
+ * Dark theme — neutral slate dark (the light grey-blue paper family
+ * inverted, NOT Solarized teal). Dracula accents are the personality layer.
  * ========================================================================== */
 .dark,
 [data-theme="dark"] {
-  --bg-app: #002b36;          /* solarized base03 */
-  --bg-panel: #073642;        /* solarized base02 */
-  --bg-canvas: #002b36;
-  --bg-elevated: #0d1f2d;
-  --bg-input: #073642;
-  --bg-hover: rgba(248, 248, 242, 0.06);
-  --bg-active: rgba(189, 147, 249, 0.18);
+  --bg-app: #0d0f13;          /* neutral near-black slate */
+  --bg-panel: #15171c;        /* one step up — toolbar/sidebar/palette */
+  --bg-canvas: #0d0f13;
+  --bg-elevated: #1b1e25;
+  --bg-input: #15171c;
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --bg-active: rgba(255, 255, 255, 0.08);
   --bg-overlay: rgba(0, 0, 0, 0.7);
-  --surface-card: #073642;
+  --surface-card: #1b1e25;
 
-  --fg-default: #f8f8f2;      /* dracula foreground */
-  --fg-muted: #94a8d6;        /* lightened dracula comment for contrast */
-  --fg-faint: #6272a4;
-  --fg-on-accent: #002b36;
+  --fg-default: #e8eaed;      /* near-white neutral */
+  --fg-muted: #9aa1ac;        /* neutral slate grey */
+  --fg-faint: #6b7280;
+  --fg-on-accent: #ffffff;
 
-  --border-default: #586e75;  /* solarized base01 */
-  --border-strong: #93a1a1;
-  --border-focus: #268bd2;
+  --border-default: #2b2f37;  /* neutral hairline */
+  --border-strong: #3c424c;
+  --border-focus: #3b82f6;
 
-  --primary: #268bd2;         /* solarized blue */
-  --primary-foreground: #f8f8f2;
-  --accent: #8be9fd;          /* dracula cyan */
-  --accent-foreground: #002b36;
+  --primary: #3b82f6;         /* standard blue */
+  --primary-foreground: #ffffff;
+  --accent: #8b5cf6;          /* standard violet */
+  --accent-foreground: #ffffff;
 
-  --destructive: #dc322f;     /* solarized red */
-  --destructive-foreground: #f8f8f2;
-  --success: #859900;         /* solarized green */
-  --warning: #b58900;
-  --info: #2aa198;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --info: #38bdf8;
 
   /* In dark mode, the Dracula hues are bright enough to be the text color
    * directly — ink aliases resolve to the raw accents. */
@@ -171,8 +171,8 @@
   --action-secret-ink: var(--dracula-yellow);
   --action-tools-ink: var(--dracula-purple);
 
-  --scrollbar-track: #073642;
-  --scrollbar-thumb: #586e75;
+  --scrollbar-track: #15171c;
+  --scrollbar-thumb: #3c424c;
 
   color-scheme: dark;
 }

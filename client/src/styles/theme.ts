@@ -148,46 +148,46 @@ export const lightColors = {
 } as const;
 
 // ============================================================================
-// DARK THEME COLORS (Dracula text for better contrast)
+// DARK THEME COLORS (neutral slate surfaces + Dracula accents)
 // ============================================================================
 export const darkColors = {
-  // Backgrounds - Solarized dark
-  background: solarized.base03,
-  backgroundAlt: solarized.base02,
-  backgroundPanel: solarized.base02,
-  backgroundElevated: '#0d1f2d',
-  backgroundHover: 'rgba(255,255,255,0.04)',
+  // Backgrounds - neutral slate
+  background: '#0d0f13',                      // neutral near-black slate
+  backgroundAlt: '#15171c',
+  backgroundPanel: '#15171c',
+  backgroundElevated: '#1b1e25',
+  backgroundHover: 'rgba(255,255,255,0.05)',
   backgroundActive: 'rgba(255,255,255,0.08)',
-  backgroundCanvas: solarized.base03,
-  // Text - Dracula for better contrast
-  text: dracula.foreground,                  // #f8f8f2 - bright white text
-  textSecondary: '#bfbfbf',                  // Lighter secondary text
-  textMuted: dracula.comment,                // #6272a4 - muted/comments
+  backgroundCanvas: '#0d0f13',
+  // Text - neutral near-white over slate
+  text: '#e8eaed',                           // near-white neutral
+  textSecondary: '#c0c6cf',                  // lighter secondary text
+  textMuted: '#9aa1ac',                      // neutral slate grey
   // Borders
-  border: solarized.base01 + '60',
-  borderHover: solarized.base01,
-  borderFocus: solarized.blue,
-  borderNode: solarized.base01,
+  border: '#2b2f37',
+  borderHover: '#3c424c',
+  borderFocus: '#3b82f6',
+  borderNode: '#3c424c',
   // Shadows
   shadow: 'rgba(0,0,0,0.4)',
   shadowLight: 'rgba(0,0,0,0.25)',
   shadowHeavy: 'rgba(0,0,0,0.5)',
   shadowNode: '0 2px 12px rgba(0,0,0,0.3)',
   // Focus
-  focus: solarized.blue,
-  focusRing: 'rgba(38, 139, 210, 0.3)',
+  focus: '#3b82f6',
+  focusRing: 'rgba(59, 130, 246, 0.3)',
   // Semantic
-  primary: solarized.blue,
-  success: solarized.green,
-  warning: solarized.yellow,
-  error: solarized.red,
-  info: solarized.cyan,
+  primary: '#3b82f6',
+  success: '#22c55e',
+  warning: '#f59e0b',
+  error: '#ef4444',
+  info: '#38bdf8',
   // Special
-  templateVariable: solarized.cyan,
+  templateVariable: '#8b5cf6',
   // Node-specific
-  nodeBackground: solarized.base02,
-  nodeBorder: solarized.base01,
-  nodeHeaderBg: solarized.base03,
+  nodeBackground: '#1b1e25',
+  nodeBorder: '#3c424c',
+  nodeHeaderBg: '#15171c',
   // Action colors (Dracula - optimized for dark backgrounds)
   actionRun: dracula.green,        // #50fa7b - bright green
   actionDeploy: dracula.purple,    // #bd93f9 - purple

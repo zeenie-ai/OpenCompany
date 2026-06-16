@@ -445,7 +445,7 @@ cd client && pnpm dev
 ```
 
 1. `<html data-theme="light">` — clean default, near-white surfaces
-2. `<html data-theme="dark">` — Solarized + Dracula
+2. `<html data-theme="dark">` — neutral slate + Dracula
 3. `<html data-theme="renaissance">` — parchment, gold accents, Cinzel headings
 4. `<html data-theme="cyber">` — neon over void, JetBrains Mono everywhere
 

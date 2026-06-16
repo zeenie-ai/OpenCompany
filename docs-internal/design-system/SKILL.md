@@ -10,7 +10,7 @@ If the user invokes this skill without any other guidance, ask them what they wa
 
 Key facts:
 - MachinaOS is zeenie.ai's local-first AI workflow OS — a visual node canvas where users wire AI agents to email, WhatsApp, Android phones, browsers, and 50+ services.
-- Link `styles.css` for all tokens; add `class="dark"` on `<html>` for the signature Solarized-dark + Dracula-neon look (the default for product UI).
+- Link `styles.css` for all tokens; add `class="dark"` on `<html>` for the signature neutral-slate-dark + Dracula-neon look (the default for product UI).
 - Color is semantic: action intents (run=green, stop=pink, save=cyan, config=orange, secret=yellow, tools=purple) and node roles (agent=purple, model=cyan, tool=green, trigger=pink, workflow=orange) — always as soft tints (8–15% fill, 30–60% border, full-strength text), never solid neon fills.
 - Type: Geist (Google Fonts), 14px base, sentence case, terse copy; JetBrains Mono for counts/state/timestamps.
 - Icons: Lucide only (stroke 2, currentColor); product node icons are colorful emoji-style glyphs.

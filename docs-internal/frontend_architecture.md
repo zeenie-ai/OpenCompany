@@ -138,7 +138,7 @@ client/src/
 │   └── WebSocketContext.tsx        # Single source of truth for WS state + handlers
 │
 ├── hooks/
-│   ├── useAppTheme.ts              # Bridges ThemeContext + Solarized/Dracula palettes
+│   ├── useAppTheme.ts              # Bridges ThemeContext + light/dark base packs + per-theme overlays
 │   ├── useCatalogueQuery.ts        # TanStack Query + idb-keyval warm-start (exemplar)
 │   ├── useWorkflowsQuery.ts        # Workflow list + save/delete mutations (Query)
 │   ├── useNodeParamsQuery.ts       # Per-node parameter Query + save mutation
@@ -221,9 +221,9 @@ The bridge ([src/index.css](../client/src/index.css)) maps each Tailwind colour 
 }
 
 [data-theme="dark"] {                     /* client/src/themes/dark.css — colour-hex overrides */
-  --background: #002b36;   /* Solarized base03 */
-  --foreground: #f8f8f2;   /* Dracula fg */
-  --primary: #268bd2;      /* Solarized blue */
+  --background: #0d0f13;   /* neutral slate */
+  --foreground: #e8eaed;   /* near-white neutral */
+  --primary: #3b82f6;      /* standard blue */
   /* …etc; node/action tokens inherit light.css's :root (identical in dark) + -ink overrides */
 }
 

@@ -22,7 +22,7 @@ Beyond color: **typeface trio, base font size (13–15px), letter case, tracking
 | Theme | World | Surfaces | Signature accents | Display / body / mono | Case·track | Radii | Motion (style) | Sound | Pulse |
 |---|---|---|---|---|---|---|---|---|---|
 | **Light** | quiet workspace | grey-blue paper | Dracula tints + blue | Geist ×2 / sys mono | none·0 | 4/6/8 | 90/180/320 smooth | parchment | info blue |
-| **Dark** | signature look | Solarized teal | Dracula neon | Geist ×2 / sys mono | none·0 | 4/6/8 | 90/180/320 smooth | terminal | info teal |
+| **Dark** | signature look | neutral slate | Dracula neon | Geist ×2 / sys mono | none·0 | 4/6/8 | 90/180/320 smooth | terminal | info sky |
 | **Renaissance** | illuminated codex | vellum cream | gold #d4a030 · crimson #8a1410 · lapis #2548c8 | Cinzel / Cormorant Garamond / IM Fell English | UPPER·.10em | 2/3/4 (pill 12) | 140/280/520 organic | parchment | lapis (Marian halo) |
 | **Greek** | marble agora | sun-bleached marble | lapis #284b82 · oxblood #7a1a18 · gold #c8a040 · olive | Cinzel / Cormorant / Courier Prime | UPPER·.18em | 0/0/2 | 120/240/460 smooth | marble | lapis |
 | **Edo** | washi + sumi-e | rice paper | vermillion #b41e1e · sumi ink · bamboo · sakura | Shippori Mincho ×2 / JetBrains | none·.06em | all 0 | 90/220/520 organic | ink | vermillion |

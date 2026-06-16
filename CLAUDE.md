@@ -709,14 +709,14 @@ The project uses WebSocket as the primary communication method between frontend 
 
 ### AI Chat Models (9 nodes)
 - **openaiChatModel**: OpenAI GPT models with response format options. O-series models (o1, o3, o4) support reasoning effort parameter.
-- **anthropicChatModel**: Claude models with extended thinking support (budget_tokens for claude-3-5-sonnet, claude-3-opus)
+- **anthropicChatModel**: Claude models (Fable 5, Opus 4.8/4.7, Sonnet 4.6, Haiku 4.5) with extended thinking support
 - **geminiChatModel**: Google Gemini models with multimodal capabilities, safety settings, and thinking support for 2.5/Flash Thinking models
 - **openrouterChatModel**: OpenRouter unified API - access 200+ models from OpenAI, Anthropic, Google, Meta, Mistral, and more through a single API. Features free/paid model grouping in dropdown.
 - **groqChatModel**: Groq ultra-fast inference with Llama, Qwen3, and GPT-OSS models. Qwen3-32b supports reasoning_format.
 - **cerebrasChatModel**: Cerebras ultra-fast inference on custom AI hardware with Llama and Qwen models
-- **deepseekChatModel**: DeepSeek V3 models (deepseek-chat, deepseek-reasoner). Reasoner has always-on Chain-of-Thought with reasoning_content in response. 128K context, up to 64K output.
-- **kimiChatModel**: Kimi K2 models by Moonshot AI (kimi-k2.5, kimi-k2-thinking). 256K context, 96K output. Thinking on by default for k2.5 (explicitly disabled for tool-calling agent compatibility). Fixed temperature: 0.6 (instant) / 1.0 (thinking).
-- **mistralChatModel**: Mistral AI models (mistral-large-latest, mistral-small-latest, codestral-latest). Up to 256K context. No thinking support. Temperature 0-1.5.
+- **deepseekChatModel**: DeepSeek V4 models (deepseek-v4-flash, deepseek-v4-pro); `deepseek-chat` / `deepseek-reasoner` remain as legacy aliases (deprecate 2026-07-24). Up to 1M context (V4), up to 64K output.
+- **kimiChatModel**: Kimi models by Moonshot AI (kimi-k2.6, kimi-k2.5, kimi-k2.7-code). 256K context, 96K output. Thinking on by default (explicitly disabled for tool-calling agent compatibility). Fixed temperature 0.6.
+- **mistralChatModel**: Mistral AI models (mistral-large-latest, mistral-medium-latest, mistral-small-latest, codestral-latest). Up to 256K context. No thinking support. Temperature 0-1.5.
 
 ### AI Agents & Memory (3 nodes)
 - **aiAgent**: Advanced AI agent with tool calling, memory input handle, and iterative reasoning. Uses the plain-async `_run_agent_loop` for structured execution. Parameters: Provider, Model, Prompt, System Message, Options.
@@ -1800,7 +1800,7 @@ See **[Scripts Reference](./docs-internal/SCRIPTS.md)** for full documentation.
 ✅ **Continuous Scheduling Execution**: Temporal/Conductor pattern using `asyncio.wait(FIRST_COMPLETED)` for true parallel pipelines where dependent nodes start immediately when their specific dependency completes
 ✅ **Event-Driven Deployment**: n8n-style architecture where each trigger event spawns an independent, concurrent execution run (no iteration loop)
 ✅ **HTTP/Webhook Nodes**: HTTP Request for external APIs, Webhook Trigger for incoming requests, Webhook Response for custom responses
-✅ **Theme System**: Solarized + Dracula dual-palette theming with dark mode support, vibrant action buttons, and themed React Flow edges
+✅ **Theme System**: Neutral-slate (dark) + grey-blue paper (light) surfaces with Dracula accent palette, dark mode support, vibrant action buttons, and themed React Flow edges
 ✅ **Modular Backend Architecture**: workflow.py refactored from 2068 to 460 lines using facade pattern with NodeExecutor, ParameterResolver, and DeploymentManager modules
 ✅ **Node Rename System**: n8n-style node renaming via F2 keyboard shortcut, double-click on label, or right-click context menu with inline editing
 ✅ **UI State Persistence**: localStorage persistence for sidebar visibility, component palette visibility, dev mode, and collapsed sections
@@ -2170,20 +2170,21 @@ deploy_workflow() -> Sets up triggers, returns immediately
 
 | Provider | Key Models | Context | Max Output | Thinking | Temp Range |
 |----------|-----------|---------|-----------|----------|------------|
-| **OpenAI** | GPT-5.2/5.1/5/5-mini/5-nano | 400K | 128K | effort (hybrid) | 0-2 |
+| **OpenAI** | GPT-5.5/5.4/5.2 | 400K–1.05M | 128K | effort (hybrid) | 0-2 |
 | **OpenAI** | GPT-4.1/4.1-mini/4.1-nano | 1M | 32K | none | 0-2 |
-| **OpenAI** | o1, o3, o3-mini, o4-mini | 200K | 100K | effort (reasoning) | fixed 1.0 |
+| **OpenAI** | o3, o4-mini | 200K | 100K | effort (reasoning) | fixed 1.0 |
 | **OpenAI** | GPT-4o/4o-mini | 128K | 16K | none | 0-2 |
-| **Anthropic** | Claude Opus 4.6 | 200K (1M beta) | 128K | budget | 0-1 |
-| **Anthropic** | Claude Sonnet 4.6/4.5/4, Opus 4.5, Haiku 4.5 | 200K (1M beta) | 64K | budget | 0-1 |
-| **Anthropic** | Claude Opus 4.1/4 | 200K | 32K | budget | 0-1 |
-| **Google** | Gemini 3-pro/flash, 2.5-pro/flash/flash-lite | 1M | 65K | budget | 0-2 |
-| **DeepSeek** | deepseek-chat (V3), deepseek-reasoner (CoT) | 128K | 8-64K | always-on (reasoner) | 0-2 |
-| **Kimi** | kimi-k2.5, kimi-k2-thinking | 256K | 96K | on by default (disabled for agents) | fixed 0.6/1.0 |
-| **Mistral** | mistral-large, mistral-small, codestral | 256K | 131K | none | 0-1.5 |
-| **Groq** | Llama 4 Scout, Llama 3.x, Qwen3-32b, GPT-OSS | 131K | 8-131K | format (Qwen3) | 0-2 |
+| **Anthropic** | Claude Fable 5 | 1M | 128K | budget | 0-1 |
+| **Anthropic** | Claude Opus 4.8/4.7 | 1M | 128K | budget | 0-1 |
+| **Anthropic** | Claude Sonnet 4.6 | 1M | 64K | budget | 0-1 |
+| **Anthropic** | Claude Haiku 4.5 | 200K | 64K | budget | 0-1 |
+| **Google** | Gemini 3.5-flash, 3.1-pro/flash-lite, 3-flash, 2.5-pro/flash/flash-lite | 1M | 64K | budget | 0-2 |
+| **DeepSeek** | deepseek-v4-flash, deepseek-v4-pro (deepseek-chat/reasoner legacy) | 1M | 64K | thinking modes | 0-2 |
+| **Kimi** | kimi-k2.6, kimi-k2.5, kimi-k2.7-code | 256K | 96K | on by default (disabled for agents) | fixed 0.6 |
+| **Mistral** | mistral-large/medium/small-latest, codestral-latest | 256K | 131K | none | 0-1.5 |
+| **Groq** | Llama 3.3-70b, Llama 3.1-8b, GPT-OSS-120b/20b, Qwen3-32b | 131K | 8-131K | format (Qwen3) | 0-2 |
 | **OpenRouter** | 200+ models from multiple providers | varies | varies | varies | 0-2 |
-| **Cerebras** | Llama 3.1-8b, GPT-OSS-120b, Qwen-3-235b | 32-131K | 8K | format (Qwen) | 0-1.5 |
+| **Cerebras** | GPT-OSS-120b, Qwen-3-235b, GLM-4.7 | 131K | 65K | budget (Qwen) | 0-1.5 |
 | **Ollama** | Whatever the user has pulled (qwen2.5, llama3.x, phi-3, deepseek-r1, ...) | per-loaded-model (typed via `ps()`) | ctx ÷ 4 (capped 4096) | none (per-model) | 0-2 |
 | **LM Studio** | Whatever the user has loaded in the LM Studio UI | per-loaded-model (typed via `LlmInstanceInfo.context_length`) | ctx ÷ 4 (capped 4096) | none (per-model) | 0-2 |
 
@@ -3787,7 +3788,7 @@ pricing_info = pricing.get_pricing("anthropic", "claude-3-5-sonnet-20241022")
 | OpenAI | gpt-5, gpt-4o, o3 | 1.25-15.00 | 10.00-60.00 |
 | Anthropic | claude-opus-4.6, claude-sonnet-4 | 3.00-5.00 | 15.00-25.00 |
 | Gemini | gemini-2.5-pro, gemini-2.0-flash | 0.10-1.25 | 0.40-10.00 |
-| Groq | llama-4-scout, qwen3-32b | 0.05-0.59 | 0.08-0.79 |
+| Groq | llama-3.3-70b, gpt-oss-120b | 0.05-0.59 | 0.08-0.79 |
 | Cerebras | llama-3.1-70b | 0.10-0.60 | 0.10-0.60 |
 | OpenRouter | Pass-through | Varies | Varies |
 
@@ -3811,7 +3812,7 @@ AGENT_RECURSION_LIMIT=200      # Agent loop hard step cap (>=1)
 }
 ```
 
-Effective threshold = `providers.<provider>.context_length.<model>` × `compaction_ratio` (e.g. claude-sonnet-4-6 → 200K × 0.8 = 160K input tokens). When model/provider are unknown, `model_registry.get_context_length` falls through to the provider's `_default` entry in the same JSON.
+Effective threshold = `providers.<provider>.context_length.<model>` × `compaction_ratio` (e.g. claude-sonnet-4-6 → 1M × 0.8 ≈ 838K input tokens). When model/provider are unknown, `model_registry.get_context_length` falls through to the provider's `_default` entry in the same JSON.
 
 **Threshold priority** (highest → lowest):
 1. Per-session `SessionTokenState.custom_threshold` (WebSocket override).
@@ -3903,7 +3904,7 @@ compaction_svc.set_ai_service(container.ai_service())
 - **5-Section Summary**: Follows Claude Code's structured summary format for continuity
 - **Automatic Triggering**: Compaction triggered in `_track_token_usage()` when threshold exceeded
 - **Per-Session State**: Each memory session has independent token tracking and thresholds
-- **Model-Aware Threshold**: `compaction_ratio` × model's context window. Default ratio 0.8 (env `COMPACTION_RATIO`, was 0.5 pre-2026.06). E.g. 800K for Claude Opus 4.6 with 1M context, 320K for GPT-5.2 with 400K context. Falls back to JSON `llm_defaults.json:agent.compaction.ratio` when Settings can't load. Per-session `custom_threshold` > per-user `UserSettings.compaction_ratio` > env Settings.
+- **Model-Aware Threshold**: `compaction_ratio` × model's context window. Default ratio 0.8 (env `COMPACTION_RATIO`, was 0.5 pre-2026.06). E.g. 800K for Claude Opus 4.8 with 1M context, 320K for GPT-5.2 with 400K context. Falls back to JSON `llm_defaults.json:agent.compaction.ratio` when Settings can't load. Per-session `custom_threshold` > per-user `UserSettings.compaction_ratio` > env Settings.
 - **Singleton Pattern**: Service accessible via `get_compaction_service()`
 
 ## API Cost Tracking

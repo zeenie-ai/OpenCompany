@@ -5,39 +5,43 @@
  * legacy `<html class="dark">` toggle continue to work) AND
  * `:root[data-theme="dark"]` (the explicit theme name).
  *
- * Mirrors the existing `.dark` block in index.css for shadcn HSL-triplet
- * tokens; this file only adds the new full-colour contract.
+ * Source palette: neutral slate dark — the light grey-blue "paper" family
+ * inverted (NOT Solarized teal) + Dracula vibrant accents kept as the
+ * personality layer. Matches the MachinaOS Design System
+ * (tokens/colors.css `.dark`) and the `darkColors` base pack in
+ * client/src/styles/theme.ts.
  *
- * Source palette: Solarized dark + Dracula accents (matches existing
- * dark theme in client/src/styles/theme.ts).
+ * Only surfaces / foreground / borders / shadcn semantic tokens are set
+ * here; the Dracula raw accents and node / action role tokens are
+ * inherited unchanged from light.css :root (identical in dark).
  * ============================================================================ */
 
 .dark,
 :root[data-theme="dark"] {
-  /* Surfaces — Solarized dark base + Dracula highlights */
-  --bg-app: #002b36;          /* base03 */
-  --bg-panel: #073642;        /* base02 */
-  --bg-canvas: #002b36;
-  --bg-elevated: #0d1f2d;
-  --bg-input: #073642;
-  --bg-hover: rgba(248, 248, 242, 0.06);
-  --bg-active: rgba(189, 147, 249, 0.18);
+  /* Surfaces — neutral slate */
+  --bg-app: #0d0f13;          /* neutral near-black slate */
+  --bg-panel: #15171c;        /* one step up — toolbar/sidebar/palette */
+  --bg-canvas: #0d0f13;
+  --bg-elevated: #1b1e25;     /* cards, inputs-on-panel */
+  --bg-input: #15171c;
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --bg-active: rgba(255, 255, 255, 0.08);
   --bg-overlay: rgba(0, 0, 0, 0.7);
 
   /* Borders */
-  --border-default: #586e75;  /* base01 */
-  --border-strong: #93a1a1;
-  --border-focus: #268bd2;    /* solarized blue */
+  --border-default: #2b2f37;  /* neutral hairline */
+  --border-strong: #3c424c;
+  --border-focus: #3b82f6;    /* standard blue */
   --ornament-frame: none;
 
-  /* Foreground — Dracula light foreground for readability over Solarized dark */
-  --fg-default: #f8f8f2;
-  --fg-muted: #6272a4;        /* dracula comment */
-  --fg-faint: #586e75;
-  --fg-on-accent: #002b36;
-  --fg-on-success: #002b36;
-  --fg-on-danger: #f8f8f2;
-  --fg-on-warning: #002b36;
+  /* Foreground — near-white neutral over slate */
+  --fg-default: #e8eaed;
+  --fg-muted: #9aa1ac;        /* neutral slate grey */
+  --fg-faint: #6b7280;
+  --fg-on-accent: #ffffff;
+  --fg-on-success: #0d0f13;
+  --fg-on-danger: #ffffff;
+  --fg-on-warning: #0d0f13;
 
   /* Type — same as light (system stack) */
   --font-display: 'Geist Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -65,35 +69,35 @@
   /* Cursor + scrollbar */
   --cursor-default: auto;
   --cursor-pointer: pointer;
-  --scrollbar-track: #073642;
-  --scrollbar-thumb: #586e75;
+  --scrollbar-track: #15171c;
+  --scrollbar-thumb: #3c424c;
 
-  /* ── shadcn semantic tokens (dark) — Solarized dark surfaces. Overrides
+  /* ── shadcn semantic tokens (dark) — neutral slate surfaces. Overrides
    * the light defaults from light.css :root. Dracula + node + action role
    * tokens are inherited unchanged from light.css (identical in dark). ── */
-  --background: #002b36;              /* base03 */
-  --foreground: #f8f8f2;              /* dracula fg */
-  --card: #073642;                    /* base02 */
-  --card-foreground: #f8f8f2;
-  --popover: #0d1f2d;
-  --popover-foreground: #f8f8f2;
-  --surface-card: #073642;
-  --primary: #268bd2;                 /* solarized blue */
-  --primary-foreground: #f8f8f2;
-  --secondary: #073642;
-  --secondary-foreground: #f8f8f2;
-  --muted: #073642;
-  --muted-foreground: #6272a4;        /* dracula comment */
-  --accent: #8be9fd;                  /* dracula cyan */
-  --accent-foreground: #002b36;
-  --destructive: #dc322f;
-  --destructive-foreground: #f8f8f2;
-  --success: #859900;
-  --warning: #b58900;
-  --info: #2aa198;
-  --border: #586e75;                  /* base01 */
-  --input: #586e75;
-  --ring: #268bd2;
+  --background: #0d0f13;              /* bg-app */
+  --foreground: #e8eaed;              /* fg-default */
+  --card: #1b1e25;                    /* elevated surface */
+  --card-foreground: #e8eaed;
+  --popover: #1b1e25;
+  --popover-foreground: #e8eaed;
+  --surface-card: #1b1e25;
+  --primary: #3b82f6;                 /* standard blue */
+  --primary-foreground: #ffffff;
+  --secondary: #1b1e25;
+  --secondary-foreground: #e8eaed;
+  --muted: #1b1e25;
+  --muted-foreground: #9aa1ac;
+  --accent: #8b5cf6;                  /* standard violet */
+  --accent-foreground: #ffffff;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --info: #38bdf8;
+  --border: #2b2f37;
+  --input: #2b2f37;
+  --ring: #3b82f6;
 
   /* In dark mode the Dracula hues are bright enough to be the text colour
    * directly — ink aliases resolve to the raw accents. */
@@ -108,4 +112,6 @@
   --shadow-card: 0 4px 12px rgb(0 0 0 / 0.3);
   --shadow-card-hover: 0 6px 18px rgb(0 0 0 / 0.4);
   --shadow-modal: 0 16px 48px rgb(0 0 0 / 0.55);
+
+  color-scheme: dark;
 }

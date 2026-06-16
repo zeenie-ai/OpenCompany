@@ -8,36 +8,36 @@
  * Mirrors the existing `.dark` block in index.css for shadcn HSL-triplet
  * tokens; this file only adds the new full-colour contract.
  *
- * Source palette: Solarized dark + Dracula accents (matches existing
- * dark theme in client/src/styles/theme.ts).
+ * Source palette: neutral slate dark — the light grey-blue "paper" family
+ * inverted (NOT Solarized teal) + Dracula vibrant accents.
  * ============================================================================ */
 
 .dark,
 :root[data-theme="dark"] {
-  /* Surfaces — Solarized dark base + Dracula highlights */
-  --bg-app: #002b36;          /* base03 */
-  --bg-panel: #073642;        /* base02 */
-  --bg-canvas: #002b36;
-  --bg-elevated: #0d1f2d;
-  --bg-input: #073642;
-  --bg-hover: rgba(248, 248, 242, 0.06);
-  --bg-active: rgba(189, 147, 249, 0.18);
+  /* Surfaces — neutral slate */
+  --bg-app: #0d0f13;          /* neutral near-black slate */
+  --bg-panel: #15171c;        /* one step up — toolbar/sidebar/palette */
+  --bg-canvas: #0d0f13;
+  --bg-elevated: #1b1e25;
+  --bg-input: #15171c;
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --bg-active: rgba(255, 255, 255, 0.08);
   --bg-overlay: rgba(0, 0, 0, 0.7);
 
   /* Borders */
-  --border-default: #586e75;  /* base01 */
-  --border-strong: #93a1a1;
-  --border-focus: #268bd2;    /* solarized blue */
+  --border-default: #2b2f37;
+  --border-strong: #3c424c;
+  --border-focus: #3b82f6;    /* standard blue */
   --ornament-frame: none;
 
-  /* Foreground — Dracula light foreground for readability over Solarized dark */
-  --fg-default: #f8f8f2;
-  --fg-muted: #6272a4;        /* dracula comment */
-  --fg-faint: #586e75;
-  --fg-on-accent: #002b36;
-  --fg-on-success: #002b36;
-  --fg-on-danger: #f8f8f2;
-  --fg-on-warning: #002b36;
+  /* Foreground — near-white neutral for readability over slate */
+  --fg-default: #e8eaed;
+  --fg-muted: #9aa1ac;
+  --fg-faint: #6b7280;
+  --fg-on-accent: #ffffff;
+  --fg-on-success: #0d0f13;
+  --fg-on-danger: #ffffff;
+  --fg-on-warning: #0d0f13;
 
   /* Type — same as light (system stack) */
   --font-display: 'Geist Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -65,6 +65,6 @@
   /* Cursor + scrollbar */
   --cursor-default: auto;
   --cursor-pointer: pointer;
-  --scrollbar-track: #073642;
-  --scrollbar-thumb: #586e75;
+  --scrollbar-track: #15171c;
+  --scrollbar-thumb: #3c424c;
 }

@@ -41,23 +41,23 @@ All tokens are CSS custom properties under `:root` (light) and `.dark` / `[data-
 ### Surfaces
 | Token | Light | Dark | Use |
 |---|---|---|---|
-| `--bg-app` | `#f5f7fa` | `#002b36` | app/window background |
-| `--bg-panel` | `#fafbfc` | `#073642` | toolbar, sidebar, palette, status bar |
-| `--bg-canvas` | `#ffffff` | `#002b36` | node canvas |
-| `--bg-elevated` | `#ffffff` | `#0d1f2d` | cards, section heads, inputs-on-panel |
-| `--bg-input` | `#ffffff` | `#073642` | form fields |
-| `--surface-card` | `#ffffff` | `#073642` | node/data card fill |
-| `--bg-hover` | `rgba(0,0,0,.04)` | `rgba(248,248,242,.06)` | hover wash |
-| `--bg-active` | `rgba(0,0,0,.06)` | `rgba(189,147,249,.18)` | selected/pressed wash |
+| `--bg-app` | `#f5f7fa` | `#0d0f13` | app/window background |
+| `--bg-panel` | `#fafbfc` | `#15171c` | toolbar, sidebar, palette, status bar |
+| `--bg-canvas` | `#ffffff` | `#0d0f13` | node canvas |
+| `--bg-elevated` | `#ffffff` | `#1b1e25` | cards, section heads, inputs-on-panel |
+| `--bg-input` | `#ffffff` | `#15171c` | form fields |
+| `--surface-card` | `#ffffff` | `#1b1e25` | node/data card fill |
+| `--bg-hover` | `rgba(0,0,0,.04)` | `rgba(255,255,255,.05)` | hover wash |
+| `--bg-active` | `rgba(0,0,0,.06)` | `rgba(255,255,255,.08)` | selected/pressed wash |
 | `--bg-overlay` | `rgba(0,0,0,.45)` | `rgba(0,0,0,.7)` | modal scrim |
 
 ### Foreground & borders
-`--fg-default` (#1a1d21 / #f8f8f2) · `--fg-muted` (#4b5563 / #94a8d6) · `--fg-faint` (#9ca3af / #6272a4) · `--fg-on-accent`.
-`--border-default` (#d1d5db / #586e75) · `--border-strong` · `--border-focus` (#3b82f6 / #268bd2).
+`--fg-default` (#1a1d21 / #e8eaed) · `--fg-muted` (#4b5563 / #9aa1ac) · `--fg-faint` (#9ca3af / #6b7280) · `--fg-on-accent`.
+`--border-default` (#d1d5db / #2b2f37) · `--border-strong` · `--border-focus` (#3b82f6 / #3b82f6).
 
 ### Brand & status
-`--primary` #2563eb / #268bd2 · `--accent` #7c3aed / #8be9fd.
-`--success` #059669 / #859900 · `--warning` #d97706 / #b58900 · `--destructive` #dc2626 / #dc322f · `--info` #0891b2 / #2aa198.
+`--primary` #2563eb / #3b82f6 · `--accent` #7c3aed / #8b5cf6.
+`--success` #059669 / #22c55e · `--warning` #d97706 / #f59e0b · `--destructive` #dc2626 / #ef4444 · `--info` #0891b2 / #38bdf8.
 
 ### Dracula accents (identical in both themes — the personality layer)
 `--dracula-green #50fa7b` · `--dracula-cyan #8be9fd` · `--dracula-purple #bd93f9` · `--dracula-pink #ff79c6` · `--dracula-orange #ffb86c` · `--dracula-yellow #f1fa8c` · `--dracula-red #ff5555`.
