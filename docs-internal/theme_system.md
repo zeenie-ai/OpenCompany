@@ -50,7 +50,7 @@ client/src/components/ui/CommandPalette.tsx + CommandPaletteHost.tsx — ⌘K la
 
 ## Token tiers
 
-There are five tiers, ordered from most semantic to most concrete. Always pick the most semantic that fits the call site.
+There are six tiers, ordered from most semantic to most concrete. Always pick the most semantic that fits the call site.
 
 ### 1. New-contract surface tokens (preferred for new code)
 
@@ -110,6 +110,12 @@ Six tokens for canvas identity: `agent / model / skill / tool / trigger / workfl
 ### 5. Dracula raw accents (palette, not consumed directly)
 
 `--dracula-green/purple/pink/cyan/red/orange/yellow/selection/current-line/comment`. Same value across light + dark. Used as the underlying palette that `--action-X` and `--node-X` reference; do not use directly in components.
+
+### 6. Code & syntax tokens
+
+`--code-*` — the per-theme syntax palette for the code editor, console/output JSON viewers, and chat code blocks. Each theme defines its own `--code-*` block in its own CSS file (`client/src/themes/<theme>.css`): editor chrome (`--code-bg`, `--code-gutter-bg`, `--code-gutter-fg`, `--code-caret`, `--code-border`, `--code-line-active`, `--code-selection`) + syntax roles (`--code-text`, `--code-comment`, `--code-keyword`, `--code-string`, `--code-number`, `--code-boolean`, `--code-function`, `--code-property`, `--code-operator`, `--code-punctuation`, `--code-tag`). Light / Dark / Cyber are copied verbatim from the design system's `tokens/code.css`; the other skins derive syntax from their own role hues — **keyword→trigger, string→success, number→agent, function→model, tag→tool, comment→faint, punctuation→muted** — on an adaptive dark/light code surface (`color-mix(#000 45%, --bg-panel)` dark, `color-mix(#000 5%, --surface-card)` light).
+
+Consumed as `var(--code-*)` in [index.css](../client/src/index.css) (`.code-editor-container`, `.console-json-output`, the `.chat-markdown` dark overrides) and exposed as Tailwind utilities (`text-code-tag`, `bg-code-bg`, …) via the `@theme inline` bridge; the `OutputPanel` `@uiw/react-json-view` viewer reads the same vars. This **replaced the old global dracula-hardcoded `--prism-*` block and the dead `getPrismTokenCSS()` helper** — code/JSON now paints in each theme's palette instead of one dracula scheme everywhere. (`prismjs` is still the tokenizer; only the colours moved to `--code-*`.)
 
 ## Migration recipe
 

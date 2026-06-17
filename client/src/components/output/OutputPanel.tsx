@@ -154,17 +154,31 @@ export default function OutputPanel({ results, onClear, selectedNode }: Props) {
         <div className="space-y-0">
           {response && (
             <Section label="Response" defaultOpen>
-              <div className="prose prose-sm max-w-none whitespace-pre-wrap dark:prose-invert">
-                <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
-                  {fmt(typeof response === 'string' ? response : JSON.stringify(response, null, 2))}
-                </ReactMarkdown>
-              </div>
+              {typeof response === 'string' ? (
+                // Markdown text (LLM response). No whitespace-pre-wrap: it
+                // double-counts newlines against remarkBreaks (each <br>
+                // carries a trailing \n that pre-wrap renders as a 2nd break).
+                <div className="prose prose-sm max-w-none dark:prose-invert">
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                    {fmt(response)}
+                  </ReactMarkdown>
+                </div>
+              ) : (
+                // Object/array response — themed JSON viewer (same --code-*
+                // palette as Raw JSON), not stringified-into-markdown.
+                <JsonView
+                  value={response}
+                  collapsed={2}
+                  displayDataTypes={false}
+                  style={CODE_JSON_THEME}
+                />
+              )}
             </Section>
           )}
 
           {thinking && (
             <Section label="Thinking">
-              <div className="prose prose-sm max-h-[300px] max-w-none overflow-auto whitespace-pre-wrap dark:prose-invert">
+              <div className="prose prose-sm max-h-[300px] max-w-none overflow-auto dark:prose-invert">
                 <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
                   {fmt(thinking)}
                 </ReactMarkdown>
