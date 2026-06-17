@@ -257,3 +257,25 @@
 :root[data-theme="plague"] .cmdk { background: var(--linen); border: 4px double var(--crow); border-radius: 0; }
 :root[data-theme="plague"] .cmdk-item.active { background: var(--danger-soft); color: var(--accent); }
 :root[data-theme="plague"] .cmdk-item.active::before { content: '† '; color: var(--accent); }
+
+/* Code & syntax tokens (code editor / JSON output / variable tree) */
+:root[data-theme="plague"] {
+  --code-bg: color-mix(in srgb, #000000 5%, var(--surface-card));
+  --code-gutter-bg: color-mix(in srgb, #000000 9%, var(--surface-card));
+  --code-gutter-fg: var(--fg-faint);
+  --code-line-active: color-mix(in srgb, var(--primary) 8%, transparent);
+  --code-selection: color-mix(in srgb, var(--primary) 18%, transparent);
+  --code-caret: var(--primary);
+  --code-border: var(--border-default);
+  --code-text: var(--fg-default);
+  --code-comment: #9a8468;
+  --code-keyword: #1a1410;
+  --code-string: #98a838;
+  --code-number: #783c28;
+  --code-boolean: #783c28;
+  --code-function: #6a5440;
+  --code-property: #6a5440;
+  --code-operator: #1a1410;
+  --code-punctuation: #6a5440;
+  --code-tag: #98a838;
+}

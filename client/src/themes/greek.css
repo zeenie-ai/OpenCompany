@@ -297,3 +297,25 @@
 :root[data-theme="greek"] .cmdk input { font-family: var(--font-display); letter-spacing: 0.12em; }
 :root[data-theme="greek"] .cmdk-item.active { background: var(--info-soft); color: var(--accent); }
 :root[data-theme="greek"] .cmdk-item.active::before { content: '◆ '; color: var(--gold); }
+
+/* Code & syntax tokens (code editor / JSON output / variable tree) */
+:root[data-theme="greek"] {
+  --code-bg: color-mix(in srgb, #000000 5%, var(--surface-card));
+  --code-gutter-bg: color-mix(in srgb, #000000 9%, var(--surface-card));
+  --code-gutter-fg: var(--fg-faint);
+  --code-line-active: color-mix(in srgb, var(--primary) 8%, transparent);
+  --code-selection: color-mix(in srgb, var(--primary) 18%, transparent);
+  --code-caret: var(--primary);
+  --code-border: var(--border-default);
+  --code-text: var(--fg-default);
+  --code-comment: #9a8c64;
+  --code-keyword: #7a1a18;
+  --code-string: #6a7a32;
+  --code-number: #284b82;
+  --code-boolean: #284b82;
+  --code-function: #6a7a32;
+  --code-property: #6a7a32;
+  --code-operator: #7a1a18;
+  --code-punctuation: #6a5d3c;
+  --code-tag: #c8a040;
+}

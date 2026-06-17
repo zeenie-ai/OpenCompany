@@ -11,8 +11,6 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import JsonView from '@uiw/react-json-view';
-import { githubDarkTheme } from '@uiw/react-json-view/githubDark';
-import { githubLightTheme } from '@uiw/react-json-view/githubLight';
 import { Node } from 'reactflow';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,7 +19,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { useTheme } from '@/contexts/ThemeContext';
 import { ExecutionResult } from '@/services/executionService';
 import { copyToClipboard } from '@/utils/formatters';
 import { cn } from '@/lib/utils';
@@ -43,6 +40,34 @@ const TAG_VARIANT: Record<string, 'secondary' | 'info' | 'success'> = {
   provider: 'info',
   agent_type: 'success',
 };
+
+/** @uiw/react-json-view palette driven entirely by the active theme's
+ * --code-* tokens — no isDarkMode branch, so all 12 themes paint Raw JSON in
+ * their own syntax colors. The CSS vars re-resolve on theme switch (the
+ * data-theme attribute changes the --code-* values; no React re-render). */
+const CODE_JSON_THEME = {
+  '--w-rjv-background-color': 'var(--code-bg)',
+  '--w-rjv-color': 'var(--code-text)',
+  '--w-rjv-key-string': 'var(--code-tag)',
+  '--w-rjv-line-color': 'var(--code-border)',
+  '--w-rjv-arrow-color': 'var(--code-gutter-fg)',
+  '--w-rjv-info-color': 'var(--code-comment)',
+  '--w-rjv-ellipsis-color': 'var(--code-comment)',
+  '--w-rjv-brackets-color': 'var(--code-punctuation)',
+  '--w-rjv-curlybraces-color': 'var(--code-punctuation)',
+  '--w-rjv-colon-color': 'var(--code-punctuation)',
+  '--w-rjv-quotes-color': 'var(--code-string)',
+  '--w-rjv-quotes-string-color': 'var(--code-string)',
+  '--w-rjv-type-string-color': 'var(--code-string)',
+  '--w-rjv-type-int-color': 'var(--code-number)',
+  '--w-rjv-type-float-color': 'var(--code-number)',
+  '--w-rjv-type-bigint-color': 'var(--code-number)',
+  '--w-rjv-type-boolean-color': 'var(--code-boolean)',
+  '--w-rjv-type-null-color': 'var(--code-number)',
+  '--w-rjv-type-nan-color': 'var(--code-number)',
+  '--w-rjv-type-undefined-color': 'var(--code-comment)',
+  '--w-rjv-type-date-color': 'var(--code-string)',
+} as React.CSSProperties;
 
 interface Props {
   results: ExecutionResult[];
@@ -76,7 +101,6 @@ function Section({ label, defaultOpen = false, action, children }: SectionProps)
 }
 
 export default function OutputPanel({ results, onClear, selectedNode }: Props) {
-  const { isDarkMode } = useTheme();
   const filtered = selectedNode ? results.filter(r => r.nodeId === selectedNode.id) : results;
   const latest = filtered[0];
 
@@ -165,7 +189,7 @@ export default function OutputPanel({ results, onClear, selectedNode }: Props) {
               value={raw}
               collapsed={2}
               displayDataTypes={false}
-              style={isDarkMode ? githubDarkTheme : githubLightTheme}
+              style={CODE_JSON_THEME}
             />
           </Section>
         </div>

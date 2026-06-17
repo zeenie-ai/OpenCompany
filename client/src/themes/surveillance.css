@@ -274,3 +274,25 @@
 :root[data-theme="surveillance"] .cmdk { background: var(--bg-elevated); border: 1px solid var(--primary); border-radius: 0; }
 :root[data-theme="surveillance"] .cmdk-item.active { background: var(--primary); color: white; }
 :root[data-theme="surveillance"] .cmdk-item.active::before { content: '> '; }
+
+/* Code & syntax tokens (code editor / JSON output / variable tree) */
+:root[data-theme="surveillance"] {
+  --code-bg: color-mix(in srgb, #000000 45%, var(--bg-panel));
+  --code-gutter-bg: color-mix(in srgb, #000000 30%, var(--bg-panel));
+  --code-gutter-fg: var(--fg-faint);
+  --code-line-active: color-mix(in srgb, var(--primary) 8%, transparent);
+  --code-selection: color-mix(in srgb, var(--primary) 18%, transparent);
+  --code-caret: var(--primary);
+  --code-border: var(--border-default);
+  --code-text: var(--fg-default);
+  --code-comment: #5a5e62;
+  --code-keyword: #d8a020;
+  --code-string: #6acc6a;
+  --code-number: #e82626;
+  --code-boolean: #e82626;
+  --code-function: #888c90;
+  --code-property: #888c90;
+  --code-operator: #d8a020;
+  --code-punctuation: #888c90;
+  --code-tag: #6acc6a;
+}

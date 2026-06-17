@@ -564,35 +564,8 @@ export const styles = {
   },
 };
 
-/**
- * Generate prismjs token CSS for a given theme instance.
- * Call via `getPrismTokenCSS(theme)` and inject once per component
- * tree that uses `Prism.highlight`. Same dracula token mapping as
- * CodeEditor.tsx — centralised here so every code display in the
- * app shares one source of truth.
- *
- * @param selector  CSS parent selector to scope the tokens (e.g.
- *                  '.prism-json' or '.code-editor-container').
- *                  Defaults to '.prism-code' which all prism output
- *                  containers should use as a className.
- */
-export function getPrismTokenCSS(
-  t: { dracula: typeof dracula; colors: { text?: string }; [k: string]: any },
-  selector: string = '.prism-code',
-): string {
-  return `
-    ${selector} .token.property { color: ${t.dracula.cyan}; }
-    ${selector} .token.string { color: ${t.dracula.yellow}; }
-    ${selector} .token.number { color: ${t.dracula.purple}; }
-    ${selector} .token.boolean { color: ${t.dracula.purple}; }
-    ${selector} .token.null { color: ${t.dracula.orange}; }
-    ${selector} .token.keyword { color: ${t.dracula.pink}; }
-    ${selector} .token.function { color: ${t.dracula.green}; }
-    ${selector} .token.operator { color: ${t.dracula.pink}; }
-    ${selector} .token.class-name { color: ${t.dracula.cyan}; }
-    ${selector} .token.builtin { color: ${t.dracula.cyan}; }
-    ${selector} .token.comment { color: ${t.dracula.comment}; }
-    ${selector} .token.punctuation { color: ${t.dracula.foreground}; }
-  `;
-}
+// Code/JSON syntax colors are now theme-driven via the per-theme `--code-*`
+// tokens (client/src/themes/<theme>.css) consumed by `.code-editor-container`
+// and `.console-json-output` in index.css. The old `getPrismTokenCSS` helper
+// (hardcoded dracula, 0 call sites) was retired.
 

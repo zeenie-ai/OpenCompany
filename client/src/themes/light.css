@@ -174,3 +174,29 @@
   --action-tools-border:  color-mix(in srgb, var(--dracula-purple) var(--tint-action-border), transparent);
   --action-tools-ink:     #7c3aed;
 }
+
+/* Code & syntax tokens (code editor / JSON output / variable tree) */
+:root,
+:root[data-theme="light"] {
+  /* Editor chrome */
+  --code-bg: #f6f7f9;                /* code surface — faint grey, distinct from white card */
+  --code-gutter-bg: #eef0f3;         /* line-number gutter */
+  --code-gutter-fg: #aab1bd;         /* line numbers */
+  --code-line-active: rgba(37, 99, 235, 0.06);  /* active line highlight */
+  --code-selection: rgba(37, 99, 235, 0.18);
+  --code-caret: var(--primary);
+  --code-border: var(--border-default);
+
+  /* Syntax (light) */
+  --code-text: #1f2328;             /* plain text / identifiers */
+  --code-comment: #6e7781;          /* comments */
+  --code-keyword: #8250df;          /* def, return, const, if … (purple) */
+  --code-string: #0a7d33;           /* strings (green) */
+  --code-number: #0550ae;           /* numbers (blue) */
+  --code-boolean: #cf222e;          /* true/false/null (red) */
+  --code-function: #6639ba;         /* function names */
+  --code-property: #0550ae;         /* object keys / attributes */
+  --code-operator: #cf222e;         /* + - = => : (red-ish) */
+  --code-punctuation: #57606a;      /* braces, commas */
+  --code-tag: #116329;              /* JSON keys / HTML tags (green) */
+}

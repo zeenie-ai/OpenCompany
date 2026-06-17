@@ -254,3 +254,25 @@
 /* CMDK */
 :root[data-theme="wasteland"] .cmdk { background: var(--bg-elevated); border: 3px solid var(--accent); border-radius: 0; }
 :root[data-theme="wasteland"] .cmdk-item.active { background: var(--bg-active); color: var(--accent); border-left: 3px solid var(--rust); }
+
+/* Code & syntax tokens (code editor / JSON output / variable tree) */
+:root[data-theme="wasteland"] {
+  --code-bg: color-mix(in srgb, #000000 45%, var(--bg-panel));
+  --code-gutter-bg: color-mix(in srgb, #000000 30%, var(--bg-panel));
+  --code-gutter-fg: var(--fg-faint);
+  --code-line-active: color-mix(in srgb, var(--primary) 8%, transparent);
+  --code-selection: color-mix(in srgb, var(--primary) 18%, transparent);
+  --code-caret: var(--primary);
+  --code-border: var(--border-default);
+  --code-text: var(--fg-default);
+  --code-comment: #8a7048;
+  --code-keyword: #8a3a18;
+  --code-string: #c8d038;
+  --code-number: #e88a28;
+  --code-boolean: #e88a28;
+  --code-function: #d8c8a0;
+  --code-property: #d8c8a0;
+  --code-operator: #8a3a18;
+  --code-punctuation: #b89868;
+  --code-tag: #c8d038;
+}

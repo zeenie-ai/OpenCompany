@@ -115,3 +115,28 @@
 
   color-scheme: dark;
 }
+
+/* Code & syntax tokens (code editor / JSON output / variable tree) */
+.dark,
+:root[data-theme="dark"] {
+  --code-bg: #0d1117;
+  --code-gutter-bg: #15171c;
+  --code-gutter-fg: #545b66;
+  --code-line-active: rgba(255, 255, 255, 0.05);
+  --code-selection: rgba(139, 233, 253, 0.20);
+  --code-caret: var(--accent);
+  --code-border: var(--border-default);
+
+  /* Dracula syntax palette */
+  --code-text: #f8f8f2;
+  --code-comment: #6272a4;
+  --code-keyword: #ff79c6;          /* pink */
+  --code-string: #f1fa8c;           /* yellow */
+  --code-number: #bd93f9;           /* purple */
+  --code-boolean: #bd93f9;
+  --code-function: #50fa7b;         /* green */
+  --code-property: #8be9fd;         /* cyan */
+  --code-operator: #ff79c6;         /* pink */
+  --code-punctuation: #f8f8f2;
+  --code-tag: #8be9fd;              /* cyan */
+}

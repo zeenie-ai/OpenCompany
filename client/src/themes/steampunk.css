@@ -276,3 +276,25 @@
   background: var(--bg-elevated); border: 4px ridge var(--border-strong); border-radius: 4px;
 }
 :root[data-theme="steampunk"] .cmdk-item.active { background: var(--bg-active); color: var(--accent); border-left: 3px solid var(--copper); }
+
+/* Code & syntax tokens (code editor / JSON output / variable tree) */
+:root[data-theme="steampunk"] {
+  --code-bg: color-mix(in srgb, #000000 5%, var(--surface-card));
+  --code-gutter-bg: color-mix(in srgb, #000000 9%, var(--surface-card));
+  --code-gutter-fg: var(--fg-faint);
+  --code-line-active: color-mix(in srgb, var(--primary) 8%, transparent);
+  --code-selection: color-mix(in srgb, var(--primary) 18%, transparent);
+  --code-caret: var(--primary);
+  --code-border: var(--border-default);
+  --code-text: var(--fg-default);
+  --code-comment: #8a7448;
+  --code-keyword: #b8602a;
+  --code-string: #8a8a4a;
+  --code-number: #d8a848;
+  --code-boolean: #d8a848;
+  --code-function: #b8a070;
+  --code-property: #b8a070;
+  --code-operator: #b8602a;
+  --code-punctuation: #b8a070;
+  --code-tag: #8a8a4a;
+}

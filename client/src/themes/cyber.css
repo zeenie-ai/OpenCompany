@@ -875,3 +875,24 @@
     1px 0 0 var(--neon-cyan);
 }
 :root[data-theme="cyber"] .v-display:hover { animation: cyber-glitch 0.4s steps(8); }
+
+/* Code & syntax tokens (code editor / JSON output / variable tree) */
+:root[data-theme="cyber"] {
+  --code-bg: #03000a;
+  --code-gutter-bg: #0a0420;
+  --code-gutter-fg: #6a5a90;
+  --code-line-active: rgba(245, 30, 182, 0.10);
+  --code-selection: rgba(29, 217, 229, 0.22);
+  --code-caret: #1dd9e5;
+  --code-text: #f0e0ff;
+  --code-comment: #6a5a90;
+  --code-keyword: #f51eb6;          /* neon magenta */
+  --code-string: #26d97a;           /* neon green */
+  --code-number: #ffd028;           /* neon yellow */
+  --code-boolean: #ffd028;
+  --code-function: #1dd9e5;         /* neon cyan */
+  --code-property: #1dd9e5;
+  --code-operator: #f51eb6;
+  --code-punctuation: #a090c0;
+  --code-tag: #1dd9e5;
+}

@@ -196,6 +196,23 @@
   --font-body:    var(--font-body);
 
   --radius-pill: var(--radius-pill);
+
+  /* Code & syntax tokens -> Tailwind utilities (text-code-tag, bg-code-bg, …).
+   * Defined per-theme in client/src/themes/<theme>.css. */
+  --color-code-bg:          var(--code-bg);
+  --color-code-gutter-bg:   var(--code-gutter-bg);
+  --color-code-gutter-fg:   var(--code-gutter-fg);
+  --color-code-text:        var(--code-text);
+  --color-code-comment:     var(--code-comment);
+  --color-code-keyword:     var(--code-keyword);
+  --color-code-string:      var(--code-string);
+  --color-code-number:      var(--code-number);
+  --color-code-boolean:     var(--code-boolean);
+  --color-code-function:    var(--code-function);
+  --color-code-property:    var(--code-property);
+  --color-code-operator:    var(--code-operator);
+  --color-code-punctuation: var(--code-punctuation);
+  --color-code-tag:         var(--code-tag);
 }
 
 /* ============================================================================
@@ -333,13 +350,13 @@ html {
  * Static CSS vars; dark-mode overrides via `.dark` cascade.
  * ============================================================================ */
 
-.console-json-output .token.string { color: var(--dracula-yellow); }
+.console-json-output .token.string { color: var(--code-string); }
 .console-json-output .token.number,
 .console-json-output .token.boolean,
-.console-json-output .token.null { color: var(--dracula-purple); }
-.console-json-output .token.property { color: var(--dracula-cyan); }
-.console-json-output .token.punctuation { color: var(--foreground); }
-.console-json-output .token.operator { color: var(--dracula-pink); }
+.console-json-output .token.null { color: var(--code-number); }
+.console-json-output .token.property { color: var(--code-tag); }
+.console-json-output .token.punctuation { color: var(--code-punctuation); }
+.console-json-output .token.operator { color: var(--code-operator); }
 
 .chat-markdown p { margin: 0 0 8px 0; }
 .chat-markdown p:last-child { margin-bottom: 0; }
@@ -369,7 +386,7 @@ html {
   font-size: 0.9em;
 }
 .dark .chat-markdown code {
-  background-color: var(--dracula-current-line);
+  background-color: var(--code-bg);
 }
 .chat-markdown pre {
   background-color: var(--card);
@@ -379,7 +396,7 @@ html {
   margin: 8px 0;
 }
 .dark .chat-markdown pre {
-  background-color: var(--dracula-current-line);
+  background-color: var(--code-bg);
 }
 .chat-markdown pre code { background: none; padding: 0; }
 .chat-markdown table {
@@ -396,14 +413,14 @@ html {
 }
 .dark .chat-markdown th,
 .dark .chat-markdown td {
-  border-color: var(--dracula-selection);
+  border-color: var(--code-border);
 }
 .chat-markdown th {
   background-color: var(--card);
   font-weight: 600;
 }
 .dark .chat-markdown th {
-  background-color: var(--dracula-current-line);
+  background-color: var(--code-gutter-bg);
 }
 .chat-markdown blockquote {
   border-left: 3px solid var(--primary);
@@ -412,14 +429,14 @@ html {
   color: var(--muted-foreground);
 }
 .dark .chat-markdown blockquote {
-  border-left-color: var(--dracula-purple);
+  border-left-color: var(--code-keyword);
 }
 .chat-markdown a {
   color: var(--primary);
   text-decoration: none;
 }
 .dark .chat-markdown a {
-  color: var(--dracula-cyan);
+  color: var(--code-property);
 }
 .chat-markdown a:hover { text-decoration: underline; }
 .chat-markdown hr {
@@ -428,37 +445,26 @@ html {
   margin: 12px 0;
 }
 .dark .chat-markdown hr {
-  border-top-color: var(--dracula-selection);
+  border-top-color: var(--code-border);
 }
 
 /* ============================================================================
- * Prism syntax-highlighting palette — used by react-simple-code-editor.
- * Token roles map to existing dracula tokens; future themes can override
- * each --prism-* var in their own scope.
+ * Syntax-highlighting palette — used by react-simple-code-editor + the
+ * console/output JSON viewers. Token colors read the per-theme --code-*
+ * tokens (defined in client/src/themes/<theme>.css), so each theme paints
+ * code in its own palette on its own code surface.
  * ============================================================================ */
 
-:root {
-  --prism-comment:     var(--dracula-comment);
-  --prism-string:      var(--dracula-yellow);
-  --prism-keyword:     var(--dracula-pink);
-  --prism-function:    var(--dracula-green);
-  --prism-number:      var(--dracula-purple);
-  --prism-operator:    var(--dracula-pink);
-  --prism-class-name:  var(--dracula-cyan);
-  --prism-builtin:     var(--dracula-cyan);
-  --prism-boolean:     var(--dracula-purple);
-  --prism-punctuation: var(--foreground);
-}
-
-.code-editor-container .token.comment     { color: var(--prism-comment); }
-.code-editor-container .token.string      { color: var(--prism-string); }
-.code-editor-container .token.keyword     { color: var(--prism-keyword); }
-.code-editor-container .token.function    { color: var(--prism-function); }
-.code-editor-container .token.number      { color: var(--prism-number); }
-.code-editor-container .token.operator    { color: var(--prism-operator); }
-.code-editor-container .token.class-name  { color: var(--prism-class-name); }
-.code-editor-container .token.builtin     { color: var(--prism-builtin); }
-.code-editor-container .token.boolean     { color: var(--prism-boolean); }
-.code-editor-container .token.punctuation { color: var(--prism-punctuation); }
-.code-editor-container textarea           { outline: none !important; caret-color: var(--foreground); }
+.code-editor-container { background: var(--code-bg); }
+.code-editor-container .token.comment     { color: var(--code-comment); }
+.code-editor-container .token.string      { color: var(--code-string); }
+.code-editor-container .token.keyword     { color: var(--code-keyword); }
+.code-editor-container .token.function    { color: var(--code-function); }
+.code-editor-container .token.number      { color: var(--code-number); }
+.code-editor-container .token.operator    { color: var(--code-operator); }
+.code-editor-container .token.class-name  { color: var(--code-property); }
+.code-editor-container .token.builtin     { color: var(--code-property); }
+.code-editor-container .token.boolean     { color: var(--code-boolean); }
+.code-editor-container .token.punctuation { color: var(--code-punctuation); }
+.code-editor-container textarea           { outline: none !important; caret-color: var(--code-caret); }
 .code-editor-container textarea::placeholder { color: var(--muted-foreground); }

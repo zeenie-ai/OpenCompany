@@ -253,3 +253,25 @@
 /* CMDK */
 :root[data-theme="rot"] .cmdk { background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 4px; }
 :root[data-theme="rot"] .cmdk-item.active { background: var(--bg-active); color: var(--accent); }
+
+/* Code & syntax tokens (code editor / JSON output / variable tree) */
+:root[data-theme="rot"] {
+  --code-bg: color-mix(in srgb, #000000 45%, var(--bg-panel));
+  --code-gutter-bg: color-mix(in srgb, #000000 30%, var(--bg-panel));
+  --code-gutter-fg: var(--fg-faint);
+  --code-line-active: color-mix(in srgb, var(--primary) 8%, transparent);
+  --code-selection: color-mix(in srgb, var(--primary) 18%, transparent);
+  --code-caret: var(--primary);
+  --code-border: var(--border-default);
+  --code-text: var(--fg-default);
+  --code-comment: #4a5a50;
+  --code-keyword: #e8a838;
+  --code-string: #78c878;
+  --code-number: #78c878;
+  --code-boolean: #78c878;
+  --code-function: #788878;
+  --code-property: #788878;
+  --code-operator: #e8a838;
+  --code-punctuation: #788878;
+  --code-tag: #d8d0b8;
+}

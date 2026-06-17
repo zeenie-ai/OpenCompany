@@ -714,3 +714,25 @@
   border: 1px solid var(--border-default);
   font-family: var(--font-mono);
 }
+
+/* Code & syntax tokens (code editor / JSON output / variable tree) */
+:root[data-theme="renaissance"] {
+  --code-bg: color-mix(in srgb, #000000 5%, var(--surface-card));
+  --code-gutter-bg: color-mix(in srgb, #000000 9%, var(--surface-card));
+  --code-gutter-fg: var(--fg-faint);
+  --code-line-active: color-mix(in srgb, var(--primary) 8%, transparent);
+  --code-selection: color-mix(in srgb, var(--primary) 18%, transparent);
+  --code-caret: var(--primary);
+  --code-border: var(--border-default);
+  --code-text: var(--fg-default);
+  --code-comment: #8a6a3c;
+  --code-keyword: #8a1410;
+  --code-string: #5a6a28;
+  --code-number: #2548c8;
+  --code-boolean: #2548c8;
+  --code-function: #5a6a28;
+  --code-property: #5a6a28;
+  --code-operator: #8a1410;
+  --code-punctuation: #6a4a1c;
+  --code-tag: #d4a030;
+}
