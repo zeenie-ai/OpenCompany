@@ -1,5 +1,4 @@
-<img width="1584" height="672" alt="image" src="https://github.com/user-attachments/assets/54be1590-7e08-4b60-9a3d-aadcb3aa44f3" />
-
+<img width="1584" height="672" alt="image" src="https://github.com/user-attachments/assets/cebd0198-4c09-4757-9407-a7ad79a7d71e" />
 
 
 # MachinaOS
@@ -40,8 +39,8 @@ The `dev` task starts the Python backend, Vite client, WhatsApp service, and Tem
 </details>
 
 ## See It In Action ↓
+https://github.com/user-attachments/assets/035a2293-0837-4969-8b9d-8d680e023b89
 
-https://github.com/user-attachments/assets/5ee81bb3-12cf-4755-8532-7470c6f1d841
 
 ## Full Capabilities ↓
 
