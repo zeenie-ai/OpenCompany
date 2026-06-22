@@ -1,17 +1,105 @@
 {
-  "_generated": "2026-06-17T09:18:01.815605+00:00",
+  "_generated": "2026-06-22T08:05:13.193897+00:00",
   "_source": "openrouter",
-  "_model_count": 337,
+  "_model_count": 340,
   "models": {
+    "gemini/gemini-3.1-flash-image": {
+      "id": "google/gemini-3.1-flash-image",
+      "name": "Google: Nano Banana 2 (Gemini 3.1 Flash Image)",
+      "provider": "gemini",
+      "local_id": "gemini-3.1-flash-image",
+      "context_length": 131072,
+      "max_output_tokens": 32768,
+      "input_price_per_mtok": 0.5,
+      "output_price_per_mtok": 3.0,
+      "supports_thinking": true,
+      "thinking_type": "budget",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "include_reasoning",
+        "max_tokens",
+        "reasoning",
+        "response_format",
+        "seed",
+        "structured_outputs",
+        "temperature",
+        "top_p"
+      ]
+    },
+    "gemini/gemini-3-pro-image": {
+      "id": "google/gemini-3-pro-image",
+      "name": "Google: Nano Banana Pro (Gemini 3 Pro Image)",
+      "provider": "gemini",
+      "local_id": "gemini-3-pro-image",
+      "context_length": 131072,
+      "max_output_tokens": 32768,
+      "input_price_per_mtok": 2.0,
+      "output_price_per_mtok": 12.0,
+      "supports_thinking": true,
+      "thinking_type": "budget",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "include_reasoning",
+        "max_tokens",
+        "reasoning",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_p"
+      ]
+    },
+    "cohere/north-mini-code:free": {
+      "id": "cohere/north-mini-code:free",
+      "name": "Cohere: North Mini Code (free)",
+      "provider": "cohere",
+      "local_id": "north-mini-code:free",
+      "context_length": 256000,
+      "max_output_tokens": 64000,
+      "input_price_per_mtok": 0.0,
+      "output_price_per_mtok": 0.0,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "max_tokens",
+        "presence_penalty",
+        "reasoning",
+        "seed",
+        "stop",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_p"
+      ]
+    },
     "z-ai/glm-5.2": {
       "id": "z-ai/glm-5.2",
       "name": "Z.ai: GLM 5.2",
       "provider": "z-ai",
       "local_id": "glm-5.2",
       "context_length": 1048576,
-      "max_output_tokens": 262144,
-      "input_price_per_mtok": 1.4,
-      "output_price_per_mtok": 4.4,
+      "max_output_tokens": 32768,
+      "input_price_per_mtok": 1.0,
+      "output_price_per_mtok": 4.0,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -23,6 +111,7 @@
         "frequency_penalty",
         "include_reasoning",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -36,6 +125,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -63,9 +153,9 @@
       "provider": "moonshotai",
       "local_id": "kimi-k2.7-code",
       "context_length": 262144,
-      "max_output_tokens": 16384,
-      "input_price_per_mtok": 0.74,
-      "output_price_per_mtok": 3.5,
+      "max_output_tokens": 262144,
+      "input_price_per_mtok": 0.612,
+      "output_price_per_mtok": 3.069,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -159,7 +249,7 @@
       "provider": "nex-agi",
       "local_id": "nex-n2-pro:free",
       "context_length": 262144,
-      "max_output_tokens": 262144,
+      "max_output_tokens": 256000,
       "input_price_per_mtok": 0.0,
       "output_price_per_mtok": 0.0,
       "supports_thinking": false,
@@ -172,15 +262,40 @@
       "supported_parameters": [
         "frequency_penalty",
         "include_reasoning",
-        "logprobs",
         "max_tokens",
         "reasoning",
         "response_format",
-        "structured_outputs",
         "temperature",
         "tool_choice",
         "tools",
         "top_k",
+        "top_p"
+      ]
+    },
+    "nex-agi/nex-n2-pro": {
+      "id": "nex-agi/nex-n2-pro",
+      "name": "Nex AGI: Nex-N2-Pro",
+      "provider": "nex-agi",
+      "local_id": "nex-n2-pro",
+      "context_length": 262144,
+      "max_output_tokens": 262144,
+      "input_price_per_mtok": 0.5,
+      "output_price_per_mtok": 2.5,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "include_reasoning",
+        "logprobs",
+        "max_tokens",
+        "reasoning",
+        "temperature",
+        "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -310,7 +425,7 @@
       "provider": "minimax",
       "local_id": "minimax-m3",
       "context_length": 1048576,
-      "max_output_tokens": 512000,
+      "max_output_tokens": 0,
       "input_price_per_mtok": 0.3,
       "output_price_per_mtok": 1.2,
       "supports_thinking": false,
@@ -734,6 +849,7 @@
       "is_reasoning_model": false,
       "supported_parameters": [
         "frequency_penalty",
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "repetition_penalty",
@@ -745,6 +861,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -864,6 +981,31 @@
         "tools"
       ]
     },
+    "poolside/laguna-xs.2": {
+      "id": "poolside/laguna-xs.2",
+      "name": "Poolside: Laguna XS.2",
+      "provider": "poolside",
+      "local_id": "laguna-xs.2",
+      "context_length": 262144,
+      "max_output_tokens": 32768,
+      "input_price_per_mtok": 0.1,
+      "output_price_per_mtok": 0.2,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "include_reasoning",
+        "max_tokens",
+        "reasoning",
+        "temperature",
+        "tool_choice",
+        "tools"
+      ]
+    },
     "poolside/laguna-m.1:free": {
       "id": "poolside/laguna-m.1:free",
       "name": "Poolside: Laguna M.1 (free)",
@@ -873,6 +1015,31 @@
       "max_output_tokens": 32768,
       "input_price_per_mtok": 0.0,
       "output_price_per_mtok": 0.0,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "include_reasoning",
+        "max_tokens",
+        "reasoning",
+        "temperature",
+        "tool_choice",
+        "tools"
+      ]
+    },
+    "poolside/laguna-m.1": {
+      "id": "poolside/laguna-m.1",
+      "name": "Poolside: Laguna M.1",
+      "provider": "poolside",
+      "local_id": "laguna-m.1",
+      "context_length": 262144,
+      "max_output_tokens": 32768,
+      "input_price_per_mtok": 0.2,
+      "output_price_per_mtok": 0.4,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -983,8 +1150,8 @@
       "provider": "moonshotai",
       "local_id": "kimi-latest",
       "context_length": 262144,
-      "max_output_tokens": 262142,
-      "input_price_per_mtok": 0.68,
+      "max_output_tokens": 262144,
+      "input_price_per_mtok": 0.66,
       "output_price_per_mtok": 3.41,
       "supports_thinking": false,
       "thinking_type": "none",
@@ -1003,7 +1170,6 @@
         "parallel_tool_calls",
         "presence_penalty",
         "reasoning",
-        "reasoning_effort",
         "repetition_penalty",
         "response_format",
         "seed",
@@ -1125,6 +1291,7 @@
       "is_reasoning_model": false,
       "supported_parameters": [
         "include_reasoning",
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "reasoning",
@@ -1134,6 +1301,7 @@
         "temperature",
         "tool_choice",
         "tools",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -1155,6 +1323,7 @@
       "is_reasoning_model": false,
       "supported_parameters": [
         "include_reasoning",
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "reasoning",
@@ -1164,6 +1333,7 @@
         "temperature",
         "tool_choice",
         "tools",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -1174,7 +1344,7 @@
       "local_id": "qwen3.6-35b-a3b",
       "context_length": 262144,
       "max_output_tokens": 262144,
-      "input_price_per_mtok": 0.15,
+      "input_price_per_mtok": 0.14,
       "output_price_per_mtok": 1.0,
       "supports_thinking": false,
       "thinking_type": "none",
@@ -1187,6 +1357,7 @@
         "frequency_penalty",
         "include_reasoning",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -1200,6 +1371,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -1422,6 +1594,7 @@
       "is_reasoning_model": false,
       "supported_parameters": [
         "frequency_penalty",
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "repetition_penalty",
@@ -1433,6 +1606,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -1442,9 +1616,9 @@
       "provider": "tencent",
       "local_id": "hy3-preview",
       "context_length": 262144,
-      "max_output_tokens": 262144,
-      "input_price_per_mtok": 0.066,
-      "output_price_per_mtok": 0.26,
+      "max_output_tokens": 0,
+      "input_price_per_mtok": 0.063,
+      "output_price_per_mtok": 0.21,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -1487,6 +1661,7 @@
         "frequency_penalty",
         "include_reasoning",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -1500,6 +1675,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -1522,6 +1698,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "include_reasoning",
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "reasoning",
@@ -1531,6 +1708,7 @@
         "temperature",
         "tool_choice",
         "tools",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -1583,6 +1761,7 @@
       "is_reasoning_model": false,
       "supported_parameters": [
         "frequency_penalty",
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "repetition_penalty",
@@ -1594,6 +1773,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -1649,8 +1829,8 @@
       "provider": "moonshotai",
       "local_id": "kimi-k2.6",
       "context_length": 262144,
-      "max_output_tokens": 262142,
-      "input_price_per_mtok": 0.68,
+      "max_output_tokens": 262144,
+      "input_price_per_mtok": 0.66,
       "output_price_per_mtok": 3.41,
       "supports_thinking": false,
       "thinking_type": "none",
@@ -1669,7 +1849,6 @@
         "parallel_tool_calls",
         "presence_penalty",
         "reasoning",
-        "reasoning_effort",
         "repetition_penalty",
         "response_format",
         "seed",
@@ -1871,6 +2050,7 @@
       "supported_parameters": [
         "include_reasoning",
         "max_tokens",
+        "min_p",
         "reasoning",
         "response_format",
         "seed",
@@ -1878,6 +2058,8 @@
         "temperature",
         "tool_choice",
         "tools",
+        "top_a",
+        "top_k",
         "top_p"
       ]
     },
@@ -1937,6 +2119,7 @@
       "is_reasoning_model": false,
       "supported_parameters": [
         "include_reasoning",
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "reasoning",
@@ -1946,6 +2129,7 @@
         "temperature",
         "tool_choice",
         "tools",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -1955,9 +2139,9 @@
       "provider": "arcee-ai",
       "local_id": "trinity-large-thinking",
       "context_length": 262144,
-      "max_output_tokens": 262144,
-      "input_price_per_mtok": 0.22,
-      "output_price_per_mtok": 0.85,
+      "max_output_tokens": 80000,
+      "input_price_per_mtok": 0.25,
+      "output_price_per_mtok": 0.8,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -1968,13 +2152,10 @@
       "supported_parameters": [
         "frequency_penalty",
         "include_reasoning",
-        "logit_bias",
         "max_tokens",
         "presence_penalty",
         "reasoning",
-        "repetition_penalty",
         "response_format",
-        "seed",
         "stop",
         "structured_outputs",
         "temperature",
@@ -2097,8 +2278,8 @@
       "name": "Kwaipilot: KAT-Coder-Pro V2",
       "provider": "kwaipilot",
       "local_id": "kat-coder-pro-v2",
-      "context_length": 256000,
-      "max_output_tokens": 80000,
+      "context_length": 262144,
+      "max_output_tokens": 144000,
       "input_price_per_mtok": 0.3,
       "output_price_per_mtok": 1.2,
       "supports_thinking": false,
@@ -2111,6 +2292,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -2123,6 +2305,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -2144,6 +2327,7 @@
       "is_reasoning_model": false,
       "supported_parameters": [
         "frequency_penalty",
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "seed",
@@ -2153,6 +2337,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -2420,8 +2605,8 @@
       "name": "Qwen: Qwen3.5-9B",
       "provider": "qwen",
       "local_id": "qwen3.5-9b",
-      "context_length": 262144,
-      "max_output_tokens": 262144,
+      "context_length": 256000,
+      "max_output_tokens": 32768,
       "input_price_per_mtok": 0.1,
       "output_price_per_mtok": 0.15,
       "supports_thinking": false,
@@ -2645,7 +2830,6 @@
         "reasoning",
         "response_format",
         "seed",
-        "stop",
         "structured_outputs",
         "temperature",
         "top_p"
@@ -2818,6 +3002,7 @@
         "min_p",
         "presence_penalty",
         "repetition_penalty",
+        "response_format",
         "stop",
         "temperature",
         "top_k",
@@ -2846,7 +3031,6 @@
         "reasoning",
         "response_format",
         "seed",
-        "stop",
         "structured_outputs",
         "temperature",
         "tool_choice",
@@ -2986,6 +3170,7 @@
       "is_reasoning_model": false,
       "supported_parameters": [
         "include_reasoning",
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "reasoning",
@@ -2995,6 +3180,7 @@
         "temperature",
         "tool_choice",
         "tools",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -3096,6 +3282,7 @@
         "frequency_penalty",
         "include_reasoning",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -3109,6 +3296,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -3130,6 +3318,7 @@
       "is_reasoning_model": false,
       "supported_parameters": [
         "include_reasoning",
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "reasoning",
@@ -3139,6 +3328,7 @@
         "temperature",
         "tool_choice",
         "tools",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -3193,6 +3383,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -3205,6 +3396,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -3227,7 +3419,6 @@
       "supported_parameters": [
         "frequency_penalty",
         "include_reasoning",
-        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -3240,6 +3431,7 @@
         "temperature",
         "tool_choice",
         "tools",
+        "top_a",
         "top_k",
         "top_p"
       ]
@@ -3416,7 +3608,10 @@
         "repetition_penalty",
         "seed",
         "stop",
+        "structured_outputs",
         "temperature",
+        "tool_choice",
+        "tools",
         "top_k",
         "top_p"
       ]
@@ -3445,6 +3640,7 @@
         "repetition_penalty",
         "seed",
         "stop",
+        "structured_outputs",
         "temperature",
         "top_k",
         "top_p"
@@ -3536,6 +3732,7 @@
         "frequency_penalty",
         "include_reasoning",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -3549,6 +3746,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -3720,7 +3918,7 @@
       "provider": "gemini",
       "local_id": "gemini-3-flash-preview",
       "context_length": 1048576,
-      "max_output_tokens": 65536,
+      "max_output_tokens": 65535,
       "input_price_per_mtok": 0.5,
       "output_price_per_mtok": 3.0,
       "supports_thinking": true,
@@ -3738,36 +3936,6 @@
         "seed",
         "stop",
         "structured_outputs",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_p"
-      ]
-    },
-    "xiaomi/mimo-v2-flash": {
-      "id": "xiaomi/mimo-v2-flash",
-      "name": "Xiaomi: MiMo-V2-Flash",
-      "provider": "xiaomi",
-      "local_id": "mimo-v2-flash",
-      "context_length": 262144,
-      "max_output_tokens": 65536,
-      "input_price_per_mtok": 0.1,
-      "output_price_per_mtok": 0.3,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "include_reasoning",
-        "max_tokens",
-        "presence_penalty",
-        "reasoning",
-        "response_format",
-        "stop",
         "temperature",
         "tool_choice",
         "tools",
@@ -3821,6 +3989,7 @@
         "frequency_penalty",
         "include_reasoning",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -3834,6 +4003,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -3843,7 +4013,7 @@
       "provider": "openai",
       "local_id": "gpt-5.2-chat",
       "context_length": 128000,
-      "max_output_tokens": 16384,
+      "max_output_tokens": 32000,
       "input_price_per_mtok": 1.75,
       "output_price_per_mtok": 14.0,
       "supports_thinking": true,
@@ -3966,6 +4136,7 @@
       "is_reasoning_model": false,
       "supported_parameters": [
         "max_tokens",
+        "response_format",
         "seed",
         "stop",
         "temperature",
@@ -4261,6 +4432,7 @@
       "is_reasoning_model": false,
       "supported_parameters": [
         "include_reasoning",
+        "logprobs",
         "max_completion_tokens",
         "max_tokens",
         "reasoning",
@@ -4270,6 +4442,8 @@
         "temperature",
         "tool_choice",
         "tools",
+        "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -4293,6 +4467,7 @@
         "frequency_penalty",
         "include_reasoning",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -4306,6 +4481,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -4328,11 +4504,14 @@
       "supported_parameters": [
         "frequency_penalty",
         "include_reasoning",
+        "logit_bias",
         "max_tokens",
         "presence_penalty",
         "reasoning",
         "repetition_penalty",
         "response_format",
+        "seed",
+        "stop",
         "structured_outputs",
         "temperature",
         "tool_choice",
@@ -4499,7 +4678,7 @@
       "provider": "openai",
       "local_id": "gpt-5.1-chat",
       "context_length": 128000,
-      "max_output_tokens": 32000,
+      "max_output_tokens": 16384,
       "input_price_per_mtok": 1.25,
       "output_price_per_mtok": 10.0,
       "supports_thinking": true,
@@ -4595,6 +4774,7 @@
         "frequency_penalty",
         "include_reasoning",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -4608,6 +4788,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -4718,6 +4899,7 @@
         "response_format",
         "seed",
         "stop",
+        "structured_outputs",
         "temperature",
         "tool_choice",
         "tools",
@@ -4771,6 +4953,7 @@
         "frequency_penalty",
         "include_reasoning",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -4784,6 +4967,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -4804,13 +4988,16 @@
       ],
       "is_reasoning_model": false,
       "supported_parameters": [
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "response_format",
         "seed",
+        "structured_outputs",
         "temperature",
         "tool_choice",
         "tools",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -4833,14 +5020,17 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
         "repetition_penalty",
+        "response_format",
         "seed",
         "stop",
         "temperature",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -4862,6 +5052,7 @@
       "is_reasoning_model": false,
       "supported_parameters": [
         "frequency_penalty",
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "repetition_penalty",
@@ -4871,6 +5062,7 @@
         "structured_outputs",
         "temperature",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -4955,6 +5147,7 @@
       "is_reasoning_model": false,
       "supported_parameters": [
         "include_reasoning",
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "reasoning",
@@ -4964,6 +5157,7 @@
         "temperature",
         "tool_choice",
         "tools",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -4986,6 +5180,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -4998,6 +5193,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -5145,7 +5341,7 @@
       "provider": "gemini",
       "local_id": "gemini-2.5-flash-image",
       "context_length": 32768,
-      "max_output_tokens": 32768,
+      "max_output_tokens": 8192,
       "input_price_per_mtok": 0.3,
       "output_price_per_mtok": 2.5,
       "supports_thinking": true,
@@ -5184,6 +5380,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "include_reasoning",
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "reasoning",
@@ -5196,6 +5393,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -5218,6 +5416,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -5230,6 +5429,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -5346,6 +5546,7 @@
         "frequency_penalty",
         "include_reasoning",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -5359,6 +5560,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -5381,13 +5583,17 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "repetition_penalty",
+        "response_format",
         "seed",
         "stop",
+        "structured_outputs",
         "temperature",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -5462,6 +5668,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "include_reasoning",
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "reasoning",
@@ -5469,10 +5676,12 @@
         "response_format",
         "seed",
         "stop",
+        "structured_outputs",
         "temperature",
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -5495,6 +5704,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -5507,6 +5717,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -5527,13 +5738,16 @@
       ],
       "is_reasoning_model": false,
       "supported_parameters": [
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "response_format",
         "seed",
+        "structured_outputs",
         "temperature",
         "tool_choice",
         "tools",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -5554,6 +5768,7 @@
       ],
       "is_reasoning_model": false,
       "supported_parameters": [
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "response_format",
@@ -5562,6 +5777,7 @@
         "temperature",
         "tool_choice",
         "tools",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -5645,6 +5861,7 @@
       ],
       "is_reasoning_model": false,
       "supported_parameters": [
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "response_format",
@@ -5652,6 +5869,7 @@
         "temperature",
         "tool_choice",
         "tools",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -5675,6 +5893,7 @@
         "frequency_penalty",
         "include_reasoning",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -5688,6 +5907,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -5740,6 +5960,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -5752,6 +5973,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -5802,6 +6024,7 @@
       ],
       "is_reasoning_model": false,
       "supported_parameters": [
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "response_format",
@@ -5810,6 +6033,7 @@
         "temperature",
         "tool_choice",
         "tools",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -5896,6 +6120,7 @@
         "frequency_penalty",
         "include_reasoning",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -5909,6 +6134,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -5990,6 +6216,7 @@
         "frequency_penalty",
         "include_reasoning",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -6003,6 +6230,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -6152,7 +6380,7 @@
       "provider": "openai",
       "local_id": "gpt-5-mini",
       "context_length": 400000,
-      "max_output_tokens": 128000,
+      "max_output_tokens": 0,
       "input_price_per_mtok": 0.25,
       "output_price_per_mtok": 2.0,
       "supports_thinking": true,
@@ -6221,12 +6449,16 @@
       "supported_parameters": [
         "include_reasoning",
         "max_tokens",
+        "min_p",
         "reasoning",
         "seed",
         "stop",
         "temperature",
         "tool_choice",
-        "tools"
+        "tools",
+        "top_a",
+        "top_k",
+        "top_p"
       ]
     },
     "openai/gpt-oss-120b": {
@@ -6273,7 +6505,7 @@
       "provider": "openai",
       "local_id": "gpt-oss-20b:free",
       "context_length": 131072,
-      "max_output_tokens": 8192,
+      "max_output_tokens": 32768,
       "input_price_per_mtok": 0.0,
       "output_price_per_mtok": 0.0,
       "supports_thinking": true,
@@ -6287,6 +6519,7 @@
         "frequency_penalty",
         "include_reasoning",
         "max_tokens",
+        "min_p",
         "presence_penalty",
         "reasoning",
         "repetition_penalty",
@@ -6297,6 +6530,7 @@
         "temperature",
         "tool_choice",
         "tools",
+        "top_a",
         "top_k",
         "top_p"
       ]
@@ -6417,6 +6651,7 @@
       "is_reasoning_model": false,
       "supported_parameters": [
         "frequency_penalty",
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "repetition_penalty",
@@ -6428,6 +6663,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -6450,6 +6686,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -6462,6 +6699,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -6482,15 +6720,10 @@
       ],
       "is_reasoning_model": false,
       "supported_parameters": [
-        "frequency_penalty",
         "include_reasoning",
         "max_tokens",
-        "presence_penalty",
         "reasoning",
-        "repetition_penalty",
         "response_format",
-        "seed",
-        "stop",
         "temperature",
         "tool_choice",
         "tools",
@@ -6550,6 +6783,7 @@
         "frequency_penalty",
         "include_reasoning",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -6563,6 +6797,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -6613,6 +6848,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -6625,6 +6861,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -6647,13 +6884,16 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "repetition_penalty",
         "seed",
         "stop",
+        "structured_outputs",
         "temperature",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -6706,6 +6946,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -6718,6 +6959,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -6741,6 +6983,7 @@
         "include_reasoning",
         "max_tokens",
         "reasoning",
+        "response_format",
         "seed",
         "stop",
         "temperature",
@@ -6851,9 +7094,13 @@
       ],
       "is_reasoning_model": false,
       "supported_parameters": [
+        "logprobs",
         "max_tokens",
+        "response_format",
         "stop",
-        "temperature"
+        "structured_outputs",
+        "temperature",
+        "top_logprobs"
       ]
     },
     "morph/morph-v3-fast": {
@@ -6927,6 +7174,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -6939,6 +7187,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -7111,6 +7360,7 @@
         "frequency_penalty",
         "include_reasoning",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -7124,6 +7374,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -7205,7 +7456,9 @@
         "min_p",
         "presence_penalty",
         "repetition_penalty",
+        "response_format",
         "stop",
+        "structured_outputs",
         "temperature",
         "top_k",
         "top_p"
@@ -7494,6 +7747,7 @@
         "frequency_penalty",
         "include_reasoning",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -7507,6 +7761,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -7654,7 +7909,7 @@
       "provider": "openai",
       "local_id": "gpt-4.1-mini",
       "context_length": 1047576,
-      "max_output_tokens": 32768,
+      "max_output_tokens": 0,
       "input_price_per_mtok": 0.4,
       "output_price_per_mtok": 1.6,
       "supports_thinking": false,
@@ -7723,6 +7978,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -7735,6 +7991,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -7791,6 +8048,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -7803,6 +8061,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -7850,6 +8109,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -7858,6 +8118,7 @@
         "stop",
         "temperature",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -8026,6 +8287,7 @@
         "reasoning",
         "seed",
         "stop",
+        "structured_outputs",
         "temperature",
         "top_k",
         "top_p"
@@ -8050,6 +8312,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -8062,6 +8325,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -8084,13 +8348,17 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "repetition_penalty",
+        "response_format",
         "seed",
         "stop",
+        "structured_outputs",
         "temperature",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -8322,6 +8590,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "repetition_penalty",
@@ -8331,6 +8600,7 @@
         "structured_outputs",
         "temperature",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -8351,13 +8621,16 @@
       ],
       "is_reasoning_model": false,
       "supported_parameters": [
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "response_format",
         "seed",
+        "structured_outputs",
         "temperature",
         "tool_choice",
         "tools",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -8592,6 +8865,7 @@
         "repetition_penalty",
         "seed",
         "stop",
+        "structured_outputs",
         "temperature",
         "top_k",
         "top_p"
@@ -8765,6 +9039,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -8777,6 +9052,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -8982,32 +9258,6 @@
         "top_p"
       ]
     },
-    "anthropic/claude-3.5-haiku": {
-      "id": "anthropic/claude-3.5-haiku",
-      "name": "Anthropic: Claude 3.5 Haiku",
-      "provider": "anthropic",
-      "local_id": "claude-3.5-haiku",
-      "context_length": 200000,
-      "max_output_tokens": 8192,
-      "input_price_per_mtok": 0.8,
-      "output_price_per_mtok": 4.0,
-      "supports_thinking": true,
-      "thinking_type": "budget",
-      "temperature_range": [
-        0.0,
-        1.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "max_tokens",
-        "stop",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_k",
-        "top_p"
-      ]
-    },
     "anthracite-org/magnum-v4-72b": {
       "id": "anthracite-org/magnum-v4-72b",
       "name": "Magnum v4 72B",
@@ -9035,6 +9285,7 @@
         "response_format",
         "seed",
         "stop",
+        "structured_outputs",
         "temperature",
         "top_a",
         "top_k",
@@ -9061,22 +9312,28 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
         "repetition_penalty",
+        "response_format",
         "seed",
         "stop",
+        "structured_outputs",
         "temperature",
+        "tool_choice",
+        "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
-    "inflection/inflection-3-productivity": {
-      "id": "inflection/inflection-3-productivity",
-      "name": "Inflection: Inflection 3 Productivity",
+    "inflection/inflection-3-pi": {
+      "id": "inflection/inflection-3-pi",
+      "name": "Inflection: Inflection 3 Pi",
       "provider": "inflection",
-      "local_id": "inflection-3-productivity",
+      "local_id": "inflection-3-pi",
       "context_length": 8000,
       "max_output_tokens": 1024,
       "input_price_per_mtok": 2.5,
@@ -9095,11 +9352,11 @@
         "top_p"
       ]
     },
-    "inflection/inflection-3-pi": {
-      "id": "inflection/inflection-3-pi",
-      "name": "Inflection: Inflection 3 Pi",
+    "inflection/inflection-3-productivity": {
+      "id": "inflection/inflection-3-productivity",
+      "name": "Inflection: Inflection 3 Productivity",
       "provider": "inflection",
-      "local_id": "inflection-3-pi",
+      "local_id": "inflection-3-productivity",
       "context_length": 8000,
       "max_output_tokens": 1024,
       "input_price_per_mtok": 2.5,
@@ -9199,10 +9456,43 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
         "repetition_penalty",
+        "seed",
+        "stop",
+        "temperature",
+        "top_k",
+        "top_logprobs",
+        "top_p"
+      ]
+    },
+    "meta/llama-3.2-11b-vision-instruct": {
+      "id": "meta-llama/llama-3.2-11b-vision-instruct",
+      "name": "Meta: Llama 3.2 11B Vision Instruct",
+      "provider": "meta",
+      "local_id": "llama-3.2-11b-vision-instruct",
+      "context_length": 131072,
+      "max_output_tokens": 16384,
+      "input_price_per_mtok": 0.345,
+      "output_price_per_mtok": 0.345,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "logit_bias",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "repetition_penalty",
+        "response_format",
         "seed",
         "stop",
         "temperature",
@@ -9233,37 +9523,6 @@
         "min_p",
         "presence_penalty",
         "repetition_penalty",
-        "seed",
-        "stop",
-        "temperature",
-        "top_k",
-        "top_p"
-      ]
-    },
-    "meta/llama-3.2-11b-vision-instruct": {
-      "id": "meta-llama/llama-3.2-11b-vision-instruct",
-      "name": "Meta: Llama 3.2 11B Vision Instruct",
-      "provider": "meta",
-      "local_id": "llama-3.2-11b-vision-instruct",
-      "context_length": 131072,
-      "max_output_tokens": 16384,
-      "input_price_per_mtok": 0.345,
-      "output_price_per_mtok": 0.345,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "logit_bias",
-        "max_tokens",
-        "min_p",
-        "presence_penalty",
-        "repetition_penalty",
-        "response_format",
         "seed",
         "stop",
         "temperature",
@@ -9577,6 +9836,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -9589,6 +9849,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -9611,6 +9872,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -9623,6 +9885,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -9645,6 +9908,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -9657,41 +9921,8 @@
         "tool_choice",
         "tools",
         "top_k",
-        "top_p"
-      ]
-    },
-    "openai/gpt-4o-mini-2024-07-18": {
-      "id": "openai/gpt-4o-mini-2024-07-18",
-      "name": "OpenAI: GPT-4o-mini (2024-07-18)",
-      "provider": "openai",
-      "local_id": "gpt-4o-mini-2024-07-18",
-      "context_length": 128000,
-      "max_output_tokens": 16384,
-      "input_price_per_mtok": 0.15,
-      "output_price_per_mtok": 0.6,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "logit_bias",
-        "logprobs",
-        "max_tokens",
-        "presence_penalty",
-        "response_format",
-        "seed",
-        "stop",
-        "structured_outputs",
-        "temperature",
-        "tool_choice",
-        "tools",
         "top_logprobs",
-        "top_p",
-        "web_search_options"
+        "top_p"
       ]
     },
     "openai/gpt-4o-mini": {
@@ -9715,6 +9946,40 @@
         "logit_bias",
         "logprobs",
         "max_completion_tokens",
+        "max_tokens",
+        "presence_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_logprobs",
+        "top_p",
+        "web_search_options"
+      ]
+    },
+    "openai/gpt-4o-mini-2024-07-18": {
+      "id": "openai/gpt-4o-mini-2024-07-18",
+      "name": "OpenAI: GPT-4o-mini (2024-07-18)",
+      "provider": "openai",
+      "local_id": "gpt-4o-mini-2024-07-18",
+      "context_length": 128000,
+      "max_output_tokens": 16384,
+      "input_price_per_mtok": 0.15,
+      "output_price_per_mtok": 0.6,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "logit_bias",
+        "logprobs",
         "max_tokens",
         "presence_penalty",
         "response_format",
@@ -9851,34 +10116,7 @@
         "min_p",
         "presence_penalty",
         "repetition_penalty",
-        "stop",
-        "temperature",
-        "top_k",
-        "top_p"
-      ]
-    },
-    "meta/llama-3-70b-instruct": {
-      "id": "meta-llama/llama-3-70b-instruct",
-      "name": "Meta: Llama 3 70B Instruct",
-      "provider": "meta",
-      "local_id": "llama-3-70b-instruct",
-      "context_length": 8192,
-      "max_output_tokens": 8000,
-      "input_price_per_mtok": 0.51,
-      "output_price_per_mtok": 0.74,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "max_tokens",
-        "presence_penalty",
-        "repetition_penalty",
-        "seed",
+        "response_format",
         "stop",
         "structured_outputs",
         "temperature",
@@ -10134,6 +10372,7 @@
         "temperature",
         "tool_choice",
         "tools",
+        "top_a",
         "top_k",
         "top_logprobs",
         "top_p",
@@ -10232,6 +10471,7 @@
         "response_format",
         "seed",
         "stop",
+        "structured_outputs",
         "temperature",
         "top_a",
         "top_k",
