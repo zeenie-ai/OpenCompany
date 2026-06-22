@@ -201,6 +201,9 @@ export interface INodeUIHints {
   isMemoryPanel?: boolean;
   /** MiddleSection: surface the ToolSchemaEditor for connected services. */
   isToolPanel?: boolean;
+  /** MiddleSection: render the editable Current Todos manager (writeTodos)
+   * instead of the plain params list. */
+  isTodoEditor?: boolean;
   /** MiddleSection: render the team-monitor panel. */
   isMonitorPanel?: boolean;
   /** Special-case panel for gmaps_create with map preview. */

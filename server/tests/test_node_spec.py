@@ -892,6 +892,9 @@ class TestNodeSpecContractInvariants:
             "isMasterSkillEditor",
             "isMemoryPanel",
             "isToolPanel",
+            # writeTodos: render the editable Current Todos manager in the
+            # middle section (in addition to isToolPanel).
+            "isTodoEditor",
             "isMonitorPanel",
             "showLocationPanel",
             "isAndroidToolkit",

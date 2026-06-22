@@ -73,7 +73,7 @@ class WriteTodosNode(ToolNode):
         {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
         {"name": "output-tool", "kind": "output", "position": "top", "label": "Tool", "role": "tools"},
     )
-    ui_hints = {"isToolPanel": True, "hideRunButton": True}
+    ui_hints = {"isToolPanel": True, "hideRunButton": True, "isTodoEditor": True}
     annotations = {"destructive": False, "readonly": False, "open_world": False}
     task_queue = TaskQueue.DEFAULT
 
@@ -100,6 +100,20 @@ class WriteTodosNode(ToolNode):
                 workflow_id=ctx.workflow_id,
             )
 
+        # Typed todos_updated CloudEvent via the centralized dispatcher so an
+        # open Current Todos panel refreshes live during the run. (The
+        # node_status broadcast above drives canvas glow; this drives the
+        # panel's ['todos', session_key] query — same wire frame the panel's
+        # manual set_todos edits emit.)
+        from ._events import dispatch_todos_updated
+
+        await dispatch_todos_updated(
+            session_key=session_key,
+            todos=stored,
+            node_id=ctx.node_id,
+            workflow_id=ctx.workflow_id,
+        )
+
         get_logger(__name__).info(
             "[WriteTodos] Updated %d todos (session=%s)",
             len(stored),
@@ -116,3 +130,13 @@ class WriteTodosNode(ToolNode):
             "todos": stored,
             "count": len(stored),
         }
+
+
+# --- self-registration on import -------------------------------------------
+# The parameter-panel Current Todos editor reads/writes the live TodoService
+# state through these WS handlers (self-contained plugin-folder pattern —
+# core router needs no edit). See nodes/telegram/__init__.py for the template.
+from services.ws_handler_registry import register_ws_handlers  # noqa: E402
+from ._handlers import WS_HANDLERS  # noqa: E402
+
+register_ws_handlers(WS_HANDLERS)

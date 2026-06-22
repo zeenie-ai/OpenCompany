@@ -29,6 +29,7 @@ import { ActionButton } from '@/components/ui/action-button';
 import ParameterRenderer from '../ParameterRenderer';
 import ToolSchemaEditor from './ToolSchemaEditor';
 import MasterSkillEditor from './MasterSkillEditor';
+import TodoEditor from './TodoEditor';
 import { useAppStore } from '../../store/useAppStore';
 import { useWebSocket, CompactionStats } from '../../contexts/WebSocketContext';
 import { useUserSettingsQuery } from '../../hooks/useUserSettingsQuery';
@@ -182,6 +183,7 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
   // it's now permanently dead.
   const isSkillNode = false;
   const isToolNode = hints.isToolPanel === true;
+  const isTodoEditorNode = hints.isTodoEditor === true;
   const isAgentWithSkills = hints.hasSkills === true;
 
   const { data: userSettings } = useUserSettingsQuery();
@@ -512,8 +514,9 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
 
   return (
     <div className="relative flex h-full flex-1 flex-col overflow-hidden">
-      {/* Description - hide for code editor nodes (Python, Skill) and masterSkill */}
-      {!needsCodeEditorLayout && !isMasterSkillNode && (
+      {/* Description - hide for code editor nodes (Python, Skill), masterSkill,
+          and the todo editor (each renders its own full-panel header). */}
+      {!needsCodeEditorLayout && !isMasterSkillNode && !isTodoEditorNode && (
         <div className="shrink-0 border-b border-border-default bg-bg-panel px-6 pt-4 pb-2">
           <p className="m-0 text-base leading-[1.5] text-fg-muted">
             {nodeDefinition.description}
@@ -534,6 +537,8 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
               nodeId={nodeId}
             />
           </div>
+        ) : isTodoEditorNode ? (
+          <TodoEditor nodeId={nodeId} />
         ) : (
         <>
         {/* Parameters */}
@@ -541,7 +546,7 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
           className={cn(
             'box-border min-h-0 w-full overflow-x-hidden p-6',
             needsCodeEditorLayout
-              ? 'flex flex-[3] flex-col overflow-y-hidden'
+              ? 'flex flex-[3] flex-col overflow-y-auto'
               : 'block flex-1 overflow-y-auto',
           )}
         >
@@ -549,7 +554,13 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
           <div
             className={cn(
               'box-border rounded-md border border-border-default bg-bg-elevated p-4 shadow-sm',
-              needsCodeEditorLayout ? 'flex h-full flex-col' : 'block h-auto',
+              // ``min-h-full`` (not ``h-full``): the card fills the region when
+              // content is short (so the code editor's flex-1 stretches) but
+              // GROWS when a node has extra params (e.g. montyExecutor's
+              // timeout / max_memory / capabilities) so the last field can't
+              // bleed past the card border. The container scrolls instead of
+              // clipping (``overflow-y-auto`` above).
+              needsCodeEditorLayout ? 'flex min-h-full flex-col' : 'block h-auto',
             )}
           >
             {/* All Parameters - standard n8n style */}

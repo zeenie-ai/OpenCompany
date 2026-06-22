@@ -18,6 +18,31 @@ state over WebSocket so the UI can render a live checklist. Storage is an
 in-process `TodoService` singleton keyed by `workflow_id` (or `node_id` as
 fallback).
 
+## Parameter-panel editor (editable Current Todos)
+
+The node's middle section is an **editable** Current Todos manager, not the empty
+generic-params card. `uiHints.isTodoEditor` (declared on the plugin) routes
+`MiddleSection` to [`client/src/components/parameterPanel/TodoEditor.tsx`](../../../client/src/components/parameterPanel/TodoEditor.tsx).
+
+- **Source of truth = the live `TodoService` list** (same `workflow_id` → `node_id`
+  key as the `write` op), NOT `parameters.todos`. Because the key is the workflow,
+  every writeTodos node in one workflow shares one list (surfaced in the panel).
+- **Read / write WS handlers** (self-registered from the plugin folder via
+  `register_ws_handlers`, see `server/nodes/tool/write_todos/_handlers.py`):
+  - `get_todos` `{workflow_id?, node_id?}` → `{todos, session_key}` (TanStack
+    Query key `['todos', session_key]`, fetched on open).
+  - `set_todos` `{workflow_id?, node_id?, todos}` → `{success, todos}`; replaces
+    the list via `TodoService.write` (same validation/normalisation as the tool).
+- **Edits**: add / remove / inline edit content / click-to-cycle status; optimistic
+  cache update + `set_todos`. While a row's content input is focused, incoming
+  remote updates are suppressed so they can't clobber an in-progress edit.
+- **Live updates**: both the tool `write` op AND `set_todos` emit the typed
+  `todos_updated` CloudEvent via the centralized `services.events.dispatch.emit`
+  (`server/nodes/tool/write_todos/_events.py`); the FE `todos_updated` case in
+  `WebSocketContext` writes the inner `todos` into `['todos', session_key]`. This
+  is a plain CloudEvent (NOT a `node_status` "executing" broadcast), so a manual
+  edit never makes the canvas node glow.
+
 ## Inputs (handles)
 
 | Handle | Connection type | Required | Purpose |

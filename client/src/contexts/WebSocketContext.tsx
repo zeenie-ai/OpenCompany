@@ -756,6 +756,21 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           break;
         }
 
+        case 'todos_updated': {
+          // CloudEvents-typed todo-list change from
+          // server/nodes/tool/write_todos/_events.py, emitted via the
+          // centralized dispatcher on both the write_todos tool run AND
+          // manual edits from the Current Todos panel (set_todos). Refresh
+          // the open panel's ['todos', session_key] query so it reflects the
+          // new list live, across clients, without polling.
+          const event = data as WorkflowEvent<{ session_key?: string; todos?: unknown[] }>;
+          const sessionKey = event?.data?.session_key || event?.subject;
+          if (sessionKey) {
+            queryClient.setQueryData(['todos', sessionKey], event?.data?.todos ?? []);
+          }
+          break;
+        }
+
         case 'plugin_connection_status': {
           // CloudEvents-typed connection-status envelope (Wave 12 B1-B3).
           // Backend dual-emits today: the legacy raw wire key
