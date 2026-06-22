@@ -18,6 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
+from core.ansi import strip_ansi
 from core.logging import get_logger
 from services._supervisor.util import kill_tree
 
@@ -405,7 +406,10 @@ class ProcessService:
                     line = await stream.readline()
                     if not line:
                         break
-                    text = line.decode(errors="replace").rstrip()
+                    # Strip ANSI colour/cursor codes so the Terminal tab, the
+                    # persisted log file, and get_output() all show clean text
+                    # (vite/npm/etc. emit colour codes that render as garbage).
+                    text = strip_ansi(line.decode(errors="replace")).rstrip()
 
                     # Write to log file
                     f.write(text + "\n")

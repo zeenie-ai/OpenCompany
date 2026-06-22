@@ -113,6 +113,13 @@ flowchart TD
 - **PATH inheritance**: `env = {**os.environ, "PYTHONUNBUFFERED": "1"}`.
   The full system PATH is available - this is the main distinction from the
   sandboxed shell node.
+- **ANSI-stripped at capture**: `_read_stream` runs each decoded line through
+  `core.ansi.strip_ansi` (a wrapper over **`click.unstyle`**) BEFORE the log-file
+  write / `broadcast_terminal_log` / `line_handler`, so colour + cursor/erase
+  codes from build tools (`vite`/`npm`/…) render as clean text in the Terminal
+  tab, the persisted logs, and `get_output`. `click.unstyle` is byte-faithful
+  apart from the stripped escapes (unlike `rich.Text.from_ansi`, which drops
+  trailing newlines).
 - **Exit code capture**: only the stdout reader task fulfils `exit_code` on
   EOF via `process.wait()` with a 5s timeout. Status becomes `stopped`
   (exit=0) or `error` (nonzero).

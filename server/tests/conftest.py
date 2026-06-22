@@ -97,6 +97,18 @@ _make_submodule("core", "credentials_database", {"CredentialsDatabase": MagicMoc
 _make_submodule("core", "config", {"Settings": MagicMock})
 _make_submodule("core", "cache", {"CacheService": MagicMock})
 
+# core.ansi — load the REAL module from file (it only depends on ``rich``, no
+# heavy core deps), so the stubbed-core environment still exposes the genuine
+# ``strip_ansi`` that process_service / the shell node import at module load.
+# File-load (not a lambda) keeps tests exercising the actual implementation.
+import importlib.util as _importlib_util  # noqa: E402
+
+_ansi_spec = _importlib_util.spec_from_file_location("core.ansi", SERVER_DIR / "core" / "ansi.py")
+_ansi_mod = _importlib_util.module_from_spec(_ansi_spec)
+sys.modules["core.ansi"] = _ansi_mod
+_ansi_spec.loader.exec_module(_ansi_mod)
+setattr(_core_pkg, "ansi", _ansi_mod)
+
 # core.paths — central path resolution. Stub the public surface with
 # tmpdir-rooted Paths so plugin module imports don't trip over the
 # real ``Path.home()`` lookup during test collection. Tests that

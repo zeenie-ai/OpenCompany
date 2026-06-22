@@ -7,6 +7,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from core.ansi import strip_ansi
 from services.plugin import ActionNode, NodeContext, NodeUserError, Operation, TaskQueue
 
 
@@ -93,6 +94,10 @@ class ShellNode(ActionNode):
             params.command,
             timeout=params.timeout,
         )
+        # Strip ANSI colour/cursor codes — commands like ``vite build`` / ``npm``
+        # emit them and they render as garbage ("[36m…[39m") in the Output panel.
+        clean_output = strip_ansi(result.output)
+
         if result.exit_code == 124:
             log.warning("[Shell] Timed out after %ds: %s", params.timeout, params.command[:100])
         elif result.exit_code != 0:
@@ -100,13 +105,13 @@ class ShellNode(ActionNode):
                 "[Shell] Non-zero exit (%d): %s -> %s",
                 result.exit_code,
                 params.command[:100],
-                result.output[:300],
+                clean_output[:300],
             )
         else:
-            log.info("[Shell] Completed: exit=%d len=%d", result.exit_code, len(result.output))
+            log.info("[Shell] Completed: exit=%d len=%d", result.exit_code, len(clean_output))
 
         return {
-            "stdout": result.output,
+            "stdout": clean_output,
             "exit_code": result.exit_code,
             "truncated": result.truncated,
             "command": params.command,

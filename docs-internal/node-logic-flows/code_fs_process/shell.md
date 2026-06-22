@@ -46,7 +46,7 @@ servicing other requests while the command executes.
 
 ```ts
 {
-  stdout: string;      // Combined output (backend merges stderr into stdout unless truncated)
+  stdout: string;      // Combined output (backend merges stderr into stdout unless truncated); ANSI-stripped
   exit_code: number;   // 124 = timed out, else the process exit code
   truncated: boolean;  // Whether the backend truncated the output buffer
   command: string;     // Echo of the requested command
@@ -85,6 +85,11 @@ flowchart TD
 - **Truncation**: the backend caps output size internally; when capped
   `truncated=true` surfaces to the caller. The exact cap lives in
   `deepagents`.
+- **ANSI stripping**: `result.output` is run through `core.ansi.strip_ansi`
+  (a wrapper over **`click.unstyle`**) before being returned as `stdout` (and
+  before the operator-log line), so colour/cursor codes from tools like
+  `vite`/`npm` don't render as garbage in the Output panel. `click.unstyle` is
+  byte-faithful apart from the stripped escapes.
 - **Broad `except Exception`**: backend failures (missing binary,
   `virtual_mode` violations) become an error envelope.
 
