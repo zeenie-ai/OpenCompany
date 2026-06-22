@@ -97,6 +97,16 @@ interface PendingSkillData {
   color: string;
 }
 
+// Stable empty-array references. `query.data ?? []` mints a NEW array
+// identity every render, and the folder query is disabled (so `data`
+// stays undefined) whenever the node's `skillFolder` is unset. Without
+// a stable fallback the `availableSkills` memo recomputes on every
+// render, and the "load selected user skill" effect setStates in an
+// unbounded loop -> "Maximum update depth exceeded" -> the ErrorBoundary
+// tears down the React Flow canvas.
+const EMPTY_USER_SKILLS: UserSkill[] = [];
+const EMPTY_FOLDER_SKILLS: AvailableSkill[] = [];
+
 interface MasterSkillEditorProps {
   skillsConfig: MasterSkillConfig;
   onConfigChange: (config: MasterSkillConfig) => void;
@@ -123,6 +133,10 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const editorWrapperRef = useRef<HTMLDivElement>(null);
+  // Tracks which skill's data has been loaded into the edit buffer so
+  // the load effect below fires once per selection instead of on every
+  // background list refetch (avoids the render loop + clobbering edits).
+  const initializedSkillRef = useRef<string | null>(null);
 
   const queryClient = useQueryClient();
   const userSkillsQuery = useQuery<UserSkill[], Error>({
@@ -136,7 +150,7 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
     },
     staleTime: 60_000,
   });
-  const userSkills = userSkillsQuery.data ?? [];
+  const userSkills = userSkillsQuery.data ?? EMPTY_USER_SKILLS;
   const invalidateUserSkills = useCallback(
     () => queryClient.invalidateQueries({ queryKey: ['userSkills'] }),
     [queryClient],
@@ -168,7 +182,7 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
   const foldersLoaded = !foldersQuery.isLoading;
 
   const folderSkillsQuery = useFolderSkills(skillFolder);
-  const folderSkills = folderSkillsQuery.data ?? [];
+  const folderSkills = folderSkillsQuery.data ?? EMPTY_FOLDER_SKILLS;
   const folderLoading = folderSkillsQuery.isLoading;
 
   // Inline editing state (no modal)
@@ -302,30 +316,39 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
     }
   }, [availableSkills, queryClient, sendRequest, getCachedSkillContent]);
 
-  // When selecting a user skill, load its data into pendingSkillData for editing
+  // When selecting a user skill, load its data into pendingSkillData for editing.
+  // Guarded by initializedSkillRef so it runs ONCE per selection -- re-running on
+  // every availableSkills/userSkills refetch would (a) clobber in-progress edits
+  // and (b) drive an infinite setState loop (setPendingSkillData with a fresh
+  // object every render). The ref is only advanced once the skill's data is
+  // actually present, so a selection made before its data loads still resolves.
   useEffect(() => {
     if (isCreatingNew || !selectedSkillName) {
+      initializedSkillRef.current = null;
       return;
     }
+    if (initializedSkillRef.current === selectedSkillName) return;
 
     const selectedInfo = availableSkills.find(s => s.skillName === selectedSkillName);
-    if (selectedInfo?.isUserSkill) {
+    if (!selectedInfo) return; // not in the list yet -- retry when it loads
+
+    if (selectedInfo.isUserSkill) {
       const userSkill = userSkills.find(us => us.name === selectedSkillName);
-      if (userSkill) {
-        setPendingSkillData({
-          name: userSkill.name,
-          display_name: userSkill.display_name,
-          description: userSkill.description,
-          instructions: userSkill.instructions,
-          icon: userSkill.icon || '',
-          color: userSkill.color || '#6366F1'
-        });
-        setHasUnsavedChanges(false);
-      }
+      if (!userSkill) return; // user-skill data not loaded yet -- retry
+      setPendingSkillData({
+        name: userSkill.name,
+        display_name: userSkill.display_name,
+        description: userSkill.description,
+        instructions: userSkill.instructions,
+        icon: userSkill.icon || '',
+        color: userSkill.color || '#6366F1'
+      });
+      setHasUnsavedChanges(false);
     } else {
       setPendingSkillData(null);
       setHasUnsavedChanges(false);
     }
+    initializedSkillRef.current = selectedSkillName;
   }, [selectedSkillName, isCreatingNew, availableSkills, userSkills]);
 
   // Toggle skill enabled/disabled
@@ -459,11 +482,22 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
         await invalidateUserSkills();
 
         if (isCreatingNew) {
-          // Add to config as enabled
-          onConfigChange({
+          // Add to config as enabled, then persist to the database so the
+          // new skill survives panel close / reload -- mirrors
+          // handleDeleteSkill. Without the save_node_parameters call the
+          // enabled state lives only in React state and is lost unless the
+          // user also clicks the panel-level Save.
+          const newConfig = {
             ...skillsConfig,
             [skillName]: { enabled: true, instructions: pendingSkillData.instructions, isCustomized: false }
-          });
+          };
+          onConfigChange(newConfig);
+          if (nodeId) {
+            await sendRequest('save_node_parameters', {
+              node_id: nodeId,
+              parameters: { skills_config: newConfig, skillFolder: skillFolder || 'assistant' }
+            });
+          }
           setIsCreatingNew(false);
           setSelectedSkillName(skillName);
         }
@@ -476,7 +510,7 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
     } finally {
       setSavingSkill(false);
     }
-  }, [pendingSkillData, isCreatingNew, skillFolder, sendRequest, invalidateUserSkills, skillsConfig, onConfigChange]);
+  }, [pendingSkillData, isCreatingNew, skillFolder, sendRequest, invalidateUserSkills, skillsConfig, onConfigChange, nodeId]);
 
   // Delete user skill
   const handleDeleteSkill = useCallback(async (skillName: string) => {

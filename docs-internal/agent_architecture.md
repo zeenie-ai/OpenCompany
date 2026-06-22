@@ -228,11 +228,13 @@ Defined in `server/services/skill_loader.py:38+`:
 ```
 SkillLoader
 ├── _skill_dirs: [server/skills/, .machina/skills/]
+├── _database                                  # DI database singleton (user skills live in the DB)
 ├── _registry: Dict[name -> SkillMetadata]    # Metadata only (~100 tokens each)
 ├── _cache: Dict[name -> Skill]               # Full content (lazy-loaded)
 │
 ├── scan_skills()           # rglob("SKILL.md") across all dirs, parses frontmatter
-├── load_skill(name)        # Loads full content: cache -> registry -> filesystem
+├── load_skill(name)        # Filesystem skills: cache -> registry -> SKILL.md
+├── load_skill_async(name)  # DB-aware: filesystem first, then database.get_user_skill()
 ├── get_registry_prompt()   # Generates "## Available Skills" for system message
 └── get_skill_instructions()# Shortcut for load_skill().instructions
 ```
@@ -248,6 +250,10 @@ SkillLoader
 3. Read `SKILL.md`, strip frontmatter, extract markdown body as `instructions`
 4. Load optional `scripts/` and `references/` directories
 5. Cache and return `Skill` dataclass
+
+**`get_skill_loader()` is database-wired** (`skill_loader.py`):
+- The global loader is constructed with the DI `container.database()` (resolved lazily, late-bound on a subsequent call if the container was not yet ready when the loader was first requested). User-created skills are stored in the database rather than on disk, so the wired DB is what lets them resolve.
+- `load_skill_async(name)` is the DB-aware loader: filesystem `_registry` first, then `database.get_user_skill(name)`. The `get_skill_content` WebSocket handler and the agent skill paths call it, so database user skills load just like filesystem skills. `init_skill_loader(database=...)` remains available for explicit eager initialization.
 
 **SKILL.md frontmatter parsing** (`skill_loader.py:126-172`):
 ```yaml

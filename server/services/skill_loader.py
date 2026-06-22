@@ -414,8 +414,26 @@ class SkillLoader:
 _skill_loader: Optional[SkillLoader] = None
 
 
+def _resolve_database():
+    """Best-effort fetch of the DI database singleton (None if unavailable)."""
+    try:
+        from core.container import container
+
+        return container.database()
+    except Exception:  # container not wired yet (very early call)
+        return None
+
+
 def get_skill_loader() -> SkillLoader:
-    """Get the global skill loader instance."""
+    """Get the global skill loader instance.
+
+    The loader is wired with the database so ``load_skill_async`` can
+    resolve user-created skills (stored in the DB, not on disk). The DB
+    is late-bound if the loader happened to be created before the DI
+    container was ready -- otherwise a skill created via the Master
+    Skill editor stays invisible to ``get_skill_content`` and every
+    agent path, and the editor reports "Skill '<name>' not found".
+    """
     global _skill_loader
     if _skill_loader is None:
         # Default directories
@@ -424,8 +442,12 @@ def get_skill_loader() -> SkillLoader:
             server_dir / "skills",  # Built-in skills
             Path.cwd() / ".machina" / "skills",  # Project skills
         ]
-        _skill_loader = SkillLoader(skill_dirs=skill_dirs)
+        _skill_loader = SkillLoader(skill_dirs=skill_dirs, database=_resolve_database())
         _skill_loader.scan_skills()
+    elif _skill_loader._database is None:
+        # Created before the container was wired -- bind the DB now so
+        # user-skill lookups stop failing.
+        _skill_loader._database = _resolve_database()
     return _skill_loader
 
 

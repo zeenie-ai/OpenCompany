@@ -834,8 +834,8 @@ Skill nodes display an Ant Design `Input.TextArea` (markdown content) to view an
 | File | Description |
 |------|-------------|
 | `client/src/hooks/useParameterPanel.ts` | Loads/saves skill content for skill nodes |
-| `server/services/skill_loader.py` | SkillLoader for filesystem and database skills |
-| `server/routers/websocket.py` | `get_skill_content`, `save_skill_content`, `list_skill_folders`, `scan_skill_folder` handlers |
+| `server/services/skill_loader.py` | SkillLoader for filesystem and database skills (DB-wired via `get_skill_loader()`) |
+| `server/services/skills/handlers.py` | `get_skill_content`, `save_skill_content`, `list_skill_folders`, `scan_skill_folder` handlers |
 
 #### Master Skill Editor
 The Master Skill node uses a custom split-panel editor (`MasterSkillEditor.tsx`) instead of standard parameters:
@@ -889,7 +889,9 @@ interface MasterSkillConfig {
 - No frontend cleanup of stale skills is performed to avoid race conditions with async skill loading.
 
 **Custom Skill Creation:**
-- The `create_user_skill` WebSocket handler requires `name`, `display_name`, and `instructions`. The `description` field is optional (defaults to empty string).
+- The `create_user_skill` WebSocket handler requires `name`, `display_name`, and `instructions`. The `description` field is optional (defaults to empty string). Skill handlers live in `server/services/skills/handlers.py` (self-registered via `services.ws_handler_registry`).
+- On create, `MasterSkillEditor` persists the updated `skills_config` to the node via `save_node_parameters` (mirroring the delete path) so the new skill's enabled state survives panel close / reload, then `invalidateUserSkills()` + the `skill_lifecycle` broadcast refresh the list.
+- User skills are stored in the database and resolve through the database-wired `get_skill_loader().load_skill_async()` (so `get_skill_content` returns their instructions the same way it does for built-in skills).
 
 **Backend Expansion:**
 When AI Agent executes with a connected Master Skill node, `_collect_agent_connections()` in `handlers/ai.py` expands the skillsConfig into individual skill entries:
@@ -913,7 +915,7 @@ if skill_type == 'masterSkill':
 | File | Description |
 |------|-------------|
 | `client/src/components/parameterPanel/MasterSkillEditor.tsx` | Split-panel skill aggregator UI with inline user skill CRUD |
-| `server/routers/websocket.py` | User skill CRUD: `get_user_skills`, `create_user_skill`, `update_user_skill`, `delete_user_skill` |
+| `server/services/skills/handlers.py` | User skill CRUD: `get_user_skills`, `create_user_skill`, `update_user_skill`, `delete_user_skill` |
 | `server/core/database.py` | UserSkill model and database CRUD methods |
 | `server/services/handlers/ai.py` | Expands masterSkill into individual skills at execution |
 | `server/skills/GUIDE.md` | Skill creation guide for built-in skills |
