@@ -1,6 +1,6 @@
 {
   "name": "machinaos",
-  "version": "0.0.72",
+  "version": "0.0.92",
   "description": "Open source workflow automation platform with AI agents, React Flow, and n8n-inspired architecture",
   "type": "module",
   "keywords": [
