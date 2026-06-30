@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | workflow / trigger / utility |
-| **Backend handler** | [`server/services/handlers/triggers.py::handle_trigger_node`](../../../server/services/handlers/triggers.py) (generic) |
+| **Backend handler** | Plugin [`server/nodes/trigger/chat_trigger/__init__.py`](../../../server/nodes/trigger/chat_trigger/__init__.py) (`ChatTriggerNode`); dispatch via `BaseNode.execute()`. The base `TriggerNode.execute` handles the event-waiter wait — the `@Operation("wait")` body is a stub. The generic legacy path is [`server/services/handlers/triggers.py::handle_trigger_node`](../../../server/services/handlers/triggers.py) (reachable only for the lone deferred-canary trigger, not chatTrigger). |
 | **Tests** | [`server/tests/nodes/test_workflow_triggers.py`](../../../server/tests/nodes/test_workflow_triggers.py) |
 | **Skill (if any)** | none |
 | **Dual-purpose tool** | no |
@@ -11,12 +11,15 @@
 ## Purpose
 
 Fires when the user sends a message from the Console Panel chat tab. The
-WebSocket handler `send_chat_message` calls
-`broadcaster.send_custom_event('chat_message_received', {...})` (or the
-event-waiter dispatch path) and any `chatTrigger` node whose `sessionId`
-matches (or is `'default'`) receives the event and emits it as output. This
-is the primary way a user feeds an interactive prompt into an `aiAgent` or
-`chatAgent`.
+producer [`server/nodes/trigger/chat_trigger/_events.py`](../../../server/nodes/trigger/chat_trigger/_events.py)
+emits a CloudEvents `WorkflowEvent` (`type: com.machinaos.chat.message.received`)
+via `dispatch.emit`. `chatTrigger` is canary-registered
+(`register_canary_trigger_type`), so `DeploymentManager` starts a
+`TriggerListenerWorkflow` for it; the listener receives the event via Temporal
+Signal and spawns a child `MachinaWorkflow` per matching event. Any `chatTrigger`
+node whose `session_id` matches (or is `'default'`) receives the event and emits
+it as output. This is the primary way a user feeds an interactive prompt into an
+`aiAgent` or `chatAgent`.
 
 ## Inputs (handles)
 
@@ -28,7 +31,7 @@ is the primary way a user feeds an interactive prompt into an `aiAgent` or
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `sessionId` | string | `default` | no | - | Matches the `session_id` on the incoming chat event. If set to `default`, the filter accepts every event. Otherwise it only accepts events with the same `session_id`. |
+| `session_id` | string | `default` | no | - | Matches the `session_id` on the incoming chat event. If set to `default`, the filter accepts every event. Otherwise it only accepts events with the same `session_id`. |
 | `placeholder` | string | `Type a message...` | no | - | Frontend display only - not used by the handler. |
 
 ## Outputs (handles)
@@ -58,35 +61,34 @@ Wrapped in the standard envelope.
 
 ```mermaid
 flowchart TD
-  A[handle_trigger_node] --> B[event_waiter.get_trigger_config 'chatTrigger']
-  B -- None --> Eunk[Return success=false<br/>error: Unknown trigger type]
-  B -- ok --> C[await event_waiter.register<br/>params include sessionId]
-  C --> D[build_chat_filter:<br/>if sessionId != 'default' require exact match]
-  D --> E[broadcaster.update_node_status 'waiting'<br/>event_type=chat_message_received]
-  E --> F[await event_waiter.wait_for_event waiter]
-  F -- CancelledError --> G[Return success=false<br/>error: Cancelled by user]
-  F -- Exception --> H[Return success=false<br/>error: str e]
-  F -- ok --> I[Return success envelope<br/>result = event_data]
+  P[chat tab sends message] --> Q[_events.py dispatch.emit<br/>WorkflowEvent com.machinaos.chat.message.received]
+  Q --> R[TriggerListenerWorkflow receives via Temporal Signal]
+  R --> S[ChatTriggerNode.build_filter:<br/>if session_id != 'default' require exact match]
+  S -- match --> T[spawn child MachinaWorkflow<br/>trigger pre-executed with event payload]
+  S -- no match --> R
 ```
 
 ## Decision Logic
 
-- **Filter** (`build_chat_filter` in `triggers.py`):
+- **Filter** (`ChatTriggerNode.build_filter`):
   ```python
-  if session_id != 'default' and event_session != session_id:
-      return False
+  if session_id and session_id != 'default':
+      return event.get('session_id') == session_id
   return True
   ```
-  So `sessionId='default'` (the frontend default) is a wildcard - the
+  So `session_id='default'` (the frontend default) is a wildcard - the
   trigger fires for every chat message regardless of which session the user
   is in.
 - **Cancellation**: yields `success=False, error="Cancelled by user"`.
 
 ## Side Effects
 
-- **Database writes**: none in the trigger handler itself. (The chat message
+- **Database writes**: none in the trigger plugin itself. (The chat message
   is separately persisted by `send_chat_message` via `database.add_chat_message`.)
-- **Broadcasts**: `update_node_status(node_id, "waiting", {message, event_type, waiter_id}, workflow_id)`.
+- **Broadcasts**: the producer emits a CloudEvents `WorkflowEvent` via
+  `dispatch.emit` (Temporal Signal fan-out + in-process WS broadcast). The
+  `TriggerListenerWorkflow` emits firing-pulse status via
+  `broadcast_trigger_status_activity` before/after each child spawn.
 - **External API calls**: none.
 - **File I/O**: none.
 - **Subprocess**: none.
@@ -100,7 +102,7 @@ flowchart TD
 
 ## Edge cases & known limits
 
-- `sessionId='default'` behaves as a wildcard; setting a unique session ID
+- `session_id='default'` behaves as a wildcard; setting a unique session ID
   per trigger is the only way to scope messages to a specific node.
 - When multiple `chatTrigger` nodes exist with the same session ID, all of
   them fire for a matching message.

@@ -2,42 +2,53 @@
 
 | Field | Value |
 |------|-------|
-| **Category** | ai_tools (dual-purpose) |
-| **Backend handler** | [`server/services/handlers/tools.py::handle_task_manager`](../../../server/services/handlers/tools.py) (workflow-node entry) -> `_execute_task_manager` |
+| **Category** | ai_tools (dedicated AI tool, group `("tool", "ai")`) |
+| **Backend handler** | [`server/nodes/tool/task_manager/__init__.py`](../../../server/nodes/tool/task_manager/__init__.py) — `TaskManagerNode`, dispatched via `BaseNode.execute()` + the `@Operation("manage")` method, which calls the inlined `_execute_task_manager` in the same file |
 | **Tests** | [`server/tests/nodes/test_ai_tools.py`](../../../server/tests/nodes/test_ai_tools.py) |
 | **Skill (if any)** | [`server/skills/task_agent/task-manager-skill/SKILL.md`](../../../server/skills/task_agent/task-manager-skill/SKILL.md) |
-| **Dual-purpose tool** | yes - tool name `task_manager`; handler registered under both registry key `taskManager` and `execute_tool` dispatch |
+| **Dual-purpose tool** | tool-only — `ToolNode` exposed to the LLM as `task_manager` (`tool_name` class attr) |
 
 ## Purpose
 
-Inspects the in-process registry of delegated agent tasks (`_delegated_tasks`
-and `_delegation_results` dicts in `tools.py`). Lets a parent agent (or a
-workflow node run) list currently-running / completed delegations, fetch
-details for a specific `task_id`, or clear a finished task from tracking.
-Does **not** spawn work itself; it only reads/mutates the delegation state
-populated by `_execute_delegated_agent`.
+Inspects the in-process registry of delegated agent tasks. The
+`_execute_task_manager` body lives in the plugin file but reads **through** to
+the delegation registry owned by `services/handlers/tools.py` (the
+`_delegated_tasks` + `_delegation_results` dicts + `get_delegated_task_status`
+3-layer lookup) — that lifecycle state stays in `tools.py` intentionally. Lets a
+parent agent list currently-running / completed delegations, fetch details for a
+specific `task_id`, or clear a finished task from tracking. Does **not** spawn
+work itself; it only reads/mutates the delegation state populated by
+`_execute_delegated_agent`.
 
 ## Inputs (handles)
 
 | Handle | Connection type | Required | Purpose |
 |--------|-----------------|----------|---------|
-| (none) | - | - | Passive node |
+| `input-main` | main | no | Passive node - connect `output-tool` to an AI Agent's `input-tools` |
 
 ## Parameters
 
+The declared `TaskManagerParams` model fields are below. The model carries
+`model_config = ConfigDict(extra="allow")`, so the LLM-driven `operation` /
+`status_filter` args (which `_execute_task_manager` reads) pass through even
+though they are not declared fields.
+
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `toolName` | string | `task_manager` | no | - | LLM-visible tool name |
-| `toolDescription` | string | (see frontend) | no | - | LLM-visible description |
-| `operation` | options | `list_tasks` | no | - | One of `list_tasks`, `get_task`, `mark_done` (workflow-node mode) |
-| `task_id` | string | `""` | no | `operation in [get_task, mark_done]` | Target task id |
-| `status_filter` | options | `""` | no | `operation == list_tasks` | One of `""`, `running`, `completed`, `error` |
+| `action` | enum | `create` | no | - | Declared field: one of `create`, `list`, `complete`, `delete`, `update` (not the dispatch discriminator — see below) |
+| `task_id` | string? | `None` | no | - | Target task id |
+| `title` | string? | `None` | no | - | Declared but unused by the inlined op |
+| `description` | string? | `None` | no | - | Declared but unused by the inlined op |
+| `status` | string? | `None` | no | - | Declared but unused by the inlined op |
 
-### LLM-provided tool args (when used as a tool)
+### LLM-provided tool args (the operations the op actually dispatches on)
+
+The `manage` op passes `params.model_dump()` (with extras) into
+`_execute_task_manager`, which reads `operation` / `task_id` / `status_filter`:
 
 | Arg | Type | Description |
 |-----|------|-------------|
-| `operation` | string | Same three values; falls back to node param, then to `'list_tasks'` |
+| `operation` | string | One of `list_tasks`, `get_task`, `mark_done`; defaults to `'list_tasks'` |
 | `task_id` | string | Required for `get_task` / `mark_done`; otherwise ignored |
 | `status_filter` | string | Optional filter applied to `list_tasks` |
 
@@ -45,8 +56,7 @@ populated by `_execute_delegated_agent`.
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-tool` | object | Raw dict returned to the LLM |
-| `output-main` | object | Same payload, available when run as a workflow node |
+| `output-tool` | object | Raw dict returned to the LLM (the `TaskManagerOutput` model has `extra="allow"`, so the full operation dict passes through) |
 
 ### Output payload (TypeScript shape)
 
@@ -99,7 +109,8 @@ Unknown operation: `{success: false, error: "Unknown operation: <op>"}`.
 
 ```mermaid
 flowchart TD
-  A[_execute_task_manager args config] --> B[Merge operation / task_id / status_filter<br/>args wins, then node params, then defaults]
+  A[BaseNode.execute -> manage ctx params] --> A2[_execute_task_manager params.model_dump config]
+  A2 --> B[Read operation / task_id / status_filter<br/>tool_args wins, then params, then defaults]
   B --> C{operation}
   C -- list_tasks --> D[Iterate _delegated_tasks -&gt; derive running/completed/cancelled/error]
   D --> E[Merge _delegation_results entries not already in list]
@@ -171,11 +182,12 @@ flowchart TD
   three aggregate counters.
 - Unknown `operation` returns a failed envelope rather than raising; the
   agent might keep retrying with the same bad operation string.
-- `handle_task_manager` (workflow-node entry) passes an empty `tool_args`
-  dict and relies entirely on node parameters.
+- The dispatch discriminator is `operation` (read from the extra-allowed
+  tool args), NOT the declared `action` field — the `action` / `title` /
+  `description` / `status` model fields are vestigial and unused by the op.
 
 ## Related
 
-- **Sibling tools**: [`calculatorTool`](./calculatorTool.md), [`currentTimeTool`](./currentTimeTool.md), [`duckduckgoSearch`](./duckduckgoSearch.md), [`writeTodos`](./writeTodos.md)
+- **Sibling tools**: [`calculatorTool`](./calculatorTool.md), [`currentTimeTool`](./currentTimeTool.md), [`duckduckgoSearch`](./duckduckgoSearch.md), [`writeTodos`](./writeTodos.md), [`agentBuilder`](./agentBuilder.md)
 - **Skill using this tool**: [`task-manager-skill/SKILL.md`](../../../server/skills/task_agent/task-manager-skill/SKILL.md)
 - **Architecture docs**: [Agent Delegation](../../agent_delegation.md)

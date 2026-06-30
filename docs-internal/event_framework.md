@@ -2,7 +2,7 @@
 
 Temporal-native event-routing layer for MachinaOs. Implements RFC sections
 6.3 (Temporal worker contract) + 6.4 (CloudEvents broadcast contract) from
-[plugin_authoring_rfc.md](./plugin_authoring_rfc.md).
+[plugin_authoring_rfc.md](./ARCHIVE/plugin_authoring_rfc.md).
 
 This doc is the operator + plugin-author reference. The design rationale +
 phase plan lives in `~/.claude/plans/properly-fix-the-tech-dreamy-tarjan.md`.
@@ -267,6 +267,6 @@ Locked by `TestCancelSweepsStuckNodeStatuses` in [`test_deployment_canary_listen
 ## References
 
 - Plan: `~/.claude/plans/properly-fix-the-tech-dreamy-tarjan.md`
-- RFC: [`plugin_authoring_rfc.md`](./plugin_authoring_rfc.md)
+- RFC: [`plugin_authoring_rfc.md`](./ARCHIVE/plugin_authoring_rfc.md)
 - Temporal: [Search Attributes](https://docs.temporal.io/search-attribute) · [Signals](https://docs.temporal.io/develop/python/message-passing) · [Schedules](https://docs.temporal.io/develop/python/schedules) · [Retry Policies](https://docs.temporal.io/encyclopedia/retry-policies)
 - CloudEvents: [v1.0 spec](https://github.com/cloudevents/spec/blob/main/cloudevents/spec.md)

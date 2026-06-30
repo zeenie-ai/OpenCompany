@@ -3,10 +3,10 @@
 | Field | Value |
 |------|-------|
 | **Category** | google_workspace / tool (dual-purpose) |
-| **Backend handler** | [`server/services/handlers/sheets.py::handle_google_sheets`](../../../server/services/handlers/sheets.py) |
+| **Backend handler** | [`server/nodes/google/sheets/__init__.py`](../../../server/nodes/google/sheets/__init__.py) (`SheetsNode`; dispatched via `BaseNode.execute()` -> single `@Operation("dispatch")` method that branches on `params.operation`) |
 | **Tests** | [`server/tests/nodes/test_google_workspace.py`](../../../server/tests/nodes/test_google_workspace.py) |
 | **Skill (if any)** | [`server/skills/productivity_agent/google-sheets-skill/SKILL.md`](../../../server/skills/productivity_agent/google-sheets-skill/SKILL.md) |
-| **Dual-purpose tool** | yes - tool name `googleSheets` |
+| **Dual-purpose tool** | yes - tool name `google_sheets` |
 
 ## Purpose
 
@@ -29,7 +29,7 @@ Top-level dispatcher: `operation` (one of `read`, `write`, `append`).
 | Name | Type | Default | Required | Description |
 |------|------|---------|----------|-------------|
 | `spreadsheet_id` | string | `""` | **yes** | Sheet ID (from URL) |
-| `range` | string | `""` | **yes** | A1 notation, e.g. `Sheet1!A1:D10` |
+| `range` | string | `A1:Z1000` | **yes** | A1 notation, e.g. `Sheet1!A1:D10` |
 | `value_render_option` | options | `FORMATTED_VALUE` | no | `FORMATTED_VALUE` / `UNFORMATTED_VALUE` / `FORMULA` |
 | `major_dimension` | options | `ROWS` | no | `ROWS` / `COLUMNS` |
 
@@ -38,7 +38,7 @@ Top-level dispatcher: `operation` (one of `read`, `write`, `append`).
 | Name | Type | Default | Required | Description |
 |------|------|---------|----------|-------------|
 | `spreadsheet_id` | string | `""` | **yes** | - |
-| `range` | string | `""` | **yes** | e.g. `Sheet1!A1` |
+| `range` | string | `A1:Z1000` | **yes** | e.g. `Sheet1!A1` |
 | `values` | array/string | `[]` | **yes** | 2D array, or JSON string that parses to 2D array, or 1D auto-wrapped to 2D |
 | `value_input_option` | options | `USER_ENTERED` | no | `RAW` or `USER_ENTERED` |
 
@@ -47,17 +47,20 @@ Top-level dispatcher: `operation` (one of `read`, `write`, `append`).
 | Name | Type | Default | Required | Description |
 |------|------|---------|----------|-------------|
 | `spreadsheet_id` | string | `""` | **yes** | - |
-| `range` | string | `""` | **yes** | e.g. `Sheet1!A:D` |
+| `range` | string | `A1:Z1000` | **yes** | e.g. `Sheet1!A:D` |
 | `values` | array/string | `[]` | **yes** | Same coercion as write |
 | `value_input_option` | options | `USER_ENTERED` | no | - |
 | `insert_data_option` | options | `INSERT_ROWS` | no | `INSERT_ROWS` / `OVERWRITE` |
 
 ## Outputs (handles)
 
+The node declares only `input-main` and `output-main`. Tool mode
+(`usable_as_tool = True`, tool name `google_sheets`) returns the same
+`output-main` payload — there is no separate `output-tool` handle.
+
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | Operation-specific payload |
-| `output-tool` | object | Same, for AI tool wiring |
+| `output-main` | object | Operation-specific `SheetsOutput` payload |
 
 - `read`: `{values: [[...],...], range, rows, columns, major_dimension}`
 - `write` / `append`: `{updated_range, updated_rows, updated_columns, updated_cells, table_range?}`
@@ -66,50 +69,44 @@ Top-level dispatcher: `operation` (one of `read`, `write`, `append`).
 
 ```mermaid
 flowchart TD
-  A[handle_google_sheets] --> B{operation?}
-  B -- read --> R[handle_sheets_read]
-  B -- write --> W[handle_sheets_write]
-  B -- append --> AP[handle_sheets_append]
-  B -- unknown --> Eret[success=false<br/>Unknown Sheets operation]
-  R --> G[get_google_credentials + build v4]
-  W --> G
-  AP --> G
-  G -- ValueError --> Eret
-  R --> V1{spreadsheet_id & range?}
-  V1 -- no --> Eret
-  V1 -- yes --> R1[spreadsheets.values.get<br/>valueRenderOption majorDimension]
-  W --> V2{spreadsheet_id & range & values?}
-  V2 -- no --> Eret
-  V2 -- yes --> C2[Coerce values:<br/>str -> json.loads<br/>1D -> wrap to 2D]
-  C2 --> R2[spreadsheets.values.update<br/>valueInputOption body]
-  AP --> V3{spreadsheet_id & range & values?}
-  V3 -- no --> Eret
-  V3 -- yes --> C3[Same coercion as write]
-  C3 --> R3[spreadsheets.values.append<br/>valueInputOption insertDataOption]
-  R1 --> T[_track_sheets_usage]
+  A[BaseNode.execute -> SheetsNode.dispatch] --> V0{spreadsheet_id & range present?}
+  V0 -- no --> Eret[raise RuntimeError]
+  V0 -- yes --> G[build_google_service sheets v4]
+  G --> B{operation?}
+  B -- read --> R1[spreadsheets.values.get<br/>valueRenderOption majorDimension]
+  B -- write --> CW[Coerce values:<br/>str -> json.loads, 1D -> wrap to 2D]
+  CW --> VW{values non-empty?}
+  VW -- no --> Eret
+  VW -- yes --> R2[spreadsheets.values.update<br/>valueInputOption body]
+  B -- append --> CA[Same coercion as write]
+  CA --> VA{values non-empty?}
+  VA -- no --> Eret
+  VA -- yes --> R3[spreadsheets.values.append<br/>valueInputOption insertDataOption]
+  B -- unknown --> Eret
+  R1 --> T[track_google_usage google_sheets]
   R2 --> T
   R3 --> T
-  T --> OUT[Return success envelope]
+  T --> OUT[Return SheetsOutput; BaseNode serializes envelope]
 ```
 
 ## Decision Logic
 
 - **Values coercion**: if `values` is a `str`, parsed via `json.loads`. If the (possibly parsed) sequence's first element is not a list, the whole thing is wrapped into `[values]` to guarantee 2D.
-- **Required fields**: each operation has its own validation block; all three require `spreadsheet_id` and `range`, write/append additionally require a non-empty `values`.
+- **Required fields**: `spreadsheet_id` and `range` are validated once at the top of `dispatch` (before the operation branch); write/append additionally require a non-empty `values`.
 - **Usage tracking count**: read reports `len(values)` rows; write reports `updatedCells`; append reports `updates.updatedCells`. If any field is missing in the response, usage count is 0 (no exception).
 - **JSON parse errors** on `values` propagate into the outer `except Exception` and become `error: "<ValueError str>"`.
 
 ## Side Effects
 
-- **Database writes**: `api_usage_metrics` row per call via `save_api_usage_metric` with `service='google_sheets'`.
-- **Broadcasts**: none.
+- **Database writes**: `api_usage_metrics` row per call via `track_google_usage` -> `save_api_usage_metric` with `service='google_sheets'`.
+- **Broadcasts**: none from the operation; executor emits standard `node_status`.
 - **External API calls**: Sheets API v4 - `spreadsheets().values().get/update/append`.
 - **File I/O**: none.
 - **Subprocess**: none.
 
 ## External Dependencies
 
-- **Credentials**: OAuth via `auth_service.get_oauth_tokens("google")`.
+- **Credentials**: `GoogleCredential` -> OAuth tokens for provider `google`.
 - **Services**: Google Sheets API, `PricingService`, `Database`.
 - **Python packages**: `google-api-python-client`.
 - **Environment variables**: none.

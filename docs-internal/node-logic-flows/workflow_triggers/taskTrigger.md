@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | workflow / trigger |
-| **Backend handler** | [`server/services/handlers/triggers.py::handle_trigger_node`](../../../server/services/handlers/triggers.py) (generic) |
+| **Backend handler** | Plugin [`server/nodes/trigger/task_trigger/__init__.py`](../../../server/nodes/trigger/task_trigger/__init__.py) (`TaskTriggerNode`); dispatch via `BaseNode.execute()`. The base `TriggerNode.execute` runs the event wait; the `@Operation("wait")` body is a stub. |
 | **Tests** | [`server/tests/nodes/test_workflow_triggers.py`](../../../server/tests/nodes/test_workflow_triggers.py) |
 | **Skill (if any)** | none |
 | **Dual-purpose tool** | no |
@@ -13,10 +13,14 @@
 Fires when a child agent delegated via `delegate_to_*` tools completes or
 errors. The delegation code path in
 `server/services/handlers/tools.py::_execute_delegated_agent` calls
-`broadcaster.send_custom_event('task_completed', {...})`, which is
-dispatched to this trigger via `event_waiter`. Used to let a parent
-workflow react to child completion without blocking the parent on the
-child's result (fire-and-forget delegation).
+`nodes.agent._events.broadcast_agent_task_completed` for both the success and
+error paths, which emits a CloudEvents `WorkflowEvent`
+(`type: com.machinaos.agent.task.completed`, with the success/error
+discriminator carried in `data.status`) via `dispatch.emit`. `taskTrigger` is
+canary-registered, so `DeploymentManager` starts a `TriggerListenerWorkflow`
+that receives the event via Temporal Signal and spawns a child workflow per
+match. Used to let a parent workflow react to child completion without blocking
+the parent on the child's result (fire-and-forget delegation).
 
 ## Inputs (handles)
 
@@ -41,39 +45,38 @@ child's result (fire-and-forget delegation).
 
 ### Output payload
 
+Declared `TaskTriggerOutput` fields:
+
 ```ts
 {
-  task_id: string;
-  status: 'completed' | 'error';
-  agent_name: string;
-  agent_node_id: string;
-  parent_node_id: string;
+  task_id?: string;
+  status?: 'completed' | 'error';
+  agent_name?: string;
   result?: string;     // Present when status='completed'
   error?: string;      // Present when status='error'
-  workflow_id: string;
+  workflow_id?: string;
 }
 ```
 
-Wrapped in the standard envelope.
+`TaskTriggerOutput` is `model_config extra="allow"`, so the producer's extra
+fields (`agent_node_id`, `parent_node_id`) pass through to downstream nodes at
+runtime even though they are not declared on the model. Wrapped in the standard
+envelope.
 
 ## Logic Flow
 
 ```mermaid
 flowchart TD
-  A[handle_trigger_node] --> B[event_waiter.get_trigger_config 'taskTrigger']
-  B -- None --> Eunk[Return success=false<br/>error: Unknown trigger type]
-  B -- ok --> C[await event_waiter.register]
-  C --> D[build_task_completed_filter]
-  D --> E[broadcaster.update_node_status 'waiting'<br/>event_type=task_completed]
-  E --> F[await event_waiter.wait_for_event waiter]
-  F -- CancelledError --> G[Return success=false<br/>error: Cancelled by user]
-  F -- Exception --> H[Return success=false<br/>error: str e]
-  F -- ok --> I[Return success envelope<br/>result = event_data]
+  P[child agent completes/errors] --> Q[broadcast_agent_task_completed<br/>dispatch.emit com.machinaos.agent.task.completed]
+  Q --> R[TriggerListenerWorkflow receives via Temporal Signal]
+  R --> S[TaskTriggerNode.build_filter<br/>task_id / status / agent_name / parent_node_id]
+  S -- match --> T[spawn child MachinaWorkflow<br/>trigger pre-executed with event payload]
+  S -- no match --> R
 ```
 
 ## Decision Logic
 
-`build_task_completed_filter` applies all configured filters as AND:
+`TaskTriggerNode.build_filter` applies all configured filters as AND:
 
 - **task_id**: exact match if non-empty.
 - **agent_name**: `agent_name_filter.lower() in event_agent.lower()` -
@@ -89,7 +92,9 @@ If any filter rejects, the event is skipped and the waiter stays blocked.
 ## Side Effects
 
 - **Database writes**: none.
-- **Broadcasts**: `update_node_status(node_id, "waiting", {message, event_type, waiter_id}, workflow_id)`.
+- **Broadcasts**: the producer emits a CloudEvents `WorkflowEvent` via
+  `dispatch.emit`. The `TriggerListenerWorkflow` emits firing-pulse status via
+  `broadcast_trigger_status_activity` around each child spawn.
 - **External API calls**: none.
 - **File I/O**: none.
 - **Subprocess**: none.
@@ -97,9 +102,11 @@ If any filter rejects, the event is skipped and the waiter stays blocked.
 ## External Dependencies
 
 - **Credentials**: none.
-- **Services**: `services.event_waiter`, `services.status_broadcaster`.
+- **Services**: `services.deployment` (canary listener), `services.events.dispatch`,
+  `services.status_broadcaster`.
 - **Upstream dispatcher**: `services.handlers.tools._execute_delegated_agent`
-  fires `task_completed` events for both success and error paths.
+  calls `nodes.agent._events.broadcast_agent_task_completed` for both success and
+  error paths.
 - **Python packages**: stdlib only.
 - **Environment variables**: none.
 

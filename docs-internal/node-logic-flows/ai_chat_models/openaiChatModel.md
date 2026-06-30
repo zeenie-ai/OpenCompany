@@ -3,15 +3,15 @@
 | Field | Value |
 |------|-------|
 | **Category** | ai_chat_models |
-| **Backend handler** | [`server/services/handlers/ai.py::handle_ai_chat_model`](../../../server/services/handlers/ai.py) |
+| **Backend handler** | [`server/nodes/model/openai_chat_model/__init__.py`](../../../server/nodes/model/openai_chat_model/__init__.py) (dispatch via `BaseNode.execute()` -> `@Operation("chat")` in [`server/nodes/model/_base.py`](../../../server/nodes/model/_base.py)) |
 | **AI service** | [`server/services/ai.py::AIService.execute_chat`](../../../server/services/ai.py) |
 | **Tests** | [`server/tests/nodes/test_ai_chat_models.py`](../../../server/tests/nodes/test_ai_chat_models.py) |
-| **Skill (if any)** | n/a - chat models are model config nodes, not tools |
-| **Dual-purpose tool** | no - pure chat completion node |
+| **Skill (if any)** | n/a |
+| **Dual-purpose tool** | yes - tool name `openai_chat_model` (advisor; `usable_as_tool = True`, group `('model', 'tool')`) |
 
 ## Purpose
 
-Single-turn chat completion against the OpenAI REST API. Used either as a standalone workflow node (user enters a prompt, the node produces a response) or as a model config node wired into an AI Agent via the `input-model` handle. All 9 chat-model node types share the same handler (`handle_ai_chat_model`) and the same dispatch path; per-provider differences live inside `AIService.execute_chat` (native SDK for OpenAI) and in the clamp / temperature helpers.
+Single-turn chat completion against the OpenAI REST API. Used either as a standalone workflow node (user enters a prompt, the node produces a response), wired into an AI Agent via the `input-model` handle, or connected as an advisor tool (`usable_as_tool = True`). Every chat-model node runs through the shared `ChatModelBase.chat` operation (in `_base.py`), which calls `AIService.execute_chat`; per-provider differences live inside `execute_chat` (native SDK for OpenAI) and in the clamp / temperature helpers.
 
 ## Inputs (handles)
 
@@ -24,24 +24,25 @@ Single-turn chat completion against the OpenAI REST API. Used either as a standa
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
 | `prompt` | string | `""` | yes (non-empty) | - | User message content sent to the model |
-| `systemMessage` / `systemPrompt` / `system_prompt` | string | `""` | no | - | System prompt; any of the three naming conventions accepted |
-| `model` | string | auto-populated from stored models, fallback `gpt-3.5-turbo` | no | - | Model ID. `[FREE] ` prefix is stripped before the API call |
-| `temperature` | number | provider default | no | - | 0-2 for most OpenAI models; o-series (o1/o3/o4) force temperature=1 |
-| `maxTokens` / `max_tokens` | number | provider default | no | - | Clamped via `_resolve_max_tokens` to the model's actual context limit |
-| `topP` | number | 1.0 | no | - | Nucleus sampling |
-| `frequencyPenalty` | number | 0 | no | - | OpenAI penalty |
-| `presencePenalty` | number | 0 | no | - | OpenAI penalty |
-| `responseFormat` | options | `text` | no | - | `text` or `json_object` |
-| `thinkingEnabled` | boolean | false | no | - | Turn on extended reasoning (GPT-5 hybrid / o-series) |
-| `reasoningEffort` | options | `medium` | no | `thinkingEnabled=[true]` | `minimal` / `low` / `medium` / `high` |
-| `apiKey` / `api_key` | string | injected by executor | no | - | Auto-injected by `NodeExecutor._inject_api_keys` via `auth_service.get_api_key('openai', 'default')` |
-| `options` | object | `{}` | no | - | Collection bag; flattened into the top-level params dict before use |
+| `system_prompt` | string | `""` | no | - | System prompt |
+| `model` | string | `""` (injected from stored models) | no | - | Model ID. `[FREE] ` prefix is stripped before the API call |
+| `temperature` | number\|null | `null` -> `agent.default_temperature` | no | - | 0-2 for most OpenAI models; o-series (o1/o3/o4) force temperature=1 |
+| `max_tokens` | number\|null | `null` -> per-model default | no | - | 1-200000; clamped via `_resolve_max_tokens` to the model's actual ceiling |
+| `top_p` | number\|null | `1.0` | no | - | Nucleus sampling |
+| `frequency_penalty` | number\|null | `0.0` | no | - | -2.0 to 2.0 |
+| `presence_penalty` | number\|null | `0.0` | no | - | -2.0 to 2.0 |
+| `response_format` | enum | `text` | no | - | `text` or `json_object` |
+| `thinking_enabled` | boolean | `false` | no | - | Turn on extended reasoning (GPT-5 hybrid / o-series) |
+| `reasoning_effort` | enum | `medium` | no | `thinking_enabled=[true]` | `minimal` / `low` / `medium` / `high` (OpenAI override adds `minimal`) |
+| `api_key` | string\|null | `null` (injected) | no | - | `auth_service.get_api_key('openai', 'default')` |
+
+(Field names are snake_case on `OpenAIChatModelParams`; `model_config = ConfigDict(extra="ignore")` drops unknown keys.)
 
 ## Outputs (handles)
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | Standard envelope payload (see below) |
+| `output-model` | object | Model output (also feeds an agent's `input-model` handle); standard envelope payload (see below) |
 
 ### Output payload
 
@@ -64,8 +65,8 @@ Wrapped in the standard envelope: `{ success: true, node_id, node_type, result: 
 
 ```mermaid
 flowchart TD
-  A[NodeExecutor dispatch] --> B[_prepare_parameters:<br/>merge DB params, validate, inject api_key + model]
-  B --> C[handle_ai_chat_model]
+  A[NodeExecutor dispatch -> BaseNode.execute] --> B[ChatModelBase.chat Operation<br/>params validated by Pydantic]
+  B --> C[get_ai_service]
   C --> D[AIService.execute_chat]
   D --> E[Flatten options into flat params dict]
   E --> F{api_key present?}

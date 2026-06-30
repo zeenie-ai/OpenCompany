@@ -2,8 +2,8 @@
 
 | Field | Value |
 |------|-------|
-| **Category** | workflow / trigger |
-| **Backend handler** | [`server/services/handlers/utility.py::handle_start`](../../../server/services/handlers/utility.py) |
+| **Category** | workflow |
+| **Backend handler** | Plugin [`server/nodes/workflow/start/__init__.py`](../../../server/nodes/workflow/start/__init__.py) (`StartNode`); dispatch via `BaseNode.execute()` + the `@Operation("emit")` method. |
 | **Tests** | [`server/tests/nodes/test_workflow_triggers.py`](../../../server/tests/nodes/test_workflow_triggers.py) |
 | **Skill (if any)** | none |
 | **Dual-purpose tool** | no |
@@ -27,7 +27,7 @@ data.
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `initialData` | string (JSON) | `"{}"` | no | - | JSON document surfaced as the node output. Any parse failure silently becomes `{}`. |
+| `initial_data` | any (JSON string or value) | `None` | no | - | Surfaced as the node output. If a JSON string, it is parsed (parse failure -> `{}`); if `None` -> `{}`; otherwise returned as-is. |
 
 ## Outputs (handles)
 
@@ -38,9 +38,11 @@ data.
 ### Output payload
 
 ```ts
-// Whatever the user put in initialData, parsed as JSON.
-// Invalid JSON -> {}.
-Record<string, unknown>
+// initial_data resolved:
+//   None      -> {}
+//   JSON str  -> parsed value (invalid -> {})
+//   any other -> returned as-is
+unknown
 ```
 
 Wrapped in the standard envelope: `{ success: true, result: <payload>, node_id, node_type: "start" }`.
@@ -49,23 +51,25 @@ Wrapped in the standard envelope: `{ success: true, result: <payload>, node_id, 
 
 ```mermaid
 flowchart TD
-  A[handle_start] --> B[Read parameters.initialData<br/>default: '{}']
-  B --> C{json.loads?}
-  C -- ok --> D[initial_data = parsed]
-  C -- Exception --> E[initial_data = {}]
-  D --> F[Return success envelope<br/>result = initial_data]
-  E --> F
+  A[BaseNode.execute -> emit op] --> B[raw = params.initial_data]
+  B --> C{raw is None?}
+  C -- yes --> E[return {}]
+  C -- no --> D{raw is str?}
+  D -- yes --> F{json.loads?}
+  F -- ok --> G[return parsed]
+  F -- Exception --> E
+  D -- no --> H[return raw as-is]
 ```
 
 ## Decision Logic
 
-- **Validation**: none. Empty / missing `initialData` is treated as `"{}"`.
-- **Branches**: single path; either `initialData` parses or it is silently
-  replaced with `{}`.
+- **Validation**: none. `None` `initial_data` returns `{}`.
+- **Branches**: `None` -> `{}`; string -> `json.loads` (failure -> `{}`);
+  any other value returned unchanged.
 - **Fallbacks**: JSON decode errors are swallowed and produce `{}`.
-- **Error paths**: the handler does not raise; it always returns a
-  `success=True` envelope. A malformed `initialData` is **not** reported as an
-  error.
+- **Error paths**: the op does not raise; it always returns a
+  `success=True` envelope. A malformed `initial_data` string is **not** reported
+  as an error.
 
 ## Side Effects
 
@@ -85,16 +89,14 @@ flowchart TD
 
 ## Edge cases & known limits
 
-- `start` always returns `success=True` regardless of `initialData` content.
-  Invalid JSON is silently coerced to `{}` - users get no warning their data
-  was dropped.
-- Although `start` is listed in `TRIGGER_REGISTRY` (as `deploy_triggered`),
-  the handler registry in `NodeExecutor._build_handler_registry()` maps
-  `start` directly to `handle_start`. The event-waiter path is only exercised
-  inside `DeploymentManager` when a workflow is deployed; ad-hoc runs go
-  through `handle_start` without waiting for any event.
-- The payload is returned as-is; no validation, schema enforcement, or nested
-  template resolution is performed by the handler.
+- `start` always returns `success=True` regardless of `initial_data` content.
+  Invalid JSON in a string is silently coerced to `{}` - users get no warning
+  their data was dropped.
+- `start` is a plain `ActionNode` (group `workflow`), not an event trigger -
+  it registers no event waiter and completes immediately. It carries
+  `ui_hints` `hideInputSection` / `hideOutputSection` / `hasInitialDataBlob`.
+- The payload is returned as-is for non-string values; no validation, schema
+  enforcement, or nested template resolution is performed by the op.
 
 ## Related
 

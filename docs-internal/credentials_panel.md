@@ -376,8 +376,8 @@ These are the non-negotiable behaviours the test suite enforces. The refactor is
 | Credential service | [server/services/auth.py](../server/services/auth.py) | Single point of access; memory caches |
 | Encryption | [server/core/encryption.py](../server/core/encryption.py) | Fernet + PBKDF2 |
 | DB | [server/core/credentials_database.py](../server/core/credentials_database.py) | Two encrypted tables + metadata |
-| OAuth (Google) | [server/services/google_oauth.py](../server/services/google_oauth.py) | Flow, PKCE, refresh, service builders |
-| OAuth (Twitter) | [server/services/twitter_oauth.py](../server/services/twitter_oauth.py) | Manual PKCE, token exchange/refresh/revoke |
+| OAuth (Google) | [server/nodes/google/_oauth.py](../server/nodes/google/_oauth.py) | Flow, PKCE, refresh, service builders |
+| OAuth (Twitter) | [server/nodes/twitter/_oauth.py](../server/nodes/twitter/_oauth.py) | Manual PKCE, token exchange/refresh/revoke |
 | OAuth (Claude) | [server/nodes/agent/claude_code_agent/_oauth.py](../server/nodes/agent/claude_code_agent/_oauth.py) + [_handlers.py](../server/nodes/agent/claude_code_agent/_handlers.py) | CLI-managed `claude auth login` (subprocess, `stdin=PIPE`), `CLAUDE_CONFIG_DIR=<DATA_DIR>/claude/` |
 | OAuth utils | [server/services/oauth_utils.py](../server/services/oauth_utils.py) | Runtime redirect URI derivation |
 | Container | [server/core/container.py](../server/core/container.py) | DI wiring for `auth_service` etc. |

@@ -3,15 +3,15 @@
 | Field | Value |
 |------|-------|
 | **Category** | ai_chat_models |
-| **Backend handler** | [`server/services/handlers/ai.py::handle_ai_chat_model`](../../../server/services/handlers/ai.py) |
+| **Backend handler** | [`server/nodes/model/groq_chat_model/__init__.py`](../../../server/nodes/model/groq_chat_model/__init__.py) (dispatch via `BaseNode.execute()` -> `@Operation("chat")` in [`server/nodes/model/_base.py`](../../../server/nodes/model/_base.py)) |
 | **AI service** | [`server/services/ai.py::AIService.execute_chat`](../../../server/services/ai.py) |
 | **Tests** | [`server/tests/nodes/test_ai_chat_models.py`](../../../server/tests/nodes/test_ai_chat_models.py) |
 | **Skill (if any)** | n/a |
-| **Dual-purpose tool** | no |
+| **Dual-purpose tool** | no (group `('model',)`) |
 
 ## Purpose
 
-Ultra-fast inference via Groq's LPU hardware. Models include Llama 3.x / 4, Qwen3-32b, GPT-OSS. Shares `handle_ai_chat_model`; unlike OpenAI/Anthropic/Gemini, Groq routes through the **LangChain fallback** (`create_model` + `chat_model.invoke`) because `is_native_provider('groq')` returns False.
+Ultra-fast inference via Groq's LPU hardware. Models include Llama 3.x / 4, Qwen3-32b, GPT-OSS. The `ChatModelBase.chat` operation calls `AIService.execute_chat`; unlike OpenAI/Anthropic/Gemini, Groq routes through the **LangChain fallback** (`create_model` + `chat_model.invoke`) because `is_native_provider('groq')` returns False.
 
 ## Inputs (handles)
 
@@ -24,20 +24,22 @@ Ultra-fast inference via Groq's LPU hardware. Models include Llama 3.x / 4, Qwen
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
 | `prompt` | string | `""` | yes | - | User message |
-| `systemMessage` | string | `""` | no | - | System prompt |
-| `model` | string | injected | no | - | e.g. `llama-3.1-70b-versatile`, `qwen/qwen3-32b`, `groq/compound-beta` |
-| `temperature` | number | 0-2 | no | - | |
-| `maxTokens` | number | 8-131K per model | no | - | |
-| `topP` | number | - | no | - | |
-| `thinkingEnabled` | boolean | false | no | - | Only Qwen3-32b supports reasoning |
-| `reasoningFormat` | options | `parsed` | no | `thinkingEnabled=[true]` | `parsed` (returns reasoning) or `hidden` (suppresses it) |
-| `apiKey` | string | injected | no | - | `auth_service.get_api_key('groq', 'default')` |
+| `system_prompt` | string | `""` | no | - | System prompt |
+| `model` | string | `""` (injected) | no | - | e.g. `llama-3.1-70b-versatile`, `qwen/qwen3-32b`, `groq/compound-beta` |
+| `temperature` | number\|null | `null` | no | - | 0-2 |
+| `max_tokens` | number\|null | `null` (8-131K per model) | no | - | 1-200000 |
+| `top_p` | number\|null | `1.0` | no | - | |
+| `thinking_enabled` | boolean | `false` | no | - | Only Qwen3-32b supports reasoning |
+| `reasoning_format` | enum | `parsed` | no | `thinking_enabled=[true]` | `parsed` (returns reasoning) or `hidden` (suppresses it) |
+| `api_key` | string\|null | `null` (injected) | no | - | `auth_service.get_api_key('groq', 'default')` |
+
+(Field names are snake_case on `GroqChatModelParams`; unknown keys ignored.)
 
 ## Outputs (handles)
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | Standard envelope payload |
+| `output-model` | object | Model output; standard envelope payload |
 
 ### Output payload
 
@@ -58,7 +60,7 @@ Ultra-fast inference via Groq's LPU hardware. Models include Llama 3.x / 4, Qwen
 
 ```mermaid
 flowchart TD
-  A[NodeExecutor dispatch] --> B[handle_ai_chat_model]
+  A[NodeExecutor dispatch -> BaseNode.execute] --> B[ChatModelBase.chat Operation]
   B --> C[AIService.execute_chat]
   C --> D{valid key + prompt?}
   D -- no --> X[error envelope]

@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | social |
-| **Backend handler** | [`server/services/handlers/social.py::handle_social_receive`](../../../server/services/handlers/social.py) |
+| **Backend handler** | plugin [`server/nodes/social/social_receive/__init__.py`](../../../server/nodes/social/social_receive/__init__.py) (`SocialReceiveNode`, custom `execute` override) delegating to [`server/nodes/social/_base.py::handle_social_receive`](../../../server/nodes/social/_base.py) |
 | **Tests** | [`server/tests/nodes/test_telegram_social.py`](../../../server/tests/nodes/test_telegram_social.py) |
 | **Skill (if any)** | none |
 | **Dual-purpose tool** | no |
@@ -16,37 +16,44 @@ Applies channel / message-type / sender / keyword filters, then fans the
 result out across four dedicated handles (`message`, `media`, `contact`,
 `metadata`) so downstream agents can grab just the slice they need.
 
-The dispatcher in `NodeExecutor._dispatch` special-cases `socialReceive`
-(node_executor.py:367-374) to collect upstream outputs via
-`_get_connected_outputs_with_info` and inject them as `outputs` / `source_nodes`.
+`socialReceive` is in the executor's `_NEEDS_CONNECTED_OUTPUTS` set, so the
+executor injects upstream outputs as `connected_outputs` / `source_nodes` into
+the execution context. `SocialReceiveNode.execute` overrides the default
+envelope wrap (reading `context.raw["connected_outputs"]` and
+`context.raw["source_nodes"]`) so the `filtered` / `reason` keys the handler
+emits survive to the top-level result dict.
 
 ## Inputs (handles)
 
-| Handle | Connection type | Required | Purpose |
-|--------|-----------------|----------|---------|
-| `input-main` | main | yes | Upstream trigger output (`whatsappReceive`, `telegramReceive`, `chatTrigger`, ...) - this is what gets normalized |
-
-The executor resolves upstream outputs keyed by source node **type**, so the
-handler walks `source_nodes` and looks up `outputs[source_type]`.
+The plugin declares **no explicit input handle** (`component_kind = "agent"`,
+the `handles` tuple lists only the four right-side output handles). Upstream
+trigger outputs reach the node via the executor's `connected_outputs` injection
+(`socialReceive` is in `_NEEDS_CONNECTED_OUTPUTS`), keyed by source node
+**type**, so the handler walks `source_nodes` and looks up
+`connected_outputs[source_type]`. Typical sources: `whatsappReceive`,
+`telegramReceive`, `chatTrigger`.
 
 ## Parameters
 
+All field names are snake_case (no camelCase aliases on `SocialReceiveParams`).
+
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `channelFilter` | options | `all` | no | - | Only allow messages whose detected `channel` matches |
-| `messageTypeFilter` | options | `all` | no | - | Filter by `message_type` |
-| `senderFilter` | options | `all` | no | - | `all` / `any_contact` / `contact` / `group` / `keywords` |
-| `contactPhone` | string | `""` | yes when `senderFilter=contact` | `senderFilter: ['contact']` | Exact phone compare |
-| `groupId` | string | `""` | yes when `senderFilter=group` | `senderFilter: ['group']` | Exact chat_id compare |
-| `keywords` | string | `""` | no | `senderFilter: ['keywords']` | Comma-separated, lower-case substring match |
-| `ignoreOwnMessages` | boolean | `true` | no | - | Drop messages where `is_from_me=True` |
-| `ignoreBots` | boolean | `false` | no | - | Drop messages where `is_bot=True` |
+| `channel_filter` | options | `all` | no | - | `all`/`whatsapp`/`telegram`/`discord`/`slack`/`signal`/`sms`/`webchat`/`email`/`matrix`/`teams` - exact match against detected `channel` |
+| `message_type_filter` | options | `all` | no | - | `all`/`text`/`image`/`video`/`audio`/`document`/`sticker`/`location`/`contact`/`poll`/`reaction` |
+| `sender_filter` | options | `all` | no | - | `all`/`any_contact`/`contact`/`group`/`keywords` |
+| `contact_phone` | string | `""` | yes when `sender_filter=contact` | `sender_filter: ['contact']` | Exact phone compare |
+| `group_id` | string | `""` | yes when `sender_filter=group` | `sender_filter: ['group']` | Exact chat_id compare |
+| `keywords` | string | `""` | no | `sender_filter: ['keywords']` | Comma-separated, lower-case substring match |
+| `ignore_own_messages` | boolean | `true` | no | - | Drop messages where `is_from_me=True` |
+| `ignore_bots` | boolean | `false` | no | - | Drop messages where `is_bot=True` |
+| `include_media_data` | boolean | `false` | no | - | Include base64 media payload (memory-intensive) |
 
 ## Outputs (handles)
 
 `NodeExecutor` stores the handler's `result.result` under `output_main`
 **and** splits it into four additional output-store keys so different
-downstream handles can consume different slices (node_executor.py:292-296):
+downstream handles can consume different slices (node_executor.py:188-192):
 
 | Handle / key | Shape | Description |
 |--------------|-------|-------------|
@@ -105,7 +112,7 @@ When a message is filtered out the handler returns
 
 ```mermaid
 flowchart TD
-  A[_dispatch specialcase] --> A1[_get_connected_outputs_with_info]
+  A[SocialReceiveNode.execute] --> A1[read context.raw connected_outputs<br/>+ source_nodes]
   A1 --> B[handle_social_receive]
   B --> C[Scan source_nodes,<br/>pick first output with<br/>message_id / text / message]
   C -- none --> C2[Fallback: iterate outputs dict]
@@ -141,16 +148,16 @@ flowchart TD
 - **Chat type**: `_determine_chat_type` returns `data.chat_type` if set, else
   `"group"` if `is_group` else `"dm"`.
 - **Filters** (`_apply_filters`):
-  - `channelFilter`: exact match against normalized `channel`.
-  - `messageTypeFilter`: exact match against `message_type`.
-  - `senderFilter=any_contact`: rejects group messages only.
-  - `senderFilter=contact`: rejects when `sender_phone != contactPhone` (only
-    if `contactPhone` is truthy).
-  - `senderFilter=group`: rejects when `chat_id != groupId` (only if `groupId` is truthy).
-  - `senderFilter=keywords`: lower-cased substring match on the `text`; empty
+  - `channel_filter`: exact match against normalized `channel`.
+  - `message_type_filter`: exact match against `message_type`.
+  - `sender_filter=any_contact`: rejects group messages only.
+  - `sender_filter=contact`: rejects when `sender_phone != contact_phone` (only
+    if `contact_phone` is truthy).
+  - `sender_filter=group`: rejects when `chat_id != group_id` (only if `group_id` is truthy).
+  - `sender_filter=keywords`: lower-cased substring match on the `text`; empty
     `keywords` accepts all.
-  - `ignoreOwnMessages` (default `true`): drops `is_from_me`.
-  - `ignoreBots`: drops `is_bot`.
+  - `ignore_own_messages` (default `true`): drops `is_from_me`.
+  - `ignore_bots`: drops `is_bot`.
 - **Message id synthesis**: If upstream omits `message_id`, a random 8-char
   hex (`uuid4().hex[:8]`) is assigned.
 - **Webchat defaults**: When `source_channel == 'webchat'`, missing `sender` is
@@ -187,7 +194,7 @@ flowchart TD
   envelope is `success=true, result=null, filtered=true`. Downstream nodes
   receive `null` via the output store - anything that expects a dict must
   handle this.
-- **`_apply_filters` default for `ignoreOwnMessages` is `True`**: Loopback
+- **`_apply_filters` default for `ignore_own_messages` is `True`**: Loopback
   messages (echo bots, self-tests) are silently dropped unless explicitly
   turned off in the UI.
 - **Top-level spread**: `{ ...unified_message }` overwrites the dedicated
@@ -199,13 +206,15 @@ flowchart TD
 - **UUID `message_id` on fallback**: Not cryptographically unique across
   sessions; two workflows receiving chatTrigger messages at the same time
   can generate colliding ids.
-- **`source_nodes` parameter typo risk**: Handler accepts `outputs=None` and
-  `source_nodes=None` and falls back to `context['outputs']` / `[]` - useful
-  for direct unit tests but also means a broken executor path would silently
+- **Empty connected outputs**: `execute` reads `context.raw["connected_outputs"]`
+  and `["source_nodes"]`, defaulting to `{}` / `[]`. The handler still accepts
+  `outputs=None` / `source_nodes=None` and falls back to `context["outputs"]` -
+  useful for direct unit tests, but a broken executor injection would silently
   return "No message data received" instead of failing fast.
 
 ## Related
 
 - **Sibling nodes**: [`socialSend`](./socialSend.md), [`telegramReceive`](./telegramReceive.md)
 - **Upstream triggers**: [`telegramReceive`](./telegramReceive.md); WhatsApp/Chat triggers live in other categories
-- **Dispatcher special-case**: `server/services/node_executor.py:287-296, 367-374`
+- **Shared handler body**: [`server/nodes/social/_base.py`](../../../server/nodes/social/_base.py)
+- **Output handle split**: `server/services/node_executor.py:188-192` (`_NEEDS_CONNECTED_OUTPUTS` injection + 4-key split)

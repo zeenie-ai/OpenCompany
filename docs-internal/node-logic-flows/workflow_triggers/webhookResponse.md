@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | workflow / utility |
-| **Backend handler** | [`server/services/handlers/http.py::handle_webhook_response`](../../../server/services/handlers/http.py) |
+| **Backend handler** | Plugin [`server/nodes/utility/webhook_response/__init__.py`](../../../server/nodes/utility/webhook_response/__init__.py) (`WebhookResponseNode`); dispatch via `BaseNode.execute()` + the `@Operation("respond")` method (body inlined from the deleted `handlers/http.py`). |
 | **Tests** | [`server/tests/nodes/test_workflow_triggers.py`](../../../server/tests/nodes/test_workflow_triggers.py) |
 | **Skill (if any)** | none |
 | **Dual-purpose tool** | no |
@@ -22,21 +22,22 @@ out.
 
 | Handle | Connection type | Required | Purpose |
 |--------|-----------------|----------|---------|
-| `input-main` | main | yes (semantically) | Upstream node outputs are collected via `_get_connected_outputs_with_info` and made available for template substitution / default body. |
+| `input-main` | main | yes (semantically) | Upstream node outputs are surfaced as `ctx.raw["connected_outputs"]` and made available for template substitution / default body. |
 
 ## Parameters
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `statusCode` | number | `200` | no | - | HTTP status code. Coerced via `int(...)`. |
-| `responseBody` | string | `""` | no | - | Response body. Supports `{{input.<field>}}` and `{{<nodeType>.<field>}}` template substitutions using connected upstream outputs. |
-| `contentType` | options | `application/json` | no | - | One of `application/json` / `text/plain` / `text/html`. |
+| `status_code` | number | `200` | no | - | HTTP status code. Validated `100..599` (Pydantic `ge=100, le=599`). |
+| `body` | any | `None` | no | - | Response body. When a string, supports `{{input.<field>}}` and `{{<nodeType>.<field>}}` template substitutions using connected upstream outputs. Non-string values are JSON-serialized. |
+| `headers` | object | `{}` | no | - | Header dict (currently not forwarded by `resolve_webhook_response`). |
+| `content_type` | string | `application/json` | no | - | Free-form content type string. |
 
 ## Outputs (handles)
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| (none) | - | `webhookResponse` has no output handle - it terminates a response branch. The handler still returns a standard envelope (used by the executor for status tracking). |
+| `output-main` | object | The respond op's return payload (see below); typically terminates a response branch. |
 
 ### Handler return payload
 
@@ -55,29 +56,26 @@ Wrapped in the standard envelope.
 
 ```mermaid
 flowchart TD
-  A[NodeExecutor._dispatch] --> B[_get_connected_outputs_with_info<br/>returns connected_outputs + source_nodes]
-  B --> C[handle_webhook_response<br/>node_id / params / context / connected_outputs]
-  C --> D[status_code = int params.statusCode default 200]
-  D --> E[response_body = params.responseBody]
-  E --> F{response_body non-empty AND connected_outputs?}
-  F -- yes --> G[For each node_type, output in connected_outputs:<br/>replace '{{input.key}}' and '{{node_type.key}}' with str value]
+  A[BaseNode.execute -> respond op] --> B[outputs = ctx.raw connected_outputs]
+  B --> D[body = params.body]
+  D --> F{body is str AND outputs?}
+  F -- yes --> G[For each node_type, output in outputs:<br/>replace '{{input.key}}' and '{{node_type.key}}' with str value]
   F -- no --> H
-  G --> H{response_body still empty?}
-  H -- yes AND connected_outputs present --> I[response_body = json.dumps first output]
+  G --> H{body falsy AND outputs present?}
+  H -- yes --> I[body = json.dumps first output]
   H -- no --> J
-  I --> J[resolve_webhook_response node_id, statusCode, body, contentType]
-  J --> K[Return success envelope]
-  J -- Exception --> L[Return success=false<br/>error: str e]
+  I --> J[resolve_webhook_response node_id, status_code, body_text, content_type]
+  J --> K[Return sent / statusCode / contentType / bodyLength]
 ```
 
 ## Decision Logic
 
-- **Template resolution**: only applied when `response_body` is non-empty.
-  Two template formats are supported:
+- **Template resolution**: only applied when `body` is a non-empty string AND
+  there are connected outputs. Two template formats are supported:
   - `{{input.<key>}}` - pulls from any connected node's output dict
   - `{{<nodeType>.<key>}}` - pulls from a specific connected node type
-- **Empty body fallback**: if `response_body` is empty AND at least one
-  upstream node has output, the handler JSON-serialises the FIRST output
+- **Empty body fallback**: if `body` is falsy AND at least one
+  upstream node has output, the op JSON-serialises the FIRST output
   (iteration order of a Python dict keyed by node type) and uses that as
   the body. If there are no upstream outputs the body stays empty.
 - **resolve_webhook_response**: imported lazily from `routers.webhook`;
@@ -105,8 +103,8 @@ flowchart TD
 
 - `resolve_webhook_response` is looked up by `node_id`. If no matching
   webhookTrigger is pending (e.g. this node runs in a workflow without an
-  upstream `webhookTrigger`, or the trigger uses `responseMode=immediate`),
-  `resolve_webhook_response` simply no-ops - the handler still returns
+  upstream `webhookTrigger`, or the trigger uses `response_mode=immediate`),
+  `resolve_webhook_response` simply no-ops - the op still returns
   `success=True`. There is no warning that the response was dropped.
 - Template substitution uses plain `str.replace`; there is no escaping.
   Binary / non-stringifiable values will render as their Python `repr`.
@@ -114,12 +112,10 @@ flowchart TD
   (insertion order in CPython 3.7+) - which in turn depends on edge order.
   If multiple upstream nodes are connected, the output picked is not
   explicitly controlled by the user.
-- `statusCode` coercion via `int(...)` will raise on non-numeric strings,
-  which is then caught and returned as a failed envelope.
-- Unlike other handlers in the registry, `webhookResponse` is dispatched
-  in `NodeExecutor._dispatch` (not the handler registry) because it needs
-  the `connected_outputs` list - see
-  [`node_executor.py:367-381`](../../../server/services/node_executor.py).
+- `status_code` is validated by Pydantic (`ge=100, le=599`); an out-of-range
+  value fails validation and produces an error envelope before the op runs.
+- `webhookResponse` reads `ctx.raw["connected_outputs"]` — the upstream
+  outputs are surfaced into the node context by the executor for this plugin.
 
 ## Related
 

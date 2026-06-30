@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | google_workspace / trigger (polling) |
-| **Backend handler** | [`server/services/handlers/gmail.py::handle_gmail_receive`](../../../server/services/handlers/gmail.py) |
+| **Backend handler** | [`server/nodes/google/gmail_receive/__init__.py`](../../../server/nodes/google/gmail_receive/__init__.py) (`GmailReceiveNode`, a `PollingTriggerNode`; inline-Run path uses the `execute()` override, deployment path uses the `setup_service` / `fetch_ids` / `fetch_detail` / `post_emit` hooks driven by `PollingTriggerWorkflow`) |
 | **Tests** | [`server/tests/nodes/test_google_workspace.py`](../../../server/tests/nodes/test_google_workspace.py) |
 | **Skill (if any)** | none |
 | **Dual-purpose tool** | no |
@@ -12,13 +12,18 @@
 
 Polling-based trigger that fires when a new Gmail message matching a filter
 query arrives. Unlike push-based triggers (webhook, WhatsApp, Telegram) Gmail
-has no official push without extra Pub/Sub setup, so this handler polls
+has no official push without extra Pub/Sub setup, so this node polls
 `users.messages.list` at a configurable interval, diffs IDs against a
 baseline, fetches full details for new messages, and optionally marks them
 as read.
 
-Dispatches a `gmail_email_received` event via `event_waiter.dispatch` so
-deployment-mode listeners can react in parallel.
+`event_type = "gmail_email_received"`. In deployment (canary) mode the
+`PollingTriggerWorkflow` owns event fan-out directly: it calls the per-cycle
+activity built from `PollingTriggerNode.as_poll_activity()` and spawns the
+child `MachinaWorkflow` per new email — there is no `event_waiter.dispatch`
+step. The `_events.py` `gmail_message_received` CloudEvents factory is kept for
+parity / future ad-hoc emits; the legacy `dispatch_gmail_received` shim was
+removed in Wave 13.
 
 ## Inputs (handles)
 

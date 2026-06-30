@@ -54,6 +54,8 @@ API_KEY_ENCRYPTION_KEY (from .env)
 
 The derived Fernet key lives only in `EncryptionService._fernet` in process memory. It is never written to disk or to Redis.
 
+`EncryptionService` (`server/core/encryption.py`) exposes exactly five methods: `initialize(password, salt)` (derive + store the Fernet cipher), `encrypt(plaintext) -> str` (base64 ciphertext), `decrypt(ciphertext) -> str`, `clear()` (drop the in-memory key), and `is_initialized() -> bool`. `CredentialsDatabase` (`server/core/credentials_database.py`) backs both systems with `initialize() -> bytes` (creates tables, returns the salt), `save_api_key` / `get_api_key` / `delete_api_key`, and `save_oauth_tokens` / `get_oauth_tokens` / `delete_oauth_tokens(provider, customer_id="owner")`.
+
 ## Lifecycle
 
 ```
@@ -147,12 +149,17 @@ class CredentialBackend(ABC):
 
 The factory `create_backend(settings, credentials_db)` returns the selected backend with automatic fallback to Fernet if the requested backend is unavailable (e.g. `boto3` not installed for AWS).
 
-Optional dependencies for alternate backends:
+Dependencies (`server/pyproject.toml`) — the core `cryptography` package is always required for the default Fernet backend; the keyring / AWS packages are optional extras:
 
 ```toml
+[project]
+dependencies = [
+    "cryptography>=44.0.0",  # Fernet encryption (always required)
+]
+
 [project.optional-dependencies]
-keyring = ["keyring>=25.0.0"]
-aws = ["boto3>=1.34.0"]
+keyring = ["keyring>=25.0.0"]  # OS-native credential storage
+aws = ["boto3>=1.34.0"]        # AWS Secrets Manager
 ```
 
 ## Configuration

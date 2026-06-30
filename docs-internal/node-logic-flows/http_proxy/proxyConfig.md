@@ -3,17 +3,18 @@
 | Field | Value |
 |------|-------|
 | **Category** | proxy / tool (dual-purpose) |
-| **Backend handler** | [`server/services/handlers/proxy.py::handle_proxy_config`](../../../server/services/handlers/proxy.py) (delegates to [`services/handlers/tools.py::_execute_proxy_config`](../../../server/services/handlers/tools.py)) |
+| **Backend handler** | [`server/nodes/proxy/proxy_config/__init__.py`](../../../server/nodes/proxy/proxy_config/__init__.py) — `ProxyConfigNode.dispatch` (via `BaseNode.execute()` + `@Operation("dispatch")`) calls the module-level `execute_proxy_config(...)` 10-op dispatcher. The AI-tool fast path in [`server/services/handlers/tools.py`](../../../server/services/handlers/tools.py) imports the same `execute_proxy_config`. The legacy `handlers/proxy.py` was deleted in Wave 11. |
 | **Tests** | [`server/tests/nodes/test_http_proxy.py`](../../../server/tests/nodes/test_http_proxy.py) |
 | **Skill (if any)** | [`server/skills/web_agent/proxy-config-skill/SKILL.md`](../../../server/skills/web_agent/proxy-config-skill/SKILL.md) |
-| **Dual-purpose tool** | yes - tool name `proxy_config` |
+| **Dual-purpose tool** | yes - tool name `proxy_config` (`destructive = True`, `usable_as_tool = True`) |
 
 ## Purpose
 
 Admin-style CRUD node for managing proxy providers, credentials, and routing
 rules. Dispatches on the `operation` param. Works the same as both a workflow
-node and an AI-agent tool: the node handler simply forwards its parameters as
-both `args` and `node_params` to the tool handler `_execute_proxy_config`.
+node and an AI-agent tool: `ProxyConfigNode.dispatch` calls the module-level
+`execute_proxy_config(params.model_dump())`, and the AI-tool fast path in
+`tools.py` imports the same function — there is no separate handler shim.
 
 ## Inputs (handles)
 
@@ -31,15 +32,15 @@ both `args` and `node_params` to the tool handler `_execute_proxy_config`.
 | `gateway_port` | number | `0` | no | `operation in [add/update]` | Proxy port |
 | `url_template` | string (JSON) | `"{}"` | no | `operation in [add/update]` | JSON template config |
 | `cost_per_gb` | number | `0` | no | `operation in [add/update]` | USD per GB |
-| `priority` | number | `50` | no | `operation in [add/update]` | Lower = preferred |
-| `enabled` | boolean | `true` | no | `operation in [add/update]` | Provider enabled |
+| `priority` | number | `50` | no | `operation in [add/update]` | Selection priority 0-100, higher ranks first |
+| `enabled` | `Optional[bool]` | `null` | no | `operation in [add/update]` | Whether the provider is active (None = unchanged on update) |
 | `username` | string | `""` | yes (op=set_credentials) | `operation=set_credentials` | Proxy username |
-| `password` | string | `""` | yes (op=set_credentials) | `operation=set_credentials` | Proxy password |
-| `domain_pattern` | string | `""` | yes (op=add_routing_rule) | `operation=add_routing_rule` | Glob like `*.linkedin.com` |
-| `preferred_providers` | string (JSON array) | `"[]"` | no | `operation=add_routing_rule` | `["provider1"]` |
+| `password` | string (password widget) | `""` | yes (op=set_credentials) | `operation=set_credentials` | Proxy password |
+| `domain_pattern` | string | `""` | yes (op=add_routing_rule) | `operation=add_routing_rule` | Glob like `*.example.com` |
+| `preferred_providers` | `Any` (JSON array string) | `"[]"` | no | `operation=add_routing_rule` | `["provider1"]` |
 | `required_country` | string | `""` | no | `operation=add_routing_rule` | ISO country |
 | `session_type` | options | `rotating` | no | `operation=add_routing_rule` | `rotating` or `sticky` |
-| `rule_id` | number | `0` | yes (op=remove_routing_rule) | `operation=remove_routing_rule` | Rule PK |
+| `rule_id` | `Optional[int]` | `null` | yes (op=remove_routing_rule) | `operation=remove_routing_rule` | Routing rule ID to remove |
 
 ### Operation index
 
@@ -65,19 +66,22 @@ both `args` and `node_params` to the tool handler `_execute_proxy_config`.
 ### Output payload (success)
 
 ```ts
-// The node handler wraps the tool result under result = {...}
+// execute_proxy_config returns this dict; dispatch returns it directly,
+// then BaseNode.execute() wraps it once in the standard success envelope.
 {
   success: true,
   operation: string,
-  // op-specific fields: providers / rules / stats / name / rule_id / ip+latency_ms / updated_fields
+  // op-specific fields: providers / rules / stats / name / rule_id / ip+latency_ms / status_code / updated_fields / domain_pattern
 }
 ```
+
+On `success=false`, `dispatch` raises `NodeUserError(result.error)` so the failure surfaces as an error envelope (a single WARN line), NOT a nested `result.result.success=false` payload.
 
 ## Logic Flow
 
 ```mermaid
 flowchart TD
-  A[handle_proxy_config] --> B[_execute_proxy_config args=params node_params=params]
+  A[ProxyConfigNode.dispatch] --> B[execute_proxy_config params.model_dump]
   B --> C{operation}
   C -- list_providers --> LP[proxy_svc.get_providers -> model_dump list]
   C -- get_stats --> GS[proxy_svc.get_stats]
@@ -108,7 +112,7 @@ flowchart TD
   RR -- no --> Erid[success=false]
   RR -- yes --> RR2[db.delete_proxy_routing_rule int(rule_id) + reload]
   C -- unknown --> Eunk[success=false error Unknown operation]
-  LP --> W[handle_proxy_config wraps tool_result<br/>under result=]
+  LP --> W[dispatch: success? return dict<br/>else raise NodeUserError]
   GS --> W
   LR --> W
   AP3 --> W
@@ -133,7 +137,7 @@ flowchart TD
 - **Validation**: each op checks its own required fields before any service call.
 - **Branches**: 10 operations dispatched by string match; unknown op returns `Unknown operation: <op>`.
 - **Fallbacks**: `preferred_providers` JSON parse error -> `[]`; `url_template` JSON parse error -> early return with error (no fallback).
-- **Error paths**: validation failures return `{success: false, error: "..."}` *without* setting `operation`. The node handler wraps the tool result in its own envelope and copies the tool's `success` into the outer envelope, so validation errors look like `{success: false, result: {success: false, error: "..."}}`.
+- **Error paths**: per-op validation failures return `{success: false, error: "..."}` from `execute_proxy_config`. `dispatch` checks `result.get("success")` and, when false, `raise NodeUserError(result.error or "Proxy config failed")`, so the failure surfaces as a single-WARN error envelope rather than a nested success-false payload.
 
 ## Side Effects
 
@@ -154,9 +158,9 @@ flowchart TD
 
 ## Edge cases & known limits
 
-- `handle_proxy_config` passes the same dict for both `args` and `node_params`, so the `args.get(..., node_params.get(...))` fallback resolves to the same source. This is harmless but tautological.
-- The outer node handler copies the tool's `success` into the envelope, yet still wraps the tool payload under `result`; tests must inspect both `result["success"]` AND `result["result"]["success"]`.
-- `test_provider` does a **real** HTTP call to `httpbin.org/ip` when the handler is invoked - there is no offline / dry-run path; this call is un-mocked in production.
+- The workflow-node path and the AI-tool path call the same `execute_proxy_config` function, so behaviour is identical between them.
+- A failed op no longer double-wraps: `dispatch` raises `NodeUserError` on `success=false`, so tests inspect the error envelope rather than `result["result"]["success"]`.
+- `test_provider` does a **real** HTTP call to `httpbin.org/ip` when invoked - there is no offline / dry-run path; this call is un-mocked in production.
 - `update_provider` silently returns `success=true` with `updated_fields=[]` if no fields were changed.
 - `remove_provider` / `remove_routing_rule` do not verify the row existed before issuing the delete; they always return `success=true` unless the DB raises.
 - `url_template` is re-serialized via `json.dumps(...)` before being saved, so whitespace in the caller's JSON is normalised.

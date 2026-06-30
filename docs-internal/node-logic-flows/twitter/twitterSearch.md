@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | social / tool (dual-purpose) |
-| **Backend handler** | [`server/services/handlers/twitter.py::handle_twitter_search`](../../../server/services/handlers/twitter.py) |
+| **Backend handler** | [`server/nodes/twitter/twitter_search/__init__.py`](../../../server/nodes/twitter/twitter_search/__init__.py) — dispatch via `BaseNode.execute()` + `@Operation("search")` -> `_do_search` (helpers in [`_base.py`](../../../server/nodes/twitter/_base.py)) |
 | **Tests** | [`server/tests/nodes/test_twitter.py`](../../../server/tests/nodes/test_twitter.py) |
 | **Skill (if any)** | [`server/skills/social_agent/twitter-search-skill/SKILL.md`](../../../server/skills/social_agent/twitter-search-skill/SKILL.md) |
 | **Dual-purpose tool** | yes - tool name `twitter_search` |
@@ -40,10 +40,11 @@ The first result page is returned - pagination is not surfaced to the user.
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | Standard envelope payload |
-| `output-tool` | object | Same payload when invoked via `input-tools` |
+| `output-main` | `TwitterSearchOutput` | Search results; also returned to the LLM when invoked via `input-tools` |
 
 ### Output payload
+
+`_do_search` returns `TwitterSearchOutput(tweets=..., count=..., query=...)` (`extra="allow"`). Validated + dumped by `BaseNode._serialize_result`:
 
 ```ts
 {
@@ -98,55 +99,56 @@ The first result page is returned - pagination is not surfaced to the user.
 }
 ```
 
-Wrapped in `{ success, result, execution_time }`.
-
 ## Logic Flow
 
 ```mermaid
 flowchart TD
-  A[handle_twitter_search] --> B[_get_twitter_client]
-  B -- no tokens --> Eauth[Return success=false<br/>error: Twitter not connected]
-  B --> C{query non-empty?}
-  C -- no --> Eq[Return success=false<br/>error: Search query is required]
+  A[BaseNode.execute -> @Operation search] --> C{query non-empty?}
+  C -- no --> Eq[raise RuntimeError<br/>Search query is required]
   C -- yes --> D[max_results clamp<br/>max 10, min requested, 100]
-  D --> E[to_thread _sync_search_recent<br/>tweet_fields + expansions + media + user]
-  E -. 401/403 .-> R[_refresh_and_get_client] --> E
-  E -. other Exception .-> EGEN[Return success=false<br/>error: str e]
-  E --> F[Build users_by_id, media_by_key, tweets_by_id<br/>from includes]
-  F --> G[Map raw tweets -> _format_tweet]
+  D --> CWR[call_with_retry _do_search]
+  CWR --> B[get_twitter_client]
+  B -- no access_token --> Eauth[raise RuntimeError<br/>Twitter not connected]
+  B --> E[to_thread sync_search_recent<br/>tweet_fields + expansions + media + user]
+  E -. 401/403 .-> R[refresh_and_get_client] --> E
+  E -. other Exception .-> EGEN[propagate -> BaseNode error envelope]
+  E --> F[includes_lookups -> users_by_id, media_by_key, tweets_by_id]
+  F --> G[Map raw tweets -> format_tweet]
   G --> H{tweets non-empty?}
-  H -- yes --> K[_track_twitter_usage search count=len tweets]
+  H -- yes --> K[track_twitter_usage search count=len tweets]
   H -- no --> OK
-  K --> OK[Return success=true<br/>result={tweets, count, query}]
+  K --> OK[Return TwitterSearchOutput<br/>tweets, count, query]
 ```
 
 ## Decision Logic
 
-- **Validation**: missing/empty `query` -> error envelope, no API call.
+- **Validation**: missing/empty `query` raises `RuntimeError` in `search()`
+  before any client is acquired or API call made.
 - **max_results clamp**: `max(10, min(params.max_results, 100))`. Requests below
   10 are silently raised; above 100 are silently capped.
-- **SDK call**: `_sync_search_recent` iterates `client.posts.search_recent(...)`
+- **SDK call**: `sync_search_recent` iterates `client.posts.search_recent(...)`
   once and returns `{tweets, includes}` for the first page. Subsequent pages
   are discarded.
 - **Expansions assembled**:
   - `users_by_id[author_id]` from `includes.users`
   - `media_by_key[media_key]` from `includes.media`
   - `tweets_by_id[referenced.id]` from `includes.tweets`
-- **`_format_tweet` enrichment**:
+- **`format_tweet` enrichment**:
   - Replaces every `t.co` shortlink in `text` with `expanded_url` in `display_text`.
   - If `note_tweet.text` exists, it replaces both `text` and `display_text`.
   - Attaches `author`, `urls`, `media`, `referenced_tweets` as optional keys
     (only set when data is non-empty).
   - Coerces Pydantic objects -> dicts via `model_dump()` where needed.
-- **Auth refresh**: same lazy-refresh loop as `twitterSend` - a single retry
-  via `_refresh_and_get_client` on `_is_auth_error(e)`.
+- **Auth refresh**: same lazy-refresh loop as `twitterSend` (`call_with_retry`) -
+  a single retry via `refresh_and_get_client` on `_is_auth_error(e)`.
 - **Usage tracking**: `resource_count` equals the number of tweets returned,
   not 1. Skipped entirely when results are empty.
 
 ## Side Effects
 
 - **Database writes**: one `api_usage_metrics` row per non-empty search (op
-  `search`, `resource_count=len(tweets)`) via `database.save_api_usage_metric`.
+  `search`, `resource_count=len(tweets)`) via `track_twitter_usage` ->
+  `database.save_api_usage_metric`.
 - **Broadcasts**: none.
 - **External API calls**:
   - `GET https://api.twitter.com/2/tweets/search/recent` with `expansions=author_id,attachments.media_keys,referenced_tweets.id,referenced_tweets.id.author_id`, `tweet_fields=author_id,created_at,entities,public_metrics,possibly_sensitive,lang,source,conversation_id,in_reply_to_user_id,referenced_tweets,note_tweet`, `media_fields=url,preview_image_url,type,alt_text,variants`, `user_fields=username,name,profile_image_url`.
@@ -167,14 +169,14 @@ flowchart TD
 - **Unused frontend params**: `sort_order`, `start_time`, `end_time`,
   `include_metrics`, `include_author` are wired in the UI but the handler
   does not forward any of them to the SDK.
-- **Only first page returned**: `_sync_search_recent` breaks out of the
+- **Only first page returned**: `sync_search_recent` breaks out of the
   generator after the first page regardless of `next_token`.
 - **Empty-includes tolerance**: when the API returns no `includes`, `author`,
   `media`, `urls`, and `referenced_tweets` are simply omitted from each tweet -
   consumers must treat them as optional.
 - **Referenced tweet id not in includes**: `referenced_tweets[].text` is
   `null` rather than raising.
-- **Object/dict duality in `includes`**: `_format_tweet` handles both Pydantic
+- **Object/dict duality in `includes`**: `format_tweet` handles both Pydantic
   objects and raw dicts - changes to XDK's model shapes may silently drop
   fields.
 - **Long-form tweets**: `note_tweet.text` replaces the 280-char `text`; callers

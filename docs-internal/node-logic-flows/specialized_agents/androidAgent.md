@@ -3,10 +3,8 @@
 | Field | Value |
 |------|-------|
 | **Category** | specialized_agents |
-| **Backend handler** | [`server/services/handlers/ai.py::handle_chat_agent`](../../../server/services/handlers/ai.py) (routed via registry) |
-| **Theme color** | `dracula.green` |
-| **Icon** | phone (U+1F4F1) |
-| **AGENT_CONFIGS entry** | `AIAgentNode.tsx` key `android_agent` |
+| **Plugin** | [`server/nodes/agent/android_agent/__init__.py`](../../../server/nodes/agent/android_agent/__init__.py) -> [`_specialized.py::SpecializedAgentBase.execute_op`](../../../server/nodes/agent/_specialized.py) (dispatch via `BaseNode.execute()`) |
+| **Subtitle** | Device Control |
 | **Tests** | [`server/tests/nodes/test_specialized_agents.py`](../../../server/tests/nodes/test_specialized_agents.py) |
 
 ## Purpose
@@ -29,8 +27,9 @@ the `android_agent` folder via a Master Skill.
 
 See **[Generic Specialized Agent Pattern](./_pattern.md)** for the full
 contract: inputs, parameters, outputs, logic flow, decision logic, side
-effects, edge cases. This node routes to `handle_chat_agent` with no
-behavioural differences from the other 12 variants.
+effects, edge cases. This node routes through `SpecializedAgentBase.execute_op`
+-> `execute_chat_agent` with no behavioural differences from the other 12
+variants.
 
 ## Related
 

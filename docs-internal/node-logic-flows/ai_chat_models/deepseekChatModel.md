@@ -3,15 +3,15 @@
 | Field | Value |
 |------|-------|
 | **Category** | ai_chat_models |
-| **Backend handler** | [`server/services/handlers/ai.py::handle_ai_chat_model`](../../../server/services/handlers/ai.py) |
+| **Backend handler** | [`server/nodes/model/deepseek_chat_model/__init__.py`](../../../server/nodes/model/deepseek_chat_model/__init__.py) (dispatch via `BaseNode.execute()` -> `@Operation("chat")` in [`server/nodes/model/_base.py`](../../../server/nodes/model/_base.py)) |
 | **AI service** | [`server/services/ai.py::AIService.execute_chat`](../../../server/services/ai.py) |
 | **Tests** | [`server/tests/nodes/test_ai_chat_models.py`](../../../server/tests/nodes/test_ai_chat_models.py) |
 | **Skill (if any)** | n/a |
-| **Dual-purpose tool** | no |
+| **Dual-purpose tool** | no (group `('model',)`) |
 
 ## Purpose
 
-DeepSeek V4 models (`deepseek-v4-flash`, `deepseek-v4-pro`); `deepseek-chat` / `deepseek-reasoner` remain as legacy aliases (deprecate 2026-07-24). Uses the OpenAI-compatible DeepSeek endpoint via the `services/llm/providers` layer (native path). Shares `handle_ai_chat_model`.
+DeepSeek V4 models (`deepseek-v4-flash`, `deepseek-v4-pro`); `deepseek-chat` / `deepseek-reasoner` remain as legacy aliases (deprecate 2026-07-24). Uses the OpenAI-compatible DeepSeek endpoint via the `services/llm/providers` layer (native path). The `ChatModelBase.chat` operation calls `AIService.execute_chat`. The plugin docstring describes `deepseek-chat`/`deepseek-reasoner` (V3) but the registry description in `__init__.py` predates the V4 rename - the card's V4 listing reflects current `llm_defaults.json`.
 
 ## Inputs (handles)
 
@@ -24,18 +24,22 @@ DeepSeek V4 models (`deepseek-v4-flash`, `deepseek-v4-pro`); `deepseek-chat` / `
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
 | `prompt` | string | `""` | yes | - | User message |
-| `systemMessage` | string | `""` | no | - | System prompt |
-| `model` | string | injected | no | - | `deepseek-v4-flash` / `deepseek-v4-pro`; `deepseek-chat` / `deepseek-reasoner` legacy aliases (reasoner = always-on CoT) |
-| `temperature` | number | 0-2 | no | - | |
-| `maxTokens` | number | 8-64K | no | - | |
-| `topP` | number | - | no | - | |
-| `apiKey` | string | injected | no | - | `auth_service.get_api_key('deepseek', 'default')` |
+| `system_prompt` | string | `""` | no | - | System prompt |
+| `model` | string | `""` (injected) | no | - | `deepseek-v4-flash` / `deepseek-v4-pro`; `deepseek-chat` / `deepseek-reasoner` legacy aliases (reasoner = always-on CoT) |
+| `temperature` | number\|null | `null` | no | - | 0-2 |
+| `max_tokens` | number\|null | `null` (8-64K) | no | - | 1-200000 |
+| `top_p` | number\|null | `1.0` | no | - | |
+| `frequency_penalty` | number\|null | `0.0` | no | - | -2.0 to 2.0 (DeepSeek-specific) |
+| `presence_penalty` | number\|null | `0.0` | no | - | -2.0 to 2.0 (DeepSeek-specific) |
+| `api_key` | string\|null | `null` (injected) | no | - | `auth_service.get_api_key('deepseek', 'default')` |
+
+(Field names are snake_case on `DeepseekChatModelParams`; unknown keys ignored.)
 
 ## Outputs (handles)
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | Standard envelope payload |
+| `output-model` | object | Model output; standard envelope payload |
 
 ### Output payload
 
@@ -56,7 +60,7 @@ DeepSeek V4 models (`deepseek-v4-flash`, `deepseek-v4-pro`); `deepseek-chat` / `
 
 ```mermaid
 flowchart TD
-  A[NodeExecutor dispatch] --> B[handle_ai_chat_model]
+  A[NodeExecutor dispatch -> BaseNode.execute] --> B[ChatModelBase.chat Operation]
   B --> C[AIService.execute_chat]
   C --> D{valid key + prompt?}
   D -- no --> X[error envelope]

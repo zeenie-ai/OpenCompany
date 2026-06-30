@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | chat_utility |
-| **Backend handler** | [`server/services/handlers/utility.py::handle_team_monitor`](../../../server/services/handlers/utility.py) |
+| **Backend handler** | [`server/nodes/utility/team_monitor/__init__.py`](../../../server/nodes/utility/team_monitor/__init__.py) — dispatch via `BaseNode.execute()` + `@Operation("monitor")` |
 | **Tests** | [`server/tests/nodes/test_chat_utility.py`](../../../server/tests/nodes/test_chat_utility.py) |
 | **Skill (if any)** | - |
 | **Dual-purpose tool** | no |
@@ -26,7 +26,12 @@ architecture.
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `maxHistoryItems` | number | `50` | no | - | Cap on `recent_events` slice length |
+| `team_id` | string | `""` | no | - | Explicit team id (usually resolved from upstream output instead) |
+| `auto_refresh` | boolean | `true` | no | - | UI flag for periodic refresh of the monitor panel |
+| `max_history_items` | number | `50` | no | - | Cap on `recent_events` slice length (`ge=1`) |
+
+The node carries `ui_hints = {"isMonitorPanel": True, "hideInputSection": True,
+"hideOutputSection": True}` — it renders as a dedicated monitor panel.
 
 ## Outputs (handles)
 
@@ -58,12 +63,12 @@ architecture.
 
 ```mermaid
 flowchart TD
-  A[Receive params + context] --> B{team_id in context?}
+  A[Receive params + ctx.raw] --> B{ctx.raw.team_id set?}
   B -- yes --> E[team_service.get_team_status]
-  B -- no --> C[Scan context.outputs for dict with team_id]
+  B -- no --> C[Scan ctx.raw.outputs for dict with team_id]
   C -- found --> E
   C -- not found --> D[Return empty envelope with message=No team connected]
-  E --> F[Slice recent_events by maxHistoryItems]
+  E --> F[Slice recent_events by max_history_items]
   F --> G[Return envelope with counters + lists]
 ```
 
@@ -71,14 +76,14 @@ flowchart TD
 
 - **Validation**: none.
 - **Branches**:
-  - `team_id` resolved via `context['team_id']` first, else the first connected
-    output that is a dict containing `team_id`.
+  - `team_id` resolved via `ctx.raw["team_id"]` first, else the first value in
+    `ctx.raw["outputs"]` that is a dict containing a truthy `team_id`.
   - When no `team_id` is found, returns an intentional success envelope with
     zero counters - the node does not error.
 - **Fallbacks**: counters default to 0 for any missing key; `members`,
   `active_tasks`, `recent_events` default to empty lists.
-- **Error paths**: any exception from `team_service.get_team_status` is caught
-  and returned as `success=false` with the stringified error.
+- **Error paths**: no in-op try/except; any exception from
+  `get_team_status` is wrapped by `BaseNode.execute()` into the error envelope.
 
 ## Side Effects
 
@@ -100,8 +105,7 @@ flowchart TD
 
 ## Edge cases & known limits
 
-- `maxHistoryItems` is used as a negative slice (`[-max:]`); passing a
-  non-integer triggers a `TypeError` which surfaces as `success=false`.
+- `max_history_items` is used as a negative slice (`[-max:]`) on `recent_events`.
 - The "find team_id in outputs" loop stops at the first dict it sees containing
   a truthy `team_id`; if two upstream outputs carry different team ids, behaviour
   is order-dependent.

@@ -12,8 +12,8 @@ match its doc here, and each doc must still describe what the code does.
 - **Refactoring a node**: update the matching contract test in
   `server/tests/nodes/test_<category>.py` *first*, then change the handler,
   then update this doc.
-- **Rebuilding the index below**: run `node scripts/build-node-docs-index.js`
-  (also runs in CI to fail builds when a node is missing a doc).
+- **The index below is maintained by hand** (there is no generator script
+  currently). When you add, rename, or remove a card, update its entry below.
 
 ## Conventions
 
@@ -26,7 +26,7 @@ match its doc here, and each doc must still describe what the code does.
 
 ## Index
 
-<!-- AUTO-GENERATED-INDEX-START -->
+<!-- INDEX-START (manually maintained; filenames are camelCase of the plugin `type`) -->
 
 ### ai_agents
 
@@ -42,12 +42,15 @@ match its doc here, and each doc must still describe what the code does.
 - [Gemini Chat Model (`geminiChatModel`)](./ai_chat_models/geminiChatModel.md)
 - [Groq Chat Model (`groqChatModel`)](./ai_chat_models/groqChatModel.md)
 - [Kimi Chat Model (`kimiChatModel`)](./ai_chat_models/kimiChatModel.md)
+- [LM Studio Chat Model (`lmstudioChatModel`)](./ai_chat_models/lmstudioChatModel.md)
 - [Mistral Chat Model (`mistralChatModel`)](./ai_chat_models/mistralChatModel.md)
+- [Ollama Chat Model (`ollamaChatModel`)](./ai_chat_models/ollamaChatModel.md)
 - [OpenAI Chat Model (`openaiChatModel`)](./ai_chat_models/openaiChatModel.md)
 - [OpenRouter Chat Model (`openrouterChatModel`)](./ai_chat_models/openrouterChatModel.md)
 
 ### ai_tools
 
+- [Agent Builder (`agentBuilder`)](./ai_tools/agentBuilder.md)
 - [Calculator Tool (`calculatorTool`)](./ai_tools/calculatorTool.md)
 - [Current Time Tool (`currentTimeTool`)](./ai_tools/currentTimeTool.md)
 - [DuckDuckGo Search (`duckduckgoSearch`)](./ai_tools/duckduckgoSearch.md)
@@ -73,11 +76,52 @@ match its doc here, and each doc must still describe what the code does.
 - [System Info (`systemInfo`)](./android/systemInfo.md)
 - [WiFi Automation (`wifiAutomation`)](./android/wifiAutomation.md)
 
+### chat_utility
+
+- [Chat History (`chatHistory`)](./chat_utility/chatHistory.md)
+- [Chat Send (`chatSend`)](./chat_utility/chatSend.md)
+- [Console (`console`)](./chat_utility/console.md)
+- [Create Map (`gmaps_create`)](./chat_utility/gmaps_create.md)
+- [File Handler (`fileHandler`)](./chat_utility/fileHandler.md)
+- [Team Monitor (`teamMonitor`)](./chat_utility/teamMonitor.md)
+- [Text Generator (`textGenerator`)](./chat_utility/textGenerator.md)
+
+### code_fs_process
+
+- [File Modify (`fileModify`)](./code_fs_process/fileModify.md)
+- [File Read (`fileRead`)](./code_fs_process/fileRead.md)
+- [FS Search (`fsSearch`)](./code_fs_process/fsSearch.md)
+- [JavaScript Executor (`javascriptExecutor`)](./code_fs_process/javascriptExecutor.md)
+- [Monty Executor (`montyExecutor`)](./code_fs_process/montyExecutor.md)
+- [Process Manager (`processManager`)](./code_fs_process/processManager.md)
+- [Python Executor (`pythonExecutor`)](./code_fs_process/pythonExecutor.md)
+- [Shell (`shell`)](./code_fs_process/shell.md)
+- [TypeScript Executor (`typescriptExecutor`)](./code_fs_process/typescriptExecutor.md)
+
+### document
+
+- [Document Parser (`documentParser`)](./document/documentParser.md)
+- [Embedding Generator (`embeddingGenerator`)](./document/embeddingGenerator.md)
+- [File Downloader (`fileDownloader`)](./document/fileDownloader.md)
+- [HTTP Scraper (`httpScraper`)](./document/httpScraper.md)
+- [Text Chunker (`textChunker`)](./document/textChunker.md)
+- [Vector Store (`vectorStore`)](./document/vectorStore.md)
+
 ### email
 
 - [Email Read (`emailRead`)](./email/emailRead.md)
 - [Email Receive (`emailReceive`)](./email/emailReceive.md)
 - [Email Send (`emailSend`)](./email/emailSend.md)
+
+### google_workspace
+
+- [Calendar (`googleCalendar`)](./google_workspace/googleCalendar.md)
+- [Contacts (`googleContacts`)](./google_workspace/googleContacts.md)
+- [Drive (`googleDrive`)](./google_workspace/googleDrive.md)
+- [Gmail (`googleGmail`)](./google_workspace/googleGmail.md)
+- [Gmail Receive (`googleGmailReceive`)](./google_workspace/googleGmailReceive.md)
+- [Sheets (`googleSheets`)](./google_workspace/googleSheets.md)
+- [Tasks (`googleTasks`)](./google_workspace/googleTasks.md)
 
 ### http_proxy
 
@@ -98,6 +142,7 @@ match its doc here, and each doc must still describe what the code does.
 - [Android Control Agent (`android_agent`)](./specialized_agents/androidAgent.md)
 - [Autonomous Agent (`autonomous_agent`)](./specialized_agents/autonomousAgent.md)
 - [Claude Code Agent (`claude_code_agent`)](./specialized_agents/claudeCodeAgent.md)
+- [Codex (`codex_agent`)](./specialized_agents/codexAgent.md)
 - [Coding Agent (`coding_agent`)](./specialized_agents/codingAgent.md)
 - [Consumer Agent (`consumer_agent`)](./specialized_agents/consumerAgent.md)
 - [Orchestrator Agent (`orchestrator_agent`)](./specialized_agents/orchestratorAgent.md)
@@ -146,4 +191,4 @@ match its doc here, and each doc must still describe what the code does.
 - [Webhook Response (`webhookResponse`)](./workflow_triggers/webhookResponse.md)
 - [Webhook Trigger (`webhookTrigger`)](./workflow_triggers/webhookTrigger.md)
 
-<!-- AUTO-GENERATED-INDEX-END -->
+<!-- INDEX-END -->

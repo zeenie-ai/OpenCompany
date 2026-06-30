@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | specialized_agents |
-| **Backend handler** | [`server/services/handlers/ai.py::handle_chat_agent`](../../../server/services/handlers/ai.py) |
+| **Plugin** | [`server/nodes/agent/autonomous_agent/__init__.py`](../../../server/nodes/agent/autonomous_agent/__init__.py) -> [`_specialized.py::SpecializedAgentBase.execute_op`](../../../server/nodes/agent/_specialized.py) (dispatch via `BaseNode.execute()`) |
 | **Theme color** | `dracula.purple` |
 | **Icon** | target (U+1F3AF) |
 | **Tests** | [`server/tests/nodes/test_specialized_agents.py`](../../../server/tests/nodes/test_specialized_agents.py) |
@@ -26,9 +26,11 @@ the autonomous skill pack.
 
 ## Behaviour
 
-See **[Generic Specialized Agent Pattern](./_pattern.md)**. Routes to the
-same `handle_chat_agent` -- the "autonomous" behaviour comes entirely from
-the attached skill content, not a different execution engine.
+See **[Generic Specialized Agent Pattern](./_pattern.md)**. Routes through the
+same `SpecializedAgentBase.execute_op` -> `execute_chat_agent` -- the
+"autonomous" behaviour comes entirely from the attached skill content, not a
+different execution engine. (The plugin declares a `tool_description` for when
+it is delegated to by a team lead.)
 
 ## Related
 

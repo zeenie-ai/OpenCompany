@@ -3,20 +3,31 @@
 | Field | Value |
 |------|-------|
 | **Category** | code_fs_process / filesystem |
-| **Backend handler** | [`server/services/handlers/filesystem.py::handle_shell`](../../../server/services/handlers/filesystem.py) |
-| **Backend** | [`deepagents.backends.LocalShellBackend.execute`](https://github.com/langchain-ai/deepagents) |
+| **Backend handler** | [`server/nodes/filesystem/shell/__init__.py::ShellNode.execute_op`](../../../server/nodes/filesystem/shell/__init__.py) (dispatched via `BaseNode.execute()` + `@Operation("execute")`) |
+| **Backend** | `NushellBackend.execute` (subclasses `deepagents.backends.LocalShellBackend`) in [`server/nodes/filesystem/_backend.py`](../../../server/nodes/filesystem/_backend.py) |
 | **Tests** | [`server/tests/nodes/test_code_fs_process.py`](../../../server/tests/nodes/test_code_fs_process.py) |
 | **Skill (if any)** | [`server/skills/terminal/shell-skill/SKILL.md`](../../../server/skills/terminal/shell-skill/SKILL.md) |
 | **Dual-purpose tool** | yes - tool name `shell_execute` |
 
 ## Purpose
 
-Runs a short-lived shell command inside the per-workflow workspace. Delegates
-to `LocalShellBackend.execute()`, which invokes the command via `subprocess`
-but intentionally **scrubs the system PATH**, so tools like `npm`, `node`,
-`python`, and `git` are NOT resolvable unless supplied with an absolute path.
-For long-running processes or tools that need the real PATH, users are
-directed to [`processManager`](./processManager.md).
+Runs a short-lived shell command inside the per-workflow workspace. The backend
+is **Nushell** (`NushellBackend`, a `LocalShellBackend` subclass) constructed
+with `inherit_env=True`, so external tools like `npm`, `node`, `python`, and
+`git` ARE reachable on PATH (it falls back to upstream `LocalShellBackend.execute()`
+/ POSIX `sh` / cmd.exe only when `nu` isn't installed). The command grammar is
+Nushell, not bash — `&&` / `||` / `$VAR` / backticks / `>` do not work; see
+`shell-skill/SKILL.md` for the Nu equivalents. For long-running processes
+(dev servers, watchers) users are directed to [`processManager`](./processManager.md);
+this node kills the command at `timeout`.
+
+NOTE: the node's `description` metadata still reads "sandboxed; no system PATH",
+which no longer matches the `inherit_env=True` backend — a code-side copy
+mismatch (out of scope for this card).
+
+A pre-flight regex (`_BASH_CHAIN_RE`) rejects bash chain operators (` && ` / ` || `)
+up-front with a corrective message before Nushell's parser would emit a cryptic
+`shell_andand` / `shell_oror` error.
 
 Runs synchronously under `asyncio.to_thread()` so the event loop keeps
 servicing other requests while the command executes.
@@ -31,16 +42,18 @@ servicing other requests while the command executes.
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `command` | string | `""` | yes | - | Shell command |
-| `timeout` | number | `30` | no | - | Max seconds (UI clamps 1-300) |
-| `working_directory` | string | `""` | no | - | Overrides context workspace |
+| `command` | string | (required, `min_length=1`) | yes | - | Nushell command |
+| `cwd` | string | `""` | no | - | Declared param, but `get_backend` resolves the working dir from `working_directory` (not exposed) / `ctx.workspace_dir`, so `cwd` does NOT change the backend root |
+| `timeout` | number | `30` (ge=1, le=600) | no | - | Max seconds |
+
+`ShellParams` uses `extra="ignore"` — `working_directory` is NOT exposed; the
+backend root is `ctx.workspace_dir`.
 
 ## Outputs (handles)
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | Standard envelope payload |
-| `output-tool` | object | Same payload when wired to an AI agent |
+| `output-main` | object | Standard envelope payload (node declares only `input-main` / `output-main`; `usable_as_tool=True` exposes the same payload as the `shell_execute` tool result) |
 
 ### Output payload
 
@@ -53,29 +66,34 @@ servicing other requests while the command executes.
 }
 ```
 
+`node_output_schemas.ShellOutput` declares `stdout` / `exit_code` / `truncated`
+/ `command`.
+
 ## Logic Flow
 
 ```mermaid
 flowchart TD
-  A[handle_shell] --> B{command empty?}
-  B -- yes --> E[Return error:<br/>command is required]
-  B -- no --> C[_get_backend workspace root<br/>virtual_mode=True]
+  A[execute_op] --> P{_BASH_CHAIN_RE matches<br/> && / || ?}
+  P -- yes --> Pe[raise NodeUserError:<br/>use ; or try{}catch{}]
+  P -- no --> C[get_backend workspace root<br/>NushellBackend virtual_mode, inherit_env]
   C --> D[to_thread backend.execute command, timeout]
-  D -- exception --> H[Return error envelope]
-  D -- ok --> I{exit_code?}
+  D --> S[strip_ansi result.output]
+  S --> I{exit_code?}
   I -- 124 --> I1[Log warning:<br/>Timed out]
   I -- nonzero --> I2[Log warning:<br/>Non-zero exit]
   I -- 0 --> I3[Log info: Completed]
-  I1 & I2 & I3 --> J[Return success envelope<br/>stdout, exit_code, truncated, command]
+  I1 & I2 & I3 --> J[Return dict<br/>stdout, exit_code, truncated, command]
 ```
 
 ## Decision Logic
 
-- **Validation**: empty `command` -> `"command is required"` error.
-- **Sandbox PATH**: `LocalShellBackend` strips the system PATH before spawn,
-  so by default only built-ins and absolute paths work. This is a deliberate
-  safety choice; AI agents are steered toward `process_manager` for any
-  install/build tool invocation.
+- **Validation**: empty `command` is rejected by Pydantic `min_length=1` (no
+  manual check). A ` && ` / ` || ` in the command -> `raise NodeUserError` with
+  a Nushell-equivalent hint (`;` or `try { … } catch { … }`).
+- **Inherited PATH**: `NushellBackend(inherit_env=True)` — external tools
+  (`npm`, `node`, `python`, `git`, …) ARE reachable. The previous "scrubbed
+  PATH" framing no longer holds. AI agents are still steered toward
+  `process_manager` for long-running daemons (the shell kills at `timeout`).
 - **Timeout handling**: `timeout` is forwarded to
   `backend.execute(command, timeout=timeout)`. On timeout the backend kills
   the process and sets `exit_code=124` (POSIX convention). Logged at WARNING.
@@ -90,8 +108,10 @@ flowchart TD
   before the operator-log line), so colour/cursor codes from tools like
   `vite`/`npm` don't render as garbage in the Output panel. `click.unstyle` is
   byte-faithful apart from the stripped escapes.
-- **Broad `except Exception`**: backend failures (missing binary,
-  `virtual_mode` violations) become an error envelope.
+- **No catch-all error wrapper**: the op does not wrap `backend.execute` in a
+  try/except — non-zero exit codes are returned as a normal success envelope
+  with `exit_code != 0`. An unexpected backend exception surfaces with a full
+  traceback via `BaseNode.execute()`'s generic path.
 
 ## Side Effects
 
@@ -99,23 +119,22 @@ flowchart TD
 - **Broadcasts**: none (but the process stdout/stderr is NOT streamed to
   Terminal - only `processManager` does that).
 - **External API calls**: none.
-- **File I/O**: `os.makedirs(root, exist_ok=True)` on the workspace root. The
-  command itself may read/write under that root.
-- **Subprocess**: one per call, via the backend's `subprocess.run`
-  (synchronous, scrubbed PATH). Finished before the handler returns.
+- **File I/O**: `get_backend` ensures the workspace root exists. The command
+  itself may read/write under that root.
+- **Subprocess**: one per call, via the backend's subprocess (synchronous,
+  inherited PATH). Finished before the operation returns.
 
 ## External Dependencies
 
-- **Python packages**: `deepagents`.
+- **Python packages**: `deepagents` (via `NushellBackend`), `core.ansi`.
 - **Environment variables**: `WORKSPACE_BASE_DIR`.
-- **OS utilities**: whatever the command references - but PATH is empty, so
-  absolute paths only.
+- **OS utilities**: `nu` (Nushell) on PATH for the primary path; whatever the
+  command references is reachable because PATH is inherited.
 
 ## Edge cases & known limits
 
-- **Missing binaries masquerade as command failures**: because PATH is
-  scrubbed, a plain `npm test` gives "command not found" rather than a
-  permissions error. Users often confuse this for a broken node.
+- **Nushell grammar, not bash**: `&&` / `||` are pre-flight-rejected; `$VAR`,
+  backticks, and `>` redirection differ from bash. See `shell-skill/SKILL.md`.
 - **Truncation corrupts JSON output**: if a command prints JSON and the
   backend truncates, the `stdout` string becomes invalid JSON with no
   trailing marker beyond `truncated=true`.
@@ -124,10 +143,10 @@ flowchart TD
   SIGTERM-on-timeout.
 - **`timeout` is best-effort**: the backend uses `subprocess.run(..., timeout=)`.
   A child process that ignores SIGTERM may keep running until SIGKILL.
-- **Stdin is empty**: the handler exposes no way to pipe data into the
+- **Stdin is empty**: the node exposes no way to pipe data into the
   command - `input_data` from upstream nodes does not reach it.
 - **No environment variable override**: users cannot inject env vars via
-  parameters; the backend sets its own minimal env.
+  parameters; the backend inherits the server's env (`inherit_env=True`).
 - **Windows path traversal check is string-based**: `virtual_mode=True`
   normalises paths but trust-boundary violations depend on the backend
   implementation.

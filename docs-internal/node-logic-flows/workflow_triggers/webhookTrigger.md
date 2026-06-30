@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | workflow / trigger |
-| **Backend handler** | [`server/services/handlers/triggers.py::handle_trigger_node`](../../../server/services/handlers/triggers.py) (generic) |
+| **Backend handler** | Plugin [`server/nodes/trigger/webhook_trigger/__init__.py`](../../../server/nodes/trigger/webhook_trigger/__init__.py) (`WebhookTriggerNode`); dispatch via `BaseNode.execute()`. The base `TriggerNode.execute` runs the event wait; the `@Operation("wait")` body is a stub. |
 | **Tests** | [`server/tests/nodes/test_workflow_triggers.py`](../../../server/tests/nodes/test_workflow_triggers.py) |
 | **Skill (if any)** | none |
 | **Dual-purpose tool** | no |
@@ -11,11 +11,13 @@
 ## Purpose
 
 Start a workflow when an HTTP request hits `/webhook/{path}`. The
-`webhook` router in `server/routers/webhook.py` receives the request and
-dispatches a `webhook_received` event via
-`event_waiter.dispatch()`. This node registers an asyncio.Future waiter
-(memory mode) or a Redis-Streams consumer group (Redis mode) via the shared
-`event_waiter` module and blocks until a matching event is delivered.
+`webhook` router in `server/routers/webhook.py` receives the request and the
+producer [`server/nodes/trigger/webhook_trigger/_events.py`](../../../server/nodes/trigger/webhook_trigger/_events.py)
+emits a CloudEvents `WorkflowEvent` (`type: com.machinaos.webhook.received`)
+via `dispatch.emit`. `webhookTrigger` is canary-registered, so
+`DeploymentManager` starts a `TriggerListenerWorkflow` that receives the event
+via Temporal Signal and spawns a child `MachinaWorkflow` per matching event
+(filtered by `path`).
 
 ## Inputs (handles)
 
@@ -27,12 +29,12 @@ dispatches a `webhook_received` event via
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `path` | string | `""` | yes | - | URL path segment - full URL is `http://host:3010/webhook/{path}`. Must match the incoming request's `path` for the filter to accept it. |
-| `method` | options | `POST` | no | - | Filter for HTTP method at the router layer (not the handler's filter). Values: `GET` / `POST` / `PUT` / `DELETE` / `ALL`. |
-| `responseMode` | options | `immediate` | no | - | `immediate` returns 200 OK right away; `responseNode` waits for a downstream `webhookResponse` node (see [`webhookResponse`](./webhookResponse.md)). |
+| `path` | string | `""` | no | - | URL path segment - full URL is `http://host:3010/webhook/{path}`. Must match the incoming request's `path` for the filter to accept it. Empty path = wildcard (matches any). |
+| `method` | options | `POST` | no | - | Filter for HTTP method at the router layer (not the plugin filter). Values: `GET` / `POST` / `PUT` / `DELETE` / `ALL`. |
+| `response_mode` | options | `immediate` | no | - | `immediate` returns 200 OK right away; `responseNode` waits for a downstream `webhookResponse` node (see [`webhookResponse`](./webhookResponse.md)). |
 | `authentication` | options | `none` | no | - | `none` or `header`. |
-| `headerName` | string | `X-API-Key` | no | authentication == `header` | Expected header name. |
-| `headerValue` | string | `""` | no | authentication == `header` | Expected header value. |
+| `header_name` | string | `X-API-Key` | no | authentication == `header` | Expected header name. |
+| `header_value` | string (secret) | `""` | no | authentication == `header` | Expected header value. |
 
 ## Outputs (handles)
 
@@ -61,21 +63,17 @@ Wrapped in the standard envelope.
 
 ```mermaid
 flowchart TD
-  A[handle_trigger_node] --> B[event_waiter.get_trigger_config 'webhookTrigger']
-  B -- None --> Eunk[Return success=false<br/>error: Unknown trigger type]
-  B -- ok --> C[await event_waiter.register<br/>node_type, node_id, params]
-  C --> D[build_webhook_filter: checks path equality]
-  D --> E[StatusBroadcaster.update_node_status 'waiting'<br/>with event_type=webhook_received, waiter_id]
-  E --> F[await event_waiter.wait_for_event waiter]
-  F -- CancelledError --> G[Return success=false<br/>error: Cancelled by user]
-  F -- Exception --> H[Return success=false<br/>error: str e]
-  F -- ok --> I[Return success envelope<br/>result = event_data]
+  P[HTTP request hits /webhook/path] --> Q[routers/webhook.py + _events.py<br/>dispatch.emit com.machinaos.webhook.received]
+  Q --> R[TriggerListenerWorkflow receives via Temporal Signal]
+  R --> S[WebhookTriggerNode.build_filter:<br/>event.path == params.path]
+  S -- match --> T[spawn child MachinaWorkflow<br/>trigger pre-executed with event payload]
+  S -- no match --> R
 ```
 
 ## Decision Logic
 
-- **Filter match** (`build_webhook_filter` in `triggers.py`): accepts any
-  event whose `data.path` equals `params.path`. If `path` is empty the
+- **Filter match** (`WebhookTriggerNode.build_filter`): accepts any
+  event whose `path` equals `params.path`. If `path` is empty the
   filter accepts anything.
 - **Method / authentication** are NOT enforced inside the filter - they are
   supposed to be enforced at the router layer when the HTTP request lands.
@@ -85,10 +83,10 @@ flowchart TD
 
 ## Side Effects
 
-- **Database writes**: none inside the handler. (Redis mode writes waiter
-  metadata to a Redis key `waiters:<uuid>` with a 24h TTL via `CacheService`.)
-- **Broadcasts**: `update_node_status(node_id, "waiting", {message, event_type, waiter_id}, workflow_id)`
-  exactly once when the waiter is registered.
+- **Database writes**: none inside the plugin.
+- **Broadcasts**: the producer emits a CloudEvents `WorkflowEvent` via
+  `dispatch.emit`. The `TriggerListenerWorkflow` emits firing-pulse status via
+  `broadcast_trigger_status_activity` around each child spawn.
 - **External API calls**: none.
 - **File I/O**: none.
 - **Subprocess**: none.
@@ -96,9 +94,9 @@ flowchart TD
 ## External Dependencies
 
 - **Credentials**: none.
-- **Services**: `services.event_waiter`, `services.status_broadcaster`,
-  `routers.webhook` (dispatches events via `broadcaster.send_custom_event` /
-  `event_waiter.dispatch`).
+- **Services**: `services.deployment` (canary listener), `services.events.dispatch`,
+  `services.status_broadcaster`, `routers.webhook` (receives the HTTP request and
+  drives `_events.py` to emit the event).
 - **Python packages**: stdlib only.
 - **Environment variables**: none.
 

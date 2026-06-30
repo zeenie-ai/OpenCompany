@@ -3,15 +3,15 @@
 | Field | Value |
 |------|-------|
 | **Category** | ai_chat_models |
-| **Backend handler** | [`server/services/handlers/ai.py::handle_ai_chat_model`](../../../server/services/handlers/ai.py) |
+| **Backend handler** | [`server/nodes/model/cerebras_chat_model/__init__.py`](../../../server/nodes/model/cerebras_chat_model/__init__.py) (dispatch via `BaseNode.execute()` -> `@Operation("chat")` in [`server/nodes/model/_base.py`](../../../server/nodes/model/_base.py)) |
 | **AI service** | [`server/services/ai.py::AIService.execute_chat`](../../../server/services/ai.py) |
 | **Tests** | [`server/tests/nodes/test_ai_chat_models.py`](../../../server/tests/nodes/test_ai_chat_models.py) |
 | **Skill (if any)** | n/a |
-| **Dual-purpose tool** | no |
+| **Dual-purpose tool** | no (group `('model',)`) |
 
 ## Purpose
 
-Ultra-fast inference on Cerebras' custom AI hardware. Models include Llama 3.1, GPT-OSS-120b, Qwen-3-235b. Shares `handle_ai_chat_model`. Like Groq, routes through the **LangChain fallback** (`is_native_provider('cerebras')` is False).
+Ultra-fast inference on Cerebras' custom AI hardware. Models include Llama 3.1, GPT-OSS-120b, Qwen-3-235b. The `ChatModelBase.chat` operation calls `AIService.execute_chat`. Like Groq, routes through the **LangChain fallback** (`is_native_provider('cerebras')` is False).
 
 ## Inputs (handles)
 
@@ -24,20 +24,23 @@ Ultra-fast inference on Cerebras' custom AI hardware. Models include Llama 3.1, 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
 | `prompt` | string | `""` | yes | - | User message |
-| `systemMessage` | string | `""` | no | - | System prompt |
-| `model` | string | injected | no | - | e.g. `llama3.1-8b`, `gpt-oss-120b`, `qwen-3-235b-a22b` |
-| `temperature` | number | 0-1.5 | no | - | Narrower range than OpenAI (0-1.5 rather than 0-2) |
-| `maxTokens` | number | up to 8K | no | - | |
-| `topP` | number | - | no | - | |
-| `thinkingEnabled` | boolean | false | no | - | Only Qwen-3-235b supports format-based reasoning |
-| `reasoningFormat` | options | `parsed` | no | `thinkingEnabled=[true]` | `parsed` / `hidden` - same semantics as Groq Qwen |
-| `apiKey` | string | injected | no | - | `auth_service.get_api_key('cerebras', 'default')` |
+| `system_prompt` | string | `""` | no | - | System prompt |
+| `model` | string | `""` (injected) | no | - | e.g. `llama3.1-8b`, `gpt-oss-120b`, `qwen-3-235b-a22b` |
+| `temperature` | number\|null | `null` | no | - | Narrower range than OpenAI (0-1.5 rather than 0-2) |
+| `max_tokens` | number\|null | `null` (up to 8K) | no | - | 1-200000 |
+| `top_p` | number\|null | `1.0` | no | - | |
+| `thinking_enabled` | boolean | `false` | no | - | Only Qwen-3-235b supports format-based reasoning |
+| `thinking_budget` | number\|null | `2048` | no | `thinking_enabled=[true]` | 1024-16000 (Cerebras Qwen budget) |
+| `reasoning_format` | enum | `parsed` | no | - | `parsed` / `hidden` - same semantics as Groq Qwen (inherited base field) |
+| `api_key` | string\|null | `null` (injected) | no | - | `auth_service.get_api_key('cerebras', 'default')` |
+
+(Field names are snake_case on `CerebrasChatModelParams`; unknown keys ignored.)
 
 ## Outputs (handles)
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | Standard envelope payload |
+| `output-model` | object | Model output; standard envelope payload |
 
 ### Output payload
 
@@ -58,7 +61,7 @@ Ultra-fast inference on Cerebras' custom AI hardware. Models include Llama 3.1, 
 
 ```mermaid
 flowchart TD
-  A[NodeExecutor dispatch] --> B[handle_ai_chat_model]
+  A[NodeExecutor dispatch -> BaseNode.execute] --> B[ChatModelBase.chat Operation]
   B --> C[AIService.execute_chat]
   C --> D{valid key + prompt?}
   D -- no --> X[error envelope]

@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | ai_tools (dual-purpose) |
-| **Backend handler** | [`server/services/handlers/todo.py::handle_write_todos`](../../../server/services/handlers/todo.py) (workflow) / `execute_write_todos` (tool) |
+| **Backend handler** | [`server/nodes/tool/write_todos/__init__.py`](../../../server/nodes/tool/write_todos/__init__.py) — `WriteTodosNode`, dispatched via `BaseNode.execute()` + the `@Operation("write")` method (logic inlined; the standalone `services/handlers/todo.py::handle_write_todos` / `execute_write_todos` still exist but are no longer the dispatch path) |
 | **Service** | [`server/services/todo_service.py::TodoService`](../../../server/services/todo_service.py) |
 | **Tests** | [`server/tests/nodes/test_ai_tools.py`](../../../server/tests/nodes/test_ai_tools.py) |
 | **Skill (if any)** | [`server/skills/assistant/write-todos-skill/SKILL.md`](../../../server/skills/assistant/write-todos-skill/SKILL.md) |
@@ -51,51 +51,49 @@ generic-params card. `uiHints.isTodoEditor` (declared on the plugin) routes
 
 ## Parameters
 
+The `WriteTodosParams` model field IS the LLM-provided tool arg (no separate
+`toolName` / `toolDescription` node params — those live on the class as
+`tool_name` / `tool_description`).
+
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `toolName` | string | `write_todos` | no | - | LLM-visible tool name |
-| `toolDescription` | string | (see frontend, 3-row hint) | no | - | LLM-visible description |
-
-### LLM-provided tool args (at invocation time)
-
-| Arg | Type | Description |
-|-----|------|-------------|
-| `todos` | `Array<{content: string, status: 'pending' \| 'in_progress' \| 'completed'}>` | Full replacement snapshot of the todo list |
+| `todos` | `Array<TodoItem>` | `[]` | no | - | Full replacement snapshot. `TodoItem = {id?: string, content: string, status: 'pending' \| 'in_progress' \| 'completed'}`. A JSON-encoded string is coerced to a list by the `_coerce_todos` `field_validator(mode="before")` (handles Gemini stringified-array args). |
 
 ## Outputs (handles)
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-tool` | object | Tool result returned to the LLM |
-| `output-main` | object | Same payload, available when run as a workflow node |
+| `output-tool` | object | Tool result returned to the LLM (`WriteTodosOutput` has `extra="allow"`, so the dict below passes through) |
 
 ### Output payload (TypeScript shape)
 
 ```ts
 {
-  success: true;
   message: string;   // "Updated todo list (<N> items)"
-  todos: string;     // JSON string of the validated list
+  todos: Array<{ id?: string; content: string; status: string }>;  // the validated list (NOT a JSON string)
   count: number;     // len(stored)
 }
 ```
+
+Note: the op returns the validated `todos` LIST, not a JSON string. The
+pre-fix `format_for_llm()` call that stringified this leaked a raw JSON string
+into the key, which the `WriteTodosOutput` contract now rejects — the
+LLM-facing serialization happens downstream.
 
 ## Logic Flow
 
 ```mermaid
 flowchart TD
-  A[handle_write_todos node_id / parameters / context] --> B[Build config: node_id + workflow_id + broadcaster]
-  B --> C[execute_write_todos tool_args=parameters config]
-  C --> D[session_key = workflow_id OR node_id OR default]
+  A[BaseNode.execute -> write ctx params] --> D[session_key = ctx.workflow_id OR ctx.node_id OR default]
   D --> E[service = get_todo_service singleton]
-  E --> F[service.write session_key todos_input]
-  F --> G[Per-item validation: dict? content stripped non-empty? status in VALID_STATUSES?]
-  G --> H[Serialize validated list to JSON, store in _store session_key]
-  H --> I{broadcaster + node_id?}
-  I -- yes --> J[await broadcaster.update_node_status node_id executing<br/>data.phase = todo_update<br/>data.todos = stored<br/>workflow_id = workflow_id]
+  E --> F[service.write session_key todos dumped from params.todos]
+  F --> G[Per-item validation inside TodoService]
+  G --> I{broadcaster on ctx.raw?}
+  I -- yes --> J[await broadcaster.update_node_status node_id executing<br/>data.phase = todo_update<br/>data.todos = stored<br/>workflow_id]
   I -- no --> K[skip]
-  J --> L[Return success + message + todos JSON + count]
-  K --> L
+  J --> M[dispatch_todos_updated CloudEvent via services.events.dispatch.emit]
+  K --> M
+  M --> L[Return message + todos list + count]
 ```
 
 ## Decision Logic
@@ -123,9 +121,14 @@ flowchart TD
 - **In-memory state writes**: `TodoService._store[session_key] = json.dumps(validated)`.
   State persists for the lifetime of the Python process only.
 - **Database writes**: none.
-- **Broadcasts**: `StatusBroadcaster.update_node_status(node_id, "executing",
-  {"phase": "todo_update", "todos": [...]}, workflow_id=workflow_id)` - one
-  per successful write, when a broadcaster is present in context.
+- **Broadcasts** (two per successful write):
+  - `StatusBroadcaster.update_node_status(node_id, "executing",
+    {"phase": "todo_update", "todos": [...]}, workflow_id=...)` — drives the
+    canvas glow; only when a broadcaster is present on `ctx.raw`.
+  - `dispatch_todos_updated(...)` — typed `todos_updated` CloudEvent
+    (`com.machinaos.todos.updated`) via `services.events.dispatch.emit`
+    (`server/nodes/tool/write_todos/_events.py`), refreshing the open Current
+    Todos panel's `['todos', session_key]` query. Fires unconditionally.
 - **External API calls**: none.
 - **File I/O**: none.
 - **Subprocess**: none.
@@ -148,16 +151,17 @@ flowchart TD
 - **All validation silent**: dropping an item with empty content or coercing
   an invalid status never produces a warning in the return payload - only a
   DEBUG log line.
-- **Broadcast failures swallowed by caller**: `handle_write_todos` awaits
+- **Broadcast failures bubble up**: the `write` op awaits
   `update_node_status`; if the broadcaster raises, the exception bubbles up
-  to the executor (no `try/except` inside the handler).
-- **`todos` returned as a JSON string, not an object**: the LLM must parse
-  it again. This matches Claude Code's `TodoWrite` tool convention.
+  to `BaseNode.execute()` (no `try/except` inside the op).
+- **`todos` returned as a list, not a JSON string**: the Output contract
+  declares `todos: Optional[list]`; returning a stringified list is rejected
+  by `BaseNode._serialize_result`.
 - **Content is trimmed** (`.strip()`) but otherwise not sanitised - markdown
   or HTML in content survives untouched.
 
 ## Related
 
-- **Sibling tools**: [`calculatorTool`](./calculatorTool.md), [`currentTimeTool`](./currentTimeTool.md), [`duckduckgoSearch`](./duckduckgoSearch.md), [`taskManager`](./taskManager.md)
+- **Sibling tools**: [`calculatorTool`](./calculatorTool.md), [`currentTimeTool`](./currentTimeTool.md), [`duckduckgoSearch`](./duckduckgoSearch.md), [`taskManager`](./taskManager.md), [`agentBuilder`](./agentBuilder.md)
 - **Skill using this tool**: [`write-todos-skill/SKILL.md`](../../../server/skills/assistant/write-todos-skill/SKILL.md)
 - **Architecture docs**: [Status Broadcaster](../../status_broadcaster.md), [Agent Architecture](../../agent_architecture.md)

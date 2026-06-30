@@ -91,7 +91,7 @@ await clear_agent_session_state(
 Three stores are cleared in one call:
 
 1. **Vector store** (when `clear_long_term=True`) — `del services.ai._memory_vector_stores[session_id]`.
-2. **TodoService** — every candidate key (`workflow_id`, `session_id`, `"default"`) is cleared because [`server/nodes/tool/write_todos.py`](../server/nodes/tool/write_todos.py) uses `ctx.workflow_id or ctx.node_id or "default"` as the storage key and we want to clear whichever fallback the write path actually used.
+2. **TodoService** — every candidate key (`workflow_id`, `session_id`, `"default"`) is cleared because [`server/nodes/tool/write_todos/__init__.py`](../server/nodes/tool/write_todos/__init__.py) uses `ctx.workflow_id or ctx.node_id or "default"` as the storage key and we want to clear whichever fallback the write path actually used.
 3. **simpleMemory node fields** (when `memory_node_id` provided) — `memory_content` → `DEFAULT_MEMORY_CONTENT`; `last_session_id` → `None` (so claude_code_agent starts fresh next run instead of `--resume`-ing into a wiped transcript); orphan `memory_jsonl` field popped if present.
 
 Frontend `clear_memory` WS handler ([`routers/websocket.py:2167`](../server/routers/websocket.py)) calls this; UI presents a Reset Memory button on the simpleMemory parameter panel.

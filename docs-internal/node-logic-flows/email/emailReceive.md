@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | email / trigger |
-| **Backend handler** | [`server/services/handlers/email.py::handle_email_receive`](../../../server/services/handlers/email.py) |
+| **Backend handler** | [`server/nodes/email/email_receive/__init__.py`](../../../server/nodes/email/email_receive/__init__.py) — Run-button path is the `execute()` override; deployment-mode polling uses the `PollingTriggerNode` hooks (`setup_service` / `fetch_ids` / `fetch_detail` / `post_emit`) draining via the canary `TriggerListenerWorkflow` path |
 | **Tests** | [`server/tests/nodes/test_email.py`](../../../server/tests/nodes/test_email.py) |
 | **Skill (if any)** | none shipped |
 | **Dual-purpose tool** | no (trigger only) |
@@ -24,9 +24,9 @@ None. Triggers have no inputs.
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `provider` | options | `googleGmail` | no | - | Preset key in `email_providers.json` |
+| `provider` | options | `gmail` | no | - | Preset key in `email_providers.json` |
 | `folder` | string | `INBOX` | no | - | IMAP folder to watch |
-| `poll_interval` | number | `60` | no | - | Seconds between polls. Clamped to `[min_interval, max_interval]` from config (30-3600) |
+| `poll_interval` | number | `60` | no | - | Seconds between polls. Pydantic-validated `30-3600` (`poll_interval_clamp = (30, 3600)`) and re-clamped against config `min_interval`/`max_interval` |
 | `filter_query` | string | `""` | no | - | Reserved, currently not applied during polling |
 | `mark_as_read` | boolean | `false` | no | - | When true, adds the `Seen` flag to the new message after fetch |
 
@@ -57,7 +57,7 @@ Wrapped in the standard envelope: `{ success: true, result: <payload>, execution
 
 ```mermaid
 flowchart TD
-  A[handle_email_receive] --> B[resolve_credentials]
+  A[EmailReceiveNode.execute] --> B[resolve_credentials]
   B -->|ValueError| Ec[error envelope]
   B --> C[resolve_poll_params]
   C --> D[broadcaster.update_node_status waiting]
@@ -70,7 +70,7 @@ flowchart TD
   I --> J{mark_as_read?}
   J -- yes --> K[himalaya flag add Seen id]
   J -- no --> L[skip]
-  K --> M[event_waiter.dispatch email_received]
+  K --> M[dispatch_email_received -> dispatch.emit<br/>CloudEvents WorkflowEvent]
   L --> M
   M --> N[Return success envelope]
 ```
@@ -83,9 +83,10 @@ flowchart TD
 - **Interval clamping** in `EmailService.resolve_poll_params`:
   `max(min_interval, min(max_interval, requested))`. Defaults come from
   `email_providers.json -> polling` block.
-- **One event per handler run**: as soon as any new IDs are seen, the handler
-  fetches the *first* of them, dispatches a single `email_received` event,
-  and returns. Remaining new IDs are added to `seen` but not processed;
+- **One event per Run-button `execute()` run**: as soon as any new IDs are seen,
+  it fetches the *first* of them, dispatches a single `email_received` event via
+  `dispatch_email_received`, and returns. Remaining new IDs are added to `seen`
+  but not processed;
   they will be skipped on the next run because they are now considered
   baseline.
 - **`filter_query` is unused in polling**: the parameter appears in the UI
@@ -99,13 +100,20 @@ flowchart TD
 
 ## Side Effects
 
-- **Database writes**: none directly. (The `event_waiter.dispatch` side is
-  in-memory only - no DB row is written for the event.)
+- **Database writes**: none directly.
 - **Broadcasts**: one `update_node_status(..., "waiting", ...)` when polling
   starts, with `workflow_id` from context.
-- **Event bus**: `event_waiter.dispatch("email_received", email_data)` fires
-  once per handler run. Downstream trigger consumers (e.g. another
-  `emailReceive` listener) receive this payload.
+- **Event bus (canary path)**: `dispatch_email_received(email_data)` ->
+  `services.events.dispatch.emit` with a CloudEvents `WorkflowEvent`
+  (`type = "com.machinaos.email.message.received"`, `subject = message_id`,
+  outer wire-routing key `email_received`). `emailReceive` is canary-registered
+  via `register_canary_trigger_type("emailReceive", "com.machinaos.email.message.received")`
+  in [`nodes/email/__init__.py`](../../../server/nodes/email/__init__.py), so the
+  deployment manager skips the legacy `setup_event_trigger` and a Temporal-durable
+  `TriggerListenerWorkflow` consumes the event; the same call also broadcasts the
+  envelope to the FE on the `email_received` wire key. The legacy
+  `event_waiter.dispatch` path has zero consumers in canary mode and is no longer
+  called (`_events.py`).
 - **External API calls**: none direct - IMAP traffic flows through Himalaya.
 - **File I/O**: one `himalaya_*.toml` tempfile per subprocess call (baseline,
   each poll, fetch, flag). Each is deleted in `finally`.
@@ -117,7 +125,8 @@ flowchart TD
 - **Binary**: `himalaya` on `PATH`.
 - **Credentials**: same as [`emailSend`](./emailSend.md#external-dependencies).
 - **Services**: `StatusBroadcaster` (for the waiting status),
-  `event_waiter` (for dispatch).
+  `services.events.dispatch` (canary CloudEvents emit via `_events.py`);
+  `event_waiter.register_filter_builder` only for the `emailReceive` filter.
 - **Config**: `server/config/email_providers.json -> polling`.
 
 ## Edge cases & known limits

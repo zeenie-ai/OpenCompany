@@ -3,15 +3,15 @@
 | Field | Value |
 |------|-------|
 | **Category** | ai_chat_models |
-| **Backend handler** | [`server/services/handlers/ai.py::handle_ai_chat_model`](../../../server/services/handlers/ai.py) |
+| **Backend handler** | [`server/nodes/model/mistral_chat_model/__init__.py`](../../../server/nodes/model/mistral_chat_model/__init__.py) (dispatch via `BaseNode.execute()` -> `@Operation("chat")` in [`server/nodes/model/_base.py`](../../../server/nodes/model/_base.py)) |
 | **AI service** | [`server/services/ai.py::AIService.execute_chat`](../../../server/services/ai.py) |
 | **Tests** | [`server/tests/nodes/test_ai_chat_models.py`](../../../server/tests/nodes/test_ai_chat_models.py) |
 | **Skill (if any)** | n/a |
-| **Dual-purpose tool** | no |
+| **Dual-purpose tool** | no (group `('model',)`) |
 
 ## Purpose
 
-Mistral AI models (`mistral-large-latest`, `mistral-medium-latest`, `mistral-small-latest`, `codestral-latest`). Up to 256K context, 131K output. No thinking/reasoning support. Uses OpenAI-compatible Mistral endpoint via native path. Shares `handle_ai_chat_model`.
+Mistral AI models (`mistral-large-latest`, `mistral-medium-latest`, `mistral-small-latest`, `codestral-latest`). Up to 256K context, 131K output. No thinking/reasoning support. Uses OpenAI-compatible Mistral endpoint via native path. `MistralChatModelNode` uses the shared `ChatModelParams` unchanged. The `ChatModelBase.chat` operation calls `AIService.execute_chat`.
 
 ## Inputs (handles)
 
@@ -24,18 +24,20 @@ Mistral AI models (`mistral-large-latest`, `mistral-medium-latest`, `mistral-sma
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
 | `prompt` | string | `""` | yes | - | User message |
-| `systemMessage` | string | `""` | no | - | System prompt |
-| `model` | string | injected | no | - | `mistral-large-latest`, `mistral-medium-latest`, `mistral-small-latest`, `codestral-latest` |
-| `temperature` | number | 0-1.5 | no | - | Narrower range than OpenAI (0-1.5) |
-| `maxTokens` | number | up to 131K | no | - | |
-| `topP` | number | - | no | - | |
-| `apiKey` | string | injected | no | - | `auth_service.get_api_key('mistral', 'default')` |
+| `system_prompt` | string | `""` | no | - | System prompt |
+| `model` | string | `""` (injected) | no | - | `mistral-large-latest`, `mistral-medium-latest`, `mistral-small-latest`, `codestral-latest` |
+| `temperature` | number\|null | `null` | no | - | Narrower range than OpenAI (0-1.5) |
+| `max_tokens` | number\|null | `null` (up to 131K) | no | - | 1-200000 |
+| `top_p` | number\|null | `1.0` | no | - | |
+| `api_key` | string\|null | `null` (injected) | no | - | `auth_service.get_api_key('mistral', 'default')` |
+
+(Mistral uses the shared `ChatModelParams` unchanged; field names are snake_case, unknown keys ignored.)
 
 ## Outputs (handles)
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | Standard envelope payload |
+| `output-model` | object | Model output; standard envelope payload |
 
 ### Output payload
 
@@ -56,7 +58,7 @@ Mistral AI models (`mistral-large-latest`, `mistral-medium-latest`, `mistral-sma
 
 ```mermaid
 flowchart TD
-  A[NodeExecutor dispatch] --> B[handle_ai_chat_model]
+  A[NodeExecutor dispatch -> BaseNode.execute] --> B[ChatModelBase.chat Operation]
   B --> C[AIService.execute_chat]
   C --> D{valid key + prompt?}
   D -- no --> X[error envelope]

@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | document |
-| **Backend handler** | [`server/services/handlers/document.py::handle_text_chunker`](../../../server/services/handlers/document.py) |
+| **Backend handler** | [`server/nodes/document/text_chunker/__init__.py`](../../../server/nodes/document/text_chunker/__init__.py) — `TextChunkerNode`; dispatch via `BaseNode.execute()` + `@Operation("chunk")` |
 | **Tests** | [`server/tests/nodes/test_document.py`](../../../server/tests/nodes/test_document.py) |
 | **Skill (if any)** | none |
 | **Dual-purpose tool** | no |
@@ -26,10 +26,12 @@ pipeline.
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `documents` | array | `[]` | yes | - | List of `{content, source}` dicts (or raw strings) |
-| `chunkSize` | number | `1024` | no | - | Max chars per chunk (100-8000) |
-| `chunkOverlap` | number | `200` | no | - | Char overlap between adjacent chunks (0-1000) |
-| `strategy` | options | `recursive` | no | - | `recursive` / `markdown` (token strategy is documented but falls through to recursive) |
+| `text` | string | `""` | no | - | Declared Params field; wrapped into `documents` as `[{content: text}]` if `documents` absent |
+| `strategy` | options | `recursive` | no | - | `recursive` / `markdown` / `token` (token falls through to recursive) |
+| `chunk_size` | number | `1000` | no | - | Declared Params field (100-8000) |
+| `overlap` | number | `200` | no | - | Declared Params field (0-1000) |
+
+**Quirk**: `Params = TextChunkerParams` declares `text` / `strategy` / `chunk_size` / `overlap` (snake_case), but `extra="allow"` passes camelCase through and the `chunk` op reads `documents`, `chunkSize` (default `1000`), `chunkOverlap` or `overlap`, and `strategy` off `model_dump()`. So the operative inputs at runtime are `documents`/`text`, `chunkSize`, `chunkOverlap`/`overlap`, `strategy`.
 
 ## Outputs (handles)
 
@@ -57,7 +59,7 @@ Wrapped in standard envelope: `{ success, result, execution_time, node_id, node_
 
 ```mermaid
 flowchart TD
-  A[handle_text_chunker] --> B{documents empty?}
+  A[TextChunkerNode.chunk] --> B{documents empty?}
   B -- yes --> Ret0[Return success=true<br/>chunks=[], chunk_count=0]
   B -- no --> C{strategy}
   C -- markdown --> Cm[MarkdownTextSplitter]

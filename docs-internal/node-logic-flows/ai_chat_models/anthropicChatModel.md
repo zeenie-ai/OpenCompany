@@ -3,15 +3,15 @@
 | Field | Value |
 |------|-------|
 | **Category** | ai_chat_models |
-| **Backend handler** | [`server/services/handlers/ai.py::handle_ai_chat_model`](../../../server/services/handlers/ai.py) |
+| **Backend handler** | [`server/nodes/model/anthropic_chat_model/__init__.py`](../../../server/nodes/model/anthropic_chat_model/__init__.py) (dispatch via `BaseNode.execute()` -> `@Operation("chat")` in [`server/nodes/model/_base.py`](../../../server/nodes/model/_base.py)) |
 | **AI service** | [`server/services/ai.py::AIService.execute_chat`](../../../server/services/ai.py) |
 | **Tests** | [`server/tests/nodes/test_ai_chat_models.py`](../../../server/tests/nodes/test_ai_chat_models.py) |
 | **Skill (if any)** | n/a |
-| **Dual-purpose tool** | no |
+| **Dual-purpose tool** | yes - tool name `anthropic_chat_model` (advisor; `usable_as_tool = True`, group `('model', 'tool')`) |
 
 ## Purpose
 
-Single-turn chat completion against the Anthropic Messages API (Claude family). Shares the same handler as all other chat-model nodes (`handle_ai_chat_model`); provider-specific branching lives inside `AIService.execute_chat` and the native `services/llm/providers/anthropic.py`.
+Single-turn chat completion against the Anthropic Messages API (Claude family). The `ChatModelBase.chat` operation (in `_base.py`) calls `AIService.execute_chat` for every chat-model node; provider-specific branching lives inside `execute_chat` and the native `services/llm/providers/anthropic.py`. Also wired as an AI-agent advisor tool (`usable_as_tool = True`) so an agent can consult a stronger model mid-task.
 
 ## Inputs (handles)
 
@@ -24,21 +24,23 @@ Single-turn chat completion against the Anthropic Messages API (Claude family). 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
 | `prompt` | string | `""` | yes (non-empty) | - | User message |
-| `systemMessage` / `systemPrompt` / `system_prompt` | string | `""` | no | - | System prompt |
-| `model` | string | injected from stored models, fallback `gpt-3.5-turbo` (Anthropic override via stored models list) | no | - | Anthropic model ID - **hyphenated** form (e.g. `claude-sonnet-4-6`, NOT `claude-sonnet-4.6`) |
-| `temperature` | number | 0-1 range | no | - | Clamped to 0-1 for Claude; forced to 1 when thinking is enabled |
-| `maxTokens` | number | model default | no | - | **Must be greater than `thinkingBudget`** when thinking is enabled |
-| `topP` | number | - | no | - | Nucleus sampling |
-| `thinkingEnabled` | boolean | false | no | - | Enable extended thinking |
-| `thinkingBudget` | number | 2048 | no | `thinkingEnabled=[true]` | 1024-16000 tokens allocated to internal reasoning |
-| `apiKey` | string | injected | no | - | `auth_service.get_api_key('anthropic', 'default')` |
-| `options` | object | `{}` | no | - | Flattened into top-level params |
+| `system_prompt` | string | `""` | no | - | System prompt |
+| `model` | string | `""` (injected from stored models) | no | - | Anthropic model ID - **hyphenated** form (e.g. `claude-sonnet-4-6`, NOT `claude-sonnet-4.6`) |
+| `temperature` | number\|null | `null` -> falls through to `agent.default_temperature` | no | - | Clamped to 0-1 for Claude; forced to 1 when thinking is enabled |
+| `max_tokens` | number\|null | `null` -> per-model default | no | - | 1-200000. **Must be greater than `thinking_budget`** when thinking is enabled |
+| `top_p` | number\|null | `1.0` | no | - | Nucleus sampling (0-1) |
+| `top_k` | number\|null | `40` | no | - | 1-100; Anthropic-specific |
+| `thinking_enabled` | boolean | `false` | no | - | Enable extended thinking |
+| `thinking_budget` | number\|null | `2048` | no | `thinking_enabled=[true]` | 1024-16000 tokens allocated to internal reasoning |
+| `api_key` | string\|null | `null` (injected) | no | - | `auth_service.get_api_key('anthropic', 'default')` |
+
+(Field names are snake_case on the `AnthropicChatModelParams` Pydantic model; `model_config = ConfigDict(extra="ignore")` drops unknown keys.)
 
 ## Outputs (handles)
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | Standard envelope payload |
+| `output-model` | object | Model output (also feeds an agent's `input-model` handle); standard envelope payload |
 
 ### Output payload
 
@@ -61,8 +63,8 @@ Wrapped in `{ success, node_id, node_type, result, execution_time }`.
 
 ```mermaid
 flowchart TD
-  A[NodeExecutor dispatch] --> B[_prepare_parameters]
-  B --> C[handle_ai_chat_model]
+  A[NodeExecutor dispatch -> BaseNode.execute] --> B[ChatModelBase.chat Operation]
+  B --> C[get_ai_service]
   C --> D[AIService.execute_chat]
   D --> E{api_key + non-empty prompt?}
   E -- no --> X[ValueError -> error envelope]

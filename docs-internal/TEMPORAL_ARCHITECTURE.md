@@ -12,6 +12,33 @@ Each workflow node executes as a **Temporal activity** with its own isolated con
 
 `rlm_agent`, `claude_code_agent` are intentionally excluded from AgentWorkflow — their externalised loops (RLM REPL / Claude CLI `--resume`) require single-process state continuity.
 
+## Execution Routing & Running
+
+`WorkflowService.execute_workflow` picks one of three executors in priority order (`server/services/workflow.py`):
+
+1. If `TEMPORAL_ENABLED=true` and Temporal is configured → `_execute_temporal()` (the distributed path documented in this file).
+2. Else if Redis is available → `_execute_parallel()` (local parallel orchestration via `WorkflowExecutor`).
+3. Else → `_execute_sequential()` (single-threaded fallback).
+
+**Running with Temporal** — the Temporal server and the embedded worker start automatically with every launch script:
+
+```bash
+npm run start            # Starts Temporal server + all services
+npm run dev              # Starts Temporal server + all services (dev mode)
+npm run stop             # Stops all services including Temporal
+```
+
+The embedded Temporal worker runs **inside the Python backend** — registered in the `main.py` lifespan via `TemporalWorkerManager`, not as a separate process.
+
+**Standalone worker** (for horizontal scaling — add more pollers against the same task queue):
+
+```bash
+cd server
+python -m services.temporal.worker
+```
+
+This invokes `run_standalone_worker()` from `services/temporal/worker.py`.
+
 ## System Architecture
 
 ```
@@ -426,9 +453,12 @@ Trigger nodes that aren't the firing trigger are:
 ```
 server/services/temporal/
 ├── __init__.py          # Exports TemporalExecutor, TemporalClientWrapper
-├── activities.py        # NodeExecutionActivities class
+├── activities.py        # NodeExecutionActivities class (legacy WebSocket round-trip path)
 │   ├── execute_node_activity()   # Main activity method
 │   └── _execute_via_websocket()  # WebSocket execution
+├── plugin_activities.py # collect_plugin_activities() -> per-type node.{type}.v{ver} activities (F4.A)
+├── agent_workflow.py    # AgentWorkflow child workflow (F4.B agent loop)
+├── agent_activities.py  # collect_agent_activities() -> the 7 agent.*.v1 activities (F4.B)
 ├── workflow.py          # MachinaWorkflow class
 │   ├── run()                     # Main orchestrator
 │   ├── _filter_executable_graph() # Config node filtering
@@ -524,6 +554,8 @@ One supervisor-build-time env var (read inside `_temporal_specs.py`, not in `Set
 | `TEMPORAL_SERVER_READY_TIMEOUT_SECONDS` | `120` | How long the supervisor waits for Temporal's gRPC port to come up. Covers the first-run binary download (~114 MB) if `machina build` didn't pre-cache. |
 
 ## Debugging
+
+The Web UI is at http://localhost:8080; the UI's HTTP API is served at http://localhost:8233.
 
 ```bash
 # Temporal Web UI

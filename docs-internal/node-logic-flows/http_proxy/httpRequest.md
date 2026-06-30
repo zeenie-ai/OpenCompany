@@ -3,10 +3,10 @@
 | Field | Value |
 |------|-------|
 | **Category** | utility / tool (dual-purpose) |
-| **Backend handler** | [`server/services/handlers/http.py::handle_http_request`](../../../server/services/handlers/http.py) |
+| **Backend handler** | [`server/nodes/utility/http_request/__init__.py`](../../../server/nodes/utility/http_request/__init__.py) — `HttpRequestNode.request` (dispatched via `BaseNode.execute()` + `@Operation("request")`; the legacy `handlers/http.py` was deleted in Wave 11.D.3) |
 | **Tests** | [`server/tests/nodes/test_http_proxy.py`](../../../server/tests/nodes/test_http_proxy.py) |
 | **Skill (if any)** | [`server/skills/web_agent/http-request-skill/SKILL.md`](../../../server/skills/web_agent/http-request-skill/SKILL.md) |
-| **Dual-purpose tool** | yes - exposed to agents as a generic HTTP tool |
+| **Dual-purpose tool** | yes - tool name `http_request` (`usable_as_tool = True`) |
 
 ## Purpose
 
@@ -26,14 +26,15 @@ configured residential proxy provider via `ProxyService`.
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
 | `method` | options | `GET` | no | - | One of `GET` / `POST` / `PUT` / `DELETE` / `PATCH` |
-| `url` | string | `""` | **yes** | - | Target URL; empty value short-circuits with `URL is required` |
-| `headers` | string (JSON) | `"{}"` | no | - | JSON object; invalid JSON silently falls back to `{}` |
-| `body` | string | `""` | no | `method in [POST, PUT, PATCH]` | Sent as JSON when parseable, else as raw content |
-| `timeout` | number | `30` | no | - | Seconds; coerced via `float(...)` |
-| `useProxy` | boolean | `false` | no | - | Route through `ProxyService.get_proxy_url` |
-| `proxyProvider` | string | `""` | no | `useProxy=true` | Specific provider name (empty -> auto-select) |
-| `proxyCountry` | string | `""` | no | `useProxy=true` | ISO country code for geo-targeting |
-| `sessionType` | options | `rotating` | no | `useProxy=true` | `rotating` or `sticky` |
+| `url` | string | `""` | **yes** | - | Target URL; empty value raises `RuntimeError('URL is required')` |
+| `headers` | object (`Dict[str,str]`) | `{}` | no | - | Request headers passed straight to httpx |
+| `body` | `Optional[Any]` | `null` | no | `method in [POST, PUT, PATCH]` | JSON object or raw string; ignored for GET/DELETE. String parsed as JSON when possible, else sent as raw content |
+| `timeout` | number | `30` | no | - | Seconds (1-600); coerced via `float(...)` |
+| `use_proxy` | boolean | `false` | no | - | Route through `ProxyService.get_proxy_url` |
+| `proxy_provider` | string | `auto` | no | `use_proxy=true` | Specific provider name (`auto` selects by health score) |
+| `proxy_country` | string | `""` | no | `use_proxy=true` | ISO country code for geo-targeting |
+| `session_type` | options | `rotating` | no | `use_proxy=true` | `rotating` or `sticky` |
+| `sticky_duration` | number | `600` | no | `use_proxy=true` and `session_type=sticky` | Sticky session duration in seconds |
 
 ## Outputs (handles)
 
@@ -54,50 +55,48 @@ configured residential proxy provider via `ProxyService`.
 }
 ```
 
-Wrapped in the standard envelope: `{ success: <status<400>, node_id, node_type: 'httpRequest', result, execution_time, timestamp }`.
+The `request` op returns this dict directly; `BaseNode.execute()` wraps it in the standard success envelope. A status `>= 400` raises `RuntimeError(f"HTTP {status}: ...")` instead of returning, so it lands in the error envelope. The declared `HttpRequestOutput` model only pins `status` / `headers` / `body` (`extra="allow"`), so the extra `data` / `url` / `method` / `proxied` keys pass through unvalidated.
 
 ## Logic Flow
 
 ```mermaid
 flowchart TD
-  A[handle_http_request] --> B[Read method/url/headers/body/timeout]
+  A[HttpRequestNode.request] --> B[Read params method/url/headers/body/timeout]
   B --> C{url truthy?}
-  C -- no --> Eerr[Return success=false<br/>error: URL is required]
-  C -- yes --> D[Parse headers JSON<br/>fallback {} on JSONDecodeError]
-  D --> E{useProxy?}
-  E -- no --> G[httpx.AsyncClient timeout=timeout]
-  E -- yes --> F[_get_proxy_url_if_enabled<br/>-> proxy_svc.get_proxy_url]
-  F -- returns None --> G
-  F -- returns url --> G2[httpx.AsyncClient proxy=proxy_url timeout=timeout]
-  F -- raises --> G3[Log warning, proceed without proxy -> G]
-  G --> H{method in POST/PUT/PATCH<br/>and body truthy?}
+  C -- no --> Eerr[raise RuntimeError<br/>URL is required]
+  C -- yes --> D[_resolve_proxy_url use_proxy params]
+  D -- use_proxy false --> G[httpx.AsyncClient timeout=timeout]
+  D -- returns url --> G2[httpx.AsyncClient proxy=proxy_url timeout=timeout]
+  D -- service off / raises --> G3[Log warning, proceed without proxy -> G]
+  G --> H{method in POST/PUT/PATCH<br/>and body is not None?}
   G2 --> H
   G3 --> H
-  H -- yes JSON parseable --> I[kwargs.json = parsed]
-  H -- yes non-JSON --> I2[kwargs.content = body]
+  H -- yes str JSON parseable --> I[kwargs.json = parsed]
+  H -- yes str non-JSON --> I2[kwargs.content = body]
+  H -- yes non-str --> I4[kwargs.json = body]
   H -- no --> I3[no body]
   I --> J[await client.request]
   I2 --> J
   I3 --> J
-  J -- response --> K[response.json fallback text]
-  K --> L[Return success=(status<400)<br/>with status/data/headers/url/method/proxied]
-  J -- TimeoutException --> T[Return success=false<br/>error: Request timed out]
-  J -- Exception --> Z[Return success=false<br/>error: str(e)]
+  I4 --> J
+  J --> K[response.json fallback text]
+  K --> L{status >= 400?}
+  L -- yes --> M[raise RuntimeError HTTP status]
+  L -- no --> N[return dict status/data/headers/url/method/proxied]
 ```
 
 ## Decision Logic
 
-- **Validation**: `url` empty -> raises `ValueError('URL is required')` caught by outer `try`.
+- **Validation**: `url` empty -> raises `RuntimeError('URL is required')` (surfaced via the error envelope by `BaseNode.execute()`).
 - **Branches**:
-  - `useProxy=true` -> attempt proxy lookup; swallow proxy errors and fall back to direct call.
-  - Body handling depends on `method` and JSON-parseability of `body`.
+  - `use_proxy=true` -> `_resolve_proxy_url` attempts a lookup; proxy errors are swallowed and the request falls back to a direct call.
+  - Body handling depends on `method` and the type / JSON-parseability of `body` (str-JSON -> `json`, str-non-JSON -> `content`, non-str -> `json`).
 - **Fallbacks**:
-  - Invalid headers JSON -> `{}`.
-  - Proxy service disabled / `get_proxy_url` raises -> proceed without proxy.
+  - Proxy service disabled / not enabled / `get_proxy_url` raises -> proceed without proxy (returns `None`).
   - Non-JSON response body -> plain `text` string in `data`.
 - **Error paths**:
-  - `TimeoutException` (class name match) -> user-friendly `Request timed out after N seconds`.
-  - Any other exception -> `str(e)` verbatim in envelope.
+  - Status `>= 400` -> `raise RuntimeError(f"HTTP {status}: {body!r}")`.
+  - Any httpx exception (timeout, connection error, etc.) propagates uncaught; `BaseNode.execute()` produces the error envelope with the traceback. There is no timeout special-casing.
 
 ## Side Effects
 
@@ -116,10 +115,9 @@ flowchart TD
 
 ## Edge cases & known limits
 
-- Proxy lookup errors are **swallowed** (`_get_proxy_url_if_enabled` logs a warning and returns `None`); the request then proceeds directly, silently losing the proxy. Downstream nodes can detect this by checking `result.proxied`.
-- Timeout detection is by `type(e).__name__ == 'TimeoutException'` (string match) rather than `isinstance`; subclass hierarchy changes in httpx could bypass this branch.
-- `success` in the envelope reflects `status < 400`, so non-2xx 3xx responses (e.g. unfollowed 302) count as success.
-- The handler always wraps with `execution_time = time.time() - start_time`; no caching, no retry (retry is only implemented in `proxyRequest`).
+- Proxy lookup errors are **swallowed** (`_resolve_proxy_url` logs a warning and returns `None`); the request then proceeds directly, silently losing the proxy. Downstream nodes can detect this by checking `result.proxied`.
+- A `4xx`/`5xx` response raises `RuntimeError` rather than returning the body, so the error envelope carries the status; `3xx` are followed by httpx default and only surface if final status is `>= 400`.
+- No caching, no retry (retry / failover is only implemented in `proxyRequest`).
 - `response.url` (final URL) is stringified; for non-proxied requests with redirects disabled this equals the request URL.
 
 ## Related

@@ -3,10 +3,10 @@
 | Field | Value |
 |------|-------|
 | **Category** | whatsapp / tool (dual-purpose) |
-| **Backend handler** | [`server/services/handlers/whatsapp.py::handle_whatsapp_send`](../../../server/services/handlers/whatsapp.py) |
+| **Backend handler** | [`server/nodes/whatsapp/whatsapp_send.py`](../../../server/nodes/whatsapp/whatsapp_send.py) (`WhatsAppSendNode`); dispatched via `BaseNode.execute()` -> `@Operation("send")`, which delegates to [`server/nodes/whatsapp/_base.py::handle_whatsapp_send`](../../../server/nodes/whatsapp/_base.py) |
 | **Tests** | [`server/tests/nodes/test_whatsapp.py`](../../../server/tests/nodes/test_whatsapp.py) |
 | **Skill (if any)** | [`server/skills/social_agent/whatsapp-send-skill/SKILL.md`](../../../server/skills/social_agent/whatsapp-send-skill/SKILL.md) |
-| **Dual-purpose tool** | yes - tool name `whatsappSend` |
+| **Dual-purpose tool** | yes - tool name `whatsapp_send` |
 
 ## Purpose
 
@@ -35,7 +35,7 @@ Key parameters (see frontend definition for the full list and `displayOptions.sh
 | `channel_jid` | string | `""` | conditional | Required when `recipient_type == 'channel'`, must end `@newsletter` |
 | `message_type` | options | `text` | yes | `text`, `image`, `video`, `audio`, `document`, `sticker`, `location`, `contact` |
 | `message` | string | `""` | conditional | Required when `message_type == 'text'` |
-| `format_markdown` | boolean | `false` | no | When true and text message, convert GFM to WhatsApp syntax via `markdown_formatter.to_whatsapp` |
+| `format_markdown` | boolean | `true` | no | When true and text message, convert GFM to WhatsApp syntax via `markdown_formatter.to_whatsapp` |
 | `media_source` | options | `base64` | conditional | `base64`, `file`, or `url` for media types |
 | `media_data` | string | `""` | conditional | Base64 data when `media_source == 'base64'` |
 | `file_path` | string/object | `""` | conditional | Either a path string or upload dict `{type: 'upload', filename, mimeType}` |
@@ -53,8 +53,9 @@ Key parameters (see frontend definition for the full list and `displayOptions.sh
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | Standard envelope result |
-| `output-tool` | object | Same payload when wired into an AI agent's `input-tools` |
+| `output-main` | object | The handler `result` dict (see below). The plugin `Output` model is `WhatsAppSendOutput` (`message_id`, `sent`, `extra="allow"`). |
+
+When wired into an AI agent's `input-tools` handle (`usable_as_tool=True`, tool name `whatsapp_send`) the same `result` payload is returned to the LLM.
 
 ### Output payload
 
@@ -101,7 +102,7 @@ flowchart TD
   T2 -- no --> S
   T3 --> S
   T -- no --> S
-  S[await routers.whatsapp.handle_whatsapp_send params] --> S2{data.success?}
+  S[await nodes.whatsapp._service.handle_whatsapp_send params] --> S2{data.success?}
   S2 -- no --> Eret6[success=false<br/>error from RPC]
   S2 -- yes --> F[Build result dict with<br/>status/recipient/type-specific fields]
   F --> OK[success=true]
@@ -117,21 +118,21 @@ flowchart TD
   - Empty `message` when `message_type == 'text'`
 - **Markdown transform**: only runs when `message_type == 'text'` AND `format_markdown` truthy. Overwrites `parameters['message']` in place before RPC call.
 - **Type-specific result fields**: `match message_type` adds `preview`, `media_source`, `caption`, `filename`, `mime_type`, `uploaded_file`, `location`, or `contact_name` based on message type.
-- **File upload detection**: if `file_path` is a dict with `type == 'upload'`, the router uploads bytes and the result includes `uploaded_file` and `mime_type` from the upload dict.
+- **File upload detection**: if `file_path` is a dict with `type == 'upload'`, the `_service.py` send handler uploads bytes and the result includes `uploaded_file` and `mime_type` from the upload dict.
 
 ## Side Effects
 
-- **Database writes**: none directly from this handler. (Tracking, if any, is owned by the router.)
-- **Broadcasts**: none directly - standard node_status transitions come from `NodeExecutor`.
-- **External calls**: WebSocket RPC to the Go service. Default URL `ws://localhost:9400/ws/rpc` (overridable via `WHATSAPP_RPC_URL`). For media URLs, the router additionally downloads via `httpx`.
-- **File I/O**: none in this handler - file uploads are handled by the router.
+- **Database writes**: none directly from this handler. (API-usage cost is recorded by the `@Operation` `cost` metadata via `BaseNode.execute()`.)
+- **Broadcasts**: none directly - standard node_status transitions come from `BaseNode.execute()`.
+- **External calls**: WebSocket RPC to the Go `whatsapp-rpc` service via [`nodes/whatsapp/_service.py::whatsapp_rpc_call`](../../../server/nodes/whatsapp/_service.py). Default URL `ws://localhost:9400/ws/rpc` (overridable via `WHATSAPP_RPC_URL`). For media URLs, `_service.py` additionally downloads via `httpx`.
+- **File I/O**: none in this handler - file uploads are handled in `_service.py`.
 - **Subprocess**: none.
 
 ## External Dependencies
 
 - **Credentials**: none at the node handler level. Pairing state is owned by the Go service; the handler is credential-free.
 - **Services**: `whatsapp-rpc` (Go) on port 9400 (default). `services.markdown_formatter.to_whatsapp` when `format_markdown` is enabled.
-- **Python packages**: `asyncio`. (`httpx` is used inside the router for URL media fetches.)
+- **Python packages**: `asyncio`. (`httpx` is used inside `_service.py` for URL media fetches.)
 - **Environment variables**: `WHATSAPP_RPC_URL` (optional, default `ws://localhost:9400/ws/rpc`).
 
 ## Edge cases & known limits
@@ -147,4 +148,4 @@ flowchart TD
 
 - **Skills using this as a tool**: [`whatsapp-send-skill/SKILL.md`](../../../server/skills/social_agent/whatsapp-send-skill/SKILL.md)
 - **Companion nodes**: [`whatsappDb`](./whatsappDb.md), [`whatsappReceive`](./whatsappReceive.md)
-- **Architecture docs**: [Markdown Formatter](../../../CLAUDE.md) (see "Markdown Formatter Service"), WhatsApp RPC via `routers/whatsapp.py`
+- **Architecture docs**: [Markdown Formatter](../../../CLAUDE.md) (see "Markdown Formatter Service"), WhatsApp RPC via `nodes/whatsapp/_service.py`

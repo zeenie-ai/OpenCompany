@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | social / trigger |
-| **Backend handler** | [`server/services/handlers/triggers.py::handle_trigger_node`](../../../server/services/handlers/triggers.py) (generic) + [`server/services/event_waiter.py::build_twitter_filter`](../../../server/services/event_waiter.py) |
+| **Backend handler** | Plugin [`server/nodes/twitter/twitter_receive/__init__.py`](../../../server/nodes/twitter/twitter_receive/__init__.py); `execute()` delegates to [`server/services/handlers/triggers.py::handle_trigger_node`](../../../server/services/handlers/triggers.py) (generic). Filter: [`server/nodes/twitter/_filters.py::build_filter`](../../../server/nodes/twitter/_filters.py). Events: [`server/nodes/twitter/_events.py`](../../../server/nodes/twitter/_events.py). |
 | **Tests** | [`server/tests/nodes/test_twitter.py`](../../../server/tests/nodes/test_twitter.py) |
 | **Skill (if any)** | none |
 | **Dual-purpose tool** | no (trigger only) |
@@ -18,8 +18,17 @@ no push webhooks on the free tier); polling is driven by the deployment layer
 register a waiter, block on `event_waiter.wait_for_event`, and surface the
 matching event.
 
-Filtering is done by the closure returned from `build_twitter_filter` in
-`event_waiter.py`.
+**Canary status**: `twitterReceive` is the lone **deferred** trigger plugin —
+it is NOT in the canary registry (`register_canary_trigger_type` is not
+called). The Temporal-durable `TriggerListenerWorkflow` / `PollingTriggerWorkflow`
+path requires the node to subclass `PollingTriggerNode` and declare the four
+hooks (same shape as `GmailReceiveNode`); until that refactor lands it runs on
+the legacy `event_waiter` collector/processor path. `_events.py` carries the
+typed `WorkflowEvent` factory + dual-path dispatcher (`dispatch_twitter_event_received`)
+ready for canary opt-in.
+
+Filtering is done by the closure returned from `build_filter` in
+`nodes/twitter/_filters.py` (auto-registered into `event_waiter.FILTER_BUILDERS`).
 
 ## Inputs (handles)
 
@@ -40,13 +49,13 @@ Trigger node - no inputs.
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | Raw event data returned by `event_waiter.wait_for_event` |
+| `output-main` | `TwitterReceiveOutput` | Raw event data returned by `event_waiter.wait_for_event`. The declared `Output` model (`tweet_id`, `text`, `author`, plus `extra="allow"`) passes through the full dispatched payload. |
 
 ### Output payload (contract)
 
 The event shape is produced by whichever polling loop dispatches
-`twitter_event_received`. Documented fields the filter and downstream nodes
-rely on:
+`twitter_event_received` (legacy `event_type`, preserved in `_events.py`).
+Documented fields the filter and downstream nodes rely on:
 
 ```ts
 {
@@ -72,7 +81,7 @@ The handler wraps this in `{ success: true, result: <event_data>, execution_time
 flowchart TD
   A[handle_trigger_node] --> B[event_waiter.get_trigger_config twitterReceive]
   B -- None --> E1[Return success=false<br/>error: Unknown trigger type]
-  B -- config --> C[event_waiter.register<br/>build_twitter_filter]
+  B -- config --> C[event_waiter.register<br/>_filters.build_filter]
   C --> D[broadcaster.update_node_status waiting]
   D --> E[await event_waiter.wait_for_event]
   E -- CancelledError --> Ecx[Return success=false<br/>error: Cancelled by user]
@@ -82,15 +91,15 @@ flowchart TD
   subgraph Producer
     P1[Deployment polling task] --> P2[Fetch via XDK<br/>mentions/search/user_timeline]
     P2 --> P3[event_waiter.dispatch<br/>twitter_event_received]
-    P3 --> P4[build_twitter_filter.matches]
+    P3 --> P4[_filters.build_filter.matches]
     P4 -- match --> P5[Waiter.future.set_result]
   end
 ```
 
 ## Decision Logic (filter)
 
-`build_twitter_filter(params)` returns a `matches(data)` closure that rejects
-non-matching events:
+`build_filter(params)` (in `nodes/twitter/_filters.py`) returns a `matches(data)`
+closure that rejects non-matching events:
 
 - `trigger_type != 'all'` and `data['trigger_type'] != trigger_type` -> reject.
   (Frontend only exposes `mentions` / `search` / `timeline`; there is no way to
@@ -101,7 +110,7 @@ non-matching events:
 - **user_timeline branch**: if `trigger_type == 'user_timeline'` and `user_id`
   is set, require `data['user_id'] == user_id` (exact). Empty `user_id`
   accepts any timeline event.
-- No `filter_retweets` / `filter_replies` logic exists in `build_twitter_filter`.
+- No `filter_retweets` / `filter_replies` logic exists in `build_filter`.
 
 ### Execution-side handler branches
 

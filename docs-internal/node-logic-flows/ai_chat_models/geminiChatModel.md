@@ -3,15 +3,15 @@
 | Field | Value |
 |------|-------|
 | **Category** | ai_chat_models |
-| **Backend handler** | [`server/services/handlers/ai.py::handle_ai_chat_model`](../../../server/services/handlers/ai.py) |
+| **Backend handler** | [`server/nodes/model/gemini_chat_model/__init__.py`](../../../server/nodes/model/gemini_chat_model/__init__.py) (dispatch via `BaseNode.execute()` -> `@Operation("chat")` in [`server/nodes/model/_base.py`](../../../server/nodes/model/_base.py)) |
 | **AI service** | [`server/services/ai.py::AIService.execute_chat`](../../../server/services/ai.py) |
 | **Tests** | [`server/tests/nodes/test_ai_chat_models.py`](../../../server/tests/nodes/test_ai_chat_models.py) |
 | **Skill (if any)** | n/a |
-| **Dual-purpose tool** | no |
+| **Dual-purpose tool** | yes - tool name `gemini_chat_model` (advisor; `usable_as_tool = True`, group `('model', 'tool')`) |
 
 ## Purpose
 
-Single-turn chat completion against Google's Gemini API (google-genai native SDK). Shares the common `handle_ai_chat_model` handler.
+Single-turn chat completion against Google's Gemini API (google-genai native SDK). The `ChatModelBase.chat` operation calls `AIService.execute_chat`. Also wired as an AI-agent advisor tool (`usable_as_tool = True`) so an agent can consult Gemini mid-task.
 
 ## Inputs (handles)
 
@@ -24,22 +24,24 @@ Single-turn chat completion against Google's Gemini API (google-genai native SDK
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
 | `prompt` | string | `""` | yes (non-empty) | - | User message |
-| `systemMessage` | string | `""` | no | - | System prompt |
-| `model` | string | injected | no | - | e.g. `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-3-pro` |
-| `temperature` | number | 0-2 | no | - | 0-2 range |
-| `maxTokens` | number | clamped to model ceiling | no | - | Up to 65K output |
-| `topP` | number | - | no | - | |
-| `thinkingEnabled` | boolean | false | no | - | Enable thinking (2.5 Pro/Flash, 3.x) |
-| `thinkingBudget` | number | 2048 | no | `thinkingEnabled=[true]` | Token budget for internal reasoning |
-| `safetySettings` | object | provider defaults | no | - | Gemini safety category thresholds |
-| `apiKey` | string | injected | no | - | `auth_service.get_api_key('gemini', 'default')` |
-| `options` | object | `{}` | no | - | Flattened |
+| `system_prompt` | string | `""` | no | - | System prompt |
+| `model` | string | `""` (injected) | no | - | e.g. `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-3-pro` |
+| `temperature` | number\|null | `null` | no | - | 0-2 range |
+| `max_tokens` | number\|null | `null` (clamped to ceiling) | no | - | 1-200000; up to 65K output |
+| `top_p` | number\|null | `1.0` | no | - | |
+| `top_k` | number\|null | `40` | no | - | 1-100; Gemini-specific |
+| `thinking_enabled` | boolean | `false` | no | - | Enable thinking (2.5 Pro/Flash, 3.x) |
+| `thinking_budget` | number\|null | `2048` | no | `thinking_enabled=[true]` | 1024-16000 token budget for internal reasoning |
+| `safety_settings` | enum | `default` | no | - | `default` / `strict` / `permissive` |
+| `api_key` | string\|null | `null` (injected) | no | - | `auth_service.get_api_key('gemini', 'default')` |
+
+(Field names are snake_case on `GeminiChatModelParams`; unknown keys ignored.)
 
 ## Outputs (handles)
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | Standard envelope payload |
+| `output-model` | object | Model output; standard envelope payload |
 
 ### Output payload
 
@@ -60,8 +62,8 @@ Single-turn chat completion against Google's Gemini API (google-genai native SDK
 
 ```mermaid
 flowchart TD
-  A[NodeExecutor dispatch] --> B[_prepare_parameters]
-  B --> C[handle_ai_chat_model -> AIService.execute_chat]
+  A[NodeExecutor dispatch -> BaseNode.execute] --> B[ChatModelBase.chat Operation]
+  B --> C[AIService.execute_chat]
   C --> D{valid key + prompt?}
   D -- no --> X[error envelope]
   D -- yes --> E[detect_ai_provider -> 'gemini']

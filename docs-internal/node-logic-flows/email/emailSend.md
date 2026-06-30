@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | email / tool (dual-purpose) |
-| **Backend handler** | [`server/services/handlers/email.py::handle_email_send`](../../../server/services/handlers/email.py) |
+| **Backend handler** | [`server/nodes/email/email_send/__init__.py`](../../../server/nodes/email/email_send/__init__.py) — dispatched via `BaseNode.execute()` -> `@Operation("send")` -> `EmailService.send` ([`_service.py`](../../../server/nodes/email/_service.py)) |
 | **Tests** | [`server/tests/nodes/test_email.py`](../../../server/tests/nodes/test_email.py) |
 | **Skill (if any)** | none shipped |
 | **Dual-purpose tool** | yes - connect to `input-tools` as the node's own name |
@@ -29,7 +29,7 @@ presets (see `server/config/email_providers.json`). When wired to an AI agent's
 | `provider` | options | `gmail` | no | - | One of `gmail` / `outlook` / `yahoo` / `icloud` / `protonmail` / `fastmail` / `custom`. Picks the preset in `email_providers.json` |
 | `to` | string | `""` | **yes** | - | Comma-separated recipient list |
 | `subject` | string | `""` | **yes** | - | Email subject line |
-| `body` | string | `""` | **yes** | - | Email body (plain text or HTML, see `body_type`) |
+| `body` | string | `""` | no | - | Email body (plain text or HTML, see `body_type`); `rows: 6` textarea hint |
 | `cc` | string | `""` | no | - | CC recipients, only added if truthy |
 | `bcc` | string | `""` | no | - | BCC recipients, only added if truthy |
 | `body_type` | options | `text` | no | - | `text` or `html`. HTML sends a `multipart/alternative` MIME message |
@@ -43,7 +43,8 @@ Also resolved at runtime (not node-exposed):
 | Handle | Shape | Description |
 |--------|-------|-------------|
 | `output-main` | object | Himalaya send result merged with `from` (sender address) |
-| `output-tool` | object | Same payload, used when wired as an AI tool |
+
+When wired to an AI agent's `input-tools` handle (`usable_as_tool = True`, tool name `email_send`), the same payload is returned to the LLM via the tool-dispatch path — there is no separate `output-tool` handle.
 
 ### Output payload
 
@@ -61,7 +62,7 @@ Wrapped in the standard envelope: `{ success: true, result: <payload>, execution
 
 ```mermaid
 flowchart TD
-  A[handle_email_send] --> B[EmailService.send params]
+  A[BaseNode.execute -> Operation send] --> B[EmailService.send params]
   B --> C[resolve_credentials]
   C -->|no email/password| Ee[ValueError -> error envelope]
   C --> D[Merge with provider preset from email_providers.json]
@@ -88,8 +89,9 @@ flowchart TD
      `provider == 'custom'`.
 - **Port coercion**: stored ports are strings in the API-key store; `_coerce_port`
   casts them to `int` and silently returns `None` on invalid values.
-- **Missing email/password**: `resolve_credentials` raises `ValueError` before
-  any subprocess is spawned -> `handle_email_send` catches and returns
+- **Missing email/password**: `resolve_credentials` raises `ValueError`
+  (`"Email address not configured"` / `"Email password not configured"`) before
+  any subprocess is spawned -> `BaseNode.execute()` catches and returns
   `success=false`.
 - **HTML vs plain**: `body_type == 'html'` -> `multipart/alternative` with an
   HTML part (no plain-text fallback part is attached). Anything else -> a
@@ -101,8 +103,8 @@ flowchart TD
   `HimalayaService._account_name` (`john.doe@x.com` -> `john_doe`). Dots and
   `+` are replaced with `_`.
 - **Subprocess errors**: non-zero returncode raises `RuntimeError("himalaya
-  error: <stderr>")`; the handler's `except Exception` catches and emits an
-  error envelope.
+  error: <stderr>")`; `BaseNode.execute()`'s `except Exception` catches and
+  emits the error envelope (with full traceback logging).
 
 ## Side Effects
 

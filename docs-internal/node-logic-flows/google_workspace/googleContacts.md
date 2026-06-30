@@ -3,10 +3,10 @@
 | Field | Value |
 |------|-------|
 | **Category** | google_workspace / tool (dual-purpose) |
-| **Backend handler** | [`server/services/handlers/contacts.py::handle_google_contacts`](../../../server/services/handlers/contacts.py) |
+| **Backend handler** | [`server/nodes/google/contacts/__init__.py`](../../../server/nodes/google/contacts/__init__.py) (`ContactsNode`; dispatched via `BaseNode.execute()` -> single `@Operation("dispatch")` method that branches on `params.operation`) |
 | **Tests** | [`server/tests/nodes/test_google_workspace.py`](../../../server/tests/nodes/test_google_workspace.py) |
 | **Skill (if any)** | [`server/skills/productivity_agent/google-contacts-skill/SKILL.md`](../../../server/skills/productivity_agent/google-contacts-skill/SKILL.md) |
-| **Dual-purpose tool** | yes - tool name `googleContacts` |
+| **Dual-purpose tool** | yes - tool name `google_contacts` |
 
 ## Purpose
 
@@ -64,8 +64,10 @@ Top-level dispatcher: `operation` (one of `create`, `list`, `search`, `get`, `up
 | `resource_name` | string | `""` | **yes** | - |
 | `first_name` / `last_name` / `email` / `phone` / `company` / `job_title` | string | `""` | no | Any provided field triggers its person field group to be replaced. **At least one patch field required.** |
 
-Also accepts `update_first_name`, `update_last_name`, `update_email`,
-`update_phone`, `update_company`, `update_job_title` aliases.
+Also accepts the optional `update_first_name`, `update_last_name`,
+`update_email`, `update_phone`, `update_company`, `update_job_title` fields. The
+dispatch method reads `params.update_first_name or params.first_name` (etc.) as
+fallback chains — it does NOT mutate the params dict.
 
 ### `operation = delete`
 
@@ -75,10 +77,13 @@ Also accepts `update_first_name`, `update_last_name`, `update_email`,
 
 ## Outputs (handles)
 
+The node declares only `input-main` and `output-main`. Tool mode
+(`usable_as_tool = True`, tool name `google_contacts`) returns the same
+`output-main` payload — there is no separate `output-tool` handle.
+
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | Formatted contact(s) payload |
-| `output-tool` | object | Same, for AI tool wiring |
+| `output-main` | object | Formatted contact(s) `ContactsOutput` payload |
 
 ### Formatted contact shape (`_format_contact`)
 
@@ -106,72 +111,57 @@ Also accepts `update_first_name`, `update_last_name`, `update_email`,
 
 ```mermaid
 flowchart TD
-  A[handle_google_contacts] --> AL{operation == update?}
-  AL -- yes --> AM[Alias update_* params<br/>to plain names]
-  AL -- no --> B
-  AM --> B{operation?}
-  B -- create --> C1[handle_contacts_create]
-  B -- list --> C2[handle_contacts_list]
-  B -- search --> C3[handle_contacts_search]
-  B -- get --> C4[handle_contacts_get]
-  B -- update --> C5[handle_contacts_update]
-  B -- delete --> C6[handle_contacts_delete]
-  B -- unknown --> Eret[success=false<br/>Unknown Contacts operation]
-  C1 --> G[get_google_credentials + build people v1]
-  C2 --> G
-  C3 --> G
-  C4 --> G
-  C5 --> G
-  C6 --> G
-  G -- ValueError --> Eret
-  C1 --> V1{first_name?}
-  V1 -- no --> Eret
+  A[BaseNode.execute -> ContactsNode.dispatch] --> G[build_google_service people v1]
+  G --> B{operation?}
+  B -- create --> V1{first_name?}
+  V1 -- no --> Eret[raise RuntimeError]
   V1 -- yes --> BB[Build names/emails/phones<br/>organizations/biographies]
   BB --> R1[people.createContact]
-  C2 --> R2[people.connections.list<br/>personFields names emails phones<br/>organizations photos biographies]
-  C3 --> V3{query?}
+  B -- list --> R2[people.connections.list<br/>personFields names emails phones<br/>organizations photos biographies]
+  B -- search --> V3{query?}
   V3 -- no --> Eret
   V3 -- yes --> R3[people.searchContacts]
-  C4 --> V4{resource_name?}
+  B -- get --> V4{resource_name?}
   V4 -- no --> Eret
   V4 -- yes --> R4[people.get]
-  C5 --> V5{resource_name?}
+  B -- update --> V5{resource_name?}
   V5 -- no --> Eret
-  V5 -- yes --> G5[people.get etag -> build update body -> check updatePersonFields non-empty]
-  G5 -- no fields --> Eret2[raise<br/>At least one field to update required]
+  V5 -- yes --> G5[people.get etag -> build update body via update_* fallbacks -> check fields]
+  G5 -- no fields --> Eret2[raise RuntimeError<br/>At least one field to update required]
   G5 -- ok --> R5[people.updateContact updatePersonFields=csv]
-  C6 --> V6{resource_name?}
+  B -- delete --> V6{resource_name?}
   V6 -- no --> Eret
   V6 -- yes --> R6[people.deleteContact]
-  R1 --> T[_track_contacts_usage]
+  B -- unknown --> Eret
+  R1 --> T[track_google_usage google_contacts]
   R2 --> T
   R3 --> T
   R4 --> T
   R5 --> T
   R6 --> T
-  T --> OUT[Return success envelope]
+  T --> OUT[Return ContactsOutput; BaseNode serializes envelope]
 ```
 
 ## Decision Logic
 
-- **Dispatcher aliasing**: `update_*` params are copied over their plain counterparts (mutating input) before delegation.
-- **Update requires etag**: `update` does a `people.get` first to fetch the current etag, then submits `updateContact` with `updatePersonFields` set to the comma-joined list of person field groups touched. If no field group was modified, raises `ValueError("At least one field to update is required")`.
-- **Search requires query**: empty query -> `ValueError` captured by outer except.
+- **Update fallback chains**: `params.update_first_name or params.first_name` (etc.) — no mutation of the params dict.
+- **Update requires etag**: `update` does a `people.get` first to fetch the current etag, then submits `updateContact` with `updatePersonFields` set to the comma-joined list of person field groups touched. If no field group was modified, raises `RuntimeError("At least one field to update is required")`.
+- **Search requires query**: empty query -> `RuntimeError` surfaced by `BaseNode.execute`.
 - **Notes field on create**: non-empty `notes` writes a `biographies[0]` entry; empty notes skip the field. Cannot be cleared via update (not wired).
 - **Format fallbacks**: `_format_contact` returns `""` for missing headers rather than `None`, so callers should not distinguish absence from empty.
 - **`list` resource_name** is hard-coded to `people/me` - this node cannot list another user's contacts.
 
 ## Side Effects
 
-- **Database writes**: `api_usage_metrics` row per call via `save_api_usage_metric` with `service='google_contacts'`. `list` DOES call `_track_contacts_usage`.
-- **Broadcasts**: none.
+- **Database writes**: `api_usage_metrics` row per call via `track_google_usage` -> `save_api_usage_metric` with `service='google_contacts'`. `list` DOES call `track_google_usage`.
+- **Broadcasts**: none from the operation; executor emits standard `node_status`.
 - **External API calls**: People API v1 - `people().createContact/get/updateContact/deleteContact/searchContacts`, `people().connections().list`.
 - **File I/O**: none.
 - **Subprocess**: none.
 
 ## External Dependencies
 
-- **Credentials**: OAuth via `auth_service.get_oauth_tokens("google")`.
+- **Credentials**: `GoogleCredential` -> OAuth tokens for provider `google`.
 - **Services**: Google People API, `PricingService`, `Database`.
 - **Python packages**: `google-api-python-client`.
 - **Environment variables**: none.
@@ -182,7 +172,6 @@ flowchart TD
 - Update replaces entire field groups: passing `email` wipes any additional emails on the contact. The handler does not merge.
 - `search` returns at most `page_size` results; there is no pagination wrapper.
 - `delete` does not prompt or verify - the deletion is immediate and final on Google's side.
-- An unused local statement `person.get('addresses', [])` exists in `_format_contact` without assignment - noted as dead code, not a bug.
 - `update` requires at least one patch field; however the handler only treats first_name/last_name/email/phone/company/job_title. Notes and other fields cannot be updated here.
 
 ## Related

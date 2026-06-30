@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | document |
-| **Backend handler** | [`server/services/handlers/document.py::handle_document_parser`](../../../server/services/handlers/document.py) |
+| **Backend handler** | [`server/nodes/document/document_parser/__init__.py`](../../../server/nodes/document/document_parser/__init__.py) — `DocumentParserNode`; dispatch via `BaseNode.execute()` + `@Operation("parse")` |
 | **Tests** | [`server/tests/nodes/test_document.py`](../../../server/tests/nodes/test_document.py) |
 | **Skill (if any)** | none |
 | **Dual-purpose tool** | no |
@@ -21,16 +21,18 @@ glob pattern.
 
 | Handle | Connection type | Required | Purpose |
 |--------|-----------------|----------|---------|
-| `input-main` | main | no | Provides `files[]` upstream (e.g. from `fileDownloader`) |
+| `input-main` | main | no | Upstream data resolved into params (e.g. `input_dir` pointing at `fileDownloader`'s `output_dir`) |
 
 ## Parameters
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `files` | array | `[]` | no | - | List of `{path: string}` or raw path strings |
-| `inputDir` | string | `""` | no | - | Directory to glob for files |
-| `filePattern` | string | `*.pdf` | no | - | Glob pattern applied inside `inputDir` |
 | `parser` | options | `pypdf` | no | - | `pypdf` / `marker` / `unstructured` / `beautifulsoup` |
+| `file_path` | string | `""` | no | - | Single file path (takes precedence over `input_dir`) |
+| `input_dir` | string | `""` | no | - | Directory to glob for files |
+| `file_pattern` | string | `*.pdf` | no | - | Glob pattern applied inside `input_dir` |
+
+Params are snake_case (`Params = DocumentParserParams`, `extra="ignore"`). There is no `files` param — paths come from `file_path` and/or the `input_dir` glob.
 
 ## Outputs (handles)
 
@@ -60,9 +62,9 @@ Wrapped in standard envelope: `{ success, result, execution_time, node_id, node_
 
 ```mermaid
 flowchart TD
-  A[handle_document_parser] --> B[Normalize files param<br/>dict -> path, str -> path]
-  B --> C{inputDir exists?}
-  C -- yes --> C1[extend paths with inputDir.glob(filePattern)]
+  A[DocumentParserNode.parse] --> B[Collect paths from file_path]
+  B --> C{input_dir exists?}
+  C -- yes --> C1[extend paths with input_dir.glob(file_pattern)]
   C -- no --> D{paths empty?}
   C1 --> D
   D -- yes --> Ret0[Return success=true<br/>documents=[], parsed_count=0]
@@ -86,7 +88,7 @@ flowchart TD
 
 - **No paths**: returns success with empty `documents[]`, no error.
 - **Per-file failure**: any exception inside `_parse_file_sync` is captured into `failed` with `{file, error}`; other files continue.
-- **Unknown parser**: raised by `_parse_file_sync`, recorded per-file in `failed` (NOT a top-level failure - every file fails identically).
+- **Unknown parser**: `_parse_file_sync` raises `ValueError`, but `parser` is a `Literal` so Pydantic rejects unknown values before dispatch; if it ever reaches the loop it is recorded per-file in `failed` (every file fails identically).
 - **Lazy imports**: each parser imports its backend only when selected, so unused heavy deps (marker CUDA stack, unstructured) are not loaded.
 - **BeautifulSoup special handling**: strips `<script>` and `<style>` tags before extracting text.
 
@@ -114,9 +116,9 @@ flowchart TD
 - `marker`: downloads models on first call and requires CUDA; will fail on CPU-only hosts.
 - `unstructured`: classifies file type from extension/content; no explicit type param.
 - BeautifulSoup branch is the only one that handles HTML via `read_text`, so passing a binary `.pdf` there returns garbled `get_text`.
-- `files` and `inputDir` can be combined - directory glob is appended to the explicit list.
-- `filePattern` is applied via `Path.glob` (non-recursive). Use `**/*.pdf` for recursive.
-- The handler returns `success=true` even when every file failed - consumers must inspect `failed` and `parsed_count`.
+- `file_path` and `input_dir` can be combined - directory glob is appended to the explicit single path.
+- `file_pattern` is applied via `Path.glob` (non-recursive). Use `**/*.pdf` for recursive.
+- Returns `success=true` even when every file failed - consumers must inspect `failed` and `parsed_count`.
 
 ## Related
 

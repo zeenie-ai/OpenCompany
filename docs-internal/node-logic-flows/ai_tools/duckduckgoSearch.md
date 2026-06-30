@@ -2,11 +2,11 @@
 
 | Field | Value |
 |------|-------|
-| **Category** | ai_tools (dedicated AI tool) |
-| **Backend handler** | [`server/services/handlers/tools.py::_execute_duckduckgo_search`](../../../server/services/handlers/tools.py) |
+| **Category** | ai_tools (dedicated AI tool; plugin lives under `server/nodes/search/`, group `("tool", "ai", "search")`) |
+| **Backend handler** | [`server/nodes/search/duckduckgo_search/__init__.py`](../../../server/nodes/search/duckduckgo_search/__init__.py) — `DuckDuckGoSearchNode`, dispatched via `BaseNode.execute()` + the `@Operation("search")` method |
 | **Tests** | [`server/tests/nodes/test_ai_tools.py`](../../../server/tests/nodes/test_ai_tools.py) |
 | **Skill (if any)** | [`server/skills/web_agent/duckduckgo-search-skill/SKILL.md`](../../../server/skills/web_agent/duckduckgo-search-skill/SKILL.md) |
-| **Dual-purpose tool** | tool-only - LLM invokes as `web_search` (configurable via `toolName` param) |
+| **Dual-purpose tool** | tool-only — `ToolNode` exposed to the LLM as `web_search` (`tool_name` class attr) |
 
 ## Purpose
 
@@ -19,75 +19,62 @@ default web search tool for AI Agents, complementing the keyed alternatives
 
 | Handle | Connection type | Required | Purpose |
 |--------|-----------------|----------|---------|
-| (none) | - | - | Passive node |
+| `input-main` | main | no | Passive node - connect `output-tool` to an AI Agent's `input-tools` |
 
 ## Parameters
 
+The `DuckDuckGoSearchParams` model fields ARE the LLM-provided tool args (no
+separate `toolName` / `toolDescription` node params — those live on the class
+as `tool_name` / `tool_description`).
+
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `toolName` | string | `web_search` | yes | - | LLM-visible tool name |
-| `toolDescription` | string | (see frontend) | no | - | LLM-visible description |
-| `maxResults` | number | `5` | no | - | Result cap (frontend clamps `1..10`); cast to `int` in handler |
-
-### LLM-provided tool args (at invocation time)
-
-| Arg | Type | Description |
-|-----|------|-------------|
-| `query` | string | Search query; empty string short-circuits with an error |
+| `query` | string | (required) | yes | - | Search query; `min_length=1` (empty fails Pydantic validation) |
+| `max_results` | int | `5` | no | - | Result cap; Pydantic-clamped `1..20` (`ge=1, le=20`) |
 
 ## Outputs (handles)
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-tool` | object | Raw dict returned to the LLM |
+| `output-tool` | object | `DuckDuckGoSearchOutput` model, serialized per `BaseNode._serialize_result` |
 
 ### Output payload (TypeScript shape)
 
-On success:
+On success (matches the `DuckDuckGoSearchOutput` model):
 ```ts
 {
   query: string;
   results: Array<{ title: string; snippet: string; url: string }>;
-  provider: 'duckduckgo';
+  provider: 'duckduckgo';  // fixed default
 }
 ```
 
-On empty query:
-```ts
-{ error: 'No search query provided' }
-```
+On a `DDGSException` (rate-limit / network / bot detection) the op raises
+`NodeUserError("DuckDuckGo search failed: <e>")`, which `BaseNode.execute()`
+catches into a single WARN line + `{success: false, error_type: "NodeUserError",
+error: ...}` envelope (no traceback).
 
 ## Logic Flow
 
 ```mermaid
 flowchart TD
-  A[_execute_duckduckgo_search args node_params] --> B{query non-empty?}
-  B -- no --> Eq[Return error: No search query provided]
-  B -- yes --> C[provider = node_params.provider OR duckduckgo<br/>max_results = int node_params.maxResults OR 5]
-  C --> D{provider == duckduckgo}
-  D -- yes --> E{Try import ddgs}
-  E -- ok --> F[run_in_executor DDGS.text query max_results]
-  F --> G[Map title / body-&gt;snippet / href-&gt;url]
-  G --> R[Return query / results / provider]
-  E -- ImportError --> H[Fallback: httpx GET api.duckduckgo.com Instant Answer API]
-  H --> I[Map AbstractText + RelatedTopics into results]
-  I --> R
-  F -- Exception --> Eexc[Logged; propagates to outer generic handler]
+  A[BaseNode.execute -> search ctx params] --> B[import ddgs DDGS + DDGSException]
+  B --> F[run_in_executor: DDGS.text query max_results]
+  F -- DDGSException --> Eq[raise NodeUserError: DuckDuckGo search failed]
+  F -- ok --> G[Map title / body-&gt;snippet / href-&gt;url]
+  G --> R[Return DuckDuckGoSearchOutput query/results/provider]
 ```
 
 ## Decision Logic
 
-- **Empty query**: `if not query: return {error: ...}` - no library call.
-- **Provider switch**: `node_params.provider` defaults to `'duckduckgo'` and
-  the handler only implements that branch. Any other value falls through
-  without raising (returns whatever the outer try returns, typically nothing
-  useful). The frontend node does not expose `provider`, so in practice this
-  branch is always taken.
-- **`ddgs` ImportError fallback**: the handler quietly falls back to the
-  DuckDuckGo Instant Answer API (`api.duckduckgo.com`) via `httpx`, which
-  returns a very different shape (abstracts + related topics, not ranked web
-  results). Shown logs: `"ddgs not installed, falling back to Instant Answer API"`.
-- **Sync-in-async**: `DDGS().text(...)` is synchronous; handler wraps it in
+- **Empty query**: rejected at Pydantic validation (`query` has `min_length=1`)
+  before the op runs — no library call.
+- **No provider switch / no fallback**: the plugin always uses the `ddgs`
+  library `DDGS().text(...)`. The old Instant Answer API (`api.duckduckgo.com`)
+  httpx fallback was removed; `ddgs` is a hard dependency now.
+- **`DDGSException`**: caught and re-raised as `NodeUserError` so the LLM can
+  retry with a different query (one WARN line, no traceback).
+- **Sync-in-async**: `DDGS().text(...)` is synchronous; the op wraps it in
   `loop.run_in_executor(None, ...)` to avoid blocking the event loop.
 
 ## Side Effects
@@ -96,11 +83,8 @@ flowchart TD
   this handler does **not** write to `api_usage_metrics` - it is free and
   tracking cost is skipped.)
 - **Broadcasts**: none.
-- **External API calls**:
-  - Primary: `ddgs` library (HTTPS to `duckduckgo.com`; the library manages
-    its own networking, timeout, and rate limits).
-  - Fallback: `GET https://api.duckduckgo.com/?q=<query>&format=json&no_html=1`
-    (timeout 10s) via `httpx.AsyncClient`.
+- **External API calls**: `ddgs` library (HTTPS to `duckduckgo.com`; the
+  library manages its own networking, timeout, and rate limits).
 - **File I/O**: none.
 - **Subprocess**: none.
 
@@ -108,27 +92,22 @@ flowchart TD
 
 - **Credentials**: none.
 - **Services**: none.
-- **Python packages**: `ddgs` (preferred), `httpx` (fallback).
+- **Python packages**: `ddgs` (hard dependency; lazy-imported inside the op).
 - **Environment variables**: none.
 
 ## Edge cases & known limits
 
-- Handler does **not** wrap network errors from `ddgs` - they propagate up to
-  `execute_tool`, which will bubble them into the tool-call result as an
-  uncaught exception. (Mocking the library in tests is therefore required.)
-- Missing `ddgs` silently switches to Instant Answer API, which returns a
-  noticeably smaller and differently-structured result set (abstract +
-  related topics, not ranked web results). The `provider` field still says
-  `"duckduckgo"`, masking the fallback.
-- `maxResults` clamp (`1..10`) is enforced only by the frontend; an LLM could
-  in theory pass `node_params.maxResults = 999` via stored defaults and the
-  handler would honour it.
-- `results[].url` uses the `href` field from `ddgs`; older library versions
-  used a different key - the handler fills missing keys with `""` to stay
-  defensive.
+- A `DDGSException` (the only caught error) becomes a `NodeUserError`; other
+  unexpected exceptions bubble up to `BaseNode.execute()`'s generic handler
+  with a full traceback.
+- `max_results` clamp (`1..20`) is enforced by Pydantic on the model
+  (`ge=1, le=20`), so an out-of-range LLM value fails validation rather than
+  being silently honoured.
+- `results[].url` uses the `href` field from `ddgs`; missing keys default to
+  `""` to stay defensive.
 
 ## Related
 
-- **Sibling tools**: [`calculatorTool`](./calculatorTool.md), [`currentTimeTool`](./currentTimeTool.md), [`taskManager`](./taskManager.md), [`writeTodos`](./writeTodos.md)
+- **Sibling tools**: [`calculatorTool`](./calculatorTool.md), [`currentTimeTool`](./currentTimeTool.md), [`taskManager`](./taskManager.md), [`writeTodos`](./writeTodos.md), [`agentBuilder`](./agentBuilder.md)
 - **Companion search nodes** (API-keyed, track cost): [`braveSearch`](../search/braveSearch.md), [`serperSearch`](../search/serperSearch.md), [`perplexitySearch`](../search/perplexitySearch.md)
 - **Skill using this tool**: [`duckduckgo-search-skill/SKILL.md`](../../../server/skills/web_agent/duckduckgo-search-skill/SKILL.md)

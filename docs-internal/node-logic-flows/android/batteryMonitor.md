@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | android / monitoring |
-| **Backend handler** | [`server/services/handlers/android.py::handle_android_service`](../../../server/services/handlers/android.py) (shared) |
+| **Backend handler** | plugin [`server/nodes/android/battery_monitor/__init__.py`](../../../server/nodes/android/battery_monitor/__init__.py); dispatch via `BaseNode.execute()` -> shared [`AndroidServiceBase.invoke`](../../../server/nodes/android/_base.py) (`@Operation("invoke")`) |
 | **Tests** | [`server/tests/nodes/test_android.py`](../../../server/tests/nodes/test_android.py) |
 | **Skill (if any)** | [`server/skills/android_agent/battery-skill/SKILL.md`](../../../server/skills/android_agent/battery-skill/SKILL.md) |
 | **Dual-purpose tool** | direct sub-node of `androidTool` - can also connect straight to any agent's `input-tools` |

@@ -3,8 +3,8 @@
 | Field | Value |
 |------|-------|
 | **Category** | code_fs_process / filesystem |
-| **Backend handler** | [`server/services/handlers/filesystem.py::handle_fs_search`](../../../server/services/handlers/filesystem.py) |
-| **Backend** | [`deepagents.backends.LocalShellBackend`](https://github.com/langchain-ai/deepagents) (`ls_info`, `glob_info`, `grep_raw`) |
+| **Backend handler** | [`server/nodes/filesystem/fs_search/__init__.py::FsSearchNode.search`](../../../server/nodes/filesystem/fs_search/__init__.py) (dispatched via `BaseNode.execute()` + `@Operation("search")`) |
+| **Backend** | `NushellBackend` (subclasses `deepagents.backends.LocalShellBackend`; `ls_info`, `glob_info`, `grep_raw`) in [`server/nodes/filesystem/_backend.py`](../../../server/nodes/filesystem/_backend.py) |
 | **Tests** | [`server/tests/nodes/test_code_fs_process.py`](../../../server/tests/nodes/test_code_fs_process.py) |
 | **Skill (if any)** | [`server/skills/coding_agent/fs-search-skill/SKILL.md`](../../../server/skills/coding_agent/fs-search-skill/SKILL.md) |
 | **Dual-purpose tool** | yes - tool name `fs_search` |
@@ -12,8 +12,9 @@
 ## Purpose
 
 Three-mode filesystem query node confined to the per-workflow workspace.
-Dispatches to `ls_info()`, `glob_info()`, or `grep_raw()` on
-`LocalShellBackend` (`virtual_mode=True`) depending on `mode`.
+Dispatches to `ls_info()`, `glob_info()`, or `grep_raw()` on `NushellBackend`
+(`virtual_mode=True`, `inherit_env=True`) via `get_backend()` depending on
+`mode`. The `path` is run through `normalize_virtual_path()` first.
 
 ## Inputs (handles)
 
@@ -25,18 +26,20 @@ Dispatches to `ls_info()`, `glob_info()`, or `grep_raw()` on
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `mode` | options | `ls` | no | - | `ls`, `glob`, or `grep` |
+| `mode` | `ls` \| `glob` \| `grep` (Literal) | `ls` | no | - | `ls`, `glob`, or `grep` |
 | `path` | string | `.` | no | - | Directory path to search in (workspace-relative) |
-| `pattern` | string | `""` | yes (when `mode != ls`) | `mode=glob`, `mode=grep` | Glob pattern or grep regex |
-| `file_filter` | string | `""` | no | `mode=grep` | Glob pattern restricting which files are searched |
-| `working_directory` | string | `""` | no | - | Overrides context workspace |
+| `pattern` | string | `""` | yes (when `mode != ls`) | - | Glob pattern or grep regex |
+
+`FsSearchParams` uses `extra="ignore"` — there are NO `file_filter` or
+`working_directory` params; the model drops unknown keys. The grep mode passes
+only `pattern` + `path` to `backend.grep_raw()`. (displayOptions are not
+declared on these fields in the current Params model.)
 
 ## Outputs (handles)
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | Standard envelope payload |
-| `output-tool` | object | Same payload when wired to an AI agent |
+| `output-main` | object | Standard envelope payload (node declares only `input-main` / `output-main`; `usable_as_tool=True` exposes the same payload as the `fs_search` tool result) |
 
 ### Output payload
 
@@ -51,43 +54,43 @@ Dispatches to `ls_info()`, `glob_info()`, or `grep_raw()` on
 
 `FileInfo` and `GrepMatch` are the dataclass shapes returned by the
 `deepagents` backend, converted via `dict(entry)`.
+`node_output_schemas.FsSearchOutput` declares `path` / `entries` / `matches` /
+`pattern` / `count` (extra fields allowed by `_OutputBase`).
 
 ## Logic Flow
 
 ```mermaid
 flowchart TD
-  A[handle_fs_search] --> C[_get_backend virtual_mode=True]
+  A[search] --> C[get_backend + normalize_virtual_path]
   C --> D{mode?}
   D -- ls --> L[to_thread backend.ls_info path]
-  L --> Lok[Return success entries, count]
+  L --> Lok[Return dict path, entries, count]
   D -- glob --> G{pattern empty?}
-  G -- yes --> Gp[Return error:<br/>pattern is required for glob mode]
+  G -- yes --> Gp[raise NodeUserError:<br/>pattern is required for glob mode]
   G -- no --> Gr[to_thread backend.glob_info pattern, path]
-  Gr --> Grok[Return success matches, count]
+  Gr --> Grok[Return dict path, pattern, matches, count]
   D -- grep --> Gg{pattern empty?}
-  Gg -- yes --> Ggp[Return error:<br/>pattern is required for grep mode]
-  Gg -- no --> Gx[to_thread backend.grep_raw pattern, path, glob=file_filter]
+  Gg -- yes --> Ggp[raise NodeUserError:<br/>pattern is required for grep mode]
+  Gg -- no --> Gx[to_thread backend.grep_raw pattern, path]
   Gx --> Gxt{result type?}
-  Gxt -- str error --> Gxerr[Return error<br/>error=result]
-  Gxt -- list --> Gxok[Return success matches, count]
-  D -- other --> U[Return error:<br/>Unknown mode: <mode>]
+  Gxt -- str error --> Gxerr[raise NodeUserError result]
+  Gxt -- list --> Gxok[Return dict path, pattern, matches, count]
+  D -- other --> U[raise NodeUserError:<br/>Unknown mode: <mode>]
 ```
 
 ## Decision Logic
 
 - **`mode=ls`** requires nothing; defaults `path='.'`.
-- **`mode=glob`** requires `pattern`. Missing pattern -> error envelope.
-- **`mode=grep`** requires `pattern`. Optional `file_filter` is forwarded as
-  the backend's `glob` kwarg.
+- **`mode=glob`** requires `pattern`. Missing pattern -> `raise NodeUserError`.
+- **`mode=grep`** requires `pattern`. No file-filter kwarg is passed (only
+  `pattern` + `path`).
 - **`grep_raw` polymorphic return**: the backend returns either a list of
   `GrepMatch` objects (success) OR a plain string (error description). The
-  handler checks `isinstance(result, str)` and turns a string into an error
-  envelope verbatim. This is the only place error details flow through as a
-  direct backend string rather than the generic `str(Exception)` path.
-- **`file_filter` empty-string handling**: `file_filter or None` -> empty
-  string is coerced to `None` before forwarding.
-- **Unknown modes**: returns error envelope `"Unknown mode: <mode>"`.
-- **Broad `except Exception`**: catches backend-level surprises.
+  plugin checks `isinstance(result, str)` and `raise NodeUserError(result)`.
+- **Unknown modes**: `raise NodeUserError("Unknown mode: <mode>")` (Pydantic
+  Literal already constrains it).
+- All raises become single-WARN-line `error_type="NodeUserError"` envelopes via
+  `BaseNode.execute()`.
 
 ## Side Effects
 
@@ -95,29 +98,29 @@ flowchart TD
 - **Broadcasts**: none.
 - **External API calls**: none.
 - **File I/O**:
-  - `os.makedirs(root, exist_ok=True)` on the workspace root.
+  - `get_backend` ensures the workspace root exists.
   - Reads directory listings and file contents under `<root>/<path>`.
 - **Subprocess**: none (`grep_raw` is a Python regex walk in recent
   `deepagents`; not a `grep(1)` exec).
 
 ## External Dependencies
 
-- **Python packages**: `deepagents`.
+- **Python packages**: `deepagents` (via `NushellBackend`).
 - **Environment variables**: `WORKSPACE_BASE_DIR`.
 
 ## Edge cases & known limits
 
 - **`grep_raw` string-error path is unique**: unlike ls/glob which raise,
-  grep can "succeed" at the Python level but return a string. Frontends
-  expecting a consistent error shape across modes may miss this.
+  grep can "succeed" at the Python level but return a string; the plugin
+  converts that to a `NodeUserError` so the final envelope shape is consistent.
 - **Glob patterns match the backend's semantics**: `**` globs work, but
   the backend's behaviour for symlinks, hidden files, and case sensitivity
   is inherited from `pathlib`.
 - **No maxResults cap**: a `**/*` glob over a huge workspace returns every
   match; the handler does not paginate. The caller must truncate.
 - **`path='.'` resolves against the workspace root, not the server CWD**.
-- **`working_directory` escape**: same caveat as other filesystem nodes -
-  a caller can bypass the sandbox.
+- **`working_directory` not exposed**: `extra="ignore"` means the sandbox
+  cannot be widened via a node param on this node.
 - **Dataclass `dict()` conversion**: relies on `FileInfo` / `GrepMatch`
   being dataclasses (they implement `__iter__` via dataclass). A future
   backend upgrade that returns `TypedDict`s could break this.

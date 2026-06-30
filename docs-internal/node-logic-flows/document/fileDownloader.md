@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | document |
-| **Backend handler** | [`server/services/handlers/document.py::handle_file_downloader`](../../../server/services/handlers/document.py) |
+| **Backend handler** | [`server/nodes/document/file_downloader/__init__.py`](../../../server/nodes/document/file_downloader/__init__.py) — `FileDownloaderNode`; dispatch via `BaseNode.execute()` + `@Operation("download")` |
 | **Tests** | [`server/tests/nodes/test_document.py`](../../../server/tests/nodes/test_document.py) |
 | **Skill (if any)** | none |
 | **Dual-purpose tool** | no |
@@ -26,11 +26,13 @@ downloaded files land in the per-workflow workspace and can be picked up by
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `items` | array | `[]` | yes | - | List of `{url: string, ...}` dicts or raw URL strings |
-| `outputDir` | string | `""` | no | - | Falls back to `<workspace_dir>/downloads` or `downloads` |
-| `maxWorkers` | number | `8` | no | - | Semaphore width, 1-32 |
-| `skipExisting` | boolean | `true` | no | - | Skip when destination file already exists |
-| `timeout` | number | `60` | no | - | Per-request timeout (seconds) |
+| `urls` | array | `[]` | no | - | Declared Params field; wrapped into `items` as `[{url}]` if `items` not present |
+| `output_dir` | string | `downloads` | no | - | Declared Params field |
+| `max_workers` | number | `4` | no | - | Declared Params field (1-32) |
+| `skip_existing` | boolean | `true` | no | - | Declared Params field |
+| `timeout` | number | `60` | no | - | Declared Params field (1-600) |
+
+**Quirk**: `Params = FileDownloaderParams` declares snake_case fields (above), but `extra="allow"` lets camelCase keys pass through, and the `download` op reads camelCase off `model_dump()`: `items`, `outputDir`, `maxWorkers` (default `8` here, not `4`), `skipExisting`, plus `urls`/`timeout`. So the operative keys consumed at runtime are `items`/`urls`, `outputDir`, `maxWorkers`, `skipExisting`, `timeout`.
 
 ## Outputs (handles)
 
@@ -62,7 +64,7 @@ Wrapped in standard envelope: `{ success, result, execution_time, node_id, node_
 
 ```mermaid
 flowchart TD
-  A[handle_file_downloader] --> B{items empty?}
+  A[FileDownloaderNode.download] --> B{items empty?}
   B -- yes --> Ret0[Return success=true<br/>counts all zero]
   B -- no --> C[Resolve output_dir from outputDir or context.workspace_dir or ./downloads]
   C --> D[mkdir parents exist_ok]

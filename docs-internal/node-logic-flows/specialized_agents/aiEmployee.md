@@ -3,28 +3,27 @@
 | Field | Value |
 |------|-------|
 | **Category** | specialized_agents |
-| **Backend handler** | [`server/services/handlers/ai.py::handle_chat_agent`](../../../server/services/handlers/ai.py) |
-| **Theme color** | `dracula.purple` |
-| **Icon** | people / briefcase (U+1F465) |
-| **Team lead** | **yes** -- `input-teammates` handle enabled |
+| **Plugin** | [`server/nodes/agent/ai_employee/__init__.py`](../../../server/nodes/agent/ai_employee/__init__.py) -> [`_specialized.py::SpecializedAgentBase.execute_op`](../../../server/nodes/agent/_specialized.py) (dispatch via `BaseNode.execute()`) |
+| **Team lead** | **yes** -- `input-teammates` handle enabled (`team_lead_agent_handles()`) |
 | **Tests** | [`server/tests/nodes/test_specialized_agents.py`](../../../server/tests/nodes/test_specialized_agents.py) |
 
 ## Purpose
 
 Team-lead agent identical in behaviour to `orchestrator_agent`. Distinct
-only in frontend presentation (different icon, theme color, default
-labels) and an extra `maxConcurrent` parameter. Backend routing is the
-same: `handle_chat_agent` -> `_collect_teammate_connections` ->
-teammates appended to `tool_data` as `delegate_to_*` tools.
+only in frontend presentation (display name "AI Employee", subtitle
+"Team Orchestration"). Backend routing is the same:
+`SpecializedAgentBase.execute_op` -> `prepare_agent_call`
+(`collect_teammate_connections`) -> teammates appended to `tool_data` as
+`delegate_to_*` tools -> `execute_chat_agent`.
 
 ## What is unique to this node
 
-- **`input-teammates` handle** (same as `orchestrator_agent`).
-- **`teamMode` parameter** (`parallel` / `sequential`, default `parallel`;
-  no `""` option).
-- **`maxConcurrent` parameter** (number, default `5`, range 1-20)
-  controlling max concurrent task executions.
-- **Frontend theming**: purple dracula accent.
+- **`input-teammates` handle** (same as `orchestrator_agent`, via
+  `team_lead_agent_handles()`).
+- **No extra parameters**: reuses `SpecializedAgentParams` verbatim. There
+  is **no** `teamMode` or `maxConcurrent` field on the current Pydantic
+  model — those claims were stale.
+- **`tool_description`** declared for when a parent team lead delegates to it.
 
 ## Behaviour
 
@@ -34,10 +33,9 @@ for the shared contract.
 
 ## Edge cases
 
-- Same as `orchestrator_agent`: non-agent teammates are silently skipped,
-  and `maxConcurrent` / `teamMode` are passed through as parameters but
-  not enforced by `handle_chat_agent` itself -- the `delegate_to_*`
-  implementation owns concurrency.
+- Same as `orchestrator_agent`: non-agent teammates are silently skipped;
+  concurrency of `delegate_to_*` calls is owned by the downstream tool /
+  Temporal child-workflow dispatch, not by any node parameter.
 
 ## Related
 

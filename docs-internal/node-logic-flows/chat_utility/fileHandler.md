@@ -3,18 +3,19 @@
 | Field | Value |
 |------|-------|
 | **Category** | chat_utility |
-| **Backend handler** | [`server/services/handlers/utility.py::handle_file_handler`](../../../server/services/handlers/utility.py) |
+| **Backend handler** | [`server/nodes/text/file_handler/__init__.py`](../../../server/nodes/text/file_handler/__init__.py) — dispatch via `BaseNode.execute()` + `@Operation("wrap")` → [`server/services/text.py::TextService.execute_file_handler`](../../../server/services/text.py) |
 | **Tests** | [`server/tests/nodes/test_chat_utility.py`](../../../server/tests/nodes/test_chat_utility.py) |
 | **Skill (if any)** | - |
 | **Dual-purpose tool** | no |
 
 ## Purpose
 
-Legacy file-shape wrapper retained from the Node.js-era engine. Does NOT touch
-the filesystem - it only composes a descriptive dict (`fileName`, `fileType`,
-`content`, `size`) around an already-in-memory string. For real filesystem
-access use the `fileRead`, `fileModify`, `fsSearch`, and `fileDownloader`
-nodes in the `code_fs_process` and `document` categories.
+Content-metadata wrapper (NOT file I/O), retained from the Node.js-era engine.
+It only composes a descriptive dict (`fileName`, `fileType`, `content`, `size`)
+around an already-in-memory string and returns a `{type: "file", data: {...}}`
+envelope for downstream nodes. For real filesystem access use the `fileRead`,
+`fileModify`, `fsSearch`, and `fileDownloader` nodes in the `code_fs_process`
+and `document` categories.
 
 ## Inputs (handles)
 
@@ -26,9 +27,13 @@ nodes in the `code_fs_process` and `document` categories.
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `fileType` | string | `generic` | no | - | Arbitrary tag stored in output |
-| `content` | string | `""` | no | - | In-memory file contents |
-| `fileName` | string | `untitled.txt` | no | - | Display file name |
+| `file_type` | enum | `generic` | no | - | One of `generic`, `markdown`, `text`, `json`, `csv`, `html`, `xml` — content-type hint stored in output |
+| `file_name` | string | `untitled.txt` | no | - | Filename label attached to the wrapped content |
+| `content` | string | `""` | no | - | In-memory text content to wrap (8 rows) |
+
+Note: parameters in are snake_case (`file_type` / `file_name` / `content`), but
+the service's output dict keeps camelCase keys (`fileName` / `fileType`) by
+historical wire contract — the frontend reads them that way.
 
 ## Outputs (handles)
 
@@ -39,13 +44,15 @@ nodes in the `code_fs_process` and `document` categories.
 ### Output payload (TypeScript shape)
 
 ```ts
+// FileHandlerOutput (model_config extra="allow"); the service returns
+// result = { type, data, nodeId, timestamp }, which the op returns verbatim.
 {
   type: "file";
   data: {
     fileName: string;
     fileType: string;
     content: string;
-    size: number;          // len(content), bytes-of-str length
+    size: number;          // len(content) — character count, not byte count
     processed: true;
     processingType: string; // === fileType
     nodeId: string;
@@ -84,8 +91,7 @@ flowchart TD
 ## External Dependencies
 
 - **Credentials**: none.
-- **Services**: `TextService` injected via `functools.partial` in
-  `NodeExecutor._build_handler_registry`.
+- **Services**: `TextService` obtained via `services.plugin.deps.get_text_service()`.
 - **Python packages**: stdlib only.
 - **Environment variables**: none.
 

@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | workflow / trigger / tool (dual-purpose) |
-| **Backend handler** | [`server/services/handlers/utility.py::handle_cron_scheduler`](../../../server/services/handlers/utility.py) |
+| **Backend handler** | Plugin [`server/nodes/scheduler/cron_scheduler/__init__.py`](../../../server/nodes/scheduler/cron_scheduler/__init__.py) (`CronSchedulerNode`); dispatch via `BaseNode.execute()` + the `@Operation("trigger")` method. Deployed-workflow cron lifecycle lives in `DeploymentManager` (Temporal Schedules canary via `CronTriggerWorkflow`); this op only runs on a manual / AI-tool invocation. |
 | **Tests** | [`server/tests/nodes/test_workflow_triggers.py`](../../../server/tests/nodes/test_workflow_triggers.py) |
 | **Skill (if any)** | [`server/skills/task_agent/cron-scheduler-skill/SKILL.md`](../../../server/skills/task_agent/cron-scheduler-skill/SKILL.md) |
 | **Dual-purpose tool** | yes - exposed on the `tool` output handle |
@@ -34,11 +34,12 @@ call `event_waiter.register()`.
 | `daily_time` | options | `09:00` | no | frequency == `days` | Display-only in the handler. |
 | `weekday` | options | `'1'` (Mon) | no | frequency == `weeks` | Display-only. |
 | `weekly_time` | options | `09:00` | no | frequency == `weeks` | Display-only. |
-| `month_day` | options | `'1'` | no | frequency == `months` | Display-only. |
-| `monthly_time` | options | `09:00` | no | frequency == `months` | Display-only. |
+| `month_day` | options | `'1'` | no | frequency == `months` | `1`..`28` or `L`. Display-only in this op. |
 | `timezone` | options | `UTC` | no | - | Used in the description string only. |
+| `cron_expression` | string | `0 * * * *` | no | - | Vestigial; kept for backward compatibility, unused by the op. |
+| `monthly_time` | string | `09:00` | no | - | Vestigial; kept for backward compatibility, no displayOptions. |
 
-Note: for `days` / `weeks` / `months` the handler hard-codes the wait to 24h
+Note: for `days` / `weeks` / `months` the op hard-codes the wait to 24h
 / 7d / ~30d respectively; the `daily_time` / `weekday` / `weekly_time` /
 `month_day` / `monthly_time` parameters only flow into the human-readable
 `schedule` string, not the actual wait duration.
@@ -48,7 +49,8 @@ Note: for `days` / `weeks` / `months` the handler hard-codes the wait to 24h
 | Handle | Shape | Description |
 |--------|-------|-------------|
 | `output-main` | object | Schedule metadata (see below). |
-| `output-tool` | object | Same payload when invoked as an AI agent tool. |
+
+Dual-purpose: the plugin sets `usable_as_tool = True` with `tool_name = "cron_scheduler"`, so when wired to an agent's `input-tools` handle the LLM fills the same Params schema and receives the same payload. There is no separate `output-tool` handle declared.
 
 ### Output payload
 
@@ -73,7 +75,7 @@ Wrapped in the standard envelope.
 
 ```mermaid
 flowchart TD
-  A[handle_cron_scheduler] --> B[frequency = parameters.frequency default 'minutes']
+  A[BaseNode.execute -> trigger op] --> B[frequency = params.frequency default 'minutes']
   B --> C[_get_schedule_description<br/>returns e.g. 'Every 5 minutes']
   C --> D[_calculate_wait_seconds<br/>maps frequency to seconds]
   D --> E[get_status_broadcaster.update_node_status 'waiting']
@@ -122,20 +124,20 @@ flowchart TD
 
 ## Edge cases & known limits
 
-- **Handler is not the real scheduler.** Real cron semantics
+- **This op is not the real scheduler.** Real cron semantics
   (exact-time-of-day, weekday selection, timezones) live in
-  `DeploymentManager` + APScheduler. The manual-run handler does not use any
-  of that - it only sleeps for a fixed interval. `daily_time`, `weekday`,
-  `weekly_time`, `month_day`, `monthly_time`, and `timezone` are
-  **display-only** in this code path.
-- `iteration` is always `1`. The handler does not loop; repeated firings
-  come from APScheduler calling the handler again each tick (deployment mode).
-- `interval`, `interval_minutes`, `interval_hours` are coerced with
-  `int(...)`; non-numeric values raise `ValueError` which is caught and
-  returned as an error envelope.
-- `weekday` is read via `parameters.get('weekday', '1')` and expected to be
-  a string digit - if a number is passed it will raise on `.isdigit()` in
-  `_get_schedule_description`, but that only affects the description string.
+  `DeploymentManager` + the Temporal Schedule canary (`CronTriggerWorkflow`).
+  The manual-run op does not use any of that - it only sleeps for a fixed
+  interval. `daily_time`, `weekday`, `weekly_time`, `month_day`,
+  `monthly_time`, and `timezone` are **display-only** in this code path.
+- `iteration` is always `1`. The op does not loop; repeated firings
+  come from the deployed Schedule firing per tick (deployment mode).
+- `interval`, `interval_minutes`, `interval_hours` are Pydantic-validated
+  ints with ranges (`ge`/`le`); out-of-range values fail validation before
+  the op runs.
+- `weekday` is a Pydantic `Literal["0".."6"]`; the op casts it via
+  `int(weekday)` inside `_get_schedule_description`, affecting only the
+  description string.
 - Unknown `frequency` values silently use 300s wait and produce
   `schedule: "Unknown schedule"`.
 

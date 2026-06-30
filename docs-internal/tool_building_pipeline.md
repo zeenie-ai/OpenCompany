@@ -11,7 +11,7 @@ Canonical home for how AI Agents discover connected tool nodes, build LangChain 
 ## 1. Five stages
 
 ```
-1. DISCOVER     handlers/ai.py:_collect_agent_connections
+1. DISCOVER     plugin/edge_walker.py:collect_agent_connections
                   → reads edges → tool_data list
                        │
                        ▼
@@ -32,9 +32,9 @@ Canonical home for how AI Agents discover connected tool nodes, build LangChain 
                   → _dispatch_tool routes by node_type to a handler
 ```
 
-## 2. Stage 1 — Discovery (handlers/ai.py)
+## 2. Stage 1 — Discovery (plugin/edge_walker.py)
 
-[`_collect_agent_connections(node_id, context, database)`](../server/services/handlers/ai.py) walks the workflow edges and returns a 4-tuple per agent:
+[`collect_agent_connections(node_id, context, database)`](../server/services/plugin/edge_walker.py) walks the workflow edges and returns a 4-tuple per agent:
 
 ```
 (memory_data, skill_data, tool_data, input_data, task_data)

@@ -2,19 +2,19 @@
 
 | Field | Value |
 |------|-------|
-| **Category** | social / tool (dual-purpose) |
-| **Backend handler** | [`server/services/handlers/telegram.py::handle_telegram_send`](../../../server/services/handlers/telegram.py) |
+| **Category** | social (workflow-only) |
+| **Backend handler** | [`server/nodes/telegram/telegram_send.py`](../../../server/nodes/telegram/telegram_send.py) (`TelegramSendNode`); dispatch via `BaseNode.execute()` -> `@Operation("send")` |
 | **Tests** | [`server/tests/nodes/test_telegram_social.py`](../../../server/tests/nodes/test_telegram_social.py) |
 | **Skill (if any)** | none |
-| **Dual-purpose tool** | yes - group is `['social', 'tool']`; exposed to AI agents via the unified send path |
+| **Dual-purpose tool** | no - group is `("social",)` only; `usable_as_tool` not set (AI-tool exposure was dropped in Wave 11) |
 
 ## Purpose
 
 Send text, photo, document, location, or contact messages through a connected
 Telegram bot (python-telegram-bot v22.x). The node leans on the `TelegramService`
-singleton for the actual Bot API calls; the handler only does recipient
-resolution, parameter validation, and envelope packaging. When used as an AI
-tool, the LLM fills the same snake_case parameter schema documented below.
+singleton for the actual Bot API calls; the `send` operation only does recipient
+resolution, parameter validation, and envelope packaging. The operation body is
+inlined directly in the plugin file (no `handlers/telegram.py` shim).
 
 ## Inputs (handles)
 
@@ -32,8 +32,8 @@ tool, the LLM fills the same snake_case parameter schema documented below.
 | `text` | string | `""` | yes when `message_type=text` | `message_type: ['text']` | Message text |
 | `media_url` | string | `""` | yes when `message_type` in `photo`/`document` | `message_type: ['photo','document']` | Remote URL or `file_id` |
 | `caption` | string | `""` | no | `message_type: ['photo','document']` | Optional caption |
-| `latitude` | number | `0` | yes when `message_type=location` | `message_type: ['location']` | Latitude |
-| `longitude` | number | `0` | yes when `message_type=location` | `message_type: ['location']` | Longitude |
+| `latitude` | number (Optional[float], default `None`) | `None` | yes when `message_type=location` | `message_type: ['location']` | Latitude. `None` (not `0`) so deliberate `0.0` (Null Island) is distinguishable from "unset" |
+| `longitude` | number (Optional[float], default `None`) | `None` | yes when `message_type=location` | `message_type: ['location']` | Longitude |
 | `phone_number` | string | `""` | yes when `message_type=contact` | `message_type: ['contact']` | Contact phone |
 | `first_name` | string | `""` | yes when `message_type=contact` | `message_type: ['contact']` | Contact first name |
 | `last_name` | string | `""` | no | `message_type: ['contact']` | Contact last name |
@@ -46,9 +46,11 @@ tool, the LLM fills the same snake_case parameter schema documented below.
 | Handle | Shape | Description |
 |--------|-------|-------------|
 | `output-main` | object | Standard envelope containing Bot API message metadata |
-| `output-tool` | object | Same payload, emitted when wired into an AI agent's `input-tools` |
 
 ### Output payload
+
+The operation returns this dict (validated against `TelegramSendOutput`, which
+declares `message_id` / `chat_id` / `sent` and `extra="allow"`):
 
 ```ts
 {
@@ -59,14 +61,14 @@ tool, the LLM fills the same snake_case parameter schema documented below.
 }
 ```
 
-Wrapped in `{ success: true, result: <payload>, execution_time, timestamp, node_id, node_type }`.
+`BaseNode.execute()` wraps it as `{ success: true, result: <payload>, execution_time, timestamp, node_id, node_type }`.
 
 ## Logic Flow
 
 ```mermaid
 flowchart TD
-  A[handle_telegram_send] --> B{TelegramService<br/>connected?}
-  B -- no --> Efail[Return success=false<br/>error: bot not connected]
+  A[TelegramSendNode.send op] --> B{TelegramService<br/>connected?}
+  B -- no --> Efail[raise RuntimeError<br/>BaseNode wraps as success=false]
   B -- yes --> C{recipient_type?}
   C -- self --> D[chat_id = service.owner_chat_id]
   D --> D2{owner set?}
@@ -86,7 +88,7 @@ flowchart TD
   G -- document --> Doc{media_url set?}
   Doc -- no --> Efail
   Doc -- yes --> Dsend[service.send_document]
-  G -- location --> L{lat and lng set?}
+  G -- location --> L{lat and lng<br/>not None?}
   L -- no --> Efail
   L -- yes --> Lsend[service.send_location]
   G -- contact --> Ct{phone + first_name?}
@@ -103,32 +105,34 @@ flowchart TD
 
 ## Decision Logic
 
-- **Connection gate**: If `service.connected` is False the handler short-circuits with
-  `"Telegram bot not connected. Add bot token in Credentials."` No retry is attempted.
+- **Connection gate**: If `service.connected` is False the op raises
+  `RuntimeError("Telegram bot not connected. Add bot token in Credentials.")`
+  (wrapped by `BaseNode.execute()` into a `success=false` envelope). No retry.
 - **Self recipient**: Uses `service.owner_chat_id` (auto-captured on the first
-  private message). If not set, the handler tries
-  `auth_service.get_api_key("telegram_owner_chat_id")` and restores the owner by
-  calling `service.set_owner(int(saved_owner))`. Any exception during restore is
-  logged at WARNING and swallowed - the handler continues and ultimately returns
-  the "Bot owner not detected" error envelope when the chat_id is still falsy.
+  private message). If not set, the op tries
+  `get_auth_service().get_api_key("telegram_owner_chat_id")` and restores the owner by
+  calling `service.set_owner(int(saved))`. Any exception during restore is
+  logged at WARNING and swallowed - the op continues and ultimately raises
+  the "Bot owner not detected" `RuntimeError` when the chat_id is still falsy.
 - **Parse mode**: Passed through to the service. The service itself implements
   `Auto` (GFM -> Telegram HTML via `markdown_formatter.to_telegram_html`) plus the
   `BadRequest "can't parse entities"` fallback that retries with `parse_mode=None`
   and the original unescaped text.
-- **Message type dispatch**: Uses a Python `match` statement. An unknown
-  `message_type` falls into the `_` arm and returns
-  `"Unsupported message type: <x>"`.
+- **Message type dispatch**: Uses an `if/elif/else` chain on `message_type`. An
+  unknown value falls into the `else` and raises
+  `RuntimeError("Unsupported message type: <x>")`.
 - **Reply-to coercion**: `reply_to_message_id` is cast via `int(...)` only when
-  truthy. A non-numeric string here raises `ValueError`, which is caught by the
-  outer `except Exception` and returned as an error envelope.
+  truthy. A non-numeric string here raises `ValueError`, which `BaseNode.execute()`
+  catches and surfaces as an error envelope.
 
 ## Side Effects
 
-- **Database writes**: none from the handler directly. `handle_telegram_send`
-  can call `auth_service.store_api_key("telegram_owner_chat_id", ...)` indirectly
-  only through `TelegramService._on_message_received`, not from the send path.
-- **Broadcasts**: none from the send handler. The service broadcasts
-  `update_telegram_status` on connect / disconnect only.
+- **Database writes**: none from the op directly. The owner is persisted via
+  `auth_service.store_api_key("telegram_owner_chat_id", ...)` only inside
+  `TelegramService._on_message_received`, not from the send path.
+- **Broadcasts**: none from the send op. The service broadcasts the typed
+  `telegram.status` CloudEvents envelope (wire key `telegram_status`) on
+  connect / disconnect only - see `server/nodes/telegram/_events.py`.
 - **External API calls**: Telegram Bot API via `python-telegram-bot` (`bot.send_message`,
   `bot.send_photo`, `bot.send_document`, `bot.send_location`, `bot.send_contact`).
 - **File I/O**: none.
@@ -138,8 +142,9 @@ flowchart TD
 
 - **Credentials**: `auth_service.get_api_key("telegram_owner_chat_id")` when
   restoring the self-owner. Bot token comes from `auth_service.store_api_key("telegram", ...)`
-  and is consumed by `TelegramService.connect()` elsewhere, not by this handler.
-- **Services**: `TelegramService` singleton (`services.telegram_service.get_telegram_service`).
+  and is consumed by `TelegramService.connect()` elsewhere, not by this op.
+  Declared on the plugin via `credentials = (TelegramCredential,)`.
+- **Services**: `TelegramService` singleton (`server/nodes/telegram/_service.py::get_telegram_service`).
 - **Python packages**: `python-telegram-bot` (v22.x), `markdown-it-py` (via
   `markdown_formatter`).
 - **Environment variables**: `TELEGRAM_OWNER_CHAT_ID` (read by the service as a
@@ -151,11 +156,10 @@ flowchart TD
   `telegram_owner_chat_id` is logged at WARNING and continues; the user only
   sees the downstream "Bot owner not detected" error.
 - **Silent ValueError on `reply_to_message_id`**: A non-numeric value raises
-  and the outer `except Exception` returns `str(e)` as the error message.
-- **`recipient_type` spelling**: The handler treats anything that is not
-  literally `"self"` as needing a `chat_id`, including unexpected values -
-  this means a typo like `"slf"` falls through to the user/group branch and
-  the user sees `"chat_id is required"` instead of a recipient-type error.
+  `ValueError`, surfaced by `BaseNode.execute()` as the error message.
+- **`recipient_type` is a `Literal["self","user","group"]`**: Pydantic rejects
+  any other value at param validation. For `user`/`group` an empty `chat_id`
+  raises `RuntimeError("chat_id is required")`.
 - **Markdown fallback leaks unescaped text**: If `send_message` raises
   `BadRequest("can't parse entities ...")`, the service retries with the
   ORIGINAL (unescaped) text at `parse_mode=None`, not the escaped copy. If the
@@ -170,6 +174,6 @@ flowchart TD
 ## Related
 
 - **Sibling nodes**: [`telegramReceive`](./telegramReceive.md), [`socialSend`](./socialSend.md)
-- **Service**: [`server/services/telegram_service.py`](../../../server/services/telegram_service.py)
+- **Service**: [`server/nodes/telegram/_service.py`](../../../server/nodes/telegram/_service.py)
 - **Markdown formatter**: [`server/services/markdown_formatter.py`](../../../server/services/markdown_formatter.py)
 - **Architecture docs**: [Credentials Encryption](../../credentials_encryption.md), [Status Broadcaster](../../status_broadcaster.md)

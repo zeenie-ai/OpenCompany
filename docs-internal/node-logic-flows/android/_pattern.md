@@ -5,25 +5,26 @@ factory, and a single execution path. This document is the authoritative
 description of that shared behaviour. Individual per-node docs link back here
 for everything that is not node-specific.
 
-## Single handler, registry-driven dispatch
+## Single plugin base, registry-driven dispatch
+
+Wave 11.C migrated all 16 Android nodes to self-contained plugin folders
+under `server/nodes/android/<service>/__init__.py`. Each is a trivial
+subclass of the shared `AndroidServiceBase` (`server/nodes/android/_base.py`)
+that sets `type` / `display_name` / `description` / `tool_name` only. The old
+`server/services/handlers/android.py::handle_android_service` and
+`server/services/android_service.py` files are **deleted**. Dispatch flows
+through `BaseNode.execute()` -> the `@Operation("invoke")` method on
+`AndroidServiceBase`.
 
 | Concern | Location |
 |---------|----------|
-| Backend handler | [`server/services/handlers/android.py::handle_android_service`](../../../server/services/handlers/android.py) |
-| Underlying service | [`server/services/android_service.py::AndroidService.execute_service`](../../../server/services/android_service.py) |
-| Registry binding | [`server/services/node_executor.py`](../../../server/services/node_executor.py) lines 228-230 |
-| Output flatten | [`server/services/node_executor.py`](../../../server/services/node_executor.py) lines 277-285 |
+| Plugin base | [`server/nodes/android/_base.py::AndroidServiceBase.invoke`](../../../server/nodes/android/_base.py) (`@Operation("invoke")`) |
+| Underlying service | [`server/nodes/android/_dispatcher.py::AndroidService.execute_service`](../../../server/nodes/android/_dispatcher.py) |
+| Registry binding | plugins self-register via `BaseNode.__init_subclass__`; merged into `NodeExecutor` via `_PLUGIN_HANDLERS` ([`server/services/node_executor.py`](../../../server/services/node_executor.py) line 124) |
+| Output flatten | [`server/services/node_executor.py`](../../../server/services/node_executor.py) lines 173-181 |
 
-The `NodeExecutor._build_handler_registry()` method binds every entry in
-`ANDROID_SERVICE_NODE_TYPES` to the same partial:
-
-```python
-for node_type in ANDROID_SERVICE_NODE_TYPES:
-    registry[node_type] = partial(handle_android_service, android_service=self.android_service)
-```
-
-The handler then maps the incoming `node_type` (camelCase) to a backend
-`service_id` (snake_case) via a hard-coded dict **inside the handler**:
+The `@Operation("invoke")` method maps the incoming `node_type` (camelCase) to a
+backend `service_id` (snake_case) via the `SERVICE_ID_MAP` dict in `_base.py`:
 
 ```python
 SERVICE_ID_MAP = {
@@ -47,7 +48,8 @@ SERVICE_ID_MAP = {
 ```
 
 The frontend hidden `service_id` param is **ignored** for known node types;
-the handler's own map wins. See "Known inconsistencies" below.
+the plugin's own map wins (`SERVICE_ID_MAP.get(self.type, ...)`). See "Known
+inconsistencies" below.
 
 ## Shared parameter set
 
@@ -61,12 +63,13 @@ the handler's own map wins. See "Known inconsistencies" below.
 | `parameters` | dict or JSON string | `{}` | no | Per-action nested parameters |
 | `package_name` | string | `""` | conditional | Only surfaced by `appLauncher`; handler promotes it into `parameters` automatically |
 
-Any extra root-level key in the `additional_param_keys` list is hoisted into
-`parameters` before dispatch. Currently the only key in that list is
-`package_name`.
+Root-level `package_name` is hoisted into `parameters` before dispatch by the
+`invoke` method (the only key promoted today).
 
-If `parameters` is received as a string the handler calls `json.loads()` on it;
-on `JSONDecodeError` the value is silently replaced with `{}`.
+If `parameters` is received as a string it is coerced via `json.loads()` —
+first in `AndroidServiceParams._coerce_parameters` (a `field_validator(mode="before")`)
+and again defensively inside `invoke`; on `JSONDecodeError` the value is
+silently replaced with `{}`.
 
 ## Execution paths
 
@@ -82,7 +85,7 @@ on `JSONDecodeError` the value is silently replaced with `{}`.
 
 ```mermaid
 flowchart TD
-  A[handle_android_service] --> B[Look up service_id via SERVICE_ID_MAP<br/>fallback to parameters.service_id then 'battery']
+  A[AndroidServiceBase.invoke @Operation] --> B[Look up service_id via SERVICE_ID_MAP self.type<br/>fallback to parameters.service_id then 'battery']
   B --> C[Parse parameters<br/>coerce JSON string, promote package_name]
   C --> D[android_service.execute_service<br/>node_id, service_id, action, parameters, host, port]
   D --> E{relay client paired?}
@@ -163,13 +166,14 @@ preserved.
    - `screenControlAutomation` -> `screen_control`
    - `airplaneModeControl` -> `airplane_mode`
 
-   The handler map wins because it is looked up first, but any consumer that
+   The plugin map wins because it is looked up first, but any consumer that
    reads the hidden param directly would see a different value. The same
-   discrepancy exists in `handlers/tools.py::_execute_android_service`.
+   discrepancy exists in the AI-tool path
+   `server/nodes/android/_base.py::execute_android_service_tool`.
 2. **JSON parse failure is silent**. A `parameters` string that fails to parse
    is replaced with `{}` and logged only at debug level.
 3. **No validation of required action params**. `appLauncher` needs
-   `package_name`, but the handler never checks for it - an empty value is
+   `package_name`, but the plugin never checks for it - an empty value is
    passed through and the Android side is expected to error.
 4. **`default_timeout` is service-instance-wide**. All sensor / camera / media
    calls share the same timeout; there is no per-action override.
@@ -177,15 +181,20 @@ preserved.
    dict whose keys collide with `result` metadata keys (`action`,
    `service_id`, `timestamp`, ...), the flatten merges `data` **after**
    metadata, so the data wins and the metadata is lost from the promoted view.
-6. **`execute_service` never raises**. Every exception path returns an envelope
-   with `success=false` and the error string, so the handler itself never
-   raises past `NodeExecutor`.
+6. **`execute_service` never raises, but `invoke` does on failure**.
+   `AndroidService.execute_service` returns a `success=false` envelope for
+   every exception path. The `@Operation("invoke")` wrapper then re-raises a
+   `RuntimeError` when `result["success"] is False` (using `result["error"]`),
+   so `BaseNode.execute()` produces the standard error envelope. On success
+   `invoke` returns `result["result"]` (or the whole dict if no `result` key).
 
 ## Related
 
 - Android service infrastructure: [`server/services/android/`](../../../server/services/android/)
 - Status broadcaster (two-state model): [Status Broadcaster](../../status_broadcaster.md)
 - Android-agent skills: [`server/skills/android_agent/`](../../../server/skills/android_agent/)
-- Toolkit sub-node execution: see `TOOLKIT_NODE_TYPES` and
-  `_execute_android_service` in
-  [`server/services/handlers/tools.py`](../../../server/services/handlers/tools.py)
+- AI-tool dispatch (`androidTool` aggregator + direct service tools):
+  `execute_android_toolkit` and `execute_android_service_tool` in
+  [`server/nodes/android/_base.py`](../../../server/nodes/android/_base.py),
+  called from
+  [`server/services/handlers/tools.py::execute_tool`](../../../server/services/handlers/tools.py)

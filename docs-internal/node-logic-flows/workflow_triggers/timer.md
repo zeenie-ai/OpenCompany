@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | workflow / utility / tool (dual-purpose) |
-| **Backend handler** | [`server/services/handlers/utility.py::handle_timer`](../../../server/services/handlers/utility.py) |
+| **Backend handler** | Plugin [`server/nodes/scheduler/timer/__init__.py`](../../../server/nodes/scheduler/timer/__init__.py) (`TimerNode`); dispatch via `BaseNode.execute()` + the `@Operation("wait")` method. |
 | **Tests** | [`server/tests/nodes/test_workflow_triggers.py`](../../../server/tests/nodes/test_workflow_triggers.py) |
 | **Skill (if any)** | none |
 | **Dual-purpose tool** | yes - exposed on the `tool` output handle so AI agents can invoke it |
@@ -26,7 +26,7 @@ of next-run; it simply pauses the branch of the workflow it is on for
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `duration` | number | `5` | yes | - | How long to wait. Frontend clamps 1..3600. |
+| `duration` | number | `1` | yes | - | How long to wait. Pydantic-validated `ge=1, le=86400`. |
 | `unit` | options | `seconds` | no | - | One of `seconds` / `minutes` / `hours`. Unknown values are treated as `seconds`. |
 
 ## Outputs (handles)
@@ -34,7 +34,8 @@ of next-run; it simply pauses the branch of the workflow it is on for
 | Handle | Shape | Description |
 |--------|-------|-------------|
 | `output-main` | object | Timing metadata (see below). |
-| `output-tool` | object | Same payload when used as an AI agent tool. |
+
+Dual-purpose: the plugin sets `usable_as_tool = True` with `tool_name = "timer"`, so when wired to an agent's `input-tools` handle the LLM fills the same Params schema. There is no separate `output-tool` handle declared.
 
 ### Output payload
 
@@ -54,7 +55,7 @@ Wrapped in the standard envelope: `{ success: true, result: <payload>, execution
 
 ```mermaid
 flowchart TD
-  A[handle_timer] --> B[duration = int parameters.duration default 5]
+  A[BaseNode.execute -> wait op] --> B[duration = int params.duration]
   B --> C{unit?}
   C -- seconds --> S1[wait_seconds = duration]
   C -- minutes --> S2[wait_seconds = duration * 60]
@@ -101,13 +102,12 @@ flowchart TD
 
 - Only three unit strings are supported - anything else is silently treated
   as raw seconds. There is no surfaced validation error.
-- The handler has no timeout ceiling of its own; the frontend clamps at
-  3600 (1h) for `seconds`, but if a workflow injects a larger value via the
-  backend it will actually wait that long.
-- Cancellation returns a failed envelope (`success=false`). Downstream nodes
-  that key off `success` will not execute when the timer is cancelled.
-- Duration is coerced with `int(...)`; a non-numeric string raises `ValueError`
-  which is caught by the generic handler and turned into an error envelope.
+- `duration` is Pydantic-validated `ge=1, le=86400`; for `hours` that is up
+  to 86400 hours, so a large value with `unit=hours` can sleep effectively
+  indefinitely.
+- Cancellation (`asyncio.CancelledError`) is re-raised as `RuntimeError("Timer
+  cancelled")`, surfaced as a failed envelope. Downstream nodes that key off
+  `success` will not execute when the timer is cancelled.
 
 ## Related
 

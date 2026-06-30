@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | android / sensors |
-| **Backend handler** | [`server/services/handlers/android.py::handle_android_service`](../../../server/services/handlers/android.py) (shared) |
+| **Backend handler** | plugin [`server/nodes/android/motion_detection/__init__.py`](../../../server/nodes/android/motion_detection/__init__.py); dispatch via `BaseNode.execute()` -> shared [`AndroidServiceBase.invoke`](../../../server/nodes/android/_base.py) (`@Operation("invoke")`) |
 | **Tests** | [`server/tests/nodes/test_android.py`](../../../server/tests/nodes/test_android.py) |
 | **Skill (if any)** | [`server/skills/android_agent/motion-skill/SKILL.md`](../../../server/skills/android_agent/motion-skill/SKILL.md) |
 | **Dual-purpose tool** | sub-node of `androidTool`; connectable directly to any agent's `input-tools` |

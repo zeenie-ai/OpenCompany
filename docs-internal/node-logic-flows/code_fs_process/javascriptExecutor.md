@@ -3,8 +3,8 @@
 | Field | Value |
 |------|-------|
 | **Category** | code_fs_process / code |
-| **Backend handler** | [`server/services/handlers/code.py::handle_javascript_executor`](../../../server/services/handlers/code.py) |
-| **Node.js client** | [`server/services/nodejs_client.py::NodeJSClient`](../../../server/services/nodejs_client.py) |
+| **Backend handler** | [`server/nodes/code/javascript_executor/__init__.py::JavaScriptExecutorNode.execute_op`](../../../server/nodes/code/javascript_executor/__init__.py) (dispatched via `BaseNode.execute()` + `@Operation("execute")`; base in [`_base.py`](../../../server/nodes/code/_base.py)) |
+| **Node.js client** | [`server/nodes/code/_nodejs.py::get_nodejs_client`](../../../server/nodes/code/_nodejs.py) (singleton over [`server/services/nodejs_client.py::NodeJSClient`](../../../server/services/nodejs_client.py)) |
 | **Tests** | [`server/tests/nodes/test_code_fs_process.py`](../../../server/tests/nodes/test_code_fs_process.py) |
 | **Skill (if any)** | [`server/skills/coding_agent/javascript-skill/SKILL.md`](../../../server/skills/coding_agent/javascript-skill/SKILL.md) |
 | **Dual-purpose tool** | yes - tool name `javascript_code` |
@@ -12,17 +12,15 @@
 ## Purpose
 
 Runs user JavaScript through the persistent Node.js executor server (Express +
-tsx) that the Python backend spawns on startup. The handler does **not** spawn
-`node` per call - it POSTs the code to `http://localhost:3020/execute` via an
-async `aiohttp` client. The Node.js server evaluates the script inside a VM
-sandbox and returns `{success, output, console_output, execution_time_ms}`.
+tsx) that the Python backend spawns on startup. The plugin does **not** spawn
+`node` per call - it POSTs the code to `http://localhost:3020/execute` via the
+shared `get_nodejs_client()` singleton (an async `aiohttp` client). The Node.js
+server evaluates the script and returns `{success, output, console_output, ...}`.
 
-The handler merges the caller's upstream outputs into an `input_data` object,
-injects the workflow's `workspace_dir` as a key, then forwards the payload.
-
-Dispatched through the special-handlers branch at
-[`node_executor.py:367-381`](../../../server/services/node_executor.py) so it
-receives `connected_outputs`.
+The plugin merges the caller's upstream outputs (`ctx.raw["connected_outputs"]`)
+into an `input_data` object, injects the workflow's `workspace_dir`
+(`ctx.workspace_dir`) as a key, then forwards the payload with `language="javascript"`.
+`connected_outputs` is injected by the executor for code-executor node types.
 
 ## Inputs (handles)
 
@@ -34,22 +32,23 @@ receives `connected_outputs`.
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `code` | string (code editor) | (boilerplate stub) | yes | - | JavaScript source. User must assign to `output` |
-| `timeout` | number | `30` | no | - | Seconds - multiplied by 1000 and forwarded as millisecond timeout to the Node server |
+| `code` | string (code editor) | (required, `min_length=1`) | yes | - | JavaScript source. User must assign to `output` |
+| `timeout` | number | `30` (ge=1, le=600) | no | - | Seconds - multiplied by 1000 and forwarded as millisecond timeout to the Node server |
 
-## Handler-level kwargs (bound via partial at registry setup)
+`CodeExecutorParams` uses `extra="allow"` (extra params persist but are unread).
 
-| Name | Default | Description |
-|------|---------|-------------|
-| `nodejs_url` | `http://localhost:3020` | Overridable via `NODEJS_EXECUTOR_URL` at container wiring |
-| `nodejs_timeout` | `30` | Seconds; overridable via `NODEJS_EXECUTOR_TIMEOUT` |
+## Node.js client singleton
+
+`get_nodejs_client()` in [`_nodejs.py`](../../../server/nodes/code/_nodejs.py) lazily
+constructs one `NodeJSClient(base_url="http://localhost:3020", timeout=30)` shared
+across the JS + TS plugins. The defaults are hard-coded in the helper signature
+(no per-call kwargs from the plugin).
 
 ## Outputs (handles)
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | Standard envelope payload |
-| `output-tool` | object | Same payload when wired to an AI agent |
+| `output-main` | object | Standard envelope payload (node declares only `input-main` / `output-main`; `usable_as_tool=True` exposes the same payload as the `javascript_code` tool result) |
 
 ### Output payload
 
@@ -57,44 +56,42 @@ receives `connected_outputs`.
 {
   output: any;              // Value the Node.js server parsed from `output` in the script
   console_output: string;   // Captured console.log/.error etc.
-  timestamp: string;        // ISO8601
 }
 ```
+
+`node_output_schemas.CodeExecutorOutput` declares only `output` (the
+`_OutputBase` base allows extra fields like `console_output`).
 
 ## Logic Flow
 
 ```mermaid
 flowchart TD
-  A[handle_javascript_executor] --> B{code strip empty?}
-  B -- yes --> E[Return error envelope:<br/>No code provided]
-  B -- no --> C[timeout_ms = int timeout * 1000]
-  C --> D[input_data = connected_outputs or {}<br/>inject workspace_dir]
+  A[execute_op] --> B{code strip empty?}
+  B -- yes --> E[raise NodeUserError:<br/>No code provided]
+  B -- no --> C[timeout_ms = timeout * 1000]
+  C --> D[input_data = ctx.raw connected_outputs or {}<br/>inject workspace_dir]
   D --> F[get_nodejs_client<br/>lazy singleton]
   F --> G[client.execute<br/>POST /execute<br/>language=javascript]
-  G -- exception --> H[Return error envelope<br/>error=str e]
-  G -- ok + success=true --> I[Return success envelope<br/>output + console_output]
-  G -- ok + success=false --> J[Return error envelope<br/>preserve console_output]
+  G -- ClientConnectorError --> H1[raise NodeUserError<br/>JS executor not running on :3020]
+  G -- success=false --> H2[raise NodeUserError<br/>error=result.error]
+  G -- success=true --> I[Return dict<br/>output, console_output]
 ```
 
 ## Decision Logic
 
-- **Validation**: `code.strip() == ""` -> immediate error envelope
-  `"No code provided"`.
-- **Timeout unit mismatch**: UI accepts seconds, handler multiplies by 1000
-  before forwarding. Default 30 -> 30000 ms. No upper cap enforced in Python.
+- **Validation**: `code.strip() == ""` -> `raise NodeUserError("No code provided")`.
+- **Timeout unit mismatch**: UI accepts seconds, plugin multiplies by 1000
+  before forwarding. Default 30 -> 30000 ms. Pydantic clamps the input to 1-600 s.
 - **`workspace_dir` injection**: unconditionally sets
   `input_data["workspace_dir"]`, shadowing any upstream node that happened to
   produce a key with that name.
-- **Client reuse**: `_nodejs_client` is a **module-global** singleton. First
-  call fixes the `base_url` and `timeout`; subsequent calls with different
-  kwargs silently reuse the first one. See Edge cases.
-- **Node server error propagation**: if the Node.js server returns
-  `{success: false, error, console_output}`, the handler forwards the `error`
-  string and **keeps** `console_output` so users still see logs from the failed
-  run.
-- **Broad `except Exception`**: any networking error (aiohttp.ClientError,
-  TimeoutError, ConnectionRefusedError) is caught, logged at ERROR, and
-  surfaced as an error envelope with `console_output=""`.
+- **Client reuse**: `get_nodejs_client()`'s `_client` is a **module-global**
+  singleton in `_nodejs.py`, fixed at the hard-coded `base_url`/`timeout`.
+- **Node server error propagation**: if `result["success"]` is falsey, the
+  plugin raises `NodeUserError(result["error"] or "JavaScript executor failed")`.
+- **Sidecar down**: `aiohttp.ClientConnectorError` is caught and re-raised as a
+  `NodeUserError` telling the LLM the Node executor is unreachable on
+  localhost:3020 and to fall back to `python_executor`.
 
 ## Side Effects
 
@@ -107,8 +104,8 @@ flowchart TD
   packages at `server/nodejs/user-packages/`.
 - **Subprocess**: none directly. The Node.js server itself is a long-lived
   subprocess started by `main.py` lifespan.
-- **Module-level state**: the `_nodejs_client` module global is created on
-  first use and never reset.
+- **Module-level state**: the `_client` module global in `_nodejs.py` is created
+  on first use and never reset.
 
 ## External Dependencies
 
@@ -122,10 +119,9 @@ flowchart TD
 
 ## Edge cases & known limits
 
-- **Module-level client singleton**: `_nodejs_client` is cached on first call.
-  If the injected `nodejs_url` / `nodejs_timeout` kwargs change mid-process
-  (e.g., tests re-wiring the container), the cached instance keeps the
-  original values. Reset by `services.handlers.code._nodejs_client = None`.
+- **Module-level client singleton**: `_client` in `_nodejs.py` is cached on
+  first call at the hard-coded `base_url`/`timeout`. Reset by setting
+  `services.code._nodejs._client = None` (or `nodes.code._nodejs._client`).
 - **Node server down**: connection refused surfaces as
   `error="Cannot connect to host localhost:3020 ssl:default [Connect call
   failed]"` or similar aiohttp message. No automatic retry.
@@ -146,5 +142,5 @@ flowchart TD
 ## Related
 
 - **Skills using this as a tool**: [`javascript-skill/SKILL.md`](../../../server/skills/coding_agent/javascript-skill/SKILL.md)
-- **Sibling nodes**: [`typescriptExecutor`](./typescriptExecutor.md), [`pythonExecutor`](./pythonExecutor.md)
-- **Architecture docs**: [DESIGN.md](../../DESIGN.md)
+- **Sibling nodes**: [`typescriptExecutor`](./typescriptExecutor.md), [`pythonExecutor`](./pythonExecutor.md), [`montyExecutor`](./montyExecutor.md)
+- **Architecture docs**: [DESIGN.md](../../DESIGN.md), [Plugin System](../../plugin_system.md)

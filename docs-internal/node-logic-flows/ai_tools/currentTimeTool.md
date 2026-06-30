@@ -2,84 +2,71 @@
 
 | Field | Value |
 |------|-------|
-| **Category** | ai_tools (dedicated AI tool) |
-| **Backend handler** | [`server/services/handlers/tools.py::_execute_current_time`](../../../server/services/handlers/tools.py) |
+| **Category** | ai_tools (dedicated AI tool, group `("tool", "ai")`) |
+| **Backend handler** | [`server/nodes/tool/current_time_tool/__init__.py`](../../../server/nodes/tool/current_time_tool/__init__.py) — `CurrentTimeToolNode`, dispatched via `BaseNode.execute()` + the `@Operation("now")` method |
 | **Tests** | [`server/tests/nodes/test_ai_tools.py`](../../../server/tests/nodes/test_ai_tools.py) |
 | **Skill (if any)** | None |
-| **Dual-purpose tool** | tool-only - LLM invokes as `get_current_time` (configurable via `toolName` param) |
+| **Dual-purpose tool** | tool-only — `ToolNode` exposed to the LLM as `get_current_time` (`tool_name` class attr) |
 
 ## Purpose
 
-Provides the current date, time, day-of-week, and unix timestamp in a
-caller-specified timezone. Intended for AI Agents that need temporal grounding
-(e.g., "what day is it today?" before scheduling something). Pure wrapper
-around `datetime.now(tz)` with `pytz` for tz resolution.
+Provides the current ISO timestamp and unix epoch in a caller-specified
+timezone. Intended for AI Agents that need temporal grounding (e.g., "what day
+is it today?" before scheduling something). Pure wrapper around
+`datetime.now(tz)` with `zoneinfo.ZoneInfo` for tz resolution.
 
 ## Inputs (handles)
 
 | Handle | Connection type | Required | Purpose |
 |--------|-----------------|----------|---------|
-| (none) | - | - | Passive node |
+| `input-main` | main | no | Passive node - connect `output-tool` to an AI Agent's `input-tools` |
 
 ## Parameters
 
+The `CurrentTimeParams` model field IS the LLM-provided tool arg (no separate
+`toolName` / `toolDescription` node params — those live on the class as
+`tool_name` / `tool_description`).
+
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `toolName` | string | `get_current_time` | yes | - | LLM-visible tool name |
-| `toolDescription` | string | (see frontend) | no | - | LLM-visible description |
-| `timezone` | string | `UTC` | no | - | Default timezone used if the LLM does not pass one |
-
-### LLM-provided tool args (at invocation time)
-
-| Arg | Type | Description |
-|-----|------|-------------|
-| `timezone` | string? | IANA name (`UTC`, `America/New_York`, `Europe/London`, ...). When omitted or empty, handler falls back to the node's `timezone` parameter. |
+| `timezone` | string | `UTC` | no | - | IANA name (`UTC`, `America/New_York`, `Europe/London`, ...). Invalid values silently fall back to `UTC`. |
 
 ## Outputs (handles)
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-tool` | object | Raw dict returned to the LLM |
+| `output-tool` | object | `CurrentTimeOutput` model, serialized per `BaseNode._serialize_result` |
 
 ### Output payload (TypeScript shape)
 
-On success:
+On success (matches the `CurrentTimeOutput` model):
 ```ts
 {
-  datetime: string;     // ISO 8601 with offset, e.g. "2026-04-15T12:00:00+00:00"
-  date: string;         // "YYYY-MM-DD"
-  time: string;         // "HH:MM:SS"
-  timezone: string;     // echoed back (the resolved string, not the tz object)
-  day_of_week: string;  // "Monday" ... "Sunday"
-  timestamp: number;    // unix seconds, integer
+  iso: string;       // ISO 8601 with offset, e.g. "2026-04-15T12:00:00+00:00"
+  timezone: string;  // echoed back (the requested input string)
+  unix: number;      // unix seconds, integer
 }
-```
-
-On invalid timezone:
-```ts
-{ error: string }  // "Invalid timezone: <tz>. Error: <details>"
 ```
 
 ## Logic Flow
 
 ```mermaid
 flowchart TD
-  A[_execute_current_time args node_params] --> B[tz_str = args.timezone OR node_params.timezone OR UTC]
-  B --> C{pytz.timezone tz_str}
-  C -- raises UnknownTimeZoneError --> E[Return error: Invalid timezone ...]
-  C -- ok --> D[now = datetime.now tz]
-  D --> F[Format ISO / date / time / day_of_week / timestamp]
-  F --> R[Return dict]
+  A[BaseNode.execute -> now ctx params] --> B{ZoneInfo params.timezone}
+  B -- raises any exception --> C[tz = ZoneInfo UTC]
+  B -- ok --> D[tz resolved]
+  C --> E[now = datetime.now tz]
+  D --> E
+  E --> R[Return CurrentTimeOutput iso/timezone/unix]
 ```
 
 ## Decision Logic
 
-- **Timezone resolution**: `args.timezone` wins if truthy; otherwise
-  `node_params.timezone`; otherwise the string literal `'UTC'`.
-- **Invalid timezone**: caught by the outer `except Exception` and returned
-  as `{error: "Invalid timezone: <tz>. Error: <str>"}` (no raise).
-- **Empty string**: an empty `timezone` arg is falsy so falls back to
-  `node_params.timezone`; an empty node param then falls back to `'UTC'`.
+- **Timezone resolution**: `ZoneInfo(params.timezone)`; `timezone` defaults to
+  `"UTC"` when the LLM omits it.
+- **Invalid timezone**: any exception constructing `ZoneInfo` is caught and
+  silently falls back to `ZoneInfo("UTC")` (the result still echoes the
+  requested `params.timezone` string in the `timezone` field).
 
 ## Side Effects
 
@@ -93,20 +80,20 @@ flowchart TD
 
 - **Credentials**: none.
 - **Services**: none.
-- **Python packages**: `pytz`, `datetime` (stdlib).
+- **Python packages**: `zoneinfo`, `datetime` (stdlib).
 - **Environment variables**: none.
 
 ## Edge cases & known limits
 
-- `timestamp` is truncated to integer seconds via `int(now.timestamp())` -
+- `unix` is truncated to integer seconds via `int(now.timestamp())` -
   millisecond precision is lost.
-- `timezone` field in the output is the input string, not the canonical
-  zone name `pytz` may have normalised to (e.g. aliases are not rewritten).
+- `timezone` field in the output is the requested input string, not the
+  canonical zone name (and stays the input even when the lookup falls back to
+  UTC, so an invalid tz is silently masked).
 - If the server system clock is wrong, output is wrong. No NTP sync.
-- `pytz.UnknownTimeZoneError` is the typical failure mode; any other
-  unexpected exception (e.g. strftime locale issues) is also swallowed.
+- A bad/unknown IANA name does NOT error — it falls back to UTC silently.
 
 ## Related
 
-- **Sibling tools**: [`calculatorTool`](./calculatorTool.md), [`duckduckgoSearch`](./duckduckgoSearch.md), [`taskManager`](./taskManager.md), [`writeTodos`](./writeTodos.md)
+- **Sibling tools**: [`calculatorTool`](./calculatorTool.md), [`duckduckgoSearch`](./duckduckgoSearch.md), [`taskManager`](./taskManager.md), [`writeTodos`](./writeTodos.md), [`agentBuilder`](./agentBuilder.md)
 - **Architecture docs**: [Agent Architecture](../../agent_architecture.md)

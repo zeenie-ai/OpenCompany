@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | code_fs_process / code |
-| **Backend handler** | [`server/services/handlers/code.py::handle_python_executor`](../../../server/services/handlers/code.py) |
+| **Backend handler** | [`server/nodes/code/python_executor/__init__.py::PythonExecutorNode.execute_op`](../../../server/nodes/code/python_executor/__init__.py) (dispatched via `BaseNode.execute()` + the `@Operation("execute")` method; base in [`_base.py`](../../../server/nodes/code/_base.py)) |
 | **Tests** | [`server/tests/nodes/test_code_fs_process.py`](../../../server/tests/nodes/test_code_fs_process.py) |
 | **Skill (if any)** | [`server/skills/coding_agent/python-skill/SKILL.md`](../../../server/skills/coding_agent/python-skill/SKILL.md) |
 | **Dual-purpose tool** | yes - tool name `python_code` |
@@ -19,9 +19,10 @@ are intentionally excluded - only `math`, `json`, `datetime`, `re`, `random`,
 redirected to an `io.StringIO` buffer so stdout becomes the `console_output`
 return field.
 
-Dispatched through the special-handlers branch at
-[`node_executor.py:367-381`](../../../server/services/node_executor.py) so it
-receives `connected_outputs` (dict of upstream outputs keyed by source node id).
+The plugin reads upstream outputs from `ctx.raw["connected_outputs"]` (dict of
+upstream outputs keyed by source node id), which the executor injects for
+code-executor node types, and `ctx.workspace_dir` for the per-workflow scratch
+directory.
 
 ## Inputs (handles)
 
@@ -33,15 +34,17 @@ receives `connected_outputs` (dict of upstream outputs keyed by source node id).
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `code` | string (code editor) | (boilerplate stub) | yes | - | Python source. Must assign to the free variable `output` to emit a value |
-| `timeout` | number | `30` | no | - | Read and coerced to int but **not enforced** - `exec()` is synchronous with no wall-clock guard |
+| `code` | string (code editor) | (required, `min_length=1`) | yes | - | Python source. Must assign to the free variable `output` to emit a value |
+| `timeout` | number | `30` (ge=1, le=600) | no | - | Validated/clamped but **not enforced** - `exec()` is synchronous with no wall-clock guard. Use `montyExecutor` for an enforced limit |
+
+`CodeExecutorParams` uses `extra="allow"`, so any extra params persist but are
+not read by the operation.
 
 ## Outputs (handles)
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | Standard envelope payload |
-| `output-tool` | object | Same payload when wired to an AI agent |
+| `output-main` | object | Standard envelope payload (the node declares only `input-main` / `output-main`; `usable_as_tool=True` exposes the same payload as the `python_code` tool result) |
 
 ### Output payload
 
@@ -49,48 +52,52 @@ receives `connected_outputs` (dict of upstream outputs keyed by source node id).
 {
   output: any;              // Value assigned to `output` in the user code (None by default)
   console_output: string;   // Captured stdout from redirected print()
-  timestamp: string;        // ISO8601 local time
 }
 ```
 
-On failure the envelope is `{success: false, error, console_output: "", ...}`.
-Note that `console_output` is **only** preserved on the success path; when an
-exception fires mid-execution the already-captured buffer is discarded because
-the `except` branch hard-codes `"console_output": console_output` but
-`console_output` is only assigned after `exec()` finishes. See Edge cases.
+On failure the operation raises `NodeUserError` (not an error envelope). The
+framework's `BaseNode.execute()` catches it and returns
+`{success: false, error_type: "NodeUserError", error, ...}` with a single WARN
+line (no traceback). The error message preserves any captured stdout via a
+`stdout before error:` suffix, so prints before the exception are NOT lost.
+`node_output_schemas.CodeExecutorOutput` declares only `output` (the
+`_OutputBase` base allows extra fields like `console_output`).
 
 ## Logic Flow
 
 ```mermaid
 flowchart TD
-  A[handle_python_executor] --> B{code strip empty?}
-  B -- yes --> E[Return error envelope:<br/>No code provided]
-  B -- no --> C[Read timeout<br/>int-coerce only, unused]
+  A[execute_op] --> B{code strip empty?}
+  B -- yes --> E[raise NodeUserError:<br/>No code provided]
+  B -- no --> C[timeout validated by Pydantic, unused at runtime]
   C --> D[Build safe_builtins dict:<br/>abs..zip, math, json, captured_print]
-  D --> F[Build namespace:<br/>input_data=connected_outputs or {},<br/>workspace_dir=context,<br/>output=None]
+  D --> F[Build namespace:<br/>input_data=ctx.raw connected_outputs or {},<br/>workspace_dir=ctx.workspace_dir,<br/>output=None]
   F --> G[exec code in namespace]
-  G -- exception --> H[Return error envelope<br/>error=str e, console_output=empty]
+  G -- ImportError __import__ --> H1[raise NodeUserError<br/>import not allowed, list sandbox names]
+  G -- other exception --> H2[raise NodeUserError<br/>ErrType at line N: msg + stdout before error]
   G -- ok --> I[output = namespace.get output<br/>console_output = StringIO.getvalue]
-  I --> J[Return success envelope<br/>output, console_output, timestamp]
+  I --> J[Return dict<br/>output, console_output]
 ```
 
 ## Decision Logic
 
-- **Validation**: `code.strip() == ""` -> immediate error envelope with message
-  `"No code provided"`.
+- **Validation**: `code.strip() == ""` -> `raise NodeUserError("No code provided")`.
 - **Namespace seeding**: `input_data` defaults to `{}` if `connected_outputs` is
-  None. `workspace_dir` is pulled from `context["workspace_dir"]` but never
+  None. `workspace_dir` is pulled from `ctx.workspace_dir` but never
   validated; an empty string is fine.
 - **Print redirection**: `safe_builtins["print"]` is a wrapper that forces
   `file=stdout_capture`, so any user-supplied `file=` kwarg is **overwritten**.
 - **Output extraction**: `namespace.get("output", None)` - the user writing
   `output = <value>` is the only way to emit data. A top-level expression is
   evaluated but not captured.
-- **No timeout enforcement**: the `timeout` parameter is int-coerced only as a
-  sanity check (raises on non-numeric strings) but never passed to a watchdog.
-  Long loops will block the async event loop for the whole backend.
-- **Error path**: broad `except Exception` catches everything, logs via
-  `logger.error`, and returns `{success: false, error: str(e)}`.
+- **No timeout enforcement**: the `timeout` parameter is Pydantic-validated
+  (1-600) but never passed to a watchdog. Long loops will block the async event
+  loop for the whole backend.
+- **Error path**: `except Exception` re-raises as `NodeUserError`. `import X`
+  (which hits the sandboxed builtins' missing `__import__`) gets a dedicated
+  message listing the pre-injected names; other exceptions are formatted as
+  `<ErrType> at line N: <msg>` (line walked from the `<string>` traceback frame)
+  with any captured stdout appended.
 
 ## Side Effects
 
@@ -121,10 +128,9 @@ flowchart TD
   `math` and `json` are module objects, and user code can re-import anything via
   `().__class__.__base__.__subclasses__()` or similar well-known escapes. Treat
   this node as trusted-input only.
-- **`console_output` swallowed on error**: the `except` path hard-codes
-  `"console_output": console_output`, but `console_output` is initialised to
-  `""` and only overwritten **after** `exec()` succeeds. Any print()s before an
-  exception are therefore lost.
+- **`console_output` preserved on error**: the `NodeUserError` message appends a
+  `stdout before error:` block with whatever the StringIO captured before the
+  exception, so prints before a failure are surfaced (not lost) in the error.
 - **`output=None` is indistinguishable from a user explicitly returning
   `None`**: both surface as `{"output": None}` in the envelope.
 - **`input_data` mutation is visible to later siblings**: the handler passes
@@ -139,5 +145,5 @@ flowchart TD
 ## Related
 
 - **Skills using this as a tool**: [`python-skill/SKILL.md`](../../../server/skills/coding_agent/python-skill/SKILL.md)
-- **Sibling nodes**: [`javascriptExecutor`](./javascriptExecutor.md), [`typescriptExecutor`](./typescriptExecutor.md), [`shell`](./shell.md), [`processManager`](./processManager.md)
-- **Architecture docs**: [DESIGN.md](../../DESIGN.md)
+- **Sibling nodes**: [`montyExecutor`](./montyExecutor.md), [`javascriptExecutor`](./javascriptExecutor.md), [`typescriptExecutor`](./typescriptExecutor.md), [`shell`](./shell.md), [`processManager`](./processManager.md)
+- **Architecture docs**: [DESIGN.md](../../DESIGN.md), [Plugin System](../../plugin_system.md)

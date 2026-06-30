@@ -19,65 +19,12 @@ pitfalls).
 
 ## Quick start — adding a new node
 
-```python
-# server/nodes/search/example_search.py
-from pydantic import BaseModel, Field
-from services.plugin import (
-    ActionNode, ApiKeyCredential, NodeContext, Operation, TaskQueue,
-)
-
-
-class ExampleCredential(ApiKeyCredential):
-    id = "example_api"
-    display_name = "Example Search"
-    category = "Search"
-    key_name = "X-API-Key"
-    key_location = "header"
-
-
-class ExampleParams(BaseModel):
-    query: str = Field(..., min_length=1)
-    max_results: int = Field(default=10, ge=1, le=50)
-
-
-class ExampleOutput(BaseModel):
-    results: list
-    count: int
-
-
-class ExampleSearchNode(ActionNode):
-    type = "exampleSearch"
-    display_name = "Example Search"
-    # Icon + color are NOT declared on the class. Drop `icon.svg` into
-    # the plugin folder; create `meta.json` with `{"color": "#abcdef"}`.
-    # `_metadata_dict` resolves both at registration time via the
-    # central handler in server/nodes/_visuals.py.
-    group = ("search", "tool")
-    description = "Example search via external API"
-    component_kind = "square"
-    handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
-    )
-    credentials = (ExampleCredential,)
-    task_queue = TaskQueue.REST_API
-    usable_as_tool = True
-    Params = ExampleParams
-    Output = ExampleOutput
-
-    @Operation("search")
-    async def search(self, ctx: NodeContext, params: ExampleParams) -> ExampleOutput:
-        async with ctx.connection("example_api") as conn:
-            resp = await conn.get(
-                "https://api.example.com/search",
-                params={"q": params.query, "limit": params.max_results},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-        return ExampleOutput(results=data.get("hits", []), count=len(data.get("hits", [])))
-```
+The full single-file recipe code block lives in the cookbook — see
+[`server/nodes/README.md` → Five-minute recipe](../server/nodes/README.md#five-minute-recipe).
+A self-contained folder (`AcmeSearchNode`) declares `type` /
+`display_name` / `group` / `component_kind` / `handles` /
+`credentials` / `task_queue` / `usable_as_tool` / `Params` / `Output`
+plus one `@Operation` method, and nothing else.
 
 **That's it.** On server restart:
 

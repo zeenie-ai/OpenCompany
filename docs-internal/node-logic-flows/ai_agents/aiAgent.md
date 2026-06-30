@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | ai_agents / agent |
-| **Backend handler** | [`server/services/handlers/ai.py::handle_ai_agent`](../../../server/services/handlers/ai.py) |
+| **Backend handler** | [`server/nodes/agent/ai_agent/__init__.py`](../../../server/nodes/agent/ai_agent/__init__.py) — dispatched via `BaseNode.execute()` + the `@Operation("execute")` method (`execute_op`). Pre-dispatch (edge walk + task inject + prompt fallback) in [`server/nodes/agent/_inline.py::prepare_agent_call`](../../../server/nodes/agent/_inline.py); LLM loop in `AIService.execute_agent`. |
 | **Tests** | [`server/tests/nodes/test_ai_agents.py`](../../../server/tests/nodes/test_ai_agents.py) |
 | **Skill (if any)** | n/a (the agent consumes skills via `input-skill`) |
 | **Dual-purpose tool** | no |
@@ -16,8 +16,9 @@ and system message, optionally merges conversation history from a connected
 via `chat_model.bind_tools`, and runs the tool-calling loop until the LLM produces a
 final answer. All of the heavy lifting (LLM invocation, tool execution, memory
 persistence) lives in `AIService.execute_agent`; the handler's job is purely
-to gather the connected-node payloads via `_collect_agent_connections` and
-forward them.
+to gather the connected-node payloads via
+`edge_walker.collect_agent_connections` (a 5-tuple: memory, skill, tool,
+input, task) and forward them.
 
 ## Inputs (handles)
 
@@ -31,17 +32,18 @@ forward them.
 
 ## Parameters
 
-| Name | Type | Default | Required | displayOptions.show | Description |
-|------|------|---------|----------|---------------------|-------------|
-| `provider` | options | `openai` | no | - | AI provider (openai, anthropic, gemini, groq, cerebras, openrouter, deepseek, kimi, mistral, xai). |
-| `model` | string | `""` | **yes** | - | Model id; loaded dynamically from the provider. |
-| `prompt` | string | `{{ $json.chatInput }}` | **yes** | - | User prompt; may reference upstream node outputs via templates. |
-| `systemMessage` | string | `You are a helpful assistant` | no | - | System prompt prepended to the conversation. |
-| `options.temperature` | number | `0.7` | no | - | 0-2. |
-| `options.maxTokens` | number | `4096` | no | - | 1-200000; clamped to model context in `AIService._resolve_max_tokens`. |
-| `options.thinkingEnabled` | boolean | `false` | no | - | Enables extended thinking / reasoning. |
-| `options.thinkingBudget` | number | `2048` | no | `thinkingEnabled=true` | Token budget (Claude, Gemini, Cerebras). |
-| `options.reasoningEffort` | options | `medium` | no | `thinkingEnabled=true` | `low` / `medium` / `high` (OpenAI o-series, Groq). |
+Source: `AIAgentParams` in [`ai_agent/__init__.py`](../../../server/nodes/agent/ai_agent/__init__.py).
+
+| Name | Type | Default | Required | Group | Description |
+|------|------|---------|----------|-------|-------------|
+| `prompt` | string (textarea, rows 4) | `""` | no | - | User prompt; may reference upstream node outputs via templates. Empty -> auto-prompt fallback from `input-main`. |
+| `provider` | Literal | `openai` | no | - | One of openai, anthropic, gemini, openrouter, groq, cerebras, deepseek, kimi, mistral, ollama, lmstudio. |
+| `model` | string | `""` | no | - | Model id; loaded dynamically from the provider. |
+| `system_message` | string (rows 3) | `You are a helpful assistant` | no | - | System prompt prepended to the conversation. |
+| `temperature` | number (optional) | `None` | no | options | 0-2, step 0.1. Unset falls through to `agent.default_temperature` in `llm_defaults.json`. |
+| `max_tokens` | int (optional) | `None` | no | options | 1-200000. Unset falls through to the per-model default; clamped in `AIService._resolve_max_tokens`. |
+
+> Note: `api_key` is **not** a declared field — credentials are auto-injected at execution time by `node_executor._inject_api_keys`. The thinking/reasoning controls are resolved by the LLM service layer from provider/model metadata, not exposed as `AIAgentParams` fields.
 
 ## Outputs (handles)
 
@@ -68,7 +70,7 @@ Wrapped in the standard envelope: `{ success: true, result: <payload>, execution
 
 ```mermaid
 flowchart TD
-  A[handle_ai_agent] --> B[_collect_agent_connections]
+  A[execute_op -> prepare_agent_call] --> B[edge_walker.collect_agent_connections]
   B --> C{task_data?}
   C -- yes --> D[Format task_context<br/>prepend to prompt]
   D --> E{task status in<br/>completed/error AND<br/>tool_data?}
@@ -85,7 +87,7 @@ flowchart TD
 
 ## Decision Logic
 
-- **`_collect_agent_connections`** scans `context.edges` for edges whose target
+- **`edge_walker.collect_agent_connections`** scans `context.edges` for edges whose target
   is this node, then routes each by `targetHandle`:
   - `input-memory` + source type `simpleMemory` -> build `memory_data` dict.
     `session_id` is auto-set to the agent's `node_id` unless the memory node
@@ -106,30 +108,36 @@ flowchart TD
 - **Task completion short-circuit**: if `task_data` exists, `_format_task_context`
   produces a plain-English wrapper which is prepended to the prompt. If the
   task status is `completed` or `error` and any tools are present, **all tools
-  are stripped** to prevent the LLM from delegating again.
+  are stripped** to prevent the LLM from delegating again. (See
+  `prepare_agent_call` in `_inline.py`.)
 - **Auto-prompt fallback**: if `parameters.prompt` is empty after the task
-  block, the handler extracts `input_data.message`, `input_data.text`, or
-  `input_data.content` (first truthy wins) and assigns it to `prompt`. If the
+  block, `prepare_agent_call` extracts `input_data.message`, `input_data.text`,
+  or `input_data.content` (first truthy wins) and assigns it to `prompt`. If the
   input is not a dict the whole value is stringified.
-- **Delegation to AIService**: the handler always returns whatever
-  `ai_service.execute_agent` returns; success/error envelope shape is
-  owned by the service, not the handler.
+- **Team-lead delegation**: for `orchestrator_agent` / `ai_employee`,
+  teammates connected via `input-teammates` are appended to `tool_data` as
+  `delegate_to_*` tools (not applicable to `aiAgent` itself).
+- **Delegation to AIService**: `execute_op` returns `response.get("result")`
+  on success; a `success=False` envelope raises `RuntimeError`. Typed openai
+  SDK failures surface as `NodeUserError` from inside `execute_agent`.
 
 ## Side Effects
 
-- **Database writes**: none directly in the handler. `AIService.execute_agent`
+- **Database writes**: none directly in `execute_op`. `AIService.execute_agent`
   writes `token_usage_metrics` rows (via `CompactionService.track`), and
   `memory_content` markdown changes persist back through the
   `simpleMemory` node's `save_node_parameters` path owned by the service.
-- **Broadcasts**: `handle_ai_agent` acquires `StatusBroadcaster` and passes
+- **Broadcasts**: `prepare_agent_call` resolves `StatusBroadcaster` and passes
   it into `execute_agent`. The service then emits `update_node_status`
   (`thinking`, `executing_tool`, `success`, ...) plus `token_usage_update`
   and potentially `compaction_starting` / `compaction_completed` events.
+  `BaseNode.execute()` additionally wraps the body in a `node.aiAgent.execute`
+  OpenTelemetry span + `log_context(node_id, node_type, workflow_id)`.
 - **External API calls**: delegated to the native LLM provider SDKs (Anthropic,
   OpenAI, Gemini, OpenRouter, xAI, DeepSeek, Kimi, Mistral) or the LangChain
   fallback (Groq, Cerebras). Tool nodes may spawn their own HTTP or subprocess
   calls via `execute_tool`.
-- **File I/O**: none in the handler. Filesystem tool nodes may read/write the
+- **File I/O**: none in `execute_op`. Filesystem tool nodes may read/write the
   per-workflow workspace (`context.workspace_dir`).
 - **Subprocess**: none directly. Tool executors (shell, process manager,
   browser, code executors) spawn subprocesses.
@@ -143,7 +151,7 @@ flowchart TD
   `PricingService`, `SkillLoader` (for `masterSkill` expansion).
 - **Python packages**: `langchain-core`, `langchain-openai`,
   `langchain-anthropic`, provider SDKs (`anthropic`, `openai`, `google-genai`).
-- **Environment variables**: none read directly by the handler.
+- **Environment variables**: none read directly by `execute_op`.
 
 ## Edge cases & known limits
 
@@ -157,10 +165,11 @@ flowchart TD
   `writeTodos`) are removed when any task completes. This was introduced as a
   "CRITICAL FIX" because binding tools while instructing the LLM not to use
   them confused Gemini into returning empty tool call arrays.
-- **No pre-flight token budget check**: `_collect_agent_connections` can
-  produce an arbitrarily long prompt (task context + memory + skills). The
-  handler does **not** trim before calling `execute_agent`; the provider may
-  reject with `prompt_too_long`. See `docs-internal/memory_compaction.md`.
+- **No pre-flight token budget check**: `collect_agent_connections` can
+  produce an arbitrarily long prompt (task context + memory + skills).
+  `prepare_agent_call` does **not** trim before calling `execute_agent`; the
+  provider may reject with `prompt_too_long`. See
+  [`../../memory_compaction.md`](../../memory_compaction.md).
 - **Input fallback is field-ordered**: `message > text > content > str(dict)`.
   An upstream node that outputs both `message` and `text` will never reach
   `text`.
@@ -169,8 +178,9 @@ flowchart TD
 
 ## Related
 
-- **Shared collection helper**: `_collect_agent_connections` is used by every
-  specialized-agent type (android_agent, coding_agent, web_agent, ...). See
+- **Shared collection helper**: `edge_walker.collect_agent_connections` +
+  `_inline.prepare_agent_call` are used by every specialized-agent type
+  (android_agent, coding_agent, web_agent, ...). See
   [`chatAgent.md`](./chatAgent.md) for the same contract with a different
   system prompt.
 - **Memory node**: [`simpleMemory.md`](./simpleMemory.md)

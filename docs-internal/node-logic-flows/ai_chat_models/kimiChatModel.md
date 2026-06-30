@@ -3,15 +3,15 @@
 | Field | Value |
 |------|-------|
 | **Category** | ai_chat_models |
-| **Backend handler** | [`server/services/handlers/ai.py::handle_ai_chat_model`](../../../server/services/handlers/ai.py) |
+| **Backend handler** | [`server/nodes/model/kimi_chat_model/__init__.py`](../../../server/nodes/model/kimi_chat_model/__init__.py) (dispatch via `BaseNode.execute()` -> `@Operation("chat")` in [`server/nodes/model/_base.py`](../../../server/nodes/model/_base.py)) |
 | **AI service** | [`server/services/ai.py::AIService.execute_chat`](../../../server/services/ai.py) |
 | **Tests** | [`server/tests/nodes/test_ai_chat_models.py`](../../../server/tests/nodes/test_ai_chat_models.py) |
 | **Skill (if any)** | n/a |
-| **Dual-purpose tool** | no |
+| **Dual-purpose tool** | no (group `('model',)`) |
 
 ## Purpose
 
-Kimi models by Moonshot AI (`kimi-k2.6`, `kimi-k2.5`, `kimi-k2.7-code`). 256K context, 96K output. Uses OpenAI-compatible Moonshot endpoint via the native path. Shares `handle_ai_chat_model`.
+Kimi models by Moonshot AI (`kimi-k2.6`, `kimi-k2.5`, `kimi-k2.7-code`). 256K context, 96K output. Uses OpenAI-compatible Moonshot endpoint via the native path. `KimiChatModelNode` uses the shared `ChatModelParams` unchanged (no provider override). The `ChatModelBase.chat` operation calls `AIService.execute_chat`.
 
 ## Inputs (handles)
 
@@ -24,18 +24,21 @@ Kimi models by Moonshot AI (`kimi-k2.6`, `kimi-k2.5`, `kimi-k2.7-code`). 256K co
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
 | `prompt` | string | `""` | yes | - | User message |
-| `systemMessage` | string | `""` | no | - | System prompt |
-| `model` | string | injected | no | - | `kimi-k2.6`, `kimi-k2.5`, or `kimi-k2.7-code` |
-| `temperature` | number | **fixed** | no | - | Fixed at 0.6 (instant) or 1.0 (thinking). Input is ignored. |
-| `maxTokens` | number | up to 96K | no | - | |
-| `thinkingEnabled` | boolean | true for k2.5 | no | - | ON by default for k2.5; explicitly disabled for tool-calling agents |
-| `apiKey` | string | injected | no | - | `auth_service.get_api_key('kimi', 'default')` |
+| `system_prompt` | string | `""` | no | - | System prompt |
+| `model` | string | `""` (injected) | no | - | `kimi-k2.6`, `kimi-k2.5`, or `kimi-k2.7-code` |
+| `temperature` | number\|null | `null` (**ignored**) | no | - | Provider forces 0.6 (instant) or 1.0 (thinking); user input ignored |
+| `max_tokens` | number\|null | `null` (up to 96K) | no | - | 1-200000 |
+| `top_p` | number\|null | `1.0` | no | - | |
+| `thinking_enabled` | boolean | `false` (Params default) | no | - | Base default is `false`; the provider treats k2.5 as thinking-on unless explicitly disabled |
+| `api_key` | string\|null | `null` (injected) | no | - | `auth_service.get_api_key('kimi', 'default')` |
+
+(Kimi uses the shared `ChatModelParams` unchanged; field names are snake_case, unknown keys ignored.)
 
 ## Outputs (handles)
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | Standard envelope payload |
+| `output-model` | object | Model output; standard envelope payload |
 
 ### Output payload
 
@@ -56,7 +59,7 @@ Kimi models by Moonshot AI (`kimi-k2.6`, `kimi-k2.5`, `kimi-k2.7-code`). 256K co
 
 ```mermaid
 flowchart TD
-  A[NodeExecutor dispatch] --> B[handle_ai_chat_model]
+  A[NodeExecutor dispatch -> BaseNode.execute] --> B[ChatModelBase.chat Operation]
   B --> C[AIService.execute_chat]
   C --> D{valid key + prompt?}
   D -- no --> X[error envelope]

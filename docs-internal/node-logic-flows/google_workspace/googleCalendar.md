@@ -3,10 +3,10 @@
 | Field | Value |
 |------|-------|
 | **Category** | google_workspace / tool (dual-purpose) |
-| **Backend handler** | [`server/services/handlers/calendar.py::handle_google_calendar`](../../../server/services/handlers/calendar.py) |
+| **Backend handler** | [`server/nodes/google/calendar/__init__.py`](../../../server/nodes/google/calendar/__init__.py) (`CalendarNode`; dispatched via `BaseNode.execute()` -> single `@Operation("dispatch")` method that branches on `params.operation`) |
 | **Tests** | [`server/tests/nodes/test_google_workspace.py`](../../../server/tests/nodes/test_google_workspace.py) |
 | **Skill (if any)** | [`server/skills/productivity_agent/google-calendar-skill/SKILL.md`](../../../server/skills/productivity_agent/google-calendar-skill/SKILL.md) |
-| **Dual-purpose tool** | yes - tool name `googleCalendar` |
+| **Dual-purpose tool** | yes - tool name `google_calendar` |
 
 ## Purpose
 
@@ -57,8 +57,11 @@ Top-level dispatcher: `operation` (one of `create`, `list`, `update`, `delete`).
 | `title` / `start_time` / `end_time` / `description` / `location` | string | `""` | no | Patch fields |
 | `calendar_id` | string | `primary` | no | - |
 
-Also accepts `update_title`, `update_start_time`, etc. which the dispatcher
-aliases onto the standard names.
+Also accepts the optional `update_title`, `update_start_time`,
+`update_end_time`, `update_description`, `update_location` fields. The dispatch
+method does NOT mutate the params dict — it reads `params.update_title or
+params.title` (etc.) as fallback chains so either the `update_*` field or the
+plain field works.
 
 ### `operation = delete`
 
@@ -70,10 +73,13 @@ aliases onto the standard names.
 
 ## Outputs (handles)
 
+The node declares only `input-main` and `output-main`. Tool mode
+(`usable_as_tool = True`, tool name `google_calendar`) returns the same
+`output-main` payload — there is no separate `output-tool` handle.
+
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | Operation-specific payload |
-| `output-tool` | object | Same, for AI tool wiring |
+| `output-main` | object | Operation-specific `CalendarOutput` payload |
 
 - `create` / `update`: `{event_id, title, start, end, html_link, status, created?/updated?}`
 - `list`: `{events: [{event_id, title, start, end, description, location, status, html_link, attendees}], count, time_range: {start, end}}`
@@ -83,58 +89,48 @@ aliases onto the standard names.
 
 ```mermaid
 flowchart TD
-  A[handle_google_calendar] --> AL{operation == update?}
-  AL -- yes --> AM[Alias update_* params<br/>to standard names]
-  AL -- no --> B
-  AM --> B{operation?}
-  B -- create --> C1[handle_calendar_create]
-  B -- list --> C2[handle_calendar_list]
-  B -- update --> C3[handle_calendar_update]
-  B -- delete --> C4[handle_calendar_delete]
-  B -- unknown --> Eret[success=false<br/>Unknown Calendar operation]
-  C1 --> G[get_google_credentials + build v3]
-  C2 --> G
-  C3 --> G
-  C4 --> G
-  G -- ValueError --> Eret
-  C1 --> V1{title & start & end present?}
-  V1 -- no --> Eret
-  V1 -- yes --> R1[events.insert sendUpdates=all]
-  C2 --> DP[Parse date shortcuts:<br/>today / today+Nd]
+  A[BaseNode.execute -> CalendarNode.dispatch] --> G[build_google_service calendar v3]
+  G --> B{operation?}
+  B -- create --> V1{title & start & end present?}
+  V1 -- no --> Eret[raise RuntimeError]
+  V1 -- yes --> R1[events.insert sendUpdates]
+  B -- list --> DP[Parse date shortcuts:<br/>today / today+Nd]
   DP --> R2[events.list timeMin/timeMax]
-  C3 --> V3{event_id?}
+  B -- update --> V3{event_id?}
   V3 -- no --> Eret
-  V3 -- yes --> G3[events.get -> merge updates -> events.update]
-  C4 --> V4{event_id?}
+  V3 -- yes --> G3[events.get -> merge update_* fallbacks -> events.update]
+  B -- delete --> V4{event_id?}
   V4 -- no --> Eret
   V4 -- yes --> R4[events.delete sendUpdates]
-  R1 --> T[_track_calendar_usage]
+  B -- unknown --> Eret
+  R1 --> T[track_google_usage google_calendar]
   R2 --> T
   G3 --> T
   R4 --> T
-  T --> OUT[Return success envelope]
+  T --> OUT[Return CalendarOutput; BaseNode serializes envelope]
 ```
 
 ## Decision Logic
 
+- **Operation branch**: one `@Operation("dispatch")` method branches on `params.operation` (`create` / `list` / `update` / `delete`); unknown raises `RuntimeError`.
 - **Date shortcut parsing** (list): `start_date` of `today` or empty -> today 00:00 UTC; `end_date` starting with `today+` is `today + Nd`; otherwise the raw string is used and `Z` is appended if missing.
 - **Timezone fallback** (update): when updating start/end, the existing event's `timeZone` is reused; if absent falls back to `UTC`.
-- **Update parameter aliasing**: the dispatcher copies `update_title`, `update_start_time`, `update_end_time`, `update_description`, `update_location` onto their plain names before delegating - this is irreversible mutation of the incoming `parameters` dict.
+- **Update fallback chains**: `params.update_title or params.title` (etc.) — no mutation of the params dict; either field works.
 - **Description / location**: treated as `is not None` rather than truthy - empty string is a valid clear.
 - **Attendees**: empty strings after `split(',')` are filtered; the whole `attendees` field is omitted if the list is empty.
-- **`order_by`**: only sent when `single_events=True`; otherwise `None`, which the Google client library strips.
+- **`order_by`**: only sent when `single_events=True`.
 
 ## Side Effects
 
-- **Database writes**: `api_usage_metrics` row per call via `save_api_usage_metric` with `service='google_calendar'`.
-- **Broadcasts**: none.
-- **External API calls**: Calendar API v3 - `events().insert/list/update/delete/get`. `sendUpdates='all'` on create/update sends email invitations to attendees.
+- **Database writes**: `api_usage_metrics` row per call via `track_google_usage` -> `save_api_usage_metric` with `service='google_calendar'`.
+- **Broadcasts**: none from the operation; executor emits standard `node_status`.
+- **External API calls**: Calendar API v3 - `events().insert/list/update/delete/get`. `sendUpdates` on create/update/delete drives email invitations/cancellations.
 - **File I/O**: none.
 - **Subprocess**: none.
 
 ## External Dependencies
 
-- **Credentials**: OAuth via `auth_service.get_oauth_tokens("google")`.
+- **Credentials**: `GoogleCredential` -> OAuth tokens for provider `google`.
 - **Services**: Google Calendar API, `PricingService`, `Database`.
 - **Python packages**: `google-api-python-client`.
 - **Environment variables**: none.
@@ -144,7 +140,6 @@ flowchart TD
 - `max_results` clamped to 250 silently.
 - `update` performs a read-modify-write cycle: two API calls per update. A concurrent modification between the `get` and `update` is overwritten without ETag checking.
 - `delete` with an invalid event_id will surface the `HttpError 404` message into the envelope as a string.
-- The dispatcher mutates the incoming `parameters` dict for update aliasing; callers that reuse the dict will see the aliased fields.
 - `description=""` is treated as a real clear; `description=None` or missing leaves the field untouched. Subtle but load-bearing for update callers.
 
 ## Related

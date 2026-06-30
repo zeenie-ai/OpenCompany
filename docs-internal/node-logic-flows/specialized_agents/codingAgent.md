@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | specialized_agents |
-| **Backend handler** | [`server/services/handlers/ai.py::handle_chat_agent`](../../../server/services/handlers/ai.py) |
+| **Plugin** | [`server/nodes/agent/coding_agent/__init__.py`](../../../server/nodes/agent/coding_agent/__init__.py) -> [`_specialized.py::SpecializedAgentBase.execute_op`](../../../server/nodes/agent/_specialized.py) (dispatch via `BaseNode.execute()`) |
 | **Theme color** | `dracula.cyan` |
 | **Icon** | laptop (U+1F4BB) |
 | **Tests** | [`server/tests/nodes/test_specialized_agents.py`](../../../server/tests/nodes/test_specialized_agents.py) |

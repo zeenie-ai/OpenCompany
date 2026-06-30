@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | chat_utility |
-| **Backend handler** | [`server/services/handlers/utility.py::handle_chat_send`](../../../server/services/handlers/utility.py) |
+| **Backend handler** | [`server/nodes/chat/chat_send/__init__.py`](../../../server/nodes/chat/chat_send/__init__.py) — dispatch via `BaseNode.execute()` + `@Operation("send")` |
 | **Tests** | [`server/tests/nodes/test_chat_utility.py`](../../../server/tests/nodes/test_chat_utility.py) |
 | **Skill (if any)** | - |
 | **Dual-purpose tool** | no |
@@ -28,23 +28,27 @@ chat), `chatSend` pushes into a remote chat host.
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
 | `host` | string | `localhost` | no | - | Chat backend host |
-| `port` | number | `8080` | no | - | Chat backend port |
+| `port` | number | `8080` | no | - | Chat backend port (1..65535) |
 | `session_id` | string | `default` | no | - | Chat session identifier |
-| `api_key` | string | `""` | no | - | Auth token forwarded to the chat backend |
-| `content` | string | `""` | yes | - | Message body |
+| `api_key` | string (password) | `""` | no | - | Auth token forwarded to the chat backend |
+| `content` | string | `""` | conditional | - | Message body. Defaults to `""` at the Param level; the op raises if both `content` and `message` are empty |
+| `message` | string | `""` | no | - | Legacy alias for `content` (used as fallback when `content` is empty) |
 
 ## Outputs (handles)
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | The `result` payload returned by the chat backend |
+| `output-main` | object | `{ sent: true, message_id, ...rest }` from the chat backend |
 
 ### Output payload (TypeScript shape)
 
 ```ts
+// ChatSendOutput (model_config extra="allow")
 {
-  // Pass-through of whatever the chat backend's send_message RPC returned,
-  // e.g. { message_id: string, timestamp: string, ... }
+  sent: true;                 // hard-set on success
+  message_id: string | null;  // from RPC result.message_id
+  // plus every other key from the RPC result payload (extra="allow"),
+  // e.g. timestamp
   [key: string]: unknown;
 }
 ```
@@ -53,24 +57,26 @@ chat), `chatSend` pushes into a remote chat host.
 
 ```mermaid
 flowchart TD
-  A[Receive params] --> B{content non-empty?}
-  B -- no --> E[Return error envelope: content required]
+  A[Receive params] --> B{content or message non-empty?}
+  B -- no --> E[Raise RuntimeError: Message content is required]
   B -- yes --> C[Call services.chat_client.send_chat_message]
   C -- JSON-RPC error --> E
   C -- RPC ok --> F{result.success?}
   F -- false --> E
-  F -- true --> G[Return success envelope with result.result]
+  F -- true --> G[Return ChatSendOutput sent=true + message_id + rest]
 ```
 
 ## Decision Logic
 
-- **Validation**: empty `content` raises `ValueError("Message content is required")`
-  which is caught and returned as `success=false`.
-- **Branches**: success vs error branch on RPC response `success` flag.
+- **Validation**: empty `content` AND empty `message` raises
+  `RuntimeError("Message content is required")`.
+- **Branches**: success vs error branch on RPC response `success` flag;
+  `content = params.content or params.message` (legacy alias fallback).
 - **Fallbacks**: `host`/`port`/`session_id` default to `localhost:8080/default`,
   `api_key` defaults to empty string.
-- **Error paths**: every exception is logged via `logger.error` and returned as
-  `{success: false, error: str(e)}` with `node_id`, `node_type`, timing fields.
+- **Error paths**: `not result.success` raises `RuntimeError(result.error or "chatSend failed")`;
+  `BaseNode.execute()` wraps any raised exception into the standard error envelope
+  (`success=false`, `error`, `node_id`, `node_type`, timing fields).
 
 ## Side Effects
 
@@ -96,8 +102,8 @@ flowchart TD
 - Any exception from `send_chat_message` (connection refused, timeout, malformed
   RPC response) is swallowed and surfaced as `success=false` with the stringified
   error. No retry is performed.
-- `port` is coerced via `int(parameters.get('port', 8080))`; a non-numeric port
-  raises `ValueError` and is returned as `success=false`.
+- `port` is validated by the Pydantic Param (`int`, `ge=1, le=65535`); a non-coercible
+  or out-of-range value fails Param validation before the op runs.
 - Templates in `content` (e.g. `{{aiAgent.response}}`) are resolved upstream by
   `ParameterResolver`; this handler never sees unresolved `{{...}}`.
 - `session_id` here is the chat-backend session, not the MachinaOs workflow

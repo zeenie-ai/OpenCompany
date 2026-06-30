@@ -3,10 +3,10 @@
 | Field | Value |
 |------|-------|
 | **Category** | whatsapp / tool (dual-purpose) |
-| **Backend handler** | [`server/services/handlers/whatsapp.py::handle_whatsapp_db`](../../../server/services/handlers/whatsapp.py) |
+| **Backend handler** | [`server/nodes/whatsapp/whatsapp_db.py`](../../../server/nodes/whatsapp/whatsapp_db.py) (`WhatsAppDbNode`); dispatched via `BaseNode.execute()` -> `@Operation("query")`, which delegates to [`server/nodes/whatsapp/_base.py::handle_whatsapp_db`](../../../server/nodes/whatsapp/_base.py) |
 | **Tests** | [`server/tests/nodes/test_whatsapp.py`](../../../server/tests/nodes/test_whatsapp.py) |
 | **Skill (if any)** | [`server/skills/social_agent/whatsapp-db-skill/SKILL.md`](../../../server/skills/social_agent/whatsapp-db-skill/SKILL.md) |
-| **Dual-purpose tool** | yes - tool name `whatsappDb` |
+| **Dual-purpose tool** | yes - tool name `whatsapp_db` |
 
 ## Purpose
 
@@ -55,8 +55,9 @@ frontend.
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | Envelope payload with `operation` field + operation-specific fields |
-| `output-tool` | object | Same payload for AI tool wiring |
+| `output-main` | object | The handler `result` dict with `operation` field + operation-specific fields. Plugin `Output` model is `WhatsAppDbOutput` (`operation`, `messages`, `contacts`, `groups`, `channels`, `total`, `extra="allow"`). |
+
+When wired into an AI agent's `input-tools` handle (`usable_as_tool=True`, tool name `whatsapp_db`) the same payload is returned to the LLM.
 
 All payloads include the read-back `operation` and `timestamp`. Collection
 operations (`search_groups`, `list_contacts`, `list_channels`) apply a soft
@@ -121,8 +122,8 @@ flowchart TD
 ## Side Effects
 
 - **Database writes**: none.
-- **Broadcasts**: none - standard `node_status` comes from `NodeExecutor`.
-- **External calls**: WebSocket RPC to the Go service (`whatsapp_rpc_call` and `handle_whatsapp_chat_history` in `routers/whatsapp.py`). For `channel_messages` and `chat_history` with `include_media_data=true`, one additional `media` RPC call per media message (up to 5 in parallel).
+- **Broadcasts**: none - standard `node_status` comes from `BaseNode.execute()`.
+- **External calls**: WebSocket RPC to the Go service (`whatsapp_rpc_call` and `handle_whatsapp_chat_history` in [`nodes/whatsapp/_service.py`](../../../server/nodes/whatsapp/_service.py)). For `channel_messages` and `chat_history` with `include_media_data=true`, one additional `media` RPC call per media message (up to 5 in parallel).
 - **File I/O**: none.
 - **Subprocess**: none.
 

@@ -3,8 +3,8 @@
 | Field | Value |
 |------|-------|
 | **Category** | code_fs_process / code |
-| **Backend handler** | [`server/services/handlers/code.py::handle_typescript_executor`](../../../server/services/handlers/code.py) |
-| **Node.js client** | [`server/services/nodejs_client.py::NodeJSClient`](../../../server/services/nodejs_client.py) |
+| **Backend handler** | [`server/nodes/code/typescript_executor/__init__.py::TypeScriptExecutorNode.execute_op`](../../../server/nodes/code/typescript_executor/__init__.py) (dispatched via `BaseNode.execute()` + `@Operation("execute")`; base in [`_base.py`](../../../server/nodes/code/_base.py)) |
+| **Node.js client** | [`server/nodes/code/_nodejs.py::get_nodejs_client`](../../../server/nodes/code/_nodejs.py) (singleton over [`server/services/nodejs_client.py::NodeJSClient`](../../../server/services/nodejs_client.py)) |
 | **Tests** | [`server/tests/nodes/test_code_fs_process.py`](../../../server/tests/nodes/test_code_fs_process.py) |
 | **Skill (if any)** | - (shared with `javascript-skill`) |
 | **Dual-purpose tool** | yes - tool name `typescript_code` |
@@ -18,9 +18,9 @@ All inputs, outputs, and error paths match the JS variant - the only
 user-facing difference is that TypeScript type annotations parse without
 error.
 
-Dispatched through the special-handlers branch at
-[`node_executor.py:367-381`](../../../server/services/node_executor.py) so it
-receives `connected_outputs`.
+The plugin reads upstream outputs from `ctx.raw["connected_outputs"]` (injected
+by the executor for code-executor node types) and the workflow's
+`ctx.workspace_dir`, then POSTs with `language="typescript"`.
 
 ## Inputs (handles)
 
@@ -32,22 +32,22 @@ receives `connected_outputs`.
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `code` | string (code editor) | (boilerplate stub with `interface Result { ... }`) | yes | - | TypeScript source. User must assign to `output` |
-| `timeout` | number | `30` | no | - | Seconds - multiplied by 1000 before forwarding to the Node server |
+| `code` | string (code editor) | (required, `min_length=1`) | yes | - | TypeScript source. User must assign to `output` |
+| `timeout` | number | `30` (ge=1, le=600) | no | - | Seconds - multiplied by 1000 before forwarding to the Node server |
 
-## Handler-level kwargs
+`CodeExecutorParams` uses `extra="allow"` (extra params persist but are unread).
 
-| Name | Default | Description |
-|------|---------|-------------|
-| `nodejs_url` | `http://localhost:3020` | |
-| `nodejs_timeout` | `30` | |
+## Node.js client singleton
+
+Shares `get_nodejs_client()` in [`_nodejs.py`](../../../server/nodes/code/_nodejs.py)
+with the JS plugin — one `NodeJSClient(base_url="http://localhost:3020",
+timeout=30)` instance, hard-coded defaults.
 
 ## Outputs (handles)
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | Standard envelope payload |
-| `output-tool` | object | Same payload when wired to an AI agent |
+| `output-main` | object | Standard envelope payload (node declares only `input-main` / `output-main`; `usable_as_tool=True` exposes the same payload as the `typescript_code` tool result) |
 
 ### Output payload
 
@@ -55,23 +55,25 @@ receives `connected_outputs`.
 {
   output: any;
   console_output: string;
-  timestamp: string;
 }
 ```
+
+`node_output_schemas.CodeExecutorOutput` declares only `output` (extra fields
+like `console_output` allowed by `_OutputBase`).
 
 ## Logic Flow
 
 ```mermaid
 flowchart TD
-  A[handle_typescript_executor] --> B{code strip empty?}
-  B -- yes --> E[Return error envelope:<br/>No code provided]
-  B -- no --> C[timeout_ms = int timeout * 1000]
-  C --> D[input_data = connected_outputs or {}<br/>inject workspace_dir]
+  A[execute_op] --> B{code strip empty?}
+  B -- yes --> E[raise NodeUserError:<br/>No code provided]
+  B -- no --> C[timeout_ms = timeout * 1000]
+  C --> D[input_data = ctx.raw connected_outputs or {}<br/>inject workspace_dir]
   D --> F[get_nodejs_client<br/>lazy singleton]
   F --> G[client.execute<br/>POST /execute<br/>language=typescript]
-  G -- exception --> H[Return error envelope]
-  G -- ok + success=true --> I[Return success envelope]
-  G -- ok + success=false --> J[Return error envelope<br/>preserve console_output]
+  G -- ClientConnectorError --> H1[raise NodeUserError<br/>TS executor not running on :3020]
+  G -- success=false --> H2[raise NodeUserError<br/>error=result.error]
+  G -- success=true --> I[Return dict<br/>output, console_output]
 ```
 
 ## Decision Logic
@@ -113,4 +115,4 @@ wire-level difference is the POST body's `language` field.
 ## Related
 
 - **Shared skill**: [`javascript-skill/SKILL.md`](../../../server/skills/coding_agent/javascript-skill/SKILL.md)
-- **Sibling nodes**: [`javascriptExecutor`](./javascriptExecutor.md), [`pythonExecutor`](./pythonExecutor.md)
+- **Sibling nodes**: [`javascriptExecutor`](./javascriptExecutor.md), [`pythonExecutor`](./pythonExecutor.md), [`montyExecutor`](./montyExecutor.md)

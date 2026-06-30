@@ -3,15 +3,15 @@
 | Field | Value |
 |------|-------|
 | **Category** | ai_chat_models |
-| **Backend handler** | [`server/services/handlers/ai.py::handle_ai_chat_model`](../../../server/services/handlers/ai.py) |
+| **Backend handler** | [`server/nodes/model/openrouter_chat_model/__init__.py`](../../../server/nodes/model/openrouter_chat_model/__init__.py) (dispatch via `BaseNode.execute()` -> `@Operation("chat")` in [`server/nodes/model/_base.py`](../../../server/nodes/model/_base.py)) |
 | **AI service** | [`server/services/ai.py::AIService.execute_chat`](../../../server/services/ai.py) |
 | **Tests** | [`server/tests/nodes/test_ai_chat_models.py`](../../../server/tests/nodes/test_ai_chat_models.py) |
 | **Skill (if any)** | n/a |
-| **Dual-purpose tool** | no |
+| **Dual-purpose tool** | no (group `('model',)`) |
 
 ## Purpose
 
-Unified access to 200+ models from multiple providers (OpenAI, Anthropic, Google, Meta, Mistral, etc.) through a single OpenAI-compatible API. Shares the common `handle_ai_chat_model` handler.
+Unified access to 200+ models from multiple providers (OpenAI, Anthropic, Google, Meta, Mistral, etc.) through a single OpenAI-compatible API. The `ChatModelBase.chat` operation calls `AIService.execute_chat`.
 
 ## Inputs (handles)
 
@@ -24,23 +24,25 @@ Unified access to 200+ models from multiple providers (OpenAI, Anthropic, Google
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
 | `prompt` | string | `""` | yes (non-empty) | - | User message |
-| `systemMessage` | string | `""` | no | - | System prompt |
-| `model` | string | injected | no | - | `provider/model-id` format, e.g. `anthropic/claude-opus-4.6`, `openai/gpt-4o`. `[FREE] ` prefix stripped before the API call but the prefix IS preserved for the dropdown grouping |
-| `temperature` | number | 0-2 | no | - | |
-| `maxTokens` | number | varies per model | no | - | |
-| `topP` | number | - | no | - | |
-| `frequencyPenalty` | number | 0 | no | - | Forwarded to downstream provider |
-| `presencePenalty` | number | 0 | no | - | Forwarded |
-| `thinkingEnabled` | boolean | false | no | - | Only honored if the routed model supports it |
-| `thinkingBudget` | number | 2048 | no | `thinkingEnabled=[true]` | |
-| `reasoningEffort` | options | `medium` | no | `thinkingEnabled=[true]` | |
-| `apiKey` | string | injected | no | - | `auth_service.get_api_key('openrouter', 'default')` |
+| `system_prompt` | string | `""` | no | - | System prompt |
+| `model` | string | `""` (injected) | no | - | `provider/model-id` format, e.g. `anthropic/claude-opus-4.6`, `openai/gpt-4o`. `[FREE] ` prefix stripped before the API call but preserved for dropdown grouping |
+| `temperature` | number\|null | `null` | no | - | 0-2 |
+| `max_tokens` | number\|null | `null` (varies per model) | no | - | 1-200000 |
+| `top_p` | number\|null | `1.0` | no | - | |
+| `frequency_penalty` | number\|null | `0.0` | no | - | -2.0 to 2.0; forwarded to downstream provider |
+| `presence_penalty` | number\|null | `0.0` | no | - | -2.0 to 2.0; forwarded |
+| `thinking_enabled` | boolean | `false` | no | - | Only honored if the routed model supports it |
+| `thinking_budget` | number\|null | `2048` | no | - | Inherited base field (no displayOptions); 1024-16000 |
+| `reasoning_effort` | enum\|null | `null` | no | - | Inherited base field (no displayOptions); `low`/`medium`/`high` |
+| `api_key` | string\|null | `null` (injected) | no | - | `auth_service.get_api_key('openrouter', 'default')` |
+
+(Only `frequency_penalty` / `presence_penalty` are OpenRouter overrides; the thinking/reasoning fields come from the shared base `ChatModelParams` with no displayOptions. Field names are snake_case, unknown keys ignored.)
 
 ## Outputs (handles)
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | Standard envelope payload |
+| `output-model` | object | Model output; standard envelope payload |
 
 ### Output payload
 
@@ -61,7 +63,7 @@ Unified access to 200+ models from multiple providers (OpenAI, Anthropic, Google
 
 ```mermaid
 flowchart TD
-  A[NodeExecutor dispatch] --> B[handle_ai_chat_model]
+  A[NodeExecutor dispatch -> BaseNode.execute] --> B[ChatModelBase.chat Operation]
   B --> C[AIService.execute_chat]
   C --> D[Strip '[FREE] ' prefix from model]
   D --> E{valid key + prompt?}

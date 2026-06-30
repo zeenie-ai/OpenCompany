@@ -36,68 +36,18 @@ stripe) layer additional bases from `services.events` underneath them.
 ## Five-minute recipe — single file
 
 For nodes with no state, no daemon, no signed webhooks (the common
-case):
+case): the canonical single-file recipe code block lives in the
+cookbook — see
+[`server/nodes/README.md` → Five-minute recipe](../server/nodes/README.md#five-minute-recipe).
 
-```python
-# server/nodes/<group>/<name>.py
-from pydantic import BaseModel, Field
-from services.plugin import (
-    ActionNode, ApiKeyCredential, NodeContext, Operation, TaskQueue,
-)
-
-
-class MyCredential(ApiKeyCredential):
-    id = "my_api"
-    display_name = "My Service"
-    category = "Search"
-    key_name = "X-API-Key"
-
-
-class MyParams(BaseModel):
-    query: str = Field(..., min_length=1)
-
-
-class MyOutput(BaseModel):
-    results: list
-
-
-class MyNode(ActionNode):
-    type = "myNode"
-    display_name = "My Node"
-    # Icon + color: drop `icon.svg` into this plugin folder + create
-    # `meta.json` with `{"color": "#abcdef"}`. For multi-node folders
-    # (one folder, multiple node classes — telegram / whatsapp / stripe),
-    # use `icon_<nodeType>.svg` for per-node-type icons; the resolver
-    # picks per-node first, falling back to shared `icon.svg`. emoji /
-    # lobehub:<brand> live in `visuals.json` for icon-only entries.
-    group = ("search", "tool")
-    description = "Brief description for palette + AI tool."
-    component_kind = "square"
-    handles = (
-        {"name": "input-main", "kind": "input", "position": "left",
-         "label": "Input", "role": "main"},
-        {"name": "output-main", "kind": "output", "position": "right",
-         "label": "Output", "role": "main"},
-    )
-    credentials = (MyCredential,)
-    task_queue = TaskQueue.REST_API
-    usable_as_tool = True
-    Params = MyParams
-    Output = MyOutput
-
-    @Operation("search")
-    async def search(self, ctx: NodeContext, params: MyParams) -> MyOutput:
-        async with ctx.connection("my_api") as conn:
-            resp = await conn.get(
-                "https://api.example.com/search",
-                params={"q": params.query},
-            )
-        return MyOutput(results=resp.json().get("hits", []))
-```
-
+It is a single `server/nodes/<group>/<name>.py` declaring a
+`Credential` subclass, a `Params` model, an `Output` model, and one
+`ActionNode` subclass with `type` / `display_name` / `group` /
+`component_kind` / `handles` / `credentials` / `task_queue` /
+`usable_as_tool` / `Params` / `Output` plus one `@Operation` method.
 That's the entire node. On server restart it auto-registers, the
-NodeSpec is emitted at `/api/schemas/nodes/myNode/spec.json`, and it
-appears in the Component Palette under the `search` group.
+NodeSpec is emitted at `/api/schemas/nodes/<type>/spec.json`, and it
+appears in the Component Palette under its first `group` entry.
 
 ## Five-minute recipe — Wave 12 self-contained folder (signed webhook + CLI)
 

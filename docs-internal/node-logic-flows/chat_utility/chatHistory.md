@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | chat_utility |
-| **Backend handler** | [`server/services/handlers/utility.py::handle_chat_history`](../../../server/services/handlers/utility.py) |
+| **Backend handler** | [`server/nodes/chat/chat_history/__init__.py`](../../../server/nodes/chat/chat_history/__init__.py) — dispatch via `BaseNode.execute()` + `@Operation("read")` |
 | **Tests** | [`server/tests/nodes/test_chat_utility.py`](../../../server/tests/nodes/test_chat_utility.py) |
 | **Skill (if any)** | - |
 | **Dual-purpose tool** | no |
@@ -25,20 +25,21 @@ workflows that need to read a conversation from a remote chat host.
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
 | `host` | string | `localhost` | no | - | Chat backend host |
-| `port` | number | `8080` | no | - | Chat backend port |
+| `port` | number | `8080` | no | - | Chat backend port (1..65535) |
 | `session_id` | string | `default` | no | - | Chat session identifier |
-| `api_key` | string | `""` | no | - | Auth token forwarded to the chat backend |
-| `limit` | number | `50` | no | - | Maximum messages to return |
+| `api_key` | string (password) | `""` | no | - | Auth token forwarded to the chat backend |
+| `limit` | number | `50` | no | - | Maximum messages to return (1..500) |
 
 ## Outputs (handles)
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | `{ messages: Array<ChatMessage> }` |
+| `output-main` | object | `{ messages: Array<ChatMessage>, count: number }` |
 
 ### Output payload (TypeScript shape)
 
 ```ts
+// ChatHistoryOutput (model_config extra="allow")
 {
   messages: Array<{
     role: string;      // e.g. "user" | "assistant"
@@ -46,6 +47,7 @@ workflows that need to read a conversation from a remote chat host.
     created_at: string;
     [key: string]: unknown;
   }>;
+  count: number;       // len(messages)
 }
 ```
 
@@ -57,7 +59,7 @@ flowchart TD
   B -- JSON-RPC error --> E[Return error envelope]
   B -- RPC ok --> F{result.success?}
   F -- false --> E
-  F -- true --> G[Wrap result.messages into envelope]
+  F -- true --> G[Wrap result.messages + count into ChatHistoryOutput]
 ```
 
 ## Decision Logic
@@ -65,8 +67,9 @@ flowchart TD
 - **Validation**: none; no parameter is required.
 - **Branches**: success vs error branch on RPC response `success` flag.
 - **Fallbacks**: `host`/`port`/`session_id`/`api_key`/`limit` all have defaults.
-- **Error paths**: every exception logged via `logger.error` and returned as
-  `{success: false, error: str(e)}`.
+- **Error paths**: `not result.success` raises `RuntimeError(result.error or "chatHistory fetch failed")`;
+  `BaseNode.execute()` wraps the raised exception into the standard error envelope
+  (`success=false`, `error`, plus full traceback at `logger.exception` for non-`NodeUserError`).
 
 ## Side Effects
 

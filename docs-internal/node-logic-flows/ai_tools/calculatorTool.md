@@ -2,85 +2,71 @@
 
 | Field | Value |
 |------|-------|
-| **Category** | ai_tools (dedicated AI tool) |
-| **Backend handler** | [`server/services/handlers/tools.py::_execute_calculator`](../../../server/services/handlers/tools.py) |
+| **Category** | ai_tools (dedicated AI tool, group `("tool", "ai")`) |
+| **Backend handler** | [`server/nodes/tool/calculator_tool/__init__.py`](../../../server/nodes/tool/calculator_tool/__init__.py) — `CalculatorToolNode`, dispatched via `BaseNode.execute()` + the `@Operation("calculate")` method |
 | **Tests** | [`server/tests/nodes/test_ai_tools.py`](../../../server/tests/nodes/test_ai_tools.py) |
 | **Skill (if any)** | None (referenced directly by AI agents via tool-calling) |
-| **Dual-purpose tool** | tool-only - LLM invokes as `calculator` (configurable via `toolName` param) |
+| **Dual-purpose tool** | tool-only — `ToolNode` exposed to the LLM as `calculator` (`tool_name` class attr) |
 
 ## Purpose
 
 Exposes basic arithmetic as a structured tool that an AI Agent can call during
-reasoning. The LLM fills the `operation` + operand arguments and the handler
+reasoning. The LLM fills the `operation` + operand arguments and the operation
 returns the numeric result. Supports the eight operations listed below; no
-external calls, no state.
+external calls, no state. The `CalculatorParams` Pydantic model is the
+LLM-visible tool schema (via `ToolNode.as_tool_schema()`).
 
 ## Inputs (handles)
 
 | Handle | Connection type | Required | Purpose |
 |--------|-----------------|----------|---------|
-| (none) | - | - | Passive node - connect `output-tool` to an AI Agent's `input-tools` |
+| `input-main` | main | no | Passive node - connect `output-tool` to an AI Agent's `input-tools` |
 
 ## Parameters
 
+The `CalculatorParams` model fields ARE the LLM-provided tool args (no separate
+`toolName` / `toolDescription` node params — those live on the class as
+`tool_name` / `tool_description`).
+
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `toolName` | string | `calculator` | yes | - | Name the LLM uses to invoke the tool |
-| `toolDescription` | string | (see frontend) | no | - | LLM-visible tool description |
-
-### LLM-provided tool args (at invocation time)
-
-| Arg | Type | Description |
-|-----|------|-------------|
-| `operation` | string | One of `add`, `subtract`, `multiply`, `divide`, `power`, `sqrt`, `mod`, `abs` |
-| `a` | number | First operand (defaults to `0` if missing) |
-| `b` | number | Second operand (defaults to `0`; unused for `sqrt` / `abs`) |
+| `operation` | enum | (required) | yes | - | One of `add`, `subtract`, `multiply`, `divide`, `power`, `sqrt`, `mod`, `abs` |
+| `a` | float | (required) | yes | - | First operand (or the sole input for `sqrt` / `abs`) |
+| `b` | float? | `None` | no | - | Second operand; required for add/subtract/multiply/divide/power/mod, unused for `sqrt` / `abs` |
 
 ## Outputs (handles)
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-tool` | object | Raw dict returned to the LLM (no envelope wrapper at the tool level) |
+| `output-tool` | object | `CalculatorOutput` model, serialized per `BaseNode._serialize_result` |
 
 ### Output payload (TypeScript shape)
 
-On success:
+On success (matches the `CalculatorOutput` model):
 ```ts
 {
   operation: string;
   a: number;
-  b: number;
+  b: number | null;
   result: number;  // float('inf') for x/0, 0 for x mod 0
 }
 ```
 
-On unsupported operation:
-```ts
-{
-  error: string;                      // "Unknown operation: <op>"
-  supported_operations: string[];
-}
-```
-
-On any raised exception inside the op lambda:
-```ts
-{ error: string }  // str(exception)
-```
+Errors are not produced inside the op (the `Literal` schema rejects unknown
+operations at Pydantic validation before the op runs; a validation failure
+surfaces as the framework's standard error envelope from `BaseNode.execute()`).
 
 ## Logic Flow
 
 ```mermaid
 flowchart TD
-  A[_execute_calculator args] --> B[operation = args.operation.lower<br/>a = float args.a default 0<br/>b = float args.b default 0]
-  B --> C{operation in<br/>supported map?}
-  C -- no --> Eunknown[Return error + supported_operations list]
-  C -- yes --> D{Invoke op lambda}
+  A[BaseNode.execute -> calculate ctx params] --> B[fn = _OPERATIONS params.operation<br/>b_value = params.b if not None else 0.0]
+  B --> D{Invoke op lambda}
   D -- divide with b==0 --> Finf[result = float inf]
   D -- mod with b==0 --> Fmod[result = 0]
   D -- sqrt --> Fsqrt[result = sqrt of abs a]
-  D -- other --> Fok[result = a op b]
-  D -- exception --> Eexc[Return error: str exception]
-  Finf --> R[Return operation / a / b / result]
+  D -- other --> Fok[result = a op b_value]
+  Finf --> R[Return CalculatorOutput operation/a/b/result]
   Fmod --> R
   Fsqrt --> R
   Fok --> R
@@ -88,18 +74,16 @@ flowchart TD
 
 ## Decision Logic
 
-- **Unknown operation**: returns `{error, supported_operations}` and does not
-  raise. `operations.keys()` is the authoritative supported list.
+- **Unknown operation**: cannot occur — `operation` is a `Literal[...]` so an
+  out-of-set value fails Pydantic validation before the op runs.
 - **Division by zero** (`divide`): returns `float('inf')` instead of erroring.
 - **Mod by zero** (`mod`): returns `0` instead of erroring.
-- **Negative sqrt**: handler silently calls `math.sqrt(abs(a))`, so `sqrt(-9)`
-  returns `3.0` (not an error).
-- **`power` overflow**: raised as `OverflowError` by `math.pow`, caught by the
-  outer `except Exception` and returned as `{error: str}`.
-- **Tool mode only**: when dropped on the canvas and run directly, the node
-  type is not registered in `NodeExecutor._handlers`, so the executor falls
-  through to the generic success fallback. The real contract is the tool
-  invocation path via `execute_tool`.
+- **Negative sqrt**: silently calls `math.sqrt(abs(a))`, so `sqrt(-9)` returns
+  `3.0` (not an error).
+- **Missing `b`**: when `params.b is None`, `b_value` defaults to `0.0` before
+  the lambda runs (so `add`/`multiply`/etc. with no `b` operate against 0).
+- **`power` overflow**: raised as `OverflowError` by `math.pow`; bubbles up to
+  `BaseNode.execute()`'s generic exception path (full traceback envelope).
 
 ## Side Effects
 
@@ -121,14 +105,14 @@ flowchart TD
 - `divide` returns `float('inf')` for division by zero - downstream JSON
   serializers may choke on `Infinity` (not strict JSON).
 - `mod` returns `0` for modulo-by-zero, which is mathematically wrong but
-  matches the handler. Document this for agents that might reason about it.
+  matches the op lambda. Document this for agents that might reason about it.
 - `sqrt` of a negative number silently returns the sqrt of the absolute value
   rather than erroring or returning NaN.
-- `float(args.get('a', 0))` will raise `ValueError` if the LLM returns
-  non-numeric strings; that error is caught and returned as `{error: ...}`.
-- Operation names are case-insensitive (`.lower()` applied).
+- `a` is typed `float` (required) — a non-numeric LLM argument fails Pydantic
+  coercion and produces a validation error the LLM can correct.
+- Operation names are case-sensitive (`Literal` exact match; no `.lower()`).
 
 ## Related
 
-- **Sibling tools**: [`currentTimeTool`](./currentTimeTool.md), [`duckduckgoSearch`](./duckduckgoSearch.md), [`taskManager`](./taskManager.md), [`writeTodos`](./writeTodos.md)
+- **Sibling tools**: [`currentTimeTool`](./currentTimeTool.md), [`duckduckgoSearch`](./duckduckgoSearch.md), [`taskManager`](./taskManager.md), [`writeTodos`](./writeTodos.md), [`agentBuilder`](./agentBuilder.md)
 - **Architecture docs**: [Agent Architecture](../../agent_architecture.md), [Tool Building Pipeline](../../tool_building_pipeline.md), [Node Creation Guide](../../node_creation.md)

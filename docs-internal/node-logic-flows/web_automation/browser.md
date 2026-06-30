@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | web_automation / tool (dual-purpose) |
-| **Backend handler** | [`server/nodes/browser/browser/__init__.py::BrowserNode`](../../../server/nodes/browser/browser/__init__.py) |
+| **Backend handler** | [`server/nodes/browser/browser/__init__.py::BrowserNode`](../../../server/nodes/browser/browser/__init__.py) — dispatch via `BaseNode.execute()` -> `@Operation("dispatch")` |
 | **Service** | [`server/nodes/browser/_service.py::BrowserService`](../../../server/nodes/browser/_service.py) |
 | **Tests** | [`server/tests/nodes/test_web_automation.py`](../../../server/tests/nodes/test_web_automation.py) |
 | **Skill (if any)** | [`server/skills/web_agent/browser-skill/SKILL.md`](../../../server/skills/web_agent/browser-skill/SKILL.md) |
@@ -11,8 +11,12 @@
 
 ## Purpose
 
-Interactive browser automation via the `agent-browser` CLI (a pinned npm dependency
-invoked through `npx --no-install`). Exposes 14 discrete operations (navigate,
+Interactive browser automation via the `agent-browser` CLI. The binary is a
+MachinaOs-managed local install resolved by
+[`nodes/browser/_install.py::agent_browser_binary_path`](../../../server/nodes/browser/_install.py)
+(installed via `npm install agent-browser --prefix <package_dir>` on first use,
+same pattern as Claude Code's project-local CLI — NOT a workspace `package.json`
+dependency and NOT invoked through `npx`). Exposes 14 discrete operations (navigate,
 click, type, fill, screenshot, snapshot, get_text, get_html, eval, wait, scroll,
 select, console, errors) plus a `batch` meta-op. The preferred workflow for an
 AI agent is `navigate` -> `snapshot` -> `click`/`fill` using the stable `@eN`
@@ -45,34 +49,35 @@ for both knobs live in `.env.template`.
 
 ## Parameters
 
+Params model is `BrowserParams` (field names are snake_case). `tool_name` /
+`tool_description` are class attributes (not Params fields).
+
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `toolName` | string | `browser` | no | - | Tool name exposed to the AI agent |
-| `toolDescription` | string | (see frontend) | no | - | Tool description shown to LLM |
-| `operation` | options | `navigate` | no | - | One of `navigate`, `click`, `type`, `fill`, `screenshot`, `snapshot`, `get_text`, `get_html`, `eval`, `wait`, `scroll`, `select`, `console`, `errors`, `batch` |
-| `session` | string | `""` | no | - | Session id; if empty, handler uses `machina_<execution_id>` |
-| `timeout` | number | `30` | no | - | Per-operation timeout in seconds |
-| `headed` | boolean | `true` | no | - | Passes `--headed` to agent-browser |
-| `autoConnect` | boolean | `false` | no | - | Passes `--auto-connect` |
-| `browser` | options | `chrome` | no | - | `chrome` / `edge` / `chromium` / `custom` / `bundled` / `bundled_explicit`. Legacy `bundled` silently upgraded to `chrome` |
-| `executablePath` | string | `""` | no | `browser=custom` | Explicit browser path when `browser=custom` |
-| `newWindow` | boolean | `true` | no | - | Appended as `--args --new-window`; only honoured when an explicit `executable_path` resolved |
-| `chromeProfile` | string | `""` | no | - | Chrome user-data-dir profile |
-| `userAgent` | string | `""` | no | - | Custom UA string |
-| `proxy` | string | `""` | no | - | `host:port` or `user:pass@host:port` |
-| `actionDelay` | number | `0` | no | - | Seconds to wait before the real op (a pre-command `wait` is issued first) |
+| `operation` | options (Literal) | `navigate` | no | - | One of `navigate`, `click`, `type`, `fill`, `screenshot`, `snapshot`, `get_text`, `get_html`, `eval`, `wait`, `scroll`, `select`, `console`, `errors`, `batch` |
 | `url` | string | `""` | yes (op=navigate) | `operation=navigate` | Target URL |
-| `selector` | string | `""` | yes (ops that act on an element) | see below | CSS selector or `@eN` ref from snapshot |
-| `text` | string | `""` | no | `operation=type` | Text to type |
-| `value` | string | `""` | no | `operation in [fill, select]` | Value to fill / dropdown value |
+| `selector` | string | `""` | yes (ops that act on an element) | `operation in [click,type,fill,get_text,get_html,wait,select]` | CSS selector or `@eN` ref from snapshot |
+| `text` | string | `""` | no | `operation=type` | Text to type keystroke-by-keystroke |
+| `value` | string | `""` | no | `operation in [fill, select]` | Value to fill / dropdown option value |
 | `expression` | string | `""` | yes (op=eval) | `operation=eval` | JS expression to evaluate |
-| `direction` | options | `down` | no | `operation=scroll` | `up` / `down` / `left` / `right` |
-| `amount` | number | `500` | no | `operation=scroll` | Pixels to scroll |
-| `fullPage` | boolean | `false` | no | `operation=screenshot` | Passes `--full` |
+| `direction` | options (Literal: up/down/left/right) | `down` | no | `operation=scroll` | Scroll direction |
+| `amount` | int (1-20000) | `500` | no | `operation=scroll` | Pixels to scroll |
+| `commands` | string (JSON array) | `"[]"` | yes (op=batch) | `operation=batch` | JSON array of batch command dicts piped to stdin |
+| `full_page` | boolean | `false` | no | `operation=screenshot` | Passes `--full` |
 | `annotate` | boolean | `false` | no | `operation=screenshot` | Passes `--annotate` |
-| `screenshotFormat` | options | `png` | no | `operation=screenshot` | `png` / `jpeg` / `webp` |
-| `screenshotQuality` | number | - | no | `operation=screenshot, screenshotFormat=jpeg` | 1-100, only forwarded for jpeg |
-| `commands` | string (JSON array) | `"[]"` | yes (op=batch) | `operation=batch` | JSON array of command dicts piped to stdin |
+| `screenshot_format` | options (Literal: png/jpeg) | `png` | no | `operation=screenshot` | Forwarded as `--screenshot-format` when not png |
+| `screenshot_quality` | int (1-100) | `85` | no | `operation=screenshot, screenshot_format=jpeg` | Forwarded as `--screenshot-quality`, only for jpeg |
+| `session` | string | `""` | no | - | Session id; if empty, handler uses `machina_<execution_id>` |
+| `browser` | options (Literal) | `chrome` | no | - | `chrome` / `edge` / `chromium` / `bundled_explicit` / `custom`. Legacy/empty `bundled` silently upgraded to `chrome` at dispatch |
+| `executable_path` | string | `""` | no | `browser=custom` | Explicit browser path when `browser=custom` |
+| `headed` | boolean | `true` | no | - | Show browser window (false = headless `--headed` omitted) |
+| `new_window` | boolean | `true` | no | - | Appended as `--args --new-window`; only honoured when an explicit `executable_path` resolved |
+| `auto_connect` | boolean | `false` | no | - | Reuse an already-running CDP browser (`--auto-connect`) |
+| `chrome_profile` | string | `""` | no | - | Chrome user-profile name |
+| `user_agent` | string | `""` | no | - | Custom UA string |
+| `proxy` | string | `""` | no | - | Proxy URL (e.g. `http://user:pass@host:port`) |
+| `action_delay` | int (0-60000) | `0` | no | - | Milliseconds to wait before the real op (a pre-command `wait` is issued first) |
+| `timeout` | int (1-600) | `30` | no | - | Per-action timeout in seconds |
 
 Operations that **require** `selector`: `click`, `type`, `fill`, `get_text`,
 `get_html`, `wait`, `select`.
@@ -82,7 +87,7 @@ Operations that **require** `selector`: `click`, `type`, `fill`, `get_text`,
 | Handle | Shape | Description |
 |--------|-------|-------------|
 | `output-main` | object | Standard envelope payload |
-| `output-tool` | object | Same payload when wired to an AI agent |
+| `output-tool` | object | Same payload when wired to an AI agent's `input-tools` (`usable_as_tool=True`, tool name `browser`) |
 
 ### Output payload
 
@@ -101,7 +106,7 @@ On failure: `{ success: false, error: <string>, execution_time: number }`.
 
 ```mermaid
 flowchart TD
-  A[handle_browser] --> B{BrowserService<br/>available?}
+  A[BaseNode.execute -> BrowserNode.dispatch] --> B{BrowserService<br/>available?}
   B -- no --> Einst[Return error:<br/>agent-browser not installed]
   B -- yes --> C[Resolve session, timeout, headed, browser,<br/>executable_path, proxy, userAgent,<br/>newWindow, chromeProfile, actionDelay]
   C --> C1[Upgrade legacy 'bundled' -> 'chrome'<br/>_resolve_browser looks up shutil.which or Win registry]
@@ -126,7 +131,7 @@ flowchart TD
   Gsw -- unknown --> Gx[raise ValueError<br/>Unknown operation]
   Gn & Gc & Gt & Gf & Gs & Gsn & Gg & Gev & Gsc & Gco --> H[svc.run args, session, timeout, run_kw]
   F --> H
-  H --> H1[Popen argv via npx --no-install agent-browser<br/>shell=False, reads first JSON line of stdout]
+  H --> H1[Popen argv via resolved agent-browser binary<br/>shell=False, reads first JSON line of stdout]
   H1 --> H2{first line<br/>parseable JSON?}
   H2 -- yes --> H3[data = parsed JSON]
   H2 -- no --> H4[data = output: raw string]
@@ -134,15 +139,16 @@ flowchart TD
   I -- yes --> I1[truncate + append '...truncated']
   I -- no --> J[finally: psutil kill process tree]
   I1 --> J
-  J --> K[Return success envelope<br/>operation, data, session]
-  Gx --> Eval[ValueError caught:<br/>return error envelope]
-  H --> Eother[TimeoutError / RuntimeError caught<br/>return error envelope]
+  J --> K[Return BaseNode success envelope<br/>operation, data, session]
+  Gx --> Eval[ValueError -> BaseNode generic envelope]
+  H --> Eother[RuntimeError / NodeUserError -> BaseNode envelope]
 ```
 
 ## Decision Logic
 
-- **Service missing**: `get_browser_service()` returns `None` when `npx` is not on
-  PATH -> immediate `agent-browser not installed` error envelope.
+- **Service missing**: `get_browser_service()` returns `None` when the
+  agent-browser binary cannot be resolved (Node toolchain / `npm` unavailable)
+  -> `RuntimeError("agent-browser not installed...")` -> error envelope.
 - **Session resolution**: empty `session` -> `machina_<execution_id>` via the
   typed `ctx.execution_id` accessor (handles present-but-None on the agent
   tool-dispatch path). Only the stripped value is considered empty; whitespace
@@ -162,13 +168,14 @@ flowchart TD
 - **`newWindow`**: gated on `executable_path` actually resolving - if a user
   requests new-window while `browser=bundled_explicit`, the flag is silently
   dropped.
-- **`actionDelay > 0`**: issues a `wait <seconds>` command to agent-browser
-  BEFORE the real operation. Failures in the delay call propagate as errors.
+- **`action_delay > 0`**: issues a `wait <action_delay>` command (milliseconds)
+  to agent-browser BEFORE the real operation. Failures in the delay call
+  propagate as errors.
 - **`batch`**: reads `commands` JSON string (defaults to `"[]"`) and pipes
   `json.dumps(cmds).encode()` to the subprocess' stdin with flags `batch --json`.
 - **Required params**: `_req(p, "url")` and `_req(p, "expression")` raise
-  `ValueError` on empty strings; `_req_sel(s)` does the same for `selector`.
-  These surface as the error envelope via the outer `except (ValueError, ...)`.
+  `NodeUserError` on empty strings; `_req_sel(s)` does the same for `selector`.
+  `BaseNode.execute()` catches `NodeUserError` into a single-WARN error envelope.
 - **Unknown operation**: `_build_args` raises `ValueError("Unknown operation: <op>")`.
 
 ## Side Effects
@@ -178,11 +185,13 @@ flowchart TD
 - **External API calls**: none (all work happens via subprocess).
 - **File I/O**: agent-browser itself may write screenshots or a profile dir to
   its own cache - not under this handler's control.
-- **Subprocess**: spawns `npx --no-install agent-browser ...` via
+- **Subprocess**: spawns the resolved `agent-browser` binary directly via
   `subprocess.Popen` with `shell=False`. Reads only the FIRST stdout line
   (daemon holds stdout open), caps at 100 KB, then force-kills the entire
-  process tree via `psutil.Process.children(recursive=True) -> kill()`.
+  process tree via `kill_tree(proc.pid)` (`services._supervisor.util`, psutil-backed).
   Always calls `proc.wait()` in a finally block.
+  `AGENT_BROWSER_IDLE_TIMEOUT_MS` is injected into the spawn env when the idle
+  timeout is > 0.
 - **Long-lived daemon**: agent-browser spawns a persistent daemon between
   calls. `shutdown_browser_service()` (registered in FastAPI lifespan) runs
   `agent-browser close --all` to stop it.
@@ -190,9 +199,10 @@ flowchart TD
 ## External Dependencies
 
 - **Credentials**: none.
-- **Services**: `BrowserService` singleton; `npx` on PATH; `agent-browser`
-  pinned in the project's `package.json` and installed under `node_modules`.
-- **Python packages**: `psutil` (for process-tree kill).
+- **Services**: `BrowserService` singleton; `npm` on PATH (for first-use
+  install); `agent-browser` installed under `<package_dir("browser")>/npm/`
+  by `nodes/browser/_install.py` (MachinaOs-managed, not a workspace dep).
+- **Python packages**: `psutil` (via `kill_tree` for process-tree kill).
 - **Environment variables**: `BROWSER_MAX_INSTANCES` (concurrent session cap,
   default 3), `BROWSER_IDLE_TIMEOUT_MS` (daemon idle auto-shutdown in ms,
   default 600000, 0 disables) — canonical values in `.env.template`, mirrored
@@ -211,15 +221,18 @@ flowchart TD
 - **Silent `bundled` -> `chrome` upgrade**: a user who saved a workflow when
   `bundled` was the default will now actually use system Chrome on execution.
 - **`newWindow` silently disabled**: see Decision Logic.
-- **Only `ValueError`, `TimeoutError`, `RuntimeError` are caught**: other
-  exceptions (e.g. `OSError` from subprocess, `psutil.Error`) propagate and
-  the executor wraps them in its generic envelope.
+- **Exception handling is in `BaseNode.execute()`**: `NodeUserError` (empty
+  required field) -> single WARN + structured envelope; `ValueError` (unknown
+  op) / `RuntimeError` (service missing or empty stdout) / other exceptions ->
+  generic envelope with traceback. The plugin's `dispatch` itself does not
+  catch.
 - **Process tree kill race**: `psutil.NoSuchProcess` is swallowed for both the
   parent and every child, so a fast-exiting daemon never leaks an exception
   but may leave orphaned Chromium processes if the tree changed shape between
   the `children()` call and the `kill()` call.
-- **`actionDelay` is billable**: the preliminary `wait` call consumes part of
-  `timeout` because each subprocess invocation resets the timer.
+- **`action_delay` (ms) is a separate call**: the preliminary `wait` runs as its
+  own subprocess invocation with its own `timeout` budget (each invocation
+  resets the timer).
 
 ## Related
 

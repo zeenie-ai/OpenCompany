@@ -3,10 +3,10 @@
 | Field | Value |
 |------|-------|
 | **Category** | google_workspace / tool (dual-purpose) |
-| **Backend handler** | [`server/services/handlers/drive.py::handle_google_drive`](../../../server/services/handlers/drive.py) |
+| **Backend handler** | [`server/nodes/google/drive/__init__.py`](../../../server/nodes/google/drive/__init__.py) (`DriveNode`; dispatched via `BaseNode.execute()` -> single `@Operation("dispatch")` method that branches on `params.operation`) |
 | **Tests** | [`server/tests/nodes/test_google_workspace.py`](../../../server/tests/nodes/test_google_workspace.py) |
 | **Skill (if any)** | [`server/skills/productivity_agent/google-drive-skill/SKILL.md`](../../../server/skills/productivity_agent/google-drive-skill/SKILL.md) |
-| **Dual-purpose tool** | yes - tool name `googleDrive` |
+| **Dual-purpose tool** | yes - tool name `google_drive` |
 
 ## Purpose
 
@@ -65,10 +65,13 @@ Top-level dispatcher: `operation` (one of `upload`, `download`, `list`, `share`)
 
 ## Outputs (handles)
 
+The node declares only `input-main` and `output-main`. Tool mode
+(`usable_as_tool = True`, tool name `google_drive`) returns the same
+`output-main` payload — there is no separate `output-tool` handle.
+
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | Operation-specific payload |
-| `output-tool` | object | Same, for AI tool wiring |
+| `output-main` | object | Operation-specific `DriveOutput` payload |
 
 - `upload`: `{file_id, name, mime_type, size, web_link, download_link, created_time}`
 - `download` (base64): `{file_id, name, mime_type, size, content_base64}`
@@ -80,17 +83,13 @@ Top-level dispatcher: `operation` (one of `upload`, `download`, `list`, `share`)
 
 ```mermaid
 flowchart TD
-  A[handle_google_drive] --> B{operation?}
-  B -- upload --> U[handle_drive_upload]
-  B -- download --> D[handle_drive_download]
-  B -- list --> L[handle_drive_list]
-  B -- share --> S[handle_drive_share]
-  B -- unknown --> Eret[success=false<br/>Unknown Drive operation]
-  U --> G[get_google_credentials + build v3]
-  D --> G
-  L --> G
-  S --> G
-  G -- ValueError --> Eret
+  A[BaseNode.execute -> DriveNode.dispatch] --> G[build_google_service drive v3]
+  G --> B{operation?}
+  B -- upload --> U[upload branch]
+  B -- download --> D[download branch]
+  B -- list --> L[list branch]
+  B -- share --> S[share branch]
+  B -- unknown --> Eret[raise RuntimeError]
   U --> V1{filename &<br/>file_url OR file_content?}
   V1 -- no --> Eret
   V1 -- yes --> SRC{file_url set?}
@@ -110,12 +109,12 @@ flowchart TD
   S --> V3{file_id & email?}
   V3 -- no --> Eret
   V3 -- yes --> R4[permissions.create +<br/>files.get for name/link]
-  R1 --> T[_track_drive_usage]
+  R1 --> T[track_google_usage google_drive]
   DL --> T
   OUT --> T
   R3 --> T
   R4 --> T
-  T --> OE[Return success envelope]
+  T --> OE[Return DriveOutput; BaseNode serializes envelope]
 ```
 
 ## Decision Logic
@@ -128,15 +127,15 @@ flowchart TD
 
 ## Side Effects
 
-- **Database writes**: `api_usage_metrics` row per call via `save_api_usage_metric` with `service='google_drive'`.
-- **Broadcasts**: none.
+- **Database writes**: `api_usage_metrics` row per call via `track_google_usage` -> `save_api_usage_metric` with `service='google_drive'`.
+- **Broadcasts**: none from the operation; executor emits standard `node_status`.
 - **External API calls**: Drive API v3 - `files().create/get/list`, `permissions().create`, `files().get_media`. Plus `httpx.AsyncClient.get(file_url)` on upload-from-URL.
 - **File I/O**: in-memory `io.BytesIO` buffers only; no disk writes.
 - **Subprocess**: none.
 
 ## External Dependencies
 
-- **Credentials**: OAuth via `auth_service.get_oauth_tokens("google")`.
+- **Credentials**: `GoogleCredential` -> OAuth tokens for provider `google`.
 - **Services**: Google Drive API, `PricingService`, `Database`.
 - **Python packages**: `google-api-python-client`, `httpx`.
 - **Environment variables**: none.

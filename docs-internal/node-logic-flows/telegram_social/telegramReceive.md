@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | social / trigger |
-| **Backend handler** | [`server/services/handlers/triggers.py::handle_trigger_node`](../../../server/services/handlers/triggers.py) (generic) + [`server/services/event_waiter.py::build_telegram_filter`](../../../server/services/event_waiter.py) |
+| **Backend handler** | [`server/nodes/telegram/telegram_receive.py`](../../../server/nodes/telegram/telegram_receive.py) (`TelegramReceiveNode`, a `TriggerNode` with `event_type = "telegram_message_received"`); filter via `build_filter` -> [`build_telegram_filter`](../../../server/services/event_waiter.py) |
 | **Tests** | [`server/tests/nodes/test_telegram_social.py`](../../../server/tests/nodes/test_telegram_social.py) |
 | **Skill (if any)** | none |
 | **Dual-purpose tool** | no (trigger only) |
@@ -11,12 +11,14 @@
 ## Purpose
 
 Wait for an incoming Telegram message and emit it as the workflow trigger
-event. Implementation is split between the generic `handle_trigger_node`
-(registers a waiter and blocks on `event_waiter.wait_for_event`) and the
-Telegram-specific filter builder that pre-compiles a `matches()` closure
-from the node parameters. Events are produced by the `TelegramService`
-long-polling loop inside `_on_message_received` and dispatched via
-`event_waiter.dispatch("telegram_message_received", <event_data>)`.
+event. `TelegramReceiveNode` subclasses `TriggerNode`; its `execute` override
+first refuses to register if the bot is not connected, then defers to
+`TriggerNode.execute`. The Telegram-specific `build_filter` pre-compiles a
+`matches()` closure (via the legacy `build_telegram_filter`) from the node
+parameters. Events are produced by the `TelegramService` long-polling loop
+inside `_on_message_received`. In deployment mode this trigger runs on the
+canary path (`TriggerListenerWorkflow` per deployment/trigger, fed via the
+event framework); the registered filter narrows the stream.
 
 ## Inputs (handles)
 
@@ -24,17 +26,19 @@ Trigger node - no inputs.
 
 ## Parameters
 
+All field names are snake_case (no camelCase aliases on the Pydantic model).
+
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `contentTypeFilter` | options | `all` | no | - | One of `all`/`text`/`photo`/`video`/`audio`/`voice`/`document`/`sticker`/`location`/`contact`/`poll` |
-| `senderFilter` | options | `all` | no | - | `all`/`self`/`private`/`group`/`supergroup`/`channel`/`specific_chat`/`specific_user`/`keywords` |
-| `chat_id` | string | `""` | yes when `senderFilter=specific_chat` | `senderFilter: ['specific_chat']` | Numeric chat id or `@username` |
-| `from_user` | string | `""` | yes when `senderFilter=specific_user` | `senderFilter: ['specific_user']` | Numeric user id |
-| `keywords` | string | `""` | yes when `senderFilter=keywords` | `senderFilter: ['keywords']` | Comma-separated, matched case-insensitively |
-| `ignoreBots` | boolean | `true` | no | - | Skip messages where `is_bot=True` (ignored when `senderFilter=self`) |
+| `content_type_filter` | options | `all` | no | - | One of `all`/`text`/`photo`/`video`/`audio`/`voice`/`document`/`sticker`/`location`/`contact`/`poll` |
+| `sender_filter` | options | `all` | no | - | `all`/`self`/`private`/`group`/`supergroup`/`channel`/`specific_chat`/`specific_user`/`keywords` |
+| `chat_id` | string | `""` | yes when `sender_filter=specific_chat` | `sender_filter: ['specific_chat']` | Numeric chat id or `@username` |
+| `from_user` | string | `""` | yes when `sender_filter=specific_user` | `sender_filter: ['specific_user']` | Numeric user id |
+| `keywords` | string | `""` | yes when `sender_filter=keywords` | `sender_filter: ['keywords']` | Comma-separated, matched case-insensitively |
+| `ignore_bots` | boolean | `true` | no | shown for every `sender_filter` except `self` | Skip messages where `is_bot=True` (ignored when `sender_filter=self`) |
 
-Legacy alias: `chatTypeFilter` is still read when `senderFilter` is absent and
-reconstructs the new-style value.
+Legacy alias: `chatTypeFilter` is still read by `build_telegram_filter` when
+`sender_filter` is absent and reconstructs the new-style value.
 
 ## Outputs (handles)
 
@@ -73,11 +77,11 @@ Wrapped in the standard success envelope when an event is received.
 
 ```mermaid
 flowchart TD
-  A[handle_trigger_node] --> B{TelegramService.connected?}
-  B -- no --> Eoff[Return success=false<br/>error: bot not connected]
-  B -- yes --> C[event_waiter.register<br/>-> build_telegram_filter]
+  A[TelegramReceiveNode.execute] --> B{TelegramService.connected?}
+  B -- no --> Eoff[_wrap_error<br/>error: bot not connected]
+  B -- yes --> C[TriggerNode.execute<br/>register waiter via build_filter]
   C --> D[broadcaster.update_node_status waiting]
-  D --> E[await event_waiter.wait_for_event]
+  D --> E[await event delivery]
   E -- CancelledError --> Ecx[Return success=false<br/>error: Cancelled by user]
   E -- event resolved --> F[Return success=true<br/>result = event_data]
 
@@ -92,8 +96,9 @@ flowchart TD
 
 ## Decision Logic
 
-- **Pre-check**: Handler inspects `TelegramService.connected` before registering
-  a waiter. Prevents hanging forever when the bot token was never added.
+- **Pre-check**: `execute` inspects `TelegramService.connected` before deferring
+  to `TriggerNode.execute`. Prevents hanging forever when the bot token was
+  never added.
 - **Sender filter branches** (inside `build_telegram_filter.matches`):
   - `self`: compares `m.from_id` to a lazily-resolved `owner_chat_id`. If no
     owner is known, the message is rejected (but no error surfaces to the
@@ -104,9 +109,9 @@ flowchart TD
   - `all`: accepts everything (subject to `ignore_bots`).
 - **Content type filter**: Always applied first; if set and not `all`, rejects
   anything with a non-matching `content_type`.
-- **`ignore_bots`**: Applied last; silently skipped when `senderFilter == 'self'`.
-- **Legacy fallback**: If `senderFilter` is unset the code reconstructs it
-  from `chat_id`/`from_user`/`keywords`/`chatTypeFilter` so old workflows keep
+- **`ignore_bots`**: Applied last; silently skipped when `sender_filter == 'self'`.
+- **Legacy fallback**: If `sender_filter` is unset the filter builder reconstructs
+  it from `chat_id`/`from_user`/`keywords`/`chatTypeFilter` so old workflows keep
   working.
 
 ## Side Effects
@@ -139,13 +144,10 @@ flowchart TD
   matches `"chicken"`. Empty `keywords` accepts all messages.
 - **String comparison for IDs**: `specific_chat`/`specific_user` compare via
   `str(...)`. A leading `@` or whitespace difference will silently mismatch.
-- **`ignore_bots` override**: Hard-coded to be bypassed for `senderFilter=self`
+- **`ignore_bots` override**: Hard-coded to be bypassed for `sender_filter=self`
   so bot-owners who are themselves bots still match.
 - **Cancellation path**: If the trigger is cancelled mid-wait, the handler
   returns `success=false, error="Cancelled by user"` rather than swallowing.
-- **Handler accepts unknown trigger types**: `handle_trigger_node` has a guard
-  for missing `TriggerConfig`, but because the registry entry for
-  `telegramReceive` is hard-coded this branch is unreachable in practice.
 - **No timeout**: The node waits indefinitely. The only exit routes are an
   event match, an explicit `cancel_event_wait` WebSocket call, or the server
   restarting.
@@ -154,4 +156,4 @@ flowchart TD
 
 - **Sibling nodes**: [`telegramSend`](./telegramSend.md), [`socialReceive`](./socialReceive.md)
 - **Event waiter architecture**: [Event Waiter System](../../event_waiter_system.md)
-- **Service**: [`server/services/telegram_service.py`](../../../server/services/telegram_service.py)
+- **Service**: [`server/nodes/telegram/_service.py`](../../../server/nodes/telegram/_service.py)

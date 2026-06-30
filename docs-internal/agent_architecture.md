@@ -41,19 +41,24 @@ WorkflowService.execute_node()            server/services/workflow.py
         v
 NodeExecutor._dispatch()                  server/services/node_executor.py
   Handler registry lookup via functools.partial
-  Dispatches to handle_ai_agent() or handle_chat_agent()
+  Dispatches via BaseNode.execute() to the agent plugin's execute_op()
+  (server/nodes/agent/<plugin>/__init__.py — Wave 11 deleted handle_ai_agent /
+   handle_chat_agent; agent logic moved into the plugin folder)
         |
         v
-_collect_agent_connections()              server/services/handlers/ai.py
+collect_agent_connections()               server/services/plugin/edge_walker.py
+  (called by nodes/agent/_inline.prepare_agent_call)
   Scans edges where target == node_id
-  Groups by targetHandle into 4 buckets:
-    input-memory  -> memory_data
-    input-skill   -> skill_data[]
-    input-tools   -> tool_data[]
-    input-main    -> input_data
+  Groups by targetHandle into 5 buckets (returns a 5-tuple
+   memory_data, skill_data, tool_data, input_data, task_data):
+    input-memory             -> memory_data
+    input-skill              -> skill_data[]
+    input-tools              -> tool_data[]
+    input-main / input-chat  -> input_data
+    input-task               -> task_data
         |
         v
-AIService.execute_agent()                 server/services/ai.py
+AIService.execute_agent() / execute_chat_agent()   server/services/ai.py
   1. Inject skills into system message
   2. Build LangChain StructuredTools from tool_data
   3. Call _run_agent_loop() (plain async while loop)
@@ -76,7 +81,9 @@ Result broadcast via WebSocket
 | `server/routers/websocket.py` | WebSocket handler `handle_execute_node()` |
 | `server/services/workflow.py` | Facade, builds context, delegates to NodeExecutor |
 | `server/services/node_executor.py` | Handler registry, dispatches via `functools.partial` |
-| `server/services/handlers/ai.py` | `_collect_agent_connections()`, `handle_ai_agent()`, `handle_chat_agent()` |
+| `server/services/plugin/edge_walker.py` | `collect_agent_connections()` (the renamed `_collect_agent_connections`), `format_task_context()` |
+| `server/nodes/agent/_inline.py` | `prepare_agent_call()` — task-context injection + auto-prompt fallback + teammate collection; calls `collect_agent_connections` then `ai_service.execute_[chat_]agent` |
+| `server/nodes/agent/<plugin>/__init__.py` | Per-plugin `execute_op()` (Wave 11 replaced `handle_ai_agent` / `handle_chat_agent`) |
 | `server/services/ai.py` | `AIService` -- `_run_agent_loop`, skill injection, tool building |
 | `server/services/handlers/tools.py` | `execute_tool()` -- dispatch router for all tool types |
 | `server/services/skill_loader.py` | `SkillLoader` -- filesystem/DB skill discovery and loading |
@@ -159,7 +166,7 @@ Both build `initial_messages` (system + memory history + current prompt + skill 
 
 ### 1. Edge Scanning
 
-In `_collect_agent_connections()` (`server/services/handlers/ai.py:14-49`), all edges targeting the agent node are scanned:
+In `collect_agent_connections()` (`server/services/plugin/edge_walker.py`; the renamed Wave-11 successor to `_collect_agent_connections` — the old `handlers/ai.py` was deleted), all edges targeting the agent node are scanned:
 
 ```python
 for edge in edges:
@@ -435,3 +442,82 @@ else:
 ```
 
 This optimisation means tool-less Chat Agent conversations skip `_run_agent_loop` entirely for faster response times.
+
+---
+
+## AI Agent vs Chat Agent (Zeenie)
+
+`aiAgent` and `chatAgent` (display name "Zeenie") are near-identical in capability — both run the same `_run_agent_loop`, support memory / skills / tools / task input, and can delegate asynchronously. The differences are which backend method they call and the softness of error handling.
+
+| Feature | AI Agent (`aiAgent`) | Zeenie (`chatAgent`) |
+|---------|----------------------|----------------------|
+| Tool Calling | Yes (agent loop) | Yes (agent loop) |
+| Memory Support | Yes | Yes |
+| Skill Support | Yes | Yes |
+| Task Input | Yes (`input-task`) | Yes (`input-task`) |
+| Bottom Handles | Skill, Tools | Skill, Tools |
+| Left Handles | Input, Memory, Task | Input, Memory, Task |
+| Backend Method | `execute_agent()` | `execute_chat_agent()` |
+| No-tool path | Always uses `_run_agent_loop` | Single `await chat_model.ainvoke(messages)` (skips loop overhead) |
+| Tool-failure handling | Re-raises (loop wraps as `{"error": ...}` ToolMessages) | Returns `{"error": str(e)}` (softer) |
+| Async Delegation | Yes (fire-and-forget) | Yes (fire-and-forget) |
+
+See the full method comparison in [execute_agent vs execute_chat_agent](#execute_agent-vs-execute_chat_agent) above.
+
+---
+
+## Agent Input Methods
+
+Both agents resolve their prompt the same way (logic in `server/nodes/agent/_inline.py:prepare_agent_call`):
+
+1. **Template Variable (Explicit)** — set the Prompt field to a template like `{{chatTrigger.message}}` or `{{whatsappReceive.text}}`.
+   - Templates are resolved by `ParameterResolver` before the plugin's `execute_op` runs.
+   - Supports nested paths: `{{nodeName.nested.field}}`.
+
+2. **Auto-Fallback (Implicit)** — leave the Prompt field empty (`prepare_agent_call` Step 2, lines ~85-93):
+   - When `not parameters.get("prompt") and input_data`, the agent reads the output of the node wired to its `input-main` / `input-chat` handle (`input_data`, surfaced by `collect_agent_connections`).
+   - Extraction order: `input_data["message"]` → `input_data["text"]` → `input_data["content"]` → `str(input_data)` (whole-output fallback).
+
+**Task-context injection (Step 1)** runs before the prompt fallback: when an `input-task` edge supplies `task_data`, `format_task_context(task_data)` is prepended to the prompt and tools may be stripped (the agent is reacting to a completed delegation, not starting fresh).
+
+**Example workflow:**
+```
+Chat Trigger → Zeenie ← HTTP Skill (SKILL.md context)
+                       ← HTTP Request (tool node)
+```
+Zeenie loads SKILL.md instructions from connected skill nodes, builds tools from connected tool nodes (httpRequest, calculatorTool, …), and uses `_run_agent_loop` for tool execution when tools are connected.
+
+---
+
+## Handle Topology
+
+Handle layouts are declared in `server/nodes/agent/_handles.py` (local to `nodes/agent/`, not a global lookup). Two layouts cover the 20 agent variants:
+
+**`std_agent_handles()`** — shared by 18 of 20 agent variants:
+
+| Handle | Kind | Position | Offset | Role |
+|---|---|---|---|---|
+| `input-skill` | input | bottom | 25% | skill |
+| `input-tools` | input | bottom | 75% | tools |
+| `input-main` | input | left | 25% | main |
+| `input-memory` | input | left | 50% | memory |
+| `input-task` | input | left | 75% | task |
+| `output-main` | output | right | 50% | main |
+| `output-top` | output | top | — | main |
+
+**`team_lead_agent_handles()`** — `orchestrator_agent` and `ai_employee` only; adds an `input-teammates` handle (bottom, 80%) and shifts the bottom skill/tool offsets to 20%/50%. Connected agents become `delegate_to_<type>` tools via `_collect_teammate_connections()`. Team leads are also listed in `TEAM_LEAD_TYPES` in [`client/src/components/TeamMonitorNode.tsx`](../client/src/components/TeamMonitorNode.tsx) (frontend tribal array, flagged as tech debt). See [agent_teams.md](agent_teams.md).
+
+`AIAgentNode.tsx` is type-agnostic: it calls `useNodeSpec(type)` and renders whatever handles / icon / color the spec returns — there is no `AGENT_CONFIGS` map (retired Wave 10.D). Specialized-agent visuals all come from the NodeSpec; per-type display name / subtitle / description live on the plugin class, icon from `<plugin>/icon.svg` (visuals.json emoji fallback), color from `<plugin>/meta.json`. Glob `server/nodes/agent/` for the authoritative agent list — do not hand-maintain one.
+
+---
+
+## Async Agent Delegation (overview)
+
+AI Agents delegate to other agents wired to their `input-tools` handle, enabling hierarchical agent trees. There are two execution paths depending on whether the parent runs under Temporal F4.B:
+
+- **F4.B (default, `TEMPORAL_AGENT_WORKFLOW_ENABLED=true`)**: the parent `AgentWorkflow` spawns the child as a **child `AgentWorkflow`** via `workflow.execute_child_workflow` when the child type is in `AGENT_WORKFLOW_TYPES`. The parent's `node_id` rides in `child_context["parent_node_id"]` so the child's `_emit_phase` mirrors progress onto the parent's canvas badge. The LLM's `{task, context}` args travel as `child_context["invocation"]`, applied AFTER config resolution in `prepare_agent_payload` (so stored node parameters never override the delegated task; empty-task calls are rejected at the boundary without spawning). Deterministic child id `f"{parent_workflow_id}-delegate-{child_node_id}-{iteration}"`. The parent waits for the child result synchronously through the child-workflow handle.
+- **Legacy / F4.A-only**: fire-and-forget via `asyncio.create_task`. Still the path for `rlm_agent` / `claude_code_agent` (excluded from `AGENT_WORKFLOW_TYPES`) and any deployment with `TEMPORAL_AGENT_WORKFLOW_ENABLED=false`. The `delegate_to_*` tool spawns the child as a background task and returns immediately with `{"status": "delegated", "task_id": "..."}`; the parent keeps working while the child executes independently and broadcasts its own status (executing / success / error).
+
+Design decisions (legacy path): **memory isolation** (child uses its own connected memory, not the parent's), **error isolation** (child errors are logged + broadcast, never propagated to the parent), **task tracking** (background tasks live in `_delegated_tasks`, cleaned up on completion).
+
+Key files: `server/services/ai.py` (`DelegateToAgentSchema` in `_get_tool_schema()`, injects `ai_service` / `database` / `nodes` / `edges` into tool config), `server/services/handlers/tools.py` (`_execute_delegated_agent()`, `get_delegated_task_status()`). Full plumbing — memory / parameter / execution-context flow — is in [agent_delegation.md](agent_delegation.md); the multi-agent team-lead variant is in [agent_teams.md](agent_teams.md).

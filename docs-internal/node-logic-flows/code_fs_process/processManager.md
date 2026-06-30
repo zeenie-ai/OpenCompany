@@ -2,8 +2,8 @@
 
 | Field | Value |
 |------|-------|
-| **Category** | code_fs_process / process |
-| **Backend handler** | [`server/services/handlers/process.py::handle_process_manager`](../../../server/services/handlers/process.py) |
+| **Category** | code_fs_process / process (plugin lives under `server/nodes/utility/`) |
+| **Backend handler** | [`server/nodes/utility/process_manager/__init__.py::ProcessManagerNode.dispatch`](../../../server/nodes/utility/process_manager/__init__.py) (dispatched via `BaseNode.execute()` + `@Operation("dispatch")`) |
 | **Service** | [`server/services/process_service.py::ProcessService`](../../../server/services/process_service.py) |
 | **Tests** | [`server/tests/nodes/test_code_fs_process.py`](../../../server/tests/nodes/test_code_fs_process.py) |
 | **Skill (if any)** | [`server/skills/terminal/process-manager-skill/SKILL.md`](../../../server/skills/terminal/process-manager-skill/SKILL.md) |
@@ -17,10 +17,12 @@ workflow. Unlike [`shell`](./shell.md), processes spawned here inherit the
 the Terminal tab via `broadcast_terminal_log()` and persists to per-process log
 files at `<workspace>/<agent_node_id>/.processes/<name>/{stdout,stderr}.log`.
 
-Six operations: `start`, `stop`, `restart`, `send_input`, `list`, `get_output`.
-The handler is a thin dispatcher over the `ProcessService` singleton; the
-singleton owns a `{(workflow_id, name): ManagedProcess}` dict, the streaming
-tasks, and the cleanup scheduler.
+Six operations: `start`, `stop`, `restart`, `send_input`, `list`, `get_output`
+(default `list`). The plugin's `dispatch` op is a thin wrapper over the
+`ProcessService` singleton; the singleton owns a `{(workflow_id, name):
+ManagedProcess}` dict, the streaming tasks, and the cleanup scheduler. The
+wrapper's `_unwrap` raises `NodeUserError` on any service `{"success": False}`
+envelope so the framework returns a clean failure.
 
 ## Inputs (handles)
 
@@ -32,38 +34,45 @@ tasks, and the cleanup scheduler.
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `toolName` | string | `process_manager` | no | - | Tool name exposed to AI agents |
-| `toolDescription` | string | (see frontend) | no | - | Description shown to LLM |
-| `operation` | options | `start` | no | - | One of `start`, `stop`, `restart`, `send_input`, `list`, `get_output` |
-| `name` | string | `""` | yes (all except `list`) | `operation in [start, stop, restart, send_input, get_output]` | Unique process name within the workflow |
-| `command` | string | `""` | yes (`start` only) | `operation=start` | Shell command (parsed with `shlex.split`) |
-| `working_directory` | string | `""` | no | `operation=start` | Defaults to `<workspace>/<node_id>` |
-| `text` | string | `""` | yes (`send_input`) | `operation=send_input` | Text to write to stdin (newline auto-appended) |
-| `stream` | string | `"stdout"` | no | - (tool-only) | `stdout` or `stderr` for `get_output` |
-| `tail` | number | `50` | no | - (tool-only) | Tail lines; 0 means all lines from `offset` |
-| `offset` | number | `0` | no | - (tool-only) | Skip N lines (only when `tail=0`) |
+| `operation` | `start`/`stop`/`restart`/`list`/`send_input`/`get_output` (Literal) | `list` | no | - | Operation to run |
+| `name` | string | `""` | yes (all except `list`) | - | Unique process name within the workflow (LLM `"None"` coerced to empty by `_clean`) |
+| `command` | string | `""` | yes (`start` only) | `operation=start` | Command (`ProcessService` parses with `shlex.split`) |
+| `cwd` | string | `""` | no | `operation=start` | Working directory; defaults to `<workspace>/<node_id>` |
+| `env` | object (Dict[str,str]) | `{}` | no | `operation=start` | Declared param, but the `dispatch` op does NOT forward it to `svc.start` — currently inert |
+| `input_text` | string | `""` | yes (`send_input`) | `operation=send_input` | Text to write to stdin (newline auto-appended by the service) |
+| `stream` | `stdout`/`stderr` (Literal) | `stdout` | no | `operation=get_output` | Stream to read for `get_output` |
+| `tail` | number | `100` (ge=1, le=10000) | no | `operation=get_output` | Tail N lines |
+
+`ProcessManagerParams` uses `extra="ignore"`. There are NO `toolName` /
+`toolDescription` / `working_directory` / `text` / `offset` params (the old
+card listed pre-Wave-11 frontend fields). `get_output` is always called with
+`offset=0`.
 
 ## Outputs (handles)
 
 | Handle | Shape | Description |
 |--------|-------|-------------|
-| `output-main` | object | Standard envelope payload |
-| `output-tool` | object | Same payload when wired to an AI agent |
+| `output-main` | object | Standard envelope payload (node declares only `input-main` / `output-main`; `usable_as_tool=True` exposes the same payload as the `process_manager` tool result) |
 
 ### Output payload per operation
 
-- `start` / `stop` / `restart`: `{name, command, pid, status, started_at,
-  exit_code, working_directory, stdout_lines, stderr_lines, log_dir}`.
-- `send_input`: `{sent: <text>}`.
+The shapes below are whatever `ProcessService` returns (passed through `_unwrap`).
+`node_output_schemas.ProcessManagerOutput` declares `operation` / `pid` /
+`status` / `output` / `processes` (extra fields allowed by `_OutputBase`).
+
+- `start` / `stop` / `restart`: the `ProcessInfo` dict from the service
+  (`{name, command, pid, status, started_at, exit_code, working_directory,
+  log_dir, ...}`).
+- `send_input`: the service's send-input result dict.
 - `list`: `{processes: Array<ProcessInfo>}` for the current workflow.
-- `get_output`: `{lines: string[], total: number, file: string}`.
+- `get_output`: the service's `{lines, total, file, ...}` dict.
 
 ## Logic Flow
 
 ```mermaid
 flowchart TD
-  A[handle_process_manager] --> B[Build tool_args:<br/>clean 'None' strings,<br/>default working_directory to workspace/node_id]
-  B --> C[execute_process_manager]
+  A[dispatch] --> B[name = _clean params.name<br/>agent_dir = workspace/node_id]
+  B --> C[route on params.operation]
   C --> D{operation}
   D -- start --> S1{command blocked?<br/>rm, format, mkfs...}
   S1 -- yes --> Sblk[Return error:<br/>Destructive commands blocked]
@@ -83,18 +92,22 @@ flowchart TD
   St2 --> St3[wait exit, schedule 60s cleanup]
   St3 --> St4[Return success]
   D -- restart --> R[stop then start with same cmd+cwd]
-  D -- send_input --> I1[write text+newline to stdin.drain]
-  D -- list --> L[return info for workflow_id processes]
-  D -- get_output --> O[read log file, tail or offset slice]
-  D -- unknown --> U[Return error:<br/>Unknown operation]
+  D -- send_input --> I1[svc.send_input name, wf, input_text]
+  D -- list --> L[svc.list_processes workflow_id]
+  D -- get_output --> O[svc.get_output name, wf, stream, tail, 0]
+  D -- unknown --> U[raise NodeUserError:<br/>Unknown operation]
 ```
+
+Each service call (except `list`) is wrapped in `_unwrap`, which raises
+`NodeUserError` if the service returned `{"success": False}`.
 
 ## Decision Logic
 
-- **`_clean_arg()`**: LLMs sometimes pass the literal string `"None"` for
-  missing fields; the handler coerces `""` and `"None"` to empty.
-- **`working_directory` fallback**: if the param is empty the handler uses
-  `<workspace>/<node_id>` (each agent node gets its own subfolder). If the
+- **`_clean()`**: LLMs sometimes pass the literal string `"None"` for missing
+  fields; the wrapper coerces `""` and `"None"` to empty (applied to `name`,
+  `command`, `cwd`, `input_text`).
+- **`cwd` fallback**: if `cwd` is empty the wrapper uses `agent_dir =
+  <workspace>/<node_id>` (each agent node gets its own subfolder). If the
   workspace is also empty, `ProcessService.start` falls back to
   `<workspace_base>/default` and mkdir's it.
 - **Workspace guardrail**: `cwd` must resolve inside `workspace_base_resolved`

@@ -353,6 +353,38 @@ Selection state: `selected` co-class on the outer wrapper, driven by React Flow'
 
 Type-specific co-classes (Cyber-only today): `.node-agent` colors AIAgentNode neon magenta; `.sq-node.node-trigger .sq-node-box` colors TriggerNode neon green. Other themes ignore these co-classes — single colour by node type is fine when not differentiating.
 
+## Canvas-wide edge + node status animations (`canvasAnimations.ts`)
+
+[client/src/styles/canvasAnimations.ts](../client/src/styles/canvasAnimations.ts) owns the `@keyframes` + `.react-flow__edge.{status}` + `.react-flow__node.{status}` rules injected once into Dashboard's `<style>` tag. It is the single home for canvas-wide rules that need to match React Flow's wrapper classes (per-node inline animations live in their own components and read theme tokens directly — see the visual contract above).
+
+**Three named exports** — adding a new keyframe or status visual is a single-file change:
+
+| Symbol | Role |
+|---|---|
+| `KEYFRAMES` | `@keyframes` definitions for edges (`dashFlow` — the marching-ants stroke-dashoffset cycle on executing edges) |
+| `edgeStatusStyles(colors)` | `.react-flow__edge.{selected,executing,completed,error,pending,memory-active,tool-active}` stroke rules |
+| `nodeStatusStyles(_colors)` | `.react-flow__node.{...}` status-class colours (currently a no-op stub; the arg is kept on the signature so the `buildCanvasStyles` / `CanvasStatusColors` contract stays stable for downstream consumers) |
+| `buildCanvasStyles(colors)` | Composes the three into the final string for Dashboard |
+
+**Light/dark distinction lives entirely in `theme.ts`.** `buildCanvasStyles(colors)` is single-arg and the file ships **zero hardcoded hex colours** — the theme object provides different values per mode, so this module knows nothing about which theme is active.
+
+`CanvasStatusColors` is the contract interface, carrying exactly eight edge-stroke keys:
+
+```ts
+export interface CanvasStatusColors {
+  edgeDefault: string;
+  edgeSelected: string;
+  edgeExecuting: string;
+  edgeCompleted: string;
+  edgeError: string;
+  edgePending: string;
+  edgeMemoryActive: string;
+  edgeToolActive: string;
+}
+```
+
+**No `nodeGlow` keyframe here.** This module used to inject a `nodeGlow` keyframe targeting the React Flow wrapper, but it was dead code (only the inner `.node` child animated) and was removed. Node execution glow is owned solely by [base.css](../client/src/themes/base.css) — the `node-pulse` keyframe + `.react-flow__node.executing .node` / `.sq-node[data-executing] .sq-node-box` rules (see [`--node-pulse-color` contract](#done) above). Do not re-introduce a competing `nodeGlow` keyframe here.
+
 ## Sound system
 
 Each theme declares `--sound-pack: "<pack>"` in its `:root[data-theme="..."]` block. Pack names map to event tables in [client/src/lib/sound.ts](../client/src/lib/sound.ts):

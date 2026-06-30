@@ -265,6 +265,13 @@ package's `__init__.py` — the consumer never imports your folder.
 All six are idempotent (same callable / class for the same key is a
 no-op; conflicts raise `ValueError`).
 
+**Register, don't edit the consumer.** Never edit `event_waiter.py`,
+`status_broadcaster.py`, or `routers/websocket.py` to add a plugin's
+handler / filter / refresh — call the matching `register_*` from your
+plugin's `__init__.py` instead. Likewise never import a plugin folder
+from `routers/`, `services/`, or another `nodes/` subfolder; the
+consumer reaches your code through the registry, never by import path.
+
 ### Credential validation (Wave 11.I)
 
 The credential-validator dispatch is a sibling concern, handled by the

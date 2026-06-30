@@ -76,15 +76,15 @@ T+12.27 — Status broadcasters settled ◀ "everything green"
 is idle in this window; the cost lives on the frontend. Likely
 contributors:
 
-1. **TanStack Query auth-bootstrap retry budget** ([client/src/contexts/AuthContext.tsx](client/src/contexts/AuthContext.tsx) + [client/src/lib/connectionConfig.ts](client/src/lib/connectionConfig.ts)). The `AUTH_RETRY` envelope (BASE 50 ms, CAP 4000 ms, MAX_ATTEMPTS 7) covers the typical 4 s backend cold-start window in 4-5 attempts. If the backend finishes mid-retry-cycle, the next jittered draw can land 1-3 s after readiness.
-2. **React Strict Mode dual-mount** in dev. The 100 ms guard in [WebSocketContext.tsx:2554](client/src/contexts/WebSocketContext.tsx#L2554) absorbs the bulk; remaining cost is React reconciliation + babel-plugin-react-compiler overhead on first render.
+1. **TanStack Query auth-bootstrap retry budget** ([client/src/contexts/AuthContext.tsx](../client/src/contexts/AuthContext.tsx) + [client/src/lib/connectionConfig.ts](../client/src/lib/connectionConfig.ts)). The `AUTH_RETRY` envelope (BASE 50 ms, CAP 4000 ms, MAX_ATTEMPTS 7) covers the typical 4 s backend cold-start window in 4-5 attempts. If the backend finishes mid-retry-cycle, the next jittered draw can land 1-3 s after readiness.
+2. **React Strict Mode dual-mount** in dev. The 100 ms guard in [WebSocketContext.tsx:2554](../client/src/contexts/WebSocketContext.tsx#L2554) absorbs the bulk; remaining cost is React reconciliation + babel-plugin-react-compiler overhead on first render.
 3. **PartySocket upgrade handshake**. Sub-100 ms in normal cases; would only matter on slow networks.
 
 To attribute definitively: add `console.time('auth.queryFn')` / `console.timeLog('auth.queryFn')` markers and a corresponding pair around `connect()`. Not blocking — the contract this layer was meant to fix (the +12 s disconnect-reconnect cycle) is resolved.
 
 ## Frontend retry / reconnect envelope
 
-Single source of truth: [client/src/lib/connectionConfig.ts](client/src/lib/connectionConfig.ts).
+Single source of truth: [client/src/lib/connectionConfig.ts](../client/src/lib/connectionConfig.ts).
 
 | Constant | Value | Notes |
 |---|---|---|
@@ -101,7 +101,7 @@ Backoff formula (AWS Architecture Blog "full jitter" pattern):
 
     sleep = random(0, min(CAP_MS, BASE_MS * 2^attempt))
 
-Lock-in tests: [client/src/lib/__tests__/connectionConfig.test.ts](client/src/lib/__tests__/connectionConfig.test.ts).
+Lock-in tests: [client/src/lib/__tests__/connectionConfig.test.ts](../client/src/lib/__tests__/connectionConfig.test.ts).
 
 ## Bottleneck inventory (cold-start, warm cache)
 

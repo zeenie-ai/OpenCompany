@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | email / tool (dual-purpose) |
-| **Backend handler** | [`server/services/handlers/email.py::handle_email_read`](../../../server/services/handlers/email.py) |
+| **Backend handler** | [`server/nodes/email/email_read/__init__.py`](../../../server/nodes/email/email_read/__init__.py) — dispatched via `BaseNode.execute()` -> `@Operation("query")` -> `EmailService.read` ([`_service.py`](../../../server/nodes/email/_service.py)) |
 | **Tests** | [`server/tests/nodes/test_email.py`](../../../server/tests/nodes/test_email.py) |
 | **Skill (if any)** | none shipped |
 | **Dual-purpose tool** | yes - connect to `input-tools` as the node's own name |
@@ -25,15 +25,22 @@ node exposes seven operations selected by the `operation` parameter.
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
 | `provider` | options | `gmail` | no | - | Preset key in `email_providers.json` |
-| `operation` | options | `list` | **yes** | - | `list` / `search` / `read` / `folders` / `move` / `delete` / `flag` |
-| `folder` | string | `INBOX` | no | show for all except `folders` | IMAP folder name |
-| `query` | string | `""` | **yes** (`search`) | `operation: ['search']` | Himalaya search expression, e.g. `from:x subject:y` |
-| `message_id` | string | `""` | **yes** for `read`/`move`/`delete`/`flag` | `operation: ['read','move','delete','flag']` | IMAP message UID |
-| `target_folder` | string | `""` | **yes** (`move`) | `operation: ['move']` | Destination folder for `move` |
-| `flag` | options | `Seen` | no | `operation: ['flag']` | One of `Seen` / `Answered` / `Flagged` / `Draft` / `Deleted` |
+| `operation` | options | `list` | no | - | `list` / `search` / `read` / `folders` / `move` / `delete` / `flag` |
+| `folder` | string | `INBOX` | no | `operation: ['list','search']` | IMAP folder name |
+| `query` | string | `""` | no (`search`) | `operation: ['search']` | Himalaya search expression, e.g. `from:x subject:y` |
+| `message_id` | string | `""` | no (used by `read`/`move`/`delete`/`flag`) | `operation: ['read','move','delete','flag']` | IMAP message UID |
+| `target_folder` | string | `""` | no (`move`) | `operation: ['move']` | Destination folder for `move` |
+| `flag` | options | `""` | no | `operation: ['flag']` | One of `Seen` / `Answered` / `Flagged` / `Draft` / `Deleted` (empty default) |
 | `flag_action` | options | `add` | no | `operation: ['flag']` | `add` or `remove` |
-| `page` | number | `1` | no | `operation: ['list']` | 1-based page number |
-| `page_size` | number | `20` | no | `operation: ['list']` | 1-100 envelopes per page |
+| `limit` | number | `20` | no | `operation: ['list','search']` | Max envelopes per page (1-500) |
+| `page` | number | `1` | no | `operation: ['list','search']` | 1-based page number |
+| `page_size` | number | `20` | no | `operation: ['list','search']` | Items per page (1-500); overrides `limit` when paginating |
+| `offset` | number | `0` | no | `operation: ['list','search']` | Skip this many messages (alternative to page-based pagination) |
+
+> Note: no parameter is Pydantic-required (`operation` defaults to `list`); the
+> operation router in `EmailService.read` passes empty strings straight to
+> Himalaya, which fails with a non-zero exit for ops that genuinely need
+> `message_id` / `query` / `target_folder`.
 
 Credential params (`email`, `password`, `imap_host`, etc.) follow the same
 resolution rules as [`emailSend`](./emailSend.md#decision-logic).
@@ -43,7 +50,8 @@ resolution rules as [`emailSend`](./emailSend.md#decision-logic).
 | Handle | Shape | Description |
 |--------|-------|-------------|
 | `output-main` | object | Operation result |
-| `output-tool` | object | Same payload, used when wired as an AI tool |
+
+When wired to an AI agent's `input-tools` handle (`usable_as_tool = True`, tool name `email_read`), the same payload is returned to the LLM via the tool-dispatch path — there is no separate `output-tool` handle.
 
 ### Output payload
 
@@ -66,7 +74,7 @@ Wrapped in the standard envelope: `{ success: true, result: <payload>, execution
 
 ```mermaid
 flowchart TD
-  A[handle_email_read] --> B[EmailService.read params]
+  A[BaseNode.execute -> Operation query] --> B[EmailService.read params]
   B --> C[resolve_credentials]
   C -->|missing email/password| Ec[ValueError -> error envelope]
   C --> D{operation in router?}
@@ -127,9 +135,10 @@ flowchart TD
 
 ## Edge cases & known limits
 
-- **Page-size clamp is frontend-only**: the node def caps `page_size` at 100,
-  but the backend passes whatever value arrives. Requesting 10000 will hit
-  the IMAP server's own limits.
+- **Pagination uses `page`/`page_size` only**: the router in `EmailService.read`
+  reads `page` + `page_size`; the `limit` and `offset` params exist on the model
+  but are not forwarded to Himalaya for `list`/`search`. `page_size` is Pydantic-
+  validated to `1-500`; the IMAP server's own limits still apply.
 - **No pagination metadata**: `list` returns whatever Himalaya gives; there
   is no `has_more` / `total` helper.
 - **Deletion is permanent** (no undo), and the handler does not prompt or

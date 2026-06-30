@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | specialized_agents |
-| **Backend handler** | [`server/services/handlers/ai.py::handle_chat_agent`](../../../server/services/handlers/ai.py) |
+| **Plugin** | [`server/nodes/agent/payments_agent/__init__.py`](../../../server/nodes/agent/payments_agent/__init__.py) -> [`_specialized.py::SpecializedAgentBase.execute_op`](../../../server/nodes/agent/_specialized.py) (dispatch via `BaseNode.execute()`) |
 | **Theme color** | `dracula.green` |
 | **Icon** | credit card (U+1F4B3) |
 | **Tests** | [`server/tests/nodes/test_specialized_agents.py`](../../../server/tests/nodes/test_specialized_agents.py) |
@@ -19,7 +19,7 @@ wire `httpRequest` against a payment provider (Stripe, Razorpay) as a tool.
 - **Intended tool set**: `httpRequest` against payment APIs.
 - **Intended skills**: no dedicated `server/skills/payments_agent/` folder
   ships today -- the node is a naming / theming shell around
-  `handle_chat_agent`.
+  `SpecializedAgentBase` -> `execute_chat_agent`.
 - **Frontend theming**: green dracula accent.
 
 ## Behaviour

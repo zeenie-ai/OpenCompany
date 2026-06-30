@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | document |
-| **Backend handler** | [`server/services/handlers/document.py::handle_vector_store`](../../../server/services/handlers/document.py) |
+| **Backend handler** | [`server/nodes/document/vector_store/__init__.py`](../../../server/nodes/document/vector_store/__init__.py) — `VectorStoreNode`; dispatch via `BaseNode.execute()` + `@Operation("dispatch")` |
 | **Tests** | [`server/tests/nodes/test_document.py`](../../../server/tests/nodes/test_document.py) |
 | **Skill (if any)** | none |
 | **Dual-purpose tool** | no |
@@ -26,16 +26,18 @@ pipeline and/or the retrieval stage at query time.
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
 | `operation` | options | `store` | no | - | `store` / `query` / `delete` |
-| `backend` | options | `chroma` | no | - | `chroma` / `qdrant` / `pinecone` |
-| `collectionName` | string | `documents` | no | - | Collection / index name |
-| `embeddings` | array | `[]` | yes (store) | `operation=store` | Vectors from `embeddingGenerator` |
-| `chunks` | array | `[]` | no (store) | `operation=store` | Metadata pairs for the vectors |
-| `queryEmbedding` | array | `[]` | yes (query) | `operation=query` | Single vector to query |
-| `topK` | number | `5` | no | `operation=query` | Max matches to return |
-| `ids` | array | `[]` | yes (delete) | `operation=delete` | Vector IDs to delete |
-| `persistDir` | string | `./data/vectors` | no | `backend=chroma` | ChromaDB persistence dir |
-| `qdrantUrl` | string | `http://localhost:6333` | no | `backend=qdrant` | Qdrant URL |
-| `pineconeApiKey` | string | `""` | yes | `backend=pinecone` | Pinecone API key |
+| `backend` | options | `chroma` | no | - | `chroma` / `chromadb` / `qdrant` / `pinecone` (`chromadb` aliased to `chroma`) |
+| `collection_name` | string | `documents` | no | - | Collection / index name |
+| `embeddings` | array | `null` | yes (store) | - | Vectors from `embeddingGenerator` |
+| `chunks` | array | `null` | no (store) | `operation=store` | Metadata pairs for the vectors |
+| `query_embedding` | array | `null` | yes (query) | `operation=query` | Single vector to query |
+| `top_k` | number | `5` | no | `operation=query` | Max matches to return (1-100) |
+| `ids` | array | `null` | yes (delete) | `operation=delete` | Vector IDs to delete |
+| `persist_dir` | string | `./data/vectors` | no | `backend=chroma,chromadb` | ChromaDB persistence dir |
+| `qdrant_url` | string | `http://localhost:6333` | no | `backend=qdrant` | Qdrant URL |
+| `pinecone_api_key` | string | `""` | yes | `backend=pinecone` | Pinecone API key |
+
+Params are snake_case (`Params = VectorStoreParams`, `extra="ignore"`).
 
 ## Outputs (handles)
 
@@ -76,16 +78,16 @@ Wrapped in standard envelope: `{ success, result, execution_time, node_id, node_
 
 ```mermaid
 flowchart TD
-  A[handle_vector_store] --> B{backend}
-  B -- chroma --> C1[_chroma_op]
+  A[VectorStoreNode.dispatch] --> B{backend}
+  B -- chroma/chromadb --> C1[_chroma_op]
   B -- qdrant --> C2[_qdrant_op]
   B -- pinecone --> C3[_pinecone_op]
-  B -- other --> Ex[raise ValueError Unknown backend]
+  B -- other --> Ex[raise NodeUserError Unknown backend]
   C1 --> D{operation}
   C2 --> D
   C3 --> D
   D -- store --> Ds[Auto-create collection if needed<br/>generate uuid ids + metas<br/>upsert via asyncio.to_thread]
-  D -- query --> Dq[query / search with queryEmbedding + topK<br/>normalize matches across backends]
+  D -- query --> Dq[query / search with query_embedding + top_k<br/>normalize matches across backends]
   D -- delete --> Dd[delete by ids, count = len(ids)]
   Ds --> E[Return partial result]
   Dq --> E
@@ -96,9 +98,10 @@ flowchart TD
 
 ## Decision Logic
 
-- **Backend dispatch**: `chroma` / `qdrant` / `pinecone` - anything else raises `ValueError` caught as `success=false`.
+- **Backend dispatch**: `backend` is a `Literal` (`chroma` / `chromadb` / `qdrant` / `pinecone`); `chromadb` is normalized to `chroma`. Unknown values are rejected by Pydantic before dispatch (the `else: NodeUserError` is a dead path).
+- **Pinecone without key**: `_pinecone_op` raises `NodeUserError("Pinecone API key required")` when `pinecone_api_key` is empty.
 - **Empty embeddings (store)**: returns `stored_count=0` without raising; for Chroma also returns current `collection_count`.
-- **Empty queryEmbedding (query)**: returns `matches=[]` without hitting the backend.
+- **Empty query_embedding (query)**: returns `matches=[]` without hitting the backend.
 - **Empty ids (delete)**: returns `deleted=true, count=0` without hitting the backend.
 - **Collection auto-creation**:
   - Chroma: `get_or_create_collection` always.
@@ -120,7 +123,7 @@ flowchart TD
 
 ## External Dependencies
 
-- **Credentials**: `pineconeApiKey` node parameter (Pinecone only). Not fetched from `auth_service`.
+- **Credentials**: `pinecone_api_key` node parameter (Pinecone only). Not fetched from `auth_service`.
 - **Python packages**: `chromadb>=0.5.0`, `qdrant-client>=1.12.0`, `pinecone` (all lazy-imported per backend).
 - **Environment variables**: none (Qdrant URL is a param, Pinecone key is a param).
 
@@ -130,7 +133,7 @@ flowchart TD
 - Chroma is the only backend that returns `collection_count` after a store.
 - Qdrant collection creation infers the vector size from the first embedding; mixed-size batches will be rejected by Qdrant on upsert.
 - Pinecone `pc.Index(collection)` does not create the index - it must exist, or the op fails with Pinecone's own error.
-- Pinecone `apiKey` is a node parameter, inconsistent with other cloud services that pull from `auth_service`.
+- Pinecone `pinecone_api_key` is a node parameter, inconsistent with other cloud services that pull from `auth_service`.
 - Delete is by ID only - no metadata-filter delete.
 - Query match shape differs per backend: Chroma returns `distance`, Qdrant and Pinecone return `score`. Downstream consumers must handle both.
 
