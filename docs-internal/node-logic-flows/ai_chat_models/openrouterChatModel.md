@@ -103,7 +103,7 @@ flowchart TD
 
 - **200+ models, varying capabilities**: thinking support, context windows, temperature ranges, and pricing all vary per routed model. The handler applies generic clamps; mismatches surface as envelope errors from the downstream provider (e.g. "This model does not support the reasoning parameter").
 - **`[FREE] ` models are OpenRouter-free but may still cost latency**: routing can queue against capacity.
-- **`owner/model` prefix is load-bearing**: removing it breaks routing. Unique among the 9 chat models.
+- **`owner/model` prefix is load-bearing**: removing it breaks routing. Unique among the 11 chat-model nodes.
 - **Errors swallowed into envelope**.
 
 ## Related

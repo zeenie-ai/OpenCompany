@@ -68,19 +68,23 @@ A workflow JSON document contains:
 
 ## Supported Node Types
 
-> Authoritative count = glob `server/nodes/**/__init__.py` (live total via `pytest --collect-only`). The breakdown below is illustrative and grouped by category; do not rely on a hand-maintained total.
+> Authoritative count = the plugin registry: one self-contained folder (or file) per node under `server/nodes/<group>/` — ~118 node types today; live total via `pytest --collect-only`. (A bare `server/nodes/**/__init__.py` glob overcounts — it also matches the 26 group packages.) The breakdown below is illustrative and grouped by category; do not rely on a hand-maintained total.
 
-> The canonical list of nodes lives in the backend plugin tree at `server/nodes/<category>/<node>.py`; this section is a human-readable index.
+> The canonical list of nodes lives in the backend plugin tree at `server/nodes/<category>/<node>/__init__.py`; this section is a human-readable index.
 
-### Workflow Nodes (2 nodes)
+### Workflow Nodes (1 node)
 - `start` - Workflow entry point with initial data
+
+### Trigger Nodes (3 nodes)
+- `webhookTrigger` - Incoming HTTP webhook trigger at `/webhook/{path}`
+- `chatTrigger` - Console message input trigger
 - `taskTrigger` - Event-driven trigger for delegated child agent completion
 
 ### Scheduler Nodes (2 nodes)
 - `timer` - Delay/wait before continuing (seconds, minutes, hours)
 - `cronScheduler` - Recurring scheduled execution (seconds to months, timezone support)
 
-### AI Chat Model Nodes (9 nodes)
+### AI Chat Model Nodes (11 nodes)
 - `openaiChatModel` - OpenAI GPT 4.x/5.x + reasoning models (o1/o3/o4 series)
 - `anthropicChatModel` - Anthropic Claude 4.x with extended thinking
 - `geminiChatModel` - Google Gemini 2.5/3 with thinking support
@@ -90,6 +94,8 @@ A workflow JSON document contains:
 - `deepseekChatModel` - DeepSeek V4 (deepseek-v4-flash / deepseek-v4-pro; chat/reasoner legacy aliases)
 - `kimiChatModel` - Moonshot Kimi K2.6 / K2.5 / K2.7-code
 - `mistralChatModel` - Mistral Large / Small / Codestral
+- `ollamaChatModel` - Local Ollama server (OpenAI-compat via `{provider}_proxy` URL)
+- `lmstudioChatModel` - Local LM Studio server (OpenAI-compat via `{provider}_proxy` URL)
 
 ### AI Agents and Memory (3 nodes)
 - `aiAgent` - Tool-calling agent loop
@@ -199,24 +205,24 @@ Unified multi-platform messaging (WhatsApp, Telegram, Discord, Slack, SMS, Email
 - `cameraControl` - Camera info, take photos
 - `mediaControl` - Media playback, volume
 
-### Utility Nodes (6 nodes)
+### Utility Nodes (5 nodes)
 - `httpRequest` - HTTP requests (GET, POST, PUT, DELETE, PATCH) with optional proxy support (`useProxy: true`)
-- `webhookTrigger` - Incoming HTTP webhook trigger at `/webhook/{path}`
 - `webhookResponse` - Custom response to webhook caller
-- `chatTrigger` - Console message input trigger
 - `console` - Debug logging output
 - `teamMonitor` - Real-time monitoring of Agent Team operations
+- `processManager` - Start/stop/manage long-running processes
 
 ### Proxy Nodes (3 nodes)
 - `proxyRequest` - HTTP requests through residential proxy providers with geo-targeting and failover
 - `proxyConfig` - Dual-purpose: configure providers, credentials, routing rules
 - `proxyStatus` - View proxy provider health, scores, and usage statistics
 
-### Code Nodes (3 nodes)
+### Code Nodes (4 nodes)
 All dual-purpose (workflow node + AI tool):
 - `pythonExecutor` - Python code execution (in-process)
 - `javascriptExecutor` - JavaScript execution via persistent Node.js server
 - `typescriptExecutor` - TypeScript execution via persistent Node.js server (tsx)
+- `montyExecutor` - Sandboxed Python via the Monty interpreter
 
 ### Chat Nodes (2 nodes)
 - `chatSend` - Send via JSON-RPC 2.0 WebSocket

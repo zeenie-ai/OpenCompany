@@ -358,22 +358,22 @@ on a plugin resolves to a registered class.
 | `nodes/twitter/_credentials.py` | `TwitterCredential` | oauth2 | twitterSend / twitterSearch / twitterUser / twitterReceive |
 | `nodes/telegram/_credentials.py` | `TelegramCredential` | api_key | telegramSend / telegramReceive |
 | `nodes/scraper/_credentials.py` | `ApifyCredential` | api_key (bearer) | apifyActor |
-| `nodes/model/_credentials.py` | `OpenAI / Anthropic / Gemini / OpenRouter / Groq / Cerebras / DeepSeek / Kimi / Mistral / Xai` | api_key | 9 chat models (xAI reserved) |
+| `nodes/model/_credentials.py` | `OpenAI / Anthropic / Gemini / OpenRouter / Groq / Cerebras / DeepSeek / Kimi / Mistral / Xai / Ollama / LMStudio` | api_key | 11 chat-model nodes (Ollama / LM Studio store a local server URL; the Xai credential is native-chat-only — no node) |
 | `nodes/search/*.py` (inline) | `BraveSearch / Serper / Perplexity` | api_key | single-use search nodes |
 
 `GoogleCredential` exposes a `build_credentials()` classmethod that
 returns a `google.oauth2.credentials.Credentials` — hand-off to
 `googleapiclient.discovery.build(...)` is unchanged from Wave 11.D.4.
 
-Agents (aiAgent / chatAgent / 13 specialized) stay `credentials = ()`
+Agents (aiAgent / chatAgent / the 13 `SpecializedAgentBase` subclasses) stay `credentials = ()`
 because they are poly-provider — the user picks the provider at
 runtime via `params.provider`, so declaring any single credential
 would be misleading.
 
 ### Shared agent helpers
 
-Every agent plugin (ai_agent, chat_agent, 13 specialized agents, team
-leads) calls one helper:
+Every agent plugin (ai_agent, chat_agent, and the 13 `SpecializedAgentBase`
+subclasses — 11 domain agents + 2 team leads) calls one helper:
 
 ```python
 from ._inline import prepare_agent_call
@@ -451,7 +451,7 @@ Three new activities (`agent.execute_llm_step.v1`,
 `agent.persist_turn.v1`, `agent.compact_memory.v1`) registered
 alongside the per-type activities.
 
-**Agents that migrate** (15): `aiAgent`, `chatAgent`, 12 specialized
+**Agents that migrate** (15): `aiAgent`, `chatAgent`, 11 specialized
 agents (`android_agent`, `coding_agent`, `web_agent`, `task_agent`,
 `social_agent`, `travel_agent`, `tool_agent`, `productivity_agent`,
 `payments_agent`, `consumer_agent`, `autonomous_agent`), 2 team

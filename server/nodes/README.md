@@ -100,7 +100,7 @@ Match the palette group. Current folders (see
 [`groups.py`](./groups.py) for the canonical list):
 
 ```
-agent/       — AI agents (ai_agent, chat_agent, 13 specialized, team leads)
+agent/       — AI agents (ai_agent, chat_agent + 16 specialized/variant incl. 2 team leads)
 model/       — LLM chat models (openai, anthropic, gemini, …)
 android/     — Android device services
 google/      — Google Workspace (gmail / calendar / drive / sheets / …)

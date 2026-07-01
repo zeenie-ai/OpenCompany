@@ -307,7 +307,7 @@ Per-queue defaults (concurrency caps in `services/temporal/worker.py:TemporalWor
 
 ### Agent-as-child-workflow (F4.B)
 
-When `TEMPORAL_AGENT_WORKFLOW_ENABLED=true` and the node type is in the migrating set (`aiAgent` / `chatAgent` / 12 specialized agents / 2 team leads), the orchestrator schedules `AgentWorkflow` as a child workflow instead of an activity. Inside the workflow:
+When `TEMPORAL_AGENT_WORKFLOW_ENABLED=true` and the node type is in the migrating set (`aiAgent` / `chatAgent` / 11 specialized agents / 2 team leads), the orchestrator schedules `AgentWorkflow` as a child workflow instead of an activity. Inside the workflow:
 
 ```
 AgentWorkflow.run(context):

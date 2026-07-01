@@ -118,7 +118,7 @@ flowchart TD
 
 - **Specialized agents inherit every quirk**: any bug in `prepare_agent_call`
   or `execute_chat_agent` (e.g. the blanket tool-strip on task completion)
-  affects all 13 specialized node types plus the two team leads.
+  affects all 13 `SpecializedAgentBase` subclasses (11 domain agents + the 2 team leads).
 - **Team-lead teammates are appended after existing tools**: if a parent
   wires both regular tool nodes and teammates, tool order depends on edge
   scan order (not stable across clients).

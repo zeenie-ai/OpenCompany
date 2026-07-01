@@ -41,7 +41,7 @@ This is a React Flow-based workflow automation platform implementing n8n-inspire
 | **[Onboarding Service](./docs-internal/onboarding.md)** | First-launch welcome wizard with 5 steps, database persistence, and replay from Settings |
 | **[CLI Services Integration](./docs-internal/cli_services_integration.md)** | Guide for integrating CLI-based services (Temporal, etc.) with proper lifecycle management |
 | **[Temporal Architecture](./docs-internal/TEMPORAL_ARCHITECTURE.md)** | Distributed workflow execution: activities, FIRST_COMPLETED scheduling, horizontal scaling |
-| **[Native LLM SDK](./docs-internal/native_llm_sdk.md)** | Native SDK layer in services/llm/: Protocol-based providers, config-driven base URLs, 10 providers, native vs LangChain path routing |
+| **[Native LLM SDK](./docs-internal/native_llm_sdk.md)** | Native SDK layer in services/llm/: Protocol-based providers, config-driven base URLs, 12 providers (xai native-chat-only; ollama/lmstudio local servers), native vs LangChain path routing |
 | **[Event Waiter System](./docs-internal/event_waiter_system.md)** | Generic asyncio.Future/Redis-Streams waiter for push-based trigger nodes (WhatsApp, Telegram, Webhook, Chat, Task completion) |
 | **[Credentials Encryption](./docs-internal/credentials_encryption.md)** | Fernet + PBKDF2 encryption pipeline, separate credentials.db, two credential systems (OAuth vs API keys), multi-backend abstraction |
 | **[Status Broadcaster](./docs-internal/status_broadcaster.md)** | WebSocket-first communication: StatusBroadcaster singleton, live count via `len(MESSAGE_HANDLERS) + len(get_ws_handlers())`, broadcast message types, Android two-state model |
@@ -610,7 +610,7 @@ The project uses WebSocket as the primary communication method between frontend 
 
 ### Node Catalogue (collapsed)
 
-> The authoritative, per-node reference is the backend plugin registry plus the per-node "logic-flow" cards under [docs-internal/node-logic-flows/](./docs-internal/node-logic-flows/) (one card per node, grouped by category, with handles / params / outputs / side-effects / edge-cases). Live node list = glob `server/nodes/**/__init__.py` (~138 today); live total via `pytest --collect-only`. Do NOT maintain a per-node catalogue here — it drifts on every plugin add.
+> The authoritative, per-node reference is the backend plugin registry plus the per-node "logic-flow" cards under [docs-internal/node-logic-flows/](./docs-internal/node-logic-flows/) (one card per node, grouped by category, with handles / params / outputs / side-effects / edge-cases). Live node list = the plugin registry (one folder per node under `server/nodes/<group>/`, ~118 node types today; a bare `__init__.py` glob also counts the 26 group packages); live total via `pytest --collect-only`. Do NOT maintain a per-node catalogue here — it drifts on every plugin add.
 
 Node groups (palette categories): agent, model, skill, tool, trigger, workflow, search, google, android, whatsapp, telegram, twitter, social, email, proxy, chat, scheduler, text, code, document, location, utility, browser, scraper, filesystem, stripe. See [docs-internal/node-logic-flows/](./docs-internal/node-logic-flows/) for the card index.
 
@@ -646,7 +646,7 @@ Node groups (palette categories): agent, model, skill, tool, trigger, workflow, 
 - `GET /webhook/` - Webhook endpoint info and usage documentation
 
 #### Workflow Services (`server/services/workflow.py`)
-- Node execution dispatches every registered plugin via the `BaseNode` registry (authoritative count = glob `server/nodes/**/__init__.py`, ~138 node files today; live total via `pytest --collect-only`)
+- Node execution dispatches every registered plugin via the `BaseNode` registry (one self-contained folder per node under `server/nodes/<group>/`; ~118 node types today — a bare `__init__.py` glob overcounts by also matching the 26 group packages; live total via `pytest --collect-only`)
 - Parameter resolution and template variable substitution
 - Result formatting and error handling
 

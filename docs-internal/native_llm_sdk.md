@@ -54,7 +54,7 @@ Source of truth for this list: `server/config/llm_defaults.json` (the `providers
 
 ### Native chat path vs agent dropdown — two different counts
 
-- **Native chat path (`execute_chat` / `fetch_models`) supports 12 providers** (the 10 OpenAI-compat + Anthropic/Gemini natives above; Groq/Cerebras fall back to LangChain inside `execute_chat`). `xai` lives here.
+- **Native chat path (`execute_chat` / `fetch_models`) supports 12 providers** — 10 truly native (8 via the shared OpenAI-compatible client: openai, openrouter, xai, deepseek, kimi, mistral, ollama, lmstudio; plus the Anthropic/Gemini native SDKs); Groq/Cerebras fall back to LangChain inside `execute_chat`. `xai` lives here.
 - **The agent dropdown exposes 11 providers** for `aiAgent`, `chatAgent` (Zeenie), and all specialized agents — the `provider` Literal in [`nodes/agent/ai_agent/__init__.py`](../server/nodes/agent/ai_agent/__init__.py), [`chat_agent.py`](../server/nodes/agent/chat_agent/__init__.py), and [`_specialized.py`](../server/nodes/agent/_specialized.py): `openai`, `anthropic`, `gemini`, `openrouter`, `groq`, `cerebras`, `deepseek`, `kimi`, `mistral`, `ollama`, `lmstudio`. **`xai` is native-chat-only and is NOT in the agent Literal** (no agent dropdown entry).
 - Groq and Cerebras are available as standalone chat-model nodes AND in the agent dropdown, but use the LangChain path for both chat and agent execution.
 
