@@ -2,11 +2,11 @@
 
 MachinaOS uses WebSocket as the primary communication channel between the React frontend and the FastAPI backend. A single `StatusBroadcaster` service manages all active WebSocket connections and broadcasts real-time state updates (node status, workflow progress, Android device status, variable changes, etc.). This replaces REST polling with push-based updates and is the reason the UI can animate node execution, show live tool calls, and update Android status without reloading.
 
-This document covers the broadcaster architecture, the 89 WebSocket message handlers, the broadcast message types, and the Android two-state connection model.
+This document covers the broadcaster architecture, the WebSocket message handlers, the broadcast message types, and the Android two-state connection model.
 
 Source files:
 - `server/services/status_broadcaster.py` - `StatusBroadcaster` singleton
-- `server/routers/websocket.py` - WebSocket endpoint and 89 message handlers
+- `server/routers/websocket.py` - WebSocket endpoint and message handlers
 - `client/src/contexts/WebSocketContext.tsx` - frontend WebSocket provider with hooks
 
 ## Why WebSocket-First
@@ -93,7 +93,7 @@ async def handle_get_node_parameters(data: Dict, websocket: WebSocket) -> Dict:
 
 The decorator populates a module-level `_HANDLERS: Dict[str, Callable]` map from the function name (`handle_get_node_parameters` -> `"get_node_parameters"`). The dispatcher reads the incoming message's `type` field and looks up the handler.
 
-Current total: **89 WebSocket handlers** in `server/routers/websocket.py`.
+Live total = `len(MESSAGE_HANDLERS) + len(get_ws_handlers())` -- the `MESSAGE_HANDLERS` dict in `server/routers/websocket.py` plus plugin-registered handlers via `services.ws_handler_registry`. Do not hand-maintain a fixed count here.
 
 ### Handler Categories
 

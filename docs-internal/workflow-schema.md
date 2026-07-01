@@ -66,7 +66,9 @@ A workflow JSON document contains:
 }
 ```
 
-## Supported Node Types (96 Total)
+## Supported Node Types
+
+> Authoritative count = glob `server/nodes/**/__init__.py` (live total via `pytest --collect-only`). The breakdown below is illustrative and grouped by category; do not rely on a hand-maintained total.
 
 > The canonical list of nodes lives in the backend plugin tree at `server/nodes/<category>/<node>.py`; this section is a human-readable index.
 

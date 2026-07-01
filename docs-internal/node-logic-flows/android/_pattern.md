@@ -190,7 +190,7 @@ preserved.
 
 ## Related
 
-- Android service infrastructure: [`server/services/android/`](../../../server/services/android/)
+- Android service infrastructure: [`server/nodes/android/`](../../../server/nodes/android/)
 - Status broadcaster (two-state model): [Status Broadcaster](../../status_broadcaster.md)
 - Android-agent skills: [`server/skills/android_agent/`](../../../server/skills/android_agent/)
 - AI-tool dispatch (`androidTool` aggregator + direct service tools):

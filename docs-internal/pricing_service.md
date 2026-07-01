@@ -41,9 +41,11 @@ The pricing service provides centralized cost tracking for both LLM tokens and e
             ▼                 ▼                 ▼
 ┌───────────────────┐ ┌───────────────────┐ ┌───────────────────┐
 │ Manual Tracking   │ │ HTTPX Event Hooks │ │  AI Service       │
-│ _track_*_usage()  │ │ tracked_http.py   │ │ _track_token_     │
-│ maps.py           │ │                   │ │ usage() ai.py     │
-│ twitter.py        │ │                   │ │                   │
+│ track_*_usage()   │ │ tracked_http.py   │ │ _track_token_     │
+│ location/_service │ │                   │ │ usage() ai.py     │
+│ twitter/_base     │ │                   │ │                   │
+│ google/_base      │ │                   │ │                   │
+│ proxy/_usage      │ │                   │ │                   │
 └───────────────────┘ └───────────────────┘ └───────────────────┘
             │                 │                 │
             └─────────────────┼─────────────────┘
@@ -218,7 +220,7 @@ For services that make API calls directly (not through HTTPX), use manual tracki
 ### Example: Maps Service
 
 ```python
-# server/services/maps.py
+# server/nodes/location/_service.py
 
 async def _track_maps_usage(
     node_id: str,
@@ -228,12 +230,12 @@ async def _track_maps_usage(
     session_id: str = "default"
 ) -> Dict[str, float]:
     """Track Google Maps API usage."""
-    from core.container import container
+    from services.plugin.deps import get_database
 
     pricing = get_pricing_service()
     cost_data = pricing.calculate_api_cost('google_maps', action, resource_count)
 
-    db = container.database()
+    db = get_database()
     await db.save_api_usage_metric({
         'session_id': session_id,
         'node_id': node_id,
@@ -247,43 +249,55 @@ async def _track_maps_usage(
 
     return cost_data
 
-# Usage in handler:
-async def geocode_location(self, node_id: str, parameters: Dict, context: Dict):
+# Usage inside the maps plugins (server/nodes/location/{gmaps_locations,gmaps_nearby_places,...}):
     # ... API call ...
-    await _track_maps_usage(node_id, 'geocode', 1, context.get('workflow_id'))
+    await _track_maps_usage(node_id, 'geocode', 1, context.get('workflow_id'), context.get('session_id', 'default'))
 ```
 
-### Example: Twitter Handler
+### Example: Twitter Plugin
+
+The Twitter plugins (`server/nodes/twitter/twitter_send`, `twitter_search`, `twitter_user`) share one tracker defined on `server/nodes/twitter/_base.py`. It takes the raw execution context dict (not separate `workflow_id` / `session_id` args).
 
 ```python
-# server/services/handlers/twitter.py
+# server/nodes/twitter/_base.py
 
-async def _track_twitter_usage(node_id, action, resource_count=1, workflow_id=None, session_id="default"):
+async def track_twitter_usage(node_id, action, resource_count, context):
     # Same pattern as maps
+    from services.plugin.deps import get_database
     pricing = get_pricing_service()
     cost_data = pricing.calculate_api_cost('twitter', action, resource_count)
-    # ... save to database ...
+    # ... save to database (reads session_id / workflow_id from `context`) ...
 
-# Usage:
-await _track_twitter_usage(node_id, 'tweet', 1, workflow_id, session_id)
+# Usage (ctx_raw is the plugin's raw NodeContext dict):
+await track_twitter_usage(node_id, 'tweet', 1, ctx_raw)
+await track_twitter_usage(node_id, 'search', len(tweets), ctx_raw)
 ```
 
-### Example: Search Handler
+### Example: Google Workspace Plugins
+
+The 6 Google service plugins (`server/nodes/google/{gmail,calendar,drive,sheets,tasks,contacts}`) plus `gmail_receive` call `track_google_usage()` on `server/nodes/google/_base.py`. Google Workspace APIs are free within rate limits, so this records resource counts at `cost=$0` for analytics.
 
 ```python
-# server/services/handlers/search.py
+# server/nodes/google/_base.py
 
-async def _track_search_usage(node_id, service, action, resource_count=1, workflow_id=None, session_id="default"):
-    # Same pattern as maps/twitter
+async def track_google_usage(node_id, service, action, resource_count, context):
     pricing = get_pricing_service()
     cost_data = pricing.calculate_api_cost(service, action, resource_count)
     # ... save to database ...
-
-# Usage in each handler:
-await _track_search_usage(node_id, 'brave_search', 'web_search', 1, workflow_id, session_id)
-await _track_search_usage(node_id, 'serper', 'web_search', 1, workflow_id, session_id)
-await _track_search_usage(node_id, 'perplexity', 'sonar_search', 1, workflow_id, session_id)
 ```
+
+### Example: Search Plugins (declarative cost)
+
+The search plugins (`server/nodes/search/{brave_search,serper_search,perplexity_search}`) no longer call a `_track_search_usage()` helper. Each declares its cost inline on the `@Operation` decorator instead:
+
+```python
+# server/nodes/search/brave_search/__init__.py
+
+@Operation("search", cost={"service": "brave_search", "action": "web_search", "count": 1})
+async def search(self, ctx, params): ...
+```
+
+The `cost=` metadata is attached to the operation's `OperationSpec` (`server/services/plugin/operation.py`); `duckduckgo_search` is free and carries no cost block.
 
 ## Automatic HTTPX Tracking
 
@@ -443,14 +457,14 @@ await getApiUsage('twitter');
 ### 2. Add Manual Tracking (if not using HTTPX)
 
 ```python
-# server/services/handlers/new_service.py
+# server/nodes/<group>/<plugin>/_base.py (or the plugin __init__.py)
 
-async def _track_new_service_usage(node_id, action, count=1, workflow_id=None, session_id="default"):
-    from core.container import container
+async def track_new_service_usage(node_id, action, count=1, workflow_id=None, session_id="default"):
+    from services.plugin.deps import get_database
     pricing = get_pricing_service()
     cost_data = pricing.calculate_api_cost('new_service', action, count)
 
-    db = container.database()
+    db = get_database()
     await db.save_api_usage_metric({
         'session_id': session_id,
         'node_id': node_id,
@@ -463,9 +477,11 @@ async def _track_new_service_usage(node_id, action, count=1, workflow_id=None, s
     })
     return cost_data
 
-# Call in handler:
-await _track_new_service_usage(node_id, 'get_data', len(results), workflow_id)
+# Call inside the plugin's execute_op / operation method:
+await track_new_service_usage(node_id, 'get_data', len(results), workflow_id)
 ```
+
+Alternatively, for a service billed per operation, skip the helper entirely and declare the cost inline via `@Operation("get_data", cost={"service": "new_service", "action": "read_operation", "count": 1})` (the search-plugin pattern).
 
 ### 3. Add URL Patterns (if using HTTPX)
 
@@ -497,9 +513,12 @@ await _track_new_service_usage(node_id, 'get_data', len(results), workflow_id)
 | `server/config/pricing.json` | Pricing configuration (user-editable) |
 | `server/services/pricing.py` | PricingService with LLM and API cost calculation |
 | `server/services/tracked_http.py` | HTTPX event hooks for automatic tracking |
-| `server/services/maps.py` | Manual tracking example (`_track_maps_usage`) |
-| `server/services/handlers/twitter.py` | Manual tracking example (`_track_twitter_usage`) |
-| `server/services/handlers/search.py` | Manual tracking example (`_track_search_usage`) |
+| `server/nodes/location/_service.py` | Maps manual tracker (`_track_maps_usage`) |
+| `server/nodes/twitter/_base.py` | Twitter manual tracker (`track_twitter_usage`) |
+| `server/nodes/google/_base.py` | Google Workspace manual tracker (`track_google_usage`, cost $0) |
+| `server/nodes/proxy/_usage.py` | Proxy manual tracker (`track_proxy_usage`, per-GB) |
+| `server/nodes/search/{brave_search,serper_search,perplexity_search}/__init__.py` | Search plugins — declarative `@Operation(cost={...})` (no `_track_search_usage`) |
+| `server/services/plugin/operation.py` | `@Operation` decorator + `OperationSpec.cost` metadata |
 | `server/models/database.py` | `APIUsageMetric`, `TokenUsageMetric` models |
 | `server/core/database.py` | `save_api_usage_metric()`, `get_api_usage_summary()` |
 | `client/src/components/CredentialsModal.tsx` | `renderApiUsagePanel()` UI component |

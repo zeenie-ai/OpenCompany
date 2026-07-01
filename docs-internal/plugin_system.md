@@ -636,30 +636,30 @@ moving 754 lines out of `services/telegram_service.py`.
 
 ```
 server/
-├── nodes/                        # One file per node
+├── nodes/                        # One self-contained folder per plugin (Wave 11.H)
 │   ├── __init__.py              # pkgutil.walk_packages discovery
 │   ├── groups.py                # Palette group metadata
-│   ├── agent/                   # AI agents (aiAgent, chatAgent, 13 specialized)
+│   ├── agent/                   # AI agents (aiAgent, chatAgent + 16 specialized/variant)
 │   │   ├── _handles.py          # Shared handle topology helpers
 │   │   ├── _inline.py           # prepare_agent_call()
 │   │   ├── _specialized.py      # SpecializedAgentBase
-│   │   └── <agent>.py
-│   ├── model/                   # AI chat models (9 providers)
+│   │   └── <agent>/__init__.py  # one folder per agent
+│   ├── model/                   # AI chat models (11 providers; xai native-chat-only)
 │   │   ├── _base.py             # ChatModelBase + ChatModelParams/Output
-│   │   └── <provider>_chat_model.py
+│   │   └── <provider>_chat_model/__init__.py
 │   ├── android/                 # 16 Android service nodes
 │   │   ├── _base.py             # AndroidServiceBase
-│   │   └── <service>.py
+│   │   └── <service>/__init__.py
 │   ├── code/                    # python/js/ts executors
 │   │   ├── _base.py             # CodeExecutorBase
 │   │   ├── _nodejs.py           # Shared NodeJSClient singleton
-│   │   └── <lang>_executor.py
+│   │   └── <lang>_executor/__init__.py
 │   ├── filesystem/              # file_read / file_modify / shell / fs_search
 │   │   ├── _backend.py          # Shared LocalShellBackend helper
-│   │   └── <op>.py
+│   │   └── <op>/__init__.py
 │   ├── document/                # http_scraper / parser / chunker / embedding / vector
 │   │   ├── _helpers.py          # delegate() wrapper
-│   │   └── <stage>.py
+│   │   └── <stage>/__init__.py
 │   ├── google/                  # gmail / calendar / drive / sheets / tasks / contacts
 │   ├── proxy/                   # proxy_request / proxy_config / proxy_status
 │   │   └── _usage.py            # Shared track_proxy_usage

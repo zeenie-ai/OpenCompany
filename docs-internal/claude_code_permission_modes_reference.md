@@ -7,7 +7,7 @@
 > (`default`, `acceptEdits`, `plan`, `auto`, `dontAsk`,
 > `bypassPermissions`) on `ClaudeTaskSpec.permission_mode`. See
 > `services/cli_agent/types.py` and
-> `services/cli_agent/providers/anthropic_claude.py:headless_argv`.
+> `server/nodes/agent/claude_code_agent/_provider.py`.
 
 ---
 

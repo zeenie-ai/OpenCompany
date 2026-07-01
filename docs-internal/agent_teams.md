@@ -15,7 +15,7 @@ Two node types support the Agent Teams pattern:
 | `orchestrator_agent` | Orchestrator Agent | Coordinates multiple agents for complex workflows |
 | `ai_employee` | AI Employee | Team lead for intelligent task delegation |
 
-Both are defined in `TEAM_LEAD_TYPES` in `server/services/handlers/ai.py`.
+Both are defined in `TEAM_LEAD_TYPES` in [`server/nodes/agent/_inline.py`](../server/nodes/agent/_inline.py).
 
 ## Architecture
 
@@ -36,7 +36,7 @@ Both are defined in `TEAM_LEAD_TYPES` in `server/services/handlers/ai.py`.
 
 1. **User sends prompt** to AI Employee (e.g., "Write a Python script and search the web for documentation")
 
-2. **Team lead collects teammates** via `input-teammates` handle using `_collect_teammate_connections()`
+2. **Team lead collects teammates** via the `input-teammates` handle using `collect_teammate_connections()` ([`server/services/plugin/edge_walker.py`](../server/services/plugin/edge_walker.py)), invoked from `prepare_agent_call` in [`_inline.py`](../server/nodes/agent/_inline.py)
 
 3. **Teammates become delegation tools** - each connected agent becomes a `delegate_to_*` tool:
    - `coding_agent` → `delegate_to_coding_agent` tool
@@ -65,77 +65,93 @@ Team lead agents have an additional handle compared to standard specialized agen
 
 ## Backend Implementation
 
-### Handler Logic (`server/services/handlers/ai.py`)
+Wave 11 deleted `server/services/handlers/ai.py` (and `handle_chat_agent`). Agent execution now flows through each agent plugin's `execute_op` under `server/nodes/agent/<plugin>/__init__.py` (`ai_agent`, `chat_agent`) or [`server/nodes/agent/_specialized.py`](../server/nodes/agent/_specialized.py) (the 13 specialized agents share one execution body). All of them call the shared pre-dispatch helper `prepare_agent_call` in [`server/nodes/agent/_inline.py`](../server/nodes/agent/_inline.py), which (1) collects standard connections via `collect_agent_connections`, (2) injects task context, (3) auto-prompts from upstream input, and (4) for team-lead types, appends teammates as delegation tools. The prepared kwargs are then splatted into `AIService.execute_chat_agent(...)`.
+
+### Pre-dispatch Logic ([`server/nodes/agent/_inline.py`](../server/nodes/agent/_inline.py))
 
 ```python
-TEAM_LEAD_TYPES = {'orchestrator_agent', 'ai_employee'}
+# Team-lead agent types where teammates become delegation tools.
+TEAM_LEAD_TYPES = frozenset({"orchestrator_agent", "ai_employee"})
 
-async def handle_chat_agent(...):
-    # Collect standard connections
-    memory_data, skill_data, tool_data, input_data, task_data = await _collect_agent_connections(...)
+async def prepare_agent_call(*, node_id, node_type, parameters, context, database, ...):
+    # 5-tuple standard connection collection
+    memory_data, skill_data, tool_data, input_data, task_data = (
+        await collect_agent_connections(node_id, context, database, log_prefix=log_prefix)
+    )
 
-    # Team lead detection - add teammates as delegation tools
+    # ... task-context injection + auto-prompt fallback ...
+
+    # Team-lead detection - add teammates as delegation tools
     if node_type in TEAM_LEAD_TYPES:
-        teammates = await _collect_teammate_connections(node_id, context, database)
-
+        teammates = await collect_teammate_connections(node_id, context, database)
         if teammates:
             tool_data = tool_data or []
             for tm in teammates:
+                # Each teammate's own input-tools edges are walked into
+                # `child_tools` so the delegation tool's description lists
+                # what that teammate can actually do.
                 tool_data.append({
-                    'node_id': tm['node_id'],
-                    'node_type': tm['node_type'],
-                    'label': tm['label'],
-                    'parameters': tm.get('parameters', {}),
+                    "node_id": tm["node_id"],
+                    "node_type": tm["node_type"],
+                    "label": tm["label"],
+                    "parameters": tm.get("parameters", {}),
+                    "child_tools": child_tools,
                 })
             logger.info(f"[Teams] Added {len(teammates)} teammates as delegation tools")
 
-    # Standard execution - AI has delegate_to_* tools available
-    return await ai_service.execute_chat_agent(...)
+    return {"parameters": parameters, "tool_data": tool_data or None, ...}
 ```
 
-### Teammate Collection (`_collect_teammate_connections`)
+Note: `collect_agent_connections` ([`server/services/plugin/edge_walker.py`](../server/services/plugin/edge_walker.py)) returns a **5-tuple** — `(memory_data, skill_data, tool_data, input_data, task_data)`.
+
+### Teammate Collection (`collect_teammate_connections`)
+
+Lives in [`server/services/plugin/edge_walker.py`](../server/services/plugin/edge_walker.py):
 
 ```python
-async def _collect_teammate_connections(node_id, context, database):
-    """Collect agents connected via input-teammates handle."""
+async def collect_teammate_connections(node_id, context, database):
+    """Walk input-teammates edges and return connected agents.
+
+    Used by orchestrator_agent / ai_employee.
+    """
+    nodes = context.get("nodes", [])
+    edges = context.get("edges", [])
     teammates = []
 
     for edge in edges:
-        if edge.get('target') != node_id:
+        if edge.get("target") != node_id or edge.get("targetHandle") != "input-teammates":
             continue
-        if edge.get('targetHandle') != 'input-teammates':
+        source_id = edge.get("source")
+        source_node = next((n for n in nodes if n.get("id") == source_id), None)
+        if not source_node:
             continue
-
-        source_node = next((n for n in nodes if n.get('id') == edge.get('source')), None)
-        if source_node and source_node.get('type') in AI_AGENT_TYPES:
-            params = await database.get_node_parameters(source_node['id'])
-            teammates.append({
-                'node_id': source_node['id'],
-                'node_type': source_node['type'],
-                'label': source_node.get('data', {}).get('label'),
-                'parameters': params
-            })
+        node_type = source_node.get("type", "")
+        if node_type not in AI_AGENT_TYPES:
+            continue
+        params = await database.get_node_parameters(source_id) or {}
+        teammates.append({
+            "node_id": source_id,
+            "node_type": node_type,
+            "label": source_node.get("data", {}).get("label", node_type),
+            "parameters": params,
+        })
 
     return teammates
 ```
 
 ## Delegation Tools
 
-When teammates are connected, the AI service builds delegation tools via `_build_tool_from_node()`:
+When teammates are connected, the AI service builds delegation tools via `_build_tool_from_node()` in [`server/services/ai.py`](../server/services/ai.py).
+
+The `delegate_to_<type>` tool name is **auto-derived**, not maintained as a static map. `BaseNode.__init_subclass__` ([`server/services/plugin/base.py`](../server/services/plugin/base.py)) sets `cls.tool_name = f"delegate_to_{cls.type}"` for every plugin whose `component_kind == "agent"` that doesn't declare its own (e.g. `coding_agent` -> `delegate_to_coding_agent`). Subclasses with a distinct delegation contract (`autonomous_agent`, `orchestrator_agent`, `ai_employee`, `rlm_agent`, `claude_code_agent`) override `tool_description` on the class.
+
+When `_build_tool_from_node` sees an agent node type listed in `_AGENT_DELEGATION_TYPES`, it exposes the `(task, context)` delegation schema instead of the agent's own Params (which would leak provider/model/prompt into the parent LLM):
 
 ```python
-# Tool name mapping in ai.py
-DEFAULT_TOOL_NAMES = {
-    'coding_agent': 'delegate_to_coding_agent',
-    'web_agent': 'delegate_to_web_agent',
-    'task_agent': 'delegate_to_task_agent',
-    # ... etc
-}
-
-# Schema for delegation
+# server/services/ai.py
 class DelegateToAgentSchema(BaseModel):
-    task: str = Field(description="The task to delegate")
-    context: Optional[str] = Field(description="Additional context")
+    task: str = Field(description="The mission directive for the agent (becomes its system message)")
+    context: Optional[str] = Field(default=None, description="Input data / details the agent needs (becomes its user prompt)")
 ```
 
 The AI receives tools like:
@@ -206,12 +222,14 @@ Connect Team Monitor to a team lead's output to visualize team activity.
 
 | File | Description |
 |------|-------------|
-| `server/services/handlers/ai.py` | `TEAM_LEAD_TYPES`, `_collect_teammate_connections()`, team mode detection |
-| `server/services/agent_team.py` | `AgentTeamService` for team tracking |
-| `server/services/handlers/tools.py` | `_execute_delegated_agent()` for actual delegation |
-| `server/services/ai.py` | `_build_tool_from_node()` builds delegate_to_* tools |
-| `client/src/components/AIAgentNode.tsx` | Agent node rendering with `input-teammates` handle |
-| `client/src/components/TeamMonitorNode.tsx` | Team monitoring UI |
+| [`server/nodes/agent/_inline.py`](../server/nodes/agent/_inline.py) | `TEAM_LEAD_TYPES`, `prepare_agent_call()` pre-dispatch (teammate -> delegation-tool injection) |
+| [`server/services/plugin/edge_walker.py`](../server/services/plugin/edge_walker.py) | `collect_teammate_connections()` (input-teammates walk) + `collect_agent_connections()` (5-tuple) |
+| [`server/services/plugin/base.py`](../server/services/plugin/base.py) | `BaseNode.__init_subclass__` auto-derives `tool_name = f"delegate_to_{type}"` for `component_kind=="agent"` |
+| [`server/services/agent_team.py`](../server/services/agent_team.py) | `AgentTeamService` for team tracking |
+| [`server/services/handlers/tools.py`](../server/services/handlers/tools.py) | `_execute_delegated_agent()` for actual delegation |
+| [`server/services/ai.py`](../server/services/ai.py) | `_build_tool_from_node()` builds delegate_to_* tools, `DelegateToAgentSchema` |
+| [`client/src/components/AIAgentNode.tsx`](../client/src/components/AIAgentNode.tsx) | Agent node rendering with `input-teammates` handle |
+| [`client/src/components/TeamMonitorNode.tsx`](../client/src/components/TeamMonitorNode.tsx) | Team monitoring UI |
 
 ## Design Decisions
 
@@ -221,6 +239,6 @@ Connect Team Monitor to a team lead's output to visualize team activity.
 
 3. **Fire-and-Forget**: Delegated agents run as background tasks; team lead can check status via `check_delegated_tasks`
 
-4. **API Key Inheritance**: Teammates inherit provider/model from team lead if not configured; API keys injected via standard `_inject_api_keys` flow
+4. **API Key Inheritance**: Teammates inherit provider/model from team lead if not configured; API keys injected via the standard `_inject_api_keys` flow in [`server/services/node_executor.py`](../server/services/node_executor.py)
 
 5. **Standard Execution Path**: Team leads use the same `execute_chat_agent` flow as other agents, just with additional delegation tools

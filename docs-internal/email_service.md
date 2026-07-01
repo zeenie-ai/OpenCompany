@@ -8,9 +8,9 @@ IMAP/SMTP email integration via the [Himalaya CLI](https://github.com/pimalaya/h
                    ┌──────────────────────────────────────────────┐
                    │          EmailService (singleton)             │
                    │                                              │
-  handler ─────────►  resolve_credentials(params) -> dict         │
-  (email.py)        │    params > preset (email_providers.json)   │
-                   │    > stored API keys (AuthService)           │
+  plugin ──────────►  resolve_credentials(params) -> dict         │
+  execute_op        │    params > preset (email_providers.json)   │
+  (nodes/email/...) │    > stored API keys (AuthService)           │
                    │                                              │
                    │  send(params)  -> dict                       │
                    │  read(params)  -> dict (7 operations)        │
@@ -30,13 +30,18 @@ IMAP/SMTP email integration via the [Himalaya CLI](https://github.com/pimalaya/h
                  calls IMAP/SMTP backends
 ```
 
+`EmailService` and `HimalayaService` are both singletons living in the
+self-contained email plugin folder (`server/nodes/email/_service.py` and
+`server/nodes/email/_himalaya.py`). `EmailService` exposes `HimalayaService`
+via its `himalaya` property (lazy import).
+
 ### Request Flow (emailSend)
 
 ```
 emailSend node
    │
    ▼
-handle_email_send(node_id, type, params, ctx)
+EmailSendNode.execute_op (server/nodes/email/email_send/__init__.py)
    │
    ▼
 EmailService.send(params)
@@ -72,28 +77,32 @@ Custom/self-hosted providers rely on stored custom keys because their presets ar
 
 ## Key Files
 
+Self-contained plugin folder (Wave 11.I) — everything email-specific lives under `server/nodes/email/`.
+
 | File | Description |
 |------|-------------|
-| `server/services/himalaya_service.py` | CLI wrapper. Subprocess-based invocation, temp TOML config generation, JSON output parsing. Singleton via `get_himalaya_service()`. |
-| `server/services/email_service.py` | Orchestration layer. Credential resolution, operation dispatch, polling helpers. Singleton via `get_email_service()`. |
+| `server/nodes/email/__init__.py` | Self-registration: `register_filter_builder("emailReceive", build_email_filter)` + `register_canary_trigger_type("emailReceive", "com.machinaos.email.message.received")` + re-export of `dispatch_email_received`. |
+| `server/nodes/email/_himalaya.py` | `HimalayaService` (`ServiceSingleton`). Subprocess-based invocation, temp TOML config generation, JSON output parsing. Singleton via `get_himalaya_service()`. |
+| `server/nodes/email/_service.py` | `EmailService` (`ServiceSingleton`). Credential resolution, operation dispatch, polling helpers. Exposes `HimalayaService` via the `himalaya` property. Singleton via `get_email_service()`. |
+| `server/nodes/email/email_send/__init__.py` | `EmailSendNode(ActionNode)` — dual-purpose send plugin (`group = ("email", "tool")`, `usable_as_tool = True`). |
+| `server/nodes/email/email_read/__init__.py` | `EmailReadNode(ActionNode)` — dual-purpose read/search/manage plugin (7 operations). |
+| `server/nodes/email/email_receive/__init__.py` | `EmailReceiveNode(PollingTriggerNode)` — polling trigger; baseline + diff loop with `poll_ids` / `fetch_detail` hooks. |
+| `server/nodes/email/_filters.py` | `build_filter` (registered as `build_email_filter`) — server-side filter closure for the `emailReceive` trigger. |
+| `server/nodes/email/_events.py` | `email_message_received` `WorkflowEvent` factory + `dispatch_email_received` (single `dispatch.emit`, CloudEvents type `com.machinaos.email.message.received`). |
+| `server/nodes/email/email_{send,read,receive}/icon.svg` + `meta.json` | Per-plugin icon (served at `/api/schemas/nodes/<type>/icon`) + color metadata. |
 | `server/config/email_providers.json` | Provider presets (IMAP/SMTP host/port/encryption per provider) + defaults + polling config. Cached on first load. |
-| `server/services/handlers/email.py` | Three thin node handlers: `handle_email_send`, `handle_email_read`, `handle_email_receive`. |
-| `server/services/node_executor.py` | Handler registry entries: `emailSend`, `emailRead`, `emailReceive`. |
-| `server/services/event_waiter.py` | `TRIGGER_REGISTRY['emailReceive']` + `build_email_filter`. |
-| `server/services/deployment/manager.py` | `_create_email_poll_coroutine` factory for deployment-mode polling. |
-| `server/services/ai.py` | `EmailSendSchema`, `EmailReadSchema` Pydantic schemas for AI tool calling + `DEFAULT_TOOL_NAMES` / `DEFAULT_TOOL_DESCRIPTIONS` entries. |
-| `server/services/handlers/tools.py` | `_execute_email_tool` dispatch for `emailSend` / `emailRead` when called by an AI Agent. |
 | `server/constants.py` | `EMAIL_TYPES`, `EMAIL_TOOL_TYPES`, plus `emailReceive` in `POLLING_TRIGGER_TYPES` and `WORKFLOW_TRIGGER_TYPES`. |
-| `client/src/assets/icons/email/` | `send.svg`, `read.svg`, `receive.svg` + `index.ts` registering them as data URIs via `?raw` import. |
 | `client/src/components/CredentialsModal.tsx` | Email credentials panel (provider dropdown, email/password inputs, conditional custom IMAP/SMTP section). |
+
+**AI tool schema** is derived automatically from each plugin's `Params` Pydantic model — there is no hand-written `EmailSendSchema` / `EmailReadSchema`. Dual-purpose dispatch goes through the generic plugin fast-path in `server/services/handlers/tools.py` (`instance.execute_as_tool(...)`), not a per-email `_execute_email_tool` branch.
 
 ## EmailService API
 
-**File:** `server/services/email_service.py`
+**File:** `server/nodes/email/_service.py`
 
-### `resolve_credentials(params: Dict) -> Dict`
+### `async resolve_credentials(params: Dict) -> Dict`
 
-Builds the credentials dict consumed by `HimalayaService`. Required before every operation. Raises `ValueError` if `email_address` or `email_password` is not set (neither in params nor stored).
+Async. Builds the credentials dict consumed by `HimalayaService` (reads stored keys via `AuthService.get_api_key`). Required before every operation. Raises `ValueError` if the email address or password is not set (neither in params nor stored).
 
 Returned keys:
 - `email` (str, required) — account address, used as IMAP/SMTP login
@@ -135,7 +144,7 @@ Reads polling config from `email_providers.json` (`polling.interval`, `polling.m
 
 ## HimalayaService API
 
-**File:** `server/services/himalaya_service.py`
+**File:** `server/nodes/email/_himalaya.py`
 
 ### CLI execution model
 
@@ -192,7 +201,7 @@ Send email via SMTP. Group: `['email', 'tool']`. Two outputs (`main`, `tool`).
 | `bcc` | string | no | |
 | `body_type` | options | no | `text` (default) or `html` |
 
-**AI tool schema:** `EmailSendSchema` (same fields as node params, `body_type` default `"text"`, `cc`/`bcc` optional). When the LLM invokes `email_send`, `_execute_email_tool` routes to `EmailService.send()` with the LLM args merged over the node params.
+**AI tool schema:** derived from `EmailSendParams` (same fields as the node, `body_type` default `"text"`, `cc`/`bcc` optional). When the LLM invokes the tool, the generic plugin tool fast-path (`instance.execute_as_tool` in `handlers/tools.py`) runs `EmailSendNode`'s send operation with the LLM args merged over the node params.
 
 ### emailRead — Dual-purpose (workflow node + AI tool)
 
@@ -211,7 +220,7 @@ Read/search/manage emails via IMAP. Group: `['email', 'tool']`. Two outputs (`ma
 | `page` | list | default 1 |
 | `page_size` | list | default 20, max 100 |
 
-**AI tool schema:** `EmailReadSchema` exposes every operation and all operation-specific fields as optional. The LLM picks an `operation` and fills the relevant subset.
+**AI tool schema:** derived from `EmailReadParams`, exposing every operation and all operation-specific fields. The LLM picks an `operation` and fills the relevant subset.
 
 ### emailReceive — Polling trigger
 
@@ -228,34 +237,27 @@ Group: `['email', 'trigger']`. No inputs. Single output `main` with the new emai
 
 **Baseline detection:** On first execution the handler calls `poll_ids(creds, folder)` to capture the set of currently-existing envelope IDs. The poll loop then diffs against this baseline -- only newly appearing IDs trigger the workflow. This avoids firing on existing historical mail.
 
-**Event dispatch:** When a new message arrives, the handler:
+**Event dispatch:** When a new message arrives, `EmailReceiveNode.execute_op`:
 1. Fetches full detail via `fetch_detail`
 2. Optionally flags it as read
-3. Dispatches `event_waiter.dispatch("email_received", email_data)` so deployment-mode listeners see it
-4. Returns the result (single-shot in standalone mode; the deployment manager's poll coroutine keeps looping)
+3. Calls `dispatch_email_received(email_data)` (in `_events.py`), which builds a `WorkflowEvent` (`type="com.machinaos.email.message.received"`) and routes it via a single `dispatch.emit` so Temporal-durable `TriggerListenerWorkflow` consumers fire
+4. Returns the first new email's result (single-shot in standalone mode; the `PollingTriggerNode` deployment loop keeps polling)
 
 ## Deployment Mode (Continuous Polling)
 
-**File:** `server/services/deployment/manager.py`
+When a workflow containing `emailReceive` is **deployed** (not just run once), the trigger runs as a continuous polling loop owned by its `PollingTriggerNode` base class — not by a hand-written factory in the deployment manager.
 
-When a workflow containing `emailReceive` is **deployed** (not just run once), the `DeploymentManager` routes the trigger to a polling coroutine instead of a one-shot execution:
+`EmailReceiveNode(PollingTriggerNode)` declares the polling hooks (`poll_ids`, `fetch_detail`); the base class's poll-coroutine factory self-registers via `services.deployment.poll_registry.register_poll_coroutine_factory`. The deployment manager's per-type factories (`_create_poll_coroutine` / `_create_gmail_poll_coroutine` / `_create_email_poll_coroutine`) were **removed in Wave 11.I, milestone L** — the dispatch now flows through `DeploymentManager._setup_event_trigger`, which looks up the registered factory.
 
-```python
-def _create_poll_coroutine(self, node_type, node_id, params):
-    if node_type == 'emailReceive':
-        return self._create_email_poll_coroutine(node_id, params)
-```
-
-`_create_email_poll_coroutine` returns an async poll loop that:
-1. Resolves credentials once
+The poll loop:
+1. Resolves credentials once via `EmailService.resolve_credentials`
 2. Establishes the baseline via `svc.poll_ids(creds, folder)`
 3. On each iteration (clamped interval from `resolve_poll_params`):
-   - Polls for current IDs
-   - Computes `new_ids = current - seen`
-   - For each new ID: fetches detail, optionally marks read, enqueues via `await queue.put(email_data)` for the per-run workflow executor
+   - Polls for current IDs and computes `new_ids = current - seen`
+   - For each new ID: fetches detail, optionally marks read, dispatches the event
    - Handles `asyncio.CancelledError` cleanly on teardown
 
-The continuous loop delegates entirely to `EmailService` — no credential resolution or polling logic is duplicated in the deployment manager.
+All credential resolution and IMAP access still delegate to `EmailService` — nothing is duplicated in the deployment manager. (Post-2026-05-15, with the event framework enabled, deployed `emailReceive` triggers run as a Temporal-durable `PollingTriggerWorkflow` via the canary registration in `nodes/email/__init__.py`.)
 
 ## Credentials Storage
 
@@ -349,7 +351,7 @@ Status is shown via `getSpecialStatus(item)` returning `{ connected: !!emailStor
 }
 ```
 
-Loaded lazily by `EmailService._load_config()` and cached in a module-level `_CONFIG` variable. To add a new provider, edit only this JSON — no code changes required.
+Loaded lazily by the module-level `_load_config()` in `_service.py` and cached in a module-level `_CONFIG` variable (surfaced through `EmailService.config` / `.defaults` / `.polling` properties). To add a new provider, edit only this JSON — no code changes required.
 
 **Zero magic numbers:** every default, clamp, and preset lives in this file. `resolve_poll_params` reads the polling defaults; `EmailService.read()` reads `defaults.page_size`, `defaults.flag`, etc.; the provider dropdown options in `CredentialsModal.tsx` mirror the `providers` keys.
 

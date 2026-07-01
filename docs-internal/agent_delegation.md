@@ -24,17 +24,19 @@ Parent Agent (chatAgent / aiAgent / specialized)
   |
   v
 tool_executor callback (closure in ai.py)
-  |  Injects: ai_service, database, nodes, edges, workflow_id
+  |  Injects: ai_service, database, nodes, edges, workflow_id,
+  |           parent_node_id, execution_id
   |
   v
 execute_tool() dispatcher (handlers/tools.py)
-  |  Routes agent node_types to _execute_delegated_agent()
+  |  Routes node_type in AI_AGENT_TYPES to _execute_delegated_agent()
   |
   v
 _execute_delegated_agent() (handlers/tools.py)
   |  1. Fetches child_params from DATABASE
-  |  2. Injects API key from credential store
-  |  3. OVERWRITES prompt with delegated task
+  |  2. Injects API key + default model from credential store
+  |  3. task -> system_message (directive),
+  |     context-or-task -> prompt
   |  4. Builds child_context with all nodes/edges
   |  5. Spawns asyncio.create_task()
   |  6. Returns immediately: {status: "delegated", task_id: "..."}
@@ -43,17 +45,21 @@ _execute_delegated_agent() (handlers/tools.py)
 Parent continues reasoning            Child runs independently
 (non-blocking)                           |
                                          v
-                                    handle_ai_agent() or handle_chat_agent()
+                                    plugin_cls().execute(child_node_id, child_params, child_ctx)
+                                         |  (BaseNode.execute -> the agent plugin's
+                                         |   @Operation method in nodes/agent/<plugin>/)
                                          |
-                                    _collect_agent_connections(child_node_id)
+                                    collect_agent_connections(child_node_id)
+                                         |  (services/plugin/edge_walker.py)
                                          |  Filters edges by child's ID
-                                         |  Finds child's own memory/skills/tools
+                                         |  Finds child's own memory/skills/tools/task
                                          |
-                                    execute_agent() or execute_chat_agent()
+                                    AIService.execute_agent() / execute_chat_agent()
                                          |  Uses child's provider/model/system_message
                                          |  Uses child's memory (isolated session)
                                          |  Uses child's skills + tools
-                                         |  Prompt = delegated task from parent
+                                         |  system_message = delegated task,
+                                         |  prompt = delegated context
                                          |
                                     Result broadcast via WebSocket
                                     (NOT returned to parent LLM)
@@ -63,7 +69,7 @@ Parent continues reasoning            Child runs independently
 
 ### Step 1: Parent Builds Tool from Child Agent Node
 
-**File:** `server/services/ai.py`, `_build_tool_from_node()` (line 2041)
+**File:** `server/services/ai.py`, `_build_tool_from_node()`
 
 When the parent agent starts executing and finds a child agent connected to its `input-tools` handle, `_build_tool_from_node()` is called during tool setup:
 
@@ -76,28 +82,21 @@ for tool_info in tool_data:
 
 For agent node types, the method:
 
-1. Looks up the tool name from `DEFAULT_TOOL_NAMES` (line 2054):
-   ```python
-   'aiAgent': 'delegate_to_ai_agent',
-   'chatAgent': 'delegate_to_chat_agent',
-   'android_agent': 'delegate_to_android_agent',
-   'coding_agent': 'delegate_to_coding_agent',
-   # ... all 12 agent types have entries
-   ```
+1. Resolves the tool name via `_resolve_default_tool_name_description(node_type)` — a closure inside `_build_tool_from_node()` that reads the plugin class's `tool_name` ClassVar (each agent plugin declares `tool_name = "delegate_to_<x>"`). There is no central `DEFAULT_TOOL_NAMES` dict; the name comes from the plugin class via `services.node_registry.get_node_class`. The delegation branch is gated by `_get_tool_schema()`'s `_AGENT_DELEGATION_TYPES` tuple — the **15-agent delegatable set** (`aiAgent`, `chatAgent`, `android_agent`, `coding_agent`, `web_agent`, `task_agent`, `social_agent`, `travel_agent`, `tool_agent`, `productivity_agent`, `payments_agent`, `consumer_agent`, `autonomous_agent`, `orchestrator_agent`, `ai_employee`) plus the two bypass-loop agents `rlm_agent` and `claude_code_agent`. (`AI_AGENT_TYPES` in `server/constants.py` mirrors this same set; `codex_agent` is not currently in it.)
 
-2. Creates a `DelegateToAgentSchema` Pydantic model (line 2622) with two fields:
+2. Creates a `DelegateToAgentSchema` Pydantic model in `_get_tool_schema()` with two fields (`task` -> the child's mission directive / system message, `context` -> the child's input data / prompt):
    ```python
    class DelegateToAgentSchema(BaseModel):
        task: str = Field(
-           description=f"The task/instruction to delegate to '{agent_label}'."
+           description=f"The mission directive for '{agent_label}'. ..."
        )
        context: Optional[str] = Field(
            default=None,
-           description="Additional context or data the child agent needs"
+           description="Input data or specific details the agent needs to work with, ..."
        )
    ```
 
-3. Returns a config dict (line 2202):
+3. Returns a config dict:
    ```python
    config = {
        'node_type': node_type,          # e.g., 'aiAgent'
@@ -114,7 +113,7 @@ The LLM sees a tool like `delegate_to_ai_agent(task="...", context="...")`. It d
 
 ### Step 2: Tool Executor Callback Injects Services
 
-**File:** `server/services/ai.py`, `tool_executor` (line 1406) / `chat_tool_executor` (line 1835)
+**File:** `server/services/ai.py`, `tool_executor` / `chat_tool_executor` closures
 
 Both `execute_agent()` and `execute_chat_agent()` define nearly identical tool executor callbacks as closures. When the parent's LLM decides to call the delegation tool, the callback fires.
 
@@ -128,15 +127,18 @@ The callback captures from outer scope:
 | `workflow_id` | Function parameter | Scopes broadcasts to workflow |
 | `context` | Function parameter | Contains `nodes` and `edges` arrays |
 
-Before calling `execute_tool()`, the callback injects 5 fields into the config (line 1434-1443):
+Before calling `execute_tool()`, the callback injects the service + graph fields into the config:
 
 ```python
-config['workflow_id'] = workflow_id
-config['ai_service']  = self               # AIService instance (shared)
-config['database']    = self.database      # Database instance (shared)
+config["workflow_id"]    = workflow_id
+config["ai_service"]     = self               # AIService instance (shared)
+config["database"]       = self.database      # Database instance (shared)
+config["parent_node_id"] = node_id            # parent's node id (duplicate tracking)
 if context:
-    config['nodes'] = context.get('nodes', [])   # ALL workflow nodes
-    config['edges'] = context.get('edges', [])   # ALL workflow edges
+    config["nodes"]        = context.get("nodes", [])   # ALL workflow nodes
+    config["edges"]        = context.get("edges", [])   # ALL workflow edges
+    config["workspace_dir"] = context.get("workspace_dir", "")
+    config["execution_id"]  = context.get("execution_id")  # stable per-run id
 ```
 
 These injected fields are what enable the child agent to discover its own connections and execute independently. Without them, the child would have no access to the workflow graph or services.
@@ -145,84 +147,91 @@ These injected fields are what enable the child agent to discover its own connec
 
 ### Step 3: Dispatch to Delegation Handler
 
-**File:** `server/services/handlers/tools.py`, `execute_tool()` (line 27)
+**File:** `server/services/handlers/tools.py`, `execute_tool()`
 
-The dispatcher checks `node_type` and routes all 12 agent types to `_execute_delegated_agent()` (line 120):
+The dispatcher checks `node_type` against the `AI_AGENT_TYPES` frozenset (`server/constants.py`) and routes every agent type to `_execute_delegated_agent()`:
 
 ```python
-if node_type in ('aiAgent', 'chatAgent', 'android_agent', 'coding_agent',
-                 'web_agent', 'task_agent', 'social_agent', 'travel_agent',
-                 'tool_agent', 'productivity_agent', 'payments_agent',
-                 'consumer_agent'):
+from constants import AI_AGENT_TYPES
+
+if node_type == "_builtin_check_delegated_tasks":
+    return await _execute_check_delegated_tasks(tool_args, config)
+
+if node_type in AI_AGENT_TYPES:
     return await _execute_delegated_agent(tool_args, config)
 ```
+
+`AI_AGENT_TYPES` is the single source of truth: the 15 standard delegatable agents plus `rlm_agent` and `claude_code_agent`.
 
 ---
 
 ### Step 4: Delegated Agent Execution (Fire-and-Forget)
 
-**File:** `server/services/handlers/tools.py`, `_execute_delegated_agent()` (line 1126)
+**File:** `server/services/handlers/tools.py`, `_execute_delegated_agent()`
 
 This is where the actual parameter assembly happens.
 
-**4a. Extract injected services from config** (line 1149-1153):
+**4a. Extract injected services from config:**
 ```python
-ai_service  = config.get('ai_service')
-database    = config.get('database')
-nodes       = config.get('nodes', [])
-edges       = config.get('edges', [])
-workflow_id = config.get('workflow_id')
+ai_service  = config.get("ai_service")
+database    = config.get("database")
+nodes       = config.get("nodes", [])
+edges       = config.get("edges", [])
+workflow_id = config.get("workflow_id")
 ```
 
-**4b. Fetch child's OWN parameters from database** (line 1165):
+A `(parent_node_id, node_id, task_hash)` duplicate guard (`_active_delegations`) short-circuits with `status: "ALREADY_DELEGATED"` if the LLM calls the same delegation twice. A per-child counter (`_active_delegated_nodes`) keeps the child's canvas glow alive past the parent run's end (the background task outlives the `delegate_to_<x>` tool return).
+
+**4b. Fetch child's OWN parameters from database:**
 ```python
 child_params = await database.get_node_parameters(node_id) or {}
 ```
 
 The child's stored parameters (provider, model, system message, etc.) come from the database -- whatever the user configured in the child node's parameter panel. They are NOT inherited from the parent.
 
-**4c. Inject API key if missing** (line 1169-1175):
+**4c. Inject API key if missing:**
 ```python
-if not child_params.get('api_key') and not child_params.get('apiKey'):
+if not child_params.get("api_key"):
     provider = detect_ai_provider(node_type, child_params)
     key = await ai_service.auth.get_api_key(provider, "default")
     if key:
-        child_params['api_key'] = key
+        child_params["api_key"] = key
 ```
 
 The child gets its API key from the credential store based on its own provider setting. If the child is configured for Anthropic and the parent uses OpenAI, the child gets the Anthropic key.
 
-**4d. Inject default model if not set** (line 1178-1183):
+**4d. Inject default model if not set:**
 ```python
-if not child_params.get('model'):
+if not child_params.get("model"):
     provider = detect_ai_provider(node_type, child_params)
     models = await ai_service.auth.get_stored_models(provider, "default")
     if models:
-        child_params['model'] = models[0]
+        child_params["model"] = models[0]
 ```
 
-**4e. OVERWRITE prompt with delegated task** (line 1186-1189):
+**4e. Map the delegated task/context onto the child's params:**
 ```python
-full_prompt = task_description
-if task_context:
-    full_prompt = f"{task_description}\n\nContext:\n{task_context}"
-child_params['prompt'] = full_prompt
+# task -> mission directive (system message), context -> input data (prompt)
+child_params["system_message"] = task_description
+child_params.pop("systemMessage", None)   # drop pre-migration camelCase mirror
+child_params["prompt"] = task_context if task_context else task_description
 ```
 
-This is the **only parameter the parent passes to the child** -- the task instruction. Everything else comes from the child's own stored configuration.
+These two strings are the **only inputs the parent passes to the child**. `task` becomes the child's `system_message` (its mission directive); `context` becomes its `prompt` (its input data), falling back to the task text when no context is given. Everything else comes from the child's own stored configuration.
 
-**4f. Build child execution context** (line 1192-1198):
+**4f. Build child execution context:**
 ```python
 child_context = {
-    'nodes': nodes,              # ALL workflow nodes (not just child's)
-    'edges': edges,              # ALL workflow edges (not just child's)
-    'workflow_id': workflow_id,  # Parent's workflow ID (for status scoping)
-    'outputs': {},               # Empty -- child starts fresh
-    'parent_task_id': task_id   # Link back to parent's delegation task
+    "nodes": nodes,              # ALL workflow nodes (not just child's)
+    "edges": edges,              # ALL workflow edges (not just child's)
+    "workflow_id": workflow_id,  # Parent's workflow ID (for status scoping)
+    "outputs": {},               # Empty -- child starts fresh
+    "parent_task_id": task_id,   # Link back to parent's delegation task
+    "execution_id": config.get("execution_id"),  # shared per-run id (session-keyed tools)
 }
 ```
 
-**4g. Spawn as background task and return immediately** (line 1269-1281):
+**4g. Spawn as background task and return immediately:**
 ```python
 task = asyncio.create_task(run_child_agent())
 _delegated_tasks[task_id] = task
@@ -233,28 +242,38 @@ return {
     "task_id": task_id,
     "agent_node_id": node_id,
     "agent_name": agent_label,
-    "message": f"Task delegated to '{agent_label}'. Agent is now working independently..."
+    "message": f"Task delegated to '{agent_label}'. Agent is now working independently...",
 }
 ```
 
-Inside `run_child_agent()` (line 1208-1267), the child handler is selected based on node_type:
-- `aiAgent` -> `handle_ai_agent()` (agent loop with tools)
-- All others -> `handle_chat_agent()` (direct LLM invoke)
+Inside `run_child_agent()`, the child executes through its own plugin class (Wave 11.E.3 — the legacy `handle_ai_agent` / `handle_chat_agent` imports are gone). Every agent type owns an `@Operation` method that wraps `prepare_agent_call` + `AIService` dispatch, so delegation just goes through `BaseNode.execute`:
+
+```python
+from services.node_registry import get_node_class
+from services.plugin import NodeContext
+
+plugin_cls = get_node_class(node_type)
+instance = plugin_cls()
+child_ctx = NodeContext.from_legacy(
+    node_id=node_id, node_type=node_type, context=child_context,
+)
+result = await instance.execute(node_id, child_params, child_ctx)
+```
 
 ---
 
 ### Step 5: Child Handler Collects Its Own Connections
 
-**File:** `server/services/handlers/ai.py`, `handle_ai_agent()` (line 225) / `handle_chat_agent()` (line 280)
+**File:** `server/nodes/agent/_inline.py`, `prepare_agent_call()` (called by every agent plugin's `@Operation`)
 
-The spawned child calls `_collect_agent_connections()` with **its own node_id**:
+The spawned child's `execute()` runs `prepare_agent_call()`, which calls `collect_agent_connections()` (from `server/services/plugin/edge_walker.py`) with **its own node_id**. The function returns a **5-tuple** — `(memory_data, skill_data, tool_data, input_data, task_data)`:
 
 ```python
-memory_data, skill_data, tool_data, input_data = await _collect_agent_connections(
+memory_data, skill_data, tool_data, input_data, task_data = await collect_agent_connections(
     node_id,       # CHILD's node ID
     child_context, # Contains ALL nodes/edges
     database,
-    log_prefix="[AI Agent]"
+    log_prefix="[AI Agent]",
 )
 ```
 
@@ -262,27 +281,28 @@ memory_data, skill_data, tool_data, input_data = await _collect_agent_connection
 
 ### Step 6: Connection Filtering by Node ID
 
-**File:** `server/services/handlers/ai.py`, `_collect_agent_connections()` (line 14)
+**File:** `server/services/plugin/edge_walker.py`, `collect_agent_connections()`
 
-This function receives ALL nodes/edges but filters by the child's `node_id` (line 65-66):
+This function receives ALL nodes/edges but filters by the child's `node_id`:
 
 ```python
 for edge in edges:
-    if edge.get('target') != node_id:   # Only edges pointing TO this child
+    if edge.get("target") != node_id:   # Only edges pointing TO this child
         continue
 
-    target_handle = edge.get('targetHandle')
-    source_node_id = edge.get('source')
+    target_handle = edge.get("targetHandle")
+    source_node_id = edge.get("source")
 ```
 
 For each matching edge, it checks the target handle:
 
 | Handle | Action |
 |--------|--------|
-| `input-memory` | Loads markdown memory content from child's connected `simpleMemory` node (line 77-93) |
-| `input-skill` | Loads skill instructions; expands masterSkill into individual enabled skills (line 97-153) |
-| `input-tools` | Discovers tool nodes; for androidTool, finds connected Android services (line 156-205) |
-| `input-main` / `input-chat` | Reads upstream node output for auto-prompt fallback (line 209-213) |
+| `input-memory` | Loads markdown memory content from child's connected `simpleMemory` node |
+| `input-skill` | Loads skill instructions; expands masterSkill into individual enabled skills |
+| `input-tools` | Discovers tool nodes; for androidTool, finds connected Android services |
+| `input-main` / `input-chat` | Reads upstream node output for auto-prompt fallback |
+| `input-task` | Collects `taskTrigger` output for the conversational task-report pattern |
 
 The child only gets connections that are physically wired to it in the workflow graph. If the child has no memory node connected, `memory_data` is `None`. If the child has its own tools, it gets those tools -- and can delegate further.
 
@@ -496,9 +516,11 @@ All broadcasts include `workflow_id` for UI scoping. The frontend uses these to 
 
 | File | Role |
 |------|------|
-| `server/services/ai.py` | `_build_tool_from_node()`, `_get_tool_schema()`, `DelegateToAgentSchema`, `tool_executor` callback, `DEFAULT_TOOL_NAMES/DESCRIPTIONS` |
-| `server/services/handlers/ai.py` | `_collect_agent_connections()`, `handle_ai_agent()`, `handle_chat_agent()` |
-| `server/services/handlers/tools.py` | `execute_tool()` dispatcher, `_execute_delegated_agent()`, `_delegated_tasks` tracking |
+| `server/services/ai.py` | `_build_tool_from_node()`, `_get_tool_schema()` (incl. `_AGENT_DELEGATION_TYPES` + `DelegateToAgentSchema`), `_resolve_default_tool_name_description()`, `tool_executor` / `chat_tool_executor` closures, `execute_agent()` / `execute_chat_agent()` |
+| `server/services/plugin/edge_walker.py` | `collect_agent_connections()` (5-tuple: memory / skill / tool / input / task) |
+| `server/nodes/agent/_inline.py` | `prepare_agent_call()` — the 3-step pre-dispatch flow (connection collection + param prep) every agent plugin's `@Operation` runs |
+| `server/nodes/agent/<plugin>/__init__.py` | Per-agent plugin classes (`ai_agent`, `chat_agent`, the specialized agents) with their delegation `tool_name` ClassVar + `@Operation` execute method |
+| `server/services/handlers/tools.py` | `execute_tool()` dispatcher, `_execute_delegated_agent()`, `_execute_check_delegated_tasks()`, `_delegated_tasks` / `_delegation_results` / `_active_delegations` tracking |
 | `server/constants.py` | `AI_AGENT_TYPES` frozenset, `detect_ai_provider()` |
 | `client/src/components/AIAgentNode.tsx` | Frontend rendering of execution phase animations |
 ---
@@ -511,7 +533,7 @@ All broadcasts include `workflow_id` for UI scoping. The frontend uses these to 
 
 3. **Memory is fully isolated.** Parent and child have separate simpleMemory nodes with separate session IDs and separate vector stores.
 
-4. **The child sees the full workflow graph** via `nodes`/`edges`, but `_collect_agent_connections()` filters by the child's own `node_id`, so it only gets resources physically connected to it.
+4. **The child sees the full workflow graph** via `nodes`/`edges`, but `collect_agent_connections()` filters by the child's own `node_id`, so it only gets resources physically connected to it.
 
 5. **Services are shared, not duplicated.** `ai_service` and `database` are passed by reference. They share the same credential store and DB connection.
 
@@ -536,12 +558,14 @@ tools.py: _execute_delegated_agent.run_child_agent()
        ↓
 broadcaster.send_custom_event('task_completed', event_data)
        ↓
-event_waiter.dispatch_async('task_completed', event_data)
+event_waiter dispatch ('task_completed', event_data)
        ↓
 Matching taskTrigger nodes resolve their Futures
        ↓
 Downstream workflow nodes execute with delegation result
 ```
+
+> Note (Wave 12/13): `taskTrigger` is one of the canary-registered trigger types. Under the canary path the producer's CloudEvents envelope routes via `dispatch.emit`; the legacy `event_waiter.register` / `send_custom_event` path is retained for the in-process fallback. See [event_framework.md](./event_framework.md) and the trigger-architecture notes in CLAUDE.md.
 
 ### Event Data Schema
 
@@ -608,7 +632,7 @@ All approaches can coexist. The LLM-driven approach is better for dynamic reason
 
 ## Agent Task Input Handle (input-task)
 
-All AI agents (aiAgent, chatAgent, and 10 specialized agents) have an `input-task` handle on the left side that can receive task completion events from `taskTrigger` nodes. This enables a conversational pattern where the parent agent reports delegated task results to the user.
+All AI agents (`aiAgent`, `chatAgent`, and the specialized agents — live count via `glob server/nodes/agent/*/__init__.py`) have an `input-task` handle on the left side that can receive task completion events from `taskTrigger` nodes. This enables a conversational pattern where the parent agent reports delegated task results to the user.
 
 ### Architecture
 
@@ -624,9 +648,9 @@ Agent generates conversational response about completed task
 
 ### How It Works
 
-1. **Backend Detection**: `_collect_agent_connections()` in `handlers/ai.py` detects nodes connected to `input-task` handle
-2. **Task Data Collection**: Collects output from connected `taskTrigger` node
-3. **Context Injection**: `_format_task_context()` formats task data as prompt context
+1. **Backend Detection**: `collect_agent_connections()` in `server/services/plugin/edge_walker.py` detects nodes connected to the `input-task` handle and returns the collected `task_data` (5th element of the tuple)
+2. **Task Data Collection**: Collects output from the connected `taskTrigger` node
+3. **Context Injection**: `prepare_agent_call` (`server/nodes/agent/_inline.py`) calls `format_task_context()` (from `edge_walker.py`) to render `task_data` as prompt context
 4. **Prompt Prepending**: Task context is prepended to the agent's prompt before execution
 
 ### Task Context Format
@@ -657,8 +681,9 @@ Please report this error to the user and suggest next steps if appropriate.
 
 | File | Changes |
 |------|---------|
-| `client/src/components/AIAgentNode.tsx` | `input-task` handle in leftHandles for all 12 agent configs |
-| `server/services/handlers/ai.py` | `task_data` collection, `_format_task_context()`, prompt injection |
+| `client/src/components/AIAgentNode.tsx` | Spec-driven; renders the `input-task` handle from the backend NodeSpec (no per-agent config map) |
+| `server/services/plugin/edge_walker.py` | `task_data` collection via `collect_agent_connections()`, `format_task_context()` |
+| `server/nodes/agent/_inline.py` | `prepare_agent_call()` injects the formatted task context into the prompt |
 
 ### Usage Example
 
@@ -676,30 +701,12 @@ Please report this error to the user and suggest next steps if appropriate.
                                Here's what was found: ..."
 ```
 
-### Shared Input/Output Constants
+### Shared Input/Output Handles (backend SSOT)
 
-Specialized agents use shared constants for consistency:
+Post-Wave-11 the frontend `specializedAgentNodes.ts` definition file no longer exists — handle topology is declared on the backend plugin classes and the frontend renders it from each NodeSpec via `useNodeSpec(type)`. Every specialized agent subclasses `SpecializedAgentBase` (`server/nodes/agent/_specialized.py`), which provides the standard handle set through `std_agent_handles()` (declared in `server/nodes/agent/_handles.py`):
 
-```typescript
-// In specializedAgentNodes.ts
-export const AI_AGENT_INPUTS = [
-  { name: 'main', displayName: 'Input', ... },
-  { name: 'skill', displayName: 'Skill', ... },
-  { name: 'memory', displayName: 'Memory', ... },
-  { name: 'tools', displayName: 'Tool', ... },
-  { name: 'task', displayName: 'Task', ... },  // Task completion events
-];
+- **Left**: `input-main` (Input), `input-memory` (Memory), `input-task` (Task)
+- **Bottom**: `input-skill` (Skill), `input-tools` (Tool)
+- **Top**: `output-top` (Output)
 
-export const AI_AGENT_OUTPUTS = [
-  { name: 'main', displayName: 'Output', ... },
-];
-```
-
-All 10 specialized agents reference these constants:
-```typescript
-android_agent: {
-  inputs: AI_AGENT_INPUTS,
-  outputs: AI_AGENT_OUTPUTS,
-  properties: AI_AGENT_PROPERTIES
-}
-```
+Team-lead agents (`orchestrator_agent`, `ai_employee`) add an extra `input-teammates` handle for delegation. `AIAgentNode.tsx` is type-agnostic — it reads `handles` / `icon` / `color` / `displayName` / `uiHints` straight from the spec, with no `AGENT_CONFIGS` map.

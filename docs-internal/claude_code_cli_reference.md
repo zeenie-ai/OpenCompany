@@ -205,4 +205,4 @@ Quick cross-reference for the MachinaOs `claude_code_agent` integration:
 | `--disallowedTools <csv>` | optional per-task override | remove tools from context |
 | `--agent <name>` | optional per-task override | use a specific subagent |
 
-See [`services/cli_agent/providers/anthropic_claude.py:headless_argv`](../server/services/cli_agent/providers/anthropic_claude.py) for the argv-construction code.
+See [`server/nodes/agent/claude_code_agent/_provider.py`](../server/nodes/agent/claude_code_agent/_provider.py) for the argv-construction code.

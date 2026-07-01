@@ -1,3 +1,5 @@
+> **ARCHIVED / HISTORICAL (superseded).** This is a point-in-time research/exploration record from before the antd removal. It describes keeping antd inputs via a react-hook-form `Controller`, which never shipped — the live UI is fully shadcn/ui (antd was removed in `ui_migration_plan.md` Phase 7). Kept for rationale only; do not treat as current state.
+
 # Research: React Stack for a Scalable Credentials Panel
 
 Benchmarks, bundle sizes, and recommendations for the React libraries that power

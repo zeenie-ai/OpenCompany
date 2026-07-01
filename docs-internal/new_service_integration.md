@@ -1,7 +1,15 @@
 # New Service Integration Guide
 
 > **⚠️ Pre-Wave-11 — historical reference only.**
-> Node authoring now happens on the backend: each node is a Python plugin under `server/nodes/<category>/<node>.py` that emits a `NodeSpec`. The frontend reads specs via [client/src/lib/nodeSpec.ts](../client/src/lib/nodeSpec.ts) + [adapters/nodeSpecToDescription.ts](../client/src/adapters/nodeSpecToDescription.ts). See [plugin_system.md](./plugin_system.md) and [server/nodes/README.md](../server/nodes/README.md) for the current model. The snippets below that reference `client/src/nodeDefinitions/*` are kept for historical context.
+> Node authoring now happens on the backend: each node is a Python plugin in a self-contained folder under `server/nodes/<category>/<plugin>/__init__.py` that emits a `NodeSpec`. The frontend reads specs via [client/src/lib/nodeSpec.ts](../client/src/lib/nodeSpec.ts) + [adapters/nodeSpecToDescription.ts](../client/src/adapters/nodeSpecToDescription.ts). See [plugin_system.md](./plugin_system.md) and [server/nodes/README.md](../server/nodes/README.md) for the current model. The snippets below that reference `client/src/nodeDefinitions/*` are kept for historical context.
+>
+> **Path-correction note (post-extraction).** Several code locations named below moved when each plugin became a self-contained folder. When following this guide, substitute:
+> - `server/services/{service}_oauth.py` → `server/nodes/<plugin>/_oauth.py` (e.g. [server/nodes/google/_oauth.py](../server/nodes/google/_oauth.py), [server/nodes/twitter/_oauth.py](../server/nodes/twitter/_oauth.py))
+> - `server/services/handlers/{service}.py` → the plugin's own folder (Google's handler bodies are inlined into the six service plugins under [server/nodes/google/](../server/nodes/google/) plus shared helpers `_base.py` / `_gmail.py` / `_auth_helper.py`)
+> - `server/services/node_option_loaders/` → per-plugin `_option_loaders.py` registered via `register_option_loader(...)` (e.g. [server/nodes/google/_option_loaders.py](../server/nodes/google/_option_loaders.py), [server/nodes/android/_option_loaders.py](../server/nodes/android/_option_loaders.py), [server/nodes/whatsapp/_option_loaders.py](../server/nodes/whatsapp/_option_loaders.py))
+> - `server/routers/{service}.py` → the plugin's `_router.py`, mounted via `register_router(...)` (e.g. [server/nodes/google/_router.py](../server/nodes/google/_router.py))
+> - Handler registration in `server/services/node_executor.py` → automatic via `BaseNode.__init_subclass__`; no manual registry entry.
+> `server/services/handlers/` now contains only cross-cutting orchestration — `tools.py`, `triggers.py`, `todo.py`.
 
 This guide provides a comprehensive walkthrough for integrating new external services (like Google Workspace, Slack, Notion, etc.) into MachinaOs. It covers OAuth authentication, database models, API handlers, frontend nodes, and AI Agent tool integration.
 
@@ -15,7 +23,7 @@ A complete service integration includes:
 2. **Database Models** - Store OAuth tokens and connection state
 3. **API Handlers** - Execute service operations (CRUD)
 4. **Pydantic input model + NODE_METADATA entry** - The Wave 6 recipe replaces the bulk of the legacy frontend node definition work. See [node_creation.md Wave 6 section](./node_creation.md#wave-6-recommended-recipe-backend-first).
-5. **Dynamic-option loaders** - If your service has dropdown fields needing live data (label list, channel list, calendar list), add a loader to [server/services/node_option_loaders/](../server/services/node_option_loaders/) and register in `LOAD_OPTIONS_REGISTRY`. One-line registration; see Google Workspace loaders as the reference (`gmailLabels`, `googleCalendarList`, `googleDriveFolders`, `googleTasklists`).
+5. **Dynamic-option loaders** - If your service has dropdown fields needing live data (label list, channel list, calendar list), add a loader to your plugin folder's `_option_loaders.py` and register it from the plugin's `__init__.py` via `register_option_loader(method_name, fn)` (from [server/services/ws_handler_registry.py](../server/services/ws_handler_registry.py)). One-line registration; see [server/nodes/google/_option_loaders.py](../server/nodes/google/_option_loaders.py) as the reference (`gmailLabels`, `googleCalendarList`, `googleDriveFolders`, `googleTasklists`).
 6. **Frontend visual-component routing** - Add to the appropriate `*_NODE_TYPES` list or routing branch in [client/src/Dashboard.tsx](../client/src/Dashboard.tsx) so React Flow knows which component to render.
 7. **AI Tool Schemas** - Enable LLM tool calling
 8. **Credentials Modal** - UI for managing connections
@@ -68,7 +76,7 @@ The sections below detail each step using Google Workspace as the reference inte
 
 ## Step 1: OAuth Service
 
-Create `server/services/{service}_oauth.py`:
+Create `server/nodes/{service}/_oauth.py` (post-extraction location; the pre-Wave-11 path was `server/services/{service}_oauth.py`):
 
 ```python
 """
@@ -263,7 +271,7 @@ if old_exists:
 
 ## Step 3: API Router
 
-Create `server/routers/{service}.py`:
+Create `server/nodes/{service}/_router.py` and register it from the plugin's `__init__.py` via `register_router(router, name="{service}")` (post-extraction location; the pre-Wave-11 path was `server/routers/{service}.py`):
 
 ```python
 """
@@ -360,34 +368,29 @@ def _callback_html(success: bool, email: str = None, error: str = None) -> str:
 
 ### Register Router
 
-In `server/main.py`:
+**No `main.py` edit needed (post-extraction).** Register the router from the plugin's `__init__.py`; `main.py` mounts every plugin-registered router via its plugin-router loop:
 
 ```python
-# Add to router imports
-from routers.{service} import router as {service}_router
+# server/nodes/{service}/__init__.py
+from services.ws_handler_registry import register_router
+from . import _router
 
-# Add to app
-app.include_router({service}_router)
-
-# Add to container wiring
-container.wire(modules=[
-    # ... existing modules
-    "routers.{service}",
-])
+register_router(_router.router, name="{service}")
 ```
+
+For OAuth callback paths also call `register_oauth_callback_path("{service}", "/api/{service}/callback")` (see [server/nodes/google/__init__.py](../server/nodes/google/__init__.py) for the full self-registration set).
 
 ---
 
 ## Step 4: WebSocket Handlers
 
-Add handlers in `server/routers/websocket.py`:
+Add handlers in your plugin folder's `_handlers.py` and register them from `__init__.py` via `register_ws_handlers(WS_HANDLERS)` (post-extraction; the pre-Wave-11 path was `server/routers/websocket.py`). See [server/nodes/google/_handlers.py](../server/nodes/google/_handlers.py) for the `google_oauth_login` / `google_oauth_status` / `google_logout` reference:
 
 ```python
-@ws_handler()
 async def handle_{service}_oauth_login(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Initiate OAuth flow."""
     import webbrowser
-    from services.{service}_oauth import ServiceOAuth
+    from ._oauth import ServiceOAuth
 
     auth_service = container.auth_service()
     client_id = await auth_service.get_api_key("{service}_client_id")
@@ -415,19 +418,26 @@ async def handle_{service}_oauth_status(data: Dict[str, Any], websocket: WebSock
     return {"connected": True, "email": "..."}
 
 
-# Add to MESSAGE_HANDLERS dict
-MESSAGE_HANDLERS = {
-    # ... existing handlers
+# Plugin-owned dict, registered from __init__.py
+WS_HANDLERS = {
     "{service}_oauth_login": handle_{service}_oauth_login,
     "{service}_oauth_status": handle_{service}_oauth_status,
 }
+```
+
+```python
+# server/nodes/{service}/__init__.py
+from services.ws_handler_registry import register_ws_handlers
+from ._handlers import WS_HANDLERS
+
+register_ws_handlers(WS_HANDLERS)
 ```
 
 ---
 
 ## Step 5: Service Handlers
 
-Create `server/services/handlers/{service}.py`:
+**Post-Wave-11 the operation logic is inlined into the plugin class** as `@Operation`-decorated methods on the `ActionNode` / `ToolNode` subclass in `server/nodes/{service}/{plugin}/__init__.py`; shared helpers live alongside as `_base.py` / `_<service>.py`. The standalone `server/services/handlers/{service}.py` file no longer exists (Google's six operations, for example, are inlined into the six service plugins under [server/nodes/google/](../server/nodes/google/) with shared helpers `_base.py` / `_gmail.py` / `_auth_helper.py`). The template below shows the pre-Wave-11 handler shape for historical reference:
 
 ```python
 """
@@ -501,20 +511,7 @@ async def handle_{operation1}(
 
 ### Register Handlers
 
-In `server/services/node_executor.py`:
-
-```python
-# Add imports
-from services.handlers.{service} import (
-    handle_{operation1},
-    handle_{operation2},
-    # etc.
-)
-
-# Add to handler registry in _build_handler_registry()
-'{operation1}Node': handle_{operation1},
-'{operation2}Node': handle_{operation2},
-```
+**No `node_executor.py` edit needed (post-Wave-11).** The plugin class auto-registers its handler via `BaseNode.__init_subclass__` on import — dispatch flows through `BaseNode.execute()`. The pre-Wave-11 manual registry entry in `server/services/node_executor.py::_build_handler_registry()` is gone.
 
 ---
 
@@ -674,38 +671,36 @@ case '{service}_oauth_complete':
 
 The Google Workspace integration demonstrates this pattern with:
 
-### Files Created
+**Note:** post-extraction, all Google Workspace code lives inside the self-contained plugin folder [server/nodes/google/](../server/nodes/google/). The former `server/services/google_oauth.py`, `server/services/handlers/{calendar,drive,gmail,sheets,tasks,contacts}.py`, and `server/services/handlers/google_auth.py` files are gone — their bodies moved into the plugin folder (OAuth client → `_oauth.py`, shared credential builder → `_auth_helper.py`, per-service operations inlined into the service plugins). The pre-Wave-11 `client/src/nodeDefinitions/*.ts` files no longer exist at all.
+
+### Files (current layout)
 
 | File | Purpose |
 |------|---------|
-| `server/services/google_oauth.py` | OAuth 2.0 with google-auth-oauthlib |
-| `server/services/handlers/calendar.py` | Calendar CRUD handlers |
-| `server/services/handlers/drive.py` | Drive file handlers |
-| `server/services/handlers/sheets.py` | Sheets data handlers |
-| `server/services/handlers/tasks.py` | Tasks CRUD handlers |
-| `server/services/handlers/contacts.py` | Contacts handlers |
+| `server/nodes/google/__init__.py` | Self-registration: WS handlers, router, OAuth callback path, service-refresh, filter builder, 4 option loaders, canary trigger |
+| `server/nodes/google/_oauth.py` | OAuth 2.0 client with google-auth-oauthlib (was `services/google_oauth.py`) |
+| `server/nodes/google/_auth_helper.py` | Shared credential builder + proactive refresh (was `services/handlers/google_auth.py`) |
+| `server/nodes/google/_credentials.py` | `GoogleCredential` (OAuth2) — referenced by all 6 service plugins |
+| `server/nodes/google/_handlers.py` | WS handlers: `google_oauth_login` / `google_oauth_status` / `google_logout` |
+| `server/nodes/google/_router.py` | HTTP OAuth callback (`/api/google/callback`) |
+| `server/nodes/google/_option_loaders.py` | `gmailLabels` / `googleCalendarList` / `googleDriveFolders` / `googleTasklists` loaders |
+| `server/nodes/google/_base.py`, `_gmail.py` | Shared helpers (`build_google_service`, `run_sync`, `track_google_usage`, Gmail-specific) |
+| `server/nodes/google/{gmail,calendar,drive,sheets,tasks,contacts}/__init__.py` | 6 service plugins (operation logic inlined) |
+| `server/nodes/google/gmail_receive/__init__.py` | Polling trigger plugin |
 | `server/config/google_apis.json` | API endpoints and scopes |
-| `client/src/nodeDefinitions/calendarNodes.ts` | Calendar node definitions |
-| `client/src/nodeDefinitions/driveNodes.ts` | Drive node definitions |
-| `client/src/nodeDefinitions/sheetsNodes.ts` | Sheets node definitions |
-| `client/src/nodeDefinitions/tasksNodes.ts` | Tasks node definitions |
-| `client/src/nodeDefinitions/contactsNodes.ts` | Contacts node definitions |
 
-### Files Modified
+### Files Modified (cross-cutting)
 
 | File | Changes |
 |------|---------|
 | `server/models/database.py` | Added `GoogleConnection` model |
 | `server/core/database.py` | Added CRUD methods, migration logic |
-| `server/services/node_executor.py` | Added handler registry entries |
-| `server/services/ai.py` | Added Pydantic schemas for AI tools |
+| `server/services/ai.py` | Added Pydantic schemas for AI tools (dual-purpose nodes) |
 | `server/services/handlers/tools.py` | Added tool dispatchers |
+| `server/services/node_output_schemas.py` | Added per-operation output schemas |
 | `server/config/pricing.json` | Added Google API pricing |
-| `client/src/nodeDefinitions.ts` | Imported all Google node definitions |
-| `client/src/components/CredentialsModal.tsx` | Added Google Workspace panel |
-| `client/src/components/parameterPanel/InputSection.tsx` | Added output schemas |
-| `client/src/Dashboard.tsx` | Added node type mappings |
-| `client/src/contexts/WebSocketContext.tsx` | Added OAuth complete handler |
+
+No frontend edits: the node definitions, credentials panel, output schemas, and Dashboard component routing are all now driven by the backend `NodeSpec` + `credential_providers.json` catalogue.
 
 ### Combined OAuth Scopes
 
@@ -741,7 +736,7 @@ GOOGLE_WORKSPACE_SCOPES = [
 
 Use this checklist when adding a new service:
 
-- [ ] **OAuth Service** (`server/services/{service}_oauth.py`)
+- [ ] **OAuth Service** (`server/nodes/{service}/_oauth.py`)
   - [ ] Define scopes
   - [ ] Implement `generate_authorization_url()`
   - [ ] Implement `exchange_code()`
@@ -754,44 +749,34 @@ Use this checklist when adding a new service:
   - [ ] Add CRUD methods (save, get, delete, update_last_used)
   - [ ] Add migration for table rename if needed
 
-- [ ] **API Router** (`server/routers/{service}.py`)
+- [ ] **API Router** (`server/nodes/{service}/_router.py`)
   - [ ] Add callback endpoint
   - [ ] Add status endpoint
   - [ ] Add logout endpoint
   - [ ] Add customer endpoints if needed
-  - [ ] Register in `main.py`
-  - [ ] Add to container wiring
+  - [ ] Register from `__init__.py` via `register_router(...)` + `register_oauth_callback_path(...)`
 
-- [ ] **WebSocket Handlers** (`server/routers/websocket.py`)
+- [ ] **WebSocket Handlers** (`server/nodes/{service}/_handlers.py`)
   - [ ] Add `handle_{service}_oauth_login`
   - [ ] Add `handle_{service}_oauth_status`
-  - [ ] Add to MESSAGE_HANDLERS dict
+  - [ ] Collect into a `WS_HANDLERS` dict, register from `__init__.py` via `register_ws_handlers(...)`
 
-- [ ] **Service Handlers** (`server/services/handlers/{service}.py`)
-  - [ ] Add `_get_service()` helper
-  - [ ] Add handler for each operation
-  - [ ] Register in node_executor.py
+- [ ] **Operation Logic** (plugin classes in `server/nodes/{service}/{plugin}/__init__.py`)
+  - [ ] Add `@Operation`-decorated methods for each operation
+  - [ ] Shared helpers in `_base.py` / `_<service>.py`, credential builder in `_auth_helper.py`
+  - [ ] Auto-registers via `BaseNode.__init_subclass__` — no `node_executor.py` edit
 
-- [ ] **Frontend Nodes** (`client/src/nodeDefinitions/{service}Nodes.ts`)
-  - [ ] Define common properties
-  - [ ] Add node definition for each operation
-  - [ ] Export node types array
-  - [ ] Import in `nodeDefinitions.ts`
-  - [ ] Add to Dashboard.tsx
-  - [ ] **Add to `executionService.ts` `isNodeTypeSupported()`** (CRITICAL - enables Run button)
+- [ ] **Frontend Nodes** — none. The `NodeSpec` emitted by the plugin drives the palette, canvas component, and parameter panel automatically (see [node_creation.md](./node_creation.md)).
 
 - [ ] **AI Tool Integration** (`server/services/ai.py`, `server/services/handlers/tools.py`)
   - [ ] Add Pydantic schemas in `_get_tool_schema()`
   - [ ] Add dispatchers in `execute_tool()`
   - [ ] Add handler functions
 
-- [ ] **Output Schemas** (`client/src/components/parameterPanel/InputSection.tsx`)
-  - [ ] Add output schema for drag-and-drop variables
+- [ ] **Output Schemas** (`server/services/node_output_schemas.py`)
+  - [ ] Add a Pydantic model per node type, register in `NODE_OUTPUT_SCHEMAS`
 
-- [ ] **Credentials Modal** (`client/src/components/CredentialsModal.tsx`)
-  - [ ] Add to CATEGORIES
-  - [ ] Add icon component
-  - [ ] Add OAuth panel rendering
+- [ ] **Credentials Modal** — no React edits. Add an entry to `server/config/credential_providers.json`, drop the brand SVG at `server/credentials/icons/<id>.svg`, and implement the `Credential` subclass in the plugin's `_credentials.py` (see Step 9).
 
 - [ ] **WebSocket Context** (`client/src/contexts/WebSocketContext.tsx`)
   - [ ] Add OAuth complete handler

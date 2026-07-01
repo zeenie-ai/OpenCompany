@@ -128,11 +128,9 @@ than `success`/`error` (e.g. `running`) are ignored.
 
 Locked in by the test suite at:
 - [client/src/hooks/__tests__/useDragVariable.test.ts](../client/src/hooks/__tests__/useDragVariable.test.ts)
-- [client/src/hooks/__tests__/useParameterPanel.test.ts](../client/src/hooks/__tests__/useParameterPanel.test.ts)
 - [client/src/components/parameterPanel/__tests__/MiddleSection.test.tsx](../client/src/components/parameterPanel/__tests__/MiddleSection.test.tsx)
 - [client/src/components/parameterPanel/__tests__/InputSection.test.tsx](../client/src/components/parameterPanel/__tests__/InputSection.test.tsx)
 - [client/src/components/parameterPanel/__tests__/OutputSection.test.tsx](../client/src/components/parameterPanel/__tests__/OutputSection.test.tsx)
-- [client/src/components/__tests__/OutputPanel.test.tsx](../client/src/components/__tests__/OutputPanel.test.tsx)
 
 1. **Defaults loaded** from `nodeDefinition.properties[].default`; missing default ⇒ `null`.
 2. **Saved params win** over defaults when merged (DB is source of truth).
@@ -165,9 +163,7 @@ Locked in by the test suite at:
 cd client
 npm install
 npm run test:run -- src/hooks/__tests__/useDragVariable.test.ts \
-                    src/hooks/__tests__/useParameterPanel.test.ts \
-                    src/components/parameterPanel/__tests__ \
-                    src/components/__tests__/OutputPanel.test.tsx
+                    src/components/parameterPanel/__tests__
 ```
 
 Or use the dedicated script (added in `client/package.json`):

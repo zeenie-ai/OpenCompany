@@ -1,3 +1,5 @@
+> **ARCHIVED / HISTORICAL (superseded).** This is a point-in-time research/exploration record from before the antd removal. It describes keeping antd inputs via a react-hook-form `Controller`, which never shipped — the live UI is fully shadcn/ui (antd was removed in `ui_migration_plan.md` Phase 7). Kept for rationale only; do not treat as current state.
+
 # Credentials Panel Architecture (Scalable to 5000 Providers)
 
 The architecture for the MachinaOs credentials panel after scaling work.
@@ -6,9 +8,9 @@ layers: server-owned registry, bulk-fetch cache, command palette, lazy panels,
 and react-hook-form detail panels.
 
 See also:
-- [research_production_platforms.md](./research_production_platforms.md) — evidence base from n8n, Nango, Pipedream, Zapier, Supabase
+- `research_production_platforms.md` (not in repo) — evidence base from n8n, Nango, Pipedream, Zapier, Supabase
 - [research_react_stack.md](./research_react_stack.md) — library choices and benchmarks
-- [typed-splashing-crown.md](../../../../.claude/plans/typed-splashing-crown.md) — execution plan
+- `.claude/plans/typed-splashing-crown.md` (developer-local, not in repo) — execution plan
 
 ---
 
@@ -290,7 +292,7 @@ MachinaOs uses JSON for all backend config (`email_providers.json`, `llm_default
 
 ## Files touched
 
-See [typed-splashing-crown.md](../../../../.claude/plans/typed-splashing-crown.md)
+See `.claude/plans/typed-splashing-crown.md` (developer-local, not in repo)
 section "Critical files to modify/create" for the exhaustive list.
 
 Summary:

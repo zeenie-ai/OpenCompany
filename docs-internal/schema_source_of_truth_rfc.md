@@ -17,11 +17,11 @@ Wave 3 proved the pattern for output schemas. Wave 6 generalises it to the **ful
 
 **Shipped contract:**
 
-- **Input schemas** — [server/services/node_input_schemas.py](../server/services/node_input_schemas.py) registers Pydantic input models across every node type — live count via `len(_DIRECT_MODELS)` — auto-expanding `SpecializedAgentParams` and `AndroidServiceParams` via Literal union introspection.
+- **Input schemas** — [server/services/node_input_schemas.py](../server/services/node_input_schemas.py) holds the `_DIRECT_MODELS` registry (aliased `NODE_INPUT_MODELS`) of Pydantic input models across every node type — live count via `len(_DIRECT_MODELS)`. Post-Wave-11 each plugin's `Params` class self-registers here at import (the earlier Wave 6 Literal-union introspection of `SpecializedAgentParams` / `AndroidServiceParams` is gone — specialized agents and Android service nodes are now individual plugin folders under `server/nodes/agent/` and `server/nodes/android/`).
 - **NodeSpec envelope** — [server/services/node_spec.py](../server/services/node_spec.py) assembles `{type, displayName, icon, group, description, version, inputs (JSON Schema), outputs (JSON Schema, reuses Wave 3), credentials, uiHints}` fusing three sources of truth.
-- **Display metadata** — [server/models/node_metadata.py](../server/models/node_metadata.py) carries one entry per input-modeled type — live size via `len(NODE_METADATA)`. The only new server-side data file.
+- **Display metadata** — [server/models/node_metadata.py](../server/models/node_metadata.py) defines the `NodeMetadata` / `NodeHandle` TypedDicts and the `NODE_METADATA` dict — live size via `len(NODE_METADATA)`. Post-Wave-11 it starts empty at import and is plugin-populated via `services.node_registry.register_node` (called from `BaseNode.__init_subclass__`), rather than being hand-maintained.
 - **Endpoints** — alongside the Wave 3 `/nodes/{type}.json` output endpoint: `GET /api/schemas/nodes/{type}/spec.json`, `/nodes/{type}/input.json`, `/nodes/specs` (list), all with 24h `Cache-Control`. WS mirrors: `get_node_spec`, `list_node_specs`. **Icon endpoints (RFC §6.5 + F7):** `GET /api/schemas/nodes/{type}/icon` serves the plugin's co-located `icon.svg` (or per-node-type `icon_<nodeType>.svg` for multi-node folders like whatsapp); `GET /api/schemas/credentials/{provider}/icon` serves the credential brand icon from `server/credentials/icons/<provider>.svg`. Both with long cache headers.
-- **loadOptionsMethod dispatch** — [server/services/node_option_loaders/](../server/services/node_option_loaders/) generalises the WhatsApp-only pattern to a registry. Adding a new dynamic-option loader = one-line registration. `POST /api/schemas/nodes/options/{method}` + WS `load_options`.
+- **loadOptionsMethod dispatch** — per-plugin `_option_loaders.py` files ([server/nodes/android/_option_loaders.py](../server/nodes/android/_option_loaders.py), [server/nodes/google/_option_loaders.py](../server/nodes/google/_option_loaders.py), [server/nodes/whatsapp/_option_loaders.py](../server/nodes/whatsapp/_option_loaders.py)) self-register into a shared loader registry, generalising the WhatsApp-only pattern. Adding a new dynamic-option loader = one registration inside the owning plugin folder. `POST /api/schemas/nodes/options/{method}` + WS `load_options`.
 - **Node-groups index** — `GET /api/schemas/nodes/groups` returns `{group: [node_type, ...]}` derived from every NodeSpec's `group` array — live count via `len(NODE_GROUPS)` — replacing the hand-rolled `*_NODE_TYPES` arrays scattered across 6 frontend files.
 - **Pydantic Field hints** — authors encode `displayOptions.show`/`.hide`, `loadOptionsMethod`, `placeholder`, `validation`, `typeOptions` via `Field(json_schema_extra={...})`. Currently ~36 rules encoded across TwitterSend/User, TelegramSend, HttpRequest, WhatsAppSend, SocialSend, Gmail, Calendar.
 
@@ -30,14 +30,16 @@ Wave 3 proved the pattern for output schemas. Wave 6 generalises it to the **ful
 - `VITE_NODESPEC_BACKEND` flag at [client/src/lib/featureFlags.ts](../client/src/lib/featureFlags.ts). Defaults OFF — legacy `nodeDefinitions/*.ts` wins; ON routes rendering through backend NodeSpec via the adapter.
 - [client/src/lib/nodeSpec.ts](../client/src/lib/nodeSpec.ts) — shared `fetchNodeSpec`/`prefetchAllNodeSpecs`/`resolveNodeDescription` helpers following the Wave 3 colocation pattern (no new hook file).
 - [client/src/adapters/nodeSpecToDescription.ts](../client/src/adapters/nodeSpecToDescription.ts) — NodeSpec wire shape → legacy `INodeTypeDescription` bridge. Handles `required`, JSON Schema `format` (dateTime/file/binary), `displayOptions`, `validation`, typeOptions lift (`loadOptionsMethod`, `password`, `rows`, `editor`, `editorLanguage`, `accept`, …), and reads hints from both top-level and nested `uiHints` wrapper.
-- Dashboard idle-time prefetch warms all 110 NodeSpecs after WebSocket connect (no-op when flag off).
+- Dashboard idle-time prefetch (`prefetchAllNodeSpecs` in [client/src/lib/nodeSpec.ts](../client/src/lib/nodeSpec.ts)) warms every NodeSpec after WebSocket connect. (The `VITE_NODESPEC_BACKEND` flag is now the default-on path — backend NodeSpec is the SSOT; the legacy `nodeDefinitions/*.ts` files were deleted in the Wave 7/10 reductions.)
 
-**Adding a new node type's parameter surface:**
+**Adding a new node type's parameter surface** (Wave 6 recipe; superseded post-Wave-11 — see the plugin recipe in [10.C](#10c--register_node-decorator) and [Wave 11](#wave-11--plugin-first-class-hierarchy)):
 
-1. Define `XyzParams(BaseNodeParams)` in [server/models/nodes.py](../server/models/nodes.py) with `type: Literal["xyz"]` discriminator and Field constraints.
-2. Register in `KnownNodeParams` discriminated union.
-3. Register in `_DIRECT_MODELS` dict in `node_input_schemas.py`.
-4. Add `NODE_METADATA["xyz"] = {displayName, icon, group, description, version}` in `node_metadata.py`.
+At Wave 6 the surface was three separate data files:
+
+1. Define `XyzParams(BaseNodeParams)` with a `type: Literal["xyz"]` discriminator and Field constraints, register it in the `KnownNodeParams` discriminated union, and register it in the `_DIRECT_MODELS` dict in `node_input_schemas.py`.
+2. Add `NODE_METADATA["xyz"] = {displayName, icon, group, description, version}` in `node_metadata.py`.
+
+Post-Wave-11 all three collapse onto the plugin class: `Params` is declared on the `BaseNode` subclass in `server/nodes/<group>/<plugin>/__init__.py`, and `register_node` (via `__init_subclass__`) writes the class's `Params` into `_DIRECT_MODELS` (aliased as `NODE_INPUT_MODELS`) and its metadata into `NODE_METADATA` at import time. There is no `server/models/nodes.py` and no `KnownNodeParams` union any more — plugin `Params` extend `BaseModel` directly (no `type:` discriminator).
 
 Zero frontend change for parameter rendering. Icons that are SVG assets still need frontend import until SVG payload migration is its own follow-up.
 
@@ -55,7 +57,9 @@ The editor's Input panel (`client/src/components/parameterPanel/InputSection.tsx
 1. A 350-line `sampleSchemas` map inline in `InputSection.tsx` (59 entries).
 2. As-of Wave 3 Phase 1 Batch 1 (commit `f1b2813`), a new `outputSchema` field on each `INodeTypeDescription` that the frontend consults before the legacy map.
 
-Both are **frontend duplications of what the backend already owns** — the handler's return type (Pydantic models in `server/services/handlers/*`). Every node addition requires a frontend edit to keep schemas in sync.
+Both are **frontend duplications of what the backend already owns** — the handler's return type (Pydantic models colocated with each node handler). Every node addition requires a frontend edit to keep schemas in sync.
+
+> **Historical note.** This RFC was written pre-Wave-11 when handler bodies lived under `server/services/handlers/*`. Post-Wave-11 those bodies inlined into per-plugin folders under `server/nodes/<group>/<plugin>/__init__.py`; only `todo.py` / `tools.py` / `triggers.py` remain under `server/services/handlers/`. Path references throughout the earlier sections have been updated to their current locations; the design decisions still hold.
 
 ## How this scales to 1000+ nodes elsewhere
 
@@ -177,14 +181,17 @@ Each field flows through `get_node_spec()` into the `/api/schemas/nodes/{type}/s
 envelope, so every consumer (React Flow dispatch, parameter panel, palette)
 reads from one source.
 
-### 10.C — `@register_node` decorator
+### 10.C — `register_node` registry writer
 
 [server/services/node_registry.register_node(...)](../server/services/node_registry.py)
-writes to four registries atomically: `NODE_METADATA`, `_DIRECT_MODELS`,
-`NODE_OUTPUT_SCHEMAS`, `_HANDLER_REGISTRY`. `server/nodes/__init__.py` walks
-`server/nodes/*.py` submodules at import time via `pkgutil.iter_modules`,
-so plugin registration is side-effect at startup. 106/111 node types migrated
-to this path (the remaining 5 are output-only legacy aliases).
+writes to four registries in one call: `NODE_METADATA`, `_DIRECT_MODELS`,
+`NODE_OUTPUT_SCHEMAS`, `_HANDLER_REGISTRY` (and invalidates the per-type
+NodeSpec + input-schema caches). `server/nodes/__init__.py` recursively
+imports every submodule at import time via `pkgutil.walk_packages`, so
+plugin registration is a side effect at startup. Post-Wave-11 the caller is
+`BaseNode.__init_subclass__` (via `register_node_class`), so every plugin
+folder self-registers — live migrated count via
+`glob server/nodes/**/__init__.py`.
 
 **New node checklist (post-Wave-10):**
 
@@ -235,7 +242,7 @@ Icons live as `icon.svg` (or `icon_<nodeType>.svg` for multi-node folders like w
   backend is sole declaration site. `INodeTypeDescription.icon` narrowed
   to `icon?: string`.
 
-### Contract invariants (108 pytest in `tests/test_node_spec.py`)
+### Contract invariants (`tests/test_node_spec.py` — live count via `pytest --collect-only`)
 
 `TestWave10GContractInvariants` enforces:
 
@@ -289,7 +296,7 @@ API around a single `BaseNode` hierarchy. See
 
 ### Contract invariants
 
-Adds 16 invariants to the 108 Wave 10 suite → **124 total**:
+Adds a further set of invariants on top of the Wave 10 suite (live total via `pytest --collect-only` on `tests/test_node_spec.py`):
 
 - Every `BaseNode` subclass has `type`, `display_name`, `group`.
 - `Params` + `Output` are Pydantic `BaseModel` subclasses.
@@ -307,12 +314,20 @@ Plugins (live count via `glob server/nodes/**/__init__.py`) live across 9 Tempor
 `ai-heavy`, `code-exec`, `triggers-poll`, `triggers-event`, `android`,
 `browser`, `messaging`, `machina-default`). Handler bodies are fully
 inlined into plugin files — `services/handlers/` shrank from
-**12.8K LOC / 16 files → 1.1K LOC / 4 files**. Only cross-cutting
-orchestration remains: `tools.py` (AI-tool dispatch + agent
-delegation through `BaseNode.execute()` via the node registry),
-`google_auth.py`, `triggers.py`. Sunset of the empty
-`nodes/{agents,services,triggers,tools,utilities}.py` bulk files +
-dead dispatcher fallbacks is complete (Wave 11.D.13).
+**12.8K LOC / 16 files → a few files** (live set: `todo.py` / `tools.py` /
+`triggers.py` + `__init__.py`). Only cross-cutting orchestration remains
+there: `tools.py` (AI-tool dispatch + agent delegation through
+`BaseNode.execute()` via the node registry — the live delegation handler is
+`_execute_delegated_agent`), `triggers.py` (generic event-trigger handler),
+and `todo.py`. The shared Google credential helper moved out of handlers
+into its owning plugin folder at
+[server/nodes/google/_auth_helper.py](../server/nodes/google/_auth_helper.py).
+Agent connection collection lives at
+[server/services/plugin/edge_walker.py::collect_agent_connections](../server/services/plugin/edge_walker.py)
+(a 5-tuple: memory, skill, tool, input, task), and per-plugin pre-dispatch
+prep is [server/nodes/agent/_inline.py::prepare_agent_call](../server/nodes/agent/_inline.py).
+Sunset of the empty `nodes/{agents,services,triggers,tools,utilities}.py`
+bulk files + dead dispatcher fallbacks is complete (Wave 11.D.13).
 
 ### Sub-waves shipped
 

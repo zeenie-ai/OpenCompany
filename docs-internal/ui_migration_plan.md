@@ -26,7 +26,7 @@
 
 ## Post-antd cleanup (April 2026)
 
-A second audit (3 parallel sub-agents) flagged tribal patterns that survived the antd retirement and didn't match the schema-driven design system. A focused 5-phase follow-up plan ([typed-splashing-crown](../../../.claude/plans/typed-splashing-crown.md)) addresses them:
+A second audit (3 parallel sub-agents) flagged tribal patterns that survived the antd retirement and didn't match the schema-driven design system. A focused 5-phase follow-up plan (`.claude/plans/typed-splashing-crown.md` (developer-local plan, not in repo)) addresses them:
 
 | Follow-up phase | Status | Commit | What it removes |
 |---|---|---|---|
@@ -131,7 +131,7 @@ Plan: [C:\\Users\\Tgroh\\.claude\\plans\\typed-splashing-crown.md].
 | 3c — Backend parity: agents + chat models (28 types) | ✅ done | `8a8a413` | SpecializedAgentParams promoted to mirror AIAgentParams full surface (temperature/max_tokens/thinking/reasoning). 28 metadata entries. |
 | 3d.i — Backend parity: location + scheduler + chat + Android (26 types) | ✅ done | `f3664e7` | 26 metadata entries. `test_input_model_coverage_complete` invariant locks "every input model has metadata". |
 | 3d.ii — Backend parity: long-tail integrations (28 output-only types) | ✅ done | `2b65a7f` | 28 new Pydantic models across search, browser/scraping, email, Google Workspace, document/RAG, filesystem, proxy. `TestWave6FullCoverage` invariants. |
-| 4 — Generalized loadOptionsMethod dispatch | ✅ done | `a3c1ac2` | `server/services/node_option_loaders/` package with registry + `dispatch_load_options()` + 3 WhatsApp loaders (groups/channels/members). `POST /api/schemas/nodes/options/{method}` + WS `load_options`. One-line registration for future Gmail/Calendar/Telegram loaders. |
+| 4 — Generalized loadOptionsMethod dispatch | ✅ done | `a3c1ac2` | `server/services/node_option_loaders/` package with registry (later refactored to per-plugin `_option_loaders.py`) + `dispatch_load_options()` + 3 WhatsApp loaders (groups/channels/members). `POST /api/schemas/nodes/options/{method}` + WS `load_options`. One-line registration for future Gmail/Calendar/Telegram loaders. |
 | 5.a — Backend node-groups index | ✅ done | `6ef271d` | `GET /api/schemas/nodes/groups` returns `{group: [node_type, ...]}` derived from every NodeSpec's group array. 25 groups with 110 entries (tool=34, agent=19, android=16, trigger=10, …). Replaces 34 frontend `*_NODE_TYPES` arrays once consumers migrate. |
 | 5.b wave 1 — SquareNode + MiddleSection group membership | ✅ done | `15df605` | 5 call sites migrated to `isNodeInBackendGroup()` helper with legacy array fallback chain. Also seeded 9 uiHints entries on NODE_METADATA (chatTrigger / console / teamMonitor / simpleMemory / 3 code executors / gmaps_create / start). |
 | 5.b wave 2 — OutputPanel / ParameterRenderer / InputSection / ToolSchemaEditor | ✅ done | `0a6a259` | 4 more Android/agent call sites migrated. |
@@ -243,7 +243,7 @@ a shared `resolveIcon` + `resolveLibraryIcon` pair.
 
 ## Wave 12 — tech-debt cleanup (May 2026)
 
-Closes the surviving pre-Wave-11 tribal patterns and the perf hotspots six parallel exploration passes turned up. Plan: [`.claude/plans/properly-fix-the-tech-dreamy-tarjan.md`](../../.claude/plans/properly-fix-the-tech-dreamy-tarjan.md). Four batches, all four shipped.
+Closes the surviving pre-Wave-11 tribal patterns and the perf hotspots six parallel exploration passes turned up. Plan: `.claude/plans/properly-fix-the-tech-dreamy-tarjan.md` (developer-local plan, not in repo). Four batches, all four shipped.
 
 | Batch | What it delivers | Where |
 |---|---|---|
@@ -268,7 +268,7 @@ Closes the surviving pre-Wave-11 tribal patterns and the perf hotspots six paral
 
 ## Wave 13 — Credentials: DB as single source of truth + symmetric broadcasts + cache dedup (May 2026)
 
-Driven by three sub-agent audits (broadcast asymmetry, duplicated caches, parallel sources of truth) plus a research pass against modern (2024–2025) standards (OWASP, RFC 9700, CloudEvents 1.0). Plan: [`.claude/plans/properly-fix-the-tech-dreamy-tarjan.md`](../../.claude/plans/properly-fix-the-tech-dreamy-tarjan.md). Commit `c94a610`. 17 files changed, +698 / -308.
+Driven by three sub-agent audits (broadcast asymmetry, duplicated caches, parallel sources of truth) plus a research pass against modern (2024–2025) standards (OWASP, RFC 9700, CloudEvents 1.0). Plan: `.claude/plans/properly-fix-the-tech-dreamy-tarjan.md` (developer-local plan, not in repo). Commit `c94a610`. 17 files changed, +698 / -308.
 
 | Section | What it delivers | Where |
 |---|---|---|
@@ -302,7 +302,7 @@ Driven by three sub-agent audits (broadcast asymmetry, duplicated caches, parall
 
 ## Wave 14 — Theme system: 10 themes + decorative + sound + canvas overlays (May 2026)
 
-Driven by the upstream `design_handoff_machinaos_themes/` bundle expanding from 2 → 10 designed themes (5 utopian + 5 dystopian) and shipping a formal MIGRATION_PLAYBOOK for the four areas the prior pass deferred. Plan: [`.claude/plans/deploy-multiple-parallel-subagents-wild-turtle.md`](../../.claude/plans/deploy-multiple-parallel-subagents-wild-turtle.md). Two commits: `52c5229` (foundation: 4 themes + chrome migration + StatusBar + CommandPalette + playbook doc) and the subsequent push (Waves W1–W7 below). Full architecture lives in [theme_system.md](./theme_system.md) — that's the source of truth for the contract.
+Driven by the upstream `design_handoff_machinaos_themes/` bundle expanding from 2 → 10 designed themes (5 utopian + 5 dystopian) and shipping a formal MIGRATION_PLAYBOOK for the four areas the prior pass deferred. Plan: `.claude/plans/deploy-multiple-parallel-subagents-wild-turtle.md` (developer-local plan, not in repo). Two commits: `52c5229` (foundation: 4 themes + chrome migration + StatusBar + CommandPalette + playbook doc) and the subsequent push (Waves W1–W7 below). Full architecture lives in [theme_system.md](./theme_system.md) — that's the source of truth for the contract.
 
 | Wave | What it delivers | Where |
 |---|---|---|
@@ -351,7 +351,7 @@ The MachinaOs frontend was coupled to Ant Design (40 files, 187-line theme file,
 ## Codebase facts (from audit, 2026-04-13)
 
 - **antd usage:** 40 files. Top imports: `Space` (20), `Button` (16), `Flex` (13), `Tag` (11), `Spin` (10), `Alert` (10), `Typography` (9), `InputNumber` (7), `Collapse` (7), `Input` (6), `Card` (6), `Form` (5), `Statistic` (4), `Select` (4), `Switch` (3).
-- **ConfigProvider:** only in [client/src/App.tsx](../client/src/App.tsx); theme in [client/src/config/antdTheme.ts](../client/src/config/antdTheme.ts) mirrors [client/src/styles/theme.ts](../client/src/styles/theme.ts).
+- **ConfigProvider:** only in [client/src/App.tsx](../client/src/App.tsx); theme in `client/src/config/antdTheme.ts` (deleted in Phase 7) mirrors [client/src/styles/theme.ts](../client/src/styles/theme.ts).
 - **Already installed:** Tailwind 4.1.13, `@radix-ui/react-dialog`, `@radix-ui/react-collapsible`, `react-hook-form`, `babel-plugin-react-compiler@19.1.0-rc.3` (scoped to `components/credentials/`), `@uiw/react-json-view`, `class-variance-authority`, `clsx`, `tailwind-merge`, `@radix-ui/react-slot`, `sonner`.
 - **styled-components:** exactly 1 file — [client/src/components/shared/JSONTreeRenderer.tsx](../client/src/components/shared/JSONTreeRenderer.tsx).
 - **Hand-written code to be deleted in corrected Phase 0:** `client/src/design-system/primitives/*` (8 files) and `client/src/design-system/lib/toast.ts` (introduced by commits `2209dba` and `7ac69fe` — the previous mistake).
@@ -506,7 +506,7 @@ Dependency order: 0 → {1, 2, 3} parallelizable → 4 → 5 → 7; 6 can overla
 
 - Verify zero `from 'antd'` imports remain.
 - Migrate [client/src/components/shared/JSONTreeRenderer.tsx](../client/src/components/shared/JSONTreeRenderer.tsx) — rewrite styled-components as Tailwind classes.
-- Delete: [client/src/config/antdTheme.ts](../client/src/config/antdTheme.ts); `ConfigProvider` wrapper in [client/src/App.tsx](../client/src/App.tsx); antd reset CSS import in `main.tsx`. Inline remaining [client/src/styles/theme.ts](../client/src/styles/theme.ts) usages against CSS vars then delete.
+- Delete: `client/src/config/antdTheme.ts` (deleted in Phase 7); `ConfigProvider` wrapper in [client/src/App.tsx](../client/src/App.tsx); antd reset CSS import in `main.tsx`. Inline remaining [client/src/styles/theme.ts](../client/src/styles/theme.ts) usages against CSS vars then delete.
 - Remove from [client/package.json](../client/package.json): `antd`, `@ant-design/icons`, `styled-components`, `@types/styled-components`.
 - Broaden React Compiler scope to whole `src/`.
 
@@ -530,7 +530,7 @@ No test runner. Before Phase 5, decide:
 
 ### Critical files
 - [client/src/App.tsx](../client/src/App.tsx) — `ConfigProvider` removal in Phase 7
-- [client/src/config/antdTheme.ts](../client/src/config/antdTheme.ts) — theme migration source
+- `client/src/config/antdTheme.ts` (deleted in Phase 7) — theme migration source
 - [client/src/styles/theme.ts](../client/src/styles/theme.ts) — token source for Phase 0
 - [client/tailwind.config.js](../client/tailwind.config.js) — Phase 0 rewiring
 - [client/tsconfig.json](../client/tsconfig.json) + [client/vite.config.js](../client/vite.config.js) — `@/*` alias for shadcn

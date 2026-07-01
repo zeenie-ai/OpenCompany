@@ -345,7 +345,7 @@ Patterns covered in the canonical doc:
 
 ## Memory Integration
 
-Memory load + save lives in [memory_lifecycle.md](./memory_lifecycle.md). The agent loop reads `memory_data` from `_collect_agent_connections()` (via the `input-memory` edge), prepends parsed history to the system message + current prompt, runs `_run_agent_loop`, then appends the turn + trims the window + archives trimmed text to the vector store. The markdown helpers (`parse_memory_markdown`, `append_to_memory_markdown`, `trim_markdown_window`) and the vector store (`InMemoryVectorStore` with HuggingFace embeddings) are the load-bearing surface — see the canonical doc for signatures, the markdown format, and the engine-specific adapter table (aiAgent / rlm_agent / claude_code_agent native session resume bridge).
+Memory load + save lives in [memory_lifecycle.md](./memory_lifecycle.md). The agent loop reads `memory_data` from `collect_agent_connections()` (`server/services/plugin/edge_walker.py`, via the `input-memory` edge), prepends parsed history to the system message + current prompt, runs `_run_agent_loop`, then appends the turn + trims the window + archives trimmed text to the vector store. The markdown helpers (`parse_memory_markdown`, `append_to_memory_markdown`, `trim_markdown_window`) and the vector store (`InMemoryVectorStore` with HuggingFace embeddings) are the load-bearing surface — see the canonical doc for signatures, the markdown format, and the engine-specific adapter table (aiAgent / rlm_agent / claude_code_agent native session resume bridge).
 
 ---
 
@@ -362,25 +362,46 @@ Both methods live in `server/services/ai.py` and follow the same general pattern
 
 ### Specialized Agent Routing
 
-There are **11 specialized agents** plus 2 team leads. Most route to `handle_chat_agent`; `rlm_agent` and `claude_code_agent` have dedicated handlers:
+There is no hardcoded routing table for agents. Wave 11.C deleted the
+`SPECIALIZED_AGENT_TYPES → partial(handle_chat_agent, ...)` registry that
+node_executor used to build by hand. Every agent variant is now a
+self-contained plugin folder under `server/nodes/agent/<plugin>/` whose
+`BaseNode` subclass registers itself into `services.node_registry`
+(`_HANDLER_REGISTRY`) at import time via `register_node(...)`. `NodeExecutor._dispatch()`
+does a single registry lookup — `self._handlers.get(node_type)` — and the
+plugin handler that won the merge runs the node's `@Operation("execute")`
+`execute_op` method (`server/services/node_executor.py:_dispatch`,
+`_build_handler_registry`).
+
+Each agent's `execute_op` calls the matching `AIService` method:
 
 ```python
-# server/services/node_executor.py
-SPECIALIZED_AGENT_TYPES = {
-    'android_agent', 'coding_agent', 'web_agent', 'task_agent', 'social_agent',
-    'travel_agent', 'tool_agent', 'productivity_agent', 'payments_agent', 'consumer_agent',
-    'autonomous_agent', 'orchestrator_agent', 'ai_employee',
-    # rlm_agent and claude_code_agent are handled by dedicated handlers, not handle_chat_agent
-}
+# server/nodes/agent/_specialized.py — every specialized agent + team lead
+from ._inline import prepare_agent_call
+kwargs = await prepare_agent_call(...)                  # collect_agent_connections + prompt/task prep
+response = await ai_service.execute_chat_agent(ctx.node_id, **kwargs)
 
-# Most specialized agents map to handle_chat_agent (uses _run_agent_loop)
-for agent_type in SPECIALIZED_AGENT_TYPES:
-    registry[agent_type] = partial(handle_chat_agent, ai_service=self.ai_service, database=self.database)
-
-# Dedicated handlers for agents with externalised session state
-registry['rlm_agent'] = partial(handle_rlm_agent, ai_service=self.ai_service, database=self.database)
-registry['claude_code_agent'] = partial(handle_claude_code_agent, ...)
+# server/nodes/agent/ai_agent/__init__.py    -> ai_service.execute_agent(...)
+# server/nodes/agent/chat_agent/__init__.py  -> ai_service.execute_chat_agent(...)
+# server/nodes/agent/rlm_agent/__init__.py   -> ai_service.rlm_service.execute(...)
+# server/nodes/agent/claude_code_agent/__init__.py / codex_agent/__init__.py
+#   -> AICliService (CLI agent runtime) via the plugin's own execute_op
 ```
+
+`prepare_agent_call` (in `server/nodes/agent/_inline.py`) chooses
+`execute_agent` vs `execute_chat_agent` based on `self.type` and shapes the
+shared keyword bundle; `_specialized.py` is the single body shared by all
+chat-agent-path specialized agents. Glob `server/nodes/agent/` for the
+authoritative agent list, or read `AI_AGENT_TYPES` in
+[`server/constants.py`](../server/constants.py) — do not hand-maintain a
+count here. As of this writing `AI_AGENT_TYPES` lists 17 entries: the two
+base agents (`aiAgent`, `chatAgent`), 11 specialized agents
+(`android_agent`, `coding_agent`, `web_agent`, `task_agent`, `social_agent`,
+`travel_agent`, `tool_agent`, `productivity_agent`, `payments_agent`,
+`consumer_agent`, `autonomous_agent`) plus the 2 team leads
+(`orchestrator_agent`, `ai_employee`), and the 2 CLI/REPL agents that bypass
+the standard loop (`rlm_agent`, `claude_code_agent`). `codex_agent` is a
+sibling plugin folder on the same CLI-agent path.
 
 ### Temporal dispatch routing
 
@@ -393,7 +414,12 @@ Two settings flags route agent execution through different Temporal paths (see [
 
 Both flags default to `true` in `.env.template`.
 
-**Team leads** (`orchestrator_agent`, `ai_employee`) use the same `handle_chat_agent` routing but add an `input-teammates` handle. Connected agents become `delegate_to_<type>` tools automatically via `_collect_teammate_connections()`. See [agent_teams.md](agent_teams.md).
+**Team leads** (`orchestrator_agent`, `ai_employee`) run the same
+`execute_chat_agent` path as the other specialized agents but add an
+`input-teammates` handle. Connected agents become `delegate_to_<type>` tools
+automatically via `collect_teammate_connections()` (in
+`server/services/plugin/edge_walker.py`, called from
+`server/nodes/agent/_inline.py:prepare_agent_call`). See [agent_teams.md](agent_teams.md).
 
 ### RLM Agent Pattern
 
@@ -414,14 +440,10 @@ Exposed helpers inside the REPL:
 | `rlm_query(prompt)` | Recursively invoke the same RLM agent |
 | `FINAL(answer)` | Signal completion and return the final answer |
 
-Routing:
-
-```python
-# server/services/node_executor.py
-registry['rlm_agent'] = partial(handle_rlm_agent, ai_service=self.ai_service, database=self.database)
-```
-
-`handle_rlm_agent` delegates to `RLMService` in `server/services/rlm_service.py`. See [rlm_service.md](rlm_service.md) for full details.
+Routing: `rlm_agent` is a plugin folder like every other agent. Its
+`execute_op` (`server/nodes/agent/rlm_agent/__init__.py`) delegates to
+`ai_service.rlm_service.execute(...)` rather than `_run_agent_loop`. See
+[rlm_service.md](rlm_service.md) for full details.
 
 ### Chat Agent Conditional Loop
 
@@ -491,9 +513,9 @@ Zeenie loads SKILL.md instructions from connected skill nodes, builds tools from
 
 ## Handle Topology
 
-Handle layouts are declared in `server/nodes/agent/_handles.py` (local to `nodes/agent/`, not a global lookup). Two layouts cover the 20 agent variants:
+Handle layouts are declared in `server/nodes/agent/_handles.py` (local to `nodes/agent/`, not a global lookup). Two layouts cover every agent variant (glob `server/nodes/agent/` for the live count):
 
-**`std_agent_handles()`** — shared by 18 of 20 agent variants:
+**`std_agent_handles()`** — shared by every agent variant except the two team leads:
 
 | Handle | Kind | Position | Offset | Role |
 |---|---|---|---|---|
@@ -505,7 +527,7 @@ Handle layouts are declared in `server/nodes/agent/_handles.py` (local to `nodes
 | `output-main` | output | right | 50% | main |
 | `output-top` | output | top | — | main |
 
-**`team_lead_agent_handles()`** — `orchestrator_agent` and `ai_employee` only; adds an `input-teammates` handle (bottom, 80%) and shifts the bottom skill/tool offsets to 20%/50%. Connected agents become `delegate_to_<type>` tools via `_collect_teammate_connections()`. Team leads are also listed in `TEAM_LEAD_TYPES` in [`client/src/components/TeamMonitorNode.tsx`](../client/src/components/TeamMonitorNode.tsx) (frontend tribal array, flagged as tech debt). See [agent_teams.md](agent_teams.md).
+**`team_lead_agent_handles()`** — `orchestrator_agent` and `ai_employee` only; adds an `input-teammates` handle (bottom, 80%) and shifts the bottom skill/tool offsets to 20%/50%. Connected agents become `delegate_to_<type>` tools via `collect_teammate_connections()` (in `server/services/plugin/edge_walker.py`). Team leads are also listed in `TEAM_LEAD_TYPES` in [`client/src/components/TeamMonitorNode.tsx`](../client/src/components/TeamMonitorNode.tsx) (frontend tribal array, flagged as tech debt). See [agent_teams.md](agent_teams.md).
 
 `AIAgentNode.tsx` is type-agnostic: it calls `useNodeSpec(type)` and renders whatever handles / icon / color the spec returns — there is no `AGENT_CONFIGS` map (retired Wave 10.D). Specialized-agent visuals all come from the NodeSpec; per-type display name / subtitle / description live on the plugin class, icon from `<plugin>/icon.svg` (visuals.json emoji fallback), color from `<plugin>/meta.json`. Glob `server/nodes/agent/` for the authoritative agent list — do not hand-maintain one.
 

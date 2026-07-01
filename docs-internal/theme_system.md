@@ -535,6 +535,6 @@ cd client && npx eslint <files>
 | [client/src/components/ui/DropCap.tsx](../client/src/components/ui/DropCap.tsx) | `v-display drop-cap` wrapper for Renaissance ornament rule — Wave 25 |
 | [client/src/types/NodeTypes.ts](../client/src/types/NodeTypes.ts) | `NodeStyle` helper type for inline `--*` custom props — Wave 21 |
 | [client/index.html](../client/index.html) | Google Fonts loading (all 10 themes' typefaces) |
-| [design_handoff_machinaos_themes/](../design_handoff_machinaos_themes/) | Reference HTML mocks + token spec |
-| [design_handoff_machinaos_themes/app/icons.js](../design_handoff_machinaos_themes/app/icons.js) | Upstream icon source (ported by Wave 23) |
-| [design_handoff_machinaos_themes/MIGRATION_PLAYBOOK.md](../design_handoff_machinaos_themes/MIGRATION_PLAYBOOK.md) | Upstream recipe — all originally-deferred items now landed (W14–W25) |
+| `design_handoff_machinaos_themes/` (external design handoff, not in repo) | Reference HTML mocks + token spec |
+| `design_handoff_machinaos_themes/app/icons.js` (external) | Upstream icon source (ported by Wave 23) |
+| `design_handoff_machinaos_themes/MIGRATION_PLAYBOOK.md` (external) | Upstream recipe — all originally-deferred items now landed (W14–W25) |

@@ -5,7 +5,7 @@
 | Status | Draft (research, revision 2) |
 | Date | 2026-05-07 |
 | Scope | `services/cli_agent` framework — Claude Code, Codex, Gemini-CLI agents spawned by MachinaOs |
-| Companion code | [`server/services/cli_agent/`](../server/services/cli_agent/), [`server/nodes/agent/claude_code_agent.py`](../server/nodes/agent/claude_code_agent.py) |
+| Companion code | [`server/services/cli_agent/`](../server/services/cli_agent/), [`server/nodes/agent/claude_code_agent/`](../server/nodes/agent/claude_code_agent/) |
 | Companion docs | [cli_agent_framework.md](./cli_agent_framework.md), [claude_code_agent_architecture.md](./claude_code_agent_architecture.md) |
 
 ## Abstract
@@ -276,20 +276,26 @@ File:line evidence from a focused read of `services/cli_agent/`:
 
 ### 4.1 Argv flags emitted by the Claude provider
 
-[`providers/anthropic_claude.py:74-220`](../server/services/cli_agent/providers/anthropic_claude.py):
+[`claude_code_agent/_provider.py::interactive_argv`](../server/nodes/agent/claude_code_agent/_provider.py)
+(the Anthropic/Claude provider moved into the plugin folder; the generic
+`services/cli_agent/providers/` now holds only `google_gemini.py` +
+`openai_codex.py`). Post-cutover the pool path drives claude in
+interactive stream-json mode, not `claude -p` headless — so the argv is
+built by `interactive_argv`, not a `-p`-prefixed print-mode command:
 
-**Always-on:** `-p <prompt>`, `--output-format stream-json`, `--verbose`,
-`--include-partial-messages`, `--include-hook-events`, `--model`,
-`--max-turns`, `--permission-mode`, `--allowedTools <csv>`.
+**Always-on:** `--output-format stream-json`, `--input-format
+stream-json`, `--verbose`, `--ide`, `--model`, `--permission-mode`,
+`--allowedTools <csv>`.
 
 **Conditional:** `--mcp-config <json>` + `--strict-mcp-config` (when
-`mcp_endpoint_url` and `mcp_bearer_token` set), `--session-id`/`--resume`,
-`--max-budget-usd`, `--append-system-prompt`, `--effort`,
-`--fallback-model`, `--add-dir`, `--disallowedTools`, `--agent`.
+`mcp_endpoint_url` and `mcp_bearer_token` set), `--continue`/`--resume`
+(memory-bound runs, mutually exclusive), `--max-budget-usd`,
+`--append-system-prompt`, `--effort`, `--fallback-model`, `--add-dir`,
+`--disallowedTools`, `--agent`.
 
 ### 4.2 `--mcp-config` JSON shape
 
-[`providers/anthropic_claude.py:112-123`](../server/services/cli_agent/providers/anthropic_claude.py):
+[`claude_code_agent/_provider.py::interactive_argv`](../server/nodes/agent/claude_code_agent/_provider.py):
 
 ```json
 {
@@ -297,26 +303,28 @@ File:line evidence from a focused read of `services/cli_agent/`:
     "machinaos": {
       "type": "http",
       "url": "<mcp_endpoint_url>",
-      "headers": { "Authorization": "Bearer <mcp_bearer_token>" }
+      "headers": { "Authorization": "Bearer <mcp_bearer_token>" },
+      "alwaysLoad": true
     }
   }
 }
 ```
 
-**Spec gap.** Per §2.4 (I-4), with `ENABLE_TOOL_SEARCH` unset (the default
-for spawned subprocesses), the agent **defers all `mcp__machinaos__*`
-tools**. Only `ToolSearch`-driven discovery loads them — and the spawned
-agent doesn't always make that call. The fix is one line: add
-`"alwaysLoad": true` to the entry. Result: tools enter context at
-session start; startup blocks ≤5s waiting for connection.
+**Closed (I-4).** Per §2.4, with `ENABLE_TOOL_SEARCH` unset (the default
+for spawned subprocesses), the agent would otherwise **defer all
+`mcp__machinaos__*` tools** and only load them via `ToolSearch`-driven
+discovery — which the spawned agent doesn't always call. The
+`"alwaysLoad": true` entry (present in `interactive_argv`'s emitted
+`--mcp-config`) forces the tools into context at session start; startup
+blocks ≤5s waiting for connection.
 
 ### 4.3 `--allowedTools` value
 
-[`providers/anthropic_claude.py:176-194`](../server/services/cli_agent/providers/anthropic_claude.py):
+[`claude_code_agent/_provider.py::interactive_argv`](../server/nodes/agent/claude_code_agent/_provider.py):
 
 ```
-Read,Edit,Bash,Glob,Grep,Write,
 mcp__machinaos__<each connected node_type>,
+Skill                              # only when >=1 skill is wired
 mcp__machinaos__getWorkspaceFiles,
 mcp__machinaos__listSkills,
 mcp__machinaos__getSkill,
@@ -324,10 +332,20 @@ mcp__machinaos__getCredential,
 mcp__machinaos__broadcastLog
 ```
 
-**Spec gap.** `Skill` is missing → claude can't execute auto-discovered
-skills (when we materialise them per I-1). `WebSearch` and `WebFetch`
-are missing → agent gets denied when wiring is incomplete (the user's
-runtime log shows exactly this).
+**Post-cutover: strict MCP-only allowlist (gated by `--permission-mode
+dontAsk`).** Claude's built-in escape hatches (`Read`, `Edit`, `Bash`,
+`Glob`, `Grep`, `Write`, `WebSearch`, `WebFetch`) are intentionally NOT
+in the default allowlist — equivalent capability is wired explicitly via
+the `fileRead` / `fileModify` / `fsSearch` / `shell` / `browser` /
+`perplexitySearch` workflow tools. The built-in `Skill` tool is added
+**conditionally**, only when at least one skill is connected through
+`input-skill` (paired with SKILL.md materialisation under
+`<cwd>/.claude/skills/`). Callers can opt specific built-ins back in
+per-task via `ClaudeTaskSpec.allowed_tools`. This reverses the earlier
+"WebSearch/WebFetch missing → agent gets denied" gap: the framework now
+routes every capability through explicitly wired MCP tools rather than
+built-in fallbacks. Locked by
+`test_no_claude_builtins_in_default_allowlist`.
 
 `ToolSearch` is **not** needed in the allowlist (permission-free per §2.1).
 
@@ -358,8 +376,8 @@ path today.
 
 ### 4.5 FastMCP server tools
 
-[`mcp_server.py:224-427`](../server/services/cli_agent/mcp_server.py),
-[`workflow_tools.py:40-72`](../server/services/cli_agent/workflow_tools.py):
+[`mcp_server.py`](../server/services/cli_agent/mcp_server.py),
+[`workflow_tools.py`](../server/services/cli_agent/workflow_tools.py):
 
 5 built-in: `getWorkspaceFiles`, `listSkills`, `getSkill`,
 `getCredential`, `broadcastLog`.
@@ -374,7 +392,7 @@ the agent never calls them.
 
 ### 4.6 Spawn env
 
-[`session.py:138-155`](../server/services/cli_agent/session.py):
+[`session.py`](../server/services/cli_agent/session.py):
 `PYTHONUNBUFFERED=1`, `CLAUDE_CONFIG_DIR=<MACHINA_CLAUDE_DIR>` (claude only),
 `<provider.ide_lock_env_var>=<lockfile_path>`,
 `MACHINA_PARENT_RUN_ID=<workflow_id>:<node_id>:<token[:8]>`.
@@ -386,9 +404,18 @@ Either works.
 
 ### 4.8 Memory bridge — `simpleMemory` → `claude_code_agent` (DONE in `ecbe69b`)
 
-**Status:** native claude session resume works end-to-end via stable
-cwd + UUID5/last_session_id round-trip. Documented in
+**Status:** native claude session continuity works end-to-end. The
+mechanism was later simplified from the UUID5 / `--session-id`
+round-trip described in this section to `--continue` (first cold spawn
+for a memory-wired run) + intra-process stream-json multi-turn against a
+warm subprocess + `--resume <UUID>` for crash recovery — all on a stable
+`cwd=repo_root`. The entry point is
+[`claude_code_agent/__init__.py::execute_op`](../server/nodes/agent/claude_code_agent/__init__.py)
+(sets `continue_session = bool(memory_data)`) and the warm-subprocess
+pool at [`claude_code_agent/_pool.py`](../server/nodes/agent/claude_code_agent/_pool.py).
+Current canonical description:
 [cli_agent_framework.md → Memory bridge](./cli_agent_framework.md#memory-bridge--simplememory--claude_code_agent).
+The UUID5/`--session-id` prose below is retained for historical context.
 
 **Project-key derivation verified empirically** by listing
 `<DATA_DIR>/claude/projects/` on disk and reproducing each name from
@@ -455,14 +482,14 @@ documented project-instruction surface.
 
 | Invariant | Status | Action |
 |---|---|---|
-| **I-1** Skills as files | **DONE (`b40011e`).** [`session.py:_materialise_skills`](../server/services/cli_agent/session.py) writes connected skills to `<cwd>/.claude/skills/<name>/` on `_pre_spawn`. `mcp__machinaos__listSkills` / `getSkill` retained as a transitional fallback. | Drop `getSkill`/`listSkills` MCP tools after one release. |
+| **I-1** Skills as files | **DONE.** [`claude_code_agent/_skills.py::materialise_skills`](../server/nodes/agent/claude_code_agent/_skills.py) writes connected skills to `<cwd>/.claude/skills/<name>/`, invoked from both the pool spawn ([`_pool.py`](../server/nodes/agent/claude_code_agent/_pool.py)) and the non-pool `session.py::_pre_spawn` (via the `get_skill_materialiser` registry in [`services/cli_agent/factory.py`](../server/services/cli_agent/factory.py)). `mcp__machinaos__listSkills` / `getSkill` retained as a transitional fallback. | Drop `getSkill`/`listSkills` MCP tools after one release. |
 | **I-2** MCP transport | **Aligned.** Streamable-HTTP via `--mcp-config`. | None. |
 | **I-3** `list_changed` notification | **DONE (`b40011e`).** [`workflow_tools._schedule_list_changed_notify`](../server/services/cli_agent/workflow_tools.py) fires after each `add_tool` / `remove_tool` since FastMCP doesn't emit it automatically. | Optional: unit test asserting `session.send_tool_list_changed` is called. |
-| **I-4** Tool-search deferral | **DONE (`b40011e`).** `"alwaysLoad": true` added to the `machinaos` server entry in [`providers/anthropic_claude.py:111-124`](../server/services/cli_agent/providers/anthropic_claude.py). | None. |
+| **I-4** Tool-search deferral | **DONE.** `"alwaysLoad": true` set on the `machinaos` server entry in [`claude_code_agent/_provider.py::interactive_argv`](../server/nodes/agent/claude_code_agent/_provider.py). | None. |
 | **I-5** Visible-tool filtering | **Gap.** All 5 built-in MachinaOs MCP tools (including `getCredential`, `broadcastLog`) are visible to the model. | Mark internal-only tools `_meta["anthropic/alwaysLoad"]: false` or filter via FastMCP middleware. **Defer** — not breaking today. |
-| **I-6** Native session continuity | **DONE (`ecbe69b`).** [`session.py`](../server/services/cli_agent/session.py) accepts `memory_bound=True` → `cwd()` returns `repo_root`, `_pre_spawn` / `cleanup` skip the worktree. [`claude_code_agent.py`](../server/nodes/agent/claude_code_agent.py) derives UUID5 for first-run `--session-id`, reads `last_session_id` for `--resume`. [`service.py:_persist_memory`](../server/services/cli_agent/service.py) saves `last_session_id`, broadcasts `node_parameters_updated`, auto-clears stale UUIDs. See §4.8. | Drop the markdown `--append-system-prompt` injection block from `claude_code_agent` once SDK migration lands (the markdown surface remains as a UI mirror, not a context channel). Pending. |
+| **I-6** Native session continuity | **DONE.** [`session.py`](../server/services/cli_agent/session.py) keeps a stable cwd for memory-bound spawns; the warm-subprocess pool at [`claude_code_agent/_pool.py`](../server/nodes/agent/claude_code_agent/_pool.py) preserves the session across turns. [`claude_code_agent/__init__.py`](../server/nodes/agent/claude_code_agent/__init__.py) sets `continue_session = bool(memory_data)` → argv emits `--continue` (first cold spawn) with `--resume <UUID>` reserved for crash recovery. [`service.py:_persist_memory`](../server/services/cli_agent/service.py) appends turns to `memory_content`, saves `last_session_id` (display-only), broadcasts `node_parameters_updated`, and auto-clears stale UUIDs via `_clear_stale_session_id`. See §4.8. | Markdown `memory_content` remains the UI mirror, not the resume channel. |
 | **System-prompt directive** (Cursor / `CLAUDE.md` pattern) | **DONE (`b40011e`).** Second `--append-system-prompt` listing connected `mcp__machinaos__*` tools. | None. |
-| `--allowedTools` includes `Skill,WebSearch,WebFetch` | **DONE (`b40011e`).** [`ai_cli_providers.json`](../server/config/ai_cli_providers.json) + hardcoded fallback both updated. | None. |
+| `--allowedTools` strict MCP-only allowlist | **DONE (superseded R3).** Built-in escape hatches (`Read`/`Edit`/`Bash`/`Glob`/`Grep`/`Write`/`WebSearch`/`WebFetch`) are NOT in the default allowlist; `Skill` is added conditionally (only when a skill is wired). `default_allowed_tools: ""` in [`ai_cli_providers.json`](../server/config/ai_cli_providers.json); allowlist assembled in [`_provider.py::interactive_argv`](../server/nodes/agent/claude_code_agent/_provider.py). Gated by `--permission-mode dontAsk`. | None. |
 | Composio-style server-side credentials | **Aligned.** `getCredential` allowlist + `auth_service.get_api_key`. | None. |
 | Hermes-style `provider_data` envelope | **Aligned.** [`protocol.py:SessionResult.provider_data`](../server/services/cli_agent/protocol.py). | None. |
 | Composio-style parent-run-id | **Aligned.** `MACHINA_PARENT_RUN_ID` env var. | None. |
@@ -481,12 +508,18 @@ entry in `--mcp-config` (Closes I-4).** Per §2.4: *"…also blocks startup
 until that server connects (5s cap)."* The 5s wait is acceptable — the
 FastMCP server is already up before spawn.
 
-**R3 (DONE in `b40011e`). `--allowedTools` defaults extended with
-`Skill,WebSearch,WebFetch`.** Updated in both
-[`ai_cli_providers.json`](../server/config/ai_cli_providers.json) and
-the hardcoded fallback in
-[`anthropic_claude.py`](../server/services/cli_agent/providers/anthropic_claude.py).
-`ToolSearch` intentionally NOT added — it's permission-free.
+**R3 (DONE, then superseded by the strict-allowlist cutover).** An
+earlier revision extended `--allowedTools` with `Skill,WebSearch,WebFetch`.
+The current design instead ships a strict **MCP-only** allowlist:
+`default_allowed_tools: ""` in
+[`ai_cli_providers.json`](../server/config/ai_cli_providers.json), and
+[`_provider.py::interactive_argv`](../server/nodes/agent/claude_code_agent/_provider.py)
+assembles `mcp__machinaos__<node_type>` per wired tool + the 5 infra MCP
+tools + the built-in `Skill` (conditionally, when a skill is wired),
+gated by `--permission-mode dontAsk`. `WebSearch`/`WebFetch`/`Bash`/etc.
+are intentionally excluded — equivalent capability is wired explicitly
+via workflow tools. `ToolSearch` intentionally NOT added — it's
+permission-free.
 
 **R4 (DONE in `b40011e`). System-prompt directive when MCP tools are
 wired (the `CLAUDE.md` / Cursor-rules pattern).** Second
@@ -505,13 +538,20 @@ runs (Closes I-6).** Three coupled mechanisms:
    skips `git worktree add`; `cleanup` skips `git worktree remove`.
    Confirms claude's `project_key` is constant across runs.
 
-2. **UUID5 first-run / `--resume` thereafter.**
-   [`claude_code_agent.py`](../server/nodes/agent/claude_code_agent.py)
-   derives `uuid5(NAMESPACE_OID, f"{memory_node_id}:{simpleMemory.session_id}")`
-   for the very first run and passes it as `--session-id <UUID5>`.
-   Subsequent runs read `simpleMemory.last_session_id` and pass
-   `--resume <UUID>`. Mutually exclusive in argv emission
-   (`providers/anthropic_claude.py:141-146`).
+2. **`--continue` first-run / warm-subprocess multi-turn / `--resume`
+   crash recovery.**
+   [`claude_code_agent/__init__.py`](../server/nodes/agent/claude_code_agent/__init__.py)
+   sets `continue_session = bool(memory_data)`; the argv-builder
+   [`_provider.py::interactive_argv`](../server/nodes/agent/claude_code_agent/_provider.py)
+   emits `--continue` on the first cold spawn for a memory-wired run
+   (claude auto-loads the most recent conversation under the stable
+   cwd's `project_key`). Subsequent turns are written as stream-json to
+   the same warm subprocess held by
+   [`_pool.py`](../server/nodes/agent/claude_code_agent/_pool.py), which
+   preserves the session UUID in-process. If the subprocess dies between
+   batches, the pool respawns with `--resume <current_session_uuid>`.
+   `--continue` and `--resume` are mutually exclusive in argv emission.
+   (This supersedes the earlier UUID5 / `--session-id` first-run dance.)
 
 3. **Auto-clear stale `last_session_id`.**
    [`_persist_memory`](../server/services/cli_agent/service.py)
@@ -536,8 +576,8 @@ runs (Closes I-6).** Three coupled mechanisms:
    origin; locked by `tests/test_cloudevents_node_parameters.py`.
 
 5. **Parallel-batch guard.** `len(tasks) > 1` with memory wired raises
-   `NodeUserError` at handler entry — concurrent `--resume <UUID>`
-   spawns against one JSONL would race.
+   `NodeUserError` at handler entry — concurrent `--continue` spawns
+   against one project_key would race claude's session resolution.
 
 Markdown is the UI mirror. The `simpleMemory.memory_content` field
 keeps mirroring conversation turns via
@@ -551,7 +591,7 @@ claude's on-disk JSONL.
 ## 7. Open questions
 
 - **Concurrent batches sharing the FastMCP registry.** Refcount in
-  [`workflow_tools.py:51-52`](../server/services/cli_agent/workflow_tools.py)
+  [`workflow_tools.py`](../server/services/cli_agent/workflow_tools.py)
   is unlocked. Theoretical race; today's call ordering is synchronous.
   Add `threading.Lock` for safety.
 - **Verifying FastMCP emits `notifications/tools/list_changed`.**

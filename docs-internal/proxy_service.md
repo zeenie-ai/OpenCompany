@@ -25,10 +25,10 @@ Residential proxy provider management with template-based URL formatting, health
 ### Request Flow
 
 ```
-httpRequest(useProxy=true)
+httpRequest(use_proxy=true)
        │
        ▼
-_get_proxy_url_if_enabled()
+_resolve_proxy_url()   (nodes/utility/http_request)
        │
        ▼
 ProxyService.get_proxy_url(url, parameters)
@@ -53,19 +53,22 @@ httpx.AsyncClient(proxy=proxy_url)
 
 | File | Description |
 |------|-------------|
-| `server/services/proxy/__init__.py` | Exports `get_proxy_service`, `init_proxy_service`, `ProxyService` |
+| `server/services/proxy/__init__.py` | Exports `ProxyService`, `get_proxy_service` (`init_proxy_service` lives in `service.py` and is imported there directly) |
 | `server/services/proxy/service.py` | ProxyService singleton - provider selection, URL generation, health scoring |
 | `server/services/proxy/providers.py` | TemplateProxyProvider - formats proxy URLs from JSON template config |
 | `server/services/proxy/models.py` | Pydantic models: ProviderConfig, RoutingRule, SessionType, GeoTarget, ProxyResult, ProviderStats |
-| `server/services/proxy/exceptions.py` | Custom exceptions: NoHealthyProviderError, BudgetExceededError, ProxyConfigError, ProviderError |
-| `server/services/handlers/proxy.py` | Node handlers: handle_proxy_request, handle_proxy_status, handle_proxy_config |
-| `server/services/handlers/http.py` | `_get_proxy_url_if_enabled()` shared helper for transparent proxy injection |
-| `server/services/handlers/tools.py` | `_execute_proxy_config()`, `_execute_proxy_request()`, `_execute_proxy_status()` AI tool handlers |
-| `server/services/handlers/document.py` | httpScraper handler with proxy injection |
+| `server/services/proxy/exceptions.py` | Custom exceptions: ProxyError, ProviderError, NoHealthyProviderError, BudgetExceededError, ProxyConfigError |
+| `server/nodes/proxy/proxy_request/__init__.py` | `proxyRequest` plugin - direct proxy HTTP request with retry/failover + usage tracking |
+| `server/nodes/proxy/proxy_config/__init__.py` | `proxyConfig` plugin (dual-purpose) - `execute_proxy_config()` + the per-operation helpers (`_add_provider`, `_set_credentials`, `_test_provider`, routing-rule ops, ...) |
+| `server/nodes/proxy/proxy_status/__init__.py` | `proxyStatus` plugin - provider health stats |
+| `server/nodes/proxy/_usage.py` | `track_proxy_usage()` - shared cost tracker (computes cost from `pricing.json:proxy.<provider>.cost_per_gb`, writes `APIUsageMetric`) |
+| `server/nodes/utility/http_request/__init__.py` | `httpRequest` plugin - `_resolve_proxy_url()` transparent proxy injection helper (`use_proxy` param) |
+| `server/nodes/document/http_scraper/__init__.py` | `httpScraper` plugin - inline proxy injection via `get_proxy_service().get_proxy_url()` (`use_proxy` param) |
+| `server/nodes/scraper/crawlee_scraper/__init__.py` | `crawleeScraper` plugin - `_get_proxy_config()` proxy injection |
+| `server/services/handlers/tools.py` | AI-tool dispatch - the `proxyConfig` tool merges params then calls `nodes.proxy.proxy_config.execute_proxy_config()` |
 | `server/core/database.py` | CRUD: get/save/delete proxy providers and routing rules |
 | `server/models/database.py` | SQLModel tables: ProxyProvider, ProxyRoutingRule |
-| `server/core/container.py` | DI: `proxy_service()` factory |
-| `server/main.py` | Startup: `proxy_svc.startup()` after database init |
+| `server/main.py` | Startup: `init_proxy_service(...)` then `proxy_svc.startup()` after database init (not wired through the DI container) |
 | `server/constants.py` | `PROXY_NODE_TYPES` frozenset |
 | `server/skills/web_agent/proxy-config-skill/SKILL.md` | AI skill: proxy provider setup and management |
 | `server/skills/web_agent/http-request-skill/SKILL.md` | AI skill: HTTP requests with `useProxy: true` |
@@ -96,17 +99,24 @@ View provider health stats. Optionally filter by provider name.
 
 ## Transparent Proxy on HTTP Nodes
 
-The `httpRequest` and `httpScraper` nodes support `useProxy: true`. When set, `_get_proxy_url_if_enabled()` calls `ProxyService.get_proxy_url()` and passes the result to `httpx.AsyncClient(proxy=...)`. If proxy lookup fails, the request proceeds without proxy (graceful degradation).
+The `httpRequest`, `httpScraper`, and `crawleeScraper` plugins support a `use_proxy` parameter. When set, the plugin calls `ProxyService.get_proxy_url()` and passes the result to `httpx.AsyncClient(proxy=...)`. `httpRequest` routes through `_resolve_proxy_url()` (which swallows exceptions so the request proceeds without proxy on failure); `httpScraper` inlines the same lookup directly. Graceful degradation either way.
 
-The AI Agent's `http_request` tool schema includes `useProxy: bool`. The LLM only sets the flag -- the proxy service handles provider selection, geo-targeting, and session type from its own configuration.
+`httpRequest` is also a dual-purpose AI tool (`tool_name = "http_request"`, `group = ("utility", "tool")`). Its Pydantic `Params` is the AI-tool schema, so `use_proxy` is exposed to the LLM. The LLM only sets the flag -- the proxy service handles provider selection, geo-targeting, and session type from its own configuration.
 
 ```python
-# In server/services/ai.py
-class HttpRequestSchema(BaseModel):
-    url: str
-    method: str = "GET"
-    body: Optional[Dict[str, Any]] = None
-    useProxy: bool = False  # LLM sets this, proxy service handles the rest
+# In server/nodes/utility/http_request/__init__.py
+class HttpRequestNode(ActionNode):
+    type = "httpRequest"
+    tool_name = "http_request"
+
+    class Params(BaseModel):
+        url: str
+        method: str = "GET"
+        body: Optional[Any] = None
+        use_proxy: bool = False  # LLM sets this, proxy service handles the rest
+        proxy_provider: str = "auto"
+        proxy_country: str = ""
+        session_type: Literal["rotating", "sticky"] = "rotating"
 ```
 
 ## Template System
@@ -213,12 +223,12 @@ Rules are matched first-match against the target URL's hostname.
 Proxy credentials are stored via AuthService using the pattern `proxy_{name}_username` and `proxy_{name}_password`:
 
 ```python
-# In _execute_proxy_config set_credentials operation:
-await auth_service.store_api_key(f"proxy_{name}_username", username, [])
-await auth_service.store_api_key(f"proxy_{name}_password", password, [])
+# In nodes/proxy/proxy_config _set_credentials operation:
+await auth_svc.store_api_key(f"proxy_{name}_username", username, [])
+await auth_svc.store_api_key(f"proxy_{name}_password", password, [])
 ```
 
-On startup, `ProxyService._load_providers()` reads credentials from AuthService for each provider.
+On startup, `ProxyService.startup()` loads providers from the DB and `_load_providers()` reads credentials from AuthService for each provider.
 
 ## Database Tables
 
@@ -268,14 +278,22 @@ PROXY_BUDGET_DAILY_USD=         # Daily spend limit (empty = unlimited)
 
 ```python
 # In server/main.py startup
-proxy_svc = container.proxy_service()    # Creates singleton via init_proxy_service()
-await proxy_svc.startup()                # Loads providers from DB + credentials from AuthService
+from services.proxy.service import init_proxy_service
+proxy_svc = init_proxy_service(           # Builds + stores the module-level singleton
+    auth_service=container.auth_service(),
+    database=container.database(),
+    settings=settings,
+)
+await proxy_svc.startup()                 # Loads providers from DB + credentials from AuthService
 
 # In server/main.py shutdown
-await proxy_svc.shutdown()               # Clears in-memory state
+from services.proxy.service import get_proxy_service
+_proxy_svc = get_proxy_service()
+if _proxy_svc:
+    await _proxy_svc.shutdown()           # Clears in-memory state
 ```
 
-The proxy service always initializes regardless of `PROXY_ENABLED`. Providers are managed dynamically by the LLM via the `proxy_config` tool. If no providers are configured, `get_proxy_url()` raises `NoHealthyProviderError`.
+`init_proxy_service` / `get_proxy_service` live in `services/proxy/service.py` (the latter is re-exported from `services/proxy/__init__.py`); the singleton is module-level, not wired through the DI container. The proxy service always initializes regardless of `PROXY_ENABLED`. Providers are managed dynamically by the LLM via the `proxyConfig` tool. If no providers are configured, `get_proxy_url()` raises `NoHealthyProviderError`.
 
 ## Adding a New Provider (AI Workflow)
 
@@ -289,6 +307,6 @@ If the provider uses an unfamiliar URL format, the LLM can use `python_code` to 
 
 ## Cost Tracking
 
-Proxy usage is tracked via the pricing service. When a proxied request completes, `_track_proxy_usage()` in `handlers/proxy.py` calculates cost based on bytes transferred and the provider's `cost_per_gb` from `server/config/pricing.json`. The cost is persisted to the `APIUsageMetric` table.
+Proxy usage is tracked via the pricing service. When a proxied request completes, `track_proxy_usage()` in `server/nodes/proxy/_usage.py` (called by the `proxyRequest` plugin) calculates cost based on bytes transferred and the provider's `cost_per_gb` from `server/config/pricing.json` (`proxy.<provider>.cost_per_gb`). The cost is persisted to the `APIUsageMetric` table.
 
 The daily spend is also tracked in-memory on `ProxyService._daily_spend_usd` and checked against `PROXY_BUDGET_DAILY_USD` before each request.
