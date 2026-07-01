@@ -1015,8 +1015,8 @@ workspace_base_dir: str = Field(default="workspaces", env="WORKSPACE_BASE_DIR") 
 |------|-------------|
 | `server/core/config.py` | `workspace_base_dir` setting |
 | `server/services/workflow.py` | `_get_workspace_dir()`, injects into context |
-| `server/services/handlers/document.py` | `fileDownloader` uses workspace for downloads |
-| `server/services/handlers/code.py` | `workspace_dir` available in Python/JS/TS execution |
+| `server/nodes/document/file_downloader/` | `fileDownloader` saves to the workspace |
+| `server/nodes/code/` | `workspace_dir` available in Python/JS/TS executors |
 | `server/nodes/filesystem/_backend.py` | `NushellBackend(root_dir=workspace_dir, virtual_mode=True)` for the file/shell plugins |
 
 ### Workflow Naming (Wave 14)
@@ -1337,10 +1337,10 @@ Centralized cost tracking for third-party API services (Twitter/X, Google Maps).
 
 **1. Manual Tracking** - For services using native SDKs:
 ```python
-# server/services/handlers/twitter.py
+# usage tracked inside server/nodes/twitter/
 await _track_twitter_usage(node_id, 'tweet', 1, workflow_id, session_id)
 
-# server/services/maps.py
+# usage tracked inside server/nodes/location/_service.py
 await _track_maps_usage(node_id, 'geocode', 1, workflow_id, session_id)
 ```
 
@@ -1402,7 +1402,7 @@ Tool Node (calculatorTool) → (tool output) → AI Agent (input-tools handle)
 |------|-------------|
 | `server/services/handlers/tools.py` | Tool execution handlers |
 | `server/services/ai.py` | `_get_tool_schema()` - Pydantic schemas for tools |
-| `server/services/handlers/ai.py` | Tool discovery from edges |
+| `server/services/plugin/edge_walker.py` | `collect_agent_connections` — tool/skill/memory discovery from edges |
 
 ### Adding a new tool or specialized agent (Wave 11)
 
@@ -1569,7 +1569,7 @@ search_results = await asyncio.get_event_loop().run_in_executor(None, do_search)
 ```
 
 #### Search API Nodes (braveSearch, serperSearch, perplexitySearch)
-Dedicated handlers in `server/services/handlers/search.py` using `httpx.AsyncClient`:
+Dedicated plugins under `server/nodes/search/` (`brave_search` / `serper_search` / `perplexity_search`) using `httpx.AsyncClient`:
 - **Brave Search**: `GET https://api.search.brave.com/res/v1/web/search` with `X-Subscription-Token` header. Returns `{query, results: [{title, snippet, url}], result_count, provider}`.
 - **Serper**: `POST https://google.serper.dev/search` with `X-API-KEY` header. Supports web/news/images/places search types. Returns `{query, results, result_count, search_type, provider}` with optional `knowledge_graph`.
 - **Perplexity Sonar**: `POST https://api.perplexity.ai/chat/completions` with Bearer token. Returns `{query, answer (markdown), citations: [url], results: [{url}], model, provider}` with optional `images` and `related_questions`.
@@ -2447,7 +2447,9 @@ def has_real_android_devices(self) -> bool:
 
 Updated `client_left` and presence handlers use `has_real_android_devices()` instead of checking total device count.
 
-### WebSocket Message Types (127 Handlers)
+### WebSocket Message Types
+
+> Live count = `len(MESSAGE_HANDLERS) + len(get_ws_handlers())` (core dict in `server/routers/websocket.py` + plugin-registered handlers). The catalogue below is illustrative, not exhaustive or hand-maintained.
 
 #### Request/Response Messages (Client -> Server -> Client)
 | Category | Message Types |
@@ -2727,7 +2729,7 @@ This function:
 - **Skill System Architecture**: Skills organized in `server/skills/<folder>/` subfolders. Each folder appears in Master Skill dropdown. DB is source of truth for skill instructions (seeded from SKILL.md on first load). Icon resolution mirrors `BaseNode._metadata_dict`: per-plugin `<plugin>/icon.svg` (served as `/api/schemas/nodes/<type>/icon`) → `visuals.json` (emoji / `lobehub:<brand>`); color: per-plugin `<plugin>/meta.json` → `visuals.json`. Lives in [`skill_loader.py::_parse_skill_metadata`](./server/services/skill_loader.py). Native DOM keydown handler prevents React Flow from intercepting Ctrl shortcuts in skill editor. **Mutation broadcasts use the CloudEvents-typed `skill_lifecycle` wire key** with stages `created` / `updated` / `deleted` / `content_saved` — see "Plugin-folder location for plugin-specific CloudEvents factories" below.
 - **Example Workflows**: Auto-load example workflow seeds from `<repo>/.machina/workflows/` on first use (git-tracked; the only non-ignored content under `<repo>/.machina/`). Path resolved by `core.paths.example_workflows_dir()` — fixed, NOT under `DATA_DIR`, preserved by `machina clean` via `_MACHINA_KEEP`. Uses `UserSettings.examples_loaded` flag; supports anonymous users (`user_id="default"`); embedded `nodeParameters` saved to DB on import.
 - **Onboarding Service**: 5-step welcome wizard (Welcome, Concepts, API Keys, Canvas Tour, Get Started) using shadcn primitives + lucide icons. Database-backed via `UserSettings.onboarding_completed` + `onboarding_step`. Existing users auto-skip (migration marks `examples_loaded=1` as completed). Replayable from Settings "Help" section. No new WebSocket handlers needed. See [Onboarding Service](./docs-internal/onboarding.md) for details.
-- **Node.js Code Executor**: Persistent Node.js server (Express + tsx) at port 3020 for JavaScript/TypeScript execution, replacing subprocess spawning per execution. Handlers in `server/services/handlers/code.py` call `NodeJSClient` which makes HTTP requests to the Node.js server. All config via environment variables (`NODEJS_EXECUTOR_URL`, `NODEJS_EXECUTOR_PORT`, etc.).
+- **Node.js Code Executor**: Persistent Node.js server (Express + tsx) at port 3020 for JavaScript/TypeScript execution, replacing subprocess spawning per execution. The code executor plugins under `server/nodes/code/` call `NodeJSClient` which makes HTTP requests to the Node.js server. All config via environment variables (`NODEJS_EXECUTOR_URL`, `NODEJS_EXECUTOR_PORT`, etc.).
 - **writeTodos Tool Node**: Dedicated AI tool for task planning connecting to any agent's `input-tools` handle. `TodoService` singleton (`server/services/todo_service.py`) stores JSON-based per-session todo state keyed by workflow_id. Handler broadcasts `phase: "todo_update"` via WebSocket on each update for real-time UI; `formatTodoOutput()` in `OutputDisplayPanel.tsx` renders the result as a checklist with `[ ]` / `[~]` / `[x]` icons. Schema uses `TodoItem`/`TodoStatus` Pydantic enum. Skill at `server/skills/assistant/write-todos-skill/SKILL.md` teaches the plan-work-update loop.
 - **Temporal Activity Heartbeats**: Activities send `activity.heartbeat()` on every non-matching WebSocket broadcast inside the read loop in `services/temporal/activities.py`. This keeps long-running browser and claude_code_agent operations alive past the 2-minute `heartbeat_timeout`. Start/end heartbeats alone were causing `TIMEOUT_TYPE_HEARTBEAT` failures on ops taking 5-10 minutes. Connection config: `heartbeat=30`, `receive_timeout=540` (fits within 10-min `start_to_close_timeout`).
 - **WebSocket `_safe_send` Guard**: `server/routers/websocket.py` checks `websocket.client_state.name != "CONNECTED"` before sending and logs at `debug` level (not `error`) on failure. Prevents "ASGI message after websocket.close" errors when broadcasts race with disconnects.
