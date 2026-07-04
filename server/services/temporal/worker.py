@@ -26,6 +26,7 @@ from temporalio.runtime import LoggingConfig, Runtime, TelemetryConfig
 from temporalio.worker import Worker
 
 from core.logging import get_logger
+from ._interceptors import ObservabilityWorkerInterceptor
 from .workflow import MachinaWorkflow
 from .trigger_listener_workflow import TriggerListenerWorkflow
 from .polling_trigger_workflow import PollingTriggerWorkflow
@@ -192,6 +193,7 @@ class TemporalWorkerManager:
                 max_concurrent_workflow_tasks=10,
                 graceful_shutdown_timeout=_graceful_shutdown_timeout(),
                 identity=_worker_identity(self.task_queue),
+                interceptors=[ObservabilityWorkerInterceptor()],
             )
             logger.info(
                 "Registered Temporal activities",
@@ -353,6 +355,7 @@ class TemporalWorkerPool:
                 max_concurrent_workflow_tasks=10,
                 graceful_shutdown_timeout=_graceful_shutdown_timeout(),
                 identity=_worker_identity(queue),
+                interceptors=[ObservabilityWorkerInterceptor()],
             )
             task = asyncio.create_task(worker.run(), name=f"worker-{queue}")
             self._workers.append(worker)
