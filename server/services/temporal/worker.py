@@ -51,6 +51,19 @@ def _graceful_shutdown_timeout() -> timedelta:
     return timedelta(seconds=Settings().temporal_graceful_shutdown_seconds)
 
 
+def _worker_identity(queue: str) -> str:
+    """Wave 17.4: explicit worker identity for Temporal Web UI ops.
+
+    Default SDK identity is ``<pid>@<hostname>`` which makes the
+    Workers tab unreadable once the per-queue pool runs 9 workers on
+    one host. ``machina-<queue>-<deployment_mode>`` names the role and
+    the topology at a glance.
+    """
+    from core.config import Settings
+
+    return f"machina-{queue}-{Settings().deployment_mode}"
+
+
 def create_runtime() -> Runtime:
     """Create a Temporal runtime with worker heartbeating disabled.
 
@@ -178,6 +191,7 @@ class TemporalWorkerManager:
                 max_concurrent_activities=self.pool_size,
                 max_concurrent_workflow_tasks=10,
                 graceful_shutdown_timeout=_graceful_shutdown_timeout(),
+                identity=_worker_identity(self.task_queue),
             )
             logger.info(
                 "Registered Temporal activities",
@@ -338,6 +352,7 @@ class TemporalWorkerPool:
                 max_concurrent_activities=concurrency,
                 max_concurrent_workflow_tasks=10,
                 graceful_shutdown_timeout=_graceful_shutdown_timeout(),
+                identity=_worker_identity(queue),
             )
             task = asyncio.create_task(worker.run(), name=f"worker-{queue}")
             self._workers.append(worker)

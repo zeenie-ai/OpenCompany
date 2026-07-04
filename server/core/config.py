@@ -108,6 +108,18 @@ class Settings(BaseSettings):
         default=False,
         env="TEMPORAL_WORKER_POOL_ENABLED",
     )
+    # Wave 17.4: deployment topology hint. Drives worker identity
+    # strings (visible in Temporal Web UI -> Workers) and per-mode
+    # concurrency defaults (local laptops get half the per-queue slots
+    # of an always-on cloud VM; explicit TEMPORAL_<QUEUE>_CONCURRENCY
+    # env vars always win).
+    #   local       — developer machine; sleeps/hibernates; 4-8 cores
+    #   cloud       — always-on server (machina deploy)
+    #   self_hosted — user-managed always-on box
+    deployment_mode: Literal["local", "cloud", "self_hosted"] = Field(
+        default="local",
+        env="DEPLOYMENT_MODE",
+    )
 
     # gRPC frontend port — the port ``temporal server start-dev``
     # exposes for clients + supervisor readiness probe. Sourced from
