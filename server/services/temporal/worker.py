@@ -324,13 +324,27 @@ class TemporalWorkerPool:
         self._tasks: list[asyncio.Task] = []
 
     def _concurrency_for(self, queue: str) -> int:
+        """Slots for a queue: explicit env override > mode-scaled default.
+
+        Wave 17.5: ``deployment_mode == "local"`` halves the per-queue
+        defaults (floor 1) — a dev laptop sharing 4-8 cores with an IDE
+        + browser shouldn't run cloud-sized activity fan-out. Explicit
+        ``TEMPORAL_<QUEUE>_CONCURRENCY`` env vars always win.
+        """
         import os
 
         env_key = f"TEMPORAL_{queue.upper().replace('-', '_')}_CONCURRENCY"
         raw = os.environ.get(env_key)
         if raw and raw.isdigit():
             return int(raw)
-        return self.DEFAULT_CONCURRENCY.get(queue, self.default_pool_size)
+
+        base = self.DEFAULT_CONCURRENCY.get(queue, self.default_pool_size)
+
+        from core.config import Settings
+
+        if Settings().deployment_mode == "local":
+            return max(1, base // 2)
+        return base
 
     @property
     def is_running(self) -> bool:
