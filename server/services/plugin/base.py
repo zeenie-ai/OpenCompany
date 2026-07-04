@@ -18,6 +18,7 @@ and lets the class object function as the plugin manifest.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, ClassVar, Dict, Optional, Sequence, Type
@@ -729,6 +730,24 @@ class BaseNode:
                 workflow_id=workflow_id,
             )
 
+            # Wave 17.6: periodic heartbeat DURING the body. The bracketing
+            # beats below only fire at start + completion — a browser /
+            # CLI-agent body running 5+ minutes between them exceeds the
+            # heartbeat_timeout (2 min default) with no beat, so a laptop
+            # sleep mid-body wasn't detected until start_to_close (10 min).
+            # A 30s background beat keeps detection within one
+            # heartbeat_timeout window. Skipped when the plugin's
+            # start_to_close fits inside heartbeat_timeout (nothing to gain).
+            beat_task: Optional[asyncio.Task] = None
+            if cls.start_to_close_timeout > cls.heartbeat_timeout:
+
+                async def _beat_loop() -> None:
+                    while True:
+                        await asyncio.sleep(30)
+                        activity.heartbeat(f"Still executing {cls.type}: {node_id}")
+
+                beat_task = asyncio.create_task(_beat_loop())
+
             try:
                 # Heartbeat the long-running side of the pipeline.
                 activity.heartbeat(f"Executing {cls.type}: {node_id}")
@@ -803,6 +822,9 @@ class BaseNode:
                     workflow_id=workflow_id,
                 )
                 raise
+            finally:
+                if beat_task is not None:
+                    beat_task.cancel()
 
         return _node_activity
 
