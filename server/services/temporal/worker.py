@@ -405,6 +405,47 @@ class TemporalWorkerPool:
                 logger.warning(f"[Pool] Ignoring non-numeric {env_key}={raw!r}")
         return self.DEFAULT_RATE_LIMIT.get(queue)
 
+    # Wave 18.4: queues whose workloads are too unpredictable for fixed
+    # slot counts. LLM turns range 2s-5min; browser sessions idle then
+    # spike on page render. The resource-based supplier targets 80%
+    # host CPU + memory instead — per the worker-performance docs it
+    # "can provide reasonable performance without the need for
+    # profiling". Other queues keep fixed sizing (predictable work).
+    RESOURCE_TUNED_QUEUES: frozenset = frozenset({"ai-heavy", "browser"})
+
+    def _tuner_for(self, queue: str, concurrency: int):
+        """Return a WorkerTuner for resource-tuned queues, else None.
+
+        The Worker rejects ``tuner`` + ``max_concurrent_activities``
+        together, so the caller passes exactly one of the two. The
+        fixed workflow/local/nexus suppliers only exist to satisfy
+        ``create_composite`` — pool workers host no workflows.
+        """
+        if queue not in self.RESOURCE_TUNED_QUEUES:
+            return None
+
+        from temporalio.worker import (
+            FixedSizeSlotSupplier,
+            ResourceBasedSlotConfig,
+            ResourceBasedSlotSupplier,
+            ResourceBasedTunerConfig,
+            WorkerTuner,
+        )
+
+        tuner_config = ResourceBasedTunerConfig(target_memory_usage=0.8, target_cpu_usage=0.8)
+        return WorkerTuner.create_composite(
+            workflow_supplier=FixedSizeSlotSupplier(10),
+            activity_supplier=ResourceBasedSlotSupplier(
+                # minimum keeps the queue live under load spikes elsewhere
+                # on the host; maximum reuses the per-queue concurrency
+                # (env-overridable) as the hard ceiling.
+                ResourceBasedSlotConfig(minimum_slots=1, maximum_slots=max(concurrency, 2)),
+                tuner_config,
+            ),
+            local_activity_supplier=FixedSizeSlotSupplier(10),
+            nexus_supplier=FixedSizeSlotSupplier(10),
+        )
+
     @property
     def is_running(self) -> bool:
         return any(t is not None and not t.done() for t in self._tasks)
@@ -421,11 +462,10 @@ class TemporalWorkerPool:
                 continue
             concurrency = self._concurrency_for(queue)
             rate_limit = self._rate_limit_for(queue)
-            worker = Worker(
-                self.client,
+            tuner = self._tuner_for(queue, concurrency)
+            worker_kwargs: dict = dict(
                 task_queue=queue,
                 activities=activities,
-                max_concurrent_activities=concurrency,
                 max_concurrent_workflow_tasks=10,
                 graceful_shutdown_timeout=_graceful_shutdown_timeout(),
                 identity=_worker_identity(queue),
@@ -437,12 +477,22 @@ class TemporalWorkerPool:
                 # lower task volume than the manager's default queue.
                 activity_task_poller_behavior=PollerBehaviorAutoscaling(initial=1, minimum=1, maximum=5),
             )
+            # Wave 18.4: the Worker rejects tuner + max_concurrent_activities
+            # together — resource-tuned queues get the tuner, the rest keep
+            # fixed sizing.
+            if tuner is not None:
+                worker_kwargs["tuner"] = tuner
+            else:
+                worker_kwargs["max_concurrent_activities"] = concurrency
+
+            worker = Worker(self.client, **worker_kwargs)
             task = asyncio.create_task(worker.run(), name=f"worker-{queue}")
             self._workers.append(worker)
             self._tasks.append(task)
             logger.info(
                 f"[Pool] Started worker queue={queue!r} "
-                f"activities={len(activities)} concurrency={concurrency} "
+                f"activities={len(activities)} "
+                f"slots={'resource-tuned<=' + str(max(concurrency, 2)) if tuner else concurrency} "
                 f"rate_limit={rate_limit if rate_limit is not None else 'unthrottled'}"
             )
 
