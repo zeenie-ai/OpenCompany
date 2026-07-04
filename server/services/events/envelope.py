@@ -119,23 +119,11 @@ class WorkflowEvent(BaseModel):
             data={"provider": provider, **extra} if extra else {"provider": provider},
         )
 
-    @classmethod
-    def connection_status(
-        cls,
-        plugin: str,
-        *,
-        connected: bool,
-        subject: Optional[str] = None,
-        data: Optional[Mapping[str, Any]] = None,
-    ) -> "WorkflowEvent":
-        """Plugin connection-state event (whatsapp / telegram / android-relay
-        / twitter / google connect-disconnect)."""
-        return cls(
-            source=f"machinaos://nodes/{plugin}",
-            type=f"{_TYPE_PREFIX}{plugin}.connection.{'opened' if connected else 'closed'}",
-            subject=subject,
-            data=dict(data) if data else {},
-        )
+    # ``WorkflowEvent.connection_status(...)`` previously lived here as a
+    # parameterized factory but had zero callers after Wave-12 B1-B3 gave
+    # each plugin its own typed factory (``android_connection_status`` /
+    # ``whatsapp_connection_status`` / ``telegram_connection_status`` in
+    # ``server/nodes/<plugin>/_events.py``). Removed in Wave 15.1.
 
     @classmethod
     def oauth_completed(
