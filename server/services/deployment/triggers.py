@@ -1,6 +1,10 @@
 """Trigger Management - Setup and teardown of workflow triggers.
 
-Handles cron scheduling, event-based triggers (webhook, whatsapp), and cleanup.
+Handles event-based triggers (webhook, whatsapp) and polling triggers.
+Cron triggers are Temporal Schedules owned by the deployment manager
+(services/temporal/schedules.py) — the in-process APScheduler path was
+retired in Wave 15.2. ``build_cron_expression`` stays here because the
+Temporal Schedule path still translates node parameters through it.
 """
 
 import asyncio
@@ -9,7 +13,6 @@ from typing import Dict, Any, Callable, Optional
 from core.logging import get_logger
 from constants import WORKFLOW_TRIGGER_TYPES
 from services import event_waiter
-from services import scheduler as cron_scheduler
 
 logger = get_logger(__name__)
 
@@ -18,7 +21,6 @@ class TriggerManager:
     """Manages workflow trigger lifecycle."""
 
     def __init__(self, main_loop: Optional[asyncio.AbstractEventLoop] = None):
-        self._active_cron_jobs: Dict[str, str] = {}  # node_id -> job_id
         self._active_listeners: Dict[str, asyncio.Task] = {}  # node_id -> task
         self._main_loop = main_loop
         self._is_running = False
@@ -28,48 +30,6 @@ class TriggerManager:
 
     def set_main_loop(self, loop: asyncio.AbstractEventLoop):
         self._main_loop = loop
-
-    # =========================================================================
-    # CRON TRIGGERS
-    # =========================================================================
-
-    def setup_cron(self, node_id: str, cron_expr: str, timezone: str, on_tick: Callable[[], None]) -> str:
-        """Setup a cron trigger that calls on_tick on schedule."""
-        job_id = f"cron_{node_id}"
-
-        def tick_callback():
-            if not self._is_running:
-                return
-            on_tick()
-
-        cron_scheduler.register_cron_job(job_id=job_id, cron_expression=cron_expr, callback=tick_callback, timezone=timezone)
-
-        self._active_cron_jobs[node_id] = job_id
-        logger.info("Cron trigger setup", job_id=job_id, expr=cron_expr)
-        return job_id
-
-    def teardown_cron(self, node_id: str) -> bool:
-        """Remove a specific cron trigger."""
-        job_id = self._active_cron_jobs.pop(node_id, None)
-        if job_id:
-            cron_scheduler.remove_cron_job(job_id)
-            logger.debug("Cron trigger removed", job_id=job_id)
-            return True
-        return False
-
-    def get_cron_node_ids(self) -> list:
-        """Get node IDs of active cron triggers."""
-        return list(self._active_cron_jobs.keys())
-
-    def teardown_all_crons(self) -> int:
-        """Remove all cron triggers."""
-        count = 0
-        for node_id, job_id in list(self._active_cron_jobs.items()):
-            cron_scheduler.remove_cron_job(job_id)
-            count += 1
-        self._active_cron_jobs.clear()
-        logger.info("All cron triggers removed", count=count)
-        return count
 
     # =========================================================================
     # EVENT TRIGGERS (Webhook, WhatsApp, etc.)

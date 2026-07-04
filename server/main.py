@@ -66,9 +66,6 @@ _startup_log("All imports complete")
 # Suppress noisy loggers
 import logging
 
-logging.getLogger("apscheduler").setLevel(logging.WARNING)
-logging.getLogger("apscheduler.scheduler").setLevel(logging.WARNING)
-logging.getLogger("apscheduler.executors").setLevel(logging.WARNING)
 logging.getLogger("uvicorn").setLevel(logging.WARNING)
 logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
@@ -180,11 +177,6 @@ async def lifespan(app: FastAPI):
     from services import event_waiter
 
     event_waiter.set_cache_service(container.cache())
-
-    # Start APScheduler for cron jobs
-    from services.scheduler import start_scheduler, shutdown_scheduler
-
-    start_scheduler()
 
     # Initialize execution engine recovery sweeper
     from services.execution import (
@@ -479,8 +471,6 @@ async def lifespan(app: FastAPI):
     if settings.redis_enabled:
         await recovery_sweeper.stop()
         logger.info("Execution recovery sweeper stopped")
-
-    shutdown_scheduler()  # Stop APScheduler
 
     # Exit the CLI-agent MCP server's lifespan
     cli_mcp_lifespan_ctx = getattr(app.state, "cli_mcp_lifespan_ctx", None)

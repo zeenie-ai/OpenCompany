@@ -81,7 +81,6 @@ dependencies = [
 
     # Utils
     "python-dotenv>=1.0.0",
-    "apscheduler>=3.10.0",
     "qrcode[pil]>=8.0",
     "pytz>=2024.1",
     "psutil>=6.0.0",

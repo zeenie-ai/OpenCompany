@@ -78,7 +78,6 @@ class DeploymentManager:
         self._active_runs: Dict[str, Dict[str, asyncio.Task]] = {}  # workflow_id -> {run_id: task}
         self._run_counters: Dict[str, int] = {}
         self._status_callbacks: Dict[str, Callable] = {}
-        self._cron_iterations: Dict[str, int] = {}  # node_id -> iteration count
         self._main_loop: Optional[asyncio.AbstractEventLoop] = None
 
         self._settings = {"stop_on_error": False, "max_concurrent_runs": 100, "use_parallel_executor": True}
@@ -251,19 +250,13 @@ class DeploymentManager:
             await asyncio.gather(*workflow_runs.values(), return_exceptions=True)
         run_count = len(workflow_runs)
 
-        # Cleanup triggers for this workflow
+        # Cleanup triggers for this workflow. Cron triggers are
+        # Temporal Schedules (swept below via
+        # _cancel_canary_cron_schedules); their node statuses are wiped
+        # by the _clear_stuck_node_statuses(include_waiting=True) sweep.
         listener_count = 0
-        cron_count = 0
-        cron_node_ids = []
         if trigger_manager:
-            # Get cron node IDs before teardown (they'll be cleared)
-            cron_node_ids = trigger_manager.get_cron_node_ids()
             listener_count = await trigger_manager.teardown_all_listeners()
-            cron_count = trigger_manager.teardown_all_crons()
-
-        # Reset cron trigger node statuses to idle
-        for node_id in cron_node_ids:
-            await self._broadcaster.update_node_status(node_id, "idle", {}, workflow_id=workflow_id)
 
         # Reset listener node statuses to idle
         for node_id in listener_nodes:
@@ -311,10 +304,6 @@ class DeploymentManager:
             workflow_id=workflow_id,
         )
 
-        # Clear cron iteration counters for this workflow's cron nodes
-        for node_id in cron_node_ids:
-            self._cron_iterations.pop(node_id, None)
-
         # Clear state for this workflow
         self._deployments.pop(workflow_id, None)
         self._trigger_managers.pop(workflow_id, None)
@@ -328,7 +317,6 @@ class DeploymentManager:
             "workflow_id": workflow_id,
             "runs_cancelled": run_count,
             "listeners_cancelled": listener_count,
-            "crons_cancelled": cron_count,
             "waiters_cancelled": waiter_count,
             "canary_listeners_cancelled": canary_count,
             "canary_cron_schedules_cancelled": cron_schedule_count,
@@ -391,18 +379,15 @@ class DeploymentManager:
     # =========================================================================
 
     async def _setup_cron_trigger(self, node: Dict, workflow_id: str) -> TriggerInfo:
-        """Setup cron trigger for a node.
+        """Setup cron trigger for a node via a Temporal Schedule.
 
-        Two paths:
-
-        1. **Wave 12 C3 canary**: when ``Settings.event_framework_enabled``
-           is on AND ``cronScheduler`` is in the canary registry, create
-           a Temporal :class:`Schedule` whose action is the plugin's
-           :class:`CronTriggerWorkflow`. Survives FastAPI process
-           restart via the Temporal Schedule service.
-        2. **Legacy**: APScheduler ``register_cron_job`` runs an
-           in-process tick callback. Dies on process restart — kept as
-           the default while the canary stabilises.
+        Wave 12 C3: the Schedule's action is the plugin's
+        :class:`CronTriggerWorkflow`, so firings survive FastAPI process
+        restart via the Temporal Schedule service. Temporal is a hard
+        requirement — the APScheduler in-process fallback was retired in
+        Wave 15.2 (it silently died on process restart, and the dev
+        server now self-heals via health-check polling + worker
+        auto-restart).
         """
         node_id = node["id"]
         node_type = node.get("type", "cronScheduler")
@@ -413,72 +398,41 @@ class DeploymentManager:
         frequency = params.get("frequency", "minutes")
         schedule_desc = self._get_schedule_description(params)
 
-        # Path 1: Wave 12 C3 canary — Temporal Schedule.
-        if await self._canary_listener_enabled_for(node_type):
-            schedule_id = await self._start_canary_cron_schedule(
-                node,
-                workflow_id,
-                params,
-                cron_expr=cron_expr,
-                timezone=timezone,
-                frequency=frequency,
-                schedule_desc=schedule_desc,
+        if not await self._canary_listener_enabled_for(node_type):
+            raise RuntimeError(
+                "cronScheduler requires the Temporal event framework "
+                "(EVENT_FRAMEWORK_ENABLED) — the legacy APScheduler path "
+                "was retired in Wave 15.2"
             )
-            if schedule_id is not None:
-                await self._broadcaster.update_node_status(
-                    node_id,
-                    "waiting",
-                    {
-                        "message": f"Waiting for schedule: {cron_expr} (Temporal-durable)",
-                        "cron_expression": cron_expr,
-                        "timezone": timezone,
-                        "schedule_id": schedule_id,
-                    },
-                    workflow_id=workflow_id,
-                )
-                return TriggerInfo(node_id, "cron", job_id=schedule_id)
-            # Fall through to legacy path if Temporal unavailable
-            # (already logged inside _start_canary_cron_schedule).
 
-        # Initialize iteration counter for this cron node (legacy path).
-        self._cron_iterations[node_id] = 0
+        schedule_id = await self._start_canary_cron_schedule(
+            node,
+            workflow_id,
+            params,
+            cron_expr=cron_expr,
+            timezone=timezone,
+            frequency=frequency,
+            schedule_desc=schedule_desc,
+        )
+        if schedule_id is None:
+            raise RuntimeError(
+                "Temporal is required for cronScheduler deployments but "
+                "no Temporal client is connected (see logs from "
+                "_start_canary_cron_schedule)"
+            )
 
-        def on_tick():
-            if self._main_loop and self._main_loop.is_running():
-                # Increment iteration counter
-                self._cron_iterations[node_id] = self._cron_iterations.get(node_id, 0) + 1
-                iteration = self._cron_iterations[node_id]
-
-                trigger_data = {
-                    "node_id": node_id,
-                    "timestamp": datetime.now().isoformat(),
-                    "trigger_type": "cron",
-                    "event_data": {
-                        "timestamp": datetime.now().isoformat(),
-                        "iteration": iteration,
-                        "frequency": frequency,
-                        "timezone": timezone,
-                        "schedule": schedule_desc,
-                        "cron_expression": cron_expr,
-                    },
-                }
-                asyncio.run_coroutine_threadsafe(self._spawn_run(node_id, trigger_data, workflow_id=workflow_id), self._main_loop)
-
-        trigger_manager = self._trigger_managers.get(workflow_id)
-        if not trigger_manager:
-            raise RuntimeError(f"No trigger manager for workflow {workflow_id}")
-
-        job_id = trigger_manager.setup_cron(node_id, cron_expr, timezone, on_tick)
-
-        # Broadcast waiting status for cron trigger (like event triggers do)
         await self._broadcaster.update_node_status(
             node_id,
             "waiting",
-            {"message": f"Waiting for schedule: {cron_expr}", "cron_expression": cron_expr, "timezone": timezone, "job_id": job_id},
+            {
+                "message": f"Waiting for schedule: {cron_expr} (Temporal-durable)",
+                "cron_expression": cron_expr,
+                "timezone": timezone,
+                "schedule_id": schedule_id,
+            },
             workflow_id=workflow_id,
         )
-
-        return TriggerInfo(node_id, "cron", job_id=job_id)
+        return TriggerInfo(node_id, "cron", job_id=schedule_id)
 
     async def _fire_start_trigger(self, node: Dict, workflow_id: str) -> TriggerInfo:
         """Fire a start trigger immediately."""

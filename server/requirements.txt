@@ -35,8 +35,6 @@ apify-client==2.5.0
     # via machinaos-server
 apify-shared==2.2.0
     # via apify-client
-apscheduler==3.11.2
-    # via machinaos-server
 async-timeout==5.0.1
     # via crawlee
 attrs==26.1.0
@@ -544,10 +542,6 @@ typing-inspection==0.4.2
     #   mcp
     #   pydantic
     #   pydantic-settings
-tzdata==2026.1 ; sys_platform == 'win32'
-    # via tzlocal
-tzlocal==5.3.1
-    # via apscheduler
 uritemplate==4.2.0
     # via google-api-python-client
 urllib3==2.7.0
