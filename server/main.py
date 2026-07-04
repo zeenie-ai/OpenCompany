@@ -280,6 +280,7 @@ async def lifespan(app: FastAPI):
     # let Temporal init happen in a background task. WorkflowService falls back to
     # parallel/sequential execution until Temporal is ready.
     app.state.temporal_worker_manager = None
+    app.state.temporal_pool = None
     temporal_init_task: asyncio.Task | None = None
 
     if settings.temporal_enabled:
@@ -350,6 +351,18 @@ async def lifespan(app: FastAPI):
                         await worker_manager.start()
                         app.state.temporal_worker_manager = worker_manager
 
+                        # Wave 16.2: per-queue activity worker pool. Gated —
+                        # inert until TEMPORAL_WORKER_POOL_ENABLED=true. Starts
+                        # AFTER the manager so workflow registration is in
+                        # place before specialised activity workers poll.
+                        if settings.temporal_worker_pool_enabled:
+                            from services.temporal.worker import TemporalWorkerPool
+
+                            pool = TemporalWorkerPool(client=client)
+                            await pool.start()
+                            app.state.temporal_pool = pool
+                            _startup_log(f"[Temporal] Worker pool started ({len(pool.queues)} queues)")
+
                         _startup_log(f"[Temporal] Worker started, execution engine ready (attempt {attempt})")
                         logger.info(
                             "Temporal integration initialized successfully",
@@ -415,6 +428,16 @@ async def lifespan(app: FastAPI):
             await temporal_init_task
         except (asyncio.CancelledError, Exception):
             pass
+
+    # Stop the per-queue worker pool first (activity-only workers), then
+    # the manager worker that also hosts workflows.
+    pool = getattr(app.state, "temporal_pool", None)
+    if pool is not None:
+        try:
+            await pool.stop()
+            logger.info("Temporal worker pool stopped")
+        except Exception as exc:
+            logger.warning(f"Temporal worker pool stop raised: {exc}")
 
     # Stop Temporal worker if it successfully started.
     worker_manager = getattr(app.state, "temporal_worker_manager", None)

@@ -96,6 +96,18 @@ class Settings(BaseSettings):
         default=True,
         env="EVENT_FRAMEWORK_ENABLED",
     )
+    # Wave 16: per-queue activity routing. When True, main.py starts a
+    # TemporalWorkerPool (one activity-only Worker per plugin-declared
+    # task queue) alongside the TemporalWorkerManager, and
+    # MachinaWorkflow._resolve_activity returns cls.task_queue so
+    # per-type activities land on their specialised pool worker.
+    # Rollback: TEMPORAL_WORKER_POOL_ENABLED=false + restart — the pool
+    # stops and every activity routes back to the single manager worker
+    # on "machina-tasks". Default off until the 16.4 stability window.
+    temporal_worker_pool_enabled: bool = Field(
+        default=False,
+        env="TEMPORAL_WORKER_POOL_ENABLED",
+    )
 
     # gRPC frontend port — the port ``temporal server start-dev``
     # exposes for clients + supervisor readiness probe. Sourced from
