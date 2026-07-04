@@ -23,7 +23,7 @@ import aiohttp
 from opentelemetry import trace
 from temporalio.client import Client
 from temporalio.runtime import LoggingConfig, Runtime, TelemetryConfig
-from temporalio.worker import Worker
+from temporalio.worker import PollerBehaviorAutoscaling, Worker
 
 from core.logging import get_logger
 from ._interceptors import ObservabilityWorkerInterceptor
@@ -63,6 +63,21 @@ def _worker_identity(queue: str) -> str:
     from core.config import Settings
 
     return f"machina-{queue}-{Settings().deployment_mode}"
+
+
+def _sticky_cache_size() -> int:
+    """Wave 18.2: sticky workflow cache budget by deployment mode.
+
+    Cached workflow executions skip Event-History replay on the next
+    workflow task (docs.temporal.io/develop/worker-performance). Cache
+    entries hold the workflow's Python state in memory, so the budget
+    tracks host RAM: laptops get a small cache, always-on boxes a big
+    one. Evictions surface as ``sticky_cache_evictions`` + replay cost,
+    not errors — sizing is a latency knob, not a correctness one.
+    """
+    from core.config import Settings
+
+    return {"local": 50, "cloud": 500, "self_hosted": 100}[Settings().deployment_mode]
 
 
 def create_runtime() -> Runtime:
@@ -194,6 +209,16 @@ class TemporalWorkerManager:
                 graceful_shutdown_timeout=_graceful_shutdown_timeout(),
                 identity=_worker_identity(self.task_queue),
                 interceptors=[ObservabilityWorkerInterceptor()],
+                # Wave 18.2: sticky cache sized by deployment mode so
+                # cached workflows skip Event-History replay without
+                # blowing laptop RAM.
+                max_cached_workflows=_sticky_cache_size(),
+                # Wave 18.3: autoscaling pollers replace fixed counts —
+                # scale between min/max on demand (SDK-recommended over
+                # manual poller tuning). Pollers stay well below the
+                # executor slot counts per the worker-performance docs.
+                activity_task_poller_behavior=PollerBehaviorAutoscaling(initial=2, minimum=1, maximum=10),
+                workflow_task_poller_behavior=PollerBehaviorAutoscaling(initial=2, minimum=1, maximum=20),
             )
             logger.info(
                 "Registered Temporal activities",
@@ -307,6 +332,23 @@ class TemporalWorkerPool:
         "messaging": 20,
     }
 
+    # Wave 18.1: worker-level activities/second ceilings — protect
+    # external API quotas from runaway fan-out (Anthropic/OpenAI tier
+    # limits on ai-heavy; provider send limits on messaging). None =
+    # unthrottled (local subprocess work has no external quota).
+    # Override via TEMPORAL_<QUEUE>_RATE_LIMIT (float, per second).
+    DEFAULT_RATE_LIMIT: dict[str, Optional[float]] = {
+        "machina-default": None,
+        "rest-api": 100.0,
+        "ai-heavy": 60.0,
+        "code-exec": None,
+        "triggers-poll": None,
+        "triggers-event": None,
+        "android": None,
+        "browser": 10.0,
+        "messaging": 20.0,
+    }
+
     def __init__(
         self,
         client: Client,
@@ -346,6 +388,23 @@ class TemporalWorkerPool:
             return max(1, base // 2)
         return base
 
+    def _rate_limit_for(self, queue: str) -> Optional[float]:
+        """Wave 18.1: activities/second ceiling for a queue's worker.
+
+        Explicit ``TEMPORAL_<QUEUE>_RATE_LIMIT`` env override (float)
+        wins; falls back to ``DEFAULT_RATE_LIMIT``; None = unthrottled.
+        """
+        import os
+
+        env_key = f"TEMPORAL_{queue.upper().replace('-', '_')}_RATE_LIMIT"
+        raw = os.environ.get(env_key)
+        if raw:
+            try:
+                return float(raw)
+            except ValueError:
+                logger.warning(f"[Pool] Ignoring non-numeric {env_key}={raw!r}")
+        return self.DEFAULT_RATE_LIMIT.get(queue)
+
     @property
     def is_running(self) -> bool:
         return any(t is not None and not t.done() for t in self._tasks)
@@ -361,6 +420,7 @@ class TemporalWorkerPool:
                 logger.info(f"[Pool] Skipping empty queue {queue!r}")
                 continue
             concurrency = self._concurrency_for(queue)
+            rate_limit = self._rate_limit_for(queue)
             worker = Worker(
                 self.client,
                 task_queue=queue,
@@ -370,11 +430,21 @@ class TemporalWorkerPool:
                 graceful_shutdown_timeout=_graceful_shutdown_timeout(),
                 identity=_worker_identity(queue),
                 interceptors=[ObservabilityWorkerInterceptor()],
+                # Wave 18.1: per-queue activities/second ceiling.
+                max_activities_per_second=rate_limit,
+                # Wave 18.3: activity-only workers need a small
+                # autoscaling poller budget — specialised queues see
+                # lower task volume than the manager's default queue.
+                activity_task_poller_behavior=PollerBehaviorAutoscaling(initial=1, minimum=1, maximum=5),
             )
             task = asyncio.create_task(worker.run(), name=f"worker-{queue}")
             self._workers.append(worker)
             self._tasks.append(task)
-            logger.info(f"[Pool] Started worker queue={queue!r} " f"activities={len(activities)} concurrency={concurrency}")
+            logger.info(
+                f"[Pool] Started worker queue={queue!r} "
+                f"activities={len(activities)} concurrency={concurrency} "
+                f"rate_limit={rate_limit if rate_limit is not None else 'unthrottled'}"
+            )
 
     async def stop(self) -> None:
         for task in self._tasks:
