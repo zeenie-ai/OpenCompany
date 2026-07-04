@@ -83,6 +83,10 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "qrcode[pil]>=8.0",
     "pytz>=2024.1",
+    # IANA timezone database for stdlib zoneinfo on Windows (no system
+    # tz db there). Was a hidden transitive dep of apscheduler until
+    # Wave 15.2 retired it; currentTimeTool's ZoneInfo(...) needs it.
+    "tzdata>=2024.1",
     "psutil>=6.0.0",
 
     # Web Search

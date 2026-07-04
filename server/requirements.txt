@@ -542,6 +542,8 @@ typing-inspection==0.4.2
     #   mcp
     #   pydantic
     #   pydantic-settings
+tzdata==2026.2
+    # via machinaos-server
 uritemplate==4.2.0
     # via google-api-python-client
 urllib3==2.7.0
