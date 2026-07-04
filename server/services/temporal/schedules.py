@@ -20,6 +20,7 @@ Refs:
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any, Dict
 
 from temporalio.client import (
@@ -122,7 +123,15 @@ async def create_cron_schedule(
             cron_expressions=[cron_expression],
             time_zone_name=timezone or "UTC",
         ),
-        policy=SchedulePolicy(overlap=overlap_policy),
+        # Wave 17.1: bound the catch-up burst after downtime. A laptop
+        # asleep past firings gets at most 24h of make-up ticks on wake
+        # (the SKIP overlap policy then collapses that burst to a single
+        # firing since each make-up run overlaps the previous one). A
+        # host offline for a week does NOT replay 168 hourly ticks.
+        policy=SchedulePolicy(
+            overlap=overlap_policy,
+            catchup_window=timedelta(hours=24),
+        ),
     )
 
     # Search Attributes mirror the listener-canary contract so the
