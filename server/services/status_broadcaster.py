@@ -1066,20 +1066,19 @@ class StatusBroadcaster:
     async def send_custom_event(self, event_type: str, data: Any):
         """Send a custom event to all connected clients AND dispatch to event waiters.
 
-        Uses dispatch_async() directly since we're in an async context.
-        The sync dispatch() is for thread contexts like APScheduler callbacks.
-        See DESIGN.md section "Cross-Thread Event Dispatch" for pattern details.
+        ``event_waiter.dispatch`` resolves in-memory asyncio.Future
+        waiters synchronously (the Redis-Streams async path was retired
+        in Wave 15.3).
         """
         # Broadcast to all WebSocket clients
         await self.broadcast({"type": event_type, "data": data})
 
         # Dispatch to event waiters (for trigger nodes)
-        # Use dispatch_async directly - we're in async context
         try:
             from services import event_waiter
 
             event_data = data if isinstance(data, dict) else {"data": data}
-            resolved_count = await event_waiter.dispatch_async(event_type, event_data)
+            resolved_count = event_waiter.dispatch(event_type, event_data)
             if resolved_count > 0:
                 logger.info(f"[StatusBroadcaster] Event {event_type} resolved {resolved_count} waiters")
         except Exception as e:

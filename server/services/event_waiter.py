@@ -1,64 +1,43 @@
 """Event Waiter Service - Generic event waiting for trigger nodes.
 
-Supports any trigger type (WhatsApp, Email, Webhook, MQTT, etc.)
-Uses Redis Streams when available for persistence, falls back to asyncio.Future.
-
-Architecture:
-- Redis mode: Events stored in Redis Streams, waiters poll streams with blocking XREAD
-- Memory mode: Events dispatched to in-memory asyncio.Future waiters
+Supports any trigger type (WhatsApp, Email, Webhook, MQTT, etc.).
+Events are dispatched to in-memory asyncio.Future waiters. This backs
+the canvas-Run path (``TriggerNode.execute()``); deployed triggers use
+the Temporal-durable canary path (``services/events/dispatch.py``).
+The Redis-Streams branch that previously offered cross-restart waiter
+persistence was retired in Wave 15.3 — Temporal owns durability now.
 """
 
 import asyncio
-import json
 import uuid
 import time
 from dataclasses import dataclass, field
-from typing import Dict, Any, Optional, Callable, List, TYPE_CHECKING
+from typing import Dict, Any, Optional, Callable, List
 
 from core.logging import get_logger
-
-if TYPE_CHECKING:
-    from core.cache import CacheService
 
 logger = get_logger(__name__)
 
 
 # =============================================================================
-# CACHE SERVICE REFERENCE
+# MAIN LOOP REFERENCE (thread-safe dispatch)
 # =============================================================================
 
-_cache_service: Optional["CacheService"] = None
 _main_loop: Optional[asyncio.AbstractEventLoop] = None
 
 
-def set_cache_service(cache: "CacheService") -> None:
-    """Set the cache service for Redis Streams support.
+def capture_main_loop() -> None:
+    """Capture the running event loop for thread-safe dispatch.
 
-    Called during application startup from main.py.
+    Called during application startup from main.py. ``dispatch`` uses
+    the stored loop when invoked from a non-async thread context.
     """
-    global _cache_service, _main_loop
-    _cache_service = cache
-    # Store reference to the main event loop for thread-safe dispatch
+    global _main_loop
     try:
         _main_loop = asyncio.get_running_loop()
     except RuntimeError:
         _main_loop = None
-    mode = "Redis Streams" if cache and cache.is_redis_available() else "asyncio.Future"
-    logger.info(f"[EventWaiter] Initialized with {mode} backend")
-
-
-def get_cache_service() -> Optional["CacheService"]:
-    """Get the cache service if available."""
-    return _cache_service
-
-
-def is_redis_mode() -> bool:
-    """Check if Redis Streams mode is active.
-
-    Returns True only if Redis is connected AND supports Streams commands.
-    This prevents runtime failures when Redis doesn't support XREADGROUP/XADD.
-    """
-    return _cache_service is not None and _cache_service.is_streams_available()
+    logger.info("[EventWaiter] Initialized with asyncio.Future backend")
 
 
 # =============================================================================
@@ -401,21 +380,8 @@ class Waiter:
     created_at: float = field(default_factory=time.time)
 
 
-# Module-level waiter storage (used in both modes for tracking)
+# Module-level waiter storage
 _waiters: Dict[str, Waiter] = {}
-
-# Redis stream names
-EVENTS_STREAM_PREFIX = "events:"
-WAITERS_KEY_PREFIX = "waiters:"
-# NOTE: Each waiter uses its own consumer group to ensure ALL waiters receive ALL messages.
-# Redis consumer groups deliver each message to only ONE consumer in the group.
-# For trigger nodes, we want broadcast semantics where every waiter evaluates every event.
-CONSUMER_GROUP_PREFIX = "waiter_group_"  # Each waiter gets: waiter_group_{waiter_id}
-
-
-def _get_stream_name(event_type: str) -> str:
-    """Get Redis stream name for event type."""
-    return f"{EVENTS_STREAM_PREFIX}{event_type}"
 
 
 # =============================================================================
@@ -447,41 +413,14 @@ async def register(node_type: str, node_id: str, params: Dict) -> Waiter:
         filter_fn=build_filter(node_type, params),
     )
 
-    if is_redis_mode():
-        # Redis mode: store waiter metadata in Redis
-        cache = get_cache_service()
-        waiter_key = f"{WAITERS_KEY_PREFIX}{waiter.id}"
+    # Create asyncio.Future the dispatcher resolves on a matching event
+    try:
+        loop = asyncio.get_running_loop()
+        waiter.future = loop.create_future()
+    except RuntimeError:
+        waiter.future = asyncio.get_event_loop().create_future()
 
-        # Each waiter gets its own consumer group for broadcast semantics
-        # This ensures ALL waiters receive ALL messages (not load-balanced)
-        consumer_group = f"{CONSUMER_GROUP_PREFIX}{waiter.id}"
-
-        waiter_data = {
-            "id": waiter.id,
-            "node_id": node_id,
-            "node_type": node_type,
-            "event_type": config.event_type,
-            "params": json.dumps(params),
-            "created_at": waiter.created_at,
-            "consumer_group": consumer_group,  # Store for cleanup
-        }
-        await cache.set(waiter_key, waiter_data, ttl=86400)  # 24 hour TTL
-
-        # Create unique consumer group for this waiter
-        # start_id='$' means only new messages from this point forward
-        stream_name = _get_stream_name(config.event_type)
-        await cache.stream_create_group(stream_name, consumer_group, start_id="$")
-
-        logger.debug(f"[EventWaiter] Registered {node_type} waiter {waiter.id} (Redis)")
-    else:
-        # Memory mode: create asyncio.Future
-        try:
-            loop = asyncio.get_running_loop()
-            waiter.future = loop.create_future()
-        except RuntimeError:
-            waiter.future = asyncio.get_event_loop().create_future()
-
-        logger.debug(f"[EventWaiter] Registered {node_type} waiter {waiter.id}")
+    logger.debug(f"[EventWaiter] Registered {node_type} waiter {waiter.id}")
 
     _waiters[waiter.id] = waiter
     return waiter
@@ -501,16 +440,8 @@ async def wait_for_event(waiter: Waiter, timeout: Optional[float] = None) -> Dic
         asyncio.CancelledError: If waiter was cancelled
         asyncio.TimeoutError: If timeout exceeded
     """
-    if is_redis_mode():
-        return await _wait_redis(waiter, timeout)
-    else:
-        return await _wait_memory(waiter, timeout)
-
-
-async def _wait_memory(waiter: Waiter, timeout: Optional[float]) -> Dict:
-    """Wait using asyncio.Future (memory mode)."""
     if waiter.future is None:
-        raise RuntimeError("Waiter has no Future (memory mode not initialized)")
+        raise RuntimeError("Waiter has no Future (not registered?)")
 
     try:
         if timeout:
@@ -522,84 +453,9 @@ async def _wait_memory(waiter: Waiter, timeout: Optional[float]) -> Dict:
         raise
 
 
-async def _wait_redis(waiter: Waiter, timeout: Optional[float]) -> Dict:
-    """Wait using Redis Streams polling.
-
-    Polls the event stream with blocking XREAD, checking each message against the filter.
-    Each waiter has its own consumer group for broadcast semantics.
-    """
-    cache = get_cache_service()
-    stream_name = _get_stream_name(waiter.event_type)
-
-    # Use waiter-specific consumer group for broadcast (all waiters see all messages)
-    consumer_group = f"{CONSUMER_GROUP_PREFIX}{waiter.id}"
-    consumer_name = f"consumer_{waiter.id}"
-
-    # Start reading from now (new messages only)
-    block_ms = 5000  # 5 second blocks to allow cancellation checks
-
-    start_time = time.time()
-
-    while not waiter.cancelled:
-        # Check timeout
-        if timeout and (time.time() - start_time) > timeout:
-            raise asyncio.TimeoutError(f"Waiter {waiter.id} timed out after {timeout}s")
-
-        # Read from stream with blocking using waiter's own consumer group
-        try:
-            result = await cache.stream_read_group(
-                consumer_group,  # Each waiter has its own group
-                consumer_name,
-                {stream_name: ">"},  # '>' = new messages for this consumer
-                count=10,
-                block=block_ms,
-            )
-
-            if not result:
-                # No messages, continue polling
-                continue
-
-            # Process messages
-            for stream_data in result:
-                stream, messages = stream_data
-                for msg_id, fields in messages:
-                    # Deserialize event data
-                    event_data = {}
-                    for k, v in fields.items():
-                        try:
-                            event_data[k] = json.loads(v)
-                        except (json.JSONDecodeError, TypeError):
-                            event_data[k] = v
-
-                    # Check filter
-                    if waiter.filter_fn(event_data):
-                        # Match found - acknowledge and return
-                        await cache.stream_ack(stream_name, consumer_group, msg_id)
-                        _cleanup_waiter(waiter.id)
-                        logger.info(f"[EventWaiter] Waiter {waiter.id} matched event {msg_id}")
-                        return event_data
-                    else:
-                        # No match - acknowledge but continue waiting
-                        await cache.stream_ack(stream_name, consumer_group, msg_id)
-
-        except asyncio.CancelledError:
-            _cleanup_waiter(waiter.id)
-            raise
-
-    # Waiter was cancelled via cancel() flag
-    _cleanup_waiter(waiter.id)
-    raise asyncio.CancelledError(f"Waiter {waiter.id} cancelled")
-
-
 def _cleanup_waiter(waiter_id: str) -> None:
     """Remove waiter from storage."""
     _waiters.pop(waiter_id, None)
-
-    # Also remove from Redis if in Redis mode
-    if is_redis_mode():
-        cache = get_cache_service()
-        waiter_key = f"{WAITERS_KEY_PREFIX}{waiter_id}"
-        asyncio.create_task(cache.delete(waiter_key))
 
 
 # =============================================================================
@@ -614,9 +470,9 @@ def _unpack_event(
     """Normalise either ``(WorkflowEvent,)`` or ``(event_type, data)`` to
     the underlying ``(event_type, data)`` pair the dispatcher uses.
 
-    Wave 11.I, milestone Q: ``dispatch`` and ``dispatch_async`` accept a
-    ``WorkflowEvent`` directly so the ``WorkflowEvent(**event)`` rewrap
-    in ``events/triggers.py`` becomes a no-op. The legacy
+    Wave 11.I, milestone Q: ``dispatch`` accepts a ``WorkflowEvent``
+    directly so the ``WorkflowEvent(**event)`` rewrap in
+    ``events/triggers.py`` becomes a no-op. The legacy
     ``(event_type, data)`` shape stays supported via
     :meth:`WorkflowEvent.from_legacy` upstream of the dispatcher (the
     public API just forwards either form).
@@ -632,44 +488,17 @@ def _unpack_event(
     raise TypeError(f"dispatch expects a WorkflowEvent or (event_type: str, data: Dict); " f"got {type(event).__name__}")
 
 
-async def dispatch_async(
-    event: "Any",
-    data: Optional[Dict] = None,
-) -> int:
-    """Dispatch event asynchronously (for Redis mode).
-
-    Args:
-        event: Either a :class:`WorkflowEvent` (preferred, Wave 11.I) or
-            an event-type string. The legacy ``(event_type, data)`` form
-            stays supported.
-        data: Event payload (when ``event`` is a string).
-
-    Returns:
-        1 if event was added to stream, 0 otherwise
-    """
-    event_type, payload = _unpack_event(event, data)
-    logger.debug(f"[EventWaiter] dispatch_async: event_type='{event_type}'")
-
-    if is_redis_mode():
-        cache = get_cache_service()
-        stream_name = _get_stream_name(event_type)
-        msg_id = await cache.stream_add(stream_name, payload)
-        if msg_id:
-            logger.debug(f"[EventWaiter] Added event to stream {stream_name}: {msg_id}")
-            return 1
-        return 0
-    else:
-        # Fall back to sync dispatch for memory mode
-        return dispatch(event_type, payload)
-
-
 def dispatch(
     event: "Any",
     data: Optional[Dict] = None,
 ) -> int:
-    """Dispatch event to matching waiters (synchronous, memory mode).
+    """Dispatch event to matching waiters.
 
-    Thread-safe: Can be called from APScheduler threads or async context.
+    Thread-safe for resolution purposes: the asyncio.Future writes
+    happen on whichever thread calls this, which is safe because every
+    production caller runs on the main event loop. ``_main_loop``
+    (captured at startup) remains available for future thread-context
+    callers via ``asyncio.run_coroutine_threadsafe``.
 
     Args:
         event: Either a :class:`WorkflowEvent` (preferred, Wave 11.I) or
@@ -681,22 +510,6 @@ def dispatch(
         Number of waiters resolved
     """
     event_type, data = _unpack_event(event, data)
-    if is_redis_mode():
-        # In Redis mode, use async dispatch
-        # Handle both async context and thread context (e.g., APScheduler callbacks)
-        try:
-            # Try to get the current running loop
-            asyncio.get_running_loop()
-            # We're in an async context - schedule task normally
-            asyncio.create_task(dispatch_async(event_type, data))
-        except RuntimeError:
-            # No running loop - we're in a thread (e.g., APScheduler callback)
-            # Use the stored main loop with thread-safe dispatch
-            if _main_loop is not None and _main_loop.is_running():
-                asyncio.run_coroutine_threadsafe(dispatch_async(event_type, data), _main_loop)
-            else:
-                logger.warning(f"[EventWaiter] No event loop available for dispatch of {event_type}")
-        return 0  # Actual resolution happens in _wait_redis
 
     resolved = 0
     to_remove = []
@@ -744,12 +557,6 @@ def cancel(waiter_id: str) -> bool:
         if w.future and not w.future.done():
             w.future.cancel()
 
-        # Also remove from Redis if in Redis mode
-        if is_redis_mode():
-            cache = get_cache_service()
-            waiter_key = f"{WAITERS_KEY_PREFIX}{waiter_id}"
-            asyncio.create_task(cache.delete(waiter_key))
-
         logger.debug(f"[EventWaiter] Cancelled waiter {waiter_id}")
         return True
 
@@ -780,7 +587,7 @@ def get_active_waiters() -> List[Dict[str, Any]]:
             "done": w.future.done() if w.future else False,
             "cancelled": w.cancelled,
             "age_seconds": time.time() - w.created_at,
-            "mode": "redis" if is_redis_mode() else "memory",
+            "mode": "memory",
         }
         for w in _waiters.values()
     ]
@@ -794,15 +601,9 @@ def clear_all() -> int:
         if w.future and not w.future.done():
             w.future.cancel()
     _waiters.clear()
-
-    # Clear Redis waiter keys if in Redis mode
-    if is_redis_mode():
-        cache = get_cache_service()
-        asyncio.create_task(cache.clear_pattern(f"{WAITERS_KEY_PREFIX}*"))
-
     return count
 
 
 def get_backend_mode() -> str:
     """Get current backend mode for debugging."""
-    return "redis" if is_redis_mode() else "memory"
+    return "memory"

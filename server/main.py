@@ -176,7 +176,7 @@ async def lifespan(app: FastAPI):
     # Initialize event waiter with cache service for Redis Streams support
     from services import event_waiter
 
-    event_waiter.set_cache_service(container.cache())
+    event_waiter.capture_main_loop()
 
     # Initialize execution engine recovery sweeper
     from services.execution import (

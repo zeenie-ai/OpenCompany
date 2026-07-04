@@ -189,10 +189,12 @@ class TestCredentialBroadcastUsesWorkflowEvent:
 
 
 class TestEventWaiterDispatchAcceptsEnvelope:
-    """Wave 11.I, milestone Q. ``dispatch`` and ``dispatch_async``
-    accept either a ``WorkflowEvent`` or a ``(str, dict)`` pair via
-    ``_unpack_event`` -- the (str, dict) shape stays supported via
+    """Wave 11.I, milestone Q. ``dispatch`` accepts either a
+    ``WorkflowEvent`` or a ``(str, dict)`` pair via ``_unpack_event``
+    -- the (str, dict) shape stays supported via
     ``WorkflowEvent.from_legacy`` upstream of the dispatcher.
+    (``dispatch_async`` was the Redis-Streams sibling; retired in
+    Wave 15.3 along with the whole Redis branch.)
 
     Locks the contract so future refactors don't drop the envelope
     path silently.
@@ -215,9 +217,14 @@ class TestEventWaiterDispatchAcceptsEnvelope:
             "dispatch() must route through _unpack_event() so a " "WorkflowEvent argument is normalised before the dispatch loop."
         )
 
-    def test_dispatch_async_calls_unpack_event(self, event_waiter_module):
-        src = inspect.getsource(event_waiter_module.dispatch_async)
-        assert "_unpack_event" in src, "dispatch_async() must route through _unpack_event() for the " "same reason as dispatch()."
+    def test_dispatch_async_retired(self, event_waiter_module):
+        """Wave 15.3: the Redis-Streams dispatch path is gone; a
+        reappearing ``dispatch_async`` means someone resurrected it."""
+        assert not hasattr(event_waiter_module, "dispatch_async"), (
+            "event_waiter.dispatch_async was retired in Wave 15.3 "
+            "(Redis-Streams branch). Memory-mode dispatch() is the only "
+            "path; Temporal owns durable event delivery."
+        )
 
     def test_unpack_event_handles_workflow_event(self, event_waiter_module):
         """Functional check: a WorkflowEvent input round-trips to

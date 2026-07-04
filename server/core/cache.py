@@ -331,109 +331,12 @@ class CacheService:
             logger.error(f"Stream read failed: {streams.keys()}", error=str(e))
             return None
 
-    async def stream_create_group(self, stream: str, group: str, start_id: str = "$") -> bool:
-        """Create consumer group for stream.
-
-        Args:
-            stream: Stream name
-            group: Consumer group name
-            start_id: Start reading from ('$' = new only, '0' = all)
-
-        Returns:
-            True if created or already exists
-        """
-        try:
-            if self.use_redis and self.redis and self._streams_available:
-                try:
-                    await self.redis.xgroup_create(stream, group, start_id, mkstream=True)
-                    logger.info(f"Created consumer group: {group} on {stream}")
-                    return True
-                except Exception as e:
-                    if "BUSYGROUP" in str(e):
-                        # Group already exists - this is fine
-                        return True
-                    raise
-            return False
-        except Exception as e:
-            logger.error(f"Stream create group failed: {stream}/{group}", error=str(e))
-            return False
-
-    async def stream_read_group(
-        self, group: str, consumer: str, streams: Dict[str, str], count: int = 1, block: Optional[int] = None
-    ) -> Optional[List[Any]]:
-        """Read from streams using consumer group.
-
-        Args:
-            group: Consumer group name
-            consumer: Consumer name (unique per worker)
-            streams: Dict of stream_name -> last_id (use '>' for new pending messages)
-            count: Maximum messages to read
-            block: Milliseconds to block
-
-        Returns:
-            List of messages or None
-        """
-        try:
-            if self.use_redis and self.redis and self._streams_available:
-                result = await self.redis.xreadgroup(group, consumer, streams, count=count, block=block)
-                return result
-            return None
-        except Exception as e:
-            error_str = str(e).lower()
-            # Timeout errors are expected during blocking reads - log at debug level
-            if "timeout" in error_str or "timed out" in error_str:
-                logger.debug(f"Stream read group timeout: {group}/{consumer}", error=str(e))
-            else:
-                logger.error(f"Stream read group failed: {group}/{consumer}", error=str(e))
-            return None
-
-    async def stream_ack(self, stream: str, group: str, *msg_ids: str) -> int:
-        """Acknowledge messages in consumer group.
-
-        Args:
-            stream: Stream name
-            group: Consumer group name
-            msg_ids: Message IDs to acknowledge
-
-        Returns:
-            Number of messages acknowledged
-        """
-        try:
-            if self.use_redis and self.redis:
-                count = await self.redis.xack(stream, group, *msg_ids)
-                return count
-            return 0
-        except Exception as e:
-            logger.error(f"Stream ack failed: {stream}/{group}", error=str(e))
-            return 0
-
-    async def stream_delete(self, stream: str, *msg_ids: str) -> int:
-        """Delete messages from stream.
-
-        Args:
-            stream: Stream name
-            msg_ids: Message IDs to delete
-
-        Returns:
-            Number of messages deleted
-        """
-        try:
-            if self.use_redis and self.redis:
-                count = await self.redis.xdel(stream, *msg_ids)
-                return count
-            return 0
-        except Exception as e:
-            logger.error(f"Stream delete failed: {stream}", error=str(e))
-            return 0
+    # Consumer-group methods (stream_create_group / stream_read_group /
+    # stream_ack / stream_delete) and the public is_streams_available()
+    # were retired in Wave 15.3 with the event_waiter Redis branch.
+    # stream_add/stream_read stay for ExecutionCache.add_event/get_events;
+    # the _streams_available flag stays because stream_add guards on it.
 
     def is_redis_available(self) -> bool:
         """Check if Redis is available and connected."""
         return self.use_redis and self.redis is not None
-
-    def is_streams_available(self) -> bool:
-        """Check if Redis Streams are available (for trigger nodes).
-
-        Returns True only if Redis is connected AND supports Streams commands.
-        This is checked once during startup to avoid runtime failures.
-        """
-        return self.use_redis and self.redis is not None and self._streams_available
