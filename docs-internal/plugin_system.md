@@ -957,7 +957,9 @@ EventSource (abstract)
                             tail stdout/stderr; parse_line() → events
 ```
 
-Cron / scheduled events stay on APScheduler — they don't need this
+Cron / scheduled events are Temporal Schedules (created by the
+deployment manager via `services/temporal/schedules.py`; the
+APScheduler path was retired in Wave 15.2) — they don't need this
 base. Internal in-process events go through `event_waiter.dispatch`
 directly.
 

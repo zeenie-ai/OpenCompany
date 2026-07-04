@@ -37,7 +37,7 @@ phase plan lives in `~/.claude/plans/properly-fix-the-tech-dreamy-tarjan.md`.
 | Phase | State |
 |---|---|
 | D2 — Custom `event_dlq` SQLModel table | ❌ **dropped** (commit `89b15bd`, docs only). Temporal Event History + Visibility queries cover the ops-inspection use case; reinventing them would contradict Wave 12's "Temporal-native, no custom infra" thesis. See § "Failure inspection — no separate DLQ table". |
-| D2b — Retire `event_waiter.py` Redis-Streams branch | ⏳ pending — flag default now `True`; gated on production-stability window before draining the legacy collector. |
+| D2b — Retire `event_waiter.py` Redis-Streams branch | ✅ shipped as Wave 15.3 (see [TEMPORAL_CLEANUP_AND_RESILIENCE_PLAN.md](./TEMPORAL_CLEANUP_AND_RESILIENCE_PLAN.md)). `event_waiter` is memory-mode-only now; Temporal owns durable delivery. The in-memory collector still backs canvas-Run + non-canary (Twitter) triggers. |
 | D4 — Drain remaining dual-emit on message/newsletter/history wire keys | ⏳ pending — paired with FE migration to envelope-aware readers on those channels (`whatsapp_message_received` et al). |
 | WorkflowEnvironment integration smoke test | ⏳ pending — full 7-canary in-process Temporal cluster. Existing unit tests + per-canary producer tests + `TestCanaryRegistryCoverage` cover the static surface; the integration smoke would catch real-cluster regressions only. |
 
@@ -53,7 +53,7 @@ If the canary fan-out causes regressions in production:
 2. Restart the server (`npm run start` / `uvicorn` reload). Pydantic Settings re-reads on startup.
 3. Confirm pass-through: `dispatch.emit()` logs `event-framework disabled — emit no-op` at DEBUG.
 
-No DB migrations, no schema changes — the rollback is one env var + restart. The legacy `event_waiter` collector/processor keeps trigger nodes firing because plugin producers still call `event_waiter.dispatch(...)` alongside `dispatch.emit(...)` (the dual-dispatch pattern stays until D2b retires the Redis-Streams branch).
+No DB migrations, no schema changes — the rollback is one env var + restart. The legacy `event_waiter` collector/processor keeps trigger nodes firing because plugin producers still call `event_waiter.dispatch(...)` alongside `dispatch.emit(...)` (the dual-dispatch pattern stays for the in-memory canvas-Run path; the Redis-Streams branch itself was retired in Wave 15.3).
 
 Locked by `tests/test_event_framework_phase_a.py::TestEventFrameworkEnabledDefault::test_event_framework_enabled_defaults_true` (source-introspection check that the `Field(default=True, ...)` declaration is present) and `TestCanaryRegistryCoverage::test_seven_canary_types_registered` (every canary plugin opted in via `register_canary_trigger_type`).
 

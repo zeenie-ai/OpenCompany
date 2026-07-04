@@ -3,7 +3,7 @@
 > **⚠️ Pre-Wave-11 — historical reference only.**
 > Node authoring now happens on the backend: each node is a Python plugin under `server/nodes/<category>/<node>.py` that emits a `NodeSpec`. The frontend reads specs via [client/src/lib/nodeSpec.ts](../client/src/lib/nodeSpec.ts) + [adapters/nodeSpecToDescription.ts](../client/src/adapters/nodeSpecToDescription.ts). See [plugin_system.md](./plugin_system.md) and [server/nodes/README.md](../server/nodes/README.md) for the current model. The snippets below that reference `client/src/nodeDefinitions/*` are kept for historical context.
 
-Trigger nodes in MachinaOS suspend workflow execution until an external event arrives (WhatsApp message, webhook request, Telegram message, chat input, delegated task completion, etc.). The Event Waiter system is the generic primitive that backs all push-based triggers. It has two backends: in-memory (`asyncio.Future`) and Redis Streams (for multi-worker durability).
+Trigger nodes in MachinaOS suspend workflow execution until an external event arrives (WhatsApp message, webhook request, Telegram message, chat input, delegated task completion, etc.). The Event Waiter system is the in-memory (`asyncio.Future`) primitive that backs push-based triggers on the canvas-Run path. Deployed triggers ride the Temporal-durable canary path (`services/events/dispatch.py` → `TriggerListenerWorkflow` / `PollingTriggerWorkflow`) instead; the Redis-Streams backend that previously offered cross-restart waiter persistence was retired in Wave 15.3 because Temporal owns durability now.
 
 Source file: `server/services/event_waiter.py`
 
@@ -31,9 +31,9 @@ class Waiter:
     node_id: str                     # workflow node waiting
     node_type: str                   # 'whatsappReceive', 'webhookTrigger', ...
     event_type: str                  # 'whatsapp_message_received', ...
-    params: Dict                     # node parameters (used to rebuild filter in Redis mode)
+    params: Dict                     # node parameters (filter provenance)
     filter_fn: Callable[[Dict], bool]
-    future: Optional[asyncio.Future] # only used in memory mode
+    future: Optional[asyncio.Future] # resolved by dispatch() on match
     cancelled: bool
     created_at: float
 ```
@@ -55,7 +55,7 @@ TRIGGER_REGISTRY: Dict[str, TriggerConfig] = {
 }
 ```
 
-`cronScheduler` is **not** in this registry: it uses APScheduler directly and does not wait for events.
+`cronScheduler` is **not** in this registry: it is a Temporal Schedule (created by the deployment manager via `services/temporal/schedules.py`) and does not wait for events.
 
 ### Filter Builders
 
@@ -92,42 +92,28 @@ event_waiter.wait_for_event(waiter)  (suspends)
         External event arrives (WhatsApp RPC, Telegram long-polling, webhook HTTP request, ...)
                     |
                     v
-        event_waiter.dispatch(event_type, data)  (sync, thread-safe)
-        or event_waiter.dispatch_async(event_type, data)  (Redis mode)
+        event_waiter.dispatch(event_type, data)  (sync; also accepts a WorkflowEvent)
                     |
                     v
         For each Waiter with matching event_type:
             if waiter.filter_fn(data):
-                waiter.future.set_result(data)  (memory mode)
-                or stream_ack(...)              (Redis mode)
+                waiter.future.set_result(data)
                     |
                     v
 Workflow resumes, trigger node completes, downstream nodes execute
 ```
 
-## Two Backends
+## Backend
 
-### Memory Mode
-
-Default for local development. Uses `asyncio.Future` with a module-level `_waiters` dict.
+Single in-memory backend using `asyncio.Future` with a module-level `_waiters` dict.
 
 - `register()` creates an `asyncio.Future` and stores it in `_waiters[waiter.id]`.
 - `wait_for_event()` awaits the future.
 - `dispatch()` iterates `_waiters`, runs `filter_fn(data)` on each, calls `future.set_result(data)` on matches.
 
-Thread-safe: `dispatch()` detects whether it is running in an async loop or a thread (e.g. APScheduler callback) and uses `asyncio.run_coroutine_threadsafe(..., _main_loop)` when needed.
+`capture_main_loop()` (called during app startup in `main.py`) stores the main event loop so future thread-context callers can hop onto it via `asyncio.run_coroutine_threadsafe`.
 
-### Redis Streams Mode
-
-Activated automatically when `CacheService.is_streams_available()` returns True. Used in Temporal multi-worker deployments where waiters may live on different processes than dispatchers.
-
-- Events are appended to `events:{event_type}` streams via `XADD`.
-- Each waiter creates its own consumer group `waiter_group_{waiter_id}` for broadcast semantics (every waiter sees every event, not load-balanced).
-- `_wait_redis()` polls with blocking `XREADGROUP` in 5-second chunks so cancellation is responsive.
-- On match, the stream entry is `XACK`ed and the waiter is cleaned up.
-- Waiter metadata is stored in `waiters:{waiter_id}` with 24-hour TTL for visibility in other workers.
-
-The Redis mode is initialized by `set_cache_service(cache)` during app startup in `main.py`.
+Durability note: waiter state does NOT survive a process restart — that is by design. Deployed triggers get restart durability from the Temporal canary path (`TriggerListenerWorkflow` / `PollingTriggerWorkflow` / Temporal Schedules); the event waiter only backs interactive canvas-Run waits, where a dead process means the user's canvas session is gone anyway. (The Redis-Streams backend that previously covered this was retired in Wave 15.3.)
 
 ## Polling Triggers vs Event Triggers
 
@@ -141,8 +127,8 @@ Some triggers do not fit the push model because the upstream service has no webh
 | `taskTrigger` | Event (push via delegation) | `event_waiter.py` |
 | `telegramReceive` | Event (push via long-polling) | `event_waiter.py` + `TelegramService` |
 | `twitterReceive` | **Polling** | `deployment/triggers.py` + `asyncio.Queue` |
-| `googleGmailReceive` | **Polling** | `deployment/triggers.py` + `asyncio.Queue` |
-| `cronScheduler` | APScheduler | `deployment/triggers.py` |
+| `googleGmailReceive` | **Polling** | `PollingTriggerWorkflow` (Temporal canary) |
+| `cronScheduler` | Temporal Schedule | `services/temporal/schedules.py` |
 
 Polling triggers are routed in `DeploymentManager._create_poll_coroutine()` and use `TriggerManager.setup_polling_trigger()` with a custom poll function and an `asyncio.Queue`. See [workflow-schema.md](workflow-schema.md) for the full trigger list.
 
@@ -152,7 +138,7 @@ Users can cancel a waiting trigger from the UI (Cancel button on the trigger nod
 
 1. Frontend sends `cancel_event_wait` WebSocket message with `waiter_id` or `node_id`.
 2. `handle_cancel_event_wait()` in `server/routers/websocket.py` calls either `event_waiter.cancel(waiter_id)` or `event_waiter.cancel_for_node(node_id)`.
-3. `cancel()` sets `w.cancelled = True`, calls `future.cancel()` in memory mode, and deletes the Redis metadata key in Redis mode.
+3. `cancel()` sets `w.cancelled = True` and calls `future.cancel()`.
 4. The suspended `wait_for_event()` raises `asyncio.CancelledError`, which bubbles up through the node executor.
 
 ## Debugging

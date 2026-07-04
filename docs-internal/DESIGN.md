@@ -588,23 +588,13 @@ async def scan_on_startup(self) -> List[str]:
 
 ### Cross-Thread Event Dispatch
 
-APScheduler runs callbacks in thread pools. The event waiter handles this:
-
-```python
-def dispatch(event_type: str, data: Dict) -> int:
-    """Thread-safe event dispatch."""
-    try:
-        # Check if we're in async context
-        loop = asyncio.get_running_loop()
-        asyncio.create_task(dispatch_async(event_type, data))
-    except RuntimeError:
-        # No event loop - we're in a thread
-        if _main_loop and _main_loop.is_running():
-            asyncio.run_coroutine_threadsafe(
-                dispatch_async(event_type, data),
-                _main_loop
-            )
-```
+Historical pattern (Wave 15 note): APScheduler thread-pool callbacks were
+the original motivation; APScheduler was retired in Wave 15.2 and the
+Redis-Streams `dispatch_async` sibling in Wave 15.3. `event_waiter`
+still captures the main loop at startup (`capture_main_loop()` in
+`main.py`) so any future thread-context caller can hop onto it with
+`asyncio.run_coroutine_threadsafe(...)`; every production caller today
+runs on the main event loop and uses the sync `dispatch()` directly.
 
 ---
 

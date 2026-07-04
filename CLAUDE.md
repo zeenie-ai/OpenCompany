@@ -43,7 +43,7 @@ This is a React Flow-based workflow automation platform implementing n8n-inspire
 | **[CLI Services Integration](./docs-internal/cli_services_integration.md)** | Guide for integrating CLI-based services (Temporal, etc.) with proper lifecycle management |
 | **[Temporal Architecture](./docs-internal/TEMPORAL_ARCHITECTURE.md)** | Distributed workflow execution: activities, FIRST_COMPLETED scheduling, horizontal scaling |
 | **[Native LLM SDK](./docs-internal/native_llm_sdk.md)** | Native SDK layer in services/llm/: Protocol-based providers, config-driven base URLs, 12 providers (xai native-chat-only; ollama/lmstudio local servers), native vs LangChain path routing |
-| **[Event Waiter System](./docs-internal/event_waiter_system.md)** | Generic asyncio.Future/Redis-Streams waiter for push-based trigger nodes (WhatsApp, Telegram, Webhook, Chat, Task completion) |
+| **[Event Waiter System](./docs-internal/event_waiter_system.md)** | In-memory asyncio.Future waiter for push-based trigger nodes on the canvas-Run path (WhatsApp, Telegram, Webhook, Chat, Task completion). Deployed triggers ride the Temporal canary path; the Redis-Streams backend was retired in Wave 15.3 |
 | **[Credentials Encryption](./docs-internal/credentials_encryption.md)** | Fernet + PBKDF2 encryption pipeline, separate credentials.db, two credential systems (OAuth vs API keys), multi-backend abstraction |
 | **[Status Broadcaster](./docs-internal/status_broadcaster.md)** | WebSocket-first communication: StatusBroadcaster singleton, live count via `len(MESSAGE_HANDLERS) + len(get_ws_handlers())`, broadcast message types, Android two-state model |
 | **[RLM Service](./docs-internal/rlm_service.md)** | Recursive Language Model agent with REPL-based execution (llm_query, rlm_query, FINAL) |
@@ -121,7 +121,6 @@ server/services/
 ├── himalaya_service.py      # HimalayaService CLI wrapper for IMAP/SMTP (any email provider)
 ├── email_service.py         # EmailService orchestrator (credential resolution, provider presets)
 ├── todo_service.py          # TodoService singleton for writeTodos tool (JSON per-session state)
-├── scheduler.py             # APScheduler singleton for cron job management
 ├── memory.py                # Markdown-based conversation memory helpers
 ├── memory_store.py          # In-memory conversation store (LangChain 0.3+ compatible)
 ├── skill_prompt.py          # Skill system prompt builder (injects SKILL.md for personality skills)

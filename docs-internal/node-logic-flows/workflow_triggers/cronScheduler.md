@@ -11,7 +11,8 @@
 ## Purpose
 
 Recurring time-based trigger. In **deployed** workflows the scheduling
-happens inside `DeploymentManager` using APScheduler; this handler only
+happens inside `DeploymentManager` via a Temporal Schedule (the
+APScheduler path was retired in Wave 15.2); this handler only
 runs when the node is executed directly (manual run) or as an AI tool. In
 that mode it simply sleeps for the computed interval once, then returns
 metadata describing the schedule. It is NOT an event-waiter - it does not

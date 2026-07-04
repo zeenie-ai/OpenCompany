@@ -5,6 +5,16 @@
 - **Baseline**: `5b384b7` (v0.0.92)
 - **Supersedes**: the Wave 12/13 tracker (shipped; see `docs-internal/event_framework.md`)
 
+## Implementation status
+
+| Phase | Status |
+|---|---|
+| 15.1 — drop `WorkflowEvent.connection_status` | ✅ shipped `8bc96c1` |
+| 15.2 — retire APScheduler cron stack | ✅ shipped `eda3a20` (-272 LOC; Temporal hard-required for cron) |
+| 15.3 — retire Redis-Streams branch (D2b) | ✅ shipped `76576b1` (-347/+57 LOC; `dispatch_async` gone, `set_cache_service` → `capture_main_loop`, cache consumer-group methods gone; `_streams_available` flag KEPT — the surviving `stream_add` guards on it, a detail §4 originally missed) |
+| 15.4 — docs sweep | ✅ shipped (this commit) |
+| 16.x / 17.x / 18.x | ⏳ in progress |
+
 ---
 
 ## §1 Motivation
