@@ -272,9 +272,9 @@ Benefits:
 Add more workers = handle more concurrent nodes
 ```
 
-### Specialized Worker Pools (Future)
+### Specialized Worker Pools (Wave 16 — gated by `TEMPORAL_WORKER_POOL_ENABLED`)
 
-F4.A laid the infrastructure (per-type dispatch with `task_queue=cls.task_queue` on `BaseNode`) but the single `TemporalWorkerManager` still polls one queue. Wiring `TemporalWorkerPool` in `main.py` is the deferred follow-up:
+`TemporalWorkerPool` is wired into the `main.py` lifespan (starts right after `TemporalWorkerManager`, stops before it). When `TEMPORAL_WORKER_POOL_ENABLED=true`, one activity-only Worker per plugin-declared queue polls its specialised queue, and `MachinaWorkflow._resolve_activity` returns `(activity_name, cls.task_queue)` so per-type activities land there. Flag off (default until the stability window) = queue `None` = everything routes to the single manager worker on `machina-tasks`. **The flag is the rollback channel.**
 
 ```
 Queue: rest-api         Queue: ai-heavy         Queue: code-exec
@@ -285,25 +285,40 @@ Queue: rest-api         Queue: ai-heavy         Queue: code-exec
 | brave   |             | chatA   |             | js exec |
 | twitter |             | deepA   |             | ts exec |
 +---------+             +---------+             +---------+
-
-Plugin classes already declare cls.task_queue. When the pool wires
-in, `MachinaWorkflow._resolve_activity` starts returning
-(activity_name, cls.task_queue) instead of (activity_name, None).
 ```
 
-Per-queue defaults (concurrency caps in `services/temporal/worker.py:TemporalWorkerPool.DEFAULT_CONCURRENCY`):
+Pre-flight invariants live in `server/tests/test_task_queue_coverage.py` (every queue populated, every plugin queue declared, `DEFAULT_CONCURRENCY` covers every queue — an off-registry queue would hang activities at schedule-to-start).
 
-| Queue | Default concurrency | Use case |
-|---|---|---|
-| `machina-default` | 20 | Catch-all |
-| `rest-api` | 50 | Lightweight HTTP calls |
-| `ai-heavy` | 4 | LLM agent loops |
-| `code-exec` | 10 | Python / JS / TS sandboxes |
-| `triggers-poll` | 100 | Gmail polling, etc. |
-| `triggers-event` | 100 | Event-waiter triggers |
-| `android` | 10 | ADB / relay ops |
-| `browser` | 4 | Playwright / agent-browser |
-| `messaging` | 20 | WhatsApp / Telegram |
+### Worker Performance Tuning (Waves 17-18)
+
+All knobs live in `services/temporal/worker.py`; every default is env-overridable. `DEPLOYMENT_MODE` (`local` / `cloud` / `self_hosted`) is the topology hint (`core/config.py`).
+
+| Queue | Concurrency (cloud) | Concurrency (local = halved, floor 1) | Rate limit (act/s) | Slot sizing |
+|---|---|---|---|---|
+| `machina-default` | 20 | 10 | — | fixed |
+| `rest-api` | 50 | 25 | 100 | fixed |
+| `ai-heavy` | 4 | 2 | 60 | **resource-based** (80% CPU+mem target) |
+| `code-exec` | 10 | 5 | — | fixed |
+| `triggers-poll` | 100 | 50 | — | fixed |
+| `triggers-event` | 100 | 50 | — | fixed |
+| `android` | 10 | 5 | — | fixed |
+| `browser` | 4 | 2 | 10 | **resource-based** (80% CPU+mem target) |
+| `messaging` | 20 | 10 | 20 | fixed |
+
+Env overrides: `TEMPORAL_<QUEUE>_CONCURRENCY` (int) and `TEMPORAL_<QUEUE>_RATE_LIMIT` (float/sec) always win over the mode-scaled defaults.
+
+- **Worker identity** (Wave 17.4): `machina-<queue>-<deployment_mode>` — readable Workers tab in the Temporal Web UI.
+- **Sticky workflow cache** (Wave 18.2, manager worker only): `max_cached_workflows` = local 50 / cloud 500 / self_hosted 100. Cached workflows skip Event-History replay; evictions are a latency cost, not an error.
+- **Poller autoscaling** (Wave 18.3): `PollerBehaviorAutoscaling` — manager activity pollers 1-10 (initial 2), workflow pollers 1-20 (initial 2); pool workers 1-5 (initial 1). Invariant per the [worker-performance docs](https://docs.temporal.io/develop/worker-performance): pollers stay below executor slots.
+- **Resource-based slot supplier** (Wave 18.4): `ai-heavy` + `browser` (unpredictable workloads) use `ResourceBasedSlotSupplier` targeting 80% host CPU + memory, `minimum_slots=1`, `maximum_slots` = the per-queue concurrency. Requires `temporalio>=1.25.0` (pinned).
+- **Observability interceptors** (Wave 17.3, `services/temporal/_interceptors.py`): `activity_retry` WARN when `activity.info().attempt > 1` — the "worker died and Temporal re-dispatched" signal; `workflow_start` guarded by `workflow.unsafe.is_replaying()`.
+- **Periodic activity heartbeat** (Wave 17.6, `plugin/base.py::as_activity`): 30s background beat during long bodies so a laptop-sleep crash is detected within one `heartbeat_timeout` (2 min) instead of `start_to_close` (10 min).
+- **Cron catch-up bound** (Wave 17.1, `services/temporal/schedules.py`): `SchedulePolicy(catchup_window=24h)` + `SKIP` overlap — a laptop offline a week does not replay 168 hourly ticks on wake.
+- **One-shot LLM-step retry** (Wave 17.2): `LLM_STEP_RETRY(maximum_attempts=1)` on `agent.execute_llm_step.v1` — LLM calls are not idempotent; the workflow surfaces the failure instead of silently re-billing the prompt. `agent.refresh_tools.v1` deliberately keeps 3 attempts (idempotent canvas rebuild).
+
+**Metric watchlist** (Temporal Web UI / metrics endpoint): `schedule_to_start_latency` (elevated = raise pollers or slots), `worker_task_slots_available` (0 = raise concurrency or add hosts), `poll_success_rate` (target >= 90%), `sticky_cache_evictions` (persistent growth = raise `max_cached_workflows`).
+
+**Tuning order** (per the worker-performance docs): host provisioning -> executor slots -> poller counts -> rate limits.
 
 ### Agent-as-child-workflow (F4.B)
 

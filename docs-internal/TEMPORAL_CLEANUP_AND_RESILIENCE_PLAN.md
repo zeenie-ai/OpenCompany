@@ -12,8 +12,20 @@
 | 15.1 — drop `WorkflowEvent.connection_status` | ✅ shipped `8bc96c1` |
 | 15.2 — retire APScheduler cron stack | ✅ shipped `eda3a20` (-272 LOC; Temporal hard-required for cron) |
 | 15.3 — retire Redis-Streams branch (D2b) | ✅ shipped `76576b1` (-347/+57 LOC; `dispatch_async` gone, `set_cache_service` → `capture_main_loop`, cache consumer-group methods gone; `_streams_available` flag KEPT — the surviving `stream_add` guards on it, a detail §4 originally missed) |
-| 15.4 — docs sweep | ✅ shipped (this commit) |
-| 16.x / 17.x / 18.x | ⏳ in progress |
+| 15.4 — docs sweep | ✅ shipped `1af2e00` |
+| 16.1 — task-queue coverage invariants | ✅ shipped `3262fb0` |
+| 16.2 — pool wired into lifespan (gated off) | ✅ shipped `18df875` |
+| 16.3 — `_resolve_activity` returns `cls.task_queue` when pool on | ✅ shipped `d4b55c4` |
+| 16.4 — default flip | ⏳ parked for one-release stability window (`TEMPORAL_WORKER_POOL_ENABLED` stays default-false; flip + `test_temporal_worker_pool_enabled_defaults_true` invariant afterwards) |
+| 17.1 — cron `catchup_window=24h` | ✅ shipped `5bf9000` (note: `catchup_window` is a `SchedulePolicy` field in the Python SDK, not `ScheduleSpec` as §6 originally said) |
+| 17.2 — one-shot LLM-step retry | ✅ shipped `03c2bf6` (`LLM_STEP_RETRY` constant; refresh_tools keeps 3 attempts, documented at callsite) |
+| 17.3 — observability interceptors | ✅ shipped `9ecd743` (replay guard via `workflow.unsafe.is_replaying()`) |
+| 17.4 — `DEPLOYMENT_MODE` + worker identity | ✅ shipped `a8ab832` |
+| 17.5 — mode-aware concurrency defaults | ✅ shipped `9b79e1a` |
+| 17.6 — periodic heartbeat during long bodies | ✅ shipped `dd32d50` |
+| 18.1-18.3 — rate limits + sticky cache + poller autoscaling | ✅ shipped `7842452` (temporalio floor bumped to >=1.25.0) |
+| 18.4 — resource-based slot supplier (ai-heavy + browser) | ✅ shipped `aa094be` |
+| 18.5 — tuning-recipe docs | ✅ shipped (this commit) |
 
 ---
 
