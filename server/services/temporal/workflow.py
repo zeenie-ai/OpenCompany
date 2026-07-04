@@ -451,14 +451,17 @@ class MachinaWorkflow:
         """Resolve (activity_name, task_queue) for a node type.
 
         F4.A: when ``settings.temporal_per_type_dispatch`` is on AND the
-        plugin class is registered, returns
-        ``("node.{type}.v{version}", None)`` so the activity is scheduled
-        by per-type name but stays on the workflow's default task queue.
-        The default queue is what ``TemporalWorkerManager`` polls today;
-        per-queue routing (``cls.task_queue``) becomes meaningful only
-        once ``TemporalWorkerPool`` is wired with one worker per queue
-        — until then, returning ``cls.task_queue`` would schedule the
-        activity to a queue no worker polls and the workflow would hang.
+        plugin class is registered, returns the per-type activity name
+        ``node.{type}.v{version}``.
+
+        Wave 16.3: the returned queue is ``cls.task_queue`` when
+        ``settings.temporal_worker_pool_enabled`` is on (each declared
+        queue then has a dedicated ``TemporalWorkerPool`` worker polling
+        it — wired in main.py right after the manager starts), or
+        ``None`` otherwise so the activity stays on the workflow's
+        default queue, which the single ``TemporalWorkerManager`` polls.
+        The flag is the rollback channel: flipping it off routes every
+        activity back to the manager worker without code changes.
 
         Falls back to ``("execute_node_activity", None)`` when:
           - the flag is off (preserves pre-F4.A behavior exactly), OR
@@ -474,14 +477,16 @@ class MachinaWorkflow:
         from core.config import Settings
         from services.node_registry import get_node_class
 
-        if not Settings().temporal_per_type_dispatch:
+        settings = Settings()
+        if not settings.temporal_per_type_dispatch:
             return "execute_node_activity", None
 
         cls = get_node_class(node_type)
         if cls is None:
             return "execute_node_activity", None
 
-        return f"node.{cls.type}.v{cls.version}", None
+        queue = cls.task_queue if settings.temporal_worker_pool_enabled else None
+        return f"node.{cls.type}.v{cls.version}", queue
 
     async def _wait_any_complete(self, running: Dict[str, Any]) -> tuple:
         """Wait for any activity to complete, return (node_id, result).

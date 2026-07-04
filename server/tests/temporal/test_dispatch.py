@@ -4,7 +4,9 @@ Locks the orchestrator's `_resolve_activity` contract:
   - flag OFF (default): every node routes to legacy `execute_node_activity`
   - flag ON + registered plugin: routes to `node.{type}.v{version}`
   - flag ON + unknown type: falls back to legacy
-  - task_queue is always None (per-queue routing waits for TemporalWorkerPool)
+  - task_queue is None while `temporal_worker_pool_enabled` is off;
+    `cls.task_queue` once the pool flag is on (Wave 16.3 — one
+    TemporalWorkerPool worker per declared queue polls it)
 
 If these invariants drift the Temporal worker will either silently lose
 per-type activity wiring (regression to single-dispatcher) or schedule
@@ -29,18 +31,21 @@ def workflow_instance() -> MachinaWorkflow:
     return MachinaWorkflow()
 
 
-def _set_flag(value: bool):
+def _set_flag(value: bool, *, pool: bool = False):
     """Patch the ``Settings`` import used by ``_resolve_activity``.
 
     ``tests/conftest.py`` stubs ``core.config.Settings`` as a MagicMock,
     so we can't go through the real env var. Instead, swap the lazy
     import inside the resolver for a SimpleNamespace returning the
-    desired flag value. Same effective contract — the resolver only
-    reads ``Settings().temporal_per_type_dispatch``.
+    desired flag values. Same effective contract — the resolver reads
+    ``temporal_per_type_dispatch`` + ``temporal_worker_pool_enabled``.
     """
 
     def fake_settings_factory():
-        return SimpleNamespace(temporal_per_type_dispatch=value)
+        return SimpleNamespace(
+            temporal_per_type_dispatch=value,
+            temporal_worker_pool_enabled=pool,
+        )
 
     return patch("core.config.Settings", side_effect=lambda: fake_settings_factory())
 
@@ -74,8 +79,8 @@ class TestResolveActivityFlagOn:
         with _set_flag(True):
             name, queue = workflow_instance._resolve_activity("pythonExecutor")
         assert name == "node.pythonExecutor.v1"
-        # F4.A intentionally returns None for queue — per-queue routing
-        # depends on TemporalWorkerPool which isn't wired yet.
+        # queue stays None while temporal_worker_pool_enabled is off —
+        # the single manager worker polls only the default queue.
         assert queue is None
 
     def test_agent_routes_per_type(self, workflow_instance):
@@ -104,6 +109,38 @@ class TestResolveActivityFlagOn:
         assert name == f"node.coding_agent.v{cls.version}"
 
 
+class TestResolveActivityPoolRouting:
+    """Wave 16.3: with BOTH flags on, the resolver returns the plugin's
+    declared ``cls.task_queue`` so per-type activities land on their
+    specialised TemporalWorkerPool worker. Pool flag off = None (the
+    rollback channel)."""
+
+    def test_pool_on_routes_to_declared_queue(self, workflow_instance):
+        from services.node_registry import get_node_class
+
+        with _set_flag(True, pool=True):
+            name, queue = workflow_instance._resolve_activity("pythonExecutor")
+        assert name == "node.pythonExecutor.v1"
+        assert queue == get_node_class("pythonExecutor").task_queue
+        assert queue == "code-exec"
+
+    def test_pool_on_ai_agent_routes_to_ai_heavy(self, workflow_instance):
+        with _set_flag(True, pool=True):
+            _, queue = workflow_instance._resolve_activity("aiAgent")
+        assert queue == "ai-heavy"
+
+    def test_pool_off_is_the_rollback_channel(self, workflow_instance):
+        with _set_flag(True, pool=False):
+            _, queue = workflow_instance._resolve_activity("pythonExecutor")
+        assert queue is None
+
+    def test_pool_on_unknown_type_still_falls_back_to_legacy(self, workflow_instance):
+        with _set_flag(True, pool=True):
+            name, queue = workflow_instance._resolve_activity("nonExistentType")
+        assert name == "execute_node_activity"
+        assert queue is None
+
+
 class TestAgentWorkflowDispatch:
     """F4.B: when the agent-workflow flag is on AND the node type is in
     AGENT_WORKFLOW_TYPES, dispatch must route through the child workflow
@@ -118,6 +155,7 @@ class TestAgentWorkflowDispatch:
             return SimpleNamespace(
                 temporal_per_type_dispatch=per_type,
                 temporal_agent_workflow_enabled=agent_wf,
+                temporal_worker_pool_enabled=False,
             )
 
         return _patch("core.config.Settings", side_effect=lambda: fake_settings())
