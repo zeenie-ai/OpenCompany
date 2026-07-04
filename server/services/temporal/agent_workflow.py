@@ -54,7 +54,7 @@ from temporalio.common import RetryPolicy  # kept for type hints
 
 from services.node_registry import get_node_class
 
-from ._retry_policies import DEFAULT_ACTIVITY_RETRY
+from ._retry_policies import DEFAULT_ACTIVITY_RETRY, LLM_STEP_RETRY
 from .workflow import AGENT_WORKFLOW_TYPES
 
 
@@ -291,13 +291,33 @@ class AgentWorkflow:
                 "thinking_config": payload.get("thinking_config"),
             }
 
-            step_result = await workflow.execute_activity(
-                "agent.execute_llm_step.v1",
-                args=[llm_payload],
-                activity_id=f"llm-step-{iteration + 1}",
-                start_to_close_timeout=LLM_STEP_TIMEOUT,
-                retry_policy=AGENT_ACTIVITY_RETRY,
-            )
+            # Wave 17.2: one-shot retry. The LLM call is not idempotent —
+            # a worker crash mid-call must not silently re-bill the full
+            # prompt (3x under the shared policy). The workflow owns the
+            # failure instead: message history is intact here, so a
+            # future enhancement can re-ask with context; today we
+            # surface the error to the canvas and stop the loop.
+            try:
+                step_result = await workflow.execute_activity(
+                    "agent.execute_llm_step.v1",
+                    args=[llm_payload],
+                    activity_id=f"llm-step-{iteration + 1}",
+                    start_to_close_timeout=LLM_STEP_TIMEOUT,
+                    retry_policy=LLM_STEP_RETRY,
+                )
+            except Exception as e:
+                cause = getattr(e, "cause", None)
+                detail = str(cause) if cause is not None else str(e)
+                workflow.logger.error(f"AgentWorkflow LLM step failed (iteration {iteration + 1}, " f"no auto-retry): {detail}")
+                return {
+                    "success": False,
+                    "error": f"LLM step failed: {detail}",
+                    "error_type": "LLMStepError",
+                    "result": {
+                        "iterations": iteration + 1,
+                        "usage": usage_total,
+                    },
+                }
 
             # Accumulate usage + thinking for the eventual return value.
             for k, v in (step_result.get("usage") or {}).items():
@@ -501,6 +521,10 @@ class AgentWorkflow:
                     if auto_rebind_enabled and isinstance(tool_result, dict):
                         ops_from_tool = tool_result.get("operations") or []
                         if ops_from_tool:
+                            # Deliberately multi-attempt (unlike the LLM
+                            # step's one-shot LLM_STEP_RETRY): rebuilding
+                            # the tool surface from canvas state is fully
+                            # idempotent, so retries are free.
                             refresh_result = await workflow.execute_activity(
                                 "agent.refresh_tools.v1",
                                 args=[{"operations": ops_from_tool}],

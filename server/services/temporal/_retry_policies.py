@@ -78,8 +78,23 @@ QUICK_ACTIVITY_RETRY: RetryPolicy = RetryPolicy(
 )
 
 
+# Wave 17.2: one-shot policy for the LLM step. An LLM API call is NOT
+# idempotent from a cost perspective — every automatic re-attempt after
+# a worker crash / laptop sleep bills the full prompt again (and can
+# double-fire side effects when the first attempt actually completed
+# server-side but the worker died before recording the result). The
+# workflow layer (AgentWorkflow.run) owns the retry decision instead:
+# it catches the ActivityError with the message history intact and
+# surfaces the failure to the canvas rather than silently re-billing.
+LLM_STEP_RETRY: RetryPolicy = RetryPolicy(
+    maximum_attempts=1,
+    non_retryable_error_types=list(NON_RETRYABLE_ERROR_TYPES),
+)
+
+
 __all__ = [
     "NON_RETRYABLE_ERROR_TYPES",
     "DEFAULT_ACTIVITY_RETRY",
     "QUICK_ACTIVITY_RETRY",
+    "LLM_STEP_RETRY",
 ]
