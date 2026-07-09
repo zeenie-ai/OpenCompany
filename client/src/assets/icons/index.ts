@@ -48,6 +48,7 @@ import Kimi from '@lobehub/icons/es/Kimi';
 import Mistral from '@lobehub/icons/es/Mistral';
 import Ollama from '@lobehub/icons/es/Ollama';
 import LmStudio from '@lobehub/icons/es/LmStudio';
+import Vercel from '@lobehub/icons/es/Vercel';
 
 type RawSvg = string;
 
@@ -152,6 +153,7 @@ const LOBEHUB_BRANDS: Readonly<Record<string, any>> = {
   mistral: Mistral,
   ollama: Ollama,
   lmstudio: LmStudio,
+  vercel: Vercel,
 };
 
 const ICON_LIBRARIES: Readonly<Record<string, LibraryResolver>> = {

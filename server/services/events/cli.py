@@ -24,11 +24,16 @@ async def run_cli_command(
     timeout: float = 30.0,
     env: Optional[Dict[str, str]] = None,
     stdin: Optional[int] = None,
+    cwd: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run ``<binary> <argv> [api_key_arg <key>]`` once, return parsed JSON.
 
     ``env``: optional process environment override. When None, the child
     inherits the parent's environment (asyncio default).
+
+    ``cwd``: optional working directory for the child. Needed by CLIs
+    whose commands are directory-scoped (``vercel deploy`` deploys the
+    cwd). ``None`` inherits the parent's cwd.
 
     ``stdin``: optional override for the child's stdin handle. ``None``
     (default) inherits the parent's stdin — what most one-shot CLI
@@ -74,6 +79,7 @@ async def run_cli_command(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
+            cwd=cwd,
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
     except asyncio.TimeoutError:

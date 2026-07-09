@@ -308,6 +308,10 @@
   "vectorStore": {
     "icon": "🗄️"
   },
+  "vercelAction": {
+    "icon": "lobehub:Vercel",
+    "skill": "vercel-skill"
+  },
   "web_agent": {
     "icon": "🌐"
   },

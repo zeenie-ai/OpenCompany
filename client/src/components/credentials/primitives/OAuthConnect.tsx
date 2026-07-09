@@ -40,18 +40,21 @@ const OAuthConnect: React.FC<Props> = ({
 }) => {
   // Some providers (e.g. Stripe) delegate auth entirely to an external
   // CLI tool — they have no MachinaOs-side credentials to paste, so
-  // there's nothing to "store" before Login is meaningful.
-  const hasFields = !!config.fields?.length;
+  // there's nothing to "store" before Login is meaningful. Only
+  // *required* fields gate the Login button: optional fields are an
+  // alternative auth path, not a prerequisite (e.g. Vercel's access
+  // token alongside its CLI device-flow login).
+  const hasRequiredFields = !!config.fields?.some((f) => f.required);
 
   const statusRows: StatusRowDef[] = [
     { label: 'Status', ok: () => connected, trueText: 'Connected', falseText: 'Not Connected' },
-    ...(hasFields
+    ...(hasRequiredFields
       ? [{ label: 'Credentials', ok: () => stored, trueText: 'Configured', falseText: 'Not configured' } as StatusRowDef]
       : []),
   ];
 
   const actions: ActionDef[] = [
-    { key: 'login', label: `Login with ${config.name}`, intent: 'save', onClick: onLogin, disabled: hasFields && !stored, hidden: connected },
+    { key: 'login', label: `Login with ${config.name}`, intent: 'save', onClick: onLogin, disabled: hasRequiredFields && !stored, hidden: connected },
     { key: 'logout', label: 'Disconnect', intent: 'stop', onClick: onLogout, hidden: !connected },
     { key: 'refresh', label: 'Refresh', intent: 'save', onClick: onRefresh, icon: <RotateCcw className="h-4 w-4" /> },
   ];
@@ -96,7 +99,7 @@ const OAuthConnect: React.FC<Props> = ({
             ? config.account_label
               ? `Connected as ${config.account_label}.`
               : `Your ${config.name} account is connected.`
-            : (stored || !hasFields)
+            : (stored || !hasRequiredFields)
               ? 'Click Login to authorize.'
               : 'Enter your credentials above to get started.'}
         </div>

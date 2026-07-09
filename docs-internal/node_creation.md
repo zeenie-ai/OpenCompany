@@ -17,7 +17,7 @@ this file picks the right entry point based on what you're adding.
 | A node that wraps a CLI tool, supervises a daemon, or receives signed webhooks | [Wave 12 event framework](./plugin_system.md#wave-12--generalized-event-framework-servicesevents) (this section is the most important one) | self-contained folder under `server/nodes/<group>/` using `services.events` base classes |
 | A polling-based trigger node | [Wave 12 event framework](./plugin_system.md#wave-12--generalized-event-framework-servicesevents) — subclass `PollingEventSource` | new file or folder; framework owns the loop |
 | A long-lived service plugin (bot connection, WebSocket bridge, SDK session) | [Self-contained plugin folders (Wave 11.H)](./plugin_system.md#self-contained-plugin-folders) — telegram is the reference | folder with `_credentials.py` / `_service.py` / `_handlers.py` / `_filters.py` / `_refresh.py` |
-| A plugin whose auth is owned by an external CLI (`stripe login`, `gh auth login`, `gcloud auth login`) | [Stripe Service](./stripe_service.md) — the reference for "marker-token + generic catalogue invalidation" — and [plugin_system.md → CLI-managed auth pattern](./plugin_system.md#cli-managed-auth-pattern) | self-contained folder + `_install.py` for the auto-downloader; `_handlers.py` calls `auth_service.store_oauth_tokens(provider, "cli-managed", "cli-managed")` after the CLI login completes, then broadcasts the existing generic `credential_catalogue_updated` event |
+| A plugin whose auth is owned by an external CLI (`stripe login`, `vercel login`, `gh auth login`, `gcloud auth login`) | [Stripe Service](./stripe_service.md) — the reference for "marker-token + generic catalogue invalidation" — and [plugin_system.md → CLI-managed auth pattern](./plugin_system.md#cli-managed-auth-pattern); [Vercel Service](./vercel_service.md) for the **device-flow** variant (single blocking `login` process, no two-step complete flag) | self-contained folder + `_install.py` for the auto-downloader; `_handlers.py` calls `auth_service.store_oauth_tokens(provider, "cli-managed", "cli-managed")` after the CLI login completes, then broadcasts the existing generic `credential_catalogue_updated` event |
 
 ## The four node kinds
 
@@ -152,6 +152,26 @@ browser-OAuth" plugin lands as a self-contained folder under
 `server/nodes/<group>/` plus a one-line entry in
 `server/config/credential_providers.json` and zero touches outside
 the folder.
+
+**Device-flow variant (Vercel).** Not every CLI exposes Stripe's
+machine-friendly two-step (`--non-interactive` → `--complete <url>`).
+`vercel login` is a single **blocking** OAuth device flow: it prints a
+verification URL, then polls until the browser auth completes. The
+login handler therefore cannot use `run_cli_command` (which buffers
+output until process exit) — it spawns the CLI directly with
+`asyncio.create_subprocess_exec` (`stdin=PIPE` left un-written, the
+claude-login EOF guard), reads stdout+stderr in chunks until the URL
+appears (chunk-based, not `readline()` — spinner `\r` frames overrun
+the line limit; pumps keep draining for the process lifetime so the
+pipe buffer never fills), returns `{success, url}` immediately, and a
+background task awaits exit. Success gate is the same mtime-advance +
+sniff pair, against a **pinned config dir**: every invocation passes
+`--global-config <DATA_DIR>/vercel/` (the `CLAUDE_CONFIG_DIR`
+isolation idiom) so the auth-file path is deterministic across
+platforms. The installer is `npm install <pkg> --prefix
+<packages_dir()>` into the shared npm tree instead of a GitHub-release
+download. Reference: [`server/nodes/vercel/`](../server/nodes/vercel/)
++ [vercel_service.md](./vercel_service.md).
 
 ## What auto-wires (don't write it yourself)
 
