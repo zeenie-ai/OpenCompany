@@ -351,10 +351,11 @@ async def lifespan(app: FastAPI):
                         await worker_manager.start()
                         app.state.temporal_worker_manager = worker_manager
 
-                        # Wave 16.2: per-queue activity worker pool. Gated —
-                        # inert until TEMPORAL_WORKER_POOL_ENABLED=true. Starts
-                        # AFTER the manager so workflow registration is in
-                        # place before specialised activity workers poll.
+                        # Wave 16: per-queue activity worker pool (default-on
+                        # since 16.4; TEMPORAL_WORKER_POOL_ENABLED=false is
+                        # the rollback channel). Starts AFTER the manager so
+                        # workflow registration is in place before
+                        # specialised activity workers poll.
                         if settings.temporal_worker_pool_enabled:
                             from services.temporal.worker import TemporalWorkerPool
 

@@ -87,3 +87,41 @@ class TestTaskQueueCoverage:
             "update docs-internal/TEMPORAL_CLEANUP_AND_RESILIENCE_PLAN.md "
             "if a queue was deliberately removed."
         )
+
+
+class TestWorkerPoolDefaultOn:
+    """Wave 16.4: per-queue routing is the production default.
+
+    Source-introspection rather than ``Settings()`` instantiation because
+    conftest stubs ``core.config.Settings`` as a MagicMock for the test
+    session — same pattern as
+    ``test_event_framework_phase_a.py::test_event_framework_enabled_defaults_true``.
+    """
+
+    def test_temporal_worker_pool_enabled_defaults_true(self):
+        import re
+        from pathlib import Path
+
+        config_src = (Path(__file__).parent.parent / "core" / "config.py").read_text(encoding="utf-8")
+        default_true = re.compile(
+            r"default=True[\s,]+env=\"TEMPORAL_WORKER_POOL_ENABLED\"",
+            re.DOTALL,
+        )
+        default_false = re.compile(
+            r"default=False[\s,]+env=\"TEMPORAL_WORKER_POOL_ENABLED\"",
+            re.DOTALL,
+        )
+        assert default_true.search(config_src) is not None, (
+            "temporal_worker_pool_enabled default flipped to True in "
+            "Wave 16.4. The declaration "
+            '``Field(default=True, env="TEMPORAL_WORKER_POOL_ENABLED")`` '
+            "is missing from core/config.py. Opt out via "
+            "TEMPORAL_WORKER_POOL_ENABLED=false in .env — not by "
+            "reverting the default."
+        )
+        assert default_false.search(config_src) is None, (
+            "temporal_worker_pool_enabled reverted to default=False. "
+            "Wave 16.4 flipped the default to True. Use the env var "
+            "(TEMPORAL_WORKER_POOL_ENABLED=false) for opt-out, not a "
+            "code revert."
+        )

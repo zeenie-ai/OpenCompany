@@ -6,8 +6,8 @@ Each workflow node executes as a **Temporal activity** with its own isolated con
 
 | Dispatch | Trigger | Use case |
 |---|---|---|
-| **Legacy single activity** (`execute_node_activity`) | Default | Every node routed through one dispatcher activity. WebSocket round-trip back to the FastAPI server. Stable since Wave 11. |
-| **Per-type activity** (`node.{type}.v{version}`) | `TEMPORAL_PER_TYPE_DISPATCH=true` | Each plugin gets its own `@activity.defn`. Per-plugin retry / timeout / heartbeat configs apply. Worker pool can later specialise per `cls.task_queue` (browser / code-exec / ai-heavy / ...). Shipped in F4.A (commit `8261b05`). |
+| **Legacy single activity** (`execute_node_activity`) | `TEMPORAL_PER_TYPE_DISPATCH=false` | Every node routed through one dispatcher activity. WebSocket round-trip back to the FastAPI server. Stable since Wave 11; kept as the fallback path. |
+| **Per-type activity** (`node.{type}.v{version}`) | `TEMPORAL_PER_TYPE_DISPATCH=true` (production default) | Each plugin gets its own `@activity.defn`. Per-plugin retry / timeout / heartbeat configs apply. With `TEMPORAL_WORKER_POOL_ENABLED=true` (default since Wave 16.4) the activity also carries `task_queue=cls.task_queue`, landing it on its specialised `TemporalWorkerPool` worker (browser / code-exec / ai-heavy / ...). Shipped in F4.A (commit `8261b05`); queue routing activated in Wave 16. |
 | **Agent-as-child-workflow** (`AgentWorkflow`) | `TEMPORAL_AGENT_WORKFLOW_ENABLED=true` | AI Agents (aiAgent, chatAgent, 11 specialized agents, 2 team leads) run as Temporal child workflows. Each LLM turn = activity; each tool call = per-type activity. Mirrors Temporal's AI Cookbook canonical pattern. F4.B infrastructure shipped (commit `a4d009e`); per-agent migrations follow. |
 
 `rlm_agent`, `claude_code_agent` are intentionally excluded from AgentWorkflow — their externalised loops (RLM REPL / Claude CLI `--resume`) require single-process state continuity.
@@ -44,28 +44,31 @@ This invokes `run_standalone_worker()` from `services/temporal/worker.py`.
 ```
                         TEMPORAL SERVER (port 7233)
                                   |
-              Task Queue: machina-tasks
+              Task Queue: machina-tasks  (workflows + framework activities)
   +---------------------------------------------------------------+
   |  Workflow: MachinaWorkflow (orchestrator only)                |
   |  - Parses graph structure from React Flow                     |
   |  - Filters config nodes (tools, memory, services)             |
   |  - Resolves activity per node (legacy / per-type / agent-wf)  |
+  |  - Per-type activities carry task_queue=cls.task_queue        |
+  |    (Wave 16; TEMPORAL_WORKER_POOL_ENABLED, default on)        |
   |  - Schedules activities (FIRST_COMPLETED pattern)             |
   |  - Collects results and routes outputs to dependent nodes     |
   +---------------------------------------------------------------+
                                   |
-          Activity / child-workflow scheduling
-    +--------+  +--------+  +--------+  +----------------+
-    | Node A |  | Node B |  | Node C |  | AgentWorkflow  |  (F4.B child wf)
-    +--------+  +--------+  +--------+  +----------------+
-         |          |           |              |
-         v          v           v              v
-  +----------+  +----------+  +----------+  +-----------------------+
-  | Worker 1 |  | Worker 2 |  | Worker 3 |  | LLM step + tool steps |
-  | aiAgent  |  | timer    |  | console  |  | (per-type activities) |
-  +----------+  +----------+  +----------+  +-----------------------+
-         |          |           |              |
-         +----------+-----------+--------------+
+          Activity / child-workflow scheduling (routed by queue)
+                                  |
+   machina-tasks        specialised queues (TemporalWorkerPool)
+        |            ai-heavy   code-exec   browser   rest-api  ...
+  +-----------+     +--------+  +--------+  +-------+  +-------+
+  | Manager   |     | Pool   |  | Pool   |  | Pool  |  | Pool  |
+  | worker    |     | worker |  | worker |  | worker|  | worker|
+  | (wf tasks |     | aiAgent|  | python |  |browser|  | gmail |
+  | + legacy  |     | chatA  |  | js/ts  |  |       |  | brave |
+  | dispatch  |     | deepA  |  |        |  |       |  | ...   |
+  | + AgentWf)|     +--------+  +--------+  +-------+  +-------+
+  +-----------+          |           |          |          |
+        +----------------+-----------+----------+----------+
                            |
                            v
                    In-process call (F4.A) OR
@@ -272,9 +275,9 @@ Benefits:
 Add more workers = handle more concurrent nodes
 ```
 
-### Specialized Worker Pools (Wave 16 — gated by `TEMPORAL_WORKER_POOL_ENABLED`)
+### Specialized Worker Pools (Wave 16 — `TEMPORAL_WORKER_POOL_ENABLED`, default on since 16.4)
 
-`TemporalWorkerPool` is wired into the `main.py` lifespan (starts right after `TemporalWorkerManager`, stops before it). When `TEMPORAL_WORKER_POOL_ENABLED=true`, one activity-only Worker per plugin-declared queue polls its specialised queue, and `MachinaWorkflow._resolve_activity` returns `(activity_name, cls.task_queue)` so per-type activities land there. Flag off (default until the stability window) = queue `None` = everything routes to the single manager worker on `machina-tasks`. **The flag is the rollback channel.**
+`TemporalWorkerPool` is wired into the `main.py` lifespan (starts right after `TemporalWorkerManager`, stops before it). One activity-only Worker per plugin-declared queue polls its specialised queue, and `MachinaWorkflow._resolve_activity` returns `(activity_name, cls.task_queue)` so per-type activities land there. Setting `TEMPORAL_WORKER_POOL_ENABLED=false` stops the pool and routes every activity back to the single manager worker on `machina-tasks` — **the flag is the rollback channel** (locked default-on by `test_task_queue_coverage.py::TestWorkerPoolDefaultOn`).
 
 ```
 Queue: rest-api         Queue: ai-heavy         Queue: code-exec

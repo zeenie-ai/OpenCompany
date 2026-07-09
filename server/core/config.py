@@ -101,11 +101,16 @@ class Settings(BaseSettings):
     # task queue) alongside the TemporalWorkerManager, and
     # MachinaWorkflow._resolve_activity returns cls.task_queue so
     # per-type activities land on their specialised pool worker.
+    #
+    # Wave 16.4: default flipped to True — per-queue routing is the
+    # production default (LLM / browser / code-exec / REST workloads
+    # get isolated slot pools instead of sharing one 100-slot queue).
     # Rollback: TEMPORAL_WORKER_POOL_ENABLED=false + restart — the pool
     # stops and every activity routes back to the single manager worker
-    # on "machina-tasks". Default off until the 16.4 stability window.
+    # on "machina-tasks". Opt out via the env var, never by reverting
+    # this default (locked by test_task_queue_coverage.py).
     temporal_worker_pool_enabled: bool = Field(
-        default=False,
+        default=True,
         env="TEMPORAL_WORKER_POOL_ENABLED",
     )
     # Wave 17.4: deployment topology hint. Drives worker identity

@@ -16,7 +16,7 @@
 | 16.1 — task-queue coverage invariants | ✅ shipped `3262fb0` |
 | 16.2 — pool wired into lifespan (gated off) | ✅ shipped `18df875` |
 | 16.3 — `_resolve_activity` returns `cls.task_queue` when pool on | ✅ shipped `d4b55c4` |
-| 16.4 — default flip | ⏳ parked for one-release stability window (`TEMPORAL_WORKER_POOL_ENABLED` stays default-false; flip + `test_temporal_worker_pool_enabled_defaults_true` invariant afterwards) |
+| 16.4 — default flip | ✅ shipped (this commit) — `temporal_worker_pool_enabled` default `True`; opt-out via env var only, locked by `test_task_queue_coverage.py::TestWorkerPoolDefaultOn` |
 | 17.1 — cron `catchup_window=24h` | ✅ shipped `5bf9000` (note: `catchup_window` is a `SchedulePolicy` field in the Python SDK, not `ScheduleSpec` as §6 originally said) |
 | 17.2 — one-shot LLM-step retry | ✅ shipped `03c2bf6` (`LLM_STEP_RETRY` constant; refresh_tools keeps 3 attempts, documented at callsite) |
 | 17.3 — observability interceptors | ✅ shipped `9ecd743` (replay guard via `workflow.unsafe.is_replaying()`) |

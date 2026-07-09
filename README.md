@@ -38,7 +38,7 @@ The `dev` task starts the Python backend, Vite client, WhatsApp service, and Tem
 
 </details>
 
-## Quick Hello World Setup for Machinaos ↓.
+## Quick Hello World Setup for MachinaOS ↓
 https://github.com/user-attachments/assets/a5a5583f-bb5f-4d27-a387-8522c556e89e
 
 
@@ -120,7 +120,7 @@ RAG pipeline out of the box: parse PDFs and HTML, chunk into searchable pieces, 
 
 Local providers (Ollama, LM Studio) are first-class — context length, vision support, and tool-use capability are detected automatically from your running server. No paid API needed.
 
-### 17 specialized agent types
+### 16 specialized agent types
 
 Pick the right agent for the job:
 
@@ -150,7 +150,7 @@ Skills are short markdown files that teach an agent how to do something well —
 
 ### Memory that scales with your context window
 
-Agents track token usage and automatically compact long conversations when you hit half your model's context limit. Compaction summarizes in five sections — Task Overview, Current State, Important Discoveries, Next Steps, Context to Preserve — so the agent picks up exactly where it left off. For Anthropic and OpenAI, native API compaction is used; everywhere else, the agent summarizes itself.
+Agents track token usage and automatically compact long conversations as you approach your model's context limit (80% by default, configurable). Compaction summarizes in five sections — Task Overview, Current State, Important Discoveries, Next Steps, Context to Preserve — so the agent picks up exactly where it left off. For Anthropic and OpenAI, native API compaction is used; everywhere else, the agent summarizes itself.
 
 ### Cost tracking, built in
 
@@ -158,7 +158,7 @@ Every LLM call and API request is tracked with USD cost. See per-provider spend 
 
 ## The Canvas
 
-- **10 visual themes** — light, dark, Renaissance, Greek, Edo, Steampunk, Atomic, Cyber, Wasteland, Rot, Plague, Surveillance — each with its own icon set, sound pack, and decorative ornaments. Pick the vibe that matches your workflow.
+- **12 visual themes** — light, dark, Renaissance, Greek, Edo, Steampunk, Atomic, Cyber, Wasteland, Rot, Plague, Surveillance — each with its own icon set, sound pack, and decorative ornaments. Pick the vibe that matches your workflow.
 - **Drag-to-map outputs** from one node's output directly onto another's input fields.
 - **Live execution animations** — nodes glow while running, show iteration count for AI agents, and surface errors inline.
 - **Multi-tab Console** — chat with trigger nodes, watch console logs, and view terminal output side by side.

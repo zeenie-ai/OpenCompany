@@ -466,7 +466,6 @@ class TemporalWorkerPool:
             worker_kwargs: dict = dict(
                 task_queue=queue,
                 activities=activities,
-                max_concurrent_workflow_tasks=10,
                 graceful_shutdown_timeout=_graceful_shutdown_timeout(),
                 identity=_worker_identity(queue),
                 interceptors=[ObservabilityWorkerInterceptor()],
@@ -477,13 +476,19 @@ class TemporalWorkerPool:
                 # lower task volume than the manager's default queue.
                 activity_task_poller_behavior=PollerBehaviorAutoscaling(initial=1, minimum=1, maximum=5),
             )
-            # Wave 18.4: the Worker rejects tuner + max_concurrent_activities
-            # together — resource-tuned queues get the tuner, the rest keep
-            # fixed sizing.
+            # Wave 18.4: the Worker rejects `tuner` alongside ANY of
+            # `max_concurrent_workflow_tasks` / `max_concurrent_activities` /
+            # `max_concurrent_local_activities` / `max_concurrent_nexus_tasks`
+            # — the SDK enforces "size via tuner OR via max_concurrent_*,
+            # never both" (temporalio.worker.Worker.__init__). Resource-tuned
+            # queues get the tuner (which already carries a
+            # FixedSizeSlotSupplier(10) for workflow slots via
+            # `_tuner_for`); the rest keep fixed sizing.
             if tuner is not None:
                 worker_kwargs["tuner"] = tuner
             else:
                 worker_kwargs["max_concurrent_activities"] = concurrency
+                worker_kwargs["max_concurrent_workflow_tasks"] = 10
 
             worker = Worker(self.client, **worker_kwargs)
             task = asyncio.create_task(worker.run(), name=f"worker-{queue}")
