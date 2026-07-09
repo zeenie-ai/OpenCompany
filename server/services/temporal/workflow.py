@@ -286,6 +286,14 @@ class MachinaWorkflow:
             ready = self._find_ready_nodes(deps, completed, running, node_map)
             workflow.logger.debug(f"Loop {loop_count}: ready={len(ready)}, running={len(running)}, completed={len(completed)}")
 
+            # Triggers auto-completed by the skip branch below unblock their
+            # downstream nodes without putting anything into ``running`` —
+            # the exit check must re-evaluate readiness in that case instead
+            # of concluding the graph is drained (direct canvas-Run path:
+            # ``start`` is NOT pre-executed, so without this the loop broke
+            # after the start node and downstream never ran).
+            auto_completed_this_pass = 0
+
             # Start activities for ready nodes
             for node_id in ready:
                 node = node_map[node_id]
@@ -303,6 +311,7 @@ class MachinaWorkflow:
                     }
                     completed.add(node_id)
                     execution_trace.append(node_id)
+                    auto_completed_this_pass += 1
                     continue
 
                 # Build immutable context for this node
@@ -374,8 +383,13 @@ class MachinaWorkflow:
                         f"(activity={dispatch['name']}, queue={dispatch.get('queue') or 'default'})"
                     )
 
-            # Exit if nothing running and nothing ready
+            # Exit only when nothing is running AND this pass made no
+            # progress. Auto-completed triggers count as progress — they
+            # may have unblocked downstream nodes that the next
+            # _find_ready_nodes pass will pick up.
             if not running:
+                if auto_completed_this_pass:
+                    continue
                 break
 
             # Wait for ANY activity to complete (FIRST_COMPLETED pattern)
