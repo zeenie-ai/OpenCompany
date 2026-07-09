@@ -21,7 +21,8 @@ pitfalls).
 
 The full single-file recipe code block lives in the cookbook — see
 [`server/nodes/README.md` → Five-minute recipe](../server/nodes/README.md#five-minute-recipe).
-A self-contained folder (`AcmeSearchNode`) declares `type` /
+A single file (`server/nodes/search/acme_search.py`, class
+`AcmeSearchNode`) declares `type` /
 `display_name` / `group` / `component_kind` / `handles` /
 `credentials` / `task_queue` / `usable_as_tool` / `Params` / `Output`
 plus one `@Operation` method, and nothing else.
@@ -34,7 +35,7 @@ plus one `@Operation` method, and nothing else.
 - `_NODE_CLASS_REGISTRY` indexes the class itself so Temporal workers
   and tool dispatch can look it up by type.
 - NodeSpec emits automatically via
-  `GET /api/schemas/nodes/exampleSearch/spec.json`.
+  `GET /api/schemas/nodes/acmeSearch/spec.json`.
 - `_PLUGIN_HANDLERS` merge in `NodeExecutor` makes it runnable.
 - The node appears in the Component Palette under its group
   (search + tool) at the next browser reload.
@@ -704,8 +705,8 @@ server/
 
 ## Contract invariants
 
-`server/tests/test_plugin_contract.py` — 16 invariants enforced on
-every CI run. Examples:
+`server/tests/test_plugin_contract.py` — contract invariants enforced
+on every CI run (live count via `pytest --collect-only`). Examples:
 
 - Non-empty `type` / `display_name` / `group` per class.
 - `Params` + `Output` must be Pydantic `BaseModel` subclasses.

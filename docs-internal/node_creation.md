@@ -63,6 +63,7 @@ server/nodes/<provider>/
 ├── _credentials.py         # ApiKeyCredential subclass
 ├── _source.py              # DaemonEventSource + WebhookSource subclasses
 ├── _handlers.py            # WS_HANDLERS via make_lifecycle_handlers()
+├── _install.py             # ensure_<provider>_cli() auto-downloader
 ├── <provider>_action.py    # ActionNode + AI tool — uses run_cli_command
 └── <provider>_receive.py   # WebhookTriggerNode subclass
 ```
@@ -90,17 +91,19 @@ reused:
 
 1. **Marker-token write after CLI login completes.** The plugin
    writes synthetic strings to `auth_service.store_oauth_tokens`
-   with the provider id matching the catalogue's `status_hook`. The
-   strings exist purely to flip
-   `auth_service.get_oauth_tokens(status_hook) is not None` true,
-   which the catalogue handler at
+   with the provider id matching the catalogue entry's key. CLI-managed
+   providers set **no** `status_hook` — the catalogue handler at
    [`server/routers/websocket.py:handle_get_credential_catalogue`](../server/routers/websocket.py)
-   uses to set `provider.stored = true`. **Same API path Google's
+   resolves them through its `kind == "oauth"` fallback, which keys
+   `auth_service.get_oauth_tokens(provider_id) is not None` off the
+   provider id directly to set `provider.stored = true` (the
+   `status_hook` branch is only for providers that declare one:
+   google / twitter / telegram). **Same storage API path Google's
    OAuth callback uses** — no new abstraction.
 
    ```python
    await auth_service.store_oauth_tokens(
-       provider="stripe",                # matches status_hook in catalogue JSON
+       provider="stripe",                # matches the provider id (catalogue key) — no status_hook needed
        access_token="cli-managed",       # marker; CLI owns the real auth
        refresh_token="cli-managed",
    )
@@ -182,7 +185,7 @@ walker does on startup), these registrations happen automatically:
 |---|---|---|
 | Node class registration | `_NODE_CLASS_REGISTRY` | `BaseNode.__init_subclass__` on class definition |
 | Metadata + Pydantic schemas | `NODE_METADATA`, `_DIRECT_MODELS`, `NODE_OUTPUT_SCHEMAS` | same |
-| Handler dispatch | `_PLUGIN_HANDLERS` (merged into `NodeExecutor`) | same |
+| Handler dispatch | `_HANDLER_REGISTRY` (imported into `NodeExecutor` as `_PLUGIN_HANDLERS`) | same |
 | Auto-derived `uiHints.isConfigNode: True` | `NODE_METADATA[type]['uiHints']` | `_metadata_dict` runs `_derive_auto_ui_hints(cls.group)` for every plugin in a `('memory', 'tool')` group. Plugin `ui_hints = {...}` always wins. Tells the frontend that the node's panel inherits its parent's main inputs. See [plugin_system.md → Auto-derived uiHints](./plugin_system.md#auto-derived-uihints). |
 | Credentials | `CREDENTIAL_REGISTRY` | `Credential.__init_subclass__` when `_credentials.py` is imported |
 | Trigger registry + filter builders | `event_waiter.TRIGGER_REGISTRY`, `FILTER_BUILDERS` | back-fill from `TriggerNode` subclasses on first lookup |
@@ -218,9 +221,11 @@ What you **do** still write:
   plugin count via `glob server/nodes/**/__init__.py`; invariant total
   via `pytest --collect-only`. `services/handlers/` shrank from
   12.8K → 1.1K LOC.
-- **Wave 11.H** — Self-contained plugin folders. Five generic
-  registries replace per-plugin hardcoding in core. Telegram is the
-  reference.
+- **Wave 11.H** — Self-contained plugin folders. Six generic
+  registries replace per-plugin hardcoding in core (five at 11.H;
+  `register_router` landed in 11.I), plus newer `register_*`
+  entrypoints for webhook sources / option loaders / OAuth callback
+  paths / canary trigger types. Telegram is the reference.
 - **Wave 12** — Generalized event framework
   ([`services/events/`](../server/services/events/)). `EventSource`
   hierarchy + CloudEvents-shaped envelope + verifier registry +

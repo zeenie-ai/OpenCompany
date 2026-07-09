@@ -141,7 +141,7 @@ these first before writing new code:
 |---|---|---|
 | `agent/` | `_inline.prepare_agent_call` | One-shot pre-dispatch for every agent (memory + skill + tool + teammate collection) |
 | `agent/` | `_specialized.SpecializedAgentBase` | Base for 13 specialized agents |
-| `model/` | `_base.ChatModelBase` | 9 chat models inherit → same `@Operation("chat")` body that calls `ai_service.execute_chat` |
+| `model/` | `_base.ChatModelBase` | 11 chat models inherit → same `@Operation("chat")` body that calls `ai_service.execute_chat` |
 | `android/` | `_base.AndroidServiceBase` | 16 Android services inherit; payload translation + `SERVICE_ID_MAP` lives on this base |
 | `android/` | `_base.execute_android_toolkit` / `execute_android_service_tool` | AI-tool dispatchers — called from `services/handlers/tools.py` for the toolkit aggregator + direct service tool branches |
 | `code/` | `_base.CodeExecutorBase` + `_nodejs.NodeJSClient` | Python/JS/TS executors; `monty_executor/` is sandboxed Python via `pydantic-monty` (enforced limits + opt-in capabilities) |
@@ -182,7 +182,7 @@ from ._credentials import TwitterCredential              # shared with 3 sibling
 | `nodes/twitter/` | `TwitterCredential` (OAuth2 + PKCE) | twitter_send / _search / _user / _receive |
 | `nodes/telegram/` | `TelegramCredential` (bot token + owner chat id) | telegram_send / _receive |
 | `nodes/scraper/` | `ApifyCredential` (Bearer) | apify_actor |
-| `nodes/model/` | 10 LLM classes (`OpenAI / Anthropic / Gemini / OpenRouter / Groq / Cerebras / DeepSeek / Kimi / Mistral / Xai`) | 9 chat models |
+| `nodes/model/` | 12 LLM classes (`OpenAI / Anthropic / Gemini / OpenRouter / Groq / Cerebras / DeepSeek / Kimi / Mistral / Xai / Ollama / LMStudio`) | 11 chat models |
 | `nodes/search/` | `BraveSearch / Serper / Perplexity` inlined in each plugin file | single-use per plugin |
 
 Declare inline only when genuinely single-use (see
@@ -199,8 +199,9 @@ wiring beyond the import statement.
 
 ## Contract invariants
 
-`server/tests/test_plugin_contract.py` enforces 16 invariants on
-every plugin. Common ones you'll trip:
+`server/tests/test_plugin_contract.py` enforces the contract
+invariants on every plugin (live count via `pytest --collect-only`).
+Common ones you'll trip:
 
 - `type` / `display_name` / `group` must be non-empty.
 - `Params` + `Output` must be Pydantic `BaseModel` subclasses.
@@ -266,6 +267,16 @@ package's `__init__.py` — the consumer never imports your folder.
 
 All six are idempotent (same callable / class for the same key is a
 no-op; conflicts raise `ValueError`).
+
+These six are the core self-contained-folder set; newer concerns have
+their own generic `register_*` entrypoints in the same spirit —
+`services.events.register_webhook_source`,
+`services.ws_handler_registry.register_option_loader` /
+`register_oauth_callback_path`,
+`services.deployment.canary_registry.register_canary_trigger_type`,
+`services.deployment.poll_registry.register_poll_coroutine_factory`,
+`services.plugin.edge_walker.register_master_skill_expander`, and
+`services.plugin.social_provider_registry.register_social_send_handler`.
 
 **Register, don't edit the consumer.** Never edit `event_waiter.py`,
 `status_broadcaster.py`, or `routers/websocket.py` to add a plugin's
