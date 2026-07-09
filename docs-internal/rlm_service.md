@@ -49,10 +49,11 @@ Execution Flow
 ================================
 
 NodeExecutor._dispatch()
-  -> handle_rlm_agent()                    [server/services/handlers/rlm.py]
-       |
-       +-- _collect_agent_connections()     [REUSE from handlers/ai.py]
-       +-- _format_task_context()           [REUSE from handlers/ai.py]
+  -> RLMAgentNode.execute_op()             [server/nodes/agent/rlm_agent.py]
+       |                                    (post-Wave-11 replacement for the
+       |                                     retired server/services/handlers/rlm.py)
+       +-- collect_agent_connections()      [services/plugin/edge_walker.py]
+       +-- _format_task_context()           [nodes/agent/_inline.py — prepare_agent_call]
        +-- tool stripping on completion     [REUSE pattern]
        +-- auto-prompt fallback             [REUSE pattern]
        |
@@ -241,14 +242,14 @@ return await ai_service.rlm_service.execute(node_id, parameters, ...)
 
 | Function | Source | Purpose in RLM |
 |----------|--------|----------------|
-| `_collect_agent_connections()` | `handlers/ai.py:17` | Discover memory, skills, tools, input, task connections |
-| `_format_task_context()` | `handlers/ai.py:352` | Format delegated task results as prompt context |
-| `_build_skill_system_prompt()` | `ai.py:833` | Build system prompt from connected skill nodes |
-| `is_model_valid_for_provider()` | `ai.py:362` | Validate model name for provider |
-| `get_default_model_async()` | `ai.py:377` | Look up default model from DB or config |
+| `collect_agent_connections()` | `services/plugin/edge_walker.py` | Discover memory, skills, tools, input, task connections (renamed Wave-11 successor to `handlers/ai.py::_collect_agent_connections`; the old handler file is gone) |
+| `prepare_agent_call()` | `nodes/agent/_inline.py` | Shared pre-dispatch helper — collects connections + injects task context + auto-prompt from upstream input |
+| `_build_skill_system_prompt()` | `services/ai.py` | Build system prompt from connected skill nodes |
+| `is_model_valid_for_provider()` | `services/ai.py` | Validate model name for provider |
+| `get_default_model_async()` | `services/ai.py` | Look up default model from DB or config |
 | `self.auth.get_api_key()` | AIService | Retrieve API key from credential store |
 | `save_message()` | `memory_store.py` | Persist conversation to memory |
-| `execute_tool()` | `handlers/tools.py:34` | Dispatch tool execution (used by ToolBridgeAdapter) |
+| `execute_tool()` | `services/handlers/tools.py` | Dispatch tool execution (used by ToolBridgeAdapter) |
 | `broadcaster.update_node_status()` | `status_broadcaster.py` | Real-time UI status updates |
 
 ---

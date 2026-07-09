@@ -102,7 +102,7 @@ For tokens obtained via OAuth 2.0 flows (Google Workspace, Twitter/X, Claude.ai)
 
 ### The Mistake to Avoid
 
-Google access tokens live in the OAuth system, not the API key system. Reading them via `get_api_key("google_access_token")` returns None even if the user is fully logged in. All Google Workspace handlers must use `get_google_credentials()` from `server/services/handlers/google_auth.py`, which calls `get_oauth_tokens("google")` internally.
+Google access tokens live in the OAuth system, not the API key system. Reading them via `get_api_key("google_access_token")` returns None even if the user is fully logged in. All Google Workspace handlers must use `get_google_credentials()` from `server/nodes/google/_auth_helper.py` (post-Wave-11.I, this replaced the retired `server/services/handlers/google_auth.py`), which calls `get_oauth_tokens("google")` internally.
 
 Twitter has the same split: `twitter_client_id` and `twitter_client_secret` are in the API key system, but `twitter_access_token` is in the OAuth system.
 
