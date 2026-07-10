@@ -418,7 +418,7 @@ Wave 2 introduced two typed fields on `INodeTypeDescription` so panels and the i
 
 ### `uiHints` — per-node panel visibility flags
 
-Defined on `INodeTypeDescription.uiHints` ([client/src/types/INodeProperties.ts](../client/src/types/INodeProperties.ts)). Each flag is consumed by exactly one panel and defaults to `false` (the panel renders normally). 15 flags today:
+Defined on `INodeTypeDescription.uiHints` ([client/src/types/INodeProperties.ts](../client/src/types/INodeProperties.ts)). Each flag is consumed by exactly one panel and defaults to off (the panel renders normally). The current set (live list = the `known` set in `test_node_spec.py`):
 
 | Flag | Read by | Effect |
 |---|---|---|
@@ -436,6 +436,7 @@ Defined on `INodeTypeDescription.uiHints` ([client/src/types/INodeProperties.ts]
 | `isConsoleSink` | `ConsolePanel` | This node consumes console output (filter source) |
 | `hasSkills` | Agent panels | Connect the connected-skills section |
 | `isConfigNode` | `InputSection`, `OutputPanel` | This node is auxiliary configuration — its panel inherits the parent's main inputs instead of showing direct upstream connections. **Auto-derived on the backend** by `_derive_auto_ui_hints` in [`server/services/plugin/base.py`](../server/services/plugin/base.py): plugins whose `group` tuple contains `memory` or `tool` get this for free. Explicit `cls.ui_hints` always wins. |
+| `outputMode: "terminal"` | `output/OutputPanel` | The node's textual output is CLI/terminal text: render it in a `<pre>` painted with the per-theme `--code-*` tokens instead of ReactMarkdown (which turns `#` into headings and collapses indentation). Strings that are wholly JSON route to the JSON tree via the shared `tryParseJson` helper. Declared by the CLI-wrapper plugins (`githubAction`, `vercelAction`, `shell`). |
 
 Adding new panel behaviour: add a flag to `INodeUIHints`, annotate the relevant node definitions (or extend the auto-derivation rule on the backend), read the flag in the panel. Don't add another `nodeDefinition.name === '…'` branch — six such checks for `'masterSkill'` were retired in this round in favour of `uiHints.isMasterSkillEditor`. Pytest invariant `test_ui_hints_only_carry_known_flags` in `server/tests/test_node_spec.py` locks the flag set; new flags must be added there too.
 

@@ -52,8 +52,11 @@ Either path is sufficient; the token wins when both exist.
    outlive the handler, draining both pipes for the process lifetime
    so the CLI never blocks on a full pipe buffer. The first
    code-embedding URL is returned as `{success, url,
-   verification_code}` — the frontend only opens `url`
-   (`useCredentialPanel.oauthLogin`), so the URL must carry the code.
+   verification_code}` — the frontend opens `url` AND renders
+   `verification_code` prominently in the modal's info box
+   (`useCredentialPanel.oauthLogin` → `OAuthConnect`, the generic
+   device-flow display shipped with the GitHub plugin; prefer a
+   code-embedding URL anyway so the user rarely needs to type it).
    A background task (strong-ref'd — asyncio holds only weak refs)
    awaits process exit; the success gate is **`auth.json` mtime
    advanced past the pre-login snapshot AND `is_logged_in()`** (exit
@@ -104,6 +107,13 @@ auth="oauth2"`, which produces the credential envelope + the
 `run_cli_command(..., env=vercel_env(token), cwd=...)` → non-zero exit
 → `NodeUserError` carrying the stderr tail (user/LLM-correctable, one
 WARN line, no traceback).
+
+Output shaping: `_shape` never ships raw stdout alongside a
+server-side-parsed JSON `result` (pre-stringified duplication violates
+the output contract) and omits empty keys entirely (`exclude_unset`
+preserves the producer's key set). The node declares
+`ui_hints = {"outputMode": "terminal"}` so the Output panel renders
+its textual output preformatted instead of through ReactMarkdown.
 
 **First-deploy project guard**: an unlinked deploy (no `project`
 param, no `.vercel/project.json` in the cwd, no `VERCEL_PROJECT_ID`,

@@ -71,7 +71,7 @@ class SpecializedAgentBase(ActionNode, abstract=True):
 | `group` | Tuple of palette groupings (first is primary). |
 | `component_kind` | Frontend dispatch: `square` / `trigger` / `agent` / `tool` / `model` / `start` / `generic`. |
 | `handles` | React Flow handle topology (`input-main`, `output-main`, …). |
-| `ui_hints` | Dict of panel flags (`hasCodeEditor`, `isMemoryPanel`, `isMasterSkillEditor`, `isToolPanel`, `hasSkills`, `isConfigNode`, …). See "Auto-derived uiHints" below — `isConfigNode` is set automatically for `('memory', 'tool')` group plugins. |
+| `ui_hints` | Dict of panel flags (`hasCodeEditor`, `isMemoryPanel`, `isMasterSkillEditor`, `isToolPanel`, `hasSkills`, `isConfigNode`, `outputMode: "terminal"` for CLI-wrapper nodes whose textual output must render preformatted, …). See "Auto-derived uiHints" below — `isConfigNode` is set automatically for `('memory', 'tool')` group plugins. Live flag list = the `known` set in `test_node_spec.py`. |
 | `annotations` | Pipedream-style: `destructive` / `readonly` / `open_world`. |
 | `credentials` | Tuple of `Credential` subclasses the node uses. |
 | `Params` | Pydantic `BaseModel` — user-facing parameters. Used for both UI rendering and AI tool schemas. |

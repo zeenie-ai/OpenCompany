@@ -304,6 +304,12 @@ Usage panels (`Usage & Costs`, `API Usage`, model constraints) fetch inside `use
 
 The "Refresh" buttons in OAuth panels (Twitter/Google/Telegram) explicitly call the corresponding status request handler to force a re-check, which in turn re-broadcasts.
 
+### 3.6 Device-flow verification code (CLI-managed providers)
+When an oauth-kind provider's `ws.login` response carries a `verification_code` (OAuth device flows: GitHub via `gh auth login --web`, Vercel), `useCredentialPanel.oauthLogin` captures it into transient state (reset on provider switch / logout) and `OAuthConnect` renders it prominently in the info box — large monospace, letter-spaced, `select-all` — alongside opening `url` in a new tab. GitHub's `github.com/login/device` page cannot pre-fill the code, so this display is load-bearing there. Generic: any provider returning `{success, url, verification_code}` gets it for free.
+
+### 3.7 Login gating on required fields only
+`OAuthConnect` disables the Login button via `hasRequiredFields && !stored` where `hasRequiredFields = config.fields?.some(f => f.required)`. Required fields (Google/Twitter client creds, Telegram bot token) gate Login as prerequisites; optional fields (Vercel's `vercel_token`) are an *alternative* auth path and never block it. Fieldless CLI-managed providers (Stripe, GitHub) always have Login enabled.
+
 ---
 
 ## 4. Backend Contract

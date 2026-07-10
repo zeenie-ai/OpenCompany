@@ -156,6 +156,16 @@ browser-OAuth" plugin lands as a self-contained folder under
 `server/config/credential_providers.json` and zero touches outside
 the folder.
 
+**Output display for CLI nodes**: declare
+`ui_hints = {"outputMode": "terminal"}` so the Output panel renders
+the node's textual output preformatted (never ReactMarkdown — `#`
+would become headings and indentation would collapse), and follow the
+`_shape` convention: parsed JSON goes in `result`, human text in
+`stdout` — never both (pre-stringified duplication violates the
+output contract) — with empty keys omitted. Reference:
+`githubAction` / `vercelAction` / `shell`; the panel side is locked by
+`client/src/components/__tests__/OutputPanel.test.tsx`.
+
 **Device-flow variant (Vercel).** Not every CLI exposes Stripe's
 machine-friendly two-step (`--non-interactive` → `--complete <url>`).
 `vercel login` is a single **blocking** OAuth device flow: it prints a

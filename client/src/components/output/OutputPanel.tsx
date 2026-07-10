@@ -197,6 +197,7 @@ export default function OutputPanel({ results, onClear, selectedNode }: Props) {
                 // never markdown — `#` would become headings and indentation
                 // would collapse (gh/vercel tables, clone progress).
                 <pre
+                  data-testid="terminal-output"
                   className="overflow-auto rounded-md border p-3 font-mono text-sm whitespace-pre-wrap break-words"
                   style={TERMINAL_STYLE}
                 >

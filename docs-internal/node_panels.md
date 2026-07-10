@@ -124,6 +124,18 @@ The WebSocket result is folded in at the front (newest-first) **only when** its 
 isn't already present in `executionResults` (deduplicated via `JSON.stringify`). Statuses other
 than `success`/`error` (e.g. `running`) are ignored.
 
+Rendering lives in [client/src/components/output/OutputPanel.tsx](../client/src/components/output/OutputPanel.tsx)
+(the active renderer — `ui/OutputDisplayPanel.tsx` is legacy and unimported). The Response
+section picks, in order: `response` / `output` / `text` / `content` (prose keys), then an
+object-typed `result` (the canonical payload key CLI nodes fill with server-side-parsed JSON —
+arrays survive `unwrap` un-peeled and surface here), then `stdout`. Objects/arrays render in the
+themed `@uiw/react-json-view` tree. Strings render through ReactMarkdown **unless** the node's
+NodeSpec declares `uiHints.outputMode = "terminal"` (CLI-wrapper plugins: `githubAction`,
+`vercelAction`, `shell`) — then they render preformatted in a `<pre>` on the per-theme
+`--code-*` surface, with wholly-JSON strings detected via the shared `tryParseJson`
+(`utils/formatters.ts`) and routed to the tree instead. The panel resolves the spec via
+`useNodeSpec(selectedNode?.type)` — backend owns display logic, no node-name checks.
+
 ## 7. Refactor Invariants
 
 Locked in by the test suite at:
