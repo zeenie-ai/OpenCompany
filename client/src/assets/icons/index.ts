@@ -49,6 +49,7 @@ import Mistral from '@lobehub/icons/es/Mistral';
 import Ollama from '@lobehub/icons/es/Ollama';
 import LmStudio from '@lobehub/icons/es/LmStudio';
 import Vercel from '@lobehub/icons/es/Vercel';
+import Github from '@lobehub/icons/es/Github';
 
 type RawSvg = string;
 
@@ -154,12 +155,21 @@ const LOBEHUB_BRANDS: Readonly<Record<string, any>> = {
   ollama: Ollama,
   lmstudio: LmStudio,
   vercel: Vercel,
+  github: Github,
 };
 
 const ICON_LIBRARIES: Readonly<Record<string, LibraryResolver>> = {
   lobehub: (brand) => {
     const entry = LOBEHUB_BRANDS[brand.toLowerCase()];
-    return entry?.Color ?? entry?.Avatar ?? null;
+    // `.Color` = multi-color brand artwork (openai, claude, gemini, …).
+    // Mono-only brands (Github, Vercel) don't export it — their compound
+    // default IS the Mono glyph component (`fill="currentColor"`), which
+    // scales with NodeIcon's `h-full w-full` and tints with the site's
+    // color cascade, staying visible on every theme. The `.Avatar`
+    // variant is deliberately NOT used: it renders a fixed-size tile
+    // with a hardcoded brand background (black for GitHub) that neither
+    // scales with the wrapper nor adapts to dark surfaces.
+    return entry?.Color ?? entry ?? null;
   },
   // Lucide ships ~1,500 PascalCase forwardRef'd icon components. Same
   // prefix-dispatch contract as lobehub: backend plugins declare

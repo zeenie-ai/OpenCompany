@@ -33,6 +33,10 @@ export function useCredentialPanel(config: ProviderConfig, visible: boolean) {
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [stored, setStored] = useState(false);
+  // Device-flow one-time code from the login response (RFC 8628 —
+  // GitHub et al. require the user to TYPE it on the verification
+  // page, so the panel must display it).
+  const [verificationCode, setVerificationCode] = useState<string | null>(null);
 
   // Reset transient UI state when the user switches providers so a
   // "Bot Token required" error from Telegram doesn't bleed into the
@@ -42,6 +46,7 @@ export function useCredentialPanel(config: ProviderConfig, visible: boolean) {
     setError(null);
     setLoading(null);
     setStored(false);
+    setVerificationCode(null);
   }, [config.id]);
 
   const {
@@ -199,16 +204,21 @@ export function useCredentialPanel(config: ProviderConfig, visible: boolean) {
     }),
     oauthLogin: () => execute('login', async () => {
       const res = await sendRequest(config.ws!.login, {});
+      setVerificationCode(res.success ? (res.verification_code ?? null) : null);
       if (res.success && res.url) window.open(res.url, '_blank');
       return res;
     }),
-    oauthLogout: () => execute('logout', () => sendRequest(config.ws!.logout, {})),
+    oauthLogout: () => execute('logout', async () => {
+      setVerificationCode(null);
+      return sendRequest(config.ws!.logout, {});
+    }),
     oauthRefresh: () => execute('refresh', () => sendRequest(config.ws!.status, {})),
     sendWs: (type: string, data?: Record<string, any>) => execute(type, () => sendRequest(type, data ?? {})),
   };
 
   return {
     form, values, loading, error, stored, setStored, setError,
+    verificationCode,
     execute, actions, isConnected,
     getProviderDefaults, saveProviderDefaults,
     getProviderUsageSummary, getAPIUsageSummary,

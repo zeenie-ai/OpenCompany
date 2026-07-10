@@ -25,6 +25,9 @@ interface Props {
   stored: boolean;
   loading: string | null;
   error: string | null;
+  /** Device-flow one-time code from the login response (RFC 8628) —
+   * shown while the user completes auth in the opened browser tab. */
+  verificationCode?: string | null;
   icon: React.ReactNode;
   onSaveCredentials: () => void;
   onLogin: () => void;
@@ -35,7 +38,7 @@ interface Props {
 }
 
 const OAuthConnect: React.FC<Props> = ({
-  config, form, connected, stored, loading, error, icon,
+  config, form, connected, stored, loading, error, verificationCode, icon,
   onSaveCredentials, onLogin, onLogout, onRefresh, extraSection,
 }) => {
   // Some providers (e.g. Stripe) delegate auth entirely to an external
@@ -99,9 +102,19 @@ const OAuthConnect: React.FC<Props> = ({
             ? config.account_label
               ? `Connected as ${config.account_label}.`
               : `Your ${config.name} account is connected.`
-            : (stored || !hasRequiredFields)
-              ? 'Click Login to authorize.'
-              : 'Enter your credentials above to get started.'}
+            : verificationCode
+              ? (
+                <div className="flex flex-col items-center gap-2 py-1 text-center">
+                  <span>Enter this one-time code in the browser tab that just opened:</span>
+                  <code className="select-all font-mono text-3xl font-bold tracking-[0.25em] text-accent">
+                    {verificationCode}
+                  </code>
+                  <span className="text-xs">Click the code to select it, then approve the request to finish connecting.</span>
+                </div>
+              )
+              : (stored || !hasRequiredFields)
+                ? 'Click Login to authorize.'
+                : 'Enter your credentials above to get started.'}
         </div>
       </div>
 
