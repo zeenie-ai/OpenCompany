@@ -19,4 +19,9 @@ from services.plugin.shutdown_hooks import register_shutdown_hook
 from ._service import shutdown_browser_service
 from . import browser as _browser  # noqa: F401 — side-effect: registers BrowserNode
 
+# Wave 19: browser-harness sibling plugin (browser-use/browser-harness).
+# Registers BrowserHarnessNode + its own "browser_harness" shutdown hook
+# from inside the subpackage; eager import keeps discovery deterministic.
+from . import browser_harness as _browser_harness  # noqa: F401
+
 register_shutdown_hook("browser_service", shutdown_browser_service)
