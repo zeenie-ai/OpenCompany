@@ -42,9 +42,10 @@ const ParameterPanelLayout: React.FC<ParameterPanelLayoutProps> = ({
 }) => {
   return (
     <div className="flex h-full min-h-0">
-      {/* Left: Input Nodes JSON Data */}
+      {/* Left: Input Nodes JSON Data (border-r = the design system's
+          column split on --border-default) */}
       {showInputSection && (
-        <div className="h-full flex-[0.7] overflow-hidden">
+        <div className="h-full flex-[0.7] overflow-hidden border-r border-border-default">
           <InputSection
             nodeId={selectedNode.id}
             visible={showInputSection}
@@ -64,9 +65,10 @@ const ParameterPanelLayout: React.FC<ParameterPanelLayoutProps> = ({
         />
       </div>
 
-      {/* Right: Current Node Output */}
+      {/* Right: Current Node Output (border-l = the design system's
+          column split on --border-default) */}
       {showOutputSection && (
-        <div className="h-full flex-[0.7] overflow-hidden">
+        <div className="h-full flex-[0.7] overflow-hidden border-l border-border-default">
           <OutputSection
             selectedNode={selectedNode}
             executionResults={executionResults}

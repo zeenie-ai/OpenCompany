@@ -515,9 +515,12 @@ const InputSection: React.FC<InputSectionProps> = ({ nodeId, visible = true }) =
   }
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden bg-card">
+    // Transparent column shell — sits on the modal's bg-bg-app body per the
+    // design system's PanelModal recipe (column heads on bg-bg-panel, only
+    // data cards elevated).
+    <div className="flex h-full w-full flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-border bg-background px-4 py-3">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border-default bg-bg-panel px-4 py-3">
         <Database className="h-4 w-4 text-muted-foreground" />
         <span className="font-display text-sm font-semibold tracking-[var(--type-tracking-display)] text-fg-default [text-transform:var(--type-uppercase)]">Input Data &amp; Variables</span>
         <Badge variant="info">{connectedNodes.length}</Badge>

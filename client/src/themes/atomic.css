@@ -257,6 +257,19 @@
 }
 :root[data-theme="atomic"] .modal-head { border-bottom: 3px solid var(--slate); background: var(--accent); color: var(--bg-elevated); }
 :root[data-theme="atomic"] .modal-title { font-family: var(--font-display); color: var(--bg-elevated); letter-spacing: 0.10em; }
+/* Parameter panel — follow the design system's PanelModal surface
+ * hierarchy ("MachinaOS Design System": components/panels/PanelModal.jsx
+ * + ui_kits/machinaos/PanelsModals.jsx NodeConfigModal): card body on
+ * --bg-app, header on --bg-panel one step above it with --fg-default
+ * text, column heads on --bg-panel, splits on --border-default. The
+ * generic atomic modal overrides (white .modal card + solid teal
+ * .modal-head) diverge from that recipe here AND melt the tinted
+ * Run / Save / Cancel ActionButtons into the teal (worse under
+ * disabled:opacity-50 — IMPLEMENTATION.md §5 accent-surface contrast
+ * rule). Scoped to this panel; other modals keep the teal look. */
+:root[data-theme="atomic"] .param-panel-modal { background: var(--bg-app); }
+:root[data-theme="atomic"] .param-panel-modal .modal-head { background: var(--bg-panel); color: var(--fg-default); }
+:root[data-theme="atomic"] .param-panel-modal .modal-title { color: var(--fg-default); }
 
 /* CMDK */
 :root[data-theme="atomic"] .cmdk { background: var(--bg-elevated); border: 4px solid var(--slate); border-radius: 24px 4px 24px 4px; box-shadow: 8px 8px 0 var(--slate); }

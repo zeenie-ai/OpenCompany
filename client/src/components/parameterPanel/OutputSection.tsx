@@ -77,7 +77,9 @@ const OutputSection: React.FC<OutputSectionProps> = ({
   }, [executionResults, nodeStatuses, selectedNode.id, selectedNode.type]);
 
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden bg-card">
+    // Transparent column shell — sits on the modal's bg-bg-app body per the
+    // design system's PanelModal recipe.
+    <div className="relative flex h-full w-full flex-col overflow-hidden">
       <OutputPanel
         results={combinedResults}
         onClear={onClearResults}

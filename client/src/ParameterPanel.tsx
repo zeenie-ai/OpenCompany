@@ -190,6 +190,10 @@ const ParameterPanel: React.FC = () => {
       isOpen={!!selectedNode}
       onClose={handleModalClose}
       title="Node Configuration"
+      // Structural hook so themes can scope decorations to THIS modal
+      // (e.g. atomic keeps its accent header off the parameter panel so
+      // the tinted Run / Save / Cancel header actions stay legible).
+      className="param-panel-modal"
       maxWidth="95vw"
       maxHeight="95vh"
       headerActions={headerActions}
