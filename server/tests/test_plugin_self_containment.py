@@ -61,6 +61,7 @@ _MIGRATED_PLUGINS = (
     "browser",
     "code",
     "email",
+    "github",
     "google",
     "stripe",
     "telegram",
@@ -73,6 +74,7 @@ _MIGRATED_PLUGINS = (
 # ``register_ws_handlers`` from its package ``__init__.py``.
 _PLUGINS_WITH_HANDLERS = (
     "android",
+    "github",
     "google",
     "stripe",
     "telegram",

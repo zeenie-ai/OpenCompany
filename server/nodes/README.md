@@ -127,6 +127,7 @@ skill/       — simpleMemory / masterSkill
 browser/     — browser (agent-browser CLI)
 stripe/      — Stripe (CLI passthrough action + signed-webhook trigger)
 vercel/      — Vercel (CLI deploy / inspect / list / custom passthrough)
+github/      — GitHub (gh CLI: clone / PRs / issues / custom; palette group "vcs")
 ```
 
 ---

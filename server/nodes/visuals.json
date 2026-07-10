@@ -132,6 +132,10 @@
   "geminiChatModel": {
     "icon": "lobehub:gemini"
   },
+  "githubAction": {
+    "icon": "lobehub:Github",
+    "skill": "github-skill"
+  },
   "gmaps_create": {
     "icon": "🗺️"
   },
