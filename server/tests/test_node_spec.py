@@ -911,6 +911,10 @@ class TestNodeSpecContractInvariants:
             # parameter panel that this node is an auxiliary config node
             # and should inherit the parent's main inputs.
             "isConfigNode",
+            # OutputPanel: 'terminal' renders the node's textual output
+            # preformatted instead of through ReactMarkdown (CLI-wrapper
+            # plugins: githubAction, vercelAction, shell).
+            "outputMode",
         }
         for node_type, meta in NODE_METADATA.items():
             hints = meta.get("uiHints") or {}

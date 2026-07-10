@@ -26,6 +26,24 @@ export const formatJson = (obj: any, compact: boolean = false): string => {
 };
 
 /**
+ * Parse a string that is wholly a JSON object/array; null otherwise.
+ * Stdlib JSON.parse behind a cheap shape check — used by output
+ * surfaces to route JSON-looking CLI/stdout strings to the tree
+ * viewer instead of markdown/plain text.
+ */
+export const tryParseJson = (s: string): object | null => {
+  const t = s.trim();
+  const looksJson = (t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'));
+  if (!looksJson) return null;
+  try {
+    const v = JSON.parse(t);
+    return typeof v === 'object' && v !== null ? v : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
  * Format timestamp to locale string
  */
 export const formatTimestamp = (timestamp: string | number | Date): string => {

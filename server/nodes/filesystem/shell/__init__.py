@@ -50,6 +50,8 @@ class ShellNode(ActionNode):
         {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
     annotations = {"destructive": True, "readonly": False, "open_world": True}
+    # OutputPanel renders stdout preformatted (terminal text, not markdown).
+    ui_hints = {"outputMode": "terminal"}
     task_queue = TaskQueue.DEFAULT
     usable_as_tool = True
 

@@ -163,6 +163,9 @@ class VercelActionNode(ActionNode):
         {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
     annotations = {"destructive": False, "readonly": False, "open_world": True}
+    # OutputPanel renders textual output preformatted (vercel tables /
+    # build logs are terminal text, not markdown).
+    ui_hints = {"outputMode": "terminal"}
     credentials = (VercelCredential,)
     task_queue = TaskQueue.REST_API
     usable_as_tool = True
@@ -236,15 +239,24 @@ class VercelActionNode(ActionNode):
 
     @staticmethod
     def _shape(operation: str, result: Dict[str, Any], *, url: Optional[str] = None) -> Dict[str, Any]:
+        """Output-panel shaping: when the CLI returned JSON, the parsed
+        data IS the payload — the raw stdout string would duplicate it
+        as an unreadable blob (pre-stringified JSON violates the output
+        contract). Keys are omitted (not None'd) when empty so the
+        panel shows only meaningful fields (`exclude_unset`)."""
+        shaped: Dict[str, Any] = {"operation": operation, "success": True}
+        if url:
+            shaped["url"] = url
+        parsed = result.get("result")
+        stdout = (result.get("stdout") or "").strip()
+        if parsed is not None:
+            shaped["result"] = parsed
+        elif stdout:
+            shaped["stdout"] = stdout
         stderr = (result.get("stderr") or "").strip()
-        return {
-            "operation": operation,
-            "success": True,
-            "url": url,
-            "result": result.get("result"),
-            "stdout": result.get("stdout"),
-            "stderr_tail": stderr[-_STDERR_TAIL_CHARS:] or None,
-        }
+        if stderr:
+            shaped["stderr_tail"] = stderr[-_STDERR_TAIL_CHARS:]
+        return shaped
 
     # ---- operations ------------------------------------------------------
 

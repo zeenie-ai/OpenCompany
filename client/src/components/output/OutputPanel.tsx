@@ -20,7 +20,8 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { ExecutionResult } from '@/services/executionService';
-import { copyToClipboard } from '@/utils/formatters';
+import { useNodeSpec } from '@/lib/nodeSpec';
+import { copyToClipboard, tryParseJson } from '@/utils/formatters';
 import { cn } from '@/lib/utils';
 
 /** Extract output data from ExecutionResult. */
@@ -33,6 +34,14 @@ const unwrap = (d: any) =>
 
 /** Convert escaped newlines to real ones. */
 const fmt = (s: string) => s.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+
+/** Terminal-style surface for CLI stdout — the same --code-* tokens the
+ * JSON viewer uses, so all 12 themes paint it in their own palette. */
+const TERMINAL_STYLE = {
+  background: 'var(--code-bg)',
+  color: 'var(--code-text)',
+  borderColor: 'var(--code-border)',
+} as React.CSSProperties;
 
 /** Map metadata field names to badge variants. */
 const TAG_VARIANT: Record<string, 'secondary' | 'info' | 'success'> = {
@@ -103,6 +112,10 @@ function Section({ label, defaultOpen = false, action, children }: SectionProps)
 export default function OutputPanel({ results, onClear, selectedNode }: Props) {
   const filtered = selectedNode ? results.filter(r => r.nodeId === selectedNode.id) : results;
   const latest = filtered[0];
+  // Backend owns display logic: CLI-wrapper plugins declare
+  // uiHints.outputMode = "terminal" on their NodeSpec.
+  const spec = useNodeSpec(selectedNode?.type);
+  const isTerminal = spec?.uiHints?.outputMode === 'terminal';
 
   if (!latest) {
     return (
@@ -114,7 +127,15 @@ export default function OutputPanel({ results, onClear, selectedNode }: Props) {
 
   const raw = getData(latest);
   const data = unwrap(raw);
-  const response = data?.response ?? data?.output ?? data?.text ?? data?.content ?? data?.stdout;
+  // `result` is the codebase's canonical payload key (same convention
+  // `unwrap` peels) — CLI nodes put server-side-parsed JSON there.
+  // Arrays survive `unwrap` un-peeled, so surface them here.
+  const parsedResult = data?.result !== null && typeof data?.result === 'object' ? data.result : undefined;
+  const response =
+    data?.response ?? data?.output ?? data?.text ?? data?.content ?? parsedResult ?? data?.stdout;
+  // Terminal nodes sometimes emit JSON on stdout anyway — a tree view
+  // beats a wall of braces (stdlib JSON.parse via shared formatter).
+  const stdoutJson = isTerminal && typeof response === 'string' ? tryParseJson(response) : null;
   const thinking = data?.thinking;
   const metaTags = ['model', 'provider', 'agent_type'].filter(k => data?.[k]);
 
@@ -154,16 +175,7 @@ export default function OutputPanel({ results, onClear, selectedNode }: Props) {
         <div className="space-y-0">
           {response && (
             <Section label="Response" defaultOpen>
-              {typeof response === 'string' ? (
-                // Markdown text (LLM response). No whitespace-pre-wrap: it
-                // double-counts newlines against remarkBreaks (each <br>
-                // carries a trailing \n that pre-wrap renders as a 2nd break).
-                <div className="prose prose-sm max-w-none dark:prose-invert">
-                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
-                    {fmt(response)}
-                  </ReactMarkdown>
-                </div>
-              ) : (
+              {typeof response !== 'string' ? (
                 // Object/array response — themed JSON viewer (same --code-*
                 // palette as Raw JSON), not stringified-into-markdown.
                 <JsonView
@@ -172,6 +184,33 @@ export default function OutputPanel({ results, onClear, selectedNode }: Props) {
                   displayDataTypes={false}
                   style={CODE_JSON_THEME}
                 />
+              ) : stdoutJson ? (
+                // Terminal node whose stdout is itself JSON — tree view.
+                <JsonView
+                  value={stdoutJson}
+                  collapsed={2}
+                  displayDataTypes={false}
+                  style={CODE_JSON_THEME}
+                />
+              ) : isTerminal ? (
+                // CLI text (uiHints.outputMode === 'terminal'): preformatted,
+                // never markdown — `#` would become headings and indentation
+                // would collapse (gh/vercel tables, clone progress).
+                <pre
+                  className="overflow-auto rounded-md border p-3 font-mono text-sm whitespace-pre-wrap break-words"
+                  style={TERMINAL_STYLE}
+                >
+                  {fmt(response)}
+                </pre>
+              ) : (
+                // Markdown text (LLM response). No whitespace-pre-wrap: it
+                // double-counts newlines against remarkBreaks (each <br>
+                // carries a trailing \n that pre-wrap renders as a 2nd break).
+                <div className="prose prose-sm max-w-none dark:prose-invert">
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                    {fmt(response)}
+                  </ReactMarkdown>
+                </div>
               )}
             </Section>
           )}

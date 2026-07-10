@@ -221,6 +221,11 @@ export interface INodeUIHints {
    * instead of showing direct upstream connections. Auto-derived on
    * the backend from group membership; plugins can override. */
   isConfigNode?: boolean;
+  /** OutputPanel: how the node's textual output renders. `"terminal"`
+   * = preformatted CLI text (never markdown — `#` would become
+   * headings and indentation would collapse). Declared by CLI-wrapper
+   * plugins (githubAction, vercelAction, shell). */
+  outputMode?: 'terminal';
 }
 
 export interface INodeTypeDescription {
