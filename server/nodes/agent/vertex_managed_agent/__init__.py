@@ -13,11 +13,12 @@ Interactions API and bridges the MachinaOS canvas into it:
   node: ``vertex_interaction_id`` / ``vertex_environment_id`` are stored
   in its params and the turn is appended to ``memory_content``.
 - Cloud-side tool usage (sandbox commands, google_search, ...) is
-  surfaced post-turn as dynamic ``vertexCloudTool`` canvas nodes via the
-  workflow-ops protocol (agentBuilder pattern) — see ``_ops.py``.
-
-No SSE streaming in v1: the enterprise surface requires background
-interactions, so each turn is create(background=True) + poll.
+  surfaced LIVE as dynamic ``vertexCloudTool`` canvas nodes via the
+  workflow-ops protocol (agentBuilder pattern) — see ``_ops.py``: each
+  turn streams SSE step events (``stream_interaction``), minting and
+  glowing nodes while the cloud agent is still working, with a post-turn
+  sweep as catch-all. The stream is visibility-only; the authoritative
+  result always comes from the final non-stream ``interactions.get``.
 """
 
 from __future__ import annotations
@@ -38,10 +39,10 @@ from .._vertex import (
     DEFAULT_LOCATION,
     DEFAULT_MANAGED_AGENT,
     build_genai_client,
-    create_interaction_and_wait,
     is_expired_environment_error,
     raise_as_user_error,
     resolve_api_key_from_context,
+    stream_interaction,
 )
 
 logger = get_logger(__name__)
@@ -219,6 +220,20 @@ class VertexManagedAgentNode(ActionNode):
         await phase("building_tools")
         declared_tools, tool_configs = await self._build_function_tools(tool_data)
 
+        # ---- live visibility state (shared with the post-turn sweep)
+        live_nodes: Dict[str, str] = {}  # cloud_tool_key -> canvas node id
+        open_calls: Dict[str, str] = {}  # step id -> canvas node id
+        on_event = None
+        if params.visualize_cloud_tools:
+            on_event = self._make_live_handler(
+                broadcaster=broadcaster,
+                workflow_id=workflow_id,
+                agent_node_id=node_id,
+                declared_names=frozenset(tool_configs),
+                live_nodes=live_nodes,
+                open_calls=open_calls,
+            )
+
         # ---- memory bridge: interaction/environment chain ids
         prev_interaction_id: Optional[str] = None
         environment: Any = "remote"
@@ -240,7 +255,9 @@ class VertexManagedAgentNode(ActionNode):
 
         async def run_turn(**kw: Any) -> Any:
             try:
-                return await create_interaction_and_wait(client, **create_kwargs, **kw)
+                return await stream_interaction(
+                    client, on_event=on_event, **create_kwargs, **kw
+                )
             except Exception as exc:  # noqa: BLE001 — mapped below
                 raise_as_user_error(exc, what="Vertex managed agent interaction")
 
@@ -303,17 +320,36 @@ class VertexManagedAgentNode(ActionNode):
         environment_id = getattr(interaction, "environment_id", None)
         usage = self._usage_dict(interaction)
 
-        # ---- cloud tool visualization (post-turn, from steps)
-        cloud_tools = self._collect_cloud_tool_usage(interaction, tool_configs)
-        if cloud_tools and params.visualize_cloud_tools and workflow_id:
-            from ._ops import ensure_cloud_tool_nodes
+        # ---- cloud tool visualization: post-turn catch-all sweep.
+        # Live streaming already minted+pulsed most usage; this covers
+        # steps the stream missed and closes any still-glowing calls.
+        final_used = self._collect_cloud_tool_usage(interaction, tool_configs)
+        cloud_tools = {
+            **{key: self._label_for_key(key) for key in live_nodes},
+            **final_used,
+        }
+        if params.visualize_cloud_tools and workflow_id:
+            from ._ops import ensure_cloud_tool_nodes, pulse_node
 
             try:
-                await ensure_cloud_tool_nodes(
-                    workflow_id=workflow_id,
-                    agent_node_id=node_id,
-                    used=cloud_tools,
-                )
+                sweep = {
+                    key: label
+                    for key, label in final_used.items()
+                    if key not in live_nodes
+                }
+                if sweep:
+                    resolved = await ensure_cloud_tool_nodes(
+                        workflow_id=workflow_id,
+                        agent_node_id=node_id,
+                        used=sweep,
+                    )
+                    for swept_id in resolved.values():
+                        await pulse_node(swept_id, "executing", workflow_id=workflow_id)
+                        await pulse_node(swept_id, "success", workflow_id=workflow_id)
+                # Calls whose result step never streamed: don't leave them glowing.
+                for dangling_id in set(open_calls.values()):
+                    await pulse_node(dangling_id, "success", workflow_id=workflow_id)
+                open_calls.clear()
             except Exception:  # noqa: BLE001 — visualization is best-effort
                 logger.exception("[Vertex Agent] cloud-tool minting failed")
 
@@ -527,6 +563,113 @@ class VertexManagedAgentNode(ActionNode):
                 if name and name not in tool_configs and name not in _CLOUD_NOISE_NAMES:
                     used[f"fn:{name}"] = name
         return used
+
+    @staticmethod
+    def _label_for_key(key: str) -> str:
+        """Recover the display label from a cloud_tool_key."""
+        if key.startswith("type:"):
+            return _CLOUD_STEP_LABELS.get(key[5:], key[5:])
+        if key.startswith("fn:"):
+            return key[3:]
+        return key
+
+    def _make_live_handler(
+        self,
+        *,
+        broadcaster: Any,
+        workflow_id: Optional[str],
+        agent_node_id: str,
+        declared_names: frozenset,
+        live_nodes: Dict[str, str],
+        open_calls: Dict[str, str],
+    ):
+        """Build the per-event SSE callback for live tool visibility.
+
+        Mints a vertexCloudTool node the FIRST time each cloud-side tool
+        appears (memoized in ``live_nodes`` — one DB round-trip per key
+        per run), pulses it ``executing`` on the call step and ``success``
+        on the matching result step (``call_id`` join via ``open_calls``).
+        Declared local tools only get an agent phase broadcast here —
+        their real execution still happens at requires_action, where
+        ``execute_tool`` owns their canvas animation.
+
+        Exceptions are swallowed by ``stream_interaction`` — visibility
+        must never kill the turn.
+        """
+        from ._ops import ensure_cloud_tool_nodes, pulse_node
+
+        async def phase_tool(label: str) -> None:
+            await broadcaster.update_node_status(
+                agent_node_id,
+                "executing",
+                {"phase": "executing_tool", "agent_type": "vertex_managed", "tool_name": label},
+                workflow_id=workflow_id,
+            )
+
+        async def on_event(event: Any) -> None:
+            event_type = getattr(event, "event_type", "") or ""
+
+            if event_type == "interaction.status_update":
+                if getattr(event, "status", None) == "requires_action":
+                    await phase_tool("local tools")
+                return
+            if event_type == "error":
+                error = getattr(event, "error", None)
+                logger.warning(
+                    "[Vertex Agent] stream error event: %s",
+                    getattr(error, "message", None) or error,
+                )
+                return
+            if event_type != "step.start":
+                return
+
+            step = getattr(event, "step", None)
+            if step is None:
+                return
+            step_type = getattr(step, "type", "") or ""
+
+            # Result steps close the matching call's glow.
+            if step_type == "function_result" or step_type.endswith("_result"):
+                call_id = getattr(step, "call_id", None)
+                node_id = open_calls.pop(call_id, None)
+                if node_id and workflow_id:
+                    await pulse_node(node_id, "success", workflow_id=workflow_id)
+                return
+
+            name = getattr(step, "name", "") or ""
+            if step_type in _CLOUD_STEP_LABELS:
+                key, label = f"type:{step_type}", _CLOUD_STEP_LABELS[step_type]
+            elif step_type == "function_call":
+                if name in declared_names:
+                    # Ours — bridged at requires_action; phase only.
+                    await phase_tool(name)
+                    return
+                if not name or name in _CLOUD_NOISE_NAMES:
+                    return
+                key, label = f"fn:{name}", name
+            else:
+                return
+
+            await phase_tool(label)
+            if not workflow_id:
+                return
+            node_id = live_nodes.get(key)
+            if node_id is None:
+                resolved = await ensure_cloud_tool_nodes(
+                    workflow_id=workflow_id,
+                    agent_node_id=agent_node_id,
+                    used={key: label},
+                )
+                node_id = resolved.get(key)
+                if node_id is None:
+                    return
+                live_nodes[key] = node_id
+            await pulse_node(node_id, "executing", workflow_id=workflow_id)
+            step_id = getattr(step, "id", None)
+            if step_id:
+                open_calls[step_id] = node_id
+
+        return on_event
 
     @staticmethod
     def _usage_dict(interaction: Any) -> Optional[Dict[str, Any]]:

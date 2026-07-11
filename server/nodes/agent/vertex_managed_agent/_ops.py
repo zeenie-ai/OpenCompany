@@ -5,8 +5,9 @@ distinct cloud-side tool the managed agent used, wire them to the
 agent's ``input-tools`` handle, persist into ``workflow.data`` FIRST
 (DB is source of truth on the next run) and then broadcast the ops
 batch on the ``workflow_ops_apply`` wire key so an open canvas applies
-them live. Finally each used node gets a one-shot executing->success
-pulse (the frontend's 500ms minimum glow makes it visible).
+them live. Pulsing (executing/success glow via ``pulse_node``) is the
+caller's concern: the live SSE handler pulses per call/result step,
+the post-turn sweep pulses once per missed key.
 """
 
 from __future__ import annotations
@@ -31,23 +32,42 @@ def _mint_node_id(prefix: str) -> str:
     return f"{prefix}-{int(time.time() * 1000)}-{secrets.token_hex(3)}"
 
 
+async def pulse_node(
+    node_id: str,
+    status: str,
+    *,
+    workflow_id: str,
+    message: str = "Used by Vertex agent",
+) -> None:
+    """One status broadcast on a display node (executing / success)."""
+    await get_status_broadcaster().update_node_status(
+        node_id,
+        status,
+        {"message": message},
+        workflow_id=workflow_id,
+    )
+
+
 async def ensure_cloud_tool_nodes(
     *,
     workflow_id: str,
     agent_node_id: str,
     used: Dict[str, str],
-) -> List[str]:
+) -> Dict[str, str]:
     """Mint/dedupe display nodes for ``{cloud_tool_key: label}`` usage.
 
-    Returns the canvas node ids that were pulsed (existing + minted).
+    Mint + persist + broadcast only — pulsing is the caller's concern
+    (live streaming pulses per call/result; the post-turn sweep pulses
+    once). Returns ``{cloud_tool_key: canvas_node_id}`` for every
+    requested key (existing + minted).
     """
     if not used:
-        return []
+        return {}
 
     database = get_database()
     workflow = await database.get_workflow(workflow_id)
     if workflow is None:
-        return []
+        return {}
 
     data = dict(workflow.data or {})
     nodes = list(data.get("nodes") or [])
@@ -69,9 +89,9 @@ async def ensure_cloud_tool_nodes(
                 existing[label] = node.get("id")
 
     operations: List[dict] = []
-    pulse_ids: List[str] = [
-        existing[label] for label in used.values() if label in existing
-    ]
+    resolved: Dict[str, str] = {
+        key: existing[label] for key, label in used.items() if label in existing
+    }
 
     fan_index = 0
     for key, label in used.items():
@@ -131,12 +151,11 @@ async def ensure_cloud_tool_nodes(
         await database.save_node_parameters(
             minted_id, {"label": label, "cloud_tool_key": key}
         )
-        pulse_ids.append(minted_id)
+        resolved[key] = minted_id
         fan_index += 1
 
-    broadcaster = get_status_broadcaster()
-
     if operations:
+        broadcaster = get_status_broadcaster()
         data["nodes"] = nodes
         data["edges"] = edges
         # Persist-then-broadcast: the DB write must land before any
@@ -164,18 +183,4 @@ async def ensure_cloud_tool_nodes(
             agent_node_id,
         )
 
-    for node_id in pulse_ids:
-        await broadcaster.update_node_status(
-            node_id,
-            "executing",
-            {"message": "Used by Vertex agent"},
-            workflow_id=workflow_id,
-        )
-        await broadcaster.update_node_status(
-            node_id,
-            "success",
-            {"message": "Used by Vertex agent"},
-            workflow_id=workflow_id,
-        )
-
-    return pulse_ids
+    return resolved

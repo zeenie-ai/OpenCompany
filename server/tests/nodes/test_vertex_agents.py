@@ -74,11 +74,15 @@ _ADMIN_MODULE = "nodes.agent.vertex_agent_admin"
 
 
 def _patched_interactions(side_effect):
-    """Patch the node's SDK seam: fake client + canned interactions."""
+    """Patch the node's SDK seam: fake client + canned interactions.
+
+    The node now calls ``stream_interaction`` (SSE-backed); non-live
+    tests mock it to return final interactions, ignoring ``on_event``.
+    """
     return (
         patch(f"{_NODE_MODULE}.build_genai_client", return_value=MagicMock()),
         patch(
-            f"{_NODE_MODULE}.create_interaction_and_wait",
+            f"{_NODE_MODULE}.stream_interaction",
             AsyncMock(side_effect=side_effect),
         ),
     )
@@ -327,7 +331,7 @@ class TestVertexManagedAgent:
 
         client_patch = patch(f"{_NODE_MODULE}.build_genai_client", return_value=MagicMock())
         create_patch = patch(
-            f"{_NODE_MODULE}.create_interaction_and_wait",
+            f"{_NODE_MODULE}.stream_interaction",
             AsyncMock(side_effect=create_side_effect),
         )
         with (
@@ -359,13 +363,15 @@ class TestVertexManagedAgent:
             SimpleNamespace(type="google_search_call", id="c2", name=None),
         ]
         client_patch, create_patch = _patched_interactions([_interaction(steps=steps)])
-        mint_mock = AsyncMock(return_value=[])
+        mint_mock = AsyncMock(return_value={})
+        pulse_mock = AsyncMock()
         with (
             patched_container(auth_api_keys={}),
             patched_broadcaster() as bc,
             client_patch,
             create_patch,
             patch(f"{_NODE_MODULE}._ops.ensure_cloud_tool_nodes", mint_mock),
+            patch(f"{_NODE_MODULE}._ops.pulse_node", pulse_mock),
         ):
             _wire_async_broadcasts(bc)
             result = await harness.execute(
@@ -381,6 +387,8 @@ class TestVertexManagedAgent:
             )
 
         harness.assert_envelope(result, success=True)
+        # Stream mock never invoked on_event, so everything lands in the
+        # post-turn sweep.
         mint_mock.assert_awaited_once()
         used = mint_mock.await_args.kwargs["used"]
         assert used == {
@@ -413,6 +421,148 @@ class TestVertexManagedAgent:
         harness.assert_envelope(result, success=True)
         mint_mock.assert_not_awaited()
 
+    async def test_live_stream_mints_and_pulses_mid_turn(self, harness):
+        """Cloud tool nodes appear WHILE streaming: mint + executing pulse
+        on the call step, success pulse on the call_id-matched result
+        step; noise names and non-step events are ignored; the live
+        union feeds cloud_tools_used even when the final resource
+        carries no steps."""
+        agent_id = "vx-1"
+
+        async def fake_stream(client, *, on_event=None, **kwargs):
+            assert on_event is not None
+            await on_event(
+                SimpleNamespace(
+                    event_type="step.start",
+                    index=0,
+                    step=SimpleNamespace(type="code_execution_call", id="c1", name=None),
+                )
+            )
+            await on_event(SimpleNamespace(event_type="step.delta", index=0))
+            await on_event(
+                SimpleNamespace(
+                    event_type="step.start",
+                    index=1,
+                    step=SimpleNamespace(type="code_execution_result", call_id="c1"),
+                )
+            )
+            await on_event(
+                SimpleNamespace(
+                    event_type="step.start",
+                    index=2,
+                    step=SimpleNamespace(
+                        type="function_call", id="c9", name="provision_sandbox"
+                    ),
+                )
+            )
+            return _interaction(steps=[])  # final resource: no steps
+
+        mint_mock = AsyncMock(return_value={"type:code_execution_call": "vct-1"})
+        pulse_mock = AsyncMock()
+        with (
+            patched_container(auth_api_keys={}),
+            patched_broadcaster() as bc,
+            patch(f"{_NODE_MODULE}.build_genai_client", return_value=MagicMock()),
+            patch(
+                f"{_NODE_MODULE}.stream_interaction",
+                AsyncMock(side_effect=fake_stream),
+            ),
+            patch(f"{_NODE_MODULE}._ops.ensure_cloud_tool_nodes", mint_mock),
+            patch(f"{_NODE_MODULE}._ops.pulse_node", pulse_mock),
+        ):
+            _wire_async_broadcasts(bc)
+            result = await harness.execute(
+                "vertex_managed_agent",
+                {"prompt": "p", "project_id": "test-proj"},
+                node_id=agent_id,
+                context={
+                    "workflow_id": "wf-1",
+                    "nodes": [_node(agent_id, "vertex_managed_agent")],
+                    "edges": [],
+                    "outputs": {},
+                },
+            )
+
+        harness.assert_envelope(result, success=True)
+        # Minted once, LIVE (noise name skipped; empty final steps = no sweep).
+        mint_mock.assert_awaited_once()
+        assert mint_mock.await_args.kwargs["used"] == {
+            "type:code_execution_call": "Code Execution"
+        }
+        pulses = [(c.args[0], c.args[1]) for c in pulse_mock.await_args_list]
+        assert ("vct-1", "executing") in pulses
+        assert ("vct-1", "success") in pulses
+        assert result["result"]["cloud_tools_used"] == ["Code Execution"]
+
+
+# ============================================================================
+# stream_interaction (SSE helper)
+# ============================================================================
+
+
+class _FakeStream:
+    def __init__(self, events):
+        self._events = list(events)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if not self._events:
+            raise StopAsyncIteration
+        return self._events.pop(0)
+
+
+class TestStreamInteraction:
+    async def test_on_event_errors_swallowed_and_full_resource_fetched(self):
+        from nodes.agent._vertex import stream_interaction
+
+        events = [
+            SimpleNamespace(
+                event_type="interaction.created",
+                interaction=SimpleNamespace(id="ix-9"),
+            ),
+            SimpleNamespace(
+                event_type="step.start",
+                step=SimpleNamespace(type="model_output"),
+            ),
+        ]
+        client = MagicMock()
+        client.aio.interactions.create = AsyncMock(return_value=_FakeStream(events))
+        final = _interaction(interaction_id="ix-9")
+        client.aio.interactions.get = AsyncMock(return_value=final)
+
+        async def bad_handler(event):
+            raise RuntimeError("boom")
+
+        interaction = await stream_interaction(
+            client, on_event=bad_handler, agent="a", input="p"
+        )
+
+        assert interaction is final
+        client.aio.interactions.get.assert_awaited_with("ix-9")
+        create_kwargs = client.aio.interactions.create.await_args.kwargs
+        assert create_kwargs["stream"] is True
+        assert create_kwargs["background"] is True
+
+    async def test_falls_back_to_poll_when_streaming_rejected(self):
+        from nodes.agent._vertex import stream_interaction
+
+        final = _interaction(interaction_id="ix-2")
+        client = MagicMock()
+        client.aio.interactions.create = AsyncMock(
+            side_effect=[FakeGenaiError("streaming not supported"), final]
+        )
+        client.aio.interactions.get = AsyncMock(return_value=final)
+
+        interaction = await stream_interaction(client, agent="a", input="p")
+
+        assert interaction is final
+        # Second create is the non-stream background fallback.
+        second = client.aio.interactions.create.await_args_list[1].kwargs
+        assert second.get("stream") is not True
+        assert second["background"] is True
+
 
 # ============================================================================
 # ensure_cloud_tool_nodes (minting helper)
@@ -428,7 +578,7 @@ class TestCloudToolMinting:
             description=None,
         )
 
-    async def test_mints_persists_then_broadcasts_and_pulses(self):
+    async def test_mints_persists_then_broadcasts(self):
         from nodes.agent.vertex_managed_agent import _ops
 
         database = MagicMock()
@@ -443,14 +593,14 @@ class TestCloudToolMinting:
             patch.object(_ops, "get_database", return_value=database),
             patch.object(_ops, "get_status_broadcaster", return_value=broadcaster),
         ):
-            pulsed = await _ops.ensure_cloud_tool_nodes(
+            resolved = await _ops.ensure_cloud_tool_nodes(
                 workflow_id="wf-1",
                 agent_node_id="vx-1",
                 used={"fn:run_command": "run_command"},
             )
 
-        assert len(pulsed) == 1
-        minted_id = pulsed[0]
+        assert list(resolved) == ["fn:run_command"]
+        minted_id = resolved["fn:run_command"]
         assert minted_id.startswith("vertexCloudTool-")
 
         # Persisted node + edge with the minted id.
@@ -475,9 +625,21 @@ class TestCloudToolMinting:
         assert ops[1]["source_handle"] == "output-tool"
         assert ops[1]["target_handle"] == "input-tools"
 
-        # executing -> success pulse on the minted node.
-        statuses = [c.args[1] for c in broadcaster.update_node_status.await_args_list]
-        assert statuses == ["executing", "success"]
+        # Pulsing is the caller's concern now — mint emits no node_status.
+        broadcaster.update_node_status.assert_not_awaited()
+
+    async def test_pulse_node_broadcasts_status(self):
+        from nodes.agent.vertex_managed_agent import _ops
+
+        broadcaster = MagicMock()
+        broadcaster.update_node_status = AsyncMock()
+        with patch.object(_ops, "get_status_broadcaster", return_value=broadcaster):
+            await _ops.pulse_node("vct-1", "executing", workflow_id="wf-1")
+
+        args = broadcaster.update_node_status.await_args
+        assert args.args[0] == "vct-1"
+        assert args.args[1] == "executing"
+        assert args.kwargs["workflow_id"] == "wf-1"
 
     async def test_dedupes_existing_node_by_label(self):
         from nodes.agent.vertex_managed_agent import _ops
@@ -510,17 +672,16 @@ class TestCloudToolMinting:
             patch.object(_ops, "get_database", return_value=database),
             patch.object(_ops, "get_status_broadcaster", return_value=broadcaster),
         ):
-            pulsed = await _ops.ensure_cloud_tool_nodes(
+            resolved = await _ops.ensure_cloud_tool_nodes(
                 workflow_id="wf-1",
                 agent_node_id="vx-1",
                 used={"fn:run_command": "run_command"},
             )
 
-        assert pulsed == ["vertexCloudTool-1-aaa"]
+        assert resolved == {"fn:run_command": "vertexCloudTool-1-aaa"}
         database.save_workflow.assert_not_awaited()
         broadcaster.broadcast.assert_not_awaited()
-        # Existing node still pulses.
-        assert broadcaster.update_node_status.await_count == 2
+        broadcaster.update_node_status.assert_not_awaited()
 
 
 # ============================================================================

@@ -148,3 +148,67 @@ async def create_interaction_and_wait(
             await on_poll()
         interaction = await client.aio.interactions.get(interaction.id)
     return interaction
+
+
+async def stream_interaction(
+    client: Any,
+    *,
+    on_event: Optional[Callable[[Any], Awaitable[None]]] = None,
+    poll_interval: float = _POLL_INTERVAL_SECONDS,
+    **kwargs: Any,
+) -> Any:
+    """Create a streamed background interaction; return the FULL resource.
+
+    The SSE stream (``create(stream=True, background=True)``) exists purely
+    for LIVE visibility — each event is handed to ``on_event`` best-effort
+    (an exception there is logged, never fatal to the turn). The
+    ``interaction.completed`` event carries only a PARTIAL interaction
+    (no ``output_text`` / ``environment_id``; ``steps`` optional), so after
+    the stream closes the authoritative resource is fetched with a
+    non-stream ``interactions.get`` and polled to a terminal status as a
+    safety net.
+
+    If the streaming create itself is rejected by the surface, falls back
+    to the plain background+poll path so the node still works.
+    """
+    try:
+        stream = await client.aio.interactions.create(
+            background=True, stream=True, **kwargs
+        )
+    except Exception as exc:  # noqa: BLE001 — fall back, then error-map there
+        if not is_genai_error(exc):
+            raise
+        logger.warning(
+            "[Vertex] streaming create rejected (%s) — falling back to poll",
+            str(exc).replace("\n", " ")[:200],
+        )
+        return await create_interaction_and_wait(
+            client, poll_interval=poll_interval, **kwargs
+        )
+
+    interaction_id: Optional[str] = None
+    async for event in stream:
+        if interaction_id is None:
+            inner = getattr(event, "interaction", None)
+            candidate = getattr(inner, "id", None) or getattr(
+                event, "interaction_id", None
+            )
+            if candidate:
+                interaction_id = candidate
+        if on_event is not None:
+            try:
+                await on_event(event)
+            except Exception:  # noqa: BLE001 — visibility must never kill the turn
+                logger.exception("[Vertex] on_event handler failed (ignored)")
+
+    if interaction_id is None:
+        raise NodeUserError(
+            "Vertex managed agent stream ended without an interaction id — "
+            "no interaction.created event was received."
+        )
+
+    interaction = await client.aio.interactions.get(interaction_id)
+    while getattr(interaction, "status", None) not in TERMINAL_STATUSES:
+        await asyncio.sleep(poll_interval)
+        interaction = await client.aio.interactions.get(interaction_id)
+    return interaction
