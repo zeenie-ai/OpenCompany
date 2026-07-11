@@ -1,6 +1,6 @@
 {
-  "version": "2026.06",
-  "last_updated": "2026-06-16",
+  "version": "2026.07",
+  "last_updated": "2026-07-11",
   "_description": "LLM provider defaults. Connection config (base_url, models_endpoint) drives both native SDK and LangChain paths. Model specs auto-enriched by model_registry.json (OpenRouter cache).",
 
   "agent": {
@@ -14,27 +14,28 @@
 
   "providers": {
     "openai": {
-      "default_model": "gpt-5.5",
+      "default_model": "gpt-5.6-sol",
       "detection_patterns": ["gpt", "openai", "o1", "o3", "o4"],
       "base_url": "https://api.openai.com/v1",
       "models_endpoint": "https://api.openai.com/v1/models",
       "api_key_param": "openai_api_key",
       "max_tokens_param": "max_tokens",
+      "_models_note": "GPT-5.6 family (sol/terra/luna) GA 2026-07-09. gpt-5.5 / gpt-5.4 remain GA as legacy tiers. Dropped: gpt-5.2 (new requests blocked 2026-06-30), o3 (API shutdown 2026-12-11), o4-mini (API shutdown 2026-10-23) — they fall back to _default constraints if still selected before shutdown.",
       "max_output_tokens": {
+        "gpt-5.6-sol": 128000,
+        "gpt-5.6-terra": 128000,
+        "gpt-5.6-luna": 128000,
         "gpt-5.5": 128000,
         "gpt-5.4": 128000,
-        "gpt-5.2": 128000,
-        "o4-mini": 100000,
-        "o3": 100000,
         "gpt-4.1": 32768,
         "_default": 16384
       },
       "context_length": {
+        "gpt-5.6-sol": 1050000,
+        "gpt-5.6-terra": 1050000,
+        "gpt-5.6-luna": 1050000,
         "gpt-5.5": 1050000,
         "gpt-5.4": 1050000,
-        "gpt-5.2": 400000,
-        "o4-mini": 200000,
-        "o3": 200000,
         "gpt-4.1": 1047576,
         "_default": 128000
       },
@@ -54,7 +55,8 @@
         "claude-fable-5": 128000,
         "claude-opus-4-8": 128000,
         "claude-opus-4-7": 128000,
-        "claude-sonnet-4-6": 64000,
+        "claude-sonnet-5": 128000,
+        "claude-sonnet-4-6": 128000,
         "claude-haiku-4-5": 64000,
         "_default": 8192
       },
@@ -62,6 +64,7 @@
         "claude-fable-5": 1048576,
         "claude-opus-4-8": 1048576,
         "claude-opus-4-7": 1048576,
+        "claude-sonnet-5": 1048576,
         "claude-sonnet-4-6": 1048576,
         "claude-haiku-4-5": 200000,
         "_default": 200000
@@ -148,24 +151,25 @@
     },
     "cerebras": {
       "default_model": "gpt-oss-120b",
-      "detection_patterns": ["cerebras", "gpt-oss", "qwen-3-235b", "zai-glm"],
+      "detection_patterns": ["cerebras", "gpt-oss", "zai-glm", "gemma-4"],
       "base_url": "https://api.cerebras.ai/v1",
       "models_endpoint": "https://api.cerebras.ai/v1/models",
       "api_key_param": "api_key",
       "max_tokens_param": "max_tokens",
+      "_models_note": "Per inference-docs.cerebras.ai 2026-07-11: gpt-oss-120b is the only production model (paid tier 131k context / 40k max completion); zai-glm-4.7 and gemma-4-31b are preview. qwen-3-235b* variants are shut down (migration target: gpt-oss-120b).",
       "max_output_tokens": {
-        "gpt-oss-120b": 65536,
-        "qwen-3-235b": 40960,
+        "gpt-oss-120b": 40960,
         "zai-glm-4.7": 40960,
+        "gemma-4-31b": 40960,
         "_default": 8192
       },
       "context_length": {
         "gpt-oss-120b": 131072,
-        "qwen-3-235b": 131072,
         "zai-glm-4.7": 131072,
+        "gemma-4-31b": 131072,
         "_default": 131072
       },
-      "thinking_models": ["qwen-3-235b"],
+      "thinking_models": ["zai-glm-4.7"],
       "thinking_type": "budget",
       "temperature_range": [0.0, 1.5]
     },

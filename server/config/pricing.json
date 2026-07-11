@@ -1,9 +1,13 @@
 {
-  "version": "2026.03",
-  "last_updated": "2026-03-09",
+  "version": "2026.07",
+  "last_updated": "2026-07-11",
 
   "llm": {
     "openai": {
+      "gpt-5.6-sol": {"input": 5.00, "output": 30.00, "cache_read": 0.50},
+      "gpt-5.6-terra": {"input": 2.50, "output": 15.00, "cache_read": 0.25},
+      "gpt-5.6-luna": {"input": 1.00, "output": 6.00, "cache_read": 0.10},
+      "gpt-5.5": {"input": 5.00, "output": 30.00, "cache_read": 0.50},
       "gpt-5.4": {"input": 2.50, "output": 15.00},
       "gpt-5.3-chat": {"input": 1.75, "output": 14.00},
       "gpt-5.2": {"input": 1.75, "output": 14.00},
@@ -12,7 +16,11 @@
       "_default": {"input": 2.50, "output": 15.00}
     },
     "anthropic": {
+      "claude-fable-5": {"input": 10.00, "output": 50.00, "cache_read": 1.00},
+      "claude-opus-4-8": {"input": 5.00, "output": 25.00, "cache_read": 0.50},
+      "claude-opus-4-7": {"input": 5.00, "output": 25.00, "cache_read": 0.50},
       "claude-opus-4-6": {"input": 5.00, "output": 25.00, "cache_read": 0.50},
+      "claude-sonnet-5": {"input": 3.00, "output": 15.00, "cache_read": 0.30},
       "claude-sonnet-4-6": {"input": 3.00, "output": 15.00, "cache_read": 0.30},
       "claude-haiku-4-5": {"input": 1.00, "output": 5.00, "cache_read": 0.10},
       "claude-sonnet-4-0": {"input": 3.00, "output": 15.00, "cache_read": 0.30},
@@ -36,9 +44,10 @@
       "_default": {"input": 0.15, "output": 0.60}
     },
     "cerebras": {
-      "qwen-3-235b": {"input": 0.20, "output": 0.20},
-      "llama3.1-8b": {"input": 0.10, "output": 0.10},
-      "_default": {"input": 0.10, "output": 0.10}
+      "gpt-oss-120b": {"input": 0.35, "output": 0.75},
+      "zai-glm-4.7": {"input": 2.25, "output": 2.75},
+      "gemma-4-31b": {"input": 0.99, "output": 1.49},
+      "_default": {"input": 0.35, "output": 0.75}
     },
     "openrouter": {
       "_default": {"input": 1.00, "output": 5.00}
