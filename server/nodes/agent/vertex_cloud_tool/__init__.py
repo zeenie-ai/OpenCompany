@@ -67,11 +67,14 @@ class VertexCloudToolNode(ActionNode):
     ui_hints = {"hideRunButton": True}
     # Never expose to LLMs as a callable tool — it has no behavior.
     usable_as_tool = False
+    # Tool nodes hang below the agent and connect upward: output on TOP
+    # (house shape — see calculator_tool), into the agent's bottom
+    # input-tools handle.
     handles = (
         {
-            "name": "output-main",
+            "name": "output-tool",
             "kind": "output",
-            "position": "right",
+            "position": "top",
             "label": "Tool",
             "role": "tools",
         },

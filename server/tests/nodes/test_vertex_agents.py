@@ -460,6 +460,9 @@ class TestCloudToolMinting:
         assert persisted_nodes[0]["id"] == minted_id
         assert persisted_nodes[0]["type"] == "vertexCloudTool"
         assert persisted_edges[0]["source"] == minted_id
+        # Tool-node convention: top output-tool handle -> agent's bottom
+        # input-tools handle (side attachment was a rendering bug).
+        assert persisted_edges[0]["sourceHandle"] == "output-tool"
         assert persisted_edges[0]["targetHandle"] == "input-tools"
 
         # Persist happens before the ops broadcast.
@@ -469,6 +472,8 @@ class TestCloudToolMinting:
         assert ops[0]["type"] == "add_node"
         assert ops[0]["minted_id"] == minted_id
         assert ops[1]["type"] == "add_edge"
+        assert ops[1]["source_handle"] == "output-tool"
+        assert ops[1]["target_handle"] == "input-tools"
 
         # executing -> success pulse on the minted node.
         statuses = [c.args[1] for c in broadcaster.update_node_status.await_args_list]

@@ -79,6 +79,9 @@ async def ensure_cloud_tool_nodes(
             continue
         minted_id = _mint_node_id(_DISPLAY_NODE_TYPE)
         client_ref = f"new_{key}"
+        # Below-left of the agent so the top output-tool handle connects
+        # upward into the agent's bottom input-tools handle (tool-node
+        # convention; agentBuilder-spawned tools fan out below-right).
         add_node_op = wf_ops.add_node(
             client_ref,
             _DISPLAY_NODE_TYPE,
@@ -86,8 +89,8 @@ async def ensure_cloud_tool_nodes(
             label=label,
             position=wf_ops.anchored(
                 agent_node_id,
-                offset_x=-260,
-                offset_y=140 + 90 * fan_index,
+                offset_x=-60,
+                offset_y=240 + 90 * fan_index,
             ),
         )
         # Shared id so backend status broadcasts glow the exact node the
@@ -98,7 +101,7 @@ async def ensure_cloud_tool_nodes(
             wf_ops.add_edge(
                 {"client_ref": client_ref},
                 agent_node_id,
-                source_handle="output-main",
+                source_handle="output-tool",
                 target_handle="input-tools",
             )
         )
@@ -121,7 +124,7 @@ async def ensure_cloud_tool_nodes(
                 "id": f"e-{minted_id}-{agent_node_id}",
                 "source": minted_id,
                 "target": agent_node_id,
-                "sourceHandle": "output-main",
+                "sourceHandle": "output-tool",
                 "targetHandle": "input-tools",
             }
         )
