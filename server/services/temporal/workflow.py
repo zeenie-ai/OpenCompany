@@ -45,10 +45,11 @@ SKILL_NODE_TYPES = {
 # AgentWorkflow for these node types instead of an activity. Tool calls
 # inside the agent loop become per-type activities (F4.A path).
 #
-# Excluded: ``rlm_agent``, ``claude_code_agent``. Their internal session
-# state (RLM REPL / Claude CLI --resume with stable cwd) requires
-# single-process continuity and breaks across activity boundaries. They
-# continue via F4.A per-type activities.
+# Excluded: ``rlm_agent``, ``claude_code_agent``, ``vertex_managed_agent``.
+# Their internal session state (RLM REPL / Claude CLI --resume with stable
+# cwd / Interactions API previous_interaction_id + environment chaining and
+# post-turn canvas minting) requires single-process continuity and breaks
+# across activity boundaries. They continue via F4.A per-type activities.
 AGENT_WORKFLOW_TYPES = frozenset(
     [
         "aiAgent",

@@ -2820,6 +2820,7 @@ class AIService:
             "ai_employee",
             "rlm_agent",
             "claude_code_agent",
+            "vertex_managed_agent",
         )
         if node_type in _AGENT_DELEGATION_TYPES:
             agent_label = params.get("label", node_type)

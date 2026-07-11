@@ -90,6 +90,11 @@ async def clear_agent_session_state(
         # earlier bridge revision.
         params["last_session_id"] = None
         params.pop("memory_jsonl", None)
+        # Wipe the Vertex managed-agent chain so the next run starts a
+        # fresh interaction + sandbox instead of continuing the cleared
+        # conversation (vertex_managed_agent memory bridge).
+        params.pop("vertex_interaction_id", None)
+        params.pop("vertex_environment_id", None)
         await db.save_node_parameters(memory_node_id, params)
         cleared_memory_node = True
         logger.info(

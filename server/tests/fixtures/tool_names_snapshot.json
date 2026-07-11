@@ -38,6 +38,7 @@
   "ai_employee": "delegate_to_ai_employee",
   "rlm_agent": "delegate_to_rlm_agent",
   "claude_code_agent": "delegate_to_claude_code_agent",
+  "vertex_managed_agent": "delegate_to_vertex_managed_agent",
   "batteryMonitor": "android_battery",
   "networkMonitor": "android_network",
   "systemInfo": "android_system_info",
