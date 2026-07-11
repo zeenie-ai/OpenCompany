@@ -343,10 +343,12 @@
     "skill": "stripe-skill"
   },
   "vertex_managed_agent": {
-    "icon": "lobehub:vertexai"
+    "icon": "lobehub:vertexai",
+    "skill": "vertex-agent-skill"
   },
   "vertex_agent_admin": {
-    "icon": "lobehub:googlecloud"
+    "icon": "lobehub:googlecloud",
+    "skill": "vertex-agent-admin-skill"
   },
   "vertexCloudTool": {
     "icon": "lobehub:gemini"
