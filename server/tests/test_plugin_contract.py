@@ -172,6 +172,8 @@ class TestToolSchemaGeneration:
     """ToolNode.Params must produce LLM-compatible JSON schema."""
 
     def test_tool_schema_has_no_refs(self):
+        import json
+
         from services.plugin.tool import ToolNode
 
         for cls in _all_plugin_classes():
@@ -181,6 +183,10 @@ class TestToolSchemaGeneration:
             params = schema["parameters"]
             assert "$defs" not in params, f"{cls.__qualname__} tool schema contains $defs — LLM " "function-calling rejects $ref"
             assert "definitions" not in params
+            # A stripped $defs with a surviving $ref is worse than $defs
+            # itself — the declaration points at a definition that no
+            # longer exists (nested BaseModel / Enum Params fields).
+            assert '"$ref"' not in json.dumps(params), f"{cls.__qualname__} tool schema contains a dangling $ref — " "nested refs must be inlined, not stripped"
             assert schema.get("name") == cls.type
 
 

@@ -49,6 +49,11 @@ TERMINAL_STATUSES = frozenset(
 
 _POLL_INTERVAL_SECONDS = 3.0
 
+# Set on a client instance after the surface rejects a streaming create
+# (400 "Precondition check failed" on the enterprise agent surface) so
+# later turns in the same run skip straight to the background+poll path.
+_STREAM_UNSUPPORTED_ATTR = "_machina_stream_unsupported"
+
 
 def is_genai_error(exc: BaseException) -> bool:
     """True for any google-genai SDK error, across its two hierarchies.
@@ -79,6 +84,22 @@ def is_expired_environment_error(exc: BaseException) -> bool:
     return ("environment" in text or "interaction" in text) and (
         "not found" in text or "expired" in text or "invalid" in text
     )
+
+
+def is_precondition_failure(exc: BaseException) -> bool:
+    """400 'Precondition check failed' from the enterprise surface.
+
+    Live-verified trigger: creating with ``previous_interaction_id``
+    pointing at an interaction that is not in a resumable state (e.g.
+    still ``in_progress`` — an orphaned background interaction keeps
+    running server-side after a client-side cancel/reload). A chain
+    wedged on such a target fails every subsequent run, so callers
+    treat this like an expired chain: wipe the stored ids and retry
+    fresh.
+    """
+    if not is_genai_error(exc):
+        return False
+    return "precondition check failed" in str(exc).lower()
 
 
 def build_genai_client(api_key: str, project_id: str, location: str = DEFAULT_LOCATION):
@@ -168,9 +189,20 @@ async def stream_interaction(
     non-stream ``interactions.get`` and polled to a terminal status as a
     safety net.
 
-    If the streaming create itself is rejected by the surface, falls back
-    to the plain background+poll path so the node still works.
+    If the streaming create itself is rejected by the surface (e.g. the
+    enterprise agent surface answers 400 "Precondition check failed"),
+    falls back to the plain background+poll path so the node still works
+    — and latches the rejection on the client so the remaining turns of
+    the run skip the doomed streaming attempt instead of paying a failed
+    round trip + a warning per turn. A fresh run builds a fresh client,
+    so streaming is re-probed next run.
     """
+    # Identity check on purpose: only an explicit latch counts (mock
+    # clients auto-create truthy attributes).
+    if getattr(client, _STREAM_UNSUPPORTED_ATTR, False) is True:
+        return await create_interaction_and_wait(
+            client, poll_interval=poll_interval, **kwargs
+        )
     try:
         stream = await client.aio.interactions.create(
             background=True, stream=True, **kwargs
@@ -178,8 +210,10 @@ async def stream_interaction(
     except Exception as exc:  # noqa: BLE001 — fall back, then error-map there
         if not is_genai_error(exc):
             raise
+        setattr(client, _STREAM_UNSUPPORTED_ATTR, True)
         logger.warning(
-            "[Vertex] streaming create rejected (%s) — falling back to poll",
+            "[Vertex] streaming create rejected (%s) — falling back to poll "
+            "for the rest of this run",
             str(exc).replace("\n", " ")[:200],
         )
         return await create_interaction_and_wait(

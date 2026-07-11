@@ -9,8 +9,38 @@ from __future__ import annotations
 
 from typing import Any, ClassVar, Dict, Optional
 
+from core.logging import get_logger
 from services.plugin.base import BaseNode
 from services.plugin.scaling import TaskQueue
+
+logger = get_logger(__name__)
+
+
+def inline_schema_refs(schema: Dict[str, Any]) -> Dict[str, Any]:
+    """Inline $defs/$ref indirection for LLM function-calling surfaces.
+
+    Function-calling APIs reject schema indirection, but a Params model
+    with nested BaseModel or Enum fields emits ``$defs`` + ``$ref`` under
+    Pydantic v2 — stripping ``$defs`` alone would leave dangling refs.
+    Circular refs degrade to a permissive ``{}`` at the cycle point
+    (``dereference_refs`` contract); a dereference failure (out-of-document
+    ref, malformed schema) falls back to a permissive object schema.
+    """
+    # Lazy import: langchain_core is heavyweight and this module loads at
+    # plugin-registration time (cold-start rule).
+    from langchain_core.utils.json_schema import dereference_refs
+
+    try:
+        inlined = dereference_refs(schema)
+    except Exception as e:  # noqa: BLE001 — KeyError/ValueError from _retrieve_ref
+        logger.warning(
+            "inline_schema_refs: dereference failed (%s) — falling back to permissive schema",
+            e,
+        )
+        return {"type": "object", "properties": {}}
+    inlined.pop("$defs", None)
+    inlined.pop("definitions", None)
+    return inlined
 
 
 class ToolNode(BaseNode, abstract=True):
@@ -30,10 +60,9 @@ class ToolNode(BaseNode, abstract=True):
     def as_tool_schema(cls) -> Dict[str, Any]:
         """LLM-visible schema: ``{name, description, parameters}`` where
         ``parameters`` is the Pydantic JSON schema of :class:`Params`."""
-        schema = cls.Params.model_json_schema()
-        # Strip $defs / definitions — LLM function-calling doesn't cope.
-        schema.pop("$defs", None)
-        schema.pop("definitions", None)
+        # Inline $defs / $ref — LLM function-calling doesn't cope with
+        # indirection, and a bare strip would leave dangling $ref.
+        schema = inline_schema_refs(cls.Params.model_json_schema())
         return {
             "name": cls.type,
             "description": cls.description or cls.display_name or cls.type,

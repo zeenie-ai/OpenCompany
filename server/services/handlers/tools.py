@@ -119,7 +119,14 @@ async def execute_tool(tool_name: str, tool_args: Dict[str, Any], config: Dict[s
             )
         raise
 
-    handler_owns_lifecycle = isinstance(result, dict) and result.get("status") in ("delegated", "ALREADY_DELEGATED")
+    # Awaited-delegation results (delegation_wait_seconds > 0) carry a
+    # delegation_lifecycle marker: run_child_agent already broadcast the
+    # child node's terminal status, so a duplicate `success` here would
+    # stomp an `error` glow. pop() keeps the marker out of the payload
+    # the LLM sees.
+    handler_owns_lifecycle = isinstance(result, dict) and (
+        result.get("status") in ("delegated", "ALREADY_DELEGATED") or result.pop("delegation_lifecycle", False)
+    )
     if node_id and broadcaster and not handler_owns_lifecycle:
         await broadcaster.update_node_status(
             node_id,
@@ -331,6 +338,14 @@ async def _execute_delegated_agent(args: Dict[str, Any], config: Dict[str, Any])
     # Get parent node ID for duplicate tracking
     parent_node_id = config.get("parent_node_id", "")
 
+    # Opt-in blocking wait (delegation_wait_seconds in config): bridged
+    # cloud agents (vertex_managed_agent) cannot poll cheaply — a
+    # check_delegated_tasks round trip costs a full Interactions API turn
+    # — so they await the child inline and fall back to the polling
+    # contract only on timeout. Absent key = fire-and-forget (native
+    # agent loop, unchanged).
+    wait_seconds = float(config.get("delegation_wait_seconds") or 0)
+
     # Generate hash of task to detect duplicate delegation attempts
     task_hash = hashlib.md5(f"{task_description}:{task_context}".encode()).hexdigest()[:16]
     delegation_key = (parent_node_id, node_id, task_hash)
@@ -339,6 +354,12 @@ async def _execute_delegated_agent(args: Dict[str, Any], config: Dict[str, Any])
     existing_task_id = _active_delegations.get(delegation_key)
     if existing_task_id:
         logger.warning(f"[Delegated Agent] Duplicate delegation detected: task_hash={task_hash}, existing_task_id={existing_task_id}")
+        if wait_seconds > 0:
+            # Re-call after a timed-out wait: await the existing in-flight
+            # task instead of duplicating work.
+            resolved = await wait_for_delegation(existing_task_id, timeout=wait_seconds, database=database)
+            if resolved is not None:
+                return _delegation_result_reply(existing_task_id, resolved)
         return {
             "success": True,
             "status": "ALREADY_DELEGATED",
@@ -612,6 +633,25 @@ async def _execute_delegated_agent(args: Dict[str, Any], config: Dict[str, Any])
     task = asyncio.create_task(run_child_agent())
     _delegated_tasks[task_id] = task
 
+    if wait_seconds > 0:
+        resolved = await wait_for_delegation(task_id, timeout=wait_seconds, task=task, database=database)
+        if resolved is not None:
+            return _delegation_result_reply(task_id, resolved)
+        return {
+            "success": True,
+            "status": "delegated",
+            "task_id": task_id,
+            "agent_node_id": node_id,
+            "agent_name": agent_label,
+            "message": (
+                f"'{agent_label}' is STILL WORKING after {int(wait_seconds)}s "
+                f"(task_id: {task_id}). It continues in the background. "
+                f"Do NOT call this tool again for this task. Use "
+                f"'check_delegated_tasks' with task_id='{task_id}' to "
+                f"retrieve the result later."
+            ),
+        }
+
     # Return immediately - Parent agent continues working
     return {
         "success": True,
@@ -626,6 +666,56 @@ async def _execute_delegated_agent(args: Dict[str, Any], config: Dict[str, Any])
             f"To check results later, use 'check_delegated_tasks' with task_id='{task_id}'."
         ),
     }
+
+
+def _delegation_result_reply(task_id: str, entry: Dict[str, Any]) -> Dict[str, Any]:
+    """Shape a terminal delegation entry as an awaited tool result.
+
+    ``delegation_lifecycle`` tells :func:`execute_tool` that
+    ``run_child_agent`` already owns the child node's terminal broadcast.
+    """
+    completed = entry.get("status") == "completed"
+    return {
+        "success": completed,
+        "status": entry.get("status"),  # "completed" | "error" | "not_found"
+        "task_id": task_id,
+        "agent_name": entry.get("agent_name"),
+        "result": entry.get("result"),
+        "error": entry.get("error"),
+        "delegation_lifecycle": True,
+    }
+
+
+async def wait_for_delegation(
+    task_id: str,
+    *,
+    timeout: float,
+    task: Optional[asyncio.Task] = None,
+    database=None,
+) -> Optional[Dict[str, Any]]:
+    """Block until a delegated task reaches a terminal state, or timeout.
+
+    Returns the ``_delegation_results``-shaped entry on completion/error,
+    or ``None`` when the child is still running after ``timeout``. The
+    child is NEVER cancelled — ``asyncio.shield`` cancels only the waiter,
+    so ``_delegation_results`` caching / taskTrigger events still fire
+    later and the result stays retrievable via ``check_delegated_tasks``.
+    """
+    live = task if task is not None else _delegated_tasks.get(task_id)
+    if live is not None:
+        try:
+            await asyncio.wait_for(asyncio.shield(live), timeout=timeout)
+        except asyncio.TimeoutError:
+            return None  # still working in the background
+        except Exception:  # noqa: BLE001 — run_child_agent caches its own errors
+            pass
+    cached = _delegation_results.get(task_id)
+    if cached:
+        return cached
+    # Cleanup race / cross-restart: 3-layer lookup (live -> cache -> DB).
+    status = await get_delegated_task_status(task_ids=[task_id], database=database)
+    entry = status["tasks"][0]
+    return None if entry.get("status") == "running" else entry
 
 
 async def get_delegated_task_status(task_ids: Optional[List[str]] = None, database=None) -> Dict[str, Any]:

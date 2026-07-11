@@ -319,6 +319,475 @@ class TestVertexManagedAgent:
         assert rec.args[1]["result"] == {"answer": 42}
         assert rec.args[1]["is_error"] is False
 
+    async def test_requires_action_awaits_delegated_agent_and_answers_real_result(self, harness):
+        """Sub-agent bridging: the delegate call is dispatched with the
+        blocking-wait contract (delegation_wait_seconds) and the child's
+        REAL answer — not a fire-and-forget task_id ack — is sent back
+        to the cloud agent as the function_result."""
+        agent_id = "vx-1"
+        child_id = "child-1"
+
+        delegate_tool = SimpleNamespace(name="delegate_to_ai_agent", description="d", args_schema=None)
+        check_tool = SimpleNamespace(name="check_delegated_tasks", description="check", args_schema=None)
+
+        async def build_side_effect(tool_info):
+            if tool_info["node_type"] == "_builtin_check_delegated_tasks":
+                return (check_tool, {"node_type": "_builtin_check_delegated_tasks", "node_id": tool_info["node_id"], "parameters": {}})
+            return (delegate_tool, {"node_type": "aiAgent", "node_id": child_id, "parameters": {}, "label": "child"})
+
+        ai_service = MagicMock(name="AIService")
+        ai_service._build_tool_from_node = AsyncMock(side_effect=build_side_effect)
+        execute_tool_mock = AsyncMock(
+            return_value={
+                "success": True,
+                "status": "completed",
+                "task_id": "delegated_x",
+                "agent_name": "child",
+                "result": "child answer",
+            }
+        )
+
+        turns = [
+            _interaction(
+                status="requires_action",
+                interaction_id="ix-1",
+                steps=[_fc_step("delegate_to_ai_agent", "c1", {"task": "do it"})],
+            ),
+            _interaction(status="completed", interaction_id="ix-2"),
+        ]
+        client_patch, create_patch = _patched_interactions(turns)
+        with (
+            patched_container(auth_api_keys={}),
+            patched_broadcaster() as bc,
+            client_patch,
+            create_patch as create_mock,
+            patch("services.plugin.deps.get_ai_service", return_value=ai_service),
+            patch("services.handlers.tools.execute_tool", execute_tool_mock),
+            patch(f"{_NODE_MODULE}._ops.record_tool_output", AsyncMock()),
+        ):
+            _wire_async_broadcasts(bc)
+            result = await harness.execute(
+                "vertex_managed_agent",
+                {"prompt": "delegate", "project_id": "test-proj"},
+                node_id=agent_id,
+                nodes=[
+                    _node(agent_id, "vertex_managed_agent"),
+                    _node(child_id, "aiAgent"),
+                ],
+                edges=[_edge(child_id, agent_id, "input-tools")],
+            )
+
+        harness.assert_envelope(result, success=True)
+        assert result["result"]["turns"] == 2
+
+        # The bridged dispatch carried the blocking-wait contract.
+        execute_tool_mock.assert_awaited_once()
+        name_arg, args_arg, config_arg = execute_tool_mock.await_args.args
+        assert name_arg == "delegate_to_ai_agent"
+        assert config_arg["delegation_wait_seconds"] == 600
+
+        # The cloud agent got the child's real answer, not a task_id ack.
+        second_kwargs = create_mock.call_args_list[1].kwargs
+        fr = second_kwargs["input"][0]
+        assert fr["type"] == "function_result"
+        assert fr["call_id"] == "c1"
+        assert fr["result"]["result"] == "child answer"
+        assert fr["result"]["status"] == "completed"
+
+    async def test_check_tool_injected_when_agent_connected(self, harness):
+        agent_id = "vx-1"
+        child_id = "child-1"
+
+        delegate_tool = SimpleNamespace(name="delegate_to_ai_agent", description="d", args_schema=None)
+        check_tool = SimpleNamespace(name="check_delegated_tasks", description="check", args_schema=None)
+
+        async def build_side_effect(tool_info):
+            if tool_info["node_type"] == "_builtin_check_delegated_tasks":
+                return (check_tool, {"node_type": "_builtin_check_delegated_tasks", "node_id": tool_info["node_id"], "parameters": {}})
+            return (delegate_tool, {"node_type": "aiAgent", "node_id": child_id, "parameters": {}, "label": "child"})
+
+        ai_service = MagicMock(name="AIService")
+        ai_service._build_tool_from_node = AsyncMock(side_effect=build_side_effect)
+
+        client_patch, create_patch = _patched_interactions([_interaction()])
+        with (
+            patched_container(auth_api_keys={}),
+            patched_broadcaster() as bc,
+            client_patch,
+            create_patch as create_mock,
+            patch("services.plugin.deps.get_ai_service", return_value=ai_service),
+        ):
+            _wire_async_broadcasts(bc)
+            result = await harness.execute(
+                "vertex_managed_agent",
+                {"prompt": "p", "project_id": "test-proj"},
+                node_id=agent_id,
+                nodes=[
+                    _node(agent_id, "vertex_managed_agent"),
+                    _node(child_id, "aiAgent"),
+                ],
+                edges=[_edge(child_id, agent_id, "input-tools")],
+            )
+
+        harness.assert_envelope(result, success=True)
+        kwargs = create_mock.call_args.kwargs
+        declared_names = [t["name"] for t in kwargs["tools"]]
+        assert declared_names == ["delegate_to_ai_agent", "check_delegated_tasks"]
+        # Delegation guidance injected even with no user system_instruction.
+        assert "## Agent Delegation" in kwargs["system_instruction"]
+        assert "delegate_to_ai_agent" in kwargs["system_instruction"]
+
+    async def test_check_tool_not_injected_for_plain_tools(self, harness):
+        agent_id = "vx-1"
+        tool_id = "tool-1"
+
+        fake_tool = SimpleNamespace(name="fake_tool", description="d", args_schema=None)
+        ai_service = MagicMock(name="AIService")
+        ai_service._build_tool_from_node = AsyncMock(
+            return_value=(
+                fake_tool,
+                {"node_type": "duckduckgoSearch", "node_id": tool_id, "parameters": {}, "label": "ddg"},
+            )
+        )
+
+        client_patch, create_patch = _patched_interactions([_interaction()])
+        with (
+            patched_container(auth_api_keys={}),
+            patched_broadcaster() as bc,
+            client_patch,
+            create_patch as create_mock,
+            patch("services.plugin.deps.get_ai_service", return_value=ai_service),
+        ):
+            _wire_async_broadcasts(bc)
+            result = await harness.execute(
+                "vertex_managed_agent",
+                {"prompt": "p", "project_id": "test-proj"},
+                node_id=agent_id,
+                nodes=[_node(agent_id, "vertex_managed_agent"), _node(tool_id, "duckduckgoSearch")],
+                edges=[_edge(tool_id, agent_id, "input-tools")],
+            )
+
+        harness.assert_envelope(result, success=True)
+        kwargs = create_mock.call_args.kwargs
+        assert [t["name"] for t in kwargs["tools"]] == ["fake_tool"]
+        assert "system_instruction" not in kwargs
+
+    async def test_delegation_wait_clamped_to_activity_budget(self, harness):
+        """A delegation wait must never blow the Temporal activity
+        deadline: with ~29 min already elapsed, the wait clamps to 0 and
+        the dispatch falls back to the fire-and-forget contract."""
+        agent_id = "vx-1"
+        child_id = "child-1"
+
+        delegate_tool = SimpleNamespace(name="delegate_to_ai_agent", description="d", args_schema=None)
+        check_tool = SimpleNamespace(name="check_delegated_tasks", description="check", args_schema=None)
+
+        async def build_side_effect(tool_info):
+            if tool_info["node_type"] == "_builtin_check_delegated_tasks":
+                return (check_tool, {"node_type": "_builtin_check_delegated_tasks", "node_id": tool_info["node_id"], "parameters": {}})
+            return (delegate_tool, {"node_type": "aiAgent", "node_id": child_id, "parameters": {}, "label": "child"})
+
+        ai_service = MagicMock(name="AIService")
+        ai_service._build_tool_from_node = AsyncMock(side_effect=build_side_effect)
+        execute_tool_mock = AsyncMock(return_value={"success": True, "status": "delegated", "task_id": "t1"})
+
+        turns = [
+            _interaction(
+                status="requires_action",
+                interaction_id="ix-1",
+                steps=[_fc_step("delegate_to_ai_agent", "c1", {"task": "t"})],
+            ),
+            _interaction(status="completed", interaction_id="ix-2"),
+        ]
+        client_patch, create_patch = _patched_interactions(turns)
+
+        # First time.time() call is start_time (0.0); every later call
+        # reports 1740s elapsed -> remaining budget is negative.
+        ticks = iter([0.0])
+        fake_time = MagicMock()
+        fake_time.time = lambda: next(ticks, 1740.0)
+
+        with (
+            patched_container(auth_api_keys={}),
+            patched_broadcaster() as bc,
+            client_patch,
+            create_patch,
+            patch("services.plugin.deps.get_ai_service", return_value=ai_service),
+            patch("services.handlers.tools.execute_tool", execute_tool_mock),
+            patch(f"{_NODE_MODULE}._ops.record_tool_output", AsyncMock()),
+            patch(f"{_NODE_MODULE}.time", fake_time),
+        ):
+            _wire_async_broadcasts(bc)
+            result = await harness.execute(
+                "vertex_managed_agent",
+                {"prompt": "p", "project_id": "test-proj"},
+                node_id=agent_id,
+                nodes=[_node(agent_id, "vertex_managed_agent"), _node(child_id, "aiAgent")],
+                edges=[_edge(child_id, agent_id, "input-tools")],
+            )
+
+        harness.assert_envelope(result, success=True)
+        execute_tool_mock.assert_awaited_once()
+        config_arg = execute_tool_mock.await_args.args[2]
+        assert "delegation_wait_seconds" not in config_arg
+
+    async def test_declared_schema_inlines_nested_refs(self, harness):
+        """Nested BaseModel / Enum Params fields emit $defs + $ref under
+        Pydantic v2 — the declaration must inline them, not strip $defs
+        and leave dangling refs."""
+        import json
+        from enum import Enum
+
+        from pydantic import BaseModel as PydanticBase
+
+        class Color(str, Enum):
+            RED = "red"
+            BLUE = "blue"
+
+        class Inner(PydanticBase):
+            name: str
+
+        class NestedToolParams(PydanticBase):
+            nested: Inner
+            color: Color = Color.RED
+
+        agent_id = "vx-1"
+        tool_id = "tool-1"
+        fake_tool = SimpleNamespace(name="fake_tool", description="d", args_schema=NestedToolParams)
+        ai_service = MagicMock(name="AIService")
+        ai_service._build_tool_from_node = AsyncMock(
+            return_value=(
+                fake_tool,
+                {"node_type": "duckduckgoSearch", "node_id": tool_id, "parameters": {}, "label": "ddg"},
+            )
+        )
+
+        client_patch, create_patch = _patched_interactions([_interaction()])
+        with (
+            patched_container(auth_api_keys={}),
+            patched_broadcaster() as bc,
+            client_patch,
+            create_patch as create_mock,
+            patch("services.plugin.deps.get_ai_service", return_value=ai_service),
+        ):
+            _wire_async_broadcasts(bc)
+            result = await harness.execute(
+                "vertex_managed_agent",
+                {"prompt": "p", "project_id": "test-proj"},
+                node_id=agent_id,
+                nodes=[_node(agent_id, "vertex_managed_agent"), _node(tool_id, "duckduckgoSearch")],
+                edges=[_edge(tool_id, agent_id, "input-tools")],
+            )
+
+        harness.assert_envelope(result, success=True)
+        parameters = create_mock.call_args.kwargs["tools"][0]["parameters"]
+        dumped = json.dumps(parameters)
+        assert "$defs" not in parameters
+        assert '"$ref"' not in dumped
+        assert parameters["properties"]["nested"]["type"] == "object"
+        assert "red" in json.dumps(parameters["properties"]["color"])
+
+    async def test_recursive_params_degrade_safely(self, harness):
+        import json
+        from typing import List as TypingList
+
+        from pydantic import BaseModel as PydanticBase
+
+        class TreeParams(PydanticBase):
+            label: str
+            children: TypingList["TreeParams"] = []
+
+        agent_id = "vx-1"
+        tool_id = "tool-1"
+        fake_tool = SimpleNamespace(name="fake_tool", description="d", args_schema=TreeParams)
+        ai_service = MagicMock(name="AIService")
+        ai_service._build_tool_from_node = AsyncMock(
+            return_value=(
+                fake_tool,
+                {"node_type": "duckduckgoSearch", "node_id": tool_id, "parameters": {}, "label": "ddg"},
+            )
+        )
+
+        client_patch, create_patch = _patched_interactions([_interaction()])
+        with (
+            patched_container(auth_api_keys={}),
+            patched_broadcaster() as bc,
+            client_patch,
+            create_patch as create_mock,
+            patch("services.plugin.deps.get_ai_service", return_value=ai_service),
+        ):
+            _wire_async_broadcasts(bc)
+            result = await harness.execute(
+                "vertex_managed_agent",
+                {"prompt": "p", "project_id": "test-proj"},
+                node_id=agent_id,
+                nodes=[_node(agent_id, "vertex_managed_agent"), _node(tool_id, "duckduckgoSearch")],
+                edges=[_edge(tool_id, agent_id, "input-tools")],
+            )
+
+        harness.assert_envelope(result, success=True)
+        parameters = create_mock.call_args.kwargs["tools"][0]["parameters"]
+        dumped = json.dumps(parameters)  # must stay JSON-serializable
+        assert "$defs" not in parameters
+        assert '"$ref"' not in dumped
+
+    async def test_minted_cloud_tool_nodes_not_redeclared(self, harness):
+        """Display-only vertexCloudTool nodes (minted with a persisted
+        input-tools edge) must not be re-declared as junk function tools
+        on later runs."""
+        agent_id = "vx-1"
+        tool_id = "tool-1"
+        minted_id = "vertexCloudTool-1-aaa"
+
+        fake_tool = SimpleNamespace(name="fake_tool", description="d", args_schema=None)
+        ai_service = MagicMock(name="AIService")
+        ai_service._build_tool_from_node = AsyncMock(
+            return_value=(
+                fake_tool,
+                {"node_type": "duckduckgoSearch", "node_id": tool_id, "parameters": {}, "label": "ddg"},
+            )
+        )
+
+        client_patch, create_patch = _patched_interactions([_interaction()])
+        with (
+            patched_container(auth_api_keys={}),
+            patched_broadcaster() as bc,
+            client_patch,
+            create_patch as create_mock,
+            patch("services.plugin.deps.get_ai_service", return_value=ai_service),
+        ):
+            _wire_async_broadcasts(bc)
+            result = await harness.execute(
+                "vertex_managed_agent",
+                {"prompt": "p", "project_id": "test-proj"},
+                node_id=agent_id,
+                nodes=[
+                    _node(agent_id, "vertex_managed_agent"),
+                    _node(tool_id, "duckduckgoSearch"),
+                    _node(minted_id, "vertexCloudTool", label="run_command"),
+                ],
+                edges=[
+                    _edge(tool_id, agent_id, "input-tools"),
+                    _edge(minted_id, agent_id, "input-tools"),
+                ],
+            )
+
+        harness.assert_envelope(result, success=True)
+        # Only the real tool was built + declared; the display node was
+        # gated out before the DB round-trip.
+        ai_service._build_tool_from_node.assert_awaited_once()
+        assert [t["name"] for t in create_mock.call_args.kwargs["tools"]] == ["fake_tool"]
+
+    async def test_duplicate_tool_names_deduped(self, harness):
+        """Two nodes resolving to the same tool name get deterministic
+        _2 suffixes; the suffixed name dispatches with the SECOND node's
+        config."""
+        agent_id = "vx-1"
+
+        def make_tool(node_id):
+            return (
+                SimpleNamespace(name="fake_tool", description="d", args_schema=None),
+                {"node_type": "duckduckgoSearch", "node_id": node_id, "parameters": {}, "label": node_id},
+            )
+
+        ai_service = MagicMock(name="AIService")
+        ai_service._build_tool_from_node = AsyncMock(side_effect=[make_tool("tool-1"), make_tool("tool-2")])
+        execute_tool_mock = AsyncMock(return_value={"answer": 1})
+
+        turns = [
+            _interaction(
+                status="requires_action",
+                interaction_id="ix-1",
+                steps=[_fc_step("fake_tool_2", "c1", {"query": "x"})],
+            ),
+            _interaction(status="completed", interaction_id="ix-2"),
+        ]
+        client_patch, create_patch = _patched_interactions(turns)
+        with (
+            patched_container(auth_api_keys={}),
+            patched_broadcaster() as bc,
+            client_patch,
+            create_patch as create_mock,
+            patch("services.plugin.deps.get_ai_service", return_value=ai_service),
+            patch("services.handlers.tools.execute_tool", execute_tool_mock),
+            patch(f"{_NODE_MODULE}._ops.record_tool_output", AsyncMock()),
+        ):
+            _wire_async_broadcasts(bc)
+            result = await harness.execute(
+                "vertex_managed_agent",
+                {"prompt": "p", "project_id": "test-proj"},
+                node_id=agent_id,
+                nodes=[
+                    _node(agent_id, "vertex_managed_agent"),
+                    _node("tool-1", "duckduckgoSearch"),
+                    _node("tool-2", "duckduckgoSearch"),
+                ],
+                edges=[
+                    _edge("tool-1", agent_id, "input-tools"),
+                    _edge("tool-2", agent_id, "input-tools"),
+                ],
+            )
+
+        harness.assert_envelope(result, success=True)
+        declared_names = [t["name"] for t in create_mock.call_args_list[0].kwargs["tools"]]
+        assert declared_names == ["fake_tool", "fake_tool_2"]
+        execute_tool_mock.assert_awaited_once()
+        config_arg = execute_tool_mock.await_args.args[2]
+        assert config_arg["node_id"] == "tool-2"
+
+    async def test_unanswerable_requires_action_surfaces_warning(self, harness):
+        """When requires_action only carries calls we never declared, the
+        loop stops AND says why — in the log, the output payload, and the
+        node-status details."""
+        agent_id = "vx-1"
+        tool_id = "tool-1"
+
+        fake_tool = SimpleNamespace(name="fake_tool", description="d", args_schema=None)
+        ai_service = MagicMock(name="AIService")
+        ai_service._build_tool_from_node = AsyncMock(
+            return_value=(
+                fake_tool,
+                {"node_type": "duckduckgoSearch", "node_id": tool_id, "parameters": {}, "label": "ddg"},
+            )
+        )
+
+        turns = [
+            _interaction(
+                status="requires_action",
+                interaction_id="ix-1",
+                steps=[
+                    _fc_step("provision_sandbox", "c0"),
+                    _fc_step("mystery_fn", "c1"),
+                ],
+            ),
+        ]
+        client_patch, create_patch = _patched_interactions(turns)
+        with (
+            patched_container(auth_api_keys={}),
+            patched_broadcaster() as bc,
+            client_patch,
+            create_patch as create_mock,
+            patch("services.plugin.deps.get_ai_service", return_value=ai_service),
+        ):
+            _wire_async_broadcasts(bc)
+            result = await harness.execute(
+                "vertex_managed_agent",
+                {"prompt": "p", "project_id": "test-proj"},
+                node_id=agent_id,
+                nodes=[_node(agent_id, "vertex_managed_agent"), _node(tool_id, "duckduckgoSearch")],
+                edges=[_edge(tool_id, agent_id, "input-tools")],
+            )
+
+        harness.assert_envelope(result, success=True)
+        assert create_mock.await_count == 1  # loop stopped, no follow-up turn
+        payload = result["result"]
+        assert payload["status"] == "requires_action"
+        warning = payload["warnings"][0]
+        assert "mystery_fn" in warning
+        assert "fake_tool" in warning
+        # Noise names are excluded from the diagnostic.
+        assert "provision_sandbox" not in warning
+
     async def test_stale_chain_wipes_and_retries_fresh(self, harness):
         agent_id = "vx-1"
         mem_id = "mem-1"
@@ -364,6 +833,114 @@ class TestVertexManagedAgent:
         assert "previous_interaction_id" not in calls[1]
         assert calls[1]["environment"] == "remote"
         assert result["result"]["interaction_id"] == "ix-fresh"
+
+    async def test_precondition_failure_wipes_chain_and_retries_fresh(self, harness):
+        """Live-verified wedge: previous_interaction_id pointing at an
+        unresumable interaction 400s with 'Precondition check failed'.
+        Turn 1 must wipe the stored ids and retry fresh instead of
+        failing every subsequent run."""
+        agent_id = "vx-1"
+        mem_id = "mem-1"
+
+        harness.database.get_node_parameters = AsyncMock(
+            return_value={
+                "vertex_interaction_id": "ix-wedged",
+                "vertex_environment_id": "env_wedged",
+                "memory_content": "# Conversation History\n",
+            }
+        )
+        saved: dict = {}
+
+        async def capture_save(node_id, params):
+            saved[node_id] = params
+            return True
+
+        harness.database.save_node_parameters = AsyncMock(side_effect=capture_save)
+
+        calls: list = []
+
+        async def create_side_effect(client, **kwargs):
+            calls.append(kwargs)
+            if len(calls) == 1:
+                raise FakeGenaiError(
+                    "Error code: 400 - {'error': {'message': 'Precondition check failed.', 'code': 'invalid_request'}}"
+                )
+            return _interaction(interaction_id="ix-fresh", environment_id="env_fresh")
+
+        client_patch = patch(f"{_NODE_MODULE}.build_genai_client", return_value=MagicMock())
+        create_patch = patch(
+            f"{_NODE_MODULE}.stream_interaction",
+            AsyncMock(side_effect=create_side_effect),
+        )
+        with (
+            patched_container(auth_api_keys={}),
+            patched_broadcaster() as bc,
+            client_patch,
+            create_patch,
+        ):
+            _wire_async_broadcasts(bc)
+            result = await harness.execute(
+                "vertex_managed_agent",
+                {"prompt": "p", "project_id": "test-proj"},
+                node_id=agent_id,
+                nodes=[_node(agent_id, "vertex_managed_agent"), _node(mem_id, "simpleMemory")],
+                edges=[_edge(mem_id, agent_id, "input-memory")],
+            )
+
+        harness.assert_envelope(result, success=True)
+        assert calls[0]["previous_interaction_id"] == "ix-wedged"
+        assert "previous_interaction_id" not in calls[1]
+        assert calls[1]["environment"] == "remote"
+        assert result["result"]["interaction_id"] == "ix-fresh"
+        # The fresh chain got persisted (completed status is resumable).
+        assert saved[mem_id]["vertex_interaction_id"] == "ix-fresh"
+        assert saved[mem_id]["vertex_environment_id"] == "env_fresh"
+
+    async def test_unresumable_final_status_keeps_previous_chain_ids(self, harness):
+        """A run whose final interaction is failed/stuck must NOT persist
+        that id — chaining onto it wedges every later run. Keep the last
+        good pair instead."""
+        agent_id = "vx-1"
+        mem_id = "mem-1"
+
+        harness.database.get_node_parameters = AsyncMock(
+            return_value={
+                "vertex_interaction_id": "ix-good",
+                "vertex_environment_id": "env_good",
+                "memory_content": "# Conversation History\n",
+            }
+        )
+        saved: dict = {}
+
+        async def capture_save(node_id, params):
+            saved[node_id] = params
+            return True
+
+        harness.database.save_node_parameters = AsyncMock(side_effect=capture_save)
+
+        client_patch, create_patch = _patched_interactions(
+            [_interaction(status="failed", interaction_id="ix-bad", environment_id="env_bad")]
+        )
+        with (
+            patched_container(auth_api_keys={}),
+            patched_broadcaster() as bc,
+            client_patch,
+            create_patch,
+        ):
+            _wire_async_broadcasts(bc)
+            result = await harness.execute(
+                "vertex_managed_agent",
+                {"prompt": "p", "project_id": "test-proj"},
+                node_id=agent_id,
+                nodes=[_node(agent_id, "vertex_managed_agent"), _node(mem_id, "simpleMemory")],
+                edges=[_edge(mem_id, agent_id, "input-memory")],
+            )
+
+        harness.assert_envelope(result, success=True)
+        assert result["result"]["status"] == "failed"
+        # The wedging id was NOT persisted; the last good chain survives.
+        assert saved[mem_id]["vertex_interaction_id"] == "ix-good"
+        assert saved[mem_id]["vertex_environment_id"] == "env_good"
 
     async def test_cloud_tool_usage_feeds_minting(self, harness):
         agent_id = "vx-1"
@@ -588,6 +1165,33 @@ class TestStreamInteraction:
         assert second.get("stream") is not True
         assert second["background"] is True
 
+    async def test_streaming_rejection_latches_poll_for_the_client(self):
+        """A rejected streaming create (enterprise 400 'Precondition
+        check failed') must not be re-attempted on later turns of the
+        same run: the client is latched to the poll path."""
+        from nodes.agent._vertex import stream_interaction
+
+        final = _interaction(interaction_id="ix-2")
+        client = MagicMock()
+        client.aio.interactions.create = AsyncMock(
+            side_effect=[
+                FakeGenaiError("Error code: 400 - Precondition check failed."),
+                final,  # turn 1 poll fallback
+                final,  # turn 2 goes straight to poll
+            ]
+        )
+        client.aio.interactions.get = AsyncMock(return_value=final)
+
+        await stream_interaction(client, agent="a", input="p")
+        await stream_interaction(client, agent="a", input="p2")
+
+        creates = client.aio.interactions.create.await_args_list
+        assert len(creates) == 3
+        # Only the very first create attempted streaming.
+        assert creates[0].kwargs.get("stream") is True
+        assert creates[1].kwargs.get("stream") is not True
+        assert creates[2].kwargs.get("stream") is not True
+
 
 # ============================================================================
 # ensure_cloud_tool_nodes (minting helper)
@@ -755,6 +1359,15 @@ class TestCloudToolMinting:
 
 
 class TestVertexAgentAdmin:
+    def test_palette_group_is_agent_not_tool(self):
+        """("tool",) put the admin node in the AI Tools palette and
+        auto-derived a bogus isConfigNode hint — but it has no
+        output-tool handle, so it can never wire into input-tools."""
+        from nodes.agent.vertex_agent_admin import VertexAgentAdminNode
+
+        assert VertexAgentAdminNode.group == ("agent",)
+        assert VertexAgentAdminNode.usable_as_tool is False
+
     def _client_with_agents(self):
         client = MagicMock()
         client.aio.agents.create = AsyncMock(

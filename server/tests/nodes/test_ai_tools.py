@@ -525,3 +525,183 @@ class TestWriteTodos:
 
         assert result["success"] is True
         assert get_todo_service().get("wf") == [{"content": "x", "status": "pending"}]
+
+
+# ============================================================================
+# delegation_wait_seconds (blocking delegation for bridged cloud agents)
+# ============================================================================
+
+
+class TestDelegationWait:
+    """Opt-in blocking wait in _execute_delegated_agent.
+
+    ``config["delegation_wait_seconds"] > 0`` awaits the child inline
+    (asyncio.shield -- the child is never cancelled) and returns its real
+    result; timeout falls back to the task_id + check_delegated_tasks
+    polling contract. Absent key = fire-and-forget (native agent loop).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _reset_registry(self):
+        """Snapshot + restore all delegation module state around each test."""
+        from services.handlers import tools as tools_mod
+
+        backups = {
+            name: dict(getattr(tools_mod, name))
+            for name in (
+                "_delegated_tasks",
+                "_delegation_results",
+                "_active_delegations",
+                "_active_delegated_nodes",
+            )
+        }
+        for name in backups:
+            getattr(tools_mod, name).clear()
+        try:
+            yield tools_mod
+        finally:
+            for name, backup in backups.items():
+                getattr(tools_mod, name).clear()
+                getattr(tools_mod, name).update(backup)
+
+    def _make_env(self, child_result=None, child_delay=0.0):
+        """Fake plugin + mocked services for _execute_delegated_agent."""
+        calls = {"execute": 0}
+        result = child_result if child_result is not None else {"success": True, "result": {"response": "hi"}}
+
+        class FakeAgentPlugin:
+            async def execute(self, node_id, params, ctx):
+                calls["execute"] += 1
+                if child_delay:
+                    import asyncio
+
+                    await asyncio.sleep(child_delay)
+                return result
+
+        database = MagicMock()
+        database.get_node_parameters = AsyncMock(return_value={"api_key": "k", "model": "m", "label": "child_agent"})
+        database.save_node_output = AsyncMock(return_value=None)
+        database.get_node_output_by_session = AsyncMock(return_value=None)
+
+        broadcaster = MagicMock()
+        broadcaster.update_node_status = AsyncMock(return_value=None)
+
+        config = {
+            "node_id": "child-1",
+            "node_type": "aiAgent",
+            "workflow_id": "wf-1",
+            "parent_node_id": "vertex-1",
+            "parameters": {"label": "child_agent"},
+            "ai_service": MagicMock(),
+            "database": database,
+            "nodes": [],
+            "edges": [],
+        }
+        return FakeAgentPlugin, broadcaster, config, calls
+
+    def _patches(self, plugin_cls, broadcaster):
+        return (
+            patch("services.status_broadcaster.get_status_broadcaster", return_value=broadcaster),
+            patch("services.node_registry.get_node_class", return_value=plugin_cls),
+            patch("nodes.agent._events.broadcast_agent_task_completed", new=AsyncMock()),
+            patch("nodes.agent._events.broadcast_agent_task_failed", new=AsyncMock()),
+        )
+
+    async def test_wait_returns_child_result_inline(self, _reset_registry):
+        tools_mod = _reset_registry
+        plugin_cls, broadcaster, config, calls = self._make_env()
+        config["delegation_wait_seconds"] = 5
+
+        p1, p2, p3, p4 = self._patches(plugin_cls, broadcaster)
+        with p1, p2, p3, p4:
+            result = await tools_mod._execute_delegated_agent({"task": "do it"}, config)
+
+        assert result["status"] == "completed"
+        assert result["success"] is True
+        assert result["result"] == "hi"
+        assert result["delegation_lifecycle"] is True
+        assert calls["execute"] == 1
+        assert tools_mod._active_delegations == {}
+
+    async def test_wait_timeout_keeps_child_running(self, _reset_registry):
+        import asyncio
+
+        tools_mod = _reset_registry
+        plugin_cls, broadcaster, config, calls = self._make_env(child_delay=0.3)
+        config["delegation_wait_seconds"] = 0.05
+
+        p1, p2, p3, p4 = self._patches(plugin_cls, broadcaster)
+        with p1, p2, p3, p4:
+            result = await tools_mod._execute_delegated_agent({"task": "slow"}, config)
+            task_id = result["task_id"]
+
+            assert result["status"] == "delegated"
+            assert "STILL WORKING" in result["message"]
+            assert "check_delegated_tasks" in result["message"]
+
+            # The shield must NOT have cancelled the child: it completes
+            # in the background and caches its result.
+            await asyncio.sleep(0.5)
+
+        assert tools_mod._delegation_results[task_id]["status"] == "completed"
+        assert tools_mod._delegation_results[task_id]["result"] == "hi"
+
+    async def test_already_delegated_with_wait_awaits_existing(self, _reset_registry):
+        tools_mod = _reset_registry
+        plugin_cls, broadcaster, config, calls = self._make_env(child_delay=0.2)
+        config["delegation_wait_seconds"] = 0.05
+
+        p1, p2, p3, p4 = self._patches(plugin_cls, broadcaster)
+        with p1, p2, p3, p4:
+            first = await tools_mod._execute_delegated_agent({"task": "same"}, config)
+            assert first["status"] == "delegated"
+
+            # Identical re-call while the child is in flight: md5 dedupe
+            # converts it into "await the existing task".
+            config["delegation_wait_seconds"] = 5
+            second = await tools_mod._execute_delegated_agent({"task": "same"}, config)
+
+        assert second["status"] == "completed"
+        assert second["task_id"] == first["task_id"]
+        assert second["result"] == "hi"
+        assert calls["execute"] == 1
+
+    async def test_no_wait_preserves_fire_and_forget(self, _reset_registry):
+        import asyncio
+
+        tools_mod = _reset_registry
+        plugin_cls, broadcaster, config, calls = self._make_env()
+        # No delegation_wait_seconds key at all.
+
+        p1, p2, p3, p4 = self._patches(plugin_cls, broadcaster)
+        with p1, p2, p3, p4:
+            result = await tools_mod._execute_delegated_agent({"task": "bg"}, config)
+
+            assert result["status"] == "delegated"
+            assert "SUCCESS: Task delegated" in result["message"]
+            assert "delegation_lifecycle" not in result
+            # Child had no chance to run before the ack returned.
+            assert calls["execute"] == 0
+
+            await asyncio.sleep(0.05)  # let the background task finish
+
+        assert calls["execute"] == 1
+
+    async def test_execute_tool_no_success_broadcast_on_awaited_error(self, _reset_registry):
+        tools_mod = _reset_registry
+        plugin_cls, broadcaster, config, calls = self._make_env(child_result={"success": False, "error": "boom"})
+        config["delegation_wait_seconds"] = 5
+
+        p1, p2, p3, p4 = self._patches(plugin_cls, broadcaster)
+        with p1, p2, p3, p4:
+            result = await tools_mod.execute_tool("delegate_to_ai_agent", {"task": "fail"}, config)
+
+        assert result["status"] == "error"
+        assert result["error"] == "boom"
+        # Marker consumed by execute_tool, not leaked to the LLM payload.
+        assert "delegation_lifecycle" not in result
+        # run_child_agent owns the child's terminal broadcast; execute_tool
+        # must not stomp the error glow with a success broadcast.
+        statuses = [call.args[1] for call in broadcaster.update_node_status.await_args_list]
+        assert "error" in statuses
+        assert "success" not in statuses

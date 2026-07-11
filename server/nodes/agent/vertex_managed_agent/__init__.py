@@ -40,6 +40,7 @@ from .._vertex import (
     DEFAULT_MANAGED_AGENT,
     build_genai_client,
     is_expired_environment_error,
+    is_precondition_failure,
     raise_as_user_error,
     resolve_api_key_from_context,
     stream_interaction,
@@ -58,6 +59,12 @@ _CLOUD_STEP_LABELS = {
     "mcp_server_tool_call": "MCP Tool",
 }
 _CLOUD_NOISE_NAMES = frozenset({"provision_sandbox"})
+
+# Final statuses whose interaction id may be chained onto with
+# previous_interaction_id on a later run (live-verified: completed and
+# requires_action resume fine; failed/stuck targets 400 with
+# "Precondition check failed").
+_RESUMABLE_STATUSES = frozenset({"completed", "requires_action"})
 
 
 class VertexManagedAgentParams(BaseModel):
@@ -111,6 +118,18 @@ class VertexManagedAgentParams(BaseModel):
         description="Cap on requires_action tool round-trips per run.",
         json_schema_extra={"group": "options"},
     )
+    delegation_wait_seconds: int = Field(
+        default=600,
+        ge=0,
+        le=1500,
+        description=(
+            "How long a delegate_to_* call blocks waiting for the "
+            "sub-agent's real answer before falling back to a task_id + "
+            "check_delegated_tasks polling contract. 0 disables the wait "
+            "(fire-and-forget, native behavior)."
+        ),
+        json_schema_extra={"group": "options"},
+    )
     visualize_cloud_tools: bool = Field(
         default=True,
         description=(
@@ -144,6 +163,9 @@ class VertexManagedAgentOutput(BaseModel):
     cloud_tools_used: Optional[List[str]] = None
     usage: Optional[Dict[str, Any]] = None
     timestamp: Optional[str] = None
+    # Populated when the requires_action loop stops without executing a
+    # tool (undeclared call names) — surfaces "why didn't my tool run".
+    warnings: Optional[List[str]] = None
 
     model_config = ConfigDict(extra="allow")
 
@@ -218,7 +240,7 @@ class VertexManagedAgentNode(ActionNode):
 
         # ---- tool bridge: connected tool nodes -> function declarations
         await phase("building_tools")
-        declared_tools, tool_configs = await self._build_function_tools(tool_data)
+        declared_tools, tool_configs = await self._build_function_tools(tool_data, node_id)
 
         # ---- live visibility state (shared with the post-turn sweep)
         live_nodes: Dict[str, str] = {}  # cloud_tool_key -> canvas node id
@@ -248,8 +270,29 @@ class VertexManagedAgentNode(ActionNode):
             "agent": params.agent,
             "store": True,
         }
-        if params.system_instruction:
-            create_kwargs["system_instruction"] = params.system_instruction
+        system_instruction = params.system_instruction or ""
+        if "check_delegated_tasks" in tool_configs:
+            from constants import AI_AGENT_TYPES
+
+            delegate_names = sorted(n for n, c in tool_configs.items() if c.get("node_type") in AI_AGENT_TYPES)
+            # Inverts the fire-and-forget wording baked into the shared
+            # DelegateToAgentSchema docstring: bridged delegation blocks
+            # and returns the real result unless the wait times out.
+            system_instruction += (
+                "\n\n## Agent Delegation\n"
+                "When delegating to sub-agents, use 'task' for the mission "
+                "directive (role and goal) and 'context' for input data.\n"
+                "Delegation calls WAIT for the sub-agent and return its "
+                "final result directly in the function result. If a result "
+                "instead reports status='delegated' or 'ALREADY_DELEGATED', "
+                "the agent is still working: do NOT re-call the delegate "
+                "tool for the same task; continue other work, and call "
+                "'check_delegated_tasks' with the task_id to retrieve the "
+                "result.\n"
+                f"Available agents: {', '.join(delegate_names)}"
+            )
+        if system_instruction:
+            create_kwargs["system_instruction"] = system_instruction
         if declared_tools:
             create_kwargs["tools"] = declared_tools
 
@@ -275,35 +318,58 @@ class VertexManagedAgentNode(ActionNode):
             )
         except NodeUserError as exc:
             cause = exc.__cause__
-            if prev_interaction_id and cause is not None and is_expired_environment_error(cause):
+            # Unresumable chain: expired environment (7-day TTL) OR a
+            # 400 precondition failure — live-verified when the stored
+            # previous_interaction_id points at an interaction that is
+            # not resumable (e.g. an orphaned background interaction
+            # still in_progress after a client-side cancel/reload).
+            # Either way the stored ids are useless: wipe and go fresh.
+            if (
+                prev_interaction_id
+                and cause is not None
+                and (is_expired_environment_error(cause) or is_precondition_failure(cause))
+            ):
                 logger.warning(
-                    "[Vertex Agent] stale interaction chain for %s — retrying fresh", node_id
+                    "[Vertex Agent] unresumable interaction chain for %s (%s) — retrying fresh",
+                    node_id,
+                    str(cause).replace("\n", " ")[:120],
                 )
                 if memory_node_id:
                     await self._save_chain_ids(database, memory_node_id, None, None)
                 prev_interaction_id = None
+                environment = "remote"
                 interaction = await run_turn(input=prompt, environment="remote")
             else:
                 raise
 
         # ---- requires_action loop: answer pending local function calls
+        run_warnings: List[str] = []
         while (
             getattr(interaction, "status", None) == "requires_action"
             and turn < params.max_turns
         ):
             results = self._pending_function_results_needed(interaction, tool_configs)
             if not results:
-                logger.warning(
-                    "[Vertex Agent] requires_action with no answerable "
-                    "function calls (node=%s) — stopping",
-                    node_id,
+                unmatched = self._unanswered_call_names(interaction, tool_configs)
+                msg = (
+                    "requires_action with no answerable function calls: "
+                    f"pending={unmatched or ['<none>']} "
+                    f"declared={sorted(tool_configs) or ['<none>']}"
                 )
+                logger.warning("[Vertex Agent] %s (node=%s) — stopping", msg, node_id)
+                run_warnings.append(msg)
                 break
+            # Delegation waits must fit the Temporal activity budget:
+            # leave margin for the closing turn + memory persist + sweep.
+            remaining = int(AI_START_TO_CLOSE.total_seconds() - (time.time() - start_time)) - 120
+            wait = max(0, min(params.delegation_wait_seconds, remaining))
             function_results = []
             for call in results:
                 await phase("executing_tool", tool_name=call["name"])
                 function_results.append(
-                    await self._execute_bridged_call(call, tool_configs, ctx)
+                    await self._execute_bridged_call(
+                        call, tool_configs, ctx, delegation_wait_seconds=wait
+                    )
                 )
             turn += 1
             await broadcaster.broadcast_agent_progress(
@@ -357,11 +423,21 @@ class VertexManagedAgentNode(ActionNode):
         # ---- memory persist
         if memory_node_id:
             await phase("saving_memory")
+            # Only a RESUMABLE final status may overwrite the stored chain
+            # ids: persisting a failed/stuck interaction id wedges every
+            # later run on 400 Precondition (chaining onto an unresumable
+            # target — live-verified). Otherwise keep the last good pair.
+            if status in _RESUMABLE_STATUSES:
+                chain_ix = getattr(interaction, "id", None)
+                chain_env = environment_id
+            else:
+                chain_ix = prev_interaction_id
+                chain_env = environment if environment != "remote" else None
             await self._save_chain_ids(
                 database,
                 memory_node_id,
-                getattr(interaction, "id", None),
-                environment_id,
+                chain_ix,
+                chain_env,
                 human=prompt,
                 assistant=response_text,
                 window_size=int((memory_data or {}).get("window_size") or 10),
@@ -392,6 +468,7 @@ class VertexManagedAgentNode(ActionNode):
                 "message": f"Vertex agent {status} in {turn} turn(s)",
                 "status": status,
                 "turns": turn,
+                **({"warnings": run_warnings} if run_warnings else {}),
             },
             workflow_id=workflow_id,
         )
@@ -414,6 +491,7 @@ class VertexManagedAgentNode(ActionNode):
             "cloud_tools_used": sorted(cloud_tools.values()) or None,
             "usage": usage,
             "timestamp": datetime.now().isoformat(),
+            "warnings": run_warnings or None,
         }
 
     # ------------------------------------------------------------------
@@ -431,43 +509,113 @@ class VertexManagedAgentNode(ActionNode):
         return str(input_data) if input_data else ""
 
     @staticmethod
+    def _is_declarable_tool_type(node_type: str) -> bool:
+        """Mirror of the native rebind gate (services/ai.py) and
+        ``iter_tool_node_classes``: ToolNodes, agents (delegation), and
+        dual-purpose ``usable_as_tool`` plugins declare; display-only
+        plugins (vertexCloudTool — minted by ``_ops`` with a persisted
+        ``input-tools`` edge) don't. Unknown types (androidTool
+        aggregator, pseudo-types) default-allow to preserve behavior.
+        """
+        from services.node_registry import get_node_class
+
+        cls = get_node_class(node_type)
+        if cls is None:
+            return True
+        kind = getattr(cls, "component_kind", "")
+        if kind in ("tool", "agent"):
+            return True
+        return bool(getattr(cls, "usable_as_tool", False))
+
+    @staticmethod
     async def _build_function_tools(
         tool_data: List[Dict[str, Any]],
+        agent_node_id: str,
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]]]:
         """Convert connected tool nodes into Interactions function tools.
 
         Reuses ``AIService._build_tool_from_node`` so DB ToolSchema
         overrides, plugin ClassVar names, and the delegation schema gate
-        all apply exactly as they do for the local agent loop.
+        all apply exactly as they do for the local agent loop. When any
+        connected node is an agent, ``check_delegated_tasks`` is also
+        declared — the timeout fallback of the blocking-delegation
+        contract (mirrors the native auto-injection in
+        ``AIService.execute_agent``).
         """
         if not tool_data:
             return [], {}
+        from constants import AI_AGENT_TYPES
         from services.plugin.deps import get_ai_service
+        from services.plugin.tool import inline_schema_refs
 
         ai_service = get_ai_service()
         declared: List[Dict[str, Any]] = []
         configs: Dict[str, Dict[str, Any]] = {}
-        for tool_info in tool_data:
-            structured, config = await ai_service._build_tool_from_node(tool_info)
-            if structured is None:
-                continue
+
+        def _declare(structured: Any, config: Optional[Dict[str, Any]]) -> None:
             if structured.args_schema is not None:
-                schema = structured.args_schema.model_json_schema()
+                # Function-calling APIs reject schema indirection —
+                # inline $defs/$ref (nested BaseModel / Enum Params
+                # fields) instead of stripping and leaving dangling refs.
+                schema = inline_schema_refs(structured.args_schema.model_json_schema())
             else:
                 schema = {"type": "object", "properties": {}}
-            # Function-calling APIs reject schema indirection; the plugin
-            # contract already forbids $defs in tool Params schemas.
-            schema.pop("$defs", None)
-            schema.pop("definitions", None)
+            # Deterministic de-dup: first node keeps the base name, later
+            # nodes (edge order) get _2, _3, ... — declared list and
+            # dispatch configs stay in sync. Dispatch routes by the
+            # config's node_type/node_id, so a suffixed name is safe.
+            name = structured.name
+            if name in configs:
+                n = 2
+                while f"{name}_{n}" in configs:
+                    n += 1
+                logger.warning(
+                    "[Vertex Agent] duplicate tool name %r (node %s) — declared as %r",
+                    name,
+                    (config or {}).get("node_id"),
+                    f"{name}_{n}",
+                )
+                name = f"{name}_{n}"
             declared.append(
                 {
                     "type": "function",
-                    "name": structured.name,
-                    "description": structured.description or structured.name,
+                    "name": name,
+                    "description": structured.description or name,
                     "parameters": schema,
                 }
             )
-            configs[structured.name] = config or {}
+            configs[name] = config or {}
+
+        for tool_info in tool_data:
+            node_type = tool_info.get("node_type", "")
+            if not VertexManagedAgentNode._is_declarable_tool_type(node_type):
+                logger.debug(
+                    "[Vertex Agent] skipping non-declarable tool node type=%s node=%s",
+                    node_type,
+                    tool_info.get("node_id"),
+                )
+                continue
+            structured, config = await ai_service._build_tool_from_node(tool_info)
+            if structured is None:
+                continue
+            _declare(structured, config)
+
+        # Sub-agent support: delegation may time out and fall back to a
+        # task_id — the cloud agent then needs check_delegated_tasks to
+        # retrieve the result. MUST happen here (not later): the live
+        # handler snapshots declared_names from these configs, and a
+        # streamed check call would otherwise mint a bogus cloud-tool node.
+        if any(cfg.get("node_type") in AI_AGENT_TYPES for cfg in configs.values()):
+            check_info = {
+                "node_type": "_builtin_check_delegated_tasks",
+                "node_id": f"{agent_node_id}_check_tasks",
+                "parameters": {},
+                "label": "Check Delegated Tasks",
+            }
+            structured, config = await ai_service._build_tool_from_node(check_info)
+            if structured is not None:
+                _declare(structured, config)
+
         return declared, configs
 
     @staticmethod
@@ -507,14 +655,44 @@ class VertexManagedAgentNode(ActionNode):
         return pending
 
     @staticmethod
+    def _unanswered_call_names(
+        interaction: Any,
+        tool_configs: Dict[str, Dict[str, Any]],
+    ) -> List[str]:
+        """Unanswered function_call names we did NOT declare (noise excluded).
+
+        Diagnostic companion to ``_pending_function_results_needed``:
+        when the loop stops because nothing is answerable, these names
+        explain WHY (cloud-side calls, or a declaration mismatch).
+        """
+        steps = list(getattr(interaction, "steps", None) or [])
+        answered = {
+            getattr(s, "call_id", None)
+            for s in steps
+            if getattr(s, "type", "") == "function_result"
+        }
+        return sorted(
+            {
+                (getattr(s, "name", "") or "")
+                for s in steps
+                if getattr(s, "type", "") == "function_call"
+                and getattr(s, "id", None) not in answered
+                and (getattr(s, "name", "") or "") not in tool_configs
+                and (getattr(s, "name", "") or "") not in _CLOUD_NOISE_NAMES
+            }
+        )
+
+    @staticmethod
     async def _execute_bridged_call(
         call: Dict[str, Any],
         tool_configs: Dict[str, Dict[str, Any]],
         ctx: NodeContext,
+        delegation_wait_seconds: int = 0,
     ) -> Dict[str, Any]:
         """Dispatch one bridged function call through execute_tool."""
         from pydantic_core import to_jsonable_python
 
+        from constants import AI_AGENT_TYPES
         from services.handlers.tools import execute_tool
         from services.plugin.deps import get_ai_service, get_database
 
@@ -526,6 +704,11 @@ class VertexManagedAgentNode(ActionNode):
         for key in ("nodes", "edges", "workspace_dir", "execution_id"):
             if ctx.raw.get(key) is not None:
                 config[key] = ctx.raw[key]
+        # Blocking delegation (agent tools only): the cloud agent cannot
+        # poll cheaply, so the bridged call awaits the child inline and
+        # falls back to task_id + check_delegated_tasks on timeout.
+        if delegation_wait_seconds and config.get("node_type") in AI_AGENT_TYPES:
+            config["delegation_wait_seconds"] = delegation_wait_seconds
 
         from ._ops import record_tool_output
 

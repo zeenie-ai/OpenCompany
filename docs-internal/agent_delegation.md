@@ -402,6 +402,18 @@ The parent LLM receives this immediate response from the tool call:
 
 The parent does NOT wait for the child's result. The child's output is broadcast to the UI via WebSocket (`broadcaster.update_node_status`).
 
+### Blocking Delegation for Bridged Cloud Agents (delegation_wait_seconds)
+
+Fire-and-forget assumes the parent loop can poll cheaply — a local LLM turn costs milliseconds. A bridged cloud agent (`vertex_managed_agent`) pays a full Interactions API round trip per poll, so it opts into a blocking wait instead:
+
+- The bridge sets `config["delegation_wait_seconds"]` (node param, default 600s, clamped to the remaining Temporal activity budget) on the dispatch config for agent-type tools only.
+- `_execute_delegated_agent` then awaits the spawned child via `wait_for_delegation` (`asyncio.wait_for(asyncio.shield(task))` — a timeout cancels the WAITER, never the child) and returns the child's REAL result as the function result, shaped by `_delegation_result_reply`.
+- The reply carries `delegation_lifecycle: True`; `execute_tool` pops it and skips its terminal `success` broadcast (the child's `run_child_agent` already owns the terminal status — an awaited `error` result must not be stomped by a `success` glow).
+- On timeout the child keeps running in the background and the parent receives the standard `status: "delegated"` ack; the vertex bridge declares `check_delegated_tasks` alongside any `delegate_to_*` tool (mirroring the native auto-injection) so the cloud agent can retrieve the result on a later turn. An identical re-call after a timeout hits the `_active_delegations` dedupe and awaits the existing in-flight task instead of duplicating work.
+- Absent `delegation_wait_seconds` (all native agents), behavior is byte-identical fire-and-forget.
+
+Contract locked by `TestDelegationWait` (`tests/nodes/test_ai_tools.py`) and the vertex bridge tests (`tests/nodes/test_vertex_agents.py`).
+
 ### Result Retrieval (check_delegated_tasks Tool)
 
 When a parent agent has delegation tools, a `check_delegated_tasks` tool is automatically injected. The parent LLM can call this tool to check on child status and retrieve results:

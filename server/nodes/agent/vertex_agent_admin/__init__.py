@@ -104,7 +104,11 @@ class VertexAgentAdminNode(ActionNode):
     type = "vertex_agent_admin"
     display_name = "Vertex Agent Admin"
     subtitle = "Agent Lifecycle"
-    group = ("tool",)
+    # Operator-facing lifecycle CRUD — belongs with the Vertex agents in
+    # the AI Agents palette. ("tool",) would auto-derive a bogus
+    # isConfigNode uiHint and imply input-tools wiring this node has no
+    # output-tool handle to satisfy.
+    group = ("agent",)
     description = (
         "Create, list, inspect, and delete custom managed agents on the "
         "Gemini Enterprise Agent Platform."
