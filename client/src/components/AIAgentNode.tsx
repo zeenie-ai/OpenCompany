@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps -- ``handles`` derived from spec.handles; spec is a stable React-Query slice, dep list omits it intentionally. */
-import React, { memo, useState, useEffect, useMemo } from 'react';
+import React, { memo, useState, useEffect, useMemo, useCallback } from 'react';
 import { nodePropsEqual } from './nodeMemoEquality';
 import { Handle, Position, NodeProps } from 'reactflow';
 import { NodeData, NodeStyle } from '../types/NodeTypes';
@@ -10,6 +10,7 @@ import { useNodeStatus } from '../contexts/WebSocketContext';
 import { useNodeSpec } from '../lib/nodeSpec';
 import { NodeIcon } from '../assets/icons';
 import { Badge } from '@/components/ui/badge';
+import EditableNodeLabel from './ui/EditableNodeLabel';
 
 // Agent-loop phase icons and labels. Colors reference the semantic theme
 // tokens (var(--*)) so each phase label recolors per active theme — init=info,
@@ -46,6 +47,8 @@ const REACT_POSITION: Record<SpecHandle['position'], Position> = {
 const AIAgentNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectable, selected }) => {
   const theme = useAppTheme();
   const setSelectedNode = useAppStore((s) => s.setSelectedNode);
+  const setRenamingNodeId = useAppStore((s) => s.setRenamingNodeId);
+  const updateNodeData = useAppStore((s) => s.updateNodeData);
   const [_configValid, setConfigValid] = useState(true);
   const [_configErrors, setConfigErrors] = useState<string[]>([]);
 
@@ -58,7 +61,7 @@ const AIAgentNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
   const accentColor = spec?.color || 'var(--node-agent)';
   const width = (spec?.uiHints as any)?.width ?? 300;
   const height = (spec?.uiHints as any)?.height ?? 200;
-  const title = data?.label || spec?.displayName || type || 'Agent';
+  const defaultLabel = spec?.displayName || type || 'Agent';
   const subtitle = spec?.subtitle ?? '';
 
   // Partition once; React Flow layout per-position.
@@ -93,7 +96,16 @@ const AIAgentNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
       setConfigValid(false);
       setConfigErrors(['Configuration validation failed']);
     }
-  }, [data, id, title]);
+  }, [data, id]);
+
+  const handleLabelChange = useCallback(
+    (newLabel: string) => updateNodeData(id, { label: newLabel }),
+    [id, updateNodeData]
+  );
+  const handleLabelActivate = useCallback(
+    () => setRenamingNodeId(id),
+    [id, setRenamingNodeId]
+  );
 
   const handleParametersClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -204,17 +216,25 @@ const AIAgentNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
 
       {/* Title — alignSelf:stretch + width:100% forces the flex child
           to fill the parent's content area (parent is align-items:center
-          which would otherwise size the child to its content). With
-          overflowWrap + wordBreak, long display names like
-          "PRODUCTIVITY AGENT" wrap to multiple lines. */}
-      <div className="node-label" style={{
+          which would otherwise size the child to its content). Inline
+          rename rides the shared EditableNodeLabel (F2 / double-click /
+          context-menu Rename, coordinated via useAppStore.renamingNodeId);
+          the persisted name lives in node.data.label like every other
+          renameable node. */}
+      <div style={{
         alignSelf: 'stretch',
         width: '100%',
-        fontSize: theme.fontSize.base, fontWeight: theme.fontWeight.semibold,
-        color: theme.colors.text, lineHeight: '1.2', marginBottom: theme.spacing.xs,
-        overflowWrap: 'break-word', wordBreak: 'break-word', whiteSpace: 'normal',
-        textAlign: 'center',
-      }}>{title}</div>
+        marginBottom: theme.spacing.xs,
+      }}>
+        <EditableNodeLabel
+          nodeId={id}
+          label={data?.label}
+          defaultLabel={defaultLabel}
+          onLabelChange={handleLabelChange}
+          onActivate={handleLabelActivate}
+          className="m-0 w-full max-w-full text-base font-semibold break-words whitespace-normal"
+        />
+      </div>
 
       {/* Subtitle. Phase color is JS-driven (PHASE_CONFIG[phase].color) so
           we keep the inline color while still exposing `node-sub` so themes
