@@ -255,6 +255,7 @@ class TestVertexManagedAgent:
             _interaction(status="completed", interaction_id="ix-2"),
         ]
         client_patch, create_patch = _patched_interactions(turns)
+        record_mock = AsyncMock()
         with (
             patched_container(auth_api_keys={}),
             patched_broadcaster() as bc,
@@ -262,6 +263,7 @@ class TestVertexManagedAgent:
             create_patch as create_mock,
             patch("services.plugin.deps.get_ai_service", return_value=ai_service),
             patch("services.handlers.tools.execute_tool", execute_tool_mock),
+            patch(f"{_NODE_MODULE}._ops.record_tool_output", record_mock),
         ):
             _wire_async_broadcasts(bc)
             result = await harness.execute(
@@ -308,6 +310,14 @@ class TestVertexManagedAgent:
                 "result": {"answer": 42},
             }
         ]
+
+        # Local tool node got its invocation output recorded (Output panel).
+        record_mock.assert_awaited_once()
+        rec = record_mock.await_args
+        assert rec.args[0] == tool_id
+        assert rec.args[1]["tool"] == "fake_tool"
+        assert rec.args[1]["result"] == {"answer": 42}
+        assert rec.args[1]["is_error"] is False
 
     async def test_stale_chain_wipes_and_retries_fresh(self, harness):
         agent_id = "vx-1"
@@ -443,7 +453,12 @@ class TestVertexManagedAgent:
                 SimpleNamespace(
                     event_type="step.start",
                     index=1,
-                    step=SimpleNamespace(type="code_execution_result", call_id="c1"),
+                    step=SimpleNamespace(
+                        type="code_execution_result",
+                        call_id="c1",
+                        result={"stdout": "42"},
+                        is_error=False,
+                    ),
                 )
             )
             await on_event(
@@ -459,6 +474,7 @@ class TestVertexManagedAgent:
 
         mint_mock = AsyncMock(return_value={"type:code_execution_call": "vct-1"})
         pulse_mock = AsyncMock()
+        record_mock = AsyncMock()
         with (
             patched_container(auth_api_keys={}),
             patched_broadcaster() as bc,
@@ -469,6 +485,7 @@ class TestVertexManagedAgent:
             ),
             patch(f"{_NODE_MODULE}._ops.ensure_cloud_tool_nodes", mint_mock),
             patch(f"{_NODE_MODULE}._ops.pulse_node", pulse_mock),
+            patch(f"{_NODE_MODULE}._ops.record_tool_output", record_mock),
         ):
             _wire_async_broadcasts(bc)
             result = await harness.execute(
@@ -493,6 +510,14 @@ class TestVertexManagedAgent:
         assert ("vct-1", "executing") in pulses
         assert ("vct-1", "success") in pulses
         assert result["result"]["cloud_tools_used"] == ["Code Execution"]
+        # Invocation output recorded on the display node (Output panel).
+        record_mock.assert_awaited_once()
+        rec_args = record_mock.await_args
+        assert rec_args.args[0] == "vct-1"
+        payload = rec_args.args[1]
+        assert payload["tool"] == "Code Execution"
+        assert payload["result"] == {"stdout": "42"}
+        assert payload["is_error"] is False
 
 
 # ============================================================================
@@ -640,6 +665,46 @@ class TestCloudToolMinting:
         assert args.args[0] == "vct-1"
         assert args.args[1] == "executing"
         assert args.kwargs["workflow_id"] == "wf-1"
+
+    async def test_record_tool_output_persists_then_broadcasts(self):
+        from nodes.agent.vertex_managed_agent import _ops
+
+        database = MagicMock()
+        database.save_node_output = AsyncMock(return_value=True)
+        broadcaster = MagicMock()
+        broadcaster.update_node_output = AsyncMock()
+        payload = {"tool": "run_command", "result": {"stdout": "ok"}}
+
+        with (
+            patch.object(_ops, "get_database", return_value=database),
+            patch.object(_ops, "get_status_broadcaster", return_value=broadcaster),
+        ):
+            await _ops.record_tool_output("vct-1", payload, workflow_id="wf-1")
+
+        # Stored under the "default" session (what the Output panel fetches).
+        database.save_node_output.assert_awaited_once_with(
+            "vct-1", "default", "output_0", payload
+        )
+        out_args = broadcaster.update_node_output.await_args
+        assert out_args.args[0] == "vct-1"
+        assert out_args.args[1] == payload
+        assert out_args.kwargs["workflow_id"] == "wf-1"
+
+    async def test_record_tool_output_skips_broadcast_on_persist_failure(self):
+        from nodes.agent.vertex_managed_agent import _ops
+
+        database = MagicMock()
+        database.save_node_output = AsyncMock(side_effect=RuntimeError("db locked"))
+        broadcaster = MagicMock()
+        broadcaster.update_node_output = AsyncMock()
+
+        with (
+            patch.object(_ops, "get_database", return_value=database),
+            patch.object(_ops, "get_status_broadcaster", return_value=broadcaster),
+        ):
+            await _ops.record_tool_output("vct-1", {"tool": "x"}, workflow_id="wf-1")
+
+        broadcaster.update_node_output.assert_not_awaited()
 
     async def test_dedupes_existing_node_by_label(self):
         from nodes.agent.vertex_managed_agent import _ops

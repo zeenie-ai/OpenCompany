@@ -222,7 +222,7 @@ class VertexManagedAgentNode(ActionNode):
 
         # ---- live visibility state (shared with the post-turn sweep)
         live_nodes: Dict[str, str] = {}  # cloud_tool_key -> canvas node id
-        open_calls: Dict[str, str] = {}  # step id -> canvas node id
+        open_calls: Dict[str, Dict[str, Any]] = {}  # step id -> {node_id, label, arguments}
         on_event = None
         if params.visualize_cloud_tools:
             on_event = self._make_live_handler(
@@ -346,8 +346,9 @@ class VertexManagedAgentNode(ActionNode):
                     for swept_id in resolved.values():
                         await pulse_node(swept_id, "executing", workflow_id=workflow_id)
                         await pulse_node(swept_id, "success", workflow_id=workflow_id)
+                    await self._record_swept_outputs(interaction, resolved, workflow_id)
                 # Calls whose result step never streamed: don't leave them glowing.
-                for dangling_id in set(open_calls.values()):
+                for dangling_id in {c["node_id"] for c in open_calls.values()}:
                     await pulse_node(dangling_id, "success", workflow_id=workflow_id)
                 open_calls.clear()
             except Exception:  # noqa: BLE001 — visualization is best-effort
@@ -526,18 +527,40 @@ class VertexManagedAgentNode(ActionNode):
             if ctx.raw.get(key) is not None:
                 config[key] = ctx.raw[key]
 
+        from ._ops import record_tool_output
+
+        async def record(payload: Dict[str, Any], is_error: bool) -> None:
+            # Same Output-panel visibility as a normally-executed node.
+            tool_node_id = config.get("node_id")
+            if not tool_node_id:
+                return
+            await record_tool_output(
+                tool_node_id,
+                {
+                    "tool": call["name"],
+                    "arguments": dict(call["arguments"]),
+                    "result": payload,
+                    "is_error": is_error,
+                    "timestamp": datetime.now().isoformat(),
+                },
+                workflow_id=ctx.workflow_id,
+            )
+
         try:
             result = await execute_tool(call["name"], dict(call["arguments"]), config)
+            jsonable = to_jsonable_python(result)
+            await record(jsonable, is_error=False)
             return {
                 "type": "function_result",
                 "name": call["name"],
                 "call_id": call["call_id"],
-                "result": to_jsonable_python(result),
+                "result": jsonable,
             }
         except Exception as exc:  # noqa: BLE001 — surfaced to the cloud agent
             logger.warning(
                 "[Vertex Agent] bridged tool %s failed: %s", call["name"], exc
             )
+            await record({"error": str(exc)}, is_error=True)
             return {
                 "type": "function_result",
                 "name": call["name"],
@@ -563,6 +586,71 @@ class VertexManagedAgentNode(ActionNode):
                 if name and name not in tool_configs and name not in _CLOUD_NOISE_NAMES:
                     used[f"fn:{name}"] = name
         return used
+
+    @staticmethod
+    def _jsonable(value: Any) -> Any:
+        """Best-effort JSON-safe conversion for step payloads."""
+        if value is None:
+            return None
+        try:
+            from pydantic_core import to_jsonable_python
+
+            if hasattr(value, "model_dump"):
+                return value.model_dump(mode="json", exclude_none=True)
+            return to_jsonable_python(value)
+        except Exception:  # noqa: BLE001 — display data only
+            return str(value)
+
+    async def _record_swept_outputs(
+        self,
+        interaction: Any,
+        resolved: Dict[str, str],
+        workflow_id: Optional[str],
+    ) -> None:
+        """Record invocation outputs for cloud tools the stream missed.
+
+        Pairs each swept key's call step with its ``call_id``-matched
+        result step from the FINAL resource, mirroring what the live
+        handler records mid-stream.
+        """
+        from ._ops import record_tool_output
+
+        steps = list(getattr(interaction, "steps", None) or [])
+        calls_by_id: Dict[str, Tuple[str, Any]] = {}
+        for step in steps:
+            step_type = getattr(step, "type", "") or ""
+            key = None
+            if step_type in _CLOUD_STEP_LABELS:
+                key = f"type:{step_type}"
+            elif step_type == "function_call":
+                name = getattr(step, "name", "") or ""
+                if name and name not in _CLOUD_NOISE_NAMES:
+                    key = f"fn:{name}"
+            if key and key in resolved:
+                step_id = getattr(step, "id", None)
+                if step_id:
+                    calls_by_id[step_id] = (key, step)
+
+        for step in steps:
+            step_type = getattr(step, "type", "") or ""
+            if not (step_type == "function_result" or step_type.endswith("_result")):
+                continue
+            entry = calls_by_id.get(getattr(step, "call_id", None))
+            if entry is None:
+                continue
+            key, call_step = entry
+            await record_tool_output(
+                resolved[key],
+                {
+                    "tool": self._label_for_key(key),
+                    "arguments": self._jsonable(getattr(call_step, "arguments", None)),
+                    "result": self._jsonable(getattr(step, "result", None))
+                    or self._jsonable(step),
+                    "is_error": bool(getattr(step, "is_error", False)),
+                    "timestamp": datetime.now().isoformat(),
+                },
+                workflow_id=workflow_id,
+            )
 
     @staticmethod
     def _label_for_key(key: str) -> str:
@@ -593,10 +681,14 @@ class VertexManagedAgentNode(ActionNode):
         their real execution still happens at requires_action, where
         ``execute_tool`` owns their canvas animation.
 
+        Result steps also RECORD the invocation output on the display
+        node (``record_tool_output``) so clicking it shows what the
+        cloud tool did — same visibility as a normally-executed node.
+
         Exceptions are swallowed by ``stream_interaction`` — visibility
         must never kill the turn.
         """
-        from ._ops import ensure_cloud_tool_nodes, pulse_node
+        from ._ops import ensure_cloud_tool_nodes, pulse_node, record_tool_output
 
         async def phase_tool(label: str) -> None:
             await broadcaster.update_node_status(
@@ -628,12 +720,25 @@ class VertexManagedAgentNode(ActionNode):
                 return
             step_type = getattr(step, "type", "") or ""
 
-            # Result steps close the matching call's glow.
+            # Result steps close the matching call's glow and record the
+            # invocation output onto the display node.
             if step_type == "function_result" or step_type.endswith("_result"):
                 call_id = getattr(step, "call_id", None)
-                node_id = open_calls.pop(call_id, None)
-                if node_id and workflow_id:
-                    await pulse_node(node_id, "success", workflow_id=workflow_id)
+                call = open_calls.pop(call_id, None)
+                if call and workflow_id:
+                    await pulse_node(call["node_id"], "success", workflow_id=workflow_id)
+                    await record_tool_output(
+                        call["node_id"],
+                        {
+                            "tool": call["label"],
+                            "arguments": call["arguments"],
+                            "result": self._jsonable(getattr(step, "result", None))
+                            or self._jsonable(step),
+                            "is_error": bool(getattr(step, "is_error", False)),
+                            "timestamp": datetime.now().isoformat(),
+                        },
+                        workflow_id=workflow_id,
+                    )
                 return
 
             name = getattr(step, "name", "") or ""
@@ -667,7 +772,11 @@ class VertexManagedAgentNode(ActionNode):
             await pulse_node(node_id, "executing", workflow_id=workflow_id)
             step_id = getattr(step, "id", None)
             if step_id:
-                open_calls[step_id] = node_id
+                open_calls[step_id] = {
+                    "node_id": node_id,
+                    "label": label,
+                    "arguments": self._jsonable(getattr(step, "arguments", None)),
+                }
 
         return on_event
 

@@ -48,6 +48,30 @@ async def pulse_node(
     )
 
 
+async def record_tool_output(
+    node_id: str,
+    payload: Dict[str, object],
+    *,
+    workflow_id: str | None,
+    session_id: str = "default",
+) -> None:
+    """Persist + broadcast a tool invocation's output for the node panel.
+
+    Same visibility contract as a normally-executed node: the frontend
+    Output section fetches ``get_node_output`` under the "default"
+    session (memory miss falls back to the DB row written here), and the
+    ``node_output`` broadcast refreshes an open panel live.
+    """
+    try:
+        await get_database().save_node_output(node_id, session_id, "output_0", dict(payload))
+    except Exception:  # noqa: BLE001 — output visibility is best-effort
+        logger.exception("[Vertex Agent] tool output persist failed for %s", node_id)
+        return
+    await get_status_broadcaster().update_node_output(
+        node_id, dict(payload), workflow_id=workflow_id
+    )
+
+
 async def ensure_cloud_tool_nodes(
     *,
     workflow_id: str,
