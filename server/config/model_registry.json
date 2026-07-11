@@ -1,7 +1,7 @@
 {
-  "_generated": "2026-07-10T06:03:13.088476+00:00",
+  "_generated": "2026-07-11T06:45:11.819419+00:00",
   "_source": "openrouter",
-  "_model_count": 347,
+  "_model_count": 345,
   "models": {
     "openai/gpt-5.6-luna-pro": {
       "id": "openai/gpt-5.6-luna-pro",
@@ -631,9 +631,9 @@
       "provider": "z-ai",
       "local_id": "glm-5.2",
       "context_length": 1048576,
-      "max_output_tokens": 1048576,
-      "input_price_per_mtok": 0.92,
-      "output_price_per_mtok": 3.0,
+      "max_output_tokens": 131072,
+      "input_price_per_mtok": 0.406,
+      "output_price_per_mtok": 1.276,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -1307,18 +1307,12 @@
       ],
       "is_reasoning_model": false,
       "supported_parameters": [
-        "frequency_penalty",
-        "logit_bias",
-        "logprobs",
         "max_tokens",
-        "presence_penalty",
         "response_format",
         "seed",
-        "stop",
         "structured_outputs",
         "tool_choice",
-        "tools",
-        "top_logprobs"
+        "tools"
       ]
     },
     "xai/grok-4.3": {
@@ -1994,9 +1988,9 @@
       "provider": "deepseek",
       "local_id": "deepseek-v4-flash",
       "context_length": 1048576,
-      "max_output_tokens": 65536,
-      "input_price_per_mtok": 0.09,
-      "output_price_per_mtok": 0.18,
+      "max_output_tokens": 384000,
+      "input_price_per_mtok": 0.077,
+      "output_price_per_mtok": 0.154,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -4822,39 +4816,6 @@
         "temperature",
         "tool_choice",
         "tools",
-        "top_p"
-      ]
-    },
-    "arcee-ai/trinity-mini": {
-      "id": "arcee-ai/trinity-mini",
-      "name": "Arcee AI: Trinity Mini",
-      "provider": "arcee-ai",
-      "local_id": "trinity-mini",
-      "context_length": 131072,
-      "max_output_tokens": 131072,
-      "input_price_per_mtok": 0.045,
-      "output_price_per_mtok": 0.15,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "include_reasoning",
-        "logprobs",
-        "max_completion_tokens",
-        "max_tokens",
-        "reasoning",
-        "response_format",
-        "stop",
-        "structured_outputs",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_k",
-        "top_logprobs",
         "top_p"
       ]
     },
@@ -10345,37 +10306,6 @@
         "top_logprobs",
         "top_p",
         "web_search_options"
-      ]
-    },
-    "meta/llama-3-8b-instruct": {
-      "id": "meta-llama/llama-3-8b-instruct",
-      "name": "Meta: Llama 3 8B Instruct",
-      "provider": "meta",
-      "local_id": "llama-3-8b-instruct",
-      "context_length": 8192,
-      "max_output_tokens": 0,
-      "input_price_per_mtok": 0.14,
-      "output_price_per_mtok": 0.14,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "logit_bias",
-        "max_tokens",
-        "min_p",
-        "presence_penalty",
-        "repetition_penalty",
-        "response_format",
-        "stop",
-        "structured_outputs",
-        "temperature",
-        "top_k",
-        "top_p"
       ]
     },
     "mistralai/mixtral-8x22b-instruct": {

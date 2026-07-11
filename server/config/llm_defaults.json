@@ -74,12 +74,13 @@
     },
     "gemini": {
       "default_model": "gemini-3.5-flash",
-      "detection_patterns": ["gemini", "google"],
+      "detection_patterns": ["gemini", "google", "gemma"],
+      "_detection_patterns_note": "'gemma' makes is_model_valid_for_provider accept the API-served Gemma models (gemma-4-*-it) on gemini nodes — without it the four agent-path call sites silently swap gemma to default_model. Cerebras keeps its own 'gemma-4' pattern for its gemma-4-31b (no -it suffix); is_model_valid_for_provider is per-provider so both coexist. Only the runtime-unused detect_provider_from_model classifier prefers gemini for gemma-* names (dict order).",
       "base_url": "https://generativelanguage.googleapis.com/v1beta",
       "models_endpoint": "https://generativelanguage.googleapis.com/v1beta/models",
       "api_key_param": "google_api_key",
       "max_tokens_param": "max_output_tokens",
-      "_models_note": "Real (concrete) model names only — no -latest rolling aliases. The same curated list (max_output_tokens keys) serves BOTH the Gemini Developer API (AIza keys) and Vertex / Agent Platform (AQ. keys); every entry live-verified on both endpoints (2026-06-12). Vertex 404s on -latest aliases and its models.list rejects API keys, which is why the dropdown is curated instead of live-fetched.",
+      "_models_note": "Real (concrete) model names only — no -latest rolling aliases. The curated list (max_output_tokens keys) serves BOTH the Gemini Developer API (AIza keys) and Vertex / Agent Platform (AQ. keys); gemini-* entries live-verified on both endpoints (2026-06-12). Vertex 404s on -latest aliases and its models.list rejects API keys, which is why the dropdown is curated instead of live-fetched. Gemma exception: gemma-4-31b-it + gemma-4-26b-a4b-it are served ONLY on the Developer API (free tier, ai.google.dev/gemma/docs/core/gemma_on_gemini_api, verified 2026-07-11) — Vertex keys must not see them, hence vertex_incompatible_models below. Gemma 4 supports systemInstruction and function calling natively (unlike the gemma-3 era); max output is undocumented, so the curated 8192 is a conservative fallback (registry cache wins when present).",
       "max_output_tokens": {
         "gemini-3.5-flash": 65536,
         "gemini-3.1-pro-preview": 65536,
@@ -88,6 +89,8 @@
         "gemini-2.5-pro": 65536,
         "gemini-2.5-flash": 65535,
         "gemini-2.5-flash-lite": 65535,
+        "gemma-4-31b-it": 8192,
+        "gemma-4-26b-a4b-it": 8192,
         "_default": 8192
       },
       "context_length": {
@@ -98,8 +101,12 @@
         "gemini-2.5-pro": 1048576,
         "gemini-2.5-flash": 1048576,
         "gemini-2.5-flash-lite": 1048576,
+        "gemma-4-31b-it": 262144,
+        "gemma-4-26b-a4b-it": 262144,
         "_default": 1048576
       },
+      "_vertex_incompatible_models_note": "Curated models that only exist on the Gemini Developer API, filtered out of fetch_models when the key is a Vertex / Agent Platform key (GeminiProvider._vertex). Gemma is Model Garden self-deploy on Vertex (the 26B MaaS variant needs a different '-maas' id on a different surface), so the plain ids 404 there.",
+      "vertex_incompatible_models": ["gemma-4-31b-it", "gemma-4-26b-a4b-it"],
       "thinking_models": ["gemini-2.5", "gemini-3"],
       "thinking_type": "budget",
       "temperature_range": [0.0, 2.0],

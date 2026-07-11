@@ -97,19 +97,22 @@ class GeminiProvider:
     async def fetch_models(self, api_key: str) -> List[str]:
         """Validate the key, then return the curated model list.
 
-        The same curated list (``max_output_tokens`` keys from the gemini
+        The curated list (``max_output_tokens`` keys from the gemini
         block in llm_defaults.json — real model names, no ``-latest``
-        aliases) serves both backends, so the dropdown is identical for
-        AI Studio and Vertex keys. Only the key probe differs: Vertex
-        rejects API keys on ``models.list`` (401 — requires an OAuth
-        principal), so a free ``count_tokens`` call verifies the key
-        there; the Developer API uses its models endpoint. Invalid keys
-        raise the typed SDK error which the unifier translates into
-        ``NodeUserError``.
+        aliases) serves both backends; Vertex keys additionally drop the
+        ``vertex_incompatible_models`` entries (Gemma is Developer-API
+        only — on Vertex it is a Model Garden self-deploy and the plain
+        ids 404). Only the key probe differs: Vertex rejects API keys on
+        ``models.list`` (401 — requires an OAuth principal), so a free
+        ``count_tokens`` call verifies the key there; the Developer API
+        uses its models endpoint. Invalid keys raise the typed SDK error
+        which the unifier translates into ``NodeUserError``.
         """
         models = self._curated_models()
 
         if self._vertex:
+            vertex_blocked = self._vertex_incompatible_models()
+            models = [m for m in models if m not in vertex_blocked]
             probe_model = models[0] if models else "gemini-2.5-flash"
             await self._client.aio.models.count_tokens(
                 model=probe_model, contents="hello"
@@ -136,6 +139,16 @@ class GeminiProvider:
             .get("max_output_tokens", {})
         )
         return [m for m in max_tokens_map if m != "_default"]
+
+    @staticmethod
+    def _vertex_incompatible_models() -> frozenset:
+        from services.llm import config as llm_config
+
+        return frozenset(
+            llm_config.LLM_DEFAULTS.get("providers", {})
+            .get("gemini", {})
+            .get("vertex_incompatible_models", [])
+        )
 
     # ------------------------------------------------------------------
     # internals
