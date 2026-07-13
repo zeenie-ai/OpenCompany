@@ -1,6 +1,6 @@
 # Skill Creation Guide
 
-This guide explains how to create new skills for MachinaOs.
+This guide explains how to create new skills for OpenCompany.
 
 ## Folder Structure
 

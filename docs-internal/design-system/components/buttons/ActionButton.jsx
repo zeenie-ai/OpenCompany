@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 /**
- * ActionButton — the signature MachinaOS "soft tinted" toolbar button.
+ * ActionButton — the signature OpenCompany "soft tinted" toolbar button.
  * `intent` is a semantic role, not a color: run / stop / save / config /
  * secret / tools. Soft tint fill (15%), tinted border (60%), accent text;
  * hover deepens the fill to 25%; press nudges down 1px.

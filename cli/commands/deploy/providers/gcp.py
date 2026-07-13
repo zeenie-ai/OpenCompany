@@ -1,4 +1,4 @@
-"""gcloud adapter -- Stage 1 of ``machina deploy --provider gcp``.
+"""gcloud adapter -- Stage 1 of ``company deploy --provider gcp``.
 
 Uses the operator's installed + authenticated ``gcloud`` CLI for auth/context/
 API-enablement; Terraform's ``google`` provider then reuses the same

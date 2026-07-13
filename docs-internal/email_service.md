@@ -81,14 +81,14 @@ Self-contained plugin folder (Wave 11.I) — everything email-specific lives und
 
 | File | Description |
 |------|-------------|
-| `server/nodes/email/__init__.py` | Self-registration: `register_filter_builder("emailReceive", build_email_filter)` + `register_canary_trigger_type("emailReceive", "com.machinaos.email.message.received")` + re-export of `dispatch_email_received`. |
+| `server/nodes/email/__init__.py` | Self-registration: `register_filter_builder("emailReceive", build_email_filter)` + `register_canary_trigger_type("emailReceive", "com.opencompany.email.message.received")` + re-export of `dispatch_email_received`. |
 | `server/nodes/email/_himalaya.py` | `HimalayaService` (`ServiceSingleton`). Subprocess-based invocation, temp TOML config generation, JSON output parsing. Singleton via `get_himalaya_service()`. |
 | `server/nodes/email/_service.py` | `EmailService` (`ServiceSingleton`). Credential resolution, operation dispatch, polling helpers. Exposes `HimalayaService` via the `himalaya` property. Singleton via `get_email_service()`. |
 | `server/nodes/email/email_send/__init__.py` | `EmailSendNode(ActionNode)` — dual-purpose send plugin (`group = ("email", "tool")`, `usable_as_tool = True`). |
 | `server/nodes/email/email_read/__init__.py` | `EmailReadNode(ActionNode)` — dual-purpose read/search/manage plugin (7 operations). |
 | `server/nodes/email/email_receive/__init__.py` | `EmailReceiveNode(PollingTriggerNode)` — polling trigger; baseline + diff loop with `poll_ids` / `fetch_detail` hooks. |
 | `server/nodes/email/_filters.py` | `build_filter` (registered as `build_email_filter`) — server-side filter closure for the `emailReceive` trigger. |
-| `server/nodes/email/_events.py` | `email_message_received` `WorkflowEvent` factory + `dispatch_email_received` (single `dispatch.emit`, CloudEvents type `com.machinaos.email.message.received`). |
+| `server/nodes/email/_events.py` | `email_message_received` `WorkflowEvent` factory + `dispatch_email_received` (single `dispatch.emit`, CloudEvents type `com.opencompany.email.message.received`). |
 | `server/nodes/email/email_{send,read,receive}/icon.svg` + `meta.json` | Per-plugin icon (served at `/api/schemas/nodes/<type>/icon`) + color metadata. |
 | `server/config/email_providers.json` | Provider presets (IMAP/SMTP host/port/encryption per provider) + defaults + polling config. Cached on first load. |
 | `server/constants.py` | `EMAIL_TYPES`, `EMAIL_TOOL_TYPES`, plus `emailReceive` in `POLLING_TRIGGER_TYPES` and `WORKFLOW_TRIGGER_TYPES`. |
@@ -240,7 +240,7 @@ Group: `['email', 'trigger']`. No inputs. Single output `main` with the new emai
 **Event dispatch:** When a new message arrives, `EmailReceiveNode.execute_op`:
 1. Fetches full detail via `fetch_detail`
 2. Optionally flags it as read
-3. Calls `dispatch_email_received(email_data)` (in `_events.py`), which builds a `WorkflowEvent` (`type="com.machinaos.email.message.received"`) and routes it via a single `dispatch.emit` so Temporal-durable `TriggerListenerWorkflow` consumers fire
+3. Calls `dispatch_email_received(email_data)` (in `_events.py`), which builds a `WorkflowEvent` (`type="com.opencompany.email.message.received"`) and routes it via a single `dispatch.emit` so Temporal-durable `TriggerListenerWorkflow` consumers fire
 4. Returns the first new email's result (single-shot in standalone mode; the `PollingTriggerNode` deployment loop keeps polling)
 
 ## Deployment Mode (Continuous Polling)

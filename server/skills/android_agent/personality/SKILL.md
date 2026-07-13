@@ -2,7 +2,7 @@
 name: android-personality
 description: Android device assistant personality. Use when the user wants to interact with their Android phone or tablet in a natural, conversational way.
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: assistant
   icon: "🤖"

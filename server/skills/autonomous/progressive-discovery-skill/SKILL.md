@@ -3,7 +3,7 @@ name: progressive-discovery-skill
 description: Discover and load tools progressively as needed (reduces token overhead)
 allowed-tools: delegate_to_ai_agent check_delegated_tasks
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: autonomous
   icon: "🔍"

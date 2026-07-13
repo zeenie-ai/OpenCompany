@@ -3,7 +3,7 @@ name: perplexity-search-skill
 description: Search the web using Perplexity Sonar AI for synthesized answers with citations, related questions, and optional images.
 allowed-tools: perplexity_search
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: search
 

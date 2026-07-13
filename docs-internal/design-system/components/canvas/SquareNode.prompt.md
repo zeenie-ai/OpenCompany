@@ -1,4 +1,4 @@
-Canvas workflow node — the heart of the MachinaOS visual identity. Color comes from the node's role.
+Canvas workflow node — the heart of the OpenCompany visual identity. Color comes from the node's role.
 
 ```jsx
 <SquareNode icon="🤖" label="AI Agent" color="var(--node-agent)" status="success" showToolOutput />

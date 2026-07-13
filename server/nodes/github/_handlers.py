@@ -26,7 +26,7 @@ catalogue-invalidation event. Marker + broadcast plumbing is the
 shared :mod:`services.cli_agent._cli_auth` module (claude/codex/github
 all use it).
 
-MachinaOs never stores or reads the actual token — it stays in gh's
+OpenCompany never stores or reads the actual token — it stays in gh's
 system credential store.
 """
 

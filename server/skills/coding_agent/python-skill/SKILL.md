@@ -3,7 +3,7 @@ name: python-skill
 description: Execute Python code for calculations, data processing, and automation. Access to math, json, datetime, collections, and more.
 allowed-tools: "python_executor"
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: code
 

@@ -11,7 +11,7 @@
 > - Handler registration in `server/services/node_executor.py` → automatic via `BaseNode.__init_subclass__`; no manual registry entry.
 > `server/services/handlers/` now contains only cross-cutting orchestration — `tools.py`, `triggers.py`, `todo.py`.
 
-This guide provides a comprehensive walkthrough for integrating new external services (like Google Workspace, Slack, Notion, etc.) into MachinaOs. It covers OAuth authentication, database models, API handlers, frontend nodes, and AI Agent tool integration.
+This guide provides a comprehensive walkthrough for integrating new external services (like Google Workspace, Slack, Notion, etc.) into OpenCompany. It covers OAuth authentication, database models, API handlers, frontend nodes, and AI Agent tool integration.
 
 > **Backend-first is canonical (post-Wave-6 / Wave-11).** Parameter schemas, validation, conditional visibility, dynamic-option dispatch, icons, and colors all live on the backend. The legacy frontend `nodeDefinitions/*.ts` files no longer exist. Follow the [canonical plugin recipe](./node_creation.md) — every node is one Python file (or self-contained folder) under `server/nodes/<group>/<plugin>/`. The frontend reads `NodeSpec` via [`client/src/lib/nodeSpec.ts`](../client/src/lib/nodeSpec.ts) and adapts via [`adapters/nodeSpecToDescription.ts`](../client/src/adapters/nodeSpecToDescription.ts). Credential icons are also backend-served via `GET /api/schemas/credentials/{provider}/icon` (F7); plugin icons via `GET /api/schemas/nodes/{type}/icon` (Phase 6 / RFC §6.5).
 
@@ -836,7 +836,7 @@ name: {service}-skill
 description: Brief description of capabilities
 allowed-tools: tool1 tool2 tool3
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: productivity
   icon: "icon"

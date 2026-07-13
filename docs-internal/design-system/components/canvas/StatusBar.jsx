@@ -59,7 +59,7 @@ export function StatusBar({
             borderRadius: '50%',
             background: tone.color,
             display: 'inline-block',
-            animation: connection === 'online' ? 'machina-pip-blink 2s ease-in-out infinite' : 'none',
+            animation: connection === 'online' ? 'opencompany-pip-blink 2s ease-in-out infinite' : 'none',
           }}
         />
         {tone.label}
@@ -79,7 +79,7 @@ export function StatusBar({
         {sep}
         <span style={{ fontVariantNumeric: 'tabular-nums' }}>{timeText}</span>
       </span>
-      <style>{'@keyframes machina-pip-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }'}</style>
+      <style>{'@keyframes opencompany-pip-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }'}</style>
     </div>
   );
 }

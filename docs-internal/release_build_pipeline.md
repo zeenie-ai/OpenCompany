@@ -1,6 +1,6 @@
 # Release Build Pipeline
 
-Compile-step plan for the npm distribution `machinaos`. Goal: cut cold-start ~20s further on top of the lazy-LangChain fix already in v0.0.76, shrink the Vite main bundle below 200 KB gz, and drop the `tsx` interpreter cost from the Node.js sidecar.
+Compile-step plan for the npm distribution `opencompany`. Goal: cut cold-start ~20s further on top of the lazy-LangChain fix already in v0.0.76, shrink the Vite main bundle below 200 KB gz, and drop the `tsx` interpreter cost from the Node.js sidecar.
 
 User scope (confirmed before this work): stay on npm distribution; **no** Nuitka/PyOxidizer standalone binary channel; optimize Vite output too; **skip** the plugin-walker (~11s) and service-status-refresh (~20s) hotspots — those are runtime concerns, not compile-time.
 
@@ -58,13 +58,13 @@ Keep `sourcemap: analyze` (already correct), keep React Compiler config.
   ```
   The list of source dirs is the public `cli.commands.build.COMPILEALL_SOURCE_DIRS` constant — `scripts/install.js` mirrors it.
 
-The npm tarball still excludes `__pycache__/` per `package.json` `files` (cross-Python-minor pyc fragility) — `compileall` runs on the user's machine via `machina build` or `scripts/install.js` post-install.
+The npm tarball still excludes `__pycache__/` per `package.json` `files` (cross-Python-minor pyc fragility) — `compileall` runs on the user's machine via `company build` or `scripts/install.js` post-install.
 
 ### 4b. Temporal binary fetch + DATA_DIR parity
 
-- Step `[6/6]` runs `uv run python -m services.temporal._install`, which pooch-downloads the official `temporal` CLI into `<DATA_DIR>/packages/temporal/` (= `~/.machina/packages/temporal/` by default). Pre-fetching at build time turns the ~114 MB download into a sub-second cache hit on first `machina start`. The download uses an explicit `HTTPDownloader(timeout=300)` (per-socket-read timeout — slow links can finish; pooch's 30 s default aborted them). Fatality differs by entry point: `machina build` keeps the step **fatal** (locked by `test_temporal_install_is_fatal_on_failure`), while npm postinstall (`scripts/install.js`) wraps it in a **non-fatal** try/catch because `TemporalServerRuntime._pre_spawn()` re-downloads lazily on first `machina start`. The cache survives `machina clean` (`packages` ∈ `_MACHINA_KEEP`), so clean+build cycles don't re-download.
-- **`machina build` layers `.env.dev` first.** `build_command()` calls `cli.config.load_dev_overrides(root)` before the install steps, so the build's `DATA_DIR` matches what the runtime sees. Without it, a repo checkout's `machina build` read `DATA_DIR=~/.machina` from `.env.template` and installed Temporal under user home, but `machina dev` then read `DATA_DIR=.machina` from `.env.dev` and re-downloaded into `<repo>/.machina/` — a redundant ~114 MB fetch on every fresh clone.
-- **Safe for global installs.** `.env.dev` is git-committed for contributors but is NOT in the npm `files` list, so an npm-distributed copy has no `.env.dev` — `load_dev_overrides` is a no-op and everything falls through to the `.env.template` default (`DATA_DIR=~/.machina`), matching `machina start` / `machina daemon`.
+- Step `[6/6]` runs `uv run python -m services.temporal._install`, which pooch-downloads the official `temporal` CLI into `<DATA_DIR>/packages/temporal/` (= `~/.opencompany/packages/temporal/` by default). Pre-fetching at build time turns the ~114 MB download into a sub-second cache hit on first `company start`. The download uses an explicit `HTTPDownloader(timeout=300)` (per-socket-read timeout — slow links can finish; pooch's 30 s default aborted them). Fatality differs by entry point: `company build` keeps the step **fatal** (locked by `test_temporal_install_is_fatal_on_failure`), while npm postinstall (`scripts/install.js`) wraps it in a **non-fatal** try/catch because `TemporalServerRuntime._pre_spawn()` re-downloads lazily on first `company start`. The cache survives `company clean` (`packages` ∈ `_OPENCOMPANY_KEEP`), so clean+build cycles don't re-download.
+- **`company build` layers `.env.dev` first.** `build_command()` calls `cli.config.load_dev_overrides(root)` before the install steps, so the build's `DATA_DIR` matches what the runtime sees. Without it, a repo checkout's `company build` read `DATA_DIR=~/.opencompany` from `.env.template` and installed Temporal under user home, but `company dev` then read `DATA_DIR=.opencompany` from `.env.dev` and re-downloaded into `<repo>/.opencompany/` — a redundant ~114 MB fetch on every fresh clone.
+- **Safe for global installs.** `.env.dev` is git-committed for contributors but is NOT in the npm `files` list, so an npm-distributed copy has no `.env.dev` — `load_dev_overrides` is a no-op and everything falls through to the `.env.template` default (`DATA_DIR=~/.opencompany`), matching `company start` / `company daemon`.
 
 ### 5. Wire bundle + compileall into install.js
 
@@ -96,9 +96,9 @@ Idempotent on re-runs (compileall only rewrites stale pyc; esbuild is determinis
 2. `ANALYZE=1 pnpm --filter react-flow-client run build` → open `client/dist/stats.html`. Expect: no chunk above 600 KB gz, main < 200 KB gz, `vendor-flow` split.
 3. `cd server/nodejs && npm run build && node dist/index.js` → starts on :3020 in <100ms.
 4. `cd server && uv run python -O -m compileall -q -j 0 .` → `__pycache__/*.opt-1.pyc` present.
-5. Cold-start: clean install + `machina start > start.log 2>&1` → `Application startup complete` at ≤+50s (was +66.9s).
+5. Cold-start: clean install + `company start > start.log 2>&1` → `Application startup complete` at ≤+50s (was +66.9s).
 6. `npm pack --dry-run` → `server/nodejs/dist/index.js` included; no `__pycache__/`; tarball size ≤ v0.0.76.
-7. Smoke: `machina start` → load http://localhost:3000 → run "AI Assistant" example → agent responds.
+7. Smoke: `company start` → load http://localhost:3000 → run "AI Assistant" example → agent responds.
 
 ## Out of scope (future work)
 

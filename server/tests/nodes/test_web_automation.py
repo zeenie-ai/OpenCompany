@@ -85,7 +85,7 @@ class TestBrowser:
         assert session == "test_sess"
 
     async def test_snapshot_uses_i_flag_and_session_fallback(self, harness):
-        # Empty session -> handler must derive machina_<execution_id>.
+        # Empty session -> handler must derive opencompany_<execution_id>.
         fake = _FakeBrowserService(canned={"success": True, "nodes": [{"ref": "@e1", "role": "button"}]})
 
         with _patch_browser_service(fake):
@@ -97,7 +97,7 @@ class TestBrowser:
         harness.assert_envelope(result, success=True)
         args, session, _, _ = fake.calls[-1]
         assert args == ("snapshot", "-i")
-        assert session.startswith("machina_")
+        assert session.startswith("opencompany_")
 
     async def test_session_stable_across_calls_in_one_run(self, harness):
         # Two browser calls sharing one execution context (one agent run)
@@ -118,7 +118,7 @@ class TestBrowser:
         harness.assert_envelope(r1, success=True)
         harness.assert_envelope(r2, success=True)
         sessions = [call[1] for call in fake.calls]
-        assert sessions == ["machina_run1234", "machina_run1234"]
+        assert sessions == ["opencompany_run1234", "opencompany_run1234"]
 
     async def test_screenshot_with_jpeg_and_quality(self, harness):
         fake = _FakeBrowserService(canned={"success": True, "base64": "AAAA"})

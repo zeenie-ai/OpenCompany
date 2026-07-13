@@ -2,7 +2,7 @@
 name: subagent-skill
 description: Manage sub-agent delegation, handle task completion events, and coordinate multi-agent workflows.
 metadata:
-  author: machina
+  author: opencompany
   version: "2.0"
   category: assistant
   icon: "🤖"

@@ -254,8 +254,8 @@ class TestLockfile:
 
 
 # ---------------------------------------------------------------------------
-# MachinaOs workflow-tool bridge — per-batch dynamic FastMCP exposure.
-# Each wired node lands as `mcp__machinaos__<node_type>`; FastMCP infers
+# OpenCompany workflow-tool bridge — per-batch dynamic FastMCP exposure.
+# Each wired node lands as `mcp__opencompany__<node_type>`; FastMCP infers
 # the schema from the typed `params` annotation (no custom translation).
 #
 # These tests drive FastMCP's own ``list_tools`` / ``call_tool`` API so
@@ -264,7 +264,7 @@ class TestLockfile:
 # ---------------------------------------------------------------------------
 
 
-class TestMachinaOsToolBridge:
+class TestOpenCompanyToolBridge:
     def setup_method(self):
         _reset_for_tests()
         import nodes  # noqa: F401 — populate plugin registry
@@ -288,7 +288,7 @@ class TestMachinaOsToolBridge:
     @pytest.mark.asyncio
     async def test_register_batch_exposes_tool_on_fastmcp(self):
         """The connected workflow node must surface in ``list_tools`` so
-        claude sees ``mcp__machinaos__<node_type>`` on first
+        claude sees ``mcp__opencompany__<node_type>`` on first
         ``tools/list``."""
         from services.cli_agent.mcp_server import get_mcp_app
 
@@ -429,7 +429,7 @@ class TestMachinaOsToolBridge:
             try:
                 out = await mcp.call_tool(
                     "duckduckgoSearch",
-                    {"query": "MachinaOs Anthropic Claude", "max_results": 3},
+                    {"query": "OpenCompany Anthropic Claude", "max_results": 3},
                 )
             except OSError as exc:
                 pytest.skip(f"network unavailable: {exc}")

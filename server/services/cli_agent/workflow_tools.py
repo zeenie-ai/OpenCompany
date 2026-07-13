@@ -2,7 +2,7 @@
 
 When an agent batch wires nodes through ``input-tools``, each connected
 node is exposed on the FastMCP server as its own
-``mcp__machinaos__<node_type>`` entry. The spawned ``claude -p`` sees
+``mcp__opencompany__<node_type>`` entry. The spawned ``claude -p`` sees
 those tools on the very first ``tools/list`` and can invoke them
 directly — no two-step generic-wrapper indirection.
 
@@ -65,9 +65,9 @@ def expose_workflow_tools(connected_tools: List[Dict[str, Any]]) -> None:
             mcp.add_tool(
                 handler,
                 name=node_type,
-                description=(getattr(cls, "description", None) or f"MachinaOs workflow tool: {node_type}"),
+                description=(getattr(cls, "description", None) or f"OpenCompany workflow tool: {node_type}"),
             )
-            logger.info("[CC-Agent MCP] exposed mcp__machinaos__%s", node_type)
+            logger.info("[CC-Agent MCP] exposed mcp__opencompany__%s", node_type)
         except Exception as exc:  # pragma: no cover
             logger.warning("[CC-Agent MCP] add_tool(%s) failed: %s", node_type, exc)
     _schedule_list_changed_notify()
@@ -89,7 +89,7 @@ def unexpose_workflow_tools(connected_tools: List[Dict[str, Any]]) -> None:
         _active_tool_refcounts.pop(node_type, None)
         try:
             mcp.remove_tool(node_type)
-            logger.info("[CC-Agent MCP] removed mcp__machinaos__%s", node_type)
+            logger.info("[CC-Agent MCP] removed mcp__opencompany__%s", node_type)
         except Exception as exc:  # pragma: no cover
             logger.debug("[CC-Agent MCP] remove_tool(%s): %s", node_type, exc)
     _schedule_list_changed_notify()

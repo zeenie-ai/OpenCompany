@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# MachinaOS Installer
+# OpenCompany Installer
 # Usage: curl -fsSL https://raw.githubusercontent.com/zeenie-ai/MachinaOS/main/install.sh | bash
 #
-# This script installs MachinaOS and its dependencies:
+# This script installs OpenCompany and its dependencies:
 # - Node.js 22+ (via brew/apt/dnf/pacman)
 # - Python 3.12+ (via brew/apt/dnf/pacman)
 # - uv (Python package manager)
@@ -26,11 +26,7 @@ error_exit() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
 # Banner
 echo ""
-echo -e "${CYAN}  __  __            _     _             ___  ____  ${NC}"
-echo -e "${CYAN} |  \\/  | __ _  ___| |__ (_)_ __   __ _/ _ \\/ ___| ${NC}"
-echo -e "${CYAN} | |\\/| |/ _\` |/ __| '_ \\| | '_ \\ / _\` | | | \\___ \\ ${NC}"
-echo -e "${CYAN} | |  | | (_| | (__| | | | | | | | (_| | |_| |___) |${NC}"
-echo -e "${CYAN} |_|  |_|\\__,_|\\___|_| |_|_|_| |_|\\__,_|\\___/|____/ ${NC}"
+echo -e "${CYAN}  OpenCompany${NC}"
 echo ""
 echo "Open-source workflow automation with AI agents"
 echo ""
@@ -274,27 +270,27 @@ main() {
   setup_wsl_npm
 
   echo ""
-  info "Installing MachinaOS..."
+  info "Installing OpenCompany..."
   echo ""
 
-  # Install machinaos from npm
+  # Install OpenCompany from npm
   # On Linux/WSL without nvm, global npm install needs sudo unless prefix is user-writable
-  if npm install -g machinaos 2>/dev/null; then
+  if npm install -g opencompany 2>/dev/null; then
     : # Installed successfully
   elif command -v sudo &> /dev/null; then
     info "Retrying with sudo..."
-    sudo npm install -g machinaos
+    sudo npm install -g opencompany
   else
-    error_exit "npm install -g failed. Try: sudo npm install -g machinaos"
+    error_exit "npm install -g failed. Try: sudo npm install -g opencompany"
   fi
 
   echo ""
   echo -e "${GREEN}============================================${NC}"
-  echo -e "${GREEN}  MachinaOS installed successfully!${NC}"
+  echo -e "${GREEN}  OpenCompany installed successfully!${NC}"
   echo -e "${GREEN}============================================${NC}"
   echo ""
-  echo "  Start MachinaOS:"
-  echo "    machina start"
+  echo "  Start OpenCompany:"
+  echo "    company start"
   echo ""
   echo "  Open in browser:"
   echo "    http://localhost:3000"
@@ -306,7 +302,7 @@ main() {
   echo "    npm install -g pnpm"
   echo ""
   echo "  Run diagnostics:"
-  echo "    machina doctor"
+  echo "    company doctor"
   echo ""
 }
 

@@ -1,12 +1,12 @@
-"""``machina serve`` -- single-port production runtime.
+"""``company serve`` -- single-port production runtime.
 
 Runs the app on ONE public port: uvicorn serves the REST API + WebSocket +
 the built React SPA (via the ``SERVE_STATIC_CLIENT`` block in
 ``server/main.py``), plus the Node.js code-exec sidecar on its own internal
 port. Used locally for a production-shaped run AND as the systemd
-``ExecStart`` on a VM provisioned by ``machina deploy``.
+``ExecStart`` on a VM provisioned by ``company deploy``.
 
-Unlike ``machina start`` (which runs a separate static-client server + the
+Unlike ``company start`` (which runs a separate static-client server + the
 backend + temporal on multiple ports), ``serve`` is single-port and serves
 the client from the backend itself. The Node sidecar is NOT launched by
 ``start``/``dev`` today, so ``serve`` adds it (the JS/TS executor nodes need
@@ -56,7 +56,7 @@ def serve_command(port: int | None = None) -> None:
         kill_port(p)
 
     console.print()
-    console.print("  [bold]MachinaOS[/] serve (single-port)")
+    console.print("  [bold]OpenCompany[/] serve (single-port)")
     console.print(f"  App:     http://0.0.0.0:{bind_port}  (API + WebSocket + SPA)")
     console.print(f"  Sidecar: 127.0.0.1:{cfg.nodejs_port}  (JS/TS executor)")
     console.print()

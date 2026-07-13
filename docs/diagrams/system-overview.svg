@@ -68,7 +68,7 @@
 
   <rect class="small-box small-exec" x="370" y="545" width="140" height="50" rx="6"/>
   <text x="440" y="568" class="sub" text-anchor="middle">SQLite</text>
-  <text x="440" y="584" class="sub" text-anchor="middle" font-size="10">machina.db + credentials.db</text>
+  <text x="440" y="584" class="sub" text-anchor="middle" font-size="10">workflow.db + credentials.db</text>
 
   <rect class="small-box small-exec" x="525" y="545" width="140" height="50" rx="6"/>
   <text x="595" y="568" class="sub" text-anchor="middle">Node.js server</text>

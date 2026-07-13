@@ -3,7 +3,7 @@ name: battery-skill
 description: Monitor Android device battery status, level, charging state, temperature, and health.
 allowed-tools: battery_monitor
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: android
 

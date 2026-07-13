@@ -13,7 +13,7 @@
 Start a workflow when an HTTP request hits `/webhook/{path}`. The
 `webhook` router in `server/routers/webhook.py` receives the request and the
 producer [`server/nodes/trigger/webhook_trigger/_events.py`](../../../server/nodes/trigger/webhook_trigger/_events.py)
-emits a CloudEvents `WorkflowEvent` (`type: com.machinaos.webhook.received`)
+emits a CloudEvents `WorkflowEvent` (`type: com.opencompany.webhook.received`)
 via `dispatch.emit`. `webhookTrigger` is canary-registered, so
 `DeploymentManager` starts a `TriggerListenerWorkflow` that receives the event
 via Temporal Signal and spawns a child `MachinaWorkflow` per matching event
@@ -63,7 +63,7 @@ Wrapped in the standard envelope.
 
 ```mermaid
 flowchart TD
-  P[HTTP request hits /webhook/path] --> Q[routers/webhook.py + _events.py<br/>dispatch.emit com.machinaos.webhook.received]
+  P[HTTP request hits /webhook/path] --> Q[routers/webhook.py + _events.py<br/>dispatch.emit com.opencompany.webhook.received]
   Q --> R[TriggerListenerWorkflow receives via Temporal Signal]
   R --> S[WebhookTriggerNode.build_filter:<br/>event.path == params.path]
   S -- match --> T[spawn child MachinaWorkflow<br/>trigger pre-executed with event payload]

@@ -67,25 +67,36 @@ describe('WorkflowEvent shape', () => {
       data: {
         specversion: '1.0',
         id: 'a1b2c3d4',
-        source: 'machinaos://services/credentials',
-        type: 'com.machinaos.credential.api_key.saved',
+        source: 'opencompany://services/credentials',
+        type: 'com.opencompany.credential.api_key.saved',
         time: '2026-05-06T12:34:56.789Z',
         subject: 'openai',
         datacontenttype: 'application/json',
-        dataschema: 'machinaos://schemas/events/credential.api_key.saved.json',
+        dataschema: 'opencompany://schemas/events/credential.api_key.saved.json',
         data: { provider: 'openai' },
       },
     };
     const envelope = payload.data as WorkflowEvent<{ provider: string }>;
     expect(envelope.specversion).toBe('1.0');
-    expect(envelope.type).toBe('com.machinaos.credential.api_key.saved');
+    expect(envelope.type).toBe('com.opencompany.credential.api_key.saved');
     expect(envelope.subject).toBe('openai');
     expect(envelope.data.provider).toBe('openai');
-    // matchesType strips the com.machinaos. prefix, so callers write
+    // matchesType strips the com.opencompany. prefix, so callers write
     // patterns without it.
     expect(matchesType(envelope, 'credential.api_key.*')).toBe(true);
     expect(matchesType(envelope, 'credential.*')).toBe(true);
     expect(matchesType(envelope, 'stripe.*')).toBe(false);
+  });
+
+  it('matches replayed events that use the pre-rebrand namespace', () => {
+    const legacyEnvelope: WorkflowEvent = {
+      ...sample,
+      source: 'machinaos://services/credentials',
+      type: 'com.machinaos.credential.api_key.saved',
+    };
+
+    expect(matchesType(legacyEnvelope, 'credential.api_key.*')).toBe(true);
+    expect(matchesType(legacyEnvelope, 'credential.*')).toBe(true);
   });
 
   it('preserves CloudEvents extension attributes when present', () => {

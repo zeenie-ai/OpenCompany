@@ -36,8 +36,8 @@ def workflow_ops_applied(
     """Canvas-mutation envelope. ``subject`` is the caller node id so
     consumers can route per-builder."""
     return WorkflowEvent(
-        source="machinaos://nodes/agent_builder",
-        type="com.machinaos.workflow.ops.applied",
+        source="opencompany://nodes/agent_builder",
+        type="com.opencompany.workflow.ops.applied",
         subject=caller_node_id,
         workflow_id=workflow_id,
         data={

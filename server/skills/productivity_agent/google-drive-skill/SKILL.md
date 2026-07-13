@@ -3,7 +3,7 @@ name: google-drive-skill
 description: Upload, download, list, and share Google Drive files. Supports folders, file search, and permission management.
 allowed-tools: "google_drive"
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: productivity
 

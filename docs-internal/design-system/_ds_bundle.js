@@ -1,8 +1,8 @@
-/* @ds-bundle: {"format":3,"namespace":"MachinaOSDesignSystem_2559cf","components":[{"name":"ActionButton","sourcePath":"components/buttons/ActionButton.jsx"},{"name":"Button","sourcePath":"components/buttons/Button.jsx"},{"name":"ComponentItem","sourcePath":"components/canvas/ComponentItem.jsx"},{"name":"ModeToggle","sourcePath":"components/canvas/ModeToggle.jsx"},{"name":"SquareNode","sourcePath":"components/canvas/SquareNode.jsx"},{"name":"StatusBar","sourcePath":"components/canvas/StatusBar.jsx"},{"name":"WorkflowCard","sourcePath":"components/canvas/WorkflowCard.jsx"},{"name":"Avatar","sourcePath":"components/display/Avatar.jsx"},{"name":"Badge","sourcePath":"components/display/Badge.jsx"},{"name":"Card","sourcePath":"components/display/Card.jsx"},{"name":"ChatBubble","sourcePath":"components/display/ChatBubble.jsx"},{"name":"Kbd","sourcePath":"components/display/Kbd.jsx"},{"name":"LogLine","sourcePath":"components/display/LogLine.jsx"},{"name":"Tabs","sourcePath":"components/display/Tabs.jsx"},{"name":"EmptyState","sourcePath":"components/feedback/EmptyState.jsx"},{"name":"Modal","sourcePath":"components/feedback/Modal.jsx"},{"name":"Progress","sourcePath":"components/feedback/Progress.jsx"},{"name":"Spinner","sourcePath":"components/feedback/Spinner.jsx"},{"name":"Toast","sourcePath":"components/feedback/Toast.jsx"},{"name":"Tooltip","sourcePath":"components/feedback/Tooltip.jsx"},{"name":"ApiKeyInput","sourcePath":"components/forms/ApiKeyInput.jsx"},{"name":"Checkbox","sourcePath":"components/forms/Checkbox.jsx"},{"name":"Input","sourcePath":"components/forms/Input.jsx"},{"name":"RadioGroup","sourcePath":"components/forms/RadioGroup.jsx"},{"name":"Select","sourcePath":"components/forms/Select.jsx"},{"name":"Slider","sourcePath":"components/forms/Slider.jsx"},{"name":"Switch","sourcePath":"components/forms/Switch.jsx"},{"name":"Textarea","sourcePath":"components/forms/Textarea.jsx"},{"name":"Icon","sourcePath":"components/icons/Icon.jsx"},{"name":"CollapsibleSection","sourcePath":"components/panels/CollapsibleSection.jsx"},{"name":"DataCard","sourcePath":"components/panels/DataCard.jsx"},{"name":"PanelModal","sourcePath":"components/panels/PanelModal.jsx"},{"name":"SettingsSection","sourcePath":"components/panels/SettingsSection.jsx"},{"name":"SettingsRow","sourcePath":"components/panels/SettingsSection.jsx"}],"sourceHashes":{"components/buttons/ActionButton.jsx":"3de567509700","components/buttons/Button.jsx":"c81ef2c80131","components/canvas/ComponentItem.jsx":"fed2f287e532","components/canvas/ModeToggle.jsx":"2386b2142874","components/canvas/SquareNode.jsx":"5604401e105a","components/canvas/StatusBar.jsx":"f3ba959f8bac","components/canvas/WorkflowCard.jsx":"76dc0735c0e1","components/display/Avatar.jsx":"c636baa7014f","components/display/Badge.jsx":"1e9482639eb7","components/display/Card.jsx":"d60b5d2e81cb","components/display/ChatBubble.jsx":"97f3de1f9e95","components/display/Kbd.jsx":"0b1575a8f4ab","components/display/LogLine.jsx":"8b8dcbe178d2","components/display/Tabs.jsx":"29083e164683","components/feedback/EmptyState.jsx":"bcaf3094afb4","components/feedback/Modal.jsx":"b99b3f25e581","components/feedback/Progress.jsx":"1c91d593fe2b","components/feedback/Spinner.jsx":"47e22c9fed7a","components/feedback/Toast.jsx":"da490f96e375","components/feedback/Tooltip.jsx":"1181368448e9","components/forms/ApiKeyInput.jsx":"5ed6f076a952","components/forms/Checkbox.jsx":"a687ca85bef0","components/forms/Input.jsx":"955d8ddccdc7","components/forms/RadioGroup.jsx":"4ff6bd70406c","components/forms/Select.jsx":"79482ec6f9e9","components/forms/Slider.jsx":"4cd8ba4d0c99","components/forms/Switch.jsx":"8de73e29935c","components/forms/Textarea.jsx":"1d0b6f74e112","components/icons/Icon.jsx":"3fbda05c3dcd","components/panels/CollapsibleSection.jsx":"5ab48b069cd1","components/panels/DataCard.jsx":"644079601685","components/panels/PanelModal.jsx":"ca2f9656ca17","components/panels/SettingsSection.jsx":"568e16e1e05e","ui_kits/machinaos/App.jsx":"b5cca1c6f3c0","ui_kits/machinaos/CanvasView.jsx":"59f3b01513f3","ui_kits/machinaos/ConsoleDock.jsx":"0c284423b0b3","ui_kits/machinaos/Panels.jsx":"de31785649fa","ui_kits/machinaos/PanelsModals.jsx":"0d558a4e2995","ui_kits/machinaos/Toolbar.jsx":"6ba622604af7"},"inlinedExternals":[],"unexposedExports":[]} */
+/* @ds-bundle: {"format":3,"namespace":"OpenCompanyDesignSystem_2559cf","components":[{"name":"ActionButton","sourcePath":"components/buttons/ActionButton.jsx"},{"name":"Button","sourcePath":"components/buttons/Button.jsx"},{"name":"ComponentItem","sourcePath":"components/canvas/ComponentItem.jsx"},{"name":"ModeToggle","sourcePath":"components/canvas/ModeToggle.jsx"},{"name":"SquareNode","sourcePath":"components/canvas/SquareNode.jsx"},{"name":"StatusBar","sourcePath":"components/canvas/StatusBar.jsx"},{"name":"WorkflowCard","sourcePath":"components/canvas/WorkflowCard.jsx"},{"name":"Avatar","sourcePath":"components/display/Avatar.jsx"},{"name":"Badge","sourcePath":"components/display/Badge.jsx"},{"name":"Card","sourcePath":"components/display/Card.jsx"},{"name":"ChatBubble","sourcePath":"components/display/ChatBubble.jsx"},{"name":"Kbd","sourcePath":"components/display/Kbd.jsx"},{"name":"LogLine","sourcePath":"components/display/LogLine.jsx"},{"name":"Tabs","sourcePath":"components/display/Tabs.jsx"},{"name":"EmptyState","sourcePath":"components/feedback/EmptyState.jsx"},{"name":"Modal","sourcePath":"components/feedback/Modal.jsx"},{"name":"Progress","sourcePath":"components/feedback/Progress.jsx"},{"name":"Spinner","sourcePath":"components/feedback/Spinner.jsx"},{"name":"Toast","sourcePath":"components/feedback/Toast.jsx"},{"name":"Tooltip","sourcePath":"components/feedback/Tooltip.jsx"},{"name":"ApiKeyInput","sourcePath":"components/forms/ApiKeyInput.jsx"},{"name":"Checkbox","sourcePath":"components/forms/Checkbox.jsx"},{"name":"Input","sourcePath":"components/forms/Input.jsx"},{"name":"RadioGroup","sourcePath":"components/forms/RadioGroup.jsx"},{"name":"Select","sourcePath":"components/forms/Select.jsx"},{"name":"Slider","sourcePath":"components/forms/Slider.jsx"},{"name":"Switch","sourcePath":"components/forms/Switch.jsx"},{"name":"Textarea","sourcePath":"components/forms/Textarea.jsx"},{"name":"Icon","sourcePath":"components/icons/Icon.jsx"},{"name":"CollapsibleSection","sourcePath":"components/panels/CollapsibleSection.jsx"},{"name":"DataCard","sourcePath":"components/panels/DataCard.jsx"},{"name":"PanelModal","sourcePath":"components/panels/PanelModal.jsx"},{"name":"SettingsSection","sourcePath":"components/panels/SettingsSection.jsx"},{"name":"SettingsRow","sourcePath":"components/panels/SettingsSection.jsx"}],"sourceHashes":{"components/buttons/ActionButton.jsx":"3de567509700","components/buttons/Button.jsx":"c81ef2c80131","components/canvas/ComponentItem.jsx":"fed2f287e532","components/canvas/ModeToggle.jsx":"2386b2142874","components/canvas/SquareNode.jsx":"5604401e105a","components/canvas/StatusBar.jsx":"f3ba959f8bac","components/canvas/WorkflowCard.jsx":"76dc0735c0e1","components/display/Avatar.jsx":"c636baa7014f","components/display/Badge.jsx":"1e9482639eb7","components/display/Card.jsx":"d60b5d2e81cb","components/display/ChatBubble.jsx":"97f3de1f9e95","components/display/Kbd.jsx":"0b1575a8f4ab","components/display/LogLine.jsx":"8b8dcbe178d2","components/display/Tabs.jsx":"29083e164683","components/feedback/EmptyState.jsx":"bcaf3094afb4","components/feedback/Modal.jsx":"b99b3f25e581","components/feedback/Progress.jsx":"1c91d593fe2b","components/feedback/Spinner.jsx":"47e22c9fed7a","components/feedback/Toast.jsx":"da490f96e375","components/feedback/Tooltip.jsx":"1181368448e9","components/forms/ApiKeyInput.jsx":"5ed6f076a952","components/forms/Checkbox.jsx":"a687ca85bef0","components/forms/Input.jsx":"955d8ddccdc7","components/forms/RadioGroup.jsx":"4ff6bd70406c","components/forms/Select.jsx":"79482ec6f9e9","components/forms/Slider.jsx":"4cd8ba4d0c99","components/forms/Switch.jsx":"8de73e29935c","components/forms/Textarea.jsx":"1d0b6f74e112","components/icons/Icon.jsx":"3fbda05c3dcd","components/panels/CollapsibleSection.jsx":"5ab48b069cd1","components/panels/DataCard.jsx":"644079601685","components/panels/PanelModal.jsx":"ca2f9656ca17","components/panels/SettingsSection.jsx":"568e16e1e05e","ui_kits/opencompany/App.jsx":"b5cca1c6f3c0","ui_kits/opencompany/CanvasView.jsx":"59f3b01513f3","ui_kits/opencompany/ConsoleDock.jsx":"0c284423b0b3","ui_kits/opencompany/Panels.jsx":"de31785649fa","ui_kits/opencompany/PanelsModals.jsx":"0d558a4e2995","ui_kits/opencompany/Toolbar.jsx":"6ba622604af7"},"inlinedExternals":[],"unexposedExports":[]} */
 
 (() => {
 
-const __ds_ns = (window.MachinaOSDesignSystem_2559cf = window.MachinaOSDesignSystem_2559cf || {});
+const __ds_ns = (window.OpenCompanyDesignSystem_2559cf = window.OpenCompanyDesignSystem_2559cf || {});
 
 const __ds_scope = {};
 
@@ -12,7 +12,7 @@ const __ds_scope = {};
 try { (() => {
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 /**
- * ActionButton — the signature MachinaOS "soft tinted" toolbar button.
+ * ActionButton — the signature OpenCompany "soft tinted" toolbar button.
  * `intent` is a semantic role, not a color: run / stop / save / config /
  * secret / tools. Soft tint fill (15%), tinted border (60%), accent text;
  * hover deepens the fill to 25%; press nudges down 1px.
@@ -361,7 +361,7 @@ Object.assign(__ds_scope, { ModeToggle });
 // components/canvas/SquareNode.jsx
 try { (() => {
 /**
- * SquareNode — MachinaOS canvas node. 64px icon square with accent-tinted
+ * SquareNode — OpenCompany canvas node. 64px icon square with accent-tinted
  * 2px border + 135° gradient fill, status pip (top-left), gear button
  * (top-right), in/out connection handles, label below. Executing nodes
  * pulse a three-layer glow (requires tokens/animations.css).
@@ -431,7 +431,7 @@ function SquareNode({
       ...style
     }
   }, /*#__PURE__*/React.createElement("div", {
-    className: executing ? 'machina-pulse' : armed ? 'machina-trigger-armed' : undefined,
+    className: executing ? 'opencompany-pulse' : armed ? 'opencompany-trigger-armed' : undefined,
     style: {
       '--node-pulse-color': glow,
       position: 'relative',
@@ -450,7 +450,7 @@ function SquareNode({
       color: 'var(--fg-default)'
     }
   }, icon, /*#__PURE__*/React.createElement("span", {
-    className: status === 'listening' ? 'machina-pip-pulse' : undefined,
+    className: status === 'listening' ? 'opencompany-pip-pulse' : undefined,
     style: {
       position: 'absolute',
       top: -4,
@@ -464,7 +464,7 @@ function SquareNode({
     }
   }), trigger ? /*#__PURE__*/React.createElement("span", {
     title: "Trigger \u2014 starts the workflow",
-    className: armed ? 'machina-bolt' : undefined,
+    className: armed ? 'opencompany-bolt' : undefined,
     style: {
       position: 'absolute',
       bottom: -4,
@@ -638,7 +638,7 @@ function StatusBar({
       borderRadius: '50%',
       background: tone.color,
       display: 'inline-block',
-      animation: connection === 'online' ? 'machina-pip-blink 2s ease-in-out infinite' : 'none'
+      animation: connection === 'online' ? 'opencompany-pip-blink 2s ease-in-out infinite' : 'none'
     }
   }), tone.label), sep, /*#__PURE__*/React.createElement("span", null, "WF: ", /*#__PURE__*/React.createElement("span", {
     style: {
@@ -663,7 +663,7 @@ function StatusBar({
     style: {
       fontVariantNumeric: 'tabular-nums'
     }
-  }, timeText)), /*#__PURE__*/React.createElement("style", null, '@keyframes machina-pip-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }'));
+  }, timeText)), /*#__PURE__*/React.createElement("style", null, '@keyframes opencompany-pip-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }'));
 }
 Object.assign(__ds_scope, { StatusBar });
 })(); } catch (e) { __ds_ns.__errors.push({ path: "components/canvas/StatusBar.jsx", error: String((e && e.message) || e) }); }
@@ -1336,7 +1336,7 @@ function Spinner({
     viewBox: "0 0 24 24",
     fill: "none",
     style: {
-      animation: 'machina-spin 0.9s linear infinite'
+      animation: 'opencompany-spin 0.9s linear infinite'
     }
   }, /*#__PURE__*/React.createElement("circle", {
     cx: "12",
@@ -1349,7 +1349,7 @@ function Spinner({
     stroke: color,
     strokeWidth: "3",
     strokeLinecap: "round"
-  })), /*#__PURE__*/React.createElement("style", null, '@keyframes machina-spin { to { transform: rotate(360deg); } }'));
+  })), /*#__PURE__*/React.createElement("style", null, '@keyframes opencompany-spin { to { transform: rotate(360deg); } }'));
 }
 Object.assign(__ds_scope, { Spinner });
 })(); } catch (e) { __ds_ns.__errors.push({ path: "components/feedback/Spinner.jsx", error: String((e && e.message) || e) }); }
@@ -1681,7 +1681,7 @@ function ValidateButton({
     viewBox: "0 0 24 24",
     fill: "none",
     style: {
-      animation: 'machina-spin 0.9s linear infinite'
+      animation: 'opencompany-spin 0.9s linear infinite'
     }
   }, /*#__PURE__*/React.createElement("path", {
     d: "M21 12a9 9 0 0 0-9-9",
@@ -1716,7 +1716,7 @@ function ValidateButton({
     points: "17 21 17 13 7 13 7 21"
   }), /*#__PURE__*/React.createElement("polyline", {
     points: "7 3 7 8 15 8"
-  })), label, /*#__PURE__*/React.createElement("style", null, '@keyframes machina-spin { to { transform: rotate(360deg); } }'));
+  })), label, /*#__PURE__*/React.createElement("style", null, '@keyframes opencompany-spin { to { transform: rotate(360deg); } }'));
 }
 function DeleteButton({
   onClick,
@@ -2352,7 +2352,7 @@ Object.assign(__ds_scope, { Textarea });
 try { (() => {
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 /**
- * Icon — Lucide bridge. MachinaOS uses lucide-react; in this design system
+ * Icon — Lucide bridge. OpenCompany uses lucide-react; in this design system
  * icons render from the lucide UMD bundle. Load it once per page:
  *   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
  * Then <Icon name="Play" size={14} /> — colored via currentColor.
@@ -2931,11 +2931,11 @@ function SettingsRow({
 Object.assign(__ds_scope, { SettingsSection, SettingsRow });
 })(); } catch (e) { __ds_ns.__errors.push({ path: "components/panels/SettingsSection.jsx", error: String((e && e.message) || e) }); }
 
-// ui_kits/machinaos/App.jsx
+// ui_kits/opencompany/App.jsx
 try { (() => {
-// MachinaOS UI kit — app shell wiring all panels together.
-const DS_APP = window.MachinaOSDesignSystem_2559cf;
-const KIT = window.MachinaKit;
+// OpenCompany UI kit — app shell wiring all panels together.
+const DS_APP = window.OpenCompanyDesignSystem_2559cf;
+const KIT = window.OpenCompanyKit;
 const WORKFLOWS = [{
   id: 'wa',
   name: 'WhatsApp Assistant',
@@ -3069,13 +3069,13 @@ function App() {
   }));
 }
 ReactDOM.createRoot(document.getElementById('root')).render(/*#__PURE__*/React.createElement(App, null));
-})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/machinaos/App.jsx", error: String((e && e.message) || e) }); }
+})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/opencompany/App.jsx", error: String((e && e.message) || e) }); }
 
-// ui_kits/machinaos/CanvasView.jsx
+// ui_kits/opencompany/CanvasView.jsx
 try { (() => {
-// MachinaOS UI kit — node canvas: dot grid, dashed edges, square nodes,
+// OpenCompany UI kit — node canvas: dot grid, dashed edges, square nodes,
 // rectangular AI Agent node. Click nodes to select; Start runs the flow.
-const DS_CV = window.MachinaOSDesignSystem_2559cf;
+const DS_CV = window.OpenCompanyDesignSystem_2559cf;
 
 // Rectangular agent node (the larger card-style node from the product).
 function AgentNode({
@@ -3090,7 +3090,7 @@ function AgentNode({
   const color = 'var(--node-agent)';
   return /*#__PURE__*/React.createElement("div", {
     onClick: onClick,
-    className: executing ? 'machina-pulse' : undefined,
+    className: executing ? 'opencompany-pulse' : undefined,
     style: {
       '--node-pulse-color': color,
       position: 'absolute',
@@ -3425,15 +3425,15 @@ function CanvasView({
     })
   }))));
 }
-window.MachinaKit = Object.assign(window.MachinaKit || {}, {
+window.OpenCompanyKit = Object.assign(window.OpenCompanyKit || {}, {
   CanvasView
 });
-})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/machinaos/CanvasView.jsx", error: String((e && e.message) || e) }); }
+})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/opencompany/CanvasView.jsx", error: String((e && e.message) || e) }); }
 
-// ui_kits/machinaos/ConsoleDock.jsx
+// ui_kits/opencompany/ConsoleDock.jsx
 try { (() => {
-// MachinaOS UI kit — multi-tab console dock (Chat / Console / Terminal).
-const DS_CD = window.MachinaOSDesignSystem_2559cf;
+// OpenCompany UI kit — multi-tab console dock (Chat / Console / Terminal).
+const DS_CD = window.OpenCompanyDesignSystem_2559cf;
 const CONSOLE_LINES = [{
   t: '12:01:31',
   tone: 'var(--fg-muted)',
@@ -3584,26 +3584,26 @@ function ConsoleDock({
     style: {
       color: 'var(--success)'
     }
-  }, "$"), " machina start"), /*#__PURE__*/React.createElement("div", {
+  }, "$"), " company start"), /*#__PURE__*/React.createElement("div", {
     style: {
       color: 'var(--fg-muted)',
       marginTop: 4
     }
-  }, "MachinaOS running at http://localhost:3000"), /*#__PURE__*/React.createElement("div", {
+  }, "OpenCompany running at http://localhost:3000"), /*#__PURE__*/React.createElement("div", {
     style: {
       color: 'var(--fg-muted)'
     }
   }, "Temporal \xB7 Python backend \xB7 WhatsApp service \u2014 all up"))) : null);
 }
-window.MachinaKit = Object.assign(window.MachinaKit || {}, {
+window.OpenCompanyKit = Object.assign(window.OpenCompanyKit || {}, {
   ConsoleDock
 });
-})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/machinaos/ConsoleDock.jsx", error: String((e && e.message) || e) }); }
+})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/opencompany/ConsoleDock.jsx", error: String((e && e.message) || e) }); }
 
-// ui_kits/machinaos/Panels.jsx
+// ui_kits/opencompany/Panels.jsx
 try { (() => {
-// MachinaOS UI kit — workflow sidebar (280px) + component palette (320px).
-const DS_PN = window.MachinaOSDesignSystem_2559cf;
+// OpenCompany UI kit — workflow sidebar (280px) + component palette (320px).
+const DS_PN = window.OpenCompanyDesignSystem_2559cf;
 function SidebarPanel({
   workflows,
   currentId,
@@ -3907,18 +3907,18 @@ function PalettePanel({
     onClick: () => onDropNode && onDropNode(it, section)
   }))) : null))));
 }
-window.MachinaKit = Object.assign(window.MachinaKit || {}, {
+window.OpenCompanyKit = Object.assign(window.OpenCompanyKit || {}, {
   SidebarPanel,
   PalettePanel
 });
-})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/machinaos/Panels.jsx", error: String((e && e.message) || e) }); }
+})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/opencompany/Panels.jsx", error: String((e && e.message) || e) }); }
 
-// ui_kits/machinaos/PanelsModals.jsx
+// ui_kits/opencompany/PanelsModals.jsx
 try { (() => {
-// MachinaOS UI kit — Settings, Node Configuration, and Credentials modals.
+// OpenCompany UI kit — Settings, Node Configuration, and Credentials modals.
 // Faithful recreations of SettingsPanel.tsx / ParameterPanel.tsx, composed
 // from the DS panel components.
-const DS_PM = window.MachinaOSDesignSystem_2559cf;
+const DS_PM = window.OpenCompanyDesignSystem_2559cf;
 function SettingsModal({
   open,
   onClose
@@ -4496,18 +4496,18 @@ function CredentialsModal({
     placeholder: "Enter API key..."
   })))));
 }
-window.MachinaKit = Object.assign(window.MachinaKit || {}, {
+window.OpenCompanyKit = Object.assign(window.OpenCompanyKit || {}, {
   SettingsModal,
   NodeConfigModal,
   CredentialsModal
 });
-})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/machinaos/PanelsModals.jsx", error: String((e && e.message) || e) }); }
+})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/opencompany/PanelsModals.jsx", error: String((e && e.message) || e) }); }
 
-// ui_kits/machinaos/Toolbar.jsx
+// ui_kits/opencompany/Toolbar.jsx
 try { (() => {
-// MachinaOS UI kit — top toolbar (48px, bg-panel).
+// OpenCompany UI kit — top toolbar (48px, bg-panel).
 // Composes ActionButton / Button / ModeToggle / Icon from the DS bundle.
-const DS_TB = window.MachinaOSDesignSystem_2559cf;
+const DS_TB = window.OpenCompanyDesignSystem_2559cf;
 function Divider() {
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -4688,10 +4688,10 @@ function Toolbar({
     size: 14
   }))));
 }
-window.MachinaKit = Object.assign(window.MachinaKit || {}, {
+window.OpenCompanyKit = Object.assign(window.OpenCompanyKit || {}, {
   Toolbar
 });
-})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/machinaos/Toolbar.jsx", error: String((e && e.message) || e) }); }
+})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/opencompany/Toolbar.jsx", error: String((e && e.message) || e) }); }
 
 __ds_ns.ActionButton = __ds_scope.ActionButton;
 

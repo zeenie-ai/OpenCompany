@@ -1,6 +1,6 @@
 """RLM service constants."""
 
-# MachinaOS provider -> RLM backend mapping
+# OpenCompany provider -> RLM backend mapping
 PROVIDER_TO_BACKEND = {
     "openai": "openai",
     "anthropic": "anthropic",

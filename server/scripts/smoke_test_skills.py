@@ -15,9 +15,9 @@ Run from ``server/``:
     .venv/Scripts/python.exe scripts/smoke_test_skills.py
 
 Requires:
-  - Claude binary at ``data/claude-machina/npm/...`` (lazy-installed
+  - Claude binary under ``<DATA_DIR>/packages/...`` (lazy-installed
     by ``nodes.agent.claude_code_agent._oauth.claude_binary_path``).
-  - Claude auth (``data/claude-machina/`` is the project-local
+  - Claude auth (``<DATA_DIR>/claude/`` is the isolated
     CLAUDE_CONFIG_DIR; user must have logged in once).
   - No active workflow consuming pool slot ``smoke-test-memory``.
 
@@ -40,7 +40,7 @@ async def main() -> int:
     sys.path.insert(0, str(server_dir))
 
     from services.cli_agent.types import ClaudeTaskSpec
-    from nodes.agent.claude_code_agent._oauth import MACHINA_CLAUDE_DIR
+    from nodes.agent.claude_code_agent._oauth import OPENCOMPANY_CLAUDE_DIR
     from nodes.agent.claude_code_agent._pool import get_session_pool
     from nodes.agent.claude_code_agent._skills import materialise_skills
 
@@ -49,7 +49,7 @@ async def main() -> int:
     workflow_id = "smoke-test-wf"
     skill_under_test = "humanify-skill"
 
-    with tempfile.TemporaryDirectory(prefix="machina_skills_smoke_") as tmp:
+    with tempfile.TemporaryDirectory(prefix="opencompany_skills_smoke_") as tmp:
         workspace = Path(tmp).resolve()
         print(f"[smoke] workspace = {workspace}")
         print(f"[smoke] repo_root = {repo_root}")
@@ -94,8 +94,10 @@ async def main() -> int:
         # `cwd=repo_root` for memory-bound runs.
         pool = get_session_pool()
         env = {**os.environ, "PYTHONUNBUFFERED": "1"}
-        env["CLAUDE_CONFIG_DIR"] = str(MACHINA_CLAUDE_DIR)
-        env["MACHINA_PARENT_RUN_ID"] = f"{workflow_id}:{memory_node_id}:smoke"
+        env["CLAUDE_CONFIG_DIR"] = str(OPENCOMPANY_CLAUDE_DIR)
+        parent_run_id = f"{workflow_id}:{memory_node_id}:smoke"
+        env["OPENCOMPANY_PARENT_RUN_ID"] = parent_run_id
+        env["MACHINA_PARENT_RUN_ID"] = parent_run_id
 
         # Make sure no stale pool entry. Idempotent.
         await pool.terminate(memory_node_id)

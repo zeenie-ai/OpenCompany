@@ -26,7 +26,7 @@ OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 CACHE_FILE = Path(__file__).parent.parent / "config" / "model_registry.json"
 CACHE_MAX_AGE = timedelta(hours=24)
 
-# Provider normalization: OpenRouter provider -> MachinaOs provider
+# Provider normalization: OpenRouter provider -> OpenCompany provider
 PROVIDER_MAP = {
     "google": "gemini",
     "meta-llama": "meta",
@@ -73,7 +73,7 @@ class ModelInfo:
 
     id: str  # "openai/gpt-5.2"
     name: str  # "OpenAI: GPT-5.2"
-    provider: str  # "openai" (MachinaOs-normalized)
+    provider: str  # "openai" (OpenCompany-normalized)
     local_id: str  # "gpt-5.2"
     context_length: int = 128000
     max_output_tokens: int = 4096

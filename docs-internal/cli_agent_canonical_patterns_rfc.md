@@ -4,20 +4,20 @@
 |---|---|
 | Status | Draft (research, revision 2) |
 | Date | 2026-05-07 |
-| Scope | `services/cli_agent` framework — Claude Code, Codex, Gemini-CLI agents spawned by MachinaOs |
+| Scope | `services/cli_agent` framework — Claude Code, Codex, Gemini-CLI agents spawned by OpenCompany |
 | Companion code | [`server/services/cli_agent/`](../server/services/cli_agent/), [`server/nodes/agent/claude_code_agent/`](../server/nodes/agent/claude_code_agent/) |
 | Companion docs | [cli_agent_framework.md](./cli_agent_framework.md), [claude_code_agent_architecture.md](./claude_code_agent_architecture.md) |
 
 ## Abstract
 
-Host platforms that spawn `claude -p` from a backend (MachinaOs, Cline,
+Host platforms that spawn `claude -p` from a backend (OpenCompany, Cline,
 Continue, Cursor as a *client* of MCP) face a small number of well-defined
 integration choices. This RFC consolidates the **official Claude Code
 specification** ([code.claude.com/docs/en/tools-reference](https://code.claude.com/docs/en/tools-reference),
 [code.claude.com/docs/en/mcp](https://code.claude.com/docs/en/mcp),
 [code.claude.com/docs/en/skills](https://code.claude.com/docs/en/skills),
 [code.claude.com/docs/en/cli-reference](https://code.claude.com/docs/en/cli-reference))
-and quotes verbatim. It then audits MachinaOs's current
+and quotes verbatim. It then audits OpenCompany's current
 `services/cli_agent` framework against the spec, with file:line evidence,
 and proposes the minimum set of changes to align.
 
@@ -32,8 +32,8 @@ registers the connected workflow tools, claude correctly receives the tool
 list (`Processing request of type ListToolsRequest`), and the bearer-token
 auth is correctly validated. But the agent **reaches for built-in
 `WebSearch` first, gets denied, gives up** — never invoking the connected
-`mcp__machinaos__perplexitySearch` even though it's in the registry. The
-question is *why*, and whether MachinaOs's framework follows the documented
+`mcp__opencompany__perplexitySearch` even though it's in the registry. The
+question is *why*, and whether OpenCompany's framework follows the documented
 patterns. This RFC is the survey that answers that.
 
 ## 2. The official Claude Code specification
@@ -89,7 +89,7 @@ Discovery paths ([skills#where-skills-live](https://code.claude.com/docs/en/skil
 | Project | `.claude/skills/<skill-name>/SKILL.md` |
 | Plugin | `<plugin>/skills/<skill-name>/SKILL.md` |
 
-The "project" entry is **relative to claude's cwd**. When MachinaOs spawns
+The "project" entry is **relative to claude's cwd**. When OpenCompany spawns
 `claude -p` with `cwd=<worktree>`, the worktree IS the project, so writing
 `<worktree>/.claude/skills/<name>/SKILL.md` makes the skill auto-load.
 
@@ -243,8 +243,8 @@ Across the official documentation:
 > `<CLAUDE_CONFIG_DIR>/projects/<project_key>/<session_id>.jsonl` where
 > `project_key = re.sub(r"[^a-zA-Z0-9.-]", "-", str(cwd))`. Verified
 > against on-disk dir names: a worktree path of
-> `D:\startup\projects\MachinaOs\server\...\wt_t_af48d0a7` produces
-> `D--startup-projects-MachinaOs-server-...-wt-t-af48d0a7`.
+> `D:\startup\projects\OpenCompany\server\...\wt_t_af48d0a7` produces
+> `D--startup-projects-OpenCompany-server-...-wt-t-af48d0a7`.
 >
 > Two consequences:
 >
@@ -270,7 +270,7 @@ Across the official documentation:
 > `last_session_id` so the next run falls through to `--session-id
 > <UUID5>` and self-heals.
 
-## 4. MachinaOs `cli_agent` alignment audit
+## 4. OpenCompany `cli_agent` alignment audit
 
 File:line evidence from a focused read of `services/cli_agent/`:
 
@@ -300,7 +300,7 @@ stream-json`, `--verbose`, `--ide`, `--model`, `--permission-mode`,
 ```json
 {
   "mcpServers": {
-    "machinaos": {
+    "opencompany": {
       "type": "http",
       "url": "<mcp_endpoint_url>",
       "headers": { "Authorization": "Bearer <mcp_bearer_token>" },
@@ -312,7 +312,7 @@ stream-json`, `--verbose`, `--ide`, `--model`, `--permission-mode`,
 
 **Closed (I-4).** Per §2.4, with `ENABLE_TOOL_SEARCH` unset (the default
 for spawned subprocesses), the agent would otherwise **defer all
-`mcp__machinaos__*` tools** and only load them via `ToolSearch`-driven
+`mcp__opencompany__*` tools** and only load them via `ToolSearch`-driven
 discovery — which the spawned agent doesn't always call. The
 `"alwaysLoad": true` entry (present in `interactive_argv`'s emitted
 `--mcp-config`) forces the tools into context at session start; startup
@@ -323,13 +323,13 @@ blocks ≤5s waiting for connection.
 [`claude_code_agent/_provider.py::interactive_argv`](../server/nodes/agent/claude_code_agent/_provider.py):
 
 ```
-mcp__machinaos__<each connected node_type>,
+mcp__opencompany__<each connected node_type>,
 Skill                              # only when >=1 skill is wired
-mcp__machinaos__getWorkspaceFiles,
-mcp__machinaos__listSkills,
-mcp__machinaos__getSkill,
-mcp__machinaos__getCredential,
-mcp__machinaos__broadcastLog
+mcp__opencompany__getWorkspaceFiles,
+mcp__opencompany__listSkills,
+mcp__opencompany__getSkill,
+mcp__opencompany__getCredential,
+mcp__opencompany__broadcastLog
 ```
 
 **Post-cutover: strict MCP-only allowlist (gated by `--permission-mode
@@ -381,7 +381,7 @@ path today.
 
 5 built-in: `getWorkspaceFiles`, `listSkills`, `getSkill`,
 `getCredential`, `broadcastLog`.
-Plus dynamic per-batch: one `mcp__machinaos__<node_type>` per connected
+Plus dynamic per-batch: one `mcp__opencompany__<node_type>` per connected
 workflow tool (refcount-tracked, schema inferred from plugin's Pydantic
 `Params` field-for-field).
 
@@ -393,9 +393,9 @@ the agent never calls them.
 ### 4.6 Spawn env
 
 [`session.py`](../server/services/cli_agent/session.py):
-`PYTHONUNBUFFERED=1`, `CLAUDE_CONFIG_DIR=<MACHINA_CLAUDE_DIR>` (claude only),
+`PYTHONUNBUFFERED=1`, `CLAUDE_CONFIG_DIR=<OPENCOMPANY_CLAUDE_DIR>` (claude only),
 `<provider.ide_lock_env_var>=<lockfile_path>`,
-`MACHINA_PARENT_RUN_ID=<workflow_id>:<node_id>:<token[:8]>`.
+`OPENCOMPANY_PARENT_RUN_ID=<workflow_id>:<node_id>:<token[:8]>`.
 
 **Spec consideration.** Setting `ENABLE_TOOL_SEARCH=false` here would
 disable tool-search deferral globally — alternative to per-server
@@ -424,9 +424,9 @@ sample names matched byte-for-byte:
 
 | cwd | project_key |
 |---|---|
-| `D:\startup\projects\MachinaOs` | `D--startup-projects-MachinaOs` |
-| `D:\startup\projects\MachinaOs\server` | `D--startup-projects-MachinaOs-server` |
-| `D:\startup\projects\MachinaOs\server\...\wt_t_af48d0a7` | `D--startup-projects-MachinaOs-server-...-wt-t-af48d0a7` |
+| `D:\startup\projects\OpenCompany` | `D--startup-projects-OpenCompany` |
+| `D:\startup\projects\OpenCompany\server` | `D--startup-projects-OpenCompany-server` |
+| `D:\startup\projects\OpenCompany\server\...\wt_t_af48d0a7` | `D--startup-projects-OpenCompany-server-...-wt-t-af48d0a7` |
 
 **Failure-mode evidence captured during dev** (log fragments):
 
@@ -482,17 +482,17 @@ documented project-instruction surface.
 
 | Invariant | Status | Action |
 |---|---|---|
-| **I-1** Skills as files | **DONE.** [`claude_code_agent/_skills.py::materialise_skills`](../server/nodes/agent/claude_code_agent/_skills.py) writes connected skills to `<cwd>/.claude/skills/<name>/`, invoked from both the pool spawn ([`_pool.py`](../server/nodes/agent/claude_code_agent/_pool.py)) and the non-pool `session.py::_pre_spawn` (via the `get_skill_materialiser` registry in [`services/cli_agent/factory.py`](../server/services/cli_agent/factory.py)). `mcp__machinaos__listSkills` / `getSkill` retained as a transitional fallback. | Drop `getSkill`/`listSkills` MCP tools after one release. |
+| **I-1** Skills as files | **DONE.** [`claude_code_agent/_skills.py::materialise_skills`](../server/nodes/agent/claude_code_agent/_skills.py) writes connected skills to `<cwd>/.claude/skills/<name>/`, invoked from both the pool spawn ([`_pool.py`](../server/nodes/agent/claude_code_agent/_pool.py)) and the non-pool `session.py::_pre_spawn` (via the `get_skill_materialiser` registry in [`services/cli_agent/factory.py`](../server/services/cli_agent/factory.py)). `mcp__opencompany__listSkills` / `getSkill` retained as a transitional fallback. | Drop `getSkill`/`listSkills` MCP tools after one release. |
 | **I-2** MCP transport | **Aligned.** Streamable-HTTP via `--mcp-config`. | None. |
 | **I-3** `list_changed` notification | **DONE (`b40011e`).** [`workflow_tools._schedule_list_changed_notify`](../server/services/cli_agent/workflow_tools.py) fires after each `add_tool` / `remove_tool` since FastMCP doesn't emit it automatically. | Optional: unit test asserting `session.send_tool_list_changed` is called. |
-| **I-4** Tool-search deferral | **DONE.** `"alwaysLoad": true` set on the `machinaos` server entry in [`claude_code_agent/_provider.py::interactive_argv`](../server/nodes/agent/claude_code_agent/_provider.py). | None. |
-| **I-5** Visible-tool filtering | **Gap.** All 5 built-in MachinaOs MCP tools (including `getCredential`, `broadcastLog`) are visible to the model. | Mark internal-only tools `_meta["anthropic/alwaysLoad"]: false` or filter via FastMCP middleware. **Defer** — not breaking today. |
+| **I-4** Tool-search deferral | **DONE.** `"alwaysLoad": true` set on the `opencompany` server entry in [`claude_code_agent/_provider.py::interactive_argv`](../server/nodes/agent/claude_code_agent/_provider.py). | None. |
+| **I-5** Visible-tool filtering | **Gap.** All 5 built-in OpenCompany MCP tools (including `getCredential`, `broadcastLog`) are visible to the model. | Mark internal-only tools `_meta["anthropic/alwaysLoad"]: false` or filter via FastMCP middleware. **Defer** — not breaking today. |
 | **I-6** Native session continuity | **DONE.** [`session.py`](../server/services/cli_agent/session.py) keeps a stable cwd for memory-bound spawns; the warm-subprocess pool at [`claude_code_agent/_pool.py`](../server/nodes/agent/claude_code_agent/_pool.py) preserves the session across turns. [`claude_code_agent/__init__.py`](../server/nodes/agent/claude_code_agent/__init__.py) sets `continue_session = bool(memory_data)` → argv emits `--continue` (first cold spawn) with `--resume <UUID>` reserved for crash recovery. [`service.py:_persist_memory`](../server/services/cli_agent/service.py) appends turns to `memory_content`, saves `last_session_id` (display-only), broadcasts `node_parameters_updated`, and auto-clears stale UUIDs via `_clear_stale_session_id`. See §4.8. | Markdown `memory_content` remains the UI mirror, not the resume channel. |
-| **System-prompt directive** (Cursor / `CLAUDE.md` pattern) | **DONE (`b40011e`).** Second `--append-system-prompt` listing connected `mcp__machinaos__*` tools. | None. |
+| **System-prompt directive** (Cursor / `CLAUDE.md` pattern) | **DONE (`b40011e`).** Second `--append-system-prompt` listing connected `mcp__opencompany__*` tools. | None. |
 | `--allowedTools` strict MCP-only allowlist | **DONE (superseded R3).** Built-in escape hatches (`Read`/`Edit`/`Bash`/`Glob`/`Grep`/`Write`/`WebSearch`/`WebFetch`) are NOT in the default allowlist; `Skill` is added conditionally (only when a skill is wired). `default_allowed_tools: ""` in [`ai_cli_providers.json`](../server/config/ai_cli_providers.json); allowlist assembled in [`_provider.py::interactive_argv`](../server/nodes/agent/claude_code_agent/_provider.py). Gated by `--permission-mode dontAsk`. | None. |
 | Composio-style server-side credentials | **Aligned.** `getCredential` allowlist + `auth_service.get_api_key`. | None. |
 | Hermes-style `provider_data` envelope | **Aligned.** [`protocol.py:SessionResult.provider_data`](../server/services/cli_agent/protocol.py). | None. |
-| Composio-style parent-run-id | **Aligned.** `MACHINA_PARENT_RUN_ID` env var. | None. |
+| Composio-style parent-run-id | **Aligned.** `OPENCOMPANY_PARENT_RUN_ID` env var. | None. |
 
 ## 6. Recommendations (mapped to the spec)
 
@@ -503,7 +503,7 @@ For memory-bound runs the cwd is `repo_root` so skills land at
 `<repo_root>/.claude/skills/`; for non-memory runs they go under the
 per-task worktree. MCP `listSkills` / `getSkill` retained as a fallback.
 
-**R2 (DONE in `b40011e`). `"alwaysLoad": true` set on the `machinaos`
+**R2 (DONE in `b40011e`). `"alwaysLoad": true` set on the `opencompany`
 entry in `--mcp-config` (Closes I-4).** Per §2.4: *"…also blocks startup
 until that server connects (5s cap)."* The 5s wait is acceptable — the
 FastMCP server is already up before spawn.
@@ -514,7 +514,7 @@ The current design instead ships a strict **MCP-only** allowlist:
 `default_allowed_tools: ""` in
 [`ai_cli_providers.json`](../server/config/ai_cli_providers.json), and
 [`_provider.py::interactive_argv`](../server/nodes/agent/claude_code_agent/_provider.py)
-assembles `mcp__machinaos__<node_type>` per wired tool + the 5 infra MCP
+assembles `mcp__opencompany__<node_type>` per wired tool + the 5 infra MCP
 tools + the built-in `Skill` (conditionally, when a skill is wired),
 gated by `--permission-mode dontAsk`. `WebSearch`/`WebFetch`/`Bash`/etc.
 are intentionally excluded — equivalent capability is wired explicitly
@@ -523,7 +523,7 @@ permission-free.
 
 **R4 (DONE in `b40011e`). System-prompt directive when MCP tools are
 wired (the `CLAUDE.md` / Cursor-rules pattern).** Second
-`--append-system-prompt` listing connected `mcp__machinaos__*` tools.
+`--append-system-prompt` listing connected `mcp__opencompany__*` tools.
 
 **R5 (followup).** Filter `getCredential` and `broadcastLog` from the
 model-visible tool list — they're host-internal RPC, the model has no
@@ -569,7 +569,7 @@ runs (Closes I-6).** Three coupled mechanisms:
    Post-commit `7c9e873`, all three emission sites (Claude CLI
    `_persist_memory`, parameter-panel save, F4.B AgentWorkflow
    per-turn) wrap [`WorkflowEvent.node_parameters_updated`](../server/services/events/envelope.py)
-   (CloudEvents v1.0, `type="com.machinaos.node.parameters.updated"`)
+   (CloudEvents v1.0, `type="com.opencompany.node.parameters.updated"`)
    via the shared
    [`StatusBroadcaster.broadcast_node_parameters_updated`](../server/services/status_broadcaster.py)
    wrapper. `data.source` (`"user"` / `"cli"` / `"agent"`) marks the
@@ -632,7 +632,7 @@ claude's on-disk JSONL.
   always-load servers per the spec.
 - **`ENABLE_TOOL_SEARCH` model gating** — Sonnet 4 / Opus 4 and later
   only. Haiku models have no tool search; with Haiku, all MCP tools are
-  loaded upfront regardless. MachinaOs default model
+  loaded upfront regardless. OpenCompany default model
   (`claude-sonnet-4-6`) is in scope; Haiku users get implicit
   always-load behaviour.
 - **`workspace` server name reserved** — verbatim from the spec. Don't

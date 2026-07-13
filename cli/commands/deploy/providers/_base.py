@@ -1,4 +1,4 @@
-"""The provider-CLI adapter contract (Stage 1 of ``machina deploy``)."""
+"""The provider-CLI adapter contract (Stage 1 of ``company deploy``)."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Shared state for the ``machina daemon`` verbs.
+"""Shared state for the ``company daemon`` verbs.
 
 PID-file location, detached-spawn kwargs, and the ``psutil``-backed
 tree-kill helper that ``start`` / ``stop`` / ``status`` / ``restart``
@@ -19,7 +19,8 @@ import psutil
 from cli.platform_ import IS_WINDOWS, user_data_dir
 
 
-_PID_FILENAME = "machina-backend.pid"
+_PID_FILENAME = "opencompany-backend.pid"
+_LEGACY_PID_FILENAME = "machina-backend.pid"
 _LOG_FILENAME = "backend.log"
 
 
@@ -31,6 +32,11 @@ def pid_dir() -> Path:
 def pid_file() -> Path:
     """Path to the daemon's PID file."""
     return pid_dir() / _PID_FILENAME
+
+
+def legacy_pid_file() -> Path:
+    """Pre-rebrand PID path, read and cleared for upgrade compatibility."""
+    return pid_dir() / _LEGACY_PID_FILENAME
 
 
 def log_file() -> Path:
@@ -58,14 +64,16 @@ def detached_kwargs() -> dict:
 def read_pid() -> int | None:
     """Return the live PID from the PID file, or ``None`` if absent /
     corrupt / process no longer exists."""
-    pf = pid_file()
-    if not pf.exists():
-        return None
-    try:
-        pid = int(pf.read_text().strip())
-    except (ValueError, OSError):
-        return None
-    return pid if psutil.pid_exists(pid) else None
+    for pf in (pid_file(), legacy_pid_file()):
+        if not pf.exists():
+            continue
+        try:
+            pid = int(pf.read_text().strip())
+        except (ValueError, OSError):
+            continue
+        if psutil.pid_exists(pid):
+            return pid
+    return None
 
 
 def kill_tree(pid: int) -> None:

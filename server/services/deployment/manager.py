@@ -624,7 +624,7 @@ class DeploymentManager:
         ``None`` if the Temporal client isn't connected (caller falls
         through to the legacy collector/processor path).
 
-        Idempotent: re-deploying the same MachinaOs workflow re-runs
+        Idempotent: re-deploying the same OpenCompany workflow re-runs
         this with the same deterministic id; Temporal returns the
         existing handle via ``WorkflowIDConflictPolicy.USE_EXISTING``
         instead of erroring. Search Attributes provide the registry

@@ -1,9 +1,9 @@
 <img width="1584" height="672" alt="image" src="https://github.com/user-attachments/assets/cebd0198-4c09-4757-9407-a7ad79a7d71e" />
 
 
-# MachinaOS
+# OpenCompany
 
-<a href="https://www.npmjs.com/package/machinaos" target="_blank"><img src="https://img.shields.io/npm/v/machinaos.svg" alt="npm version"></a>
+<a href="https://www.npmjs.com/package/opencompany" target="_blank"><img src="https://img.shields.io/npm/v/opencompany.svg" alt="npm version"></a>
 <a href="https://opensource.org/licenses/MIT" target="_blank"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
 <a href="https://discord.gg/c9pCJ7d8Ce" target="_blank"><img src="https://img.shields.io/discord/1455977012308086895?logo=discord&logoColor=white&label=Discord" alt="Discord"></a>
 <a href="https://deepwiki.com/zeenie-ai/MachinaOS" target="_blank"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
@@ -17,19 +17,24 @@ No code required. No subscription. No usage limits. Bring your own API keys (or 
 **Prerequisites:** Node.js 22+, Python 3.12+
 
 ```bash
-npm install -g machinaos
-machina start
+npm install -g opencompany
+company start
 ```
 
 Open http://localhost:3000 and click **Credentials** to connect your first AI provider.
+
+Upgrading from MachinaOS? Existing `~/.machina` and checkout-local `.machina`
+state is detected when the new `.opencompany` location does not yet exist, so
+databases and deployment state are not stranded. The `machina` command remains
+available as a deprecated legacy alias; new scripts should use `company`.
 
 <details>
 <summary><b>Run from source (for contributors)</b></summary>
 
 ```bash
 npm install -g pnpm
-git clone https://github.com/zeenie-ai/MachinaOS.git
-cd MachinaOS
+git clone https://github.com/zeenie-ai/MachinaOS.git OpenCompany
+cd OpenCompany
 pnpm run build
 pnpm run dev
 ```
@@ -38,7 +43,7 @@ The `dev` task starts the Python backend, Vite client, WhatsApp service, and Tem
 
 </details>
 
-## Quick Hello World Setup for MachinaOS ↓
+## Quick Hello World Setup for OpenCompany ↓
 https://github.com/user-attachments/assets/a5a5583f-bb5f-4d27-a387-8522c556e89e
 
 
@@ -52,15 +57,15 @@ https://github.com/user-attachments/assets/5798fe61-8d26-4d3a-90aa-189bf4eec79f
 
 ## How It Works
 
-[![How MachinaOS Works](docs/diagrams/how-it-works.svg)](https://raw.githubusercontent.com/zeenie-ai/MachinaOS/main/docs/diagrams/how-it-works.svg)
+[![How OpenCompany Works](docs/diagrams/how-it-works.svg)](https://raw.githubusercontent.com/zeenie-ai/MachinaOS/main/docs/diagrams/how-it-works.svg)
 
 Pick nodes from the palette, drag them onto a canvas, connect them with lines, give your AI agent some memory and skills, and hit Play. Or **deploy** the workflow so it runs forever in the background — waiting for emails, responding to messages, checking in on a schedule, doing the work you'd rather not.
 
 ## Three Example Workflows For Reference.
 
-[![Default workflows that ship with MachinaOS](docs/diagrams/default-workflows.svg)](https://raw.githubusercontent.com/zeenie-ai/MachinaOS/main/docs/diagrams/default-workflows.svg)
+[![Default workflows that ship with OpenCompany](docs/diagrams/default-workflows.svg)](https://raw.githubusercontent.com/zeenie-ai/MachinaOS/main/docs/diagrams/default-workflows.svg)
 
-The first time you open MachinaOS, three example workflows load automatically. Open them on the canvas to see exactly how the pieces fit together, then edit any node and save your own version.
+The first time you open OpenCompany, three example workflows load automatically. Open them on the canvas to see exactly how the pieces fit together, then edit any node and save your own version.
 
 ## What You Can Build
 
@@ -167,8 +172,8 @@ Every LLM call and API request is tracked with USD cost. See per-provider spend 
 
 ## Quick Setup Tour
 
-1. **Install** with `npm install -g machinaos` (or run from source)
-2. **Start** with `machina start` — opens at http://localhost:3000
+1. **Install** with `npm install -g opencompany` (or run from source)
+2. **Start** with `company start` — opens at http://localhost:3000
 3. **Connect a provider** — click the **Credentials** button, paste an API key or click through OAuth
 4. **Drag a node** from the left palette onto the canvas
 5. **Connect** outputs to inputs by dragging between handles

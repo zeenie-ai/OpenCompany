@@ -1,4 +1,4 @@
-"""ProxyForge - Universal proxy management service for MachinaOs.
+"""ProxyForge - Universal proxy management service for OpenCompany.
 
 Routes HTTP requests through residential proxy providers with smart rotation,
 scoring, geo-targeting, sticky sessions, failover, and cost tracking.

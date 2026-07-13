@@ -258,8 +258,8 @@
 :root[data-theme="atomic"] .modal-head { border-bottom: 3px solid var(--slate); background: var(--accent); color: var(--bg-elevated); }
 :root[data-theme="atomic"] .modal-title { font-family: var(--font-display); color: var(--bg-elevated); letter-spacing: 0.10em; }
 /* Parameter panel — follow the design system's PanelModal surface
- * hierarchy ("MachinaOS Design System": components/panels/PanelModal.jsx
- * + ui_kits/machinaos/PanelsModals.jsx NodeConfigModal): card body on
+ * hierarchy ("OpenCompany Design System": components/panels/PanelModal.jsx
+ * + ui_kits/opencompany/PanelsModals.jsx NodeConfigModal): card body on
  * --bg-app, header on --bg-panel one step above it with --fg-default
  * text, column heads on --bg-panel, splits on --border-default. The
  * generic atomic modal overrides (white .modal card + solid teal

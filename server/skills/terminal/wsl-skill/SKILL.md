@@ -3,7 +3,7 @@ name: wsl-skill
 description: Windows Subsystem for Linux (WSL) commands for running Linux tools on Windows.
 allowed-tools: "process_manager shell"
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: terminal
 

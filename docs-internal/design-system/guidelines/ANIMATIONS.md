@@ -1,4 +1,4 @@
-# MachinaOS animation system
+# OpenCompany animation system
 
 Motion is a **first-class part of each theme's identity**, not a global constant. Every theme declares the same six-token motion contract; the personality lives in the **easing function**, not just duration. Live demo: `guidelines/animations-all-themes.html`. Tokens + keyframes: `tokens/animations.css`.
 
@@ -36,7 +36,7 @@ Motion is a **first-class part of each theme's identity**, not a global constant
 - **`ren-pulse-exec`** — candle-flame: never fully dark, gentle ease-in-out swell (Renaissance).
 - **`cyber-pulse-exec` / `cyber-flicker` / `cyber-roll` / `cyber-blink` / `cyber-glitch`** — hard digital strobe via `steps(2)`, whole-frame CRT flicker, rolling scanline band, LED blink, hover text-shear (Cyber).
 - **`surv-pulse-exec` / `surv-blink`** — REC-red glow strobe + status-LED blink (Surveillance).
-- **`machina-pip-blink`** — generic status-pip blink. **`machina-spin`** — spinner.
+- **`opencompany-pip-blink`** — generic status-pip blink. **`opencompany-spin`** — spinner.
 
 ## Interaction motion (all themes)
 
@@ -49,18 +49,18 @@ Motion is a **first-class part of each theme's identity**, not a global constant
 
 ```html
 <html data-theme="cyber">           <!-- picks the whole motion contract -->
-<div class="machina-pulse node">…</div>  <!-- executing node: reads --pulse-keyframe + color -->
-<div class="machina-crt machina-scanline">…</div>  <!-- app frame ambient (cyber/surveillance) -->
+<div class="opencompany-pulse node">…</div>  <!-- executing node: reads --pulse-keyframe + color -->
+<div class="opencompany-crt opencompany-scanline">…</div>  <!-- app frame ambient (cyber/surveillance) -->
 ```
 
-Set `--node-pulse-color` on (or above) the pulsing element. `.machina-pulse` automatically uses the active theme's keyframe, duration and timing. All loops stop under `prefers-reduced-motion: reduce`.
+Set `--node-pulse-color` on (or above) the pulsing element. `.opencompany-pulse` automatically uses the active theme's keyframe, duration and timing. All loops stop under `prefers-reduced-motion: reduce`.
 
 ## Trigger nodes — the "listening / armed" state
 
 Triggers (`whatsappReceive`, `cronScheduler`, `webhookTrigger`, `start`) animate differently from regular nodes:
 
 - **No input handle**, and a **lightning ⚡ badge** (bottom-left, gold) marking them as workflow entry points.
-- A **continuous "listening" pulse** (`trigger-listening`, ~2.4s, gentle ease-in-out) that runs the whole time the trigger is *armed and waiting for events* — not just during execution. This is the key distinction: a normal node is dark until it runs and pulses once; a trigger breathes continuously while listening. The armed pip blinks (`machina-pip-pulse`).
+- A **continuous "listening" pulse** (`trigger-listening`, ~2.4s, gentle ease-in-out) that runs the whole time the trigger is *armed and waiting for events* — not just during execution. This is the key distinction: a normal node is dark until it runs and pulses once; a trigger breathes continuously while listening. The armed pip blinks (`opencompany-pip-pulse`).
 - A **one-shot `trigger-fire` flash** the moment an event arrives, before it hands off downstream.
 - WhatsApp triggers fold connection state into the pip: connected → success, pairing → waiting (pulses), disconnected → error.
 

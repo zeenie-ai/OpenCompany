@@ -152,17 +152,24 @@ async def lifespan(app: FastAPI):
     # login gate). Idempotent: only creates the owner when no user exists,
     # so restarts and in-app password changes are never clobbered. Reuses
     # the built-in auth (UserAuthService.register -> bcrypt User row) — no
-    # new auth code. Set MACHINA_OWNER_EMAIL + MACHINA_OWNER_PASSWORD
-    # (password >= 8 chars) via Secret Manager to define the secret login.
+    # new auth code. Set OPENCOMPANY_OWNER_EMAIL +
+    # OPENCOMPANY_OWNER_PASSWORD (password >= 8 chars) via Secret Manager.
+    # MACHINA_OWNER_* remains a read-only fallback for existing deployments.
     import os as _seed_os
 
-    _owner_email = _seed_os.environ.get("MACHINA_OWNER_EMAIL", "").strip()
-    _owner_password = _seed_os.environ.get("MACHINA_OWNER_PASSWORD", "")
+    _owner_email = _seed_os.environ.get("OPENCOMPANY_OWNER_EMAIL", _seed_os.environ.get("MACHINA_OWNER_EMAIL", "")).strip()
+    _owner_password = _seed_os.environ.get(
+        "OPENCOMPANY_OWNER_PASSWORD",
+        _seed_os.environ.get("MACHINA_OWNER_PASSWORD", ""),
+    )
     if _owner_email and _owner_password:
         try:
             _user_auth = container.user_auth_service()
             if await _user_auth.get_user_count() == 0:
-                _owner_name = _seed_os.environ.get("MACHINA_OWNER_NAME", "Owner")
+                _owner_name = _seed_os.environ.get(
+                    "OPENCOMPANY_OWNER_NAME",
+                    _seed_os.environ.get("MACHINA_OWNER_NAME", "Owner"),
+                )
                 _seeded, _seed_err = await _user_auth.register(_owner_email, _owner_password, _owner_name)
                 if _seeded is not None:
                     logger.info("Seeded owner account from environment", email=_owner_email)
@@ -324,7 +331,7 @@ async def lifespan(app: FastAPI):
                         # against Temporal Visibility. History stays in
                         # the SQLite db; UI shows workflows as
                         # ``Terminated`` rather than continuing to run
-                        # invisibly to MachinaOS. Toggle off via
+                        # invisibly to OpenCompany. Toggle off via
                         # TEMPORAL_TERMINATE_RUNNING_ON_STARTUP=false.
                         if settings.temporal_terminate_running_on_startup:
                             try:
@@ -511,9 +518,9 @@ async def lifespan(app: FastAPI):
 
 # Create FastAPI app
 app = FastAPI(
-    title="React Flow Python Services",
+    title="OpenCompany API",
     version="3.0.0",
-    description="Modern workflow automation backend with AI and Maps integration",
+    description="OpenCompany workflow automation backend",
     lifespan=lifespan,
 )
 
@@ -597,7 +604,7 @@ for _plugin_router in _get_plugin_routers():
 #
 # Spawned Claude Code / Codex CLI sessions auto-discover this server via
 # a per-batch lockfile (~/.claude/ide/<pid>.lock) and call tools like
-# mcp__machina__getSkill / getCredential / broadcastLog over MCP-over-HTTP.
+# mcp__opencompany__getSkill / getCredential / broadcastLog over MCP-over-HTTP.
 # Bearer-token auth scoped per batch (see services/cli_agent/mcp_server.py).
 try:
     from services.cli_agent.mcp_server import get_mcp_app as _get_cli_mcp_app
@@ -621,7 +628,7 @@ async def _sweep_cli_lockfiles_on_startup() -> None:
         # Ask the provider class for its lockfile dir rather than the
         # raw JSON config — the provider is the source of truth (e.g.
         # the claude provider derives its dir from
-        # ``MACHINA_CLAUDE_DIR/ide`` so it stays in sync with the
+        # ``OPENCOMPANY_CLAUDE_DIR/ide`` so it stays in sync with the
         # ``CLAUDE_CONFIG_DIR`` env var we set on spawn). Reading from
         # the config dict would miss provider-class-computed paths.
         for name in list_provider_names():
@@ -694,7 +701,7 @@ async def health_check():
 # the WebSocket, AND the built React client on a single port ($PORT). The
 # CLI dev/start path serves the client from a separate node static server
 # (scripts/serve-client.js), so this block is gated on the dist existing +
-# SERVE_STATIC_CLIENT so local ``machina dev`` is unaffected.
+# SERVE_STATIC_CLIENT so local ``company dev`` is unaffected.
 #
 # Registered LAST so every real API / WS / mounted route above wins; this
 # only catches otherwise-unmatched GET paths and returns the SPA shell for

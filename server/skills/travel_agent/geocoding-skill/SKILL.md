@@ -3,7 +3,7 @@ name: geocoding-skill
 description: Convert addresses to coordinates (geocoding) or coordinates to addresses (reverse geocoding) using Google Maps API.
 allowed-tools: "gmaps_locations"
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: location
 

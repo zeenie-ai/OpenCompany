@@ -1,14 +1,14 @@
 # Encrypted Credentials System
 
-API keys, OAuth tokens, and other secrets in MachinaOS are stored in a separate encrypted SQLite database (`credentials.db`) using Fernet (AES-128-CBC + HMAC-SHA256). The encryption key is derived from a server-scoped config key using PBKDF2HMAC with 600,000 iterations, following the n8n pattern.
+API keys, OAuth tokens, and other secrets in OpenCompany are stored in a separate encrypted SQLite database (`credentials.db`) using Fernet (AES-128-CBC + HMAC-SHA256). The encryption key is derived from a server-scoped config key using PBKDF2HMAC with 600,000 iterations, following the n8n pattern.
 
 This document covers the encryption pipeline, the two separate credential systems (OAuth vs API keys), the single-point-of-access rule, and the multi-backend abstraction.
 
 ## Why a Separate Database
 
-Credentials are isolated from the main `machina.db` for three reasons:
+Credentials are isolated from the main `workflow.db` for three reasons:
 
-1. **Blast radius**: a dump of `machina.db` for debugging never contains secrets.
+1. **Blast radius**: a dump of `workflow.db` for debugging never contains secrets.
 2. **Independent backups**: `credentials.db` can be excluded from snapshots and SQLite dumps.
 3. **Backend pluggability**: the file-backed SQLite can be swapped for OS keyring or AWS Secrets Manager without touching workflow storage.
 
@@ -188,7 +188,7 @@ If `API_KEY_ENCRYPTION_KEY` is missing or changed, existing ciphertext becomes u
 - **Server-scoped key**: not tied to user login sessions. JWT cookies expire, but the encryption key survives across restarts.
 - **No plaintext on disk**: credentials are only decrypted in memory.
 - **No plaintext in Redis**: even in Redis mode, only encrypted envelopes cross the wire (the cache layer never stores decrypted credentials).
-- **Salt per install**: different MachinaOS installs have different salts, so ciphertext is not portable across installs even with the same server key.
+- **Salt per install**: different OpenCompany installs have different salts, so ciphertext is not portable across installs even with the same server key.
 - **Wipes on shutdown**: `EncryptionService.clear()` zeroes the Fernet reference, preventing cold-boot recovery of the derived key.
 
 ## Source of Truth
@@ -214,7 +214,7 @@ Every backend handler that mutates credential state MUST emit one or both of:
 - **`api_key_status`** — per-provider validation state change. Payload: `{valid, models, message, timestamp}`. Used for validation results and to clear `apiKeyStatuses[provider]` on every connected client (e.g. after `delete_api_key`).
 - **`credential_catalogue_updated`** — refetch signal carrying a CloudEvents v1.0 envelope. Body shape: `WorkflowEvent` from [`server/services/events/envelope.py`](../server/services/events/envelope.py) — same envelope the Wave 12 EventSource framework already uses. CloudEvents `type` follows the convention `credential.<area>.<action>` (e.g. `credential.api_key.saved`, `credential.api_key.deleted`, `credential.oauth.disconnected`). The wire-format outer `type` stays `credential_catalogue_updated` for frontend back-compat; future external interop (EventBridge / Knative) is a JSON-schema swap rather than a rewrite.
 
-Helper: `broadcaster.broadcast_credential_event(event_type, *, provider, customer_id=None)` in `services/status_broadcaster.py` wraps `WorkflowEvent` with `source="machinaos://services/credentials"` and `subject=provider`.
+Helper: `broadcaster.broadcast_credential_event(event_type, *, provider, customer_id=None)` in `services/status_broadcaster.py` wraps `WorkflowEvent` with `source="opencompany://services/credentials"` and `subject=provider`.
 
 Delete-style mutations emit **both** events. The frontend's `WebSocketContext` handles both and refreshes `apiKeyStatuses` plus the `useCatalogueQuery` cache. The 300 ms debounce in `invalidateCatalogue(queryClient)` (`client/src/hooks/useCatalogueQuery.ts`) coalesces simultaneous events into one refetch.
 

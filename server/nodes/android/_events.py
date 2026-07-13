@@ -73,8 +73,8 @@ def android_connection_status(
     ``_DEFAULT_STATUS`` shape).
     """
     return WorkflowEvent(
-        source="machinaos://nodes/android",
-        type=("com.machinaos.android.connection.opened" if connected else "com.machinaos.android.connection.closed"),
+        source="opencompany://nodes/android",
+        type=("com.opencompany.android.connection.opened" if connected else "com.opencompany.android.connection.closed"),
         subject=device_id,
         data={
             "connected": connected,

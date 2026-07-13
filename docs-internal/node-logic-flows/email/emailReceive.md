@@ -105,9 +105,9 @@ flowchart TD
   starts, with `workflow_id` from context.
 - **Event bus (canary path)**: `dispatch_email_received(email_data)` ->
   `services.events.dispatch.emit` with a CloudEvents `WorkflowEvent`
-  (`type = "com.machinaos.email.message.received"`, `subject = message_id`,
+  (`type = "com.opencompany.email.message.received"`, `subject = message_id`,
   outer wire-routing key `email_received`). `emailReceive` is canary-registered
-  via `register_canary_trigger_type("emailReceive", "com.machinaos.email.message.received")`
+  via `register_canary_trigger_type("emailReceive", "com.opencompany.email.message.received")`
   in [`nodes/email/__init__.py`](../../../server/nodes/email/__init__.py), so the
   deployment manager skips the legacy `setup_event_trigger` and a Temporal-durable
   `TriggerListenerWorkflow` consumes the event; the same call also broadcasts the

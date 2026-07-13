@@ -27,7 +27,7 @@ and may read frozen registry dicts deterministically.
 References:
 - Temporal AI Cookbook -- https://docs.temporal.io/ai-cookbook
 - ``temporalio.contrib.openai_agents.activity_as_tool`` mirrors this
-  pattern; we re-implement manually because MachinaOs uses LangChain
+  pattern; we re-implement manually because OpenCompany uses LangChain
   (``chat_model.bind_tools`` for schema generation) rather than the
   OpenAI Agents SDK.
 """
@@ -263,7 +263,7 @@ async def persist_agent_turn(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     # Broadcast so the parameter panel auto-refetches mid-run.
     # CloudEvents v1.0 envelope (RFC §6.4) — type is
-    # ``com.machinaos.node.parameters.updated``; ``source_hint="agent"``
+    # ``com.opencompany.node.parameters.updated``; ``source_hint="agent"``
     # distinguishes this autonomous write from a user-edited save.
     # StatusBroadcaster is a module-level singleton (not on the DI
     # container) — same pattern handlers/tools.py / handlers/triggers.py
@@ -342,7 +342,7 @@ async def broadcast_agent_progress(payload: Dict[str, Any]) -> Dict[str, Any]:
     Wire-format key ``agent_progress`` is the same channel the in-process
     agent-loop path uses (services/ai.py:execute_agent), and the inner
     payload is a CloudEvents v1.0 ``WorkflowEvent`` with
-    ``type="com.machinaos.agent.progress"``. The FE routes
+    ``type="com.opencompany.agent.progress"``. The FE routes
     ``data.iteration`` / ``data.max_iterations`` into
     ``nodeStatusStore`` so the "N / max" badge on the canvas updates
     in real time.
@@ -382,7 +382,7 @@ async def broadcast_agent_progress(payload: Dict[str, Any]) -> Dict[str, Any]:
             workflow_id=workflow_id,
         )
 
-    # CloudEvents v1.0 envelope (com.machinaos.agent.progress). Drives
+    # CloudEvents v1.0 envelope (com.opencompany.agent.progress). Drives
     # the iteration badge + phase indicator on the canvas.
     await broadcaster.broadcast_agent_progress(
         node_id,

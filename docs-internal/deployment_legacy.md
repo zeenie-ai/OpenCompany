@@ -1,30 +1,31 @@
 # Deployment — Current Self-Deploy CLI + Legacy Docker Reference
 
-This doc is the single home for MachinaOS deployment topology. The **current** path is the
-`machina deploy` self-deploy CLI (top section). The **Docker Compose** path below it is a
+This doc is the single home for OpenCompany deployment topology. The **current** path is the
+`company deploy` self-deploy CLI (top section). The **Docker Compose** path below it is a
 **legacy reference only** — the compose files, `docker/` directory, and `scripts/docker.js`
 wrapper have all been removed from the repo. It is retained solely as documentation of the
 historical container topology.
 
 ---
 
-## Self-Deploy CLI (`machina deploy`) — current path
+## Self-Deploy CLI (`company deploy`) — current path
 
-One command provisions a login-gated MachinaOS VM on a cloud provider. Two stages:
+One command provisions a login-gated OpenCompany VM on a cloud provider. Two stages:
 
 1. **Operator's cloud CLI** (gcloud; aws planned) handles auth + project/region/zone resolution +
    ADC verification + API enablement.
-2. **Terraform** (`cli/terraform/gcp/`) owns all resources — VM (always named `machinaos`),
+2. **Terraform** (`cli/terraform/gcp/`) owns all resources — new VMs use the
+   `opencompany` resource id,
    firewall, artifact bucket (local `npm pack` source), service account, and a cloud-init startup
-   script that installs Node 22 + uv + the package and runs `machina serve` under systemd.
+   script that installs Node 22 + uv + the package and runs `company serve` under systemd.
 
 Login gate = built-in auth (`VITE_AUTH_ENABLED=true`, `AUTH_MODE=single`) with the owner
 credential generated at deploy time and seeded on first boot.
 
 ```bash
-machina deploy up --provider gcp --owner-email you@example.com   # provision + install + print URL/creds
-machina deploy status                                            # URL + /health
-machina deploy destroy                                           # terraform destroy + clear state
+company deploy up --provider gcp --owner-email you@example.com   # provision + install + print URL/creds
+company deploy status                                            # URL + /health
+company deploy destroy                                           # terraform destroy + clear state
 ```
 
 ### Key files
@@ -37,9 +38,16 @@ machina deploy destroy                                           # terraform des
 
 ### State + delinking
 
-- Deployment state lives at `<user-data>/deploy/machinaos/` — preserved by `machina clean`
-  (see `_MACHINA_KEEP` in `cli/commands/clean.py`); only `machina deploy destroy` removes it.
-- The deploy code is fully delinked from `machina build` / `machina clean`: lazy verb stubs in
+- New deployment state lives at `<user-data>/deploy/opencompany/` — preserved by `company clean`
+  (see `_OPENCOMPANY_KEEP` in `cli/commands/clean.py`); only `company deploy destroy` removes it.
+- Upgrade compatibility is deliberate: the CLI discovers pre-rebrand
+  `deploy/machinaos/` state under the configured data root, `~/.machina`, or a
+  checkout-local `.machina` directory. It retains the `machinaos` cloud and
+  systemd resource id for that deployment, preventing Terraform from replacing
+  or orphaning live infrastructure. Fresh deployments use `opencompany`.
+- The `machina` executable remains only as a deprecated legacy alias; use `company`
+  in new commands and automation.
+- The deploy code is fully delinked from `company build` / `company clean`: lazy verb stubs in
   `cli/cli.py` mean nothing in the build pipeline imports it.
 
 The legacy `deploy.sh` (docker-compose images over SCP to a GCE box) was removed.
@@ -62,9 +70,9 @@ The project previously deployed using Docker Compose with an nginx reverse proxy
 | Container | Image | Port | Description |
 |-----------|-------|------|-------------|
 | redis | redis:7-alpine | 6379 | Cache and pub/sub for workflows |
-| backend | machinaos-backend | 3010 | FastAPI Python backend |
-| frontend | machinaos-frontend | 3000 | React app via nginx |
-| whatsapp | machinaos-whatsapp | 5000 | Go WhatsApp bridge service |
+| backend | opencompany-backend | 3010 | FastAPI Python backend |
+| frontend | opencompany-frontend | 3000 | React app via nginx |
+| whatsapp | opencompany-whatsapp | 5000 | Go WhatsApp bridge service |
 
 **Frontend (`client/Dockerfile`):**
 - Multi-stage build: Node.js builder -> nginx:alpine production
@@ -249,17 +257,17 @@ if (!baseUrl) {
 
 ```bash
 # View logs (all containers)
-ssh $DEPLOY_HOST 'cd /opt/machinaos && docker-compose logs -f'
+ssh $DEPLOY_HOST 'cd /opt/opencompany && docker-compose logs -f'
 
 # View specific service logs
-ssh $DEPLOY_HOST 'cd /opt/machinaos && docker-compose logs -f backend'
-ssh $DEPLOY_HOST 'cd /opt/machinaos && docker-compose logs -f whatsapp'
+ssh $DEPLOY_HOST 'cd /opt/opencompany && docker-compose logs -f backend'
+ssh $DEPLOY_HOST 'cd /opt/opencompany && docker-compose logs -f whatsapp'
 
 # Restart all services
-ssh $DEPLOY_HOST 'cd /opt/machinaos && docker-compose restart'
+ssh $DEPLOY_HOST 'cd /opt/opencompany && docker-compose restart'
 
 # Restart specific service
-ssh $DEPLOY_HOST 'cd /opt/machinaos && docker-compose restart backend'
+ssh $DEPLOY_HOST 'cd /opt/opencompany && docker-compose restart backend'
 
 # Check container status
 ssh $DEPLOY_HOST 'docker ps'
@@ -268,7 +276,7 @@ ssh $DEPLOY_HOST 'docker ps'
 ssh $DEPLOY_HOST 'docker stats --no-stream'
 
 # Check Redis connection
-ssh $DEPLOY_HOST 'docker exec machinaos-redis-1 redis-cli ping'
+ssh $DEPLOY_HOST 'docker exec opencompany-redis-1 redis-cli ping'
 
 # Check backend health (shows redis_enabled status)
 curl -s https://$DEPLOY_DOMAIN/health | jq

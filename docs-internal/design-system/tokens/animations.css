@@ -1,5 +1,5 @@
 /* ============================================================================
- * MachinaOS — animation system (all 12 themes)
+ * OpenCompany — animation system (all 12 themes)
  *
  * Source: client/src/themes/base.css + each theme file's Motion block and
  * decorative keyframes. This file declares:
@@ -172,43 +172,43 @@
 @keyframes trigger-bolt { 0%, 100% { opacity: 0.6; transform: scale(0.94); } 50% { opacity: 1; transform: scale(1.06); } }
 
 /* Status pip blink (generic, smooth). */
-@keyframes machina-pip-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@keyframes opencompany-pip-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
 
 /* Spinner. */
-@keyframes machina-spin { to { transform: rotate(360deg); } }
+@keyframes opencompany-spin { to { transform: rotate(360deg); } }
 
 /* ============================================================================
  * Helper classes
  * ========================================================================== */
 
 /* Apply to an executing node; reads the theme's chosen keyframe + timing. */
-.machina-pulse {
+.opencompany-pulse {
   animation: var(--pulse-keyframe, node-pulse) var(--pulse-duration, 1.4s) var(--pulse-timing, ease-in-out) infinite;
 }
 
 /* Trigger node waiting for events — continuous armed heartbeat. Slower than
  * the execution pulse so the two read as distinct states. */
-.machina-trigger-armed {
+.opencompany-trigger-armed {
   animation: trigger-listening 2.4s ease-in-out infinite;
 }
 /* One-shot flash the moment a trigger fires (add, then remove on animationend). */
-.machina-trigger-fire {
+.opencompany-trigger-fire {
   animation: trigger-fire 0.6s var(--ease-default, ease-out) 1;
 }
 /* Lightning badge + listening pip pulses. */
-.machina-bolt { animation: trigger-bolt 1.8s ease-in-out infinite; }
-.machina-pip-pulse { animation: machina-pip-blink 1.4s ease-in-out infinite; }
+.opencompany-bolt { animation: trigger-bolt 1.8s ease-in-out infinite; }
+.opencompany-pip-pulse { animation: opencompany-pip-blink 1.4s ease-in-out infinite; }
 
 /* Ambient overlays — add once at the app frame for cyber / surveillance. */
-.machina-scanline::after {
+.opencompany-scanline::after {
   content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 50;
   height: 12%;
   background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--node-pulse-color, #1dd9e5) 18%, transparent), transparent);
   animation: cyber-roll 8s linear infinite;
 }
-.machina-crt { animation: cyber-flicker 5s linear infinite; }
+.opencompany-crt { animation: cyber-flicker 5s linear infinite; }
 
 @media (prefers-reduced-motion: reduce) {
-  .machina-pulse, .machina-crt, .machina-scanline::after,
-  .machina-trigger-armed, .machina-trigger-fire, .machina-bolt, .machina-pip-pulse { animation: none !important; }
+  .opencompany-pulse, .opencompany-crt, .opencompany-scanline::after,
+  .opencompany-trigger-armed, .opencompany-trigger-fire, .opencompany-bolt, .opencompany-pip-pulse { animation: none !important; }
 }

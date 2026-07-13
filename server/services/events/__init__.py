@@ -1,6 +1,6 @@
 """Generalized event-source framework (Wave 12).
 
-Three concrete EventSource subclasses cover all current MachinaOs
+Three concrete EventSource subclasses cover all current OpenCompany
 trigger integrations: ``PushEventSource`` (HTTP/RPC pushes),
 ``PollingEventSource`` (interval-based pull), ``DaemonEventSource``
 (long-lived subprocess driver). Webhook flow is a thin specialisation

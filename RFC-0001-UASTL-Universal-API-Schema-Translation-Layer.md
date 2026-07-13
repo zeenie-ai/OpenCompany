@@ -4,7 +4,7 @@
 **Status:** Draft  
 **Author:** Rohith Thakurwar (Genie.ai / MachinaOS)  
 **Created:** 2026-04-26  
-**Target System:** MachinaOS Agentic OS Platform  
+**Target System:** OpenCompany Agentic OS Platform
 
 ---
 
@@ -369,7 +369,7 @@ class TwitterX:
 
         Example:
             tweet = await twitter.create_tweet(
-                CreateTweetRequest(text="Hello from MachinaOS!")
+                CreateTweetRequest(text="Hello from OpenCompany!")
             )
             print(tweet.id)  # "1849573028375..."
         """

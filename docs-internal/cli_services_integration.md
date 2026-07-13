@@ -1,12 +1,12 @@
 # CLI-Based Services Integration Guide
 
-MachinaOS integrates external services that manage their own lifecycle via CLI tools. These services own their ports, data directories, and processes -- MachinaOS does not manage them directly.
+OpenCompany integrates external services that manage their own lifecycle via CLI tools. These services own their ports, data directories, and processes -- OpenCompany does not manage them directly.
 
 ## Principles
 
 1. **Install globally** -- CLI tools must be available system-wide (`npm install -g <package>`)
 2. **Use the CLI** -- Check status, start, stop via the package's own commands. No port-sniffing, no TCP socket checks, no hardcoded port detection.
-3. **Don't manage their ports** -- External service ports are NOT added to `allPorts` in `utils.js`. MachinaOS only kills ports it owns (client, backend, WhatsApp, Node.js executor).
+3. **Don't manage their ports** -- External service ports are NOT added to `allPorts` in `utils.js`. OpenCompany only kills ports it owns (client, backend, WhatsApp, Node.js executor).
 4. **Handle "already running"** -- Before adding a service to `concurrently`, check if it's already up. If it is, skip it. This prevents `--kill-others` cascade kills in `start.js`.
 5. **Keep dependencies in package.json** -- Even if installed globally, keep the package in `dependencies` so npm scripts (`npm run temporal:start`) work.
 
@@ -16,11 +16,11 @@ MachinaOS integrates external services that manage their own lifecycle via CLI t
 
 Wraps the official `temporal` CLI's `server start-dev` mode (per [docs.temporal.io/develop/python/set-up-your-local-python](https://docs.temporal.io/develop/python/set-up-your-local-python)) — SQLite-backed dev server, single process, gRPC + Web UI both embedded.
 
-**Install:** Automated. `machina build` step [6/6] runs `python -m services.temporal._install`, which uses `pooch` to download the official CLI archive from `https://temporal.download/cli/archive/latest?platform=<os>&arch=<arch>` into `<DATA_DIR>/packages/temporal/` (= `~/.machina/packages/temporal/` by default, on every OS — via `core.paths.package_dir("temporal")`). No npm package, no system install required.
+**Install:** Automated. `company build` step [6/6] runs `python -m services.temporal._install`, which uses `pooch` to download the official CLI archive from `https://temporal.download/cli/archive/latest?platform=<os>&arch=<arch>` into `<DATA_DIR>/packages/temporal/` (= `~/.opencompany/packages/temporal/` by default, on every OS — via `core.paths.package_dir("temporal")`). No npm package, no system install required.
 
-**Lifecycle:** Managed entirely by the CLI commands (`machina start` / `machina dev` / `machina stop`) — there's no separate `temporal:start` npm script. The supervisor at [cli/supervisor.py](../cli/supervisor.py) spawns the official CLI via the supervised-runtime shim at [server/services/temporal/_supervised_runtime.py](../server/services/temporal/_supervised_runtime.py).
+**Lifecycle:** Managed entirely by the CLI commands (`company start` / `company dev` / `company stop`) — there's no separate `temporal:start` npm script. The supervisor at [cli/supervisor.py](../cli/supervisor.py) spawns the official CLI via the supervised-runtime shim at [server/services/temporal/_supervised_runtime.py](../server/services/temporal/_supervised_runtime.py).
 
-**Ports (declared in `.env.template`, freed by `machina stop`'s port-kill pre-flight):**
+**Ports (declared in `.env.template`, freed by `company stop`'s port-kill pre-flight):**
 | Service | Port | Env var |
 |---------|------|---------|
 | gRPC    | 7233 | `TEMPORAL_FRONTEND_GRPC_PORT` |
@@ -29,8 +29,8 @@ Wraps the official `temporal` CLI's `server start-dev` mode (per [docs.temporal.
 Both bound by the same `temporal.exe` process. Killing the process releases both.
 
 **Persistence + resumption:**
-- SQLite db at `~/.machina/temporal.db` (`TEMPORAL_SQLITE_PATH=temporal.db`, resolved under `DATA_DIR`). History is preserved across restarts; the Temporal UI keeps showing every workflow that ever ran.
-- Workflow auto-resumption is disabled at boot: [`TemporalClientWrapper.terminate_running_workflows`](../server/services/temporal/client.py) runs once after client connect and terminates every `Running` workflow with `reason="MachinaOS startup: auto-resumption disabled"`. Workflows show as `Terminated` (not deleted) in the UI. Gated by `TEMPORAL_TERMINATE_RUNNING_ON_STARTUP=true`. Flip to `false` once `DeploymentManager` reconcile-against-Visibility lands.
+- SQLite db at `~/.opencompany/temporal.db` (`TEMPORAL_SQLITE_PATH=temporal.db`, resolved under `DATA_DIR`). History is preserved across restarts; the Temporal UI keeps showing every workflow that ever ran.
+- Workflow auto-resumption is disabled at boot: [`TemporalClientWrapper.terminate_running_workflows`](../server/services/temporal/client.py) runs once after client connect and terminates every `Running` workflow with `reason="OpenCompany startup: auto-resumption disabled"`. Workflows show as `Terminated` (not deleted) in the UI. Gated by `TEMPORAL_TERMINATE_RUNNING_ON_STARTUP=true`. Flip to `false` once `DeploymentManager` reconcile-against-Visibility lands.
 
 **Embedded worker:**
 The Temporal worker runs inside the Python backend via `TemporalWorkerManager` in `main.py` lifespan. No separate worker process needed for single-server deployments. For horizontal scaling, run standalone workers:

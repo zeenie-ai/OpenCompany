@@ -33,10 +33,12 @@ venv/
 *.egg-info/
 
 # Runtime data dirs — transient, never ship. The lone exception is
-# ``.machina/workflows/`` (git-tracked shipped example seeds — see
+# ``.opencompany/workflows/`` (git-tracked shipped example seeds — see
 # ``server/services/example_loader.py``), explicitly un-ignored below.
+.opencompany/*
+!.opencompany/workflows/
+# Ignore pre-rebrand local state if it is present in a source checkout.
 .machina/*
-!.machina/workflows/
 
 # Legacy data dir from the pre-cutover layout. Kept as a sentinel so
 # stale checkouts from older releases don't accidentally ship.
@@ -86,7 +88,8 @@ CLAUDE.md
 # Experiments (work in progress)
 server/experiments/
 
-# Duplicate folder
+# Duplicate folders
+OpenCompany/
 MachinaOS/
 
 # WhatsApp RPC is now an npm dependency (@anthropic/whatsapp-rpc)

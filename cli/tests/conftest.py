@@ -1,4 +1,4 @@
-"""Shared fixtures for ``machina`` tests.
+"""Shared fixtures for ``company`` tests.
 
 The release-pipeline config tests need to read files that live in
 pnpm workspace members (``client/``, ``server/nodejs/``) without

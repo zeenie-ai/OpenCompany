@@ -1,6 +1,6 @@
 # CI/CD Pipeline
 
-Internal reference for MachinaOs's GitHub Actions setup. Workflow inventory, release flow, and the composite setup action.
+Internal reference for OpenCompany's GitHub Actions setup. Workflow inventory, release flow, and the composite setup action.
 
 The repo currently ships **exactly 4 workflows** plus one composite action. A number of hardening / security workflows described in earlier revisions of this doc (CodeQL, zizmor, rollback, reusable PyPI publish, cross-platform test-install) are **not yet implemented** — see [Planned (not yet implemented)](#planned-not-yet-implemented) at the end.
 
@@ -27,7 +27,7 @@ The repo currently ships **exactly 4 workflows** plus one composite action. A nu
                                   +-- publish-github-packages
 
   push to main under      +------------------+
-  docs-MachinaOs/ ------> |    docs.yml      |  Mintlify documentation deploy
+  docs-OpenCompany/ ------> |    docs.yml      |  Mintlify documentation deploy
                           +------------------+
 ```
 
@@ -38,7 +38,7 @@ The repo currently ships **exactly 4 workflows** plus one composite action. A nu
 | CI | `.github/workflows/ci.yml` | push/PR → main | Delegates to predeploy.yml |
 | Predeploy | `.github/workflows/predeploy.yml` | `workflow_call` | build/lint + backend tests + CLI tests + cross-OS build/start smoke |
 | Release | `.github/workflows/release.yml` | `v*.*.*` tag, `workflow_dispatch` | predeploy gate → publish (npm + GitHub Packages) |
-| Docs | `.github/workflows/docs.yml` | push to `docs-MachinaOs/**` on main + manual | Mintlify deploy |
+| Docs | `.github/workflows/docs.yml` | push to `docs-OpenCompany/**` on main + manual | Mintlify deploy |
 | Setup | `.github/actions/setup/action.yml` | (composite) | pnpm 9 + Node 22 + Python 3.12 + uv v8 + editable CLI install |
 
 ### Toolchain pin
@@ -116,7 +116,7 @@ publish-npm       publish-github-packages
    |                   |
    +- build            +- build
    +- cli version sync +- cli version sync
-   +- npm publish      +- rewrite name -> @zeenie-ai/machinaos
+   +- npm publish      +- rewrite name -> @zeenie-ai/opencompany
       --access public  +- npm publish (registry: npm.pkg.github.com)
       --provenance        NODE_AUTH_TOKEN = GITHUB_TOKEN
       NODE_AUTH_TOKEN =
@@ -125,7 +125,7 @@ publish-npm       publish-github-packages
 
 - Both publish jobs `needs: predeploy`, run on `ubuntu-latest`, and share the same prefix: `actions/checkout` → composite setup → `actions/setup-node@v4` (with the target `registry-url`) → `pnpm install --frozen-lockfile` → `pnpm run build` → `python -m cli version sync`.
 - `publish-npm` — `npm publish --access public --provenance` with `NODE_AUTH_TOKEN=secrets.NPM_TOKEN`. The `--provenance` flag emits an npm provenance attestation (backed by the workflow's `id-token: write`).
-- `publish-github-packages` — rewrites `package.json` `name` to `@zeenie-ai/machinaos` and sets `publishConfig.registry = https://npm.pkg.github.com`, then `npm publish` with `NODE_AUTH_TOKEN=secrets.GITHUB_TOKEN`.
+- `publish-github-packages` — rewrites `package.json` `name` to `@zeenie-ai/opencompany` and sets `publishConfig.registry = https://npm.pkg.github.com`, then `npm publish` with `NODE_AUTH_TOKEN=secrets.GITHUB_TOKEN`.
 
 There is currently no audit gate, no PyPI publish, no SLSA `attest-build-provenance` step, and no `create-github-release` / test-install stage — see [Planned](#planned-not-yet-implemented).
 
@@ -135,7 +135,7 @@ There is currently no audit gate, no PyPI publish, no SLSA `attest-build-provena
 
 **File:** [.github/workflows/docs.yml](../.github/workflows/docs.yml)
 
-Triggers on push to `main` touching `docs-MachinaOs/**` + manual dispatch. Single `deploy` job: `actions/checkout` → `actions/setup-node@v4` (Node 22) → `npm install -g mintlify` → `mintlify deploy` from `docs-MachinaOs/` with `MINTLIFY_TOKEN`. No predeploy gate — docs are static, independent of the application build.
+Triggers on push to `main` touching `docs-OpenCompany/**` + manual dispatch. Single `deploy` job: `actions/checkout` → `actions/setup-node@v4` (Node 22) → `npm install -g mintlify` → `mintlify deploy` from `docs-OpenCompany/` with `MINTLIFY_TOKEN`. No predeploy gate — docs are static, independent of the application build.
 
 ---
 

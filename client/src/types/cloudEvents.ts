@@ -13,12 +13,12 @@
  *       "data": {
  *         "specversion": "1.0",
  *         "id": "<uuid>",
- *         "source": "machinaos://services/credentials",
- *         "type": "com.machinaos.credential.api_key.saved",  // reverse-DNS per Primer
+ *         "source": "opencompany://services/credentials",
+ *         "type": "com.opencompany.credential.api_key.saved",  // reverse-DNS per Primer
  *         "time": "2026-05-06T12:34:56.789Z",
  *         "subject": "openai",
  *         "datacontenttype": "application/json",
- *         "dataschema": "machinaos://schemas/events/credential.api_key.saved.json",
+ *         "dataschema": "opencompany://schemas/events/credential.api_key.saved.json",
  *         "data": { "provider": "openai", ... }
  *       }
  *     }
@@ -26,7 +26,7 @@
  * Future Wave 12 sources (`stripe.*`, `telegram.*`, `task.*`) will use the
  * same envelope. The `matchesType` helper provides server-parity glob
  * dispatch (mirrors `WorkflowEvent.matches_type` in envelope.py) — patterns
- * match against the type with the `com.machinaos.` prefix stripped.
+ * match against the type with the `com.opencompany.` prefix stripped.
  *
  * Pytest invariant `server/tests/test_credential_broadcasts.py` locks the
  * backend shape; the FE vitest counterpart locks this interface.
@@ -48,7 +48,7 @@ export interface WorkflowEvent<TData = unknown> {
   dataschema?: string;
   data: TData;
 
-  // CloudEvents extension attributes used by MachinaOs.
+  // CloudEvents extension attributes used by OpenCompany.
   // `model_config = ConfigDict(extra="allow")` on the Pydantic side means
   // additional fields may appear and should be tolerated; cast through
   // `WorkflowEvent<T> & {extra?: unknown}` if you need to read them.
@@ -57,15 +57,20 @@ export interface WorkflowEvent<TData = unknown> {
   correlation_id?: string | null;
 }
 
-const TYPE_PREFIX = 'com.machinaos.';
+const TYPE_PREFIXES = [
+  'com.opencompany.',
+  // Accept events persisted or replayed from before the product rename.
+  'com.machinaos.',
+] as const;
 
 /**
  * Glob-style match on the CloudEvents `type` field.
  *
  * Mirrors `WorkflowEvent.matches_type` in `server/services/events/envelope.py`.
- * Patterns are matched against the type with the `com.machinaos.` reverse-DNS
+ * Patterns are matched against the type with the `com.opencompany.` reverse-DNS
  * prefix stripped, so callers can write `'credential.api_key.*'` and still
- * hit `com.machinaos.credential.api_key.saved`. External-producer types
+ * hit `com.opencompany.credential.api_key.saved`. The pre-rebrand namespace
+ * remains accepted for replay compatibility. External-producer types
  * (e.g. `stripe.charge.succeeded` from a Stripe webhook) have no prefix
  * and match directly.
  *
@@ -81,7 +86,8 @@ const TYPE_PREFIX = 'com.machinaos.';
 export function matchesType(event: WorkflowEvent, pattern: string): boolean {
   if (!pattern || pattern === 'all') return true;
   const raw = event.type ?? '';
-  const normalized = raw.startsWith(TYPE_PREFIX) ? raw.slice(TYPE_PREFIX.length) : raw;
+  const matchedPrefix = TYPE_PREFIXES.find((prefix) => raw.startsWith(prefix));
+  const normalized = matchedPrefix ? raw.slice(matchedPrefix.length) : raw;
   if (pattern.endsWith('.*')) {
     const prefix = pattern.slice(0, -2);
     return normalized === prefix || normalized.startsWith(prefix + '.');

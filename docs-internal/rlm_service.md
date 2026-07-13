@@ -4,7 +4,7 @@
 
 ## Overview
 
-The RLM (Recursive Language Models) service integrates the `rlms` library into MachinaOS as a specialized agent node (`rlm_agent`). Unlike other specialized agents that route to `handle_chat_agent` and use the standard agent loop, the RLM agent uses its own REPL-based code execution loop where the LM writes Python code blocks that are `exec()`-ed in a sandboxed environment.
+The RLM (Recursive Language Models) service integrates the `rlms` library into OpenCompany as a specialized agent node (`rlm_agent`). Unlike other specialized agents that route to `handle_chat_agent` and use the standard agent loop, the RLM agent uses its own REPL-based code execution loop where the LM writes Python code blocks that are `exec()`-ed in a sandboxed environment.
 
 **Library**: [rlms](https://pypi.org/project/rlms/) (pip install rlms)
 **Paper**: https://arxiv.org/abs/2512.24601
@@ -26,7 +26,7 @@ The RLM (Recursive Language Models) service integrates the `rlms` library into M
 ## Architecture
 
 ```
-MachinaOS Node Execution System
+OpenCompany Node Execution System
 ================================
 
 [chatTrigger] --input-main--+
@@ -101,7 +101,7 @@ The `rlm_agent` node's own provider/model configuration drives the outer REPL lo
 Configured via the standard AI agent parameters:
 - `provider`: openai, anthropic, gemini, groq, openrouter, cerebras
 - `model`: The model name (e.g., gpt-4o, claude-sonnet-4-20250514)
-- `api_key`: From MachinaOS credential store
+- `api_key`: From OpenCompany credential store
 
 ### Small LMs (depth>=1)
 Connected `AI_CHAT_MODEL_TYPES` nodes (openaiChatModel, anthropicChatModel, etc.) provide backends for `llm_query()` and `rlm_query()` calls made from within the REPL code.
@@ -122,7 +122,7 @@ rlm_agent (gpt-4o)  +  openaiChatModel (gpt-4o-mini)
 
 ### BackendAdapter
 
-Maps MachinaOS provider/model/api_key to RLM backend constructor arguments.
+Maps OpenCompany provider/model/api_key to RLM backend constructor arguments.
 
 ```python
 BackendAdapter.adapt("openai", "gpt-4o", "sk-...")
@@ -134,7 +134,7 @@ BackendAdapter.adapt("groq", "llama-3.3-70b-versatile", "gsk-...")
 
 **Provider mapping** (constants.py):
 
-| MachinaOS Provider | RLM Backend | Base URL Override |
+| OpenCompany Provider | RLM Backend | Base URL Override |
 |--------------------|-------------|-------------------|
 | openai | openai | -- |
 | anthropic | anthropic | -- |
@@ -156,10 +156,10 @@ Bridges non-agent, non-chat-model tool nodes into RLM `custom_tools` dict format
 **How it works**:
 1. Filters out `AI_AGENT_TYPES` (handled via delegation) and `AI_CHAT_MODEL_TYPES` (handled by ChatModelExtractor)
 2. For each remaining tool node, creates a sync callable wrapper
-3. The wrapper uses `asyncio.run_coroutine_threadsafe()` to call MachinaOS's `execute_tool()` dispatcher from RLM's synchronous REPL thread
+3. The wrapper uses `asyncio.run_coroutine_threadsafe()` to call OpenCompany's `execute_tool()` dispatcher from RLM's synchronous REPL thread
 4. Returns dict in RLM custom_tools format: `{"tool_name": {"tool": callable, "description": str}}`
 
-**Why sync wrappers**: RLM's LocalREPL uses `exec()` which runs synchronously. MachinaOS tool handlers are async. The bridge uses `asyncio.run_coroutine_threadsafe()` with a 60-second timeout to cross the sync/async boundary.
+**Why sync wrappers**: RLM's LocalREPL uses `exec()` which runs synchronously. OpenCompany tool handlers are async. The bridge uses `asyncio.run_coroutine_threadsafe()` with a 60-second timeout to cross the sync/async boundary.
 
 **Supported tool nodes** (auto-bridged, no per-tool code needed):
 
@@ -238,7 +238,7 @@ return await ai_service.rlm_service.execute(node_id, parameters, ...)
 
 ---
 
-## Reused MachinaOS Functions
+## Reused OpenCompany Functions
 
 | Function | Source | Purpose in RLM |
 |----------|--------|----------------|

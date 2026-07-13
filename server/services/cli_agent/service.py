@@ -162,7 +162,12 @@ class AICliService:
 
         # Per-batch bearer token + MCP context
         token = issue_token()
-        port = mcp_port or int(os.environ.get("MACHINA_BACKEND_PORT", "3010"))
+        port = mcp_port or int(
+            os.environ.get(
+                "OPENCOMPANY_BACKEND_PORT",
+                os.environ.get("MACHINA_BACKEND_PORT", "3010"),
+            )
+        )
         ctx = BatchContext(
             workflow_id=workflow_id,
             node_id=node_id,
@@ -328,7 +333,7 @@ class AICliService:
         # `total_cost_usd` natively); for providers that don't (Codex,
         # Gemini v2), derive USD from `canonical_usage` via the existing
         # PricingService — a single source of truth for all LLM cost in
-        # MachinaOs.
+        # OpenCompany.
         for r in results:
             if r.cost_usd is None:
                 derived = self._derive_cost(r, task_list)
@@ -448,11 +453,13 @@ class AICliService:
 
         env = {**os.environ, "PYTHONUNBUFFERED": "1"}
         # Project-local claude auth dir — same as ``AICliSession.env``.
-        from nodes.agent.claude_code_agent._oauth import MACHINA_CLAUDE_DIR
+        from nodes.agent.claude_code_agent._oauth import OPENCOMPANY_CLAUDE_DIR
 
-        env["CLAUDE_CONFIG_DIR"] = str(MACHINA_CLAUDE_DIR)
+        env["CLAUDE_CONFIG_DIR"] = str(OPENCOMPANY_CLAUDE_DIR)
         # Composio-style parent-run-ID for MCP correlation.
-        env["MACHINA_PARENT_RUN_ID"] = f"{workflow_id}:{memory_node_id}:{mcp_bearer_token[:8]}"
+        parent_run_id = f"{workflow_id}:{memory_node_id}:{mcp_bearer_token[:8]}"
+        env["OPENCOMPANY_PARENT_RUN_ID"] = parent_run_id
+        env["MACHINA_PARENT_RUN_ID"] = parent_run_id  # legacy child-process contract
 
         pooled = await pool.acquire(
             memory_node_id,
@@ -593,7 +600,7 @@ class AICliService:
         # Broadcast `node_parameters_updated` so the simpleMemory's
         # parameter panel + memory editor refetch live without a page
         # reload. CloudEvents v1.0 envelope (RFC §6.4) — type is
-        # ``com.machinaos.node.parameters.updated``; ``source_hint="cli"``
+        # ``com.opencompany.node.parameters.updated``; ``source_hint="cli"``
         # distinguishes this Claude-CLI autonomous write from a user
         # parameter-panel save.
         if broadcaster is not None:

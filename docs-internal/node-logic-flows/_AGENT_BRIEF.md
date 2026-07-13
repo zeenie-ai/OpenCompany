@@ -1,6 +1,6 @@
 # Agent Brief - Per-Category Rollout
 
-You are documenting and writing contract tests for one category of MachinaOs
+You are documenting and writing contract tests for one category of OpenCompany
 workflow nodes. Phase 1 (test infrastructure) and Phase 2 (search-node pilot)
 are already done. Your job is to repeat the pilot pattern for your category.
 

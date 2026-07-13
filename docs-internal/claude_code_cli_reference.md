@@ -180,7 +180,7 @@ add an analogous `claude_code_*_reference.md` file.
 
 ## Flags we use in `services/cli_agent/`
 
-Quick cross-reference for the MachinaOs `claude_code_agent` integration:
+Quick cross-reference for the OpenCompany `claude_code_agent` integration:
 
 | Flag | Used in | Purpose |
 |---|---|---|
@@ -192,8 +192,8 @@ Quick cross-reference for the MachinaOs `claude_code_agent` integration:
 | `--model <id>` | always | from `ClaudeTaskSpec.model` / config default |
 | `--max-turns <N>` | always | from `ClaudeTaskSpec.max_turns` |
 | `--permission-mode <mode>` | always | default `acceptEdits` |
-| `--allowedTools <csv>` | always | `Read,Edit,Bash,Glob,Grep,Write,Skill,WebSearch,WebFetch,mcp__machinaos__*` (see canonical patterns RFC §5 R3) |
-| `--mcp-config <json>` | when MCP wired | inline JSON with `{mcpServers: {machinaos: {type: http, url, headers, alwaysLoad: true}}}` |
+| `--allowedTools <csv>` | always | `Read,Edit,Bash,Glob,Grep,Write,Skill,WebSearch,WebFetch,mcp__opencompany__*` (see canonical patterns RFC §5 R3) |
+| `--mcp-config <json>` | when MCP wired | inline JSON with `{mcpServers: {opencompany: {type: http, url, headers, alwaysLoad: true}}}` |
 | `--strict-mcp-config` | when MCP wired | blocks user-level `~/.claude.json` MCP entries |
 | `--append-system-prompt <text>` | when system_prompt or connected tools wired | per-task system prompt + connected-tools steering directive |
 | `--session-id <UUID>` | memory bridge first run | deterministic `uuid5(memory_node_id, session_id)` |

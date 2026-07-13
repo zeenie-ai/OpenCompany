@@ -1,1 +1,1 @@
-"""``machina`` subcommand modules. Imported by ``cli.cli``."""
+"""``company`` subcommand modules. Imported by ``cli.cli``."""

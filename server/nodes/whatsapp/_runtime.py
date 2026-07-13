@@ -2,11 +2,11 @@
 
 Spawns the binary with cwd inside the project (``<data_dir>/whatsapp``)
 so the SQLite session DB lives next to ``credentials.db`` and survives
-``machina clean``, version bumps, and worktree switches. Lazy-init
+``company clean``, version bumps, and worktree switches. Lazy-init
 from ``nodes.whatsapp._service.get_client()``; teardown from FastAPI
 lifespan.
 
-The binary itself is MachinaOs-managed under the shared MachinaOs
+The binary itself is OpenCompany-managed under the shared OpenCompany
 npm tree at ``<DATA_DIR>/packages/`` (resolved by
 :func:`._install.edgymeow_binary_path` on first use). The install
 runs through ``asyncio.to_thread`` in ``_pre_spawn`` so the long
@@ -57,8 +57,9 @@ class WhatsAppRuntime(BaseProcessSupervisor):
     @property
     def data_root(self) -> Path:
         # Routes through ``Settings._resolve_under_data`` so dev mode's
-        # ``DATA_DIR=.machina`` lands the WhatsApp tree at
-        # ``<repo>/.machina/whatsapp/`` (not ``<repo>/server/.machina/...``,
+        # ``DATA_DIR=.opencompany`` lands the WhatsApp tree at
+        # ``<repo>/.opencompany/whatsapp/`` (not
+        # ``<repo>/server/.opencompany/...``,
         # which the old ad-hoc ``_PROJECT_ROOT / "server" / data_dir``
         # logic produced when ``DATA_DIR`` was relative).
         return Path(self.settings._resolve_under_data(self.settings.whatsapp_data_subdir))
@@ -77,7 +78,7 @@ class WhatsAppRuntime(BaseProcessSupervisor):
 
     @property
     def _package_dir(self) -> Path:
-        # ``edgymeow`` is npm-installed into the shared MachinaOs npm
+        # ``edgymeow`` is npm-installed into the shared OpenCompany npm
         # tree at ``<DATA_DIR>/packages/node_modules/edgymeow/`` by
         # :func:`._install.edgymeow_binary_path` (called from
         # ``_pre_spawn``). Same tree holds ``claude-code``,

@@ -1,4 +1,4 @@
-"""``machina deploy status`` -- show the deployment's URL + health."""
+"""``company deploy status`` -- show the deployment's URL + health."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ def status_command() -> None:
     preflight()
     meta = _state.read_meta()
     if meta is None:
-        console.print("[yellow]No 'machinaos' deployment found.[/]")
+        console.print("[yellow]No OpenCompany deployment found.[/]")
         raise typer.Exit(code=1)
 
     wd = _state.workdir()
@@ -28,7 +28,8 @@ def status_command() -> None:
         f"http://{ip}:{meta.get('port', 8080)}" if ip else None
     )
 
-    console.print("  Deployment:  machinaos")
+    console.print("  Deployment:  OpenCompany")
+    console.print(f"  Resource ID: {_state.resource_name()}")
     console.print(f"  Provider:    {meta.get('provider', '?')}")
     console.print(f"  External IP: {ip or '(unknown / destroyed)'}")
     console.print(f"  URL:         {url or '(unknown)'}")

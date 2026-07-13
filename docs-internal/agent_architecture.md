@@ -234,7 +234,7 @@ Defined in `server/services/skill_loader.py:38+`:
 
 ```
 SkillLoader
-├── _skill_dirs: [server/skills/, .machina/skills/]
+├── _skill_dirs: [server/skills/, .opencompany/skills/]
 ├── _database                                  # DI database singleton (user skills live in the DB)
 ├── _registry: Dict[name -> SkillMetadata]    # Metadata only (~100 tokens each)
 ├── _cache: Dict[name -> Skill]               # Full content (lazy-loaded)
@@ -269,7 +269,7 @@ name: http-skill                    # Lowercase with hyphens, validated by regex
 description: Make HTTP requests...  # Brief description for LLM visibility
 allowed-tools: http-request         # Space-delimited tool names
 metadata:
-  author: machina
+  author: opencompany
   version: "2.0"
 ---
 ```

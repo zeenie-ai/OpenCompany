@@ -32,16 +32,16 @@ from unittest.mock import MagicMock
 
 import pytest
 
-# Stub the `machina` package (lives at project root, outside server/) so
+# Stub the root `cli` package (lives at project root, outside server/) so
 # services.temporal.__init__ → _runtime.py → from cli.tcp import
 # probe_tcp_port doesn't crash collection.
-if "machina" not in sys.modules:
-    _machina = types.ModuleType("cli")
-    _machina.__path__ = []
-    sys.modules["cli"] = _machina
-    _machina_tcp = types.ModuleType("cli.tcp")
-    _machina_tcp.probe_tcp_port = MagicMock(return_value=False)
-    sys.modules["cli.tcp"] = _machina_tcp
+if "cli" not in sys.modules:
+    _cli_stub = types.ModuleType("cli")
+    _cli_stub.__path__ = []
+    sys.modules["cli"] = _cli_stub
+    _opencompany_tcp = types.ModuleType("cli.tcp")
+    _opencompany_tcp.probe_tcp_port = MagicMock(return_value=False)
+    sys.modules["cli.tcp"] = _opencompany_tcp
 
 
 @pytest.fixture(autouse=True)
@@ -75,7 +75,7 @@ class TestSignalHandlerDedup:
         from services.temporal.trigger_listener_workflow import TriggerListenerWorkflow
 
         wf = TriggerListenerWorkflow()
-        payload = {"id": "evt-1", "type": "com.machinaos.webhook.received", "data": {}}
+        payload = {"id": "evt-1", "type": "com.opencompany.webhook.received", "data": {}}
 
         await wf.on_event(payload)
         await wf.on_event(payload)  # duplicate
@@ -88,7 +88,7 @@ class TestSignalHandlerDedup:
         from services.temporal.trigger_listener_workflow import TriggerListenerWorkflow
 
         wf = TriggerListenerWorkflow()
-        await wf.on_event({"type": "com.machinaos.webhook.received"})  # no 'id'
+        await wf.on_event({"type": "com.opencompany.webhook.received"})  # no 'id'
         assert wf._matched_events == []
         assert wf._seen_event_ids == set()
 
@@ -299,14 +299,14 @@ class TestSpawnChildRun:
         wf = tlw.TriggerListenerWorkflow()
         event = {
             "id": "evt-42",
-            "type": "com.machinaos.webhook.received",
+            "type": "com.opencompany.webhook.received",
             "data": {"path": "/hook", "method": "POST"},
         }
         listener_data = {
             "workflow_id": "wf-abc",
             "trigger_node_id": "wh-1",
             "node_type": "webhookTrigger",
-            "event_type": "com.machinaos.webhook.received",
+            "event_type": "com.opencompany.webhook.received",
             "filter_params": {},
             "nodes": [_node("wh-1", "webhookTrigger"), _node("agent-1", "aiAgent")],
             "edges": [_edge("wh-1", "agent-1")],

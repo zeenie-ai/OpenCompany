@@ -2,7 +2,7 @@
 name: rlm-reasoning-skill
 description: Guides the RLM agent to use REPL code execution with recursive LM calls for complex reasoning, decomposition, and multi-step problem solving.
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: reasoning
   icon: "🧠"

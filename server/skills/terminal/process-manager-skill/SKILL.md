@@ -3,7 +3,7 @@ name: process-manager-skill
 description: Start, stop, and manage long-running processes with full system PATH. Use for npm, python, node, dev servers, watchers, build tools. Destructive file commands blocked.
 allowed-tools: process_manager
 metadata:
-  author: machina
+  author: opencompany
   version: "3.0"
   category: execution
 

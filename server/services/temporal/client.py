@@ -1,4 +1,4 @@
-"""Temporal client wrapper for MachinaOs.
+"""Temporal client wrapper for OpenCompany.
 
 Manages the Temporal client connection lifecycle with retry support.
 """
@@ -150,7 +150,7 @@ class TemporalClientWrapper:
     async def terminate_running_workflows(
         self,
         *,
-        reason: str = "MachinaOS startup: auto-resumption disabled",
+        reason: str = "OpenCompany startup: auto-resumption disabled",
     ) -> int:
         """Terminate every workflow in ``Running`` state in our namespace.
 

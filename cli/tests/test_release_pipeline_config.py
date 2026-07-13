@@ -42,7 +42,7 @@ from cli.commands import build
 # Workspace package names. These are the stable IDs declared in each
 # `package.json` — paths are resolved via the `workspace_members`
 # fixture so tests don't care where the workspace lives on disk.
-SIDECAR_PKG_NAME = "machinaos-nodejs-executor"
+SIDECAR_PKG_NAME = "opencompany-nodejs-executor"
 CLIENT_PKG_NAME = "react-flow-client"
 
 
@@ -153,7 +153,7 @@ def test_sidecar_engines_match_esbuild_target(sidecar_pkg: dict):
 
 
 def test_sidecar_main_field_points_at_compiled_output(sidecar_pkg: dict):
-    """``main`` is what ``import 'machinaos-nodejs-executor'`` resolves
+    """``main`` is what ``import 'opencompany-nodejs-executor'`` resolves
     to — the compiled bundle, not the TS source.
     """
     assert sidecar_pkg.get("main") == "dist/index.js"
@@ -362,8 +362,8 @@ _INSTALL_JS_COMPILEALL_RE = re.compile(
 
 
 def test_install_js_compileall_command_shape(install_js_src: str):
-    """End-user ``npm install machinaos`` runs install.js. The
-    compileall step must use the same shape as ``machina build`` —
+    """End-user ``npm install opencompany`` runs install.js. The
+    compileall step must use the same shape as ``company build`` —
     ``uv run python -O -m compileall -q -j 0`` — so cold-start gains
     apply to the npm-tarball path too.
     """
@@ -375,7 +375,7 @@ def test_install_js_compileall_command_shape(install_js_src: str):
 def test_install_js_compileall_paths_match_source_dirs_constant(install_js_src: str):
     """install.js's path list and ``build.COMPILEALL_SOURCE_DIRS`` must
     match exactly. Drift means the npm-tarball install would compile a
-    different set of files than ``machina build``.
+    different set of files than ``company build``.
     """
     match = _INSTALL_JS_COMPILEALL_RE.search(install_js_src)
     assert match is not None, "compileall invocation not found in install.js"

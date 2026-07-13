@@ -2,7 +2,7 @@
 
 > **Source:** [code.claude.com/docs/en/skills](https://code.claude.com/docs/en/skills)
 > **Fetched:** 2026-05-11
-> **Why this lives in-repo:** MachinaOs materialises connected skills
+> **Why this lives in-repo:** OpenCompany materialises connected skills
 > into `<cwd>/.claude/skills/<name>/SKILL.md` on `_pre_spawn` so claude
 > auto-discovers them — see [`cli_agent_framework.md` → Memory bridge](./cli_agent_framework.md#memory-bridge--simplememory--claude_code_agent)
 > and [`cli_agent_canonical_patterns_rfc.md` §5 R1](./cli_agent_canonical_patterns_rfc.md).
@@ -227,7 +227,7 @@ To raise the budget, set the `skillListingBudgetFraction` setting (e.g. `0.02` =
 
 ---
 
-## How MachinaOs materialises skills for `claude_code_agent`
+## How OpenCompany materialises skills for `claude_code_agent`
 
 [`services/cli_agent/session.py:_materialise_skills`](../server/services/cli_agent/session.py)
 walks `connected_skill_names` (collected by edge_walker from the
@@ -245,7 +245,7 @@ Per *Live change detection* above, claude picks the skills up
 mid-session without a restart — but our spawn is fresh each task
 anyway, so we don't rely on that.
 
-`allowed-tools` in MachinaOs-shipped SKILL.md files uses the same
+`allowed-tools` in OpenCompany-shipped SKILL.md files uses the same
 syntax as upstream (`Bash(git diff *) Read` etc.) and is honoured by
 claude verbatim — see `server/skills/coding_agent/file-modify-skill/SKILL.md`
 for a reference.

@@ -3,7 +3,7 @@ name: google-gmail-skill
 description: Send, search, and read Gmail emails. Supports composing emails with attachments, searching by query, and reading email content.
 allowed-tools: "google_gmail"
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: productivity
 

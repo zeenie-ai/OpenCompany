@@ -17,6 +17,7 @@ import { hashKey, useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { nodeSpecToDescription, type NodeSpec } from '../adapters/nodeSpecToDescription';
 import type { INodeTypeDescription } from '../types/INodeProperties';
 import { featureFlags } from './featureFlags';
+import { BRAND_STORAGE_KEYS, readAndMigrateStorageValue } from './brandStorage';
 import { queryClient } from './queryClient';
 import { GC_TIME, STALE_TIME } from './queryConfig';
 import { useWebSocket } from '../contexts/WebSocketContext';
@@ -54,7 +55,7 @@ export async function fetchNodeSpec(
   });
 }
 
-const NODESPEC_REVISION_STORAGE_KEY = 'machina-nodespec-revision';
+const NODESPEC_REVISION_STORAGE_KEYS = BRAND_STORAGE_KEYS.nodeSpecRevision;
 
 /**
  * Prefetch every node type the backend knows about, in a single idle
@@ -77,11 +78,14 @@ export async function prefetchAllNodeSpecs(sendRequest: SendRequest): Promise<vo
     const revision: string | undefined = response?.revision;
 
     if (revision && typeof window !== 'undefined') {
-      const lastSeen = window.localStorage.getItem(NODESPEC_REVISION_STORAGE_KEY);
+      const lastSeen = readAndMigrateStorageValue(
+        window.localStorage,
+        NODESPEC_REVISION_STORAGE_KEYS,
+      );
       if (lastSeen !== revision) {
         queryClient.removeQueries({ queryKey: ['nodeSpec'] });
         queryClient.removeQueries({ queryKey: ['nodeGroups'] });
-        window.localStorage.setItem(NODESPEC_REVISION_STORAGE_KEY, revision);
+        window.localStorage.setItem(NODESPEC_REVISION_STORAGE_KEYS.canonical, revision);
       }
     }
 

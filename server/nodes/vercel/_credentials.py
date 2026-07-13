@@ -4,7 +4,7 @@ Two independent auth paths, either is sufficient:
 
 * **CLI login** — ``vercel login`` (browser device flow) driven by the
   ``vercel_login`` WS handler; the CLI stores its own auth state in the
-  MachinaOs-pinned ``--global-config`` dir (``<DATA_DIR>/vercel/``),
+  OpenCompany-pinned ``--global-config`` dir (``<DATA_DIR>/vercel/``),
   and a synthetic marker OAuth token flips the catalogue's ``stored``
   flag.
 * **Access token** — the optional ``vercel_token`` api-key row, pasted

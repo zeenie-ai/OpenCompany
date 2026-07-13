@@ -41,7 +41,7 @@ async def handle_codex_cli_login(
     return {
         "success": False,
         "error": (
-            "Codex login is not yet wired in MachinaOs. "
+            "Codex login is not yet wired in OpenCompany. "
             "Install with `npm install -g @openai/codex` and run "
             "`codex login` in your terminal — then click Login again "
             "to mark connected."

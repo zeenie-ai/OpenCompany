@@ -244,7 +244,7 @@ class AgentWorkflow:
 
         # Emit "executing" + phase="starting" via the existing
         # broadcast_agent_progress activity (CloudEvents
-        # com.machinaos.agent.progress + raw-dict node_status for
+        # com.opencompany.agent.progress + raw-dict node_status for
         # canvas glow). Mirrors what F4.A's _node_activity wrapper
         # does for non-agent plugins.
         await self._emit_phase(
@@ -648,7 +648,7 @@ class AgentWorkflow:
         )
 
         # Final lifecycle broadcast — canvas glow goes green + FE
-        # consumers of com.machinaos.agent.progress see phase="completed".
+        # consumers of com.opencompany.agent.progress see phase="completed".
         await self._emit_phase(
             agent_node_id,
             agent_workflow_id,

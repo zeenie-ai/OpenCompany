@@ -3,14 +3,15 @@
 Stdlib-only env-var loader. Three env files, lowest precedence first:
 
   1. ``.env.template`` — canonical production defaults. Ships with every
-     install. ``DATA_DIR=~/.machina`` (user home) is the daemon
-     behaviour: ``machina start`` / ``machina daemon`` use these.
+     install. ``DATA_DIR=~/.opencompany`` (user home) is the daemon
+     behaviour: ``company start`` / ``company daemon`` use these.
   2. ``.env`` — user overrides (created by ``scripts/postinstall.js`` on
-     ``npm install -g machinaos``). Gitignored.
-  3. ``.env.dev`` — dev-mode overrides. Loaded ONLY by ``machina dev``
-     via :func:`load_dev_overrides`. Pins ``DATA_DIR=.machina`` so
-     per-checkout dev state lives at ``<repo>/.machina/`` instead of
-     ``~/.machina/``. Committed to git.
+     ``npm install -g opencompany``). Gitignored.
+  3. ``.env.dev`` — dev-mode overrides. Loaded ONLY by ``company dev``
+     via :func:`load_dev_overrides`. Pins ``DATA_DIR=.opencompany`` so
+     per-checkout dev state lives at ``<repo>/.opencompany/`` instead of
+     ``~/.opencompany/``. Committed to git. Existing explicit ``.machina``
+     values remain valid and are intentionally honoured.
 
 Process env (``os.environ``) wins over all three. Merged file values
 are pushed into ``os.environ`` via ``setdefault`` so downstream
@@ -54,7 +55,7 @@ def _require(env: dict[str, str], key: str) -> str:
     if raw is None:
         raise KeyError(
             f"{key} missing from .env / .env.template -- "
-            "reinstall (``npm install -g machinaos``) or restore the template."
+            "reinstall (``npm install -g opencompany``) or restore the template."
         )
     return raw
 
@@ -89,7 +90,7 @@ class Config:
     @property
     def all_ports(self) -> list[int]:
         # Ports the supervisor frees pre-spawn and verifies are released
-        # on ``machina stop``. ``temporal_port`` (gRPC) and
+        # on ``company stop``. ``temporal_port`` (gRPC) and
         # ``temporal_ui_port`` are bound by the same ``temporal server
         # start-dev`` process, so killing one kills both — listing both
         # only matters when cleaning up stale orphans on either port.
@@ -106,18 +107,18 @@ class Config:
 def load_dev_overrides(root: Path | None = None) -> None:
     """Layer ``.env.dev`` on top of ``.env.template`` + ``.env``.
 
-    Called by ``machina dev`` BEFORE :func:`load_config` so dev-only env
-    vars (notably ``DATA_DIR=.machina``, the per-checkout dev state
+    Called by ``company dev`` BEFORE :func:`load_config` so dev-only env
+    vars (notably ``DATA_DIR=.opencompany``, the per-checkout dev state
     root) land in ``os.environ`` first. ``load_config`` then sees them
     via its own ``setdefault`` pass and skips its template fallbacks.
 
     Uses ``setdefault`` so an explicit shell override
-    (``DATA_DIR=/foo machina dev``) still wins. Missing ``.env.dev``
+    (``DATA_DIR=/foo company dev``) still wins. Missing ``.env.dev``
     file is a no-op — production-style invocations never trigger this.
 
-    The daemon path (``machina start`` / ``machina daemon``) does not
+    The daemon path (``company start`` / ``company daemon``) does not
     call this, so daemon installs keep the ``.env.template`` default
-    of ``DATA_DIR=~/.machina``.
+    of ``DATA_DIR=~/.opencompany``.
     """
     root = root or project_root()
     for key, value in _load_env_file(root / ".env.dev").items():
@@ -142,7 +143,7 @@ def load_config(root: Path | None = None) -> Config:
     if not template.exists():
         raise FileNotFoundError(
             f".env.template not found at {template}. "
-            "Reinstall (``npm install -g machinaos``) or restore the template "
+            "Reinstall (``npm install -g opencompany``) or restore the template "
             "from the source tree."
         )
 

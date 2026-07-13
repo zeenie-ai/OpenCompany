@@ -30,7 +30,7 @@ from typing import Optional
 
 from core.config import Settings
 from core.logging import get_logger
-from services.events.envelope import WorkflowEvent
+from services.events.envelope import WorkflowEvent, equivalent_event_types
 
 logger = get_logger(__name__)
 
@@ -46,6 +46,7 @@ _DEFAULT_WIRE_ROUTING_KEY = "cloudevent"
 # ``ExecutionStatus`` enum value 'Running' matches Temporal's status
 # encoding; see https://docs.temporal.io/list-filter.
 _RUNNING_CONSUMERS_QUERY = "EventType='{event_type}' AND ExecutionStatus='Running'"
+_RUNNING_COMPAT_CONSUMERS_QUERY = "({event_type_clauses}) AND ExecutionStatus='Running'"
 
 # Signal handler name on consumer workflows. Plain identifier rather
 # than CloudEvents type because Temporal Signal names are Python
@@ -117,7 +118,12 @@ async def _signal_running_consumers(event: WorkflowEvent) -> None:
         return
 
     client = wrapper.client
-    query = _RUNNING_CONSUMERS_QUERY.format(event_type=event.type)
+    event_types = equivalent_event_types(event.type)
+    if len(event_types) == 1:
+        query = _RUNNING_CONSUMERS_QUERY.format(event_type=event_types[0])
+    else:
+        clauses = " OR ".join(f"EventType='{event_type}'" for event_type in event_types)
+        query = _RUNNING_COMPAT_CONSUMERS_QUERY.format(event_type_clauses=clauses)
 
     try:
         consumers = []

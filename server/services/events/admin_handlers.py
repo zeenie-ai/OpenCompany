@@ -1,6 +1,6 @@
 """Wave 12 D3: Visibility admin WS handlers.
 
-Thin wrappers around Temporal's Visibility API so the MachinaOs admin
+Thin wrappers around Temporal's Visibility API so the OpenCompany admin
 UI can inspect canary listener / schedule state without leaving the
 app. No new DB tables, no custom persistence — Temporal Event History
 + Visibility queries ARE the registry (see
@@ -69,7 +69,7 @@ async def handle_list_canary_listeners(
                  "status": "RUNNING",
                  "start_time": "<ISO>",
                  "trigger_node_id": "<node>",
-                 "event_type": "<com.machinaos. ... >"},
+                 "event_type": "<com.opencompany. ... >"},
                 ...
             ],
             "count": <int>,

@@ -3,7 +3,7 @@ name: compaction-skill
 description: Manage memory compaction by summarizing conversation history when approaching token limits
 allowed-tools: memory-save memory-get
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: memory
   icon: "📦"

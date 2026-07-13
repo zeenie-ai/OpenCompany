@@ -8,7 +8,7 @@ and ``client.list_workflows`` calls are captured and asserted.
 The canonical pattern under test:
 
 1. **Deterministic listener id** = ``trigger-listener-{workflow_id}-{node_id}``.
-   Re-deploy of the same MachinaOs workflow targets the same Temporal id.
+   Re-deploy of the same OpenCompany workflow targets the same Temporal id.
 2. **WorkflowIDConflictPolicy.USE_EXISTING** — Temporal returns the existing
    handle instead of erroring on a duplicate-id start. Idempotent re-deploy.
 3. **TypedSearchAttributes set at start** — ``EventType``, ``TriggerNodeId``,
@@ -32,14 +32,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-# Stub `machina` namespace — same pattern as other event-framework tests.
-if "machina" not in sys.modules:
-    _machina = types.ModuleType("cli")
-    _machina.__path__ = []
-    sys.modules["cli"] = _machina
-    _machina_tcp = types.ModuleType("cli.tcp")
-    _machina_tcp.probe_tcp_port = MagicMock(return_value=False)
-    sys.modules["cli.tcp"] = _machina_tcp
+# Stub the root `cli` namespace — same pattern as other event-framework tests.
+if "cli" not in sys.modules:
+    _cli_stub = types.ModuleType("cli")
+    _cli_stub.__path__ = []
+    sys.modules["cli"] = _cli_stub
+    _opencompany_tcp = types.ModuleType("cli.tcp")
+    _opencompany_tcp.probe_tcp_port = MagicMock(return_value=False)
+    sys.modules["cli.tcp"] = _opencompany_tcp
 
 
 @pytest.fixture
@@ -139,7 +139,7 @@ class TestCanaryScope:
     async def test_disabled_when_flag_off(self, monkeypatch, fresh_canary_registry):
         from services.deployment.manager import DeploymentManager
 
-        fresh_canary_registry.register_canary_trigger_type("webhookTrigger", "com.machinaos.webhook.received")
+        fresh_canary_registry.register_canary_trigger_type("webhookTrigger", "com.opencompany.webhook.received")
 
         class _Off:
             event_framework_enabled = False
@@ -172,8 +172,8 @@ class TestCanaryScope:
     async def test_enabled_when_registered_and_flag_on(self, monkeypatch, fresh_canary_registry):
         from services.deployment.manager import DeploymentManager
 
-        fresh_canary_registry.register_canary_trigger_type("webhookTrigger", "com.machinaos.webhook.received")
-        fresh_canary_registry.register_canary_trigger_type("chatTrigger", "com.machinaos.chat.message.received")
+        fresh_canary_registry.register_canary_trigger_type("webhookTrigger", "com.opencompany.webhook.received")
+        fresh_canary_registry.register_canary_trigger_type("chatTrigger", "com.opencompany.chat.message.received")
 
         class _On:
             event_framework_enabled = True
@@ -312,7 +312,7 @@ class TestStartCanaryListener:
         # event.type into the EventType filter — if the SA carries the
         # legacy snake_case event_waiter string instead, the query
         # never matches and no signal reaches the listener.
-        assert attrs_by_name["EventType"] == "com.machinaos.webhook.received"
+        assert attrs_by_name["EventType"] == "com.opencompany.webhook.received"
 
     @pytest.mark.asyncio
     async def test_chat_trigger_uses_chat_kind_in_search_attrs(self, monkeypatch):
@@ -348,7 +348,7 @@ class TestStartCanaryListener:
         assert attrs_by_name["EventTriggerKind"] == "chat"
         # CloudEvents reverse-DNS — see test_search_attributes_include_event_workflow_id
         # for the full rationale.
-        assert attrs_by_name["EventType"] == "com.machinaos.chat.message.received"
+        assert attrs_by_name["EventType"] == "com.opencompany.chat.message.received"
 
     @pytest.mark.asyncio
     async def test_returns_none_when_temporal_not_connected(self, monkeypatch):

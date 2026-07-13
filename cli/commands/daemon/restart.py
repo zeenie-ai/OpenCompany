@@ -1,4 +1,4 @@
-"""``machina daemon restart`` -- stop then start."""
+"""``company daemon restart`` -- stop then start."""
 
 from __future__ import annotations
 

@@ -3,7 +3,7 @@ name: serper-search-skill
 description: Search the web using Serper API for Google-powered search results including web, news, images, and places.
 allowed-tools: serper_search
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: search
 

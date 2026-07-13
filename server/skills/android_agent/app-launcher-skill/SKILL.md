@@ -3,7 +3,7 @@ name: app-launcher-skill
 description: Launch Android applications by package name. Open any installed app programmatically.
 allowed-tools: app_launcher
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: android
 

@@ -110,4 +110,4 @@ class WebhookTriggerNode(TriggerNode):
 # Gated runtime by Settings.event_framework_enabled in DeploymentManager;
 # the producer side (broadcast_webhook_received calling dispatch.emit) is
 # unconditional. See services/deployment/canary_registry.py.
-register_canary_trigger_type(WebhookTriggerNode.type, "com.machinaos.webhook.received")
+register_canary_trigger_type(WebhookTriggerNode.type, "com.opencompany.webhook.received")

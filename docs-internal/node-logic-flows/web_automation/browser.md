@@ -12,7 +12,7 @@
 ## Purpose
 
 Interactive browser automation via the `agent-browser` CLI. The binary is a
-MachinaOs-managed local install resolved by
+OpenCompany-managed local install resolved by
 [`nodes/browser/_install.py::agent_browser_binary_path`](../../../server/nodes/browser/_install.py)
 (installed via `npm install agent-browser --prefix <package_dir>` on first use,
 same pattern as Claude Code's project-local CLI — NOT a workspace `package.json`
@@ -24,7 +24,7 @@ element refs returned by snapshot -> `snapshot` again to verify.
 
 Session state (cookies, open tabs, auth) persists across sequential operations
 that share the same `session` value. If no session is provided the handler
-derives `machina_<execution_id>` from the current execution context. The
+derives `opencompany_<execution_id>` from the current execution context. The
 execution_id is stable for the whole run — threaded through MachinaWorkflow
 node contexts, AgentWorkflow tool payloads (deterministic
 `workflow.info().run_id` fallback), the legacy in-process tool dispatch, and
@@ -67,7 +67,7 @@ Params model is `BrowserParams` (field names are snake_case). `tool_name` /
 | `annotate` | boolean | `false` | no | `operation=screenshot` | Passes `--annotate` |
 | `screenshot_format` | options (Literal: png/jpeg) | `png` | no | `operation=screenshot` | Forwarded as `--screenshot-format` when not png |
 | `screenshot_quality` | int (1-100) | `85` | no | `operation=screenshot, screenshot_format=jpeg` | Forwarded as `--screenshot-quality`, only for jpeg |
-| `session` | string | `""` | no | - | Session id; if empty, handler uses `machina_<execution_id>` |
+| `session` | string | `""` | no | - | Session id; if empty, handler uses `opencompany_<execution_id>` |
 | `browser` | options (Literal) | `chrome` | no | - | `chrome` / `edge` / `chromium` / `bundled_explicit` / `custom`. Legacy/empty `bundled` silently upgraded to `chrome` at dispatch |
 | `executable_path` | string | `""` | no | `browser=custom` | Explicit browser path when `browser=custom` |
 | `headed` | boolean | `true` | no | - | Show browser window (false = headless `--headed` omitted) |
@@ -149,7 +149,7 @@ flowchart TD
 - **Service missing**: `get_browser_service()` returns `None` when the
   agent-browser binary cannot be resolved (Node toolchain / `npm` unavailable)
   -> `RuntimeError("agent-browser not installed...")` -> error envelope.
-- **Session resolution**: empty `session` -> `machina_<execution_id>` via the
+- **Session resolution**: empty `session` -> `opencompany_<execution_id>` via the
   typed `ctx.execution_id` accessor (handles present-but-None on the agent
   tool-dispatch path). Only the stripped value is considered empty; whitespace
   triggers the fallback. The resolved session is logged in the `[Browser]`
@@ -201,7 +201,7 @@ flowchart TD
 - **Credentials**: none.
 - **Services**: `BrowserService` singleton; `npm` on PATH (for first-use
   install); `agent-browser` installed under `<package_dir("browser")>/npm/`
-  by `nodes/browser/_install.py` (MachinaOs-managed, not a workspace dep).
+  by `nodes/browser/_install.py` (OpenCompany-managed, not a workspace dep).
 - **Python packages**: `psutil` (via `kill_tree` for process-tree kill).
 - **Environment variables**: `BROWSER_MAX_INSTANCES` (concurrent session cap,
   default 3), `BROWSER_IDLE_TIMEOUT_MS` (daemon idle auto-shutdown in ms,

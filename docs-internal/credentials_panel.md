@@ -156,7 +156,7 @@ After validation succeeds, the frontend still calls `saveApiKey` (or backend sto
 
 ### 2.6 Pattern F — OAuth via isolated subprocess (Claude)
 
-**Credentials stored**: not in MachinaOs's encrypted DB. The official `@anthropic-ai/claude-code` CLI manages its own credentials file under `CLAUDE_CONFIG_DIR = <DATA_DIR>/claude/` (= `~/.machina/claude/` by default), isolated from the user's own `~/.claude/` session. MachinaOs never reads or writes that file; it only writes a synthetic `"cli-managed"` marker OAuth token via `auth_service.store_oauth_tokens` so the catalogue's `stored` flag flips. The CLI binary is npm-installed into the shared MachinaOs tree at `<DATA_DIR>/packages/node_modules/.bin/claude[.cmd]`.
+**Credentials stored**: not in OpenCompany's encrypted DB. The official `@anthropic-ai/claude-code` CLI manages its own credentials file under `CLAUDE_CONFIG_DIR = <DATA_DIR>/claude/` (= `~/.opencompany/claude/` by default), isolated from the user's own `~/.claude/` session. OpenCompany never reads or writes that file; it only writes a synthetic `"cli-managed"` marker OAuth token via `auth_service.store_oauth_tokens` so the catalogue's `stored` flag flips. The CLI binary is npm-installed into the shared OpenCompany tree at `<DATA_DIR>/packages/node_modules/.bin/claude[.cmd]`.
 
 **Happy path** (wire keys `claude_code_login` / `claude_code_logout`; handlers in `nodes/agent/claude_code_agent/_handlers.py`, CLI wrappers in `_oauth.py`):
 ```
@@ -181,7 +181,7 @@ No logout WebSocket handler — user can manually delete the credentials file or
 
 ### 2.7 Pattern G — QR pairing (WhatsApp)
 
-**Credentials stored**: nothing in MachinaOs DB. Session lives inside the bundled `whatsapp-rpc` Go service (default port 9400).
+**Credentials stored**: nothing in OpenCompany DB. Session lives inside the bundled `whatsapp-rpc` Go service (default port 9400).
 
 **Happy path**:
 ```

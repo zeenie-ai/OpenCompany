@@ -11,7 +11,8 @@ are isolated to the provider; the session/pool/service layer is generic.
 
 Auth: native CLI handles its own tokens. We only trigger the login flow
 (`login_argv()`) and detect logged-in state (`auth_status_argv()` +
-`detect_auth_error()`). No credential wrapping, no `~/.claude-machina/`.
+`detect_auth_error()`). No credential wrapping; provider state is isolated
+under the configured OpenCompany data directory.
 """
 
 from __future__ import annotations
@@ -102,7 +103,7 @@ class AICliProvider(Protocol):
     package_name: str  # npm package
     binary_name: str  # "claude" | "codex" | "gemini"
     ide_lock_env_var: Optional[str]  # CLAUDE_IDE_LOCK | GEMINI_IDE_LOCK | None
-    ide_lockfile_dir: Optional[Path]  # <MACHINA_CLAUDE_DIR>/ide | <tmpdir>/gemini/ide
+    ide_lockfile_dir: Optional[Path]  # <OPENCOMPANY_CLAUDE_DIR>/ide | <tmpdir>/gemini/ide
 
     # ---- spawn surface ---------------------------------------------------
 

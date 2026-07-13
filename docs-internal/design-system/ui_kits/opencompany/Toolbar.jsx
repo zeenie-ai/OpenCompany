@@ -1,6 +1,6 @@
-// MachinaOS UI kit — top toolbar (48px, bg-panel).
+// OpenCompany UI kit — top toolbar (48px, bg-panel).
 // Composes ActionButton / Button / ModeToggle / Icon from the DS bundle.
-const DS_TB = window.MachinaOSDesignSystem_2559cf;
+const DS_TB = window.OpenCompanyDesignSystem_2559cf;
 
 function Divider() {
   return <div style={{ width: 1, height: 24, background: 'var(--border-default)', margin: '0 4px', flexShrink: 0 }}></div>;
@@ -72,4 +72,4 @@ function Toolbar({
   );
 }
 
-window.MachinaKit = Object.assign(window.MachinaKit || {}, { Toolbar });
+window.OpenCompanyKit = Object.assign(window.OpenCompanyKit || {}, { Toolbar });

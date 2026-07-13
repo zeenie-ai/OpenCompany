@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | whatsapp / trigger |
-| **Backend handler** | [`server/nodes/whatsapp/whatsapp_receive.py`](../../../server/nodes/whatsapp/whatsapp_receive.py) (`WhatsAppReceiveNode`, a `TriggerNode`); the filter closure is built by `build_filter()` -> [`server/nodes/whatsapp/_filters.py::build_filter`](../../../server/nodes/whatsapp/_filters.py) (self-registered into `event_waiter.FILTER_BUILDERS` as `whatsappReceive`). Canary-registered with CloudEvents type `com.machinaos.whatsapp.message.received`; deployment fires via `TriggerListenerWorkflow`. |
+| **Backend handler** | [`server/nodes/whatsapp/whatsapp_receive.py`](../../../server/nodes/whatsapp/whatsapp_receive.py) (`WhatsAppReceiveNode`, a `TriggerNode`); the filter closure is built by `build_filter()` -> [`server/nodes/whatsapp/_filters.py::build_filter`](../../../server/nodes/whatsapp/_filters.py) (self-registered into `event_waiter.FILTER_BUILDERS` as `whatsappReceive`). Canary-registered with CloudEvents type `com.opencompany.whatsapp.message.received`; deployment fires via `TriggerListenerWorkflow`. |
 | **Tests** | [`server/tests/nodes/test_whatsapp.py`](../../../server/tests/nodes/test_whatsapp.py) |
 | **Skill (if any)** | n/a |
 | **Dual-purpose tool** | no - pure trigger node |
@@ -12,7 +12,7 @@
 
 Event-driven trigger that waits for incoming WhatsApp messages and starts a
 workflow run when one matches. `whatsappReceive` is canary-registered
-(CloudEvents type `com.machinaos.whatsapp.message.received`): on deployment the
+(CloudEvents type `com.opencompany.whatsapp.message.received`): on deployment the
 manager spawns a `TriggerListenerWorkflow` per (deployment, trigger) pair which
 receives the CloudEvents envelope via Temporal Signal and spawns a child
 `MachinaWorkflow` per matching event. Single-node "Run" (non-deployed test)

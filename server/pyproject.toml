@@ -1,7 +1,7 @@
 [project]
-name = "machinaos-server"
+name = "opencompany-server"
 version = "0.1.0"
-description = "MachinaOS workflow automation backend"
+description = "OpenCompany workflow automation backend"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     # Core
@@ -145,7 +145,7 @@ dependencies = [
     "rlms>=0.1.1",
 
     # MCP (Model Context Protocol) — host server for spawned CLI sessions
-    # to discover and call MachinaOs tools (mcp__machina__*) the same way
+    # to discover and call OpenCompany tools (mcp__opencompany__*) the same way
     # VSCode's Claude Code extension does.
     "mcp>=1.0.0",
 
@@ -172,7 +172,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # PEP 621 extras — downstream consumers opt into these via
-# ``pip install machinaos-server[<extra>]`` / ``uv pip install -e .[<extra>]``.
+# ``pip install opencompany-server[<extra>]`` / ``uv pip install -e .[<extra>]``.
 # Dev tooling lives in ``[dependency-groups]`` below (PEP 735) instead so
 # ``uv sync`` keeps it installed by default in contributor checkouts.
 docs = [
@@ -195,7 +195,7 @@ aws = [
 # meant every ``pnpm install`` (= ``uv sync`` without ``--extra dev``)
 # uninstalled them — broke contributor test workflows on every install
 # / dependency bump. Moving them here keeps ``pip install
-# machinaos-server`` lean for end-users while making contributor
+# opencompany-server`` lean for end-users while making contributor
 # checkouts test-ready straight out of ``pnpm install``.
 dev = [
     "pytest>=8.0.0",

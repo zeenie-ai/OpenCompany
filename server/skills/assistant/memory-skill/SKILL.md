@@ -3,7 +3,7 @@ name: memory-skill
 description: Manage conversation memory. Use when user asks to remember something, recall information, view/edit conversation history, or manage short/long-term memory.
 allowed-tools: memory-save memory-get memory-clear memory-view memory-search
 metadata:
-  author: machina
+  author: opencompany
   version: "2.0"
   category: memory
   icon: "🧠"

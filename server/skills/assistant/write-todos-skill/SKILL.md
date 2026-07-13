@@ -3,7 +3,7 @@ name: write-todos-skill
 description: Create and manage structured task lists for planning and tracking complex multi-step operations.
 allowed-tools: write_todos
 metadata:
-  author: machina
+  author: opencompany
   version: "2.0"
   category: automation
 

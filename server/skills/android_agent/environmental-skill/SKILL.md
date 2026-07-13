@@ -3,7 +3,7 @@ name: environmental-skill
 description: Get Android environmental sensor data - temperature, humidity, pressure, and ambient light level.
 allowed-tools: environmental_sensors
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: android
 

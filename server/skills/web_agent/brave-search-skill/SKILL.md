@@ -3,7 +3,7 @@ name: brave-search-skill
 description: Search the web using Brave Search API for privacy-focused, independent search results with no tracking.
 allowed-tools: brave_search
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: search
 

@@ -113,7 +113,7 @@
       "models_endpoint": "https://openrouter.ai/api/v1/models",
       "api_key_param": "api_key",
       "max_tokens_param": "max_tokens",
-      "extra_headers": {"HTTP-Referer": "http://localhost:3000", "X-Title": "MachinaOS"},
+      "extra_headers": {"HTTP-Referer": "http://localhost:3000", "X-Title": "OpenCompany"},
       "max_output_tokens": {
         "_default": 4096
       },

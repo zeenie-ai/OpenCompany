@@ -21,7 +21,7 @@ from services.events.envelope import WorkflowEvent
 
 # Outer wire-routing key. Matches ``WebhookTriggerNode.event_type`` and
 # the FE WS channel; the inner envelope carries
-# ``com.machinaos.webhook.received``.
+# ``com.opencompany.webhook.received``.
 _WIRE_ROUTING_KEY = "webhook_received"
 
 
@@ -31,8 +31,8 @@ def webhook_received(webhook_data: Mapping[str, Any]) -> WorkflowEvent:
     payload = dict(webhook_data)
     path = payload.get("path")
     return WorkflowEvent(
-        source="machinaos://nodes/webhook_trigger",
-        type="com.machinaos.webhook.received",
+        source="opencompany://nodes/webhook_trigger",
+        type="com.opencompany.webhook.received",
         subject=str(path) if path else None,
         data=payload,
     )

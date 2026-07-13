@@ -74,7 +74,7 @@ This invokes `run_standalone_worker()` from `services/temporal/worker.py`.
                    In-process call (F4.A) OR
                    WebSocket round-trip (legacy)
                    +----------------+
-                   | MachinaOs      |
+                   | OpenCompany      |
                    | workflow_svc   |
                    +----------------+
 ```
@@ -133,7 +133,7 @@ context = {
 ### 1. Workflow Receives Request
 
 ```
-MachinaOs Server
+OpenCompany Server
        |
        v execute_workflow()
 TemporalExecutor
@@ -399,7 +399,7 @@ AgentWorkflow.run(context):
   emit_phase("completed", status="success")
 ```
 
-`emit_phase(phase, status?)` is a thin helper that schedules `agent.broadcast_progress.v1`. The activity emits `WorkflowEvent.agent_progress` (CloudEvents v1.0, `type="com.machinaos.agent.progress"`) for FE consumers; when `status` is supplied it also drives a raw-dict `update_node_status` for the canvas-glow color (executing / success / error). Same dual-channel pattern F4.A's `_node_activity` uses. When this workflow is itself a delegated child (`context["parent_node_id"]` set), every `emit_phase` call ALSO schedules a second broadcast against the parent's `node_id` with `phase="delegating"` — the parent's canvas badge then advances in real time while the child loops, instead of freezing at "executing" glow until the child completes.
+`emit_phase(phase, status?)` is a thin helper that schedules `agent.broadcast_progress.v1`. The activity emits `WorkflowEvent.agent_progress` (CloudEvents v1.0, `type="com.opencompany.agent.progress"`) for FE consumers; when `status` is supplied it also drives a raw-dict `update_node_status` for the canvas-glow color (executing / success / error). Same dual-channel pattern F4.A's `_node_activity` uses. When this workflow is itself a delegated child (`context["parent_node_id"]` set), every `emit_phase` call ALSO schedules a second broadcast against the parent's `node_id` with `phase="delegating"` — the parent's canvas badge then advances in real time while the child loops, instead of freezing at "executing" glow until the child completes.
 
 Each LLM step is one activity, each tool call is one per-type activity (the same activities F4.A registered). **Delegation tool calls** (`delegate_to_<x>`) where the child type is in `AGENT_WORKFLOW_TYPES` are the exception: they spawn a child `AgentWorkflow` via `workflow.execute_child_workflow` instead of a per-type activity, with `parent_node_id` injected into `child_context` to enable the parent-mirror broadcast above. Deterministic child workflow id is `f"{parent_workflow_id}-delegate-{child_node_id}-{iteration}"` so Temporal retries don't spawn duplicates. Non-agent tools and excluded types (`rlm_agent`, `claude_code_agent`) still go through `execute_activity` as before. Failures of tool activities surface as error messages back to the LLM (matching the in-process agent loop behaviour); the agent loop continues.
 
@@ -419,7 +419,7 @@ Each LLM step is one activity, each tool call is one per-type activity (the same
 | `agent.store_output.v1` | Writes `output_main` / `output_top` / `output_0` so downstream nodes resolve `{{aiAgent.response}}` via `ParameterResolver`. |
 | `agent.broadcast_progress.v1` | Emits `WorkflowEvent.agent_progress` (CloudEvents v1.0) + optional raw-dict `update_node_status` for canvas-glow color. Single helper drives every phase emit. |
 
-**Broadcasts inside the loop** wrap `WorkflowEvent` (CloudEvents v1.0) per RFC §6.4: `agent_progress` events (`com.machinaos.agent.progress`) and `node_parameters_updated` events (`com.machinaos.node.parameters.updated`) flow through the `StatusBroadcaster.broadcast_agent_progress` and `StatusBroadcaster.broadcast_node_parameters_updated` wrappers respectively. The latter is reused by the legacy `routers/websocket.py:handle_save_node_parameters` (user-source) and `services/cli_agent/service.py:_persist_memory` (cli-source) — all three emission sites share the same envelope, distinguished by `source_hint` (`"user"` / `"cli"` / `"agent"`).
+**Broadcasts inside the loop** wrap `WorkflowEvent` (CloudEvents v1.0) per RFC §6.4: `agent_progress` events (`com.opencompany.agent.progress`) and `node_parameters_updated` events (`com.opencompany.node.parameters.updated`) flow through the `StatusBroadcaster.broadcast_agent_progress` and `StatusBroadcaster.broadcast_node_parameters_updated` wrappers respectively. The latter is reused by the legacy `routers/websocket.py:handle_save_node_parameters` (user-source) and `services/cli_agent/service.py:_persist_memory` (cli-source) — all three emission sites share the same envelope, distinguished by `source_hint` (`"user"` / `"cli"` / `"agent"`).
 
 `rlm_agent`, `claude_code_agent` are NOT migrated — their internal session state (RLM REPL / Claude CLI `--resume` with stable `cwd`) requires single-process continuity and would break across activity boundaries.
 
@@ -533,21 +533,21 @@ client = await Client.connect(server_address, namespace=namespace, runtime=runti
 
 The Temporal binary + persistence are managed in-process by the plugin-folder pattern at [`server/services/temporal/`](../server/services/temporal/). Single supervised process — the official `temporal` CLI's `server start-dev` mode, per [docs.temporal.io/develop/python/set-up-your-local-python](https://docs.temporal.io/develop/python/set-up-your-local-python). Five sibling files (`_install.py`, `_runtime.py`, `_handlers.py`, `_refresh.py`, `client.py`, plus `__init__.py` for registry wiring) match the [Wave 11 plugin-folder pattern](./plugin_system.md#self-contained-plugin-folders) that `server/nodes/whatsapp/` uses for its Go binary.
 
-**What runs**: one process — `temporal server start-dev --port 7233 --ui-port 8080 --db-filename ~/.machina/temporal.db --namespace default`. Both gRPC + Web UI bind to the same process (per docs.temporal.io/cli/server — "all running in a single process"). SQLite-backed durability; history persisted across restarts.
+**What runs**: one process — `temporal server start-dev --port 7233 --ui-port 8080 --db-filename ~/.opencompany/temporal.db --namespace default`. Both gRPC + Web UI bind to the same process (per docs.temporal.io/cli/server — "all running in a single process"). SQLite-backed durability; history persisted across restarts.
 
 **Modern libs doing the heavy lifting** (zero custom infrastructure code):
-- **[`pooch`](https://pypi.org/project/pooch/)** — `services/temporal/_install.py` downloads the official `temporal` CLI archive from `https://temporal.download/cli/archive/latest?platform=<os>&arch=<arch>`. Cross-platform (Windows zip / macOS+Linux tar.gz), cached at `<DATA_DIR>/packages/temporal/` via `_cache_dir() = core.paths.package_dir("temporal")` (pooch's `path=` argument). The retrieve call passes an explicit `downloader=pooch.HTTPDownloader(timeout=300, progressbar=True)`: the timeout is per-socket-read (not total transfer), so arbitrarily slow links can finish the ~114 MB fetch — pooch's 30 s default aborted them — and `progressbar` must live on the downloader because `retrieve()` ignores its own kwarg when `downloader=` is explicit. Failed downloads never poison the cache (pooch writes to a temp file and renames atomically on success). Standalone entry: `python -m services.temporal._install` — invoked **fatally** by `machina build` step [6/6] (so first `machina start` doesn't pay the download; contract locked by `test_temporal_install_is_fatal_on_failure`) and **non-fatally** by npm postinstall (`scripts/install.js` try/catch — `TemporalServerRuntime._pre_spawn()` re-downloads lazily on first `machina start`, so a failed eager fetch never fails `npm install -g`). The binary cache survives `machina clean` (`packages` is in `_MACHINA_KEEP`, `cli/commands/clean.py`). Pre-fix this used `pooch.os_cache("machinaos-temporal")` (`~/.cache/MachinaOs/machinaos-temporal/` etc.) — a separate OS-cache namespace operators reported as "not local"; it now sits under DATA_DIR alongside the Stripe binary and the shared npm tree.
+- **[`pooch`](https://pypi.org/project/pooch/)** — `services/temporal/_install.py` downloads the official `temporal` CLI archive from `https://temporal.download/cli/archive/latest?platform=<os>&arch=<arch>`. Cross-platform (Windows zip / macOS+Linux tar.gz), cached at `<DATA_DIR>/packages/temporal/` via `_cache_dir() = core.paths.package_dir("temporal")` (pooch's `path=` argument). The retrieve call passes an explicit `downloader=pooch.HTTPDownloader(timeout=300, progressbar=True)`: the timeout is per-socket-read (not total transfer), so arbitrarily slow links can finish the ~114 MB fetch — pooch's 30 s default aborted them — and `progressbar` must live on the downloader because `retrieve()` ignores its own kwarg when `downloader=` is explicit. Failed downloads never poison the cache (pooch writes to a temp file and renames atomically on success). Standalone entry: `python -m services.temporal._install` — invoked **fatally** by `company build` step [6/6] (so first `company start` doesn't pay the download; contract locked by `test_temporal_install_is_fatal_on_failure`) and **non-fatally** by npm postinstall (`scripts/install.js` try/catch — `TemporalServerRuntime._pre_spawn()` re-downloads lazily on first `company start`, so a failed eager fetch never fails `npm install -g`). The binary cache survives `company clean` (`packages` is in `_OPENCOMPANY_KEEP`, `cli/commands/clean.py`). Pre-fix this used `pooch.os_cache("opencompany-temporal")` (`~/.cache/OpenCompany/opencompany-temporal/` etc.) — a separate OS-cache namespace operators reported as "not local"; it now sits under DATA_DIR alongside the Stripe binary and the shared npm tree.
 - **`BaseProcessSupervisor` + `BaseSupervisor`** (`server/services/_supervisor/`) — the in-house supervisor base classes that `server/nodes/whatsapp/_runtime.py` also uses. Provides cross-platform signal handling (POSIX `setsid` + Windows Job Objects + `CREATE_NEW_PROCESS_GROUP` for graceful `CTRL_BREAK_EVENT` shutdown), restart policy via tenacity, log draining, status snapshots. We subclass both — zero custom supervisor logic.
 
 **ServiceSpec wiring**: [`cli/commands/_temporal_specs.py`](../cli/commands/_temporal_specs.py) returns one ServiceSpec for the supervised Temporal dev server (env reads happen inside `temporal_specs()` at call time, safe to import before `cli.config.load_config()` runs). Both `start.py` and `dev.py` call it. The generic supervised-runtime shim lives at [`server/services/temporal/_supervised_runtime.py`](../server/services/temporal/_supervised_runtime.py) so the spawned `uv run python -m services.temporal._supervised_runtime services.temporal._runtime:get_temporal_server_runtime` resolves out of the workspace `.venv` without any cross-tree path plumbing.
 
 **WS surface**: `_handlers.py` registers `temporal_status` / `temporal_start` / `temporal_stop` via `services.ws_handler_registry.register_ws_handlers`. `_refresh.py` registers a WS-connect callback via `services.status_broadcaster.register_service_refresh` so the FE health indicator stays current.
 
-**Resumption toggle**: [`TemporalClientWrapper.terminate_running_workflows`](../server/services/temporal/client.py) — runs once at server lifespan startup, between client connect and worker start, gated on `TEMPORAL_TERMINATE_RUNNING_ON_STARTUP` (default `true`). Queries Visibility for every `Running` workflow and calls `handle.terminate(reason="MachinaOS startup: auto-resumption disabled")`. **History is preserved** (UI shows workflows as `Terminated`, not deleted); only active execution stops. Disables resumption while `DeploymentManager` has no boot-time reconcile against Temporal Visibility yet — resumed workflows would otherwise keep executing but be invisible to the MachinaOS UI. Flip to `false` once the reconcile lands.
+**Resumption toggle**: [`TemporalClientWrapper.terminate_running_workflows`](../server/services/temporal/client.py) — runs once at server lifespan startup, between client connect and worker start, gated on `TEMPORAL_TERMINATE_RUNNING_ON_STARTUP` (default `true`). Queries Visibility for every `Running` workflow and calls `handle.terminate(reason="OpenCompany startup: auto-resumption disabled")`. **History is preserved** (UI shows workflows as `Terminated`, not deleted); only active execution stops. Disables resumption while `DeploymentManager` has no boot-time reconcile against Temporal Visibility yet — resumed workflows would otherwise keep executing but be invisible to the OpenCompany UI. Flip to `false` once the reconcile lands.
 
-**Port management**: Temporal owns ports 7233 (gRPC) + 8080 (Web UI). Both bound by the same `temporal.exe` process; both listed in `cli.config.Config.all_ports` so `machina stop`'s port-freeing pre-flight covers them.
+**Port management**: Temporal owns ports 7233 (gRPC) + 8080 (Web UI). Both bound by the same `temporal.exe` process; both listed in `cli.config.Config.all_ports` so `company stop`'s port-freeing pre-flight covers them.
 
-**Direct CLI access**: the pooch-installed `temporal` binary lives under `<DATA_DIR>/packages/temporal/` (= `~/.machina/packages/temporal/` by default, on every OS). Run `temporal --version`, `temporal workflow list`, etc. directly from there.
+**Direct CLI access**: the pooch-installed `temporal` binary lives under `<DATA_DIR>/packages/temporal/` (= `~/.opencompany/packages/temporal/` by default, on every OS). Run `temporal --version`, `temporal workflow list`, etc. directly from there.
 
 **Cluster tunables** — all sourced from `.env.template` (canonical defaults; no Python-side fallbacks). Settings fields with `Field(env="...")` require the env var to be present, surfaced via `cli.config.load_config()`'s `.env.template` → `.env` → `os.environ` merge.
 
@@ -561,7 +561,7 @@ The Temporal binary + persistence are managed in-process by the plugin-folder pa
 | `temporal_agent_workflow_enabled` | `TEMPORAL_AGENT_WORKFLOW_ENABLED` | `true` | F4.B flag — agent-as-child-workflow. |
 | `temporal_frontend_grpc_port` | `TEMPORAL_FRONTEND_GRPC_PORT` | `7233` | gRPC port (`--port`). Drives the readiness probe. |
 | `temporal_ui_port` | `TEMPORAL_UI_PORT` | `8080` | Web UI port (`--ui-port`). CLI default is `--port + 1000 = 8233`; we override to 8080 for muscle memory. |
-| `temporal_sqlite_path` | `TEMPORAL_SQLITE_PATH` | `temporal.db` | SQLite file (`--db-filename`). Resolved relative to `DATA_DIR` (= `~/.machina/`) unless absolute — flat under `~/.machina/` like `credentials.db` / `workflow.db`. |
+| `temporal_sqlite_path` | `TEMPORAL_SQLITE_PATH` | `temporal.db` | SQLite file (`--db-filename`). Resolved relative to `DATA_DIR` (= `~/.opencompany/`) unless absolute — flat under `~/.opencompany/` like `credentials.db` / `workflow.db`. |
 | `temporal_graceful_shutdown_seconds` | `TEMPORAL_GRACEFUL_SHUTDOWN_SECONDS` | `30` | `CTRL_BREAK_EVENT` (Windows) / `SIGTERM` (POSIX) → tree-kill grace window. Shared with the embedded worker shutdown. |
 | `temporal_terminate_running_on_startup` | `TEMPORAL_TERMINATE_RUNNING_ON_STARTUP` | `true` | Resumption toggle (see above). |
 
@@ -569,7 +569,7 @@ One supervisor-build-time env var (read inside `_temporal_specs.py`, not in `Set
 
 | Env var | `.env.template` default | Purpose |
 |---|---|---|
-| `TEMPORAL_SERVER_READY_TIMEOUT_SECONDS` | `120` | How long the supervisor waits for Temporal's gRPC port to come up. Covers the first-run binary download (~114 MB) if `machina build` didn't pre-cache. |
+| `TEMPORAL_SERVER_READY_TIMEOUT_SECONDS` | `120` | How long the supervisor waits for Temporal's gRPC port to come up. Covers the first-run binary download (~114 MB) if `company build` didn't pre-cache. |
 
 ## Debugging
 
@@ -580,7 +580,7 @@ The Web UI is at http://localhost:8080; the UI's HTTP API is served at http://lo
 open http://localhost:8080
 
 # List workflows via the local CLI binary (under <DATA_DIR>/packages/temporal/)
-~/.machina/packages/temporal/.../temporal.exe workflow list --address localhost:7233
+~/.opencompany/packages/temporal/.../temporal.exe workflow list --address localhost:7233
 
 # Re-fetch the binary at any time
 uv run python -m services.temporal._install

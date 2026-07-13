@@ -19,8 +19,8 @@ class TestClaudeSessionSpawned:
             pid=12345,
             workflow_id="wf-99",
         )
-        assert event.source == "machinaos://services/cli_agent"
-        assert event.type == "com.machinaos.claude.session.spawned"
+        assert event.source == "opencompany://services/cli_agent"
+        assert event.type == "com.opencompany.claude.session.spawned"
         assert event.subject == "mem-1"
         assert event.workflow_id == "wf-99"
         assert event.data == {
@@ -56,7 +56,7 @@ class TestClaudeSessionCleared:
             new_session_uuid="uuid-B",
             workflow_id="wf-99",
         )
-        assert event.type == "com.machinaos.claude.session.cleared"
+        assert event.type == "com.opencompany.claude.session.cleared"
         assert event.subject == "mem-1"
         assert event.data["old_session_uuid"] == "uuid-A"
         assert event.data["new_session_uuid"] == "uuid-B"
@@ -69,7 +69,7 @@ class TestClaudeSessionTerminated:
             reason="idle",
             session_uuid="uuid-A",
         )
-        assert event.type == "com.machinaos.claude.session.terminated"
+        assert event.type == "com.opencompany.claude.session.terminated"
         assert event.subject == "mem-1"
         assert event.data["reason"] == "idle"
         assert event.data["session_uuid"] == "uuid-A"
@@ -98,7 +98,7 @@ class TestClaudeSessionUsage:
             num_turns=3,
             workflow_id="wf-99",
         )
-        assert event.type == "com.machinaos.claude.session.usage"
+        assert event.type == "com.opencompany.claude.session.usage"
         assert event.subject == "mem-1"
         assert event.workflow_id == "wf-99"
         assert event.data["session_uuid"] == "uuid-A"
@@ -173,7 +173,7 @@ class TestCloudEventInvariants:
     def test_all_share_source_uri(self):
         for name, builder in self.EVENTS:
             event = builder()
-            assert event.source == "machinaos://services/cli_agent", name
+            assert event.source == "opencompany://services/cli_agent", name
 
     def test_all_share_subject_convention(self):
         # subject = memory_node_id, drives FE per-memory-node routing.
@@ -185,7 +185,7 @@ class TestCloudEventInvariants:
         for name, builder in self.EVENTS:
             event = builder()
             assert event.dataschema is not None
-            assert event.dataschema.startswith("machinaos://schemas/events/claude.session."), name
+            assert event.dataschema.startswith("opencompany://schemas/events/claude.session."), name
             assert event.dataschema.endswith(".json"), name
 
     def test_all_carry_specversion_1(self):

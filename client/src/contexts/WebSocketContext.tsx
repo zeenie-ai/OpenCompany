@@ -781,7 +781,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           // becomes the only path.
           //
           // Routing is by envelope.source substring — each plugin's
-          // _events.py declares source="machinaos://nodes/<plugin>".
+          // _events.py declares source="opencompany://nodes/<plugin>".
           const event = data as WorkflowEvent<Record<string, unknown>>;
           const source = event?.source || '';
           const payload = (event?.data || {}) as Record<string, unknown>;

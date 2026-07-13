@@ -6,7 +6,7 @@ Two workflow nodes:
 - **`stripeAction`** (dual-purpose ActionNode + AI tool) — runs any
   `stripe …` command via subprocess and returns parsed JSON.
 - **`stripeReceive`** (TriggerNode) — fires when `stripe listen`
-  forwards a webhook event to MachinaOs at `/webhook/stripe`.
+  forwards a webhook event to OpenCompany at `/webhook/stripe`.
 
 Stripe is the reference implementation of the Wave 12 event framework
 documented in [Plugin System → Wave 12](./plugin_system.md#wave-12--generalized-event-framework-servicesevents).
@@ -44,7 +44,7 @@ this folder contributes only the Stripe-specific shapes.
         ▲                             │                            │
         │ start/stop/status           │ POST /webhook/stripe       │ subprocess
         │                             │                            │
-   stripe CLI subprocess         stripe listen ──forwards─▶ MachinaOs
+   stripe CLI subprocess         stripe listen ──forwards─▶ OpenCompany
    (long-lived daemon)           (running daemon writes to localhost)
 ```
 
@@ -244,7 +244,7 @@ StripeListenSource.stop()
 
 Thin marker class. The Stripe CLI handles its own auth state at
 `~/.config/stripe/config.toml`; nothing API-key-shaped lives in
-MachinaOs's auth_service for Stripe. Only the captured webhook
+OpenCompany's auth_service for Stripe. Only the captured webhook
 signing secret rides as an extra field.
 
 ```python
@@ -270,7 +270,7 @@ Storage:
 | Key | Type | Origin | Purpose |
 |---|---|---|---|
 | (no `stripe_api_key`) | — | Stripe CLI's `~/.config/stripe/config.toml` (populated by `stripe login`) | Authenticates every CLI invocation transparently. The CLI generates restricted keys with CLI-appropriate scopes — one for live mode, one for sandbox — valid 90 days. |
-| `stripe_webhook_secret` | API key (extra field) | Auto-captured by `StripeListenSource.parse_line` from the daemon's stderr banner | Verifies forwarded webhook signatures via `StripeVerifier`. Stable across daemon restarts; the CLI re-uses the same secret for the same MachinaOs install. |
+| `stripe_webhook_secret` | API key (extra field) | Auto-captured by `StripeListenSource.parse_line` from the daemon's stderr banner | Verifies forwarded webhook signatures via `StripeVerifier`. Stable across daemon restarts; the CLI re-uses the same secret for the same OpenCompany install. |
 | OAuth marker token | OAuth token (`auth_service.store_oauth_tokens`) | Written by `_mark_logged_in()` after `stripe login --complete` exits 0; cleared by `_mark_logged_out()` on disconnect. **Strings are dummies (`"cli-managed"`)** — the real OAuth lives in the CLI's config file. | Lights up the catalogue's `provider.stored = true` flag via the existing `auth_service.get_oauth_tokens(status_hook)` check. Same path Google's OAuth callback uses; no new abstraction. |
 
 ### `StripeListenSource(DaemonEventSource)`
@@ -550,7 +550,7 @@ zero new frontend code; the difference is that Stripe's `ws.login`
 returns the URL produced by `stripe login --non-interactive`
 (rather than a URL we constructed via `oauth_utils.get_redirect_uri`
 + a Twitter/Google OAuth helper class), and there is no callback
-route in MachinaOs — the CLI completes the OAuth on its own and
+route in OpenCompany — the CLI completes the OAuth on its own and
 exits, at which point a background task in the `stripe_login`
 handler kicks the daemon and broadcasts updated status.
 
@@ -628,7 +628,7 @@ WebSocket-client connect:
 
 1. `has_credential()` (= `is_logged_in()`) is consulted. If true and
    the daemon isn't running, `start()` is called — covers the
-   "MachinaOs restarted while user was logged in" path.
+   "OpenCompany restarted while user was logged in" path.
 2. `source.status()` is mirrored into `broadcaster._status["stripe"]`
    for any consumers that read it directly. (The modal does not.)
 
@@ -756,7 +756,7 @@ persisted.
 
 ## Operational notes
 
-### CLI-managed credentials, not MachinaOs-managed
+### CLI-managed credentials, not OpenCompany-managed
 
 There is no API key in `auth_service` for Stripe — the CLI persists
 its own credentials at `~/.config/stripe/config.toml` (or
@@ -787,7 +787,7 @@ connect can hit this path.
 
 ### Single global daemon
 
-One Stripe account per MachinaOs install. The daemon is
+One Stripe account per OpenCompany install. The daemon is
 singleton-global (`workflow_id="_stripe_global"`). Multi-account
 support is deferred to a future revision; the design holds — give
 `StripeListenSource` a `__init__(account_id)` and key the singleton
@@ -839,7 +839,7 @@ End-to-end smoke (requires Stripe CLI installed and a Stripe account):
    `process_service.list_processes("_stripe_global")` is empty AND
    `~/.config/stripe/config.toml` no longer contains an `_api_key`
    line.
-9. **Auto-reconnect.** Restart MachinaOs. If still logged in
+9. **Auto-reconnect.** Restart OpenCompany. If still logged in
    (`is_logged_in()` returns true), the first WS-client connect
    triggers `make_status_refresh` which auto-spawns the daemon.
 

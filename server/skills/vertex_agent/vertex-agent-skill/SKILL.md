@@ -3,7 +3,7 @@ name: vertex-agent-skill
 description: Delegate heavy tasks to a Google cloud-hosted managed agent (Antigravity) with its own sandboxed Linux environment - code execution, file management, Google Search, and URL fetching all run in Google's cloud. Use for multi-step research or compute jobs that should not run locally.
 allowed-tools: "vertex_managed_agent"
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: agents
 

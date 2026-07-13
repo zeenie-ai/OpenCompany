@@ -1,4 +1,4 @@
-"""``machina clean`` -- reset the repo to a fresh-checkout state.
+"""``company clean`` -- reset the repo to a fresh-checkout state.
 
 Recovery verb: must work even when the env is partially broken
 (missing ``rich`` / ``psutil`` / ``platformdirs`` wheels, half-wiped
@@ -23,9 +23,9 @@ from cli._common import free_all_ports, preflight
 
 
 # Removed each run -- order doesn't matter, ``shutil.rmtree`` is recursive.
-# Only project-local artefacts. Home-rooted state (``~/.machina/``,
-# ``~/.claude/``, etc.) is the user's; we never touch it from
-# ``machina clean``.
+# Only project-local artefacts. Home-rooted state (``~/.opencompany/``, the
+# pre-rebrand ``~/.machina/``, ``~/.claude/``, etc.) is the user's; we never
+# touch it from ``company clean``.
 _TARGETS = [
     "node_modules",
     "client/node_modules",
@@ -40,23 +40,25 @@ _TARGETS = [
 ]
 
 
-# Children of ``<repo>/.machina/`` to wipe selectively. The bare
-# ``.machina`` entry can't go in ``_TARGETS`` anymore because the
-# ``workflows/`` subtree holds shipped example seeds (git-tracked,
+# Children of the canonical ``<repo>/.opencompany/`` and legacy
+# ``<repo>/.machina/`` roots to wipe selectively. Neither bare directory can
+# go in ``_TARGETS`` because the ``workflows/`` subtree holds shipped example
+# seeds (git-tracked,
 # imported on first launch by ``services.example_loader``) -- wiping
 # it would force the operator to re-clone to recover. ``deploy/``
-# holds ``machina deploy``'s Terraform working dirs + state files:
+# holds ``company deploy``'s Terraform working dirs + state files:
 # deleting state for LIVE cloud resources orphans the VM/firewall
-# (``machina deploy destroy`` could no longer find them) -- only
+# (``company deploy destroy`` could no longer find them) -- only
 # ``deploy destroy`` removes that tree. ``packages/`` holds the
-# MachinaOs-managed binaries (Temporal CLI ~114 MB, Stripe CLI, the
+# OpenCompany-managed binaries (Temporal CLI ~114 MB, Stripe CLI, the
 # shared npm tree with claude/agent-browser/edgymeow): all of it is
 # re-fetchable but expensive -- wiping it forced a full Temporal
-# re-download on every clean+build cycle, which hard-fails ``machina
+# re-download on every clean+build cycle, which hard-fails ``company
 # build`` on slow links. Anything else under ``.machina/`` (claude
 # state, workspaces, credentials.db, ...) is transient runtime state
 # and is fair game.
-_MACHINA_KEEP = frozenset({"workflows", "deploy", "packages"})
+_OPENCOMPANY_KEEP = frozenset({"workflows", "deploy", "packages"})
+_STATE_DIRS = (".opencompany", ".machina")
 
 
 def _rmtree_with_retry(path: Path, *, attempts: int = 3, delay: float = 0.1) -> bool:
@@ -86,7 +88,7 @@ def _kill_running_processes(cfg, root: Path) -> bool:
         results = free_all_ports(cfg)
         # ``free_all_ports`` itself lazy-imports ``cli.ports`` -- the
         # outer try/except catches the ImportError if psutil is gone.
-        from cli.ports import kill_orphaned_machina_processes
+        from cli.ports import kill_orphaned_opencompany_processes
     except ImportError as exc:
         print(f"  warning: psutil unavailable ({exc.name}); skipping process cleanup")
         return False
@@ -97,7 +99,9 @@ def _kill_running_processes(cfg, root: Path) -> bool:
             print(f"  port {port}: killed {len(result.killed_pids)} process(es)")
             killed_ports += len(result.killed_pids)
 
-    orphaned = kill_orphaned_machina_processes(str(root), exclude_substring="-m cli")
+    orphaned = kill_orphaned_opencompany_processes(
+        str(root), exclude_substring="-m cli"
+    )
     if orphaned:
         print(f"  orphaned: killed {len(orphaned)} process(es)")
 
@@ -107,7 +111,7 @@ def _kill_running_processes(cfg, root: Path) -> bool:
 def clean_command() -> None:
     cfg, root = preflight()
 
-    print("Cleaning MachinaOS...")
+    print("Cleaning OpenCompany...")
 
     # Step 1+2: kill running processes (best-effort, may degrade)
     print("Stopping running processes...")
@@ -127,16 +131,18 @@ def clean_command() -> None:
             print(f"  removing: {target}")
             _rmtree_with_retry(path)
 
-    # Step 4: selectively clean ``<repo>/.machina/`` -- preserve
-    # ``workflows/`` (shipped example seeds, see ``_MACHINA_KEEP``);
+    # Step 4: selectively clean both state roots. Preserve ``workflows/``
+    # (shipped example seeds, see ``_OPENCOMPANY_KEEP``);
     # wipe everything else (claude/, workspaces/, *.db, ...) so the
     # repo-local DATA_DIR opt-out gets the same fresh-state treatment.
-    machina_dir = root / ".machina"
-    if machina_dir.is_dir():
-        for child in machina_dir.iterdir():
-            if child.name in _MACHINA_KEEP:
+    for state_dir_name in _STATE_DIRS:
+        state_dir = root / state_dir_name
+        if not state_dir.is_dir():
+            continue
+        for child in state_dir.iterdir():
+            if child.name in _OPENCOMPANY_KEEP:
                 continue
-            rel = f".machina/{child.name}"
+            rel = f"{state_dir_name}/{child.name}"
             print(f"  removing: {rel}")
             if child.is_dir():
                 _rmtree_with_retry(child)

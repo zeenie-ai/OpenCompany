@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 /**
- * Icon — Lucide bridge. MachinaOS uses lucide-react; in this design system
+ * Icon — Lucide bridge. OpenCompany uses lucide-react; in this design system
  * icons render from the lucide UMD bundle. Load it once per page:
  *   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
  * Then <Icon name="Play" size={14} /> — colored via currentColor.

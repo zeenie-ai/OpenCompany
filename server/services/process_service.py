@@ -58,8 +58,9 @@ class ManagedProcess:
 class ProcessService:
     """Singleton managing long-running subprocesses per workflow.
 
-    Output is written to temp files at {tmp}/machina-proc-{name}/stdout.log
-    and stderr.log. AI agents read them via get_output() with tail/offset.
+    Output is written beneath the workflow workspace in
+    ``.processes/<name>/stdout.log`` and ``stderr.log``. AI agents read it
+    via get_output() with tail/offset.
     Files are cleaned up on stop or shutdown.
     """
 
@@ -157,7 +158,7 @@ class ProcessService:
             os.makedirs(working_directory, exist_ok=True)
         cwd = working_directory
 
-        # Guardrail: cwd must resolve inside one of the MachinaOs-controlled
+        # Guardrail: cwd must resolve inside one of the OpenCompany-controlled
         # state roots — workspaces (per-workflow scratch for workflow nodes
         # like processManager / code executors) OR daemons (framework event
         # sources like `stripe listen`). Both are siblings under DATA_DIR.

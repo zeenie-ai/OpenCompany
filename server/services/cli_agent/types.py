@@ -37,7 +37,7 @@ class BaseAICliTaskSpec(BaseModel):
     )
     branch: Optional[str] = Field(
         default=None,
-        description="Branch name for the per-task git worktree. " "Auto-named `machina/<task_id>` if omitted.",
+        description="Branch name for the per-task git worktree. " "Auto-named `opencompany/<task_id>` if omitted.",
     )
     model: Optional[str] = Field(default=None)
     timeout_seconds: int = Field(
@@ -46,7 +46,7 @@ class BaseAICliTaskSpec(BaseModel):
         le=3600,
         description="Hard timeout per task. On expiry the session is "
         "terminate_then_kill'd and a diagnostic dump is "
-        "written to ~/.claude-machina/logs/.",
+        "written under the configured OpenCompany data directory.",
     )
     system_prompt: Optional[str] = Field(
         default=None,
@@ -104,7 +104,7 @@ class ClaudeTaskSpec(BaseAICliTaskSpec):
         "claude built-ins (Read/Edit/Bash/Glob/Grep/Write/"
         "Skill/WebSearch/WebFetch) are intentionally NOT in "
         "the allowlist; the agent only gets connected MCP "
-        "tools + MachinaOs's own MCP infrastructure tools.",
+        "tools + OpenCompany's own MCP infrastructure tools.",
     )
     permission_mode: Literal["default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"] = "dontAsk"
 

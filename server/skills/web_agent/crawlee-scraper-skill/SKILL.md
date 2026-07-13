@@ -3,7 +3,7 @@ name: crawlee-scraper-skill
 description: Read and extract content from any web page URL.
 allowed-tools: "crawlee_scraper"
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: web
 

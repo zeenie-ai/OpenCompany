@@ -3,7 +3,7 @@ name: vertex-agent-admin-skill
 description: Create, list, inspect, and delete custom managed agents on the Gemini Enterprise Agent Platform. Custom agents build on the Antigravity base agent with their own system instruction and built-in cloud tools; run them with the Vertex Agent node.
 allowed-tools: "vertex_agent_admin"
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: agents
 

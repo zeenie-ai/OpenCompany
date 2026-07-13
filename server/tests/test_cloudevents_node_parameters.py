@@ -10,7 +10,7 @@ as raw dicts (``routers/websocket.py:handle_save_node_parameters``,
 This invariant pins:
 
 - ``WorkflowEvent.node_parameters_updated(...)`` factory exists with the
-  canonical reverse-DNS type ``com.machinaos.node.parameters.updated``.
+  canonical reverse-DNS type ``com.opencompany.node.parameters.updated``.
 - ``StatusBroadcaster.broadcast_node_parameters_updated(...)`` wrapper
   exists and routes through the factory.
 - The three legacy emission sites all call the broadcaster wrapper, not
@@ -36,8 +36,8 @@ class TestFactoryShape:
             source_hint="agent",
         )
         # CloudEvents envelope shape.
-        assert event.source == "machinaos://services/parameters"
-        assert event.type == "com.machinaos.node.parameters.updated"
+        assert event.source == "opencompany://services/parameters"
+        assert event.type == "com.opencompany.node.parameters.updated"
         assert event.subject == "test_node_id"
         # workflow_id extension is preserved.
         assert event.workflow_id == "wf_abc"

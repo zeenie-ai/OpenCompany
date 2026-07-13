@@ -1,5 +1,5 @@
 /* ============================================================================
- * MachinaOS — motion tokens
+ * OpenCompany — motion tokens
  * Source: client/src/themes/base.css. Motion is quick and smooth: short
  * durations, one custom ease. Canvas nodes lift -1px on hover; executing
  * nodes pulse a three-layer glow.
@@ -14,5 +14,5 @@
 }
 
 /* The executing-node pulse, per-theme motion contracts, signature keyframes
- * (node-pulse, cyber-*, surv-*, ren-*), and the `.machina-pulse` helper live
+ * (node-pulse, cyber-*, surv-*, ren-*), and the `.opencompany-pulse` helper live
  * in tokens/animations.css. See guidelines/ANIMATIONS.md for the full system. */

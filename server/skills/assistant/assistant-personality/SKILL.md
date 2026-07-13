@@ -2,7 +2,7 @@
 name: assistant-personality
 description: General AI assistant with task planning via write_todos, helpful and honest responses.
 metadata:
-  author: machina
+  author: opencompany
   version: "2.0"
   category: assistant
   icon: "✨"

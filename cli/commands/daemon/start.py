@@ -1,4 +1,4 @@
-"""``machina daemon start`` -- spawn the backend as a detached process."""
+"""``company daemon start`` -- spawn the backend as a detached process."""
 
 from __future__ import annotations
 

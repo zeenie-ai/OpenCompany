@@ -1,4 +1,4 @@
-"""``machina docs nodes`` -- replaces ``scripts/build-node-docs-index.js``.
+"""``company docs nodes`` -- replaces ``scripts/build-node-docs-index.js``.
 
 Walks ``docs-internal/node-logic-flows/<category>/<node>.md``, scrapes
 each doc's first H1, and rewrites the AUTO-GENERATED-INDEX block in

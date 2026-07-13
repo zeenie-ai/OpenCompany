@@ -1,6 +1,6 @@
-"""Adapters bridging MachinaOS systems to RLM interfaces.
+"""Adapters bridging OpenCompany systems to RLM interfaces.
 
-- BackendAdapter: MachinaOS provider config -> RLM backend + backend_kwargs
+- BackendAdapter: OpenCompany provider config -> RLM backend + backend_kwargs
 - ChatModelExtractor: Connected chat model nodes -> RLM other_backends
 - ToolBridgeAdapter: Connected tool nodes -> RLM custom_tools dict
 """
@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 
 
 class BackendAdapter:
-    """Maps MachinaOS provider/model/api_key to RLM backend constructor args."""
+    """Maps OpenCompany provider/model/api_key to RLM backend constructor args."""
 
     @staticmethod
     def adapt(provider: str, model: str, api_key: str) -> Tuple[str, Dict[str, Any]]:
@@ -69,7 +69,7 @@ class ChatModelExtractor:
 
 
 class ToolBridgeAdapter:
-    """Bridges MachinaOS tool nodes into RLM custom_tools dict.
+    """Bridges OpenCompany tool nodes into RLM custom_tools dict.
 
     Creates sync callable wrappers that route through execute_tool() dispatcher.
     Uses asyncio.run_coroutine_threadsafe() to bridge async handlers into

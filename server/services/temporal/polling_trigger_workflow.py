@@ -82,7 +82,7 @@ class PollingTriggerWorkflow:
         ``listener_data`` shape (deployment-supplied)::
 
             {
-                "workflow_id": str,        # MachinaOs deployment workflow_id
+                "workflow_id": str,        # OpenCompany deployment workflow_id
                 "trigger_node_id": str,    # node id that fires on each event
                 "node_type": str,          # e.g. "googleGmailReceive"
                 "version": int,            # plugin class version (for activity name)

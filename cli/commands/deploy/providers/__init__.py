@@ -1,4 +1,4 @@
-"""Provider CLI adapters -- Stage 1 of ``machina deploy``.
+"""Provider CLI adapters -- Stage 1 of ``company deploy``.
 
 Each adapter wraps the operator's already-installed cloud CLI (gcloud / aws)
 to verify it is present + authenticated, resolve the project/region/zone,

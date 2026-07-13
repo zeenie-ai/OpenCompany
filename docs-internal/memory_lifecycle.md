@@ -1,6 +1,6 @@
 # Memory Lifecycle
 
-Canonical home for how conversation memory is loaded, appended, trimmed, archived, cleared, and resumed across every MachinaOs agent. Replaces the partial explanations previously scattered across `agent_architecture.md`, `cli_agent_framework.md`, `rlm_service.md`, and `memory_compaction.md`.
+Canonical home for how conversation memory is loaded, appended, trimmed, archived, cleared, and resumed across every OpenCompany agent. Replaces the partial explanations previously scattered across `agent_architecture.md`, `cli_agent_framework.md`, `rlm_service.md`, and `memory_compaction.md`.
 
 > **Related docs:**
 > - [memory_compaction.md](./memory_compaction.md) — `CompactionService`, token thresholds, pricing

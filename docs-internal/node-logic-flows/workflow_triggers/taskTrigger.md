@@ -15,7 +15,7 @@ errors. The delegation code path in
 `server/services/handlers/tools.py::_execute_delegated_agent` calls
 `nodes.agent._events.broadcast_agent_task_completed` for both the success and
 error paths, which emits a CloudEvents `WorkflowEvent`
-(`type: com.machinaos.agent.task.completed`, with the success/error
+(`type: com.opencompany.agent.task.completed`, with the success/error
 discriminator carried in `data.status`) via `dispatch.emit`. `taskTrigger` is
 canary-registered, so `DeploymentManager` starts a `TriggerListenerWorkflow`
 that receives the event via Temporal Signal and spawns a child workflow per
@@ -67,7 +67,7 @@ envelope.
 
 ```mermaid
 flowchart TD
-  P[child agent completes/errors] --> Q[broadcast_agent_task_completed<br/>dispatch.emit com.machinaos.agent.task.completed]
+  P[child agent completes/errors] --> Q[broadcast_agent_task_completed<br/>dispatch.emit com.opencompany.agent.task.completed]
   Q --> R[TriggerListenerWorkflow receives via Temporal Signal]
   R --> S[TaskTriggerNode.build_filter<br/>task_id / status / agent_name / parent_node_id]
   S -- match --> T[spawn child MachinaWorkflow<br/>trigger pre-executed with event payload]

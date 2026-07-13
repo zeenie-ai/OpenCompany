@@ -296,7 +296,7 @@ From public benchmarks and measurements:
 | <100 providers | No | Substring filter OK | antd Form OK |
 | 100-500 | No | Add cmdk palette | antd Form OK |
 | 500-2000 | Maybe | cmdk + fuzzysort | RHF for detail panels |
-| **2000-5000 (MachinaOs target)** | **Yes, `react-virtuoso`** | **cmdk + fuzzysort** | **RHF** |
+| **2000-5000 (OpenCompany target)** | **Yes, `react-virtuoso`** | **cmdk + fuzzysort** | **RHF** |
 | >5000 | Yes + server pagination | Yes | RHF |
 
 ---

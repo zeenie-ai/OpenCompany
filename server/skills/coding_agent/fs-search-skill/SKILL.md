@@ -3,7 +3,7 @@ name: fs-search-skill
 description: Search the filesystem with ls (list directory), glob (pattern match), or grep (search file contents).
 allowed-tools: fs_search
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: filesystem
 

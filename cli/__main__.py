@@ -64,7 +64,7 @@ def _provision_venv() -> Path | None:
     try:
         if not _venv_python().exists():
             print(
-                "machina: provisioning CLI runtime venv (first run)...",
+                "company: provisioning CLI runtime venv (first run)...",
                 file=sys.stderr,
             )
             subprocess.check_call([uv, "venv", "--quiet", str(_VENV_DIR)])
@@ -90,10 +90,10 @@ def _reexec_in_venv() -> None:
     venv_py = _venv_python() if _venv_python().exists() else _provision_venv()
     if not venv_py:
         sys.stderr.write(
-            "machina: runtime dependencies are missing and the CLI venv\n"
+            "company: runtime dependencies are missing and the CLI venv\n"
             "  could not be provisioned. Install uv\n"
             "  (https://docs.astral.sh/uv/getting-started/installation/)\n"
-            "  and re-run, or run `machina build` to regenerate the venv.\n"
+            "  and re-run, or run `company build` to regenerate the venv.\n"
         )
         sys.exit(1)
     os.execv(str(venv_py), [str(venv_py), "-m", "cli", *sys.argv[1:]])

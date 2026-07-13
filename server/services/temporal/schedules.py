@@ -51,7 +51,7 @@ logger = get_logger(__name__)
 def cron_schedule_id(workflow_slug: str, trigger_label: str) -> str:
     """Deterministic Schedule ID for a (workflow_slug, cron-node label) pair.
 
-    Re-deploying the same MachinaOs workflow (slug + label unchanged)
+    Re-deploying the same OpenCompany workflow (slug + label unchanged)
     targets the same Schedule. Pairs with the create call's
     ``"already exists" → no-op`` semantics (per
     :exc:`temporalio.client.ScheduleAlreadyRunningError`).

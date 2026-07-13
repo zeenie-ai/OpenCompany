@@ -7,7 +7,7 @@ commands).
 
 Invocation strategy
 -------------------
-agent-browser is a MachinaOs-managed local install (see
+agent-browser is a OpenCompany-managed local install (see
 ``nodes/browser/_install.py``) — same pattern as Claude Code's
 project-local CLI. The binary lives at
 ``<package_dir("browser")>/npm/node_modules/.bin/agent-browser[.cmd]``

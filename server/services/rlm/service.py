@@ -40,7 +40,7 @@ class RLMService:
         """Execute RLM agent completion.
 
         Same interface as AIService.execute_agent() / execute_chat_agent().
-        Reuses existing MachinaOS utilities for shared concerns.
+        Reuses existing OpenCompany utilities for shared concerns.
         """
         start_time = time.time()
 
@@ -127,14 +127,14 @@ class RLMService:
                 },
             )
 
-            # Build augmented prompt: MachinaOS context prepended to user prompt.
+            # Build augmented prompt: OpenCompany context prepended to user prompt.
             # We do NOT pass custom_system_prompt to RLM because RLM_SYSTEM_PROMPT
             # uses Python .format() with {custom_tools_section} placeholder and
             # double-escaped braces {{chunk}} in examples. Appending to the template
             # and letting build_rlm_system_prompt() .format() it would break on any
             # curly braces in the appended text (skills, memory, system message).
             # Instead, let RLM use its default system prompt (with proper tool
-            # formatting) and inject MachinaOS context into the user prompt.
+            # formatting) and inject OpenCompany context into the user prompt.
             augmented_prompt = prompt
             if system_message:
                 augmented_prompt = f"## Instructions\n{system_message}\n\n## Task\n{augmented_prompt}"

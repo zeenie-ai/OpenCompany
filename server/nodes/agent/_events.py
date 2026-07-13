@@ -26,7 +26,7 @@ from typing import Any, Optional
 
 # Outer wire-routing key. FE consumers (if any) and the legacy
 # back-compat receipt path still switch on this string; the inner
-# envelope carries ``com.machinaos.agent.task.completed``.
+# envelope carries ``com.opencompany.agent.task.completed``.
 _WIRE_ROUTING_KEY = "task_completed"
 
 
@@ -88,7 +88,7 @@ async def _broadcast_task_event(
 
     ``emit`` does two things in one call: (a) Visibility query for
     running :class:`TriggerListenerWorkflow` consumers tagged with
-    ``EventType='com.machinaos.agent.task.completed'`` and signals each;
+    ``EventType='com.opencompany.agent.task.completed'`` and signals each;
     (b) direct in-process WS broadcast on the ``task_completed`` wire
     key so any FE consumers receive the envelope. Payload shape in
     ``data`` is exactly what the taskTrigger filter reads.

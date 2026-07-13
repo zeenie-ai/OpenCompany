@@ -36,7 +36,7 @@ def _ancestor_pids() -> set[int]:
     Used by the pattern-matching kill functions below so we never
     terminate our own parent / grandparent. When invoked through the
     npm bin shim the chain is ``powershell -> node.exe (bin/cli.js)
-    -> python.exe (-m cli ...)`` -- if ``kill_orphaned_machina_processes``
+    -> python.exe (-m cli ...)`` -- if ``kill_orphaned_opencompany_processes``
     matches ``node.exe`` (its cmdline carries the npm install path),
     killing it tears down stdio mid-execution and the Python child
     exits with whatever garbage code Windows assigns to an
@@ -124,7 +124,7 @@ def kill_pid(pid: int, *, graceful_timeout: float = 3.0) -> bool:
                 #     from a prior session) -- none of them are in
                 #     our console group, so this path fires every
                 #     time on Windows and used to crash
-                #     ``machina stop``.
+                #     ``company stop``.
                 proc.terminate()
         else:
             proc.terminate()
@@ -189,7 +189,7 @@ def kill_by_pattern(pattern: str, *, root_dir: str | None = None) -> list[int]:
     return killed
 
 
-def kill_orphaned_machina_processes(
+def kill_orphaned_opencompany_processes(
     root_dir: str, *, exclude_substring: str | None = None
 ) -> list[int]:
     """Kill stray python/node processes whose cmdline references the project root."""
@@ -215,3 +215,7 @@ def kill_orphaned_machina_processes(
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
     return killed
+
+
+# Deprecated import alias for third-party scripts that imported the old helper.
+kill_orphaned_machina_processes = kill_orphaned_opencompany_processes

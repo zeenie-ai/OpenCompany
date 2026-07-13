@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Preinstall cleanup script for MachinaOS.
+ * Preinstall cleanup script for OpenCompany.
  *
  * Fixes npm ENOTEMPTY error by cleaning up leftover temp directories
  * that npm fails to remove during failed install/uninstall operations.
@@ -59,9 +59,9 @@ function cleanup() {
   try {
     const entries = readdirSync(nodeModules);
 
-    // Clean .machina-* temp directories
+    // Clean current and pre-rebrand npm temp directories.
     for (const name of entries) {
-      if (name.startsWith('.machina-')) {
+      if (name.startsWith('.opencompany-') || name.startsWith('.machina-')) {
         const fullPath = resolve(nodeModules, name);
         try {
           if (statSync(fullPath).isDirectory()) {

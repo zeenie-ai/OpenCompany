@@ -3,7 +3,7 @@ name: audio-skill
 description: Control Android audio - get/set volume, mute/unmute for media, ringtone, notification, and call volumes.
 allowed-tools: audio_automation
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: android
 

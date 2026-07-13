@@ -1,4 +1,4 @@
-"""MachinaOs MCP server (VSCode pattern, no custom IPC).
+"""OpenCompany MCP server (VSCode pattern, no custom IPC).
 
 Hosts a `FastMCP` ASGI sub-app at ``/mcp/ide`` that spawned CLI sessions
 auto-discover via the lockfile written by ``lockfile.py``. Each session
@@ -12,7 +12,7 @@ Tools (5 in v1, mirroring Claude Code's progressive-disclosure pattern):
   - ``listSkills`` — metadata for skills connected to the parent agent
   - ``getSkill`` — full skill markdown + scripts + references
   - ``getCredential`` — gated by per-batch allowlist
-  - ``broadcastLog`` — write to MachinaOs Terminal tab
+  - ``broadcastLog`` — write to OpenCompany Terminal tab
 
 The server module exposes:
   - :func:`get_mcp_app` — Starlette/ASGI sub-app for ``app.mount(...)``
@@ -62,7 +62,7 @@ class BatchContext:
     # Connected ``input-tools`` nodes (entries from
     # ``services.plugin.edge_walker.collect_agent_connections``). Each
     # dict: ``{node_id, node_type, label, parameters, ...}``. Drives the
-    # ``listMachinaOsTools`` / ``callMachinaOsTool`` MCP tools so the
+    # ``listOpenCompanyTools`` / ``callOpenCompanyTool`` MCP tools so the
     # CLI agent sees the same tool surface the AI Agent does.
     connected_tools: List[Dict[str, Any]] = field(default_factory=list)
     # Optional broadcaster for `broadcastLog`. Lazily resolved from the
@@ -196,7 +196,7 @@ def active_batch_count() -> int:
 # ContextVar — thread/task-local handle to the current batch
 # ---------------------------------------------------------------------------
 
-_current_batch: contextvars.ContextVar[Optional[BatchContext]] = contextvars.ContextVar("machina_current_batch", default=None)
+_current_batch: contextvars.ContextVar[Optional[BatchContext]] = contextvars.ContextVar("opencompany_current_batch", default=None)
 
 
 def _require_batch() -> BatchContext:
@@ -208,7 +208,7 @@ def _require_batch() -> BatchContext:
 
 # Per-batch workflow-tool exposure happens in `_expose_workflow_tools`
 # (above). Each connected node lands as its own
-# `mcp__machinaos__<node_type>` entry; FastMCP infers the inputSchema
+# `mcp__opencompany__<node_type>` entry; FastMCP infers the inputSchema
 # from the typed `params` annotation. The legacy generic wrapper has
 # been removed.
 
@@ -463,13 +463,13 @@ def _build_tools(mcp: Any) -> None:  # FastMCP type
 
     # Per-batch workflow tools are exposed dynamically on
     # `register_batch` via `_expose_workflow_tools` — each connected
-    # node lands as its own `mcp__machinaos__<node_type>` entry. No
-    # generic `listMachinaOsTools` / `callMachinaOsTool` wrapper.
+    # node lands as its own `mcp__opencompany__<node_type>` entry. No
+    # generic `listOpenCompanyTools` / `callOpenCompanyTool` wrapper.
 
     @mcp.tool(
         name="broadcastLog",
         description=(
-            "Write a log line to the MachinaOs Terminal tab. Use to "
+            "Write a log line to the OpenCompany Terminal tab. Use to "
             "surface intermediate progress that would otherwise be lost "
             "between CLI sessions."
         ),
@@ -522,9 +522,9 @@ def get_mcp_app() -> Any:
     from mcp.server.fastmcp import FastMCP
 
     mcp = FastMCP(
-        name="machinaos-cli-agent",
+        name="opencompany-cli-agent",
         instructions=(
-            "MachinaOs IDE MCP server. Exposes workspace files, connected "
+            "OpenCompany IDE MCP server. Exposes workspace files, connected "
             "skills, scoped credentials, and a Terminal-tab log channel "
             "to the calling CLI session."
         ),

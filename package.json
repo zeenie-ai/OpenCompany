@@ -1,5 +1,5 @@
 {
-  "name": "machinaos",
+  "name": "opencompany",
   "version": "0.0.93",
   "description": "Open source workflow automation platform with AI agents, React Flow, and n8n-inspired architecture",
   "type": "module",
@@ -26,7 +26,8 @@
     "url": "https://github.com/zeenie-ai/MachinaOS/issues"
   },
   "bin": {
-    "machina": "./bin/cli.js"
+    "company": "./bin/cli.js",
+    "machina": "./bin/machina.js"
   },
   "engines": {
     "node": ">=22.0.0"
@@ -35,7 +36,7 @@
   "files": [
     "bin/",
     "scripts/",
-    ".machina/workflows/",
+    ".opencompany/workflows/",
     "cli/",
     "!cli/tests/",
     "!cli/**/__pycache__/",

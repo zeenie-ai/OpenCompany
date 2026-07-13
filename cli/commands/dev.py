@@ -1,4 +1,4 @@
-"""``machina dev`` -- replaces ``scripts/dev.js``.
+"""``company dev`` -- replaces ``scripts/dev.js``.
 
 Development launcher: validates the build, frees ports, clears the
 Vite dep cache (fixes "Outdated Optimize Dep" errors), then spawns
@@ -79,10 +79,10 @@ def dev_command(
     ),
 ) -> None:
     # Layer ``.env.dev`` (committed) on top of ``.env.template`` + ``.env``
-    # so dev state lands at ``<repo>/.machina/`` (per-checkout) instead
-    # of ``~/.machina/`` (user home). Called BEFORE ``preflight()`` so
+    # so dev state lands at ``<repo>/.opencompany/`` (per-checkout) instead
+    # of ``~/.opencompany/`` (user home). Called BEFORE ``preflight()`` so
     # ``load_config``'s ``setdefault`` pass sees the dev values already
-    # in ``os.environ``. ``machina start`` / ``machina daemon`` skip
+    # in ``os.environ``. ``company start`` / ``company daemon`` skip
     # this hook, falling through to the ``.env.template`` defaults.
     load_dev_overrides()
     cfg, root = preflight()
@@ -90,7 +90,7 @@ def dev_command(
 
     validate_build(root)
 
-    console.print("\n[bold]=== MachinaOS Starting ===[/]\n")
+    console.print("\n[bold]=== OpenCompany Starting ===[/]\n")
     console.print(f"Platform: {platform_name()}")
     console.print(
         f"Mode:     {'Daemon (uvicorn)' if daemon else 'Development (uvicorn)'}"

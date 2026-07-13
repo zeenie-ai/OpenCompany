@@ -1,6 +1,6 @@
 """Claude OAuth — project-local install + the documented `claude auth` subcommands.
 
-The Claude Code CLI lives in the shared MachinaOs npm tree at
+The Claude Code CLI lives in the shared OpenCompany npm tree at
 ``<DATA_DIR>/packages/node_modules/.bin/claude[.cmd]`` (on-demand
 ``npm install`` on first use, alongside ``edgymeow`` /
 ``agent-browser`` — one ``package.json`` + ``package-lock.json``
@@ -29,7 +29,7 @@ This module lives alongside the ``claude_code_agent`` plugin so all
 claude-specific code stays in one folder per the canonical plugin
 pattern. Consumers in ``services/cli_agent/`` (the generic framework)
 and the plugin's other modules (``_provider``, ``_pool``, ``_skills``)
-import ``MACHINA_CLAUDE_DIR`` from here.
+import ``OPENCOMPANY_CLAUDE_DIR`` from here.
 """
 
 from __future__ import annotations
@@ -51,22 +51,27 @@ logger = get_logger(__name__)
 # Plugin-specific subpaths composed inline against the generic
 # ``core.paths`` helpers — keeps ``core.paths`` from growing one
 # wrapper function per plugin. Re-exported as module constants so
-# existing consumers (``from ._oauth import MACHINA_CLAUDE_DIR``)
+# existing consumers (``from ._oauth import OPENCOMPANY_CLAUDE_DIR``)
 # keep working without a function-call indirection at every call
 # site. ``data_path`` / ``packages_dir`` evaluate eagerly here:
 # Settings is already initialised by the time this module is first
 # imported (node registry discovery runs after the FastAPI app is
 # built).
 #
-# ``MACHINA_CLAUDE_DIR``  -> ``<DATA_DIR>/claude/``     auth state
+# ``OPENCOMPANY_CLAUDE_DIR``  -> ``<DATA_DIR>/claude/``     auth state
 #                                                       (CLAUDE_CONFIG_DIR)
-# ``MACHINA_NPM_ROOT``    -> ``<DATA_DIR>/packages/``   shared npm tree
+# ``OPENCOMPANY_NPM_ROOT``    -> ``<DATA_DIR>/packages/``   shared npm tree
 #                                                       (``--prefix`` target;
 #                                                       also holds
 #                                                       ``edgymeow`` /
 #                                                       ``agent-browser``)
-MACHINA_CLAUDE_DIR = data_path("claude")
-MACHINA_NPM_ROOT = packages_dir()
+OPENCOMPANY_CLAUDE_DIR = data_path("claude")
+OPENCOMPANY_NPM_ROOT = packages_dir()
+
+# Public compatibility aliases for plugins and scripts written before the
+# rebrand. New code should import the OPENCOMPANY_* names above.
+MACHINA_CLAUDE_DIR = OPENCOMPANY_CLAUDE_DIR
+MACHINA_NPM_ROOT = OPENCOMPANY_NPM_ROOT
 
 # Generous timeout for browser-flow login; Stripe uses the same window.
 LOGIN_TIMEOUT_SECONDS = 600.0
@@ -81,26 +86,26 @@ def claude_binary_path() -> str:
     AND the agent spawn (``_provider.py``) so both surfaces use the
     same binary + ``CLAUDE_CONFIG_DIR``-isolated credentials.
 
-    Landed under the shared MachinaOs npm tree at
-    ``MACHINA_NPM_ROOT`` (= ``<DATA_DIR>/packages/``) so a single
+    Landed under the shared OpenCompany npm tree at
+    ``OPENCOMPANY_NPM_ROOT`` (= ``<DATA_DIR>/packages/``) so a single
     ``package.json`` + ``package-lock.json`` covers claude /
     edgymeow / agent-browser.
     """
     bin_name = "claude.cmd" if sys.platform == "win32" else "claude"
-    bin_path = MACHINA_NPM_ROOT / "node_modules" / ".bin" / bin_name
+    bin_path = OPENCOMPANY_NPM_ROOT / "node_modules" / ".bin" / bin_name
 
     if bin_path.exists():
         return str(bin_path)
 
-    logger.info("Installing Claude Code CLI into shared tree %s", MACHINA_NPM_ROOT)
-    MACHINA_NPM_ROOT.mkdir(parents=True, exist_ok=True)
+    logger.info("Installing Claude Code CLI into shared tree %s", OPENCOMPANY_NPM_ROOT)
+    OPENCOMPANY_NPM_ROOT.mkdir(parents=True, exist_ok=True)
 
     npm_cmd = shutil.which("npm")
     if not npm_cmd:
         raise FileNotFoundError("npm not found on PATH")
 
     result = subprocess.run(
-        [npm_cmd, "install", "@anthropic-ai/claude-code", "--prefix", str(MACHINA_NPM_ROOT)],
+        [npm_cmd, "install", "@anthropic-ai/claude-code", "--prefix", str(OPENCOMPANY_NPM_ROOT)],
         capture_output=True,
         text=True,
     )
@@ -117,7 +122,7 @@ def claude_binary_path() -> str:
 
 def _claude_env() -> Dict[str, str]:
     env = os.environ.copy()
-    env["CLAUDE_CONFIG_DIR"] = str(MACHINA_CLAUDE_DIR)
+    env["CLAUDE_CONFIG_DIR"] = str(OPENCOMPANY_CLAUDE_DIR)
     return env
 
 
@@ -140,7 +145,7 @@ async def _run_auth(subcommand: str, *, timeout: float) -> Dict[str, Any]:
     except (FileNotFoundError, RuntimeError) as e:
         return {"success": False, "error": str(e), "stdout": "", "stderr": ""}
 
-    MACHINA_CLAUDE_DIR.mkdir(parents=True, exist_ok=True)
+    OPENCOMPANY_CLAUDE_DIR.mkdir(parents=True, exist_ok=True)
     envelope = await run_cli_command(
         binary=binary,
         argv=["auth", subcommand],

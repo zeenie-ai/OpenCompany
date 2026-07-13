@@ -20,7 +20,7 @@ from services.events.envelope import WorkflowEvent
 
 # Outer wire-routing key. Matches ``EmailReceiveNode.event_type`` and
 # the FE WS channel; the inner envelope carries
-# ``com.machinaos.email.message.received``.
+# ``com.opencompany.email.message.received``.
 _WIRE_ROUTING_KEY = "email_received"
 
 
@@ -31,8 +31,8 @@ def email_message_received(email_data: Mapping[str, Any]) -> WorkflowEvent:
     payload = dict(email_data)
     message_id = payload.get("message_id") or payload.get("id")
     return WorkflowEvent(
-        source="machinaos://nodes/email",
-        type="com.machinaos.email.message.received",
+        source="opencompany://nodes/email",
+        type="com.opencompany.email.message.received",
         subject=str(message_id) if message_id else None,
         data=payload,
     )

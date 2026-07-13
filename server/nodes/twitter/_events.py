@@ -48,15 +48,15 @@ def twitter_event_received(event_data: Mapping[str, Any]) -> WorkflowEvent:
     dedup; the originating Twitter user id is in
     ``data.author_id`` or ``data.user_id``. The event ``type``
     distinguishes the kind via the data payload, not the envelope —
-    every twitter inbound shares ``com.machinaos.twitter.event.received``
+    every twitter inbound shares ``com.opencompany.twitter.event.received``
     since the producer (polling loop) doesn't always know which kind a
     given tweet is until the downstream filter runs.
     """
     payload = dict(event_data)
     subject = payload.get("tweet_id") or payload.get("id") or payload.get("dm_id")
     return WorkflowEvent(
-        source="machinaos://nodes/twitter",
-        type="com.machinaos.twitter.event.received",
+        source="opencompany://nodes/twitter",
+        type="com.opencompany.twitter.event.received",
         subject=str(subject) if subject else None,
         data=payload,
     )

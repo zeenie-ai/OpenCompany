@@ -151,7 +151,8 @@ class KeyringBackend(CredentialBackend):
     Best for: Desktop deployments, single-user installations.
     """
 
-    SERVICE_NAME = "MachinaOS"
+    SERVICE_NAME = "OpenCompany"
+    LEGACY_SERVICE_NAME = "MachinaOS"
 
     def __init__(self):
         self._keyring = None
@@ -185,11 +186,21 @@ class KeyringBackend(CredentialBackend):
             return False
 
     async def retrieve(self, key: str) -> Optional[str]:
-        """Retrieve credential from OS keyring."""
+        """Retrieve a credential, migrating the legacy service namespace."""
         if not self._available:
             return None
         try:
-            return self._keyring.get_password(self.SERVICE_NAME, key)
+            value = self._keyring.get_password(self.SERVICE_NAME, key)
+            if value is not None:
+                return value
+
+            value = self._keyring.get_password(self.LEGACY_SERVICE_NAME, key)
+            if value is not None:
+                self._keyring.set_password(self.SERVICE_NAME, key, value)
+                metadata = self._keyring.get_password(self.LEGACY_SERVICE_NAME, f"{key}__metadata")
+                if metadata is not None:
+                    self._keyring.set_password(self.SERVICE_NAME, f"{key}__metadata", metadata)
+            return value
         except Exception as e:
             logger.error(f"KeyringBackend retrieve failed: {e}")
             return None
@@ -198,17 +209,15 @@ class KeyringBackend(CredentialBackend):
         """Delete credential from OS keyring."""
         if not self._available:
             return False
-        try:
-            self._keyring.delete_password(self.SERVICE_NAME, key)
-            # Also delete metadata if exists
-            try:
-                self._keyring.delete_password(self.SERVICE_NAME, f"{key}__metadata")
-            except Exception:
-                pass  # Metadata may not exist
-            return True
-        except Exception as e:
-            logger.error(f"KeyringBackend delete failed: {e}")
-            return False
+        deleted = False
+        for service_name in (self.SERVICE_NAME, self.LEGACY_SERVICE_NAME):
+            for item_key in (key, f"{key}__metadata"):
+                try:
+                    self._keyring.delete_password(service_name, item_key)
+                    deleted = True
+                except Exception:
+                    pass  # Namespace/key may not exist.
+        return deleted
 
     def is_available(self) -> bool:
         """Check if keyring is available."""

@@ -20,11 +20,11 @@ ensures events reach that listener.
 
 Membership semantics (set-shaped):
 
-    register_canary_trigger_type("webhookTrigger", "com.machinaos.webhook.received")
-    register_canary_trigger_type("chatTrigger", "com.machinaos.chat.message.received")
+    register_canary_trigger_type("webhookTrigger", "com.opencompany.webhook.received")
+    register_canary_trigger_type("chatTrigger", "com.opencompany.chat.message.received")
     is_canary_trigger_type("webhookTrigger")  # True
     is_canary_trigger_type("whatsappReceive") # False (not yet opted in)
-    cloudevent_type_for("webhookTrigger")     # "com.machinaos.webhook.received"
+    cloudevent_type_for("webhookTrigger")     # "com.opencompany.webhook.received"
 
 Idempotent on re-import (multiple registrations of the same type with
 the same cloudevent_type are a no-op; a conflicting cloudevent_type
@@ -36,7 +36,7 @@ Search Attribute. :func:`services.events.dispatch.emit` runs a
 Visibility query ``EventType='<value>' AND ExecutionStatus='Running'``
 to find listeners and signal them. The query uses ``event.type`` from
 the CloudEvents envelope (reverse-DNS, e.g.
-``com.machinaos.chat.message.received``). The Search Attribute MUST
+``com.opencompany.chat.message.received``). The Search Attribute MUST
 carry the same value or the query never matches and no signal is
 delivered — symptom was "TriggerListener started ok but never reacts
 to incoming events". Pre-fix the deployment manager registered the
@@ -68,7 +68,7 @@ def register_canary_trigger_type(node_type: str, cloudevent_type: str) -> None:
             when deciding which trigger goes to the canary listener.
         cloudevent_type: The CloudEvents ``type`` field the plugin's
             ``_events.py`` factory will populate on outgoing envelopes
-            (reverse-DNS, e.g. ``"com.machinaos.chat.message.received"``).
+            (reverse-DNS, e.g. ``"com.opencompany.chat.message.received"``).
             Used as the ``EventType`` Search Attribute value when the
             listener workflow is started so
             :func:`services.events.dispatch.emit`'s Visibility query

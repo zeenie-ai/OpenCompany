@@ -120,7 +120,7 @@ class TestClaudeArgv:
         wired. Combined with ``--permission-mode dontAsk`` (which
         gates strictly on the allowlist) this means the agent can
         ONLY invoke MCP tools that were explicitly wired through
-        ``input-tools`` plus MachinaOs's own MCP infrastructure tools.
+        ``input-tools`` plus OpenCompany's own MCP infrastructure tools.
 
         Disconnected workflow tools are also blocked by the per-handler
         scope check in ``workflow_tools._build_handler`` reading the
@@ -144,13 +144,13 @@ class TestClaudeArgv:
         }
         for entry in entries:
             assert entry not in builtins, f"claude built-in {entry!r} leaked into default allowlist"
-        # MachinaOs MCP infrastructure must still be present so the
+        # OpenCompany MCP infrastructure must still be present so the
         # agent can read the workspace + invoke connected skills.
-        assert "mcp__machinaos__getWorkspaceFiles" in entries
-        assert "mcp__machinaos__listSkills" in entries
-        assert "mcp__machinaos__getSkill" in entries
-        assert "mcp__machinaos__getCredential" in entries
-        assert "mcp__machinaos__broadcastLog" in entries
+        assert "mcp__opencompany__getWorkspaceFiles" in entries
+        assert "mcp__opencompany__listSkills" in entries
+        assert "mcp__opencompany__getSkill" in entries
+        assert "mcp__opencompany__getCredential" in entries
+        assert "mcp__opencompany__broadcastLog" in entries
 
     def test_skill_builtin_conditional_on_wired_skills(self, claude_provider):
         """``Skill`` is the one claude built-in we conditionally allow

@@ -1,7 +1,7 @@
-// MachinaOS UI kit — Settings, Node Configuration, and Credentials modals.
+// OpenCompany UI kit — Settings, Node Configuration, and Credentials modals.
 // Faithful recreations of SettingsPanel.tsx / ParameterPanel.tsx, composed
 // from the DS panel components.
-const DS_PM = window.MachinaOSDesignSystem_2559cf;
+const DS_PM = window.OpenCompanyDesignSystem_2559cf;
 
 function SettingsModal({ open, onClose }) {
   const { PanelModal, SettingsSection, SettingsRow, Switch, Input, Slider, Button, ActionButton, Icon } = DS_PM;
@@ -221,4 +221,4 @@ function CredentialsModal({ open, onClose }) {
   );
 }
 
-window.MachinaKit = Object.assign(window.MachinaKit || {}, { SettingsModal, NodeConfigModal, CredentialsModal });
+window.OpenCompanyKit = Object.assign(window.OpenCompanyKit || {}, { SettingsModal, NodeConfigModal, CredentialsModal });

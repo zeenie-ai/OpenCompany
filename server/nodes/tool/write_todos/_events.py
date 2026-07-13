@@ -44,8 +44,8 @@ def todos_updated(
         "workflow_id": workflow_id,
     }
     return WorkflowEvent(
-        source="machinaos://nodes/write_todos",
-        type="com.machinaos.todos.updated",
+        source="opencompany://nodes/write_todos",
+        type="com.opencompany.todos.updated",
         subject=session_key,
         data=data,
     )

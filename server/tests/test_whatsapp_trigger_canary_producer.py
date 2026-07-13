@@ -25,13 +25,13 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 
-if "machina" not in sys.modules:
-    _machina = types.ModuleType("cli")
-    _machina.__path__ = []
-    sys.modules["cli"] = _machina
-    _machina_tcp = types.ModuleType("cli.tcp")
-    _machina_tcp.probe_tcp_port = MagicMock(return_value=False)
-    sys.modules["cli.tcp"] = _machina_tcp
+if "cli" not in sys.modules:
+    _cli_stub = types.ModuleType("cli")
+    _cli_stub.__path__ = []
+    sys.modules["cli"] = _cli_stub
+    _opencompany_tcp = types.ModuleType("cli.tcp")
+    _opencompany_tcp.probe_tcp_port = MagicMock(return_value=False)
+    sys.modules["cli.tcp"] = _opencompany_tcp
 
 
 _EVENTS_EMIT_PATTERN = re.compile(r"\bemit\s*\(")
@@ -103,7 +103,7 @@ class TestWhatsappProducerDualEmit:
         # And the canary path fires exactly once.
         assert len(emit_calls) == 1
         envelope = emit_calls[0]["event"]
-        assert envelope.type == "com.machinaos.whatsapp.message.received"
+        assert envelope.type == "com.opencompany.whatsapp.message.received"
         assert envelope.subject == "123@s.whatsapp.net"
         assert emit_calls[0]["wire_routing_key"] == "whatsapp_message_received"
 

@@ -1,4 +1,4 @@
-"""``machina deploy destroy`` -- tear down the deployment's cloud resources."""
+"""``company deploy destroy`` -- tear down the deployment's cloud resources."""
 
 from __future__ import annotations
 
@@ -17,13 +17,13 @@ def destroy_command(*, keep_state: bool = False) -> None:
     preflight()
     meta = _state.read_meta()
     if meta is None:
-        console.print("[yellow]No 'machinaos' deployment found.[/]")
+        console.print("[yellow]No OpenCompany deployment found.[/]")
         raise typer.Exit(code=1)
 
     _terraform.ensure_terraform()
     wd = _state.workdir()
 
-    console.log("terraform destroy (machinaos)...")
+    console.log(f"terraform destroy ({_state.resource_name()})...")
     _terraform.tf(wd, "destroy", "-auto-approve", "-input=false")
 
     if keep_state:
@@ -31,4 +31,4 @@ def destroy_command(*, keep_state: bool = False) -> None:
         return
 
     shutil.rmtree(wd, ignore_errors=True)
-    console.print("  [green]Destroyed[/] and removed local state for 'machinaos'.")
+    console.print("  [green]Destroyed[/] and removed local OpenCompany deployment state.")

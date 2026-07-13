@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, Request
 from pydantic import BaseModel, EmailStr
 
+from core.auth_cookies import get_session_token, session_cookie_names
 from core.container import container
 from core.config import Settings
 from core.logging import get_logger
@@ -54,7 +55,7 @@ async def get_auth_status(
     status = user_auth.get_auth_status()
 
     # Check if user has a valid session
-    token = request.cookies.get(settings.jwt_cookie_name)
+    token = get_session_token(request.cookies, settings)
     current_user = None
 
     if token:
@@ -162,9 +163,13 @@ async def logout(
     auth_service.clear_cache()
 
     # Delete auth cookie
-    response.delete_cookie(
-        key=settings.jwt_cookie_name, httponly=True, secure=settings.jwt_cookie_secure, samesite=settings.jwt_cookie_samesite
-    )
+    for cookie_name in session_cookie_names(settings):
+        response.delete_cookie(
+            key=cookie_name,
+            httponly=True,
+            secure=settings.jwt_cookie_secure,
+            samesite=settings.jwt_cookie_samesite,
+        )
     return {"success": True}
 
 
@@ -176,7 +181,7 @@ async def get_current_user(
     Get current authenticated user.
     Requires valid session cookie.
     """
-    token = request.cookies.get(settings.jwt_cookie_name)
+    token = get_session_token(request.cookies, settings)
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
 

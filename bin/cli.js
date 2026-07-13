@@ -1,18 +1,21 @@
 #!/usr/bin/env node
 
 import { spawn, execSync } from 'child_process';
-import { dirname, resolve } from 'path';
+import { basename, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync, existsSync } from 'fs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PKG = JSON.parse(readFileSync(resolve(ROOT, 'package.json'), 'utf-8'));
+const invokedName = basename(process.argv[1] || '').replace(/\.(?:cmd|exe|ps1|js)$/i, '');
+const USING_LEGACY_ALIAS = invokedName === 'machina'
+  || process.env.OPENCOMPANY_LEGACY_ALIAS === 'machina';
 
 const COMMANDS = {
   start: 'Start in production mode',
   dev: 'Start development server (hot-reload)',
   serve: 'Serve on a single public port (API + WS + SPA; used by deploy)',
-  deploy: 'Provision a cloud VM running MachinaOs (Terraform)',
+  deploy: 'Provision a cloud VM running OpenCompany (Terraform)',
   stop: 'Stop all running services',
   build: 'Build the project for production',
   clean: 'Clean build artifacts',
@@ -23,9 +26,9 @@ const COMMANDS = {
 
 function printHelp() {
   console.log(`
-MachinaOS - Workflow Automation Platform
+OpenCompany - Workflow Automation Platform
 
-Usage: machina <command> [flags]
+Usage: company <command> [flags]
 
 Commands:
 ${Object.entries(COMMANDS).map(([cmd, desc]) => `  ${cmd.padEnd(14)} ${desc}`).join('\n')}
@@ -36,10 +39,12 @@ Flags:
   --daemon         Use uvicorn daemon backend
 
 Examples:
-  machina start          # Production server (clean output)
-  machina start -v       # Production with full logs
-  machina dev            # Development with hot-reload
-  machina build          # Build for production
+  company start          # Production server (clean output)
+  company start -v       # Production with full logs
+  company dev            # Development with hot-reload
+  company build          # Build for production
+
+Compatibility: the legacy \`machina\` command remains available but is deprecated.
 Documentation: https://docs.zeenie.xyz/
 `);
 }
@@ -106,7 +111,7 @@ function checkDeps() {
 }
 
 function doctor() {
-  console.log('\nMachinaOS Doctor\n');
+  console.log('\nOpenCompany Doctor\n');
   try {
     execSync('npx envinfo --system --binaries --npmPackages edgymeow,agent-browser,cross-env', {
       cwd: ROOT, stdio: 'inherit', shell: true,
@@ -124,7 +129,7 @@ function doctor() {
 
   const has = (f) => { try { readFileSync(resolve(ROOT, f)); return true; } catch { return false; } };
   console.log(has('pnpm-lock.yaml') ? '    Lockfile: pnpm-lock.yaml' : has('package-lock.json') ? '    Lockfile: package-lock.json' : '    Lockfile: Not Found');
-  console.log(has('server/.venv/pyvenv.cfg') ? '    Python venv: OK' : '    Python venv: Missing (run machina build)');
+  console.log(has('server/.venv/pyvenv.cfg') ? '    Python venv: OK' : '    Python venv: Missing (run company build)');
   console.log('');
 }
 
@@ -169,12 +174,16 @@ function run(script, extraArgs = []) {
 // Expand PATH to find tools like uv installed in user directories
 expandPath();
 
+if (USING_LEGACY_ALIAS) {
+  console.warn('Warning: `machina` is deprecated; use `company` instead.');
+}
+
 const cmd = process.argv[2] || 'help';
 
 if (cmd === 'help' || cmd === '--help' || cmd === '-h') {
   printHelp();
 } else if (cmd === 'version' || cmd === '--version' || cmd === '-v') {
-  console.log(`machina v${PKG.version}`);
+  console.log(`company v${PKG.version}`);
 } else if (cmd === 'doctor') {
   doctor();
 } else if (cmd === 'start' || cmd === 'dev' || cmd === 'build' || cmd === 'serve') {

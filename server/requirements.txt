@@ -3,11 +3,11 @@
 aiohappyeyeballs==2.7.1
     # via aiohttp
 aiohttp==3.14.1
-    # via machinaos-server
+    # via opencompany-server
 aiosignal==1.4.0
     # via aiohttp
 aiosqlite==0.22.1
-    # via machinaos-server
+    # via opencompany-server
 annotated-doc==0.0.4
     # via fastapi
 annotated-types==0.7.0
@@ -15,7 +15,7 @@ annotated-types==0.7.0
 anthropic==0.94.0
     # via
     #   langchain-anthropic
-    #   machinaos-server
+    #   opencompany-server
     #   rlms
 anyio==4.14.1
     # via
@@ -33,7 +33,7 @@ anyio==4.14.1
     #   starlette
     #   watchfiles
 apify-client==3.0.5
-    # via machinaos-server
+    # via opencompany-server
 async-timeout==5.0.1
     # via crawlee
 attrs==26.1.0
@@ -42,7 +42,7 @@ attrs==26.1.0
     #   jsonschema
     #   referencing
 bcrypt==5.0.0
-    # via machinaos-server
+    # via opencompany-server
 beautifulsoup4==4.15.0
     # via crawlee
 bracex==3.0
@@ -79,18 +79,18 @@ colorama==0.4.6
     #   qrcode
     #   tqdm
 crawlee==1.8.1
-    # via machinaos-server
+    # via opencompany-server
 cryptography==49.0.0
     # via
     #   google-auth
-    #   machinaos-server
+    #   opencompany-server
     #   pyjwt
 ddgs==9.14.4
-    # via machinaos-server
+    # via opencompany-server
 deepagents==0.5.2
-    # via machinaos-server
+    # via opencompany-server
 dependency-injector==4.49.1
-    # via machinaos-server
+    # via opencompany-server
 distro==1.9.0
     # via
     #   anthropic
@@ -105,12 +105,12 @@ docstring-parser==0.18.0
     # via anthropic
 email-validator==2.3.0
     # via
-    #   machinaos-server
+    #   opencompany-server
     #   pydantic
 fake-useragent==2.2.0
     # via ddgs
 fastapi==0.139.0
-    # via machinaos-server
+    # via opencompany-server
 filelock==3.29.7
     # via tldextract
 filetype==1.2.0
@@ -122,7 +122,7 @@ frozenlist==1.8.0
 google-api-core==2.31.0
     # via google-api-python-client
 google-api-python-client==2.198.0
-    # via machinaos-server
+    # via opencompany-server
 google-auth==2.55.2
     # via
     #   google-api-core
@@ -130,25 +130,25 @@ google-auth==2.55.2
     #   google-auth-httplib2
     #   google-auth-oauthlib
     #   google-genai
-    #   machinaos-server
+    #   opencompany-server
 google-auth-httplib2==0.4.0
     # via
     #   google-api-python-client
-    #   machinaos-server
+    #   opencompany-server
 google-auth-oauthlib==1.4.0
-    # via machinaos-server
+    # via opencompany-server
 google-genai==2.11.0
     # via
     #   langchain-google-genai
-    #   machinaos-server
+    #   opencompany-server
     #   rlms
 googleapis-common-protos==1.75.0
     # via google-api-core
 googlemaps==4.10.0
-    # via machinaos-server
+    # via opencompany-server
 greenlet==3.5.3
     # via
-    #   machinaos-server
+    #   opencompany-server
     #   sqlalchemy
 groq==0.37.1
     # via langchain-groq
@@ -162,7 +162,7 @@ h2==4.3.0
 hpack==4.2.0
     # via h2
 html2text==2025.4.15
-    # via machinaos-server
+    # via opencompany-server
 html5lib==1.1
     # via crawlee
 httpcore==1.0.9
@@ -185,7 +185,7 @@ httpx==0.28.1
     #   langgraph-sdk
     #   langsmith
     #   lmstudio
-    #   machinaos-server
+    #   opencompany-server
     #   mcp
     #   ollama
     #   openai
@@ -229,9 +229,9 @@ langchain==1.2.18
 langchain-anthropic==1.4.0
     # via
     #   deepagents
-    #   machinaos-server
+    #   opencompany-server
 langchain-cerebras==0.8.2
-    # via machinaos-server
+    # via opencompany-server
 langchain-core==1.3.3
     # via
     #   deepagents
@@ -245,21 +245,21 @@ langchain-core==1.3.3
     #   langgraph
     #   langgraph-checkpoint
     #   langgraph-prebuilt
-    #   machinaos-server
+    #   opencompany-server
 langchain-google-genai==4.2.5
     # via
     #   deepagents
-    #   machinaos-server
+    #   opencompany-server
 langchain-groq==1.1.2
-    # via machinaos-server
+    # via opencompany-server
 langchain-openai==1.1.14
     # via
     #   langchain-cerebras
-    #   machinaos-server
+    #   opencompany-server
 langchain-protocol==0.0.18
     # via langchain-core
 langchain-text-splitters==1.1.2
-    # via machinaos-server
+    # via opencompany-server
 langgraph==1.1.10
     # via langchain
 langgraph-checkpoint==4.1.1
@@ -275,17 +275,17 @@ langsmith==0.10.2
     #   deepagents
     #   langchain-core
 lmstudio==1.5.0
-    # via machinaos-server
+    # via opencompany-server
 lxml==6.1.1
     # via
     #   beautifulsoup4
     #   ddgs
 markdown-it-py==4.2.0
     # via
-    #   machinaos-server
+    #   opencompany-server
     #   rich
 mcp==1.28.1
-    # via machinaos-server
+    # via opencompany-server
 mdurl==0.1.2
     # via markdown-it-py
 more-itertools==11.1.0
@@ -303,25 +303,25 @@ nexus-rpc==1.4.0
 oauthlib==3.3.1
     # via requests-oauthlib
 ollama==0.6.2
-    # via machinaos-server
+    # via opencompany-server
 openai==2.45.0
     # via
     #   langchain-openai
     #   rlms
 opentelemetry-api==1.43.0
     # via
-    #   machinaos-server
+    #   opencompany-server
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
 opentelemetry-sdk==1.43.0
-    # via machinaos-server
+    # via opencompany-server
 opentelemetry-semantic-conventions==0.64b0
     # via opentelemetry-sdk
 orjson==3.11.9
     # via
     #   langgraph-sdk
     #   langsmith
-    #   machinaos-server
+    #   opencompany-server
 ormsgpack==1.12.2
     # via langgraph-checkpoint
 packaging==26.2
@@ -337,7 +337,7 @@ platformdirs==4.10.0
 pluggy==1.6.0
     # via pytest
 pooch==1.9.0
-    # via machinaos-server
+    # via opencompany-server
 portkey-ai==2.3.2
     # via rlms
 primp==1.3.1
@@ -359,9 +359,9 @@ protobuf==7.35.1
 psutil==7.2.2
     # via
     #   crawlee
-    #   machinaos-server
+    #   opencompany-server
 ptyprocess==0.7.0 ; sys_platform != 'win32'
-    # via machinaos-server
+    # via opencompany-server
 pyasn1==0.6.4
     # via pyasn1-modules
 pyasn1-modules==0.4.2
@@ -382,7 +382,7 @@ pydantic==2.12.5
     #   langchain-google-genai
     #   langgraph
     #   langsmith
-    #   machinaos-server
+    #   opencompany-server
     #   mcp
     #   ollama
     #   openai
@@ -393,11 +393,11 @@ pydantic==2.12.5
 pydantic-core==2.41.5
     # via pydantic
 pydantic-monty==0.0.18
-    # via machinaos-server
+    # via opencompany-server
 pydantic-settings==2.14.2
     # via
     #   crawlee
-    #   machinaos-server
+    #   opencompany-server
     #   mcp
 pyee==13.0.1
     # via crawlee
@@ -407,7 +407,7 @@ pygments==2.20.0
     #   rich
 pyjwt==2.13.0
     # via
-    #   machinaos-server
+    #   opencompany-server
     #   mcp
 pyparsing==3.3.2
     # via httplib2
@@ -415,29 +415,29 @@ pytest==9.1.1
     # via rlms
 python-dotenv==1.2.2
     # via
-    #   machinaos-server
+    #   opencompany-server
     #   pydantic-settings
     #   rlms
     #   uvicorn
 python-multipart==0.0.32
     # via mcp
 python-slugify==8.0.4
-    # via machinaos-server
+    # via opencompany-server
 python-telegram-bot==22.8
-    # via machinaos-server
+    # via opencompany-server
 pytz==2026.2
-    # via machinaos-server
+    # via opencompany-server
 pywin32==312 ; sys_platform == 'win32'
     # via mcp
 pywinpty==3.0.5 ; sys_platform == 'win32'
-    # via machinaos-server
+    # via opencompany-server
 pyyaml==6.0.3
     # via
     #   langchain-core
-    #   machinaos-server
+    #   opencompany-server
     #   uvicorn
 qrcode==8.2
-    # via machinaos-server
+    # via opencompany-server
 referencing==0.37.0
     # via
     #   jsonschema
@@ -470,7 +470,7 @@ requests-toolbelt==1.0.0
 rich==15.0.0
     # via rlms
 rlms==0.1.3
-    # via machinaos-server
+    # via opencompany-server
 rpds-py==2026.6.3
     # via
     #   jsonschema
@@ -492,7 +492,7 @@ soupsieve==2.8.4
 sqlalchemy==2.0.51
     # via sqlmodel
 sqlmodel==0.0.39
-    # via machinaos-server
+    # via opencompany-server
 sse-starlette==3.4.5
     # via mcp
 starlette==1.3.1
@@ -501,9 +501,9 @@ starlette==1.3.1
     #   mcp
     #   sse-starlette
 structlog==26.1.0
-    # via machinaos-server
+    # via opencompany-server
 temporalio==1.30.0
-    # via machinaos-server
+    # via opencompany-server
 tenacity==9.1.4
     # via
     #   google-genai
@@ -562,7 +562,7 @@ typing-inspection==0.4.2
     #   pydantic
     #   pydantic-settings
 tzdata==2026.3
-    # via machinaos-server
+    # via opencompany-server
 uritemplate==4.2.0
     # via google-api-python-client
 urllib3==2.7.0
@@ -575,7 +575,7 @@ uuid-utils==0.17.0
     #   langsmith
 uvicorn==0.51.0
     # via
-    #   machinaos-server
+    #   opencompany-server
     #   mcp
 uvloop==0.22.1 ; platform_python_implementation != 'PyPy' and sys_platform != 'cygwin' and sys_platform != 'win32'
     # via uvicorn
@@ -589,12 +589,12 @@ websockets==16.1
     # via
     #   google-genai
     #   langsmith
-    #   machinaos-server
+    #   opencompany-server
     #   uvicorn
 wsproto==1.3.2
     # via httpx-ws
 xdk==0.9.0
-    # via machinaos-server
+    # via opencompany-server
 xxhash==3.8.1
     # via
     #   langgraph

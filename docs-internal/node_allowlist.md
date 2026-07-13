@@ -4,7 +4,7 @@
 
 ## Why this exists
 
-Removing a feature from MachinaOs at the registry level (delete the plugin file) breaks workflows that already reference it — existing saved canvases can't load, exported JSON breaks on re-import. The allowlist hides the UI affordance (palette + credentials + skills picker) without touching the registry, so existing references still resolve while new ones can't be created.
+Removing a feature from OpenCompany at the registry level (delete the plugin file) breaks workflows that already reference it — existing saved canvases can't load, exported JSON breaks on re-import. The allowlist hides the UI affordance (palette + credentials + skills picker) without touching the registry, so existing references still resolve while new ones can't be created.
 
 ## Config shape
 

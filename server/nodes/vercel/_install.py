@@ -1,7 +1,7 @@
 """Vercel CLI auto-installer.
 
 The Vercel CLI ships as the npm package ``vercel`` — it lands in the
-shared MachinaOs npm tree at :func:`core.paths.packages_dir`
+shared OpenCompany npm tree at :func:`core.paths.packages_dir`
 (``<DATA_DIR>/packages/``), the same single ``package.json`` +
 ``node_modules/`` that holds ``@anthropic-ai/claude-code`` /
 ``edgymeow`` / ``agent-browser``. ``npm install <pkg> --prefix

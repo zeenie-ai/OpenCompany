@@ -3,7 +3,7 @@ name: cron-scheduler-skill
 description: Schedule recurring tasks using cron expressions. Run workflows on schedules (daily, weekly, hourly, etc.).
 allowed-tools: cron_scheduler
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: automation
 

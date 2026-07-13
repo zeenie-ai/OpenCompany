@@ -1,7 +1,7 @@
-"""Typer CLI for ``machina``.
+"""Typer CLI for ``company``.
 
 Every verb is registered here as a thin stub that lazy-imports its
-implementation on dispatch. Running ``machina clean`` (the recovery
+implementation on dispatch. Running ``company clean`` (the recovery
 verb) only triggers the import of ``cli.commands.clean`` -- not
 ``dev`` / ``start`` / temporal specs / daemon verbs / docs / version.
 
@@ -16,11 +16,14 @@ importing ``cli.commands.daemon`` etc. at boot.
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import typer
 
 app = typer.Typer(
-    name="machina",
-    help="MachinaOS project supervisor CLI.",
+    name="company",
+    help="OpenCompany project supervisor CLI.",
     no_args_is_help=True,
     add_completion=False,
 )
@@ -29,6 +32,11 @@ app = typer.Typer(
 @app.callback()
 def _root() -> None:
     """Marks the Typer app as a multi-command group."""
+    if Path(sys.argv[0]).stem.casefold() == "machina":
+        typer.echo(
+            "Warning: `machina` is deprecated; use `company` instead.",
+            err=True,
+        )
 
 
 # ----------------------------------------------------------- top-level verbs
@@ -62,7 +70,7 @@ def _dev(
 
 @app.command(
     "stop",
-    help="Stop all MachinaOS services and free configured ports.",
+    help="Stop all OpenCompany services and free configured ports.",
 )
 def _stop() -> None:
     from cli.commands.stop import stop_command
@@ -92,7 +100,7 @@ def _build() -> None:
 
 @app.command(
     "serve",
-    help="Run on a single public port (API + WebSocket + built SPA + sidecar). Used by `machina deploy`.",
+    help="Run on a single public port (API + WebSocket + built SPA + sidecar). Used by `company deploy`.",
 )
 def _serve(
     port: int | None = typer.Option(
@@ -110,7 +118,7 @@ def _serve(
 
 daemon_app = typer.Typer(
     name="daemon",
-    help="Run the MachinaOs backend as a detached process.",
+    help="Run the OpenCompany backend as a detached process.",
     no_args_is_help=True,
     add_completion=False,
 )
@@ -163,7 +171,7 @@ app.add_typer(daemon_app, name="daemon")
 
 deploy_app = typer.Typer(
     name="deploy",
-    help="Provision a fresh cloud VM running MachinaOs (via Terraform).",
+    help="Provision a fresh cloud VM running OpenCompany (via Terraform).",
     no_args_is_help=True,
     add_completion=False,
 )
@@ -171,7 +179,7 @@ deploy_app = typer.Typer(
 
 @deploy_app.command(
     "up",
-    help="Create the 'machinaos' VM, install MachinaOs behind the login gate, and run it.",
+    help="Create an OpenCompany VM, install OpenCompany behind the login gate, and run it.",
 )
 def _deploy_up(
     provider: str = typer.Option("gcp", "--provider", help="Cloud provider: gcp (aws is a follow-on)."),
@@ -180,7 +188,7 @@ def _deploy_up(
         None, "--owner-password", help="Login password (>=8 chars). Generated + printed once if omitted."
     ),
     source: str = typer.Option("local", "--source", help="Install source: local (npm pack) or release (npm registry)."),
-    version: str = typer.Option("latest", "--version", help="machinaos version when --source release."),
+    version: str = typer.Option("latest", "--version", help="opencompany version when --source release."),
     machine_type: str = typer.Option("e2-standard-2", "--machine-type", help="VM size."),
     port: int = typer.Option(8080, "--port", help="Public port the app binds + the firewall opens."),
     allow_cidr: str = typer.Option("0.0.0.0/0", "--allow-cidr", help="Firewall source range (restrict to your IP/32)."),
@@ -207,7 +215,7 @@ def _deploy_up(
 
 @deploy_app.command(
     "status",
-    help="Show the 'machinaos' deployment's URL + health.",
+    help="Show the OpenCompany deployment's URL + health.",
 )
 def _deploy_status() -> None:
     from cli.commands.deploy.status import status_command
@@ -217,7 +225,7 @@ def _deploy_status() -> None:
 
 @deploy_app.command(
     "destroy",
-    help="Terraform-destroy the 'machinaos' deployment and remove its local state.",
+    help="Terraform-destroy the OpenCompany deployment and remove its local state.",
 )
 def _deploy_destroy(
     keep_state: bool = typer.Option(False, "--keep-state", help="Keep the local Terraform state dir."),

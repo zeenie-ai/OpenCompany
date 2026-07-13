@@ -2,7 +2,7 @@
 
 Field set mirrors https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/spec.md
 verbatim so future interop with EventBridge / Knative is a JSON-schema swap.
-The MachinaOs extensions (``workflow_id``, ``trigger_node_id``,
+The OpenCompany extensions (``workflow_id``, ``trigger_node_id``,
 ``correlation_id``) ride as CloudEvents extension attributes. Spec §3.1
 SHOULDs lowercase-alphanumeric extension names; we deliberately keep
 Python snake_case for codebase consistency — the rest of the project
@@ -11,7 +11,7 @@ outweighs the spec recommendation. Internal interop only; if we ever
 publish events to an external CloudEvents broker, an alias layer can
 translate at the producer boundary.
 
-Type strings carry the reverse-DNS prefix ``com.machinaos.`` per
+Type strings carry the reverse-DNS prefix ``com.opencompany.`` per
 Primer guidance. ``dataschema`` is auto-populated from ``type`` so
 every typed factory produces a schema URI the consumer can validate
 against.
@@ -26,19 +26,46 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-_TYPE_PREFIX = "com.machinaos."
-_DATASCHEMA_BASE = "machinaos://schemas/events/"
+_TYPE_PREFIX = "com.opencompany."
+_LEGACY_TYPE_PREFIX = "com.machinaos."
+_DATASCHEMA_BASE = "opencompany://schemas/events/"
+
+
+def _unprefixed_event_type(event_type: str) -> str:
+    """Strip either the canonical or legacy product namespace."""
+
+    for prefix in (_TYPE_PREFIX, _LEGACY_TYPE_PREFIX):
+        if event_type.startswith(prefix):
+            return event_type.removeprefix(prefix)
+    return event_type
+
+
+def equivalent_event_types(event_type: str) -> tuple[str, ...]:
+    """Return canonical/legacy equivalents for Temporal replay routing.
+
+    Running listener workflows may still have ``com.machinaos.*`` stored in
+    their ``EventType`` Search Attribute. New producers emit
+    ``com.opencompany.*``; dispatch queries both during the transition.
+    """
+
+    if event_type.startswith(_TYPE_PREFIX):
+        suffix = event_type.removeprefix(_TYPE_PREFIX)
+        return event_type, f"{_LEGACY_TYPE_PREFIX}{suffix}"
+    if event_type.startswith(_LEGACY_TYPE_PREFIX):
+        suffix = event_type.removeprefix(_LEGACY_TYPE_PREFIX)
+        return f"{_TYPE_PREFIX}{suffix}", event_type
+    return (event_type,)
 
 
 def _dataschema_for(event_type: str) -> str:
     """Compute the ``dataschema`` URI for a given event ``type``.
 
-    Strips the ``com.machinaos.`` prefix when present so the URI segment
+    Strips the ``com.opencompany.`` prefix when present so the URI segment
     matches the un-prefixed type (e.g. ``credential.api_key.saved``).
     External-producer events (e.g. ``stripe.charge.succeeded`` from a
     Stripe webhook) keep their type verbatim in the URI segment.
     """
-    seg = event_type.removeprefix(_TYPE_PREFIX) if event_type else event_type
+    seg = _unprefixed_event_type(event_type) if event_type else event_type
     return f"{_DATASCHEMA_BASE}{seg}.json"
 
 
@@ -113,7 +140,7 @@ class WorkflowEvent(BaseModel):
         ``broadcast_credential_event`` contract locked by
         ``test_credential_broadcasts.py``)."""
         return cls(
-            source="machinaos://services/credentials",
+            source="opencompany://services/credentials",
             type=f"{_TYPE_PREFIX}credential.{action}",
             subject=provider,
             data={"provider": provider, **extra} if extra else {"provider": provider},
@@ -136,7 +163,7 @@ class WorkflowEvent(BaseModel):
         """OAuth callback completion. ``identifier`` is the user-facing
         handle (email / username) used as ``subject``."""
         return cls(
-            source=f"machinaos://nodes/{provider}",
+            source=f"opencompany://nodes/{provider}",
             type=f"{_TYPE_PREFIX}{provider}.oauth.completed",
             subject=identifier,
             data=dict(data) if data else {"identifier": identifier},
@@ -159,7 +186,7 @@ class WorkflowEvent(BaseModel):
         task.added / task.claimed / task.completed / task.failed /
         message.sent)."""
         return cls(
-            source="machinaos://services/agent_team",
+            source="opencompany://services/agent_team",
             type=f"{_TYPE_PREFIX}team.{kind}",
             subject=team_id,
             data=dict(data),
@@ -200,7 +227,7 @@ class WorkflowEvent(BaseModel):
         change.
         """
         return cls(
-            source="machinaos://services/workflow",
+            source="opencompany://services/workflow",
             type=f"{_TYPE_PREFIX}workflow.{stage}",
             subject=workflow_id,
             workflow_id=workflow_id,
@@ -232,7 +259,7 @@ class WorkflowEvent(BaseModel):
         the same way ``node_status`` broadcasts do.
         """
         return cls(
-            source="machinaos://services/agent",
+            source="opencompany://services/agent",
             type=f"{_TYPE_PREFIX}agent.progress",
             subject=node_id,
             workflow_id=workflow_id,
@@ -272,7 +299,7 @@ class WorkflowEvent(BaseModel):
         the user's in-progress local edits.
         """
         return cls(
-            source="machinaos://services/parameters",
+            source="opencompany://services/parameters",
             type=f"{_TYPE_PREFIX}node.parameters.updated",
             subject=node_id,
             workflow_id=workflow_id,
@@ -306,7 +333,7 @@ class WorkflowEvent(BaseModel):
         local state."
         """
         return cls(
-            source="machinaos://services/workflow",
+            source="opencompany://services/workflow",
             type=f"{_TYPE_PREFIX}workflow.deployment.snapshot",
             data={"running_workflow_ids": list(running_workflow_ids)},
         )
@@ -323,7 +350,7 @@ class WorkflowEvent(BaseModel):
         """Delegated child-agent completion.
 
         Both success and failure share one ``type``
-        (``com.machinaos.agent.task.completed``) so the
+        (``com.opencompany.agent.task.completed``) so the
         ``TriggerListenerWorkflow`` for ``taskTrigger`` can register a
         single ``EventType`` Search Attribute and match every
         completion event via :func:`services.events.dispatch.emit`'s
@@ -336,7 +363,7 @@ class WorkflowEvent(BaseModel):
         one branch and silently lost the other half of events.
         """
         return cls(
-            source="machinaos://services/agent",
+            source="opencompany://services/agent",
             type=f"{_TYPE_PREFIX}agent.task.completed",
             subject=task_id,
             data=dict(data) if data else {"task_id": task_id, "agent": agent, "status": status},
@@ -359,7 +386,7 @@ class WorkflowEvent(BaseModel):
         status badge.
         """
         return cls(
-            source="machinaos://services/cli_agent",
+            source="opencompany://services/cli_agent",
             type=f"{_TYPE_PREFIX}claude.session.spawned",
             subject=memory_node_id,
             workflow_id=workflow_id,
@@ -389,7 +416,7 @@ class WorkflowEvent(BaseModel):
         bridge + UI can track the rotation.
         """
         return cls(
-            source="machinaos://services/cli_agent",
+            source="opencompany://services/cli_agent",
             type=f"{_TYPE_PREFIX}claude.session.cleared",
             subject=memory_node_id,
             workflow_id=workflow_id,
@@ -417,7 +444,7 @@ class WorkflowEvent(BaseModel):
         ``explicit`` (caller-driven terminate).
         """
         return cls(
-            source="machinaos://services/cli_agent",
+            source="opencompany://services/cli_agent",
             type=f"{_TYPE_PREFIX}claude.session.terminated",
             subject=memory_node_id,
             workflow_id=workflow_id,
@@ -452,7 +479,7 @@ class WorkflowEvent(BaseModel):
         is plain text per Anthropic's docs and not parseable).
         """
         return cls(
-            source="machinaos://services/cli_agent",
+            source="opencompany://services/cli_agent",
             type=f"{_TYPE_PREFIX}claude.session.usage",
             subject=memory_node_id,
             workflow_id=workflow_id,
@@ -475,21 +502,21 @@ class WorkflowEvent(BaseModel):
         """Glob-style match on event type. ``"all"``/empty matches any.
 
         Patterns are matched against the type with the
-        ``com.machinaos.`` reverse-DNS prefix stripped, so callers can
+        ``com.opencompany.`` reverse-DNS prefix stripped, so callers can
         write ``"credential.api_key.*"`` and still hit
-        ``com.machinaos.credential.api_key.saved``. External-producer
+        ``com.opencompany.credential.api_key.saved``. External-producer
         types (e.g. ``stripe.charge.succeeded`` from a Stripe webhook)
         have no prefix and match directly.
 
         Examples:
             "stripe.charge.succeeded" matches itself
-            "credential.api_key.*"    matches "com.machinaos.credential.api_key.saved"
-            "agent.*"                 matches "com.machinaos.agent.progress"
+            "credential.api_key.*"    matches "com.opencompany.credential.api_key.saved"
+            "agent.*"                 matches "com.opencompany.agent.progress"
             "all" or ""               matches everything
         """
         if not pattern or pattern == "all":
             return True
-        normalized = (self.type or "").removeprefix(_TYPE_PREFIX)
+        normalized = _unprefixed_event_type(self.type or "")
         if pattern.endswith(".*"):
             prefix = pattern[:-2]
             return normalized.startswith(prefix + ".") or normalized == prefix

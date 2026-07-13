@@ -1,7 +1,7 @@
 [project]
-name = "machinaos-cli"
+name = "opencompany-cli"
 version = "0.1.0"
-description = "MachinaOS project supervisor CLI (machina)."
+description = "OpenCompany project supervisor CLI (company)."
 requires-python = ">=3.12"
 dependencies = [
     "typer>=0.12",
@@ -11,7 +11,7 @@ dependencies = [
     # OS-native user data / cache / config / log dirs. Soft dependency
     # in the CLI (``cli/platform_.py`` imports it inside a try/except
     # and falls back to a stdlib implementation if the wheel isn't
-    # available) so ``machina clean`` / ``machina build`` still work
+    # available) so ``company clean`` / ``company build`` still work
     # immediately after a wipe, before ``pip install`` has had a
     # chance to materialise it.
     "platformdirs>=4.0",
@@ -24,6 +24,9 @@ dependencies = [
 ]
 
 [project.scripts]
+company = "cli.cli:app"
+# Deprecated compatibility alias. New documentation and installs use
+# ``company``; keep this entry point so existing automation keeps working.
 machina = "cli.cli:app"
 
 [build-system]
@@ -45,7 +48,7 @@ managed = false
 [dependency-groups]
 dev = []
 
-# ``machinaos-cli`` is a standalone Python CLI package -- installable
+# ``opencompany-cli`` is a standalone Python CLI package -- installable
 # via ``pipx install .`` / ``pip install .`` against any Python >=3.12
 # without involving uv. It depends on nothing from ``server/``. The
 # server has its own uv-managed venv at ``server/.venv``; the CLI
@@ -53,5 +56,5 @@ dev = []
 # (which runs ``uv run --no-sync ...`` with ``cwd=server/`` so uv
 # discovers ``server/pyproject.toml`` and activates ``server/.venv``).
 # Keeping the CLI independent of the uv workspace means contributors
-# can install / run / debug ``machina`` on whatever interpreter is on
+# can install / run / debug ``company`` on whatever interpreter is on
 # PATH -- no per-checkout venv activation required.
