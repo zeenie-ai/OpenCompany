@@ -10,7 +10,8 @@ every execution path picks it up with no call-site edits.
 
 One curated model list (the ``max_output_tokens`` keys in
 llm_defaults.json — real model names, no ``-latest`` aliases) serves
-both backends.
+both backends, minus the ``vertex_incompatible_models`` entries which
+are Developer-API-only (Gemma) and dropped from the Vertex branch.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -27,6 +28,14 @@ def _curated_gemini_models():
         llm_config.LLM_DEFAULTS["providers"]["gemini"]["max_output_tokens"]
     )
     return [m for m in max_tokens_map if m != "_default"]
+
+
+def _vertex_incompatible_models():
+    from services.llm import config as llm_config
+
+    return llm_config.LLM_DEFAULTS["providers"]["gemini"].get(
+        "vertex_incompatible_models", []
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -75,6 +84,66 @@ class TestCuratedModelList:
 
 
 # ---------------------------------------------------------------------------
+# Gemma on the Developer API — curated inclusion + Vertex exclusion
+# ---------------------------------------------------------------------------
+
+
+class TestGemmaCuration:
+    """Gemma 4 (gemma-4-31b-it / gemma-4-26b-a4b-it) is served on the
+    Gemini Developer API only (free tier; supports systemInstruction and
+    tools). It must appear in the curated list, be valid for the gemini
+    provider (else the agent paths silently swap it to default_model),
+    and be excluded from the Vertex branch where the plain ids 404.
+    """
+
+    GEMMA_MODELS = ("gemma-4-31b-it", "gemma-4-26b-a4b-it")
+
+    def test_gemma_models_in_curated_list(self):
+        curated = _curated_gemini_models()
+        for model in self.GEMMA_MODELS:
+            assert model in curated
+
+    def test_gemma_models_are_vertex_incompatible(self):
+        blocked = _vertex_incompatible_models()
+        for model in self.GEMMA_MODELS:
+            assert model in blocked
+
+    def test_vertex_incompatible_is_subset_of_curated(self):
+        """Every vertex-blocked entry must exist in the curated list —
+        a stale blocklist entry means a renamed/removed model."""
+        curated = set(_curated_gemini_models())
+        for model in _vertex_incompatible_models():
+            assert model in curated, (
+                f"{model!r} in vertex_incompatible_models but not curated"
+            )
+
+    def test_default_model_not_vertex_incompatible(self):
+        """The Vertex count_tokens probe and the invalid-model swap both
+        fall back to default_model — it must be servable on Vertex."""
+        from services.llm import config as llm_config
+
+        default = llm_config.LLM_DEFAULTS["providers"]["gemini"]["default_model"]
+        assert default not in _vertex_incompatible_models()
+
+    def test_gemma_valid_for_gemini_provider(self):
+        """The four runtime swap sites (execute_agent, execute_chat_agent,
+        temporal agent, RLM) gate on is_model_valid_for_provider — without
+        a matching detection pattern gemma silently swaps to default."""
+        from services.ai import is_model_valid_for_provider
+
+        for model in self.GEMMA_MODELS:
+            assert is_model_valid_for_provider(model, "gemini") is True
+
+    def test_cerebras_gemma_still_valid_for_cerebras(self):
+        """Cerebras serves its own gemma-4-31b (no -it suffix); adding
+        'gemma' to gemini's patterns must not break cerebras validity —
+        the check is per-provider, not first-match-wins."""
+        from services.ai import is_model_valid_for_provider
+
+        assert is_model_valid_for_provider("gemma-4-31b", "cerebras") is True
+
+
+# ---------------------------------------------------------------------------
 # Native path: GeminiProvider client construction + fetch_models
 # ---------------------------------------------------------------------------
 
@@ -112,15 +181,16 @@ class TestGeminiProviderVertexMode:
     @pytest.mark.asyncio
     async def test_fetch_models_vertex_probes_and_returns_curated_list(self):
         """Vertex model listing rejects API keys, so the key is verified
-        with a free count_tokens call and the shared curated list is
-        returned."""
+        with a free count_tokens call and the curated list minus the
+        Developer-API-only entries (Gemma) is returned."""
         provider, _ = self._make("AQ.test-key")
         provider._client = MagicMock()
         provider._client.aio.models.count_tokens = AsyncMock()
 
         models = await provider.fetch_models("AQ.test-key")
 
-        expected = _curated_gemini_models()
+        blocked = set(_vertex_incompatible_models())
+        expected = [m for m in _curated_gemini_models() if m not in blocked]
         assert models == expected
         assert len(models) > 0
         provider._client.aio.models.count_tokens.assert_awaited_once_with(
@@ -129,9 +199,9 @@ class TestGeminiProviderVertexMode:
 
     @pytest.mark.asyncio
     async def test_fetch_models_ai_studio_returns_same_curated_list(self):
-        """Both key types serve the SAME model list — the AI Studio
-        branch probes the key via the models endpoint, then returns the
-        shared curated list."""
+        """The AI Studio branch probes the key via the models endpoint,
+        then returns the FULL curated list — including Developer-API-only
+        entries like Gemma that the Vertex branch filters out."""
         provider, _ = self._make("AIzaSyTest")
 
         mock_response = MagicMock()
