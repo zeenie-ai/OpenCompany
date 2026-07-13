@@ -6,7 +6,7 @@ Architecture:
 - Each workflow node executes as an independent Temporal activity
 - Activities can run on ANY worker in the cluster for horizontal scaling
 - Workflow only orchestrates - schedules activities and routes outputs
-- WebSocket connection to MachinaOs for low-latency node execution
+- WebSocket connection to OpenCompany for low-latency node execution
 
 When TEMPORAL_ENABLED=true:
 - Workflows are executed via Temporal for durability and distribution

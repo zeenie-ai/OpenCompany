@@ -1,12 +1,12 @@
 # GCP VM Deploy Runbook (released npm package, manual gcloud + cf)
 
-Step-by-step runbook for deploying the **released** `machinaos` npm package on a fresh
+Step-by-step runbook for deploying the **released** `opencompany` npm package on a fresh
 GCP VM behind a Cloudflare-proxied domain, with the single-owner login gate enabled.
 Written to be executable by an AI agent (or a human) with no other context.
 
-This is the manual path — it does NOT use `machina deploy` / Terraform
+This is the manual path — it does NOT use `company deploy` / Terraform
 (`cli/commands/deploy/`, `cli/terraform/`). It was derived from a real deployment to
-`demo.zeenie.xyz` (June 2026, machinaos@0.0.88) and encodes every pitfall hit on the way.
+`demo.zeenie.xyz` (June 2026, opencompany@0.0.88) and encodes every pitfall hit on the way.
 
 ## Parameters
 
@@ -17,7 +17,7 @@ Decide these up front; they appear in commands below as `<PLACEHOLDERS>`.
 | `<PROJECT>` | `zeenie` | GCP project id (`gcloud config get-value project`) |
 | `<VM_NAME>` | `demo` | Instance name |
 | `<REGION>` / `<ZONE>` | `asia-south1` / `asia-south1-a` | Mumbai. Any region works |
-| `<IP_NAME>` | `machinaos-india-ip` | Name for the reserved static IP |
+| `<IP_NAME>` | `opencompany-india-ip` | Name for the reserved static IP |
 | `<DOMAIN>` | `demo.zeenie.xyz` | Must be a subdomain of a zone in the Cloudflare account |
 | `<SUBDOMAIN>` | `demo` | The record name within the zone |
 | `<OWNER_EMAIL>` | `rohith@zeenie.xyz` | Login email for the owner account |
@@ -46,13 +46,13 @@ print('ENC='+secrets.token_hex(24))"
 ## Known pitfalls (read first — these each cost a redeploy or a debugging loop)
 
 1. **Debian 12 fails.** The npm package's `postinstall` hard-requires Python 3.12+;
-   Debian 12 ships 3.11 and `npm install -g machinaos` exits 1
+   Debian 12 ships 3.11 and `npm install -g opencompany` exits 1
    (`ERROR: Python 3.12+ is required.`). Use **Ubuntu 24.04** (`ubuntu-2404-lts-amd64`
    in `ubuntu-os-cloud`), which ships Python 3.12.
-2. **The released package has no `machina serve`.** Released CLI commands are only
+2. **The released package has no `company serve`.** Released CLI commands are only
    `start | dev | stop | build | clean | doctor | help | version`. The single-port
    `serve` command and `SERVE_STATIC_CLIENT` backend support exist only in unreleased
-   source. Production shape for the release is the README's `machina start`
+   source. Production shape for the release is the README's `company start`
    (static client on **:3000**, backend uvicorn on **:3010**) plus an nginx reverse
    proxy on :80/:443.
 3. **`MACHINA_OWNER_*` env seeding is NOT honored by the release.** Setting
@@ -93,18 +93,18 @@ Save the returned address as `<STATIC_IP>`.
 
 ## Step 2 — Author the startup script (locally)
 
-Write `machinaos-startup.sh` with the placeholders filled in. This is the complete,
+Write `opencompany-startup.sh` with the placeholders filled in. This is the complete,
 corrected, idempotent script (toolchain + release install + env + nginx with TLS +
 systemd):
 
 ```bash
 #!/bin/bash
-# MachinaOs VM startup script: released npm package via `machina start`,
+# OpenCompany VM startup script: released npm package via `company start`,
 # nginx on :80/:443 (self-signed TLS for Cloudflare Full mode), login gate on.
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
-echo "[machinaos] installing toolchain..."
+echo "[opencompany] installing toolchain..."
 apt-get update
 apt-get install -y curl ca-certificates git build-essential pkg-config libffi-dev libssl-dev nginx
 curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
@@ -112,14 +112,14 @@ apt-get install -y nodejs
 corepack enable || true
 curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
 
-echo "[machinaos] installing MachinaOs released package..."
-npm install -g machinaos@latest
+echo "[opencompany] installing OpenCompany released package..."
+npm install -g opencompany@latest
 
-echo "[machinaos] writing login-gate env..."
-mkdir -p /etc/machinaos
-cat > /etc/machinaos/machina.env <<'MACHINA_ENV_EOF'
+echo "[opencompany] writing login-gate env..."
+mkdir -p /etc/opencompany
+cat > /etc/opencompany/opencompany.env <<'OPENCOMPANY_ENV_EOF'
 HOST=0.0.0.0
-DATA_DIR=/var/lib/machinaos
+DATA_DIR=/var/lib/opencompany
 WORKSPACE_BASE_DIR=workspaces
 VITE_AUTH_ENABLED=true
 AUTH_MODE=single
@@ -131,11 +131,11 @@ LOG_FORMAT=text
 JWT_SECRET_KEY=<JWT_KEY>
 SECRET_KEY=<SECRET_KEY>
 API_KEY_ENCRYPTION_KEY=<ENC_KEY>
-MACHINA_ENV_EOF
-chmod 600 /etc/machinaos/machina.env
-mkdir -p /var/lib/machinaos
+OPENCOMPANY_ENV_EOF
+chmod 600 /etc/opencompany/opencompany.env
+mkdir -p /var/lib/opencompany
 
-echo "[machinaos] self-signed TLS cert (Cloudflare Full mode accepts it)..."
+echo "[opencompany] self-signed TLS cert (Cloudflare Full mode accepts it)..."
 mkdir -p /etc/nginx/certs
 if [ ! -f /etc/nginx/certs/origin.crt ]; then
   openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
@@ -143,8 +143,8 @@ if [ ! -f /etc/nginx/certs/origin.crt ]; then
     -subj "/CN=<DOMAIN>"
 fi
 
-echo "[machinaos] nginx reverse proxy (SPA :3000, backend :3010)..."
-cat > /etc/nginx/sites-available/machinaos <<'NGINX_EOF'
+echo "[opencompany] nginx reverse proxy (SPA :3000, backend :3010)..."
+cat > /etc/nginx/sites-available/opencompany <<'NGINX_EOF'
 server {
     listen 80 default_server;
     listen 443 ssl default_server;
@@ -186,24 +186,24 @@ server {
 }
 NGINX_EOF
 rm -f /etc/nginx/sites-enabled/default
-ln -sf /etc/nginx/sites-available/machinaos /etc/nginx/sites-enabled/machinaos
+ln -sf /etc/nginx/sites-available/opencompany /etc/nginx/sites-enabled/opencompany
 nginx -t
 systemctl enable --now nginx
 systemctl reload nginx
 
-echo "[machinaos] installing systemd service (README usage: machina start)..."
-MACHINA_BIN=$(command -v machina)
-cat > /etc/systemd/system/machinaos.service <<SERVICE_EOF
+echo "[opencompany] installing systemd service (README usage: company start)..."
+OPENCOMPANY_BIN=$(command -v company)
+cat > /etc/systemd/system/opencompany.service <<SERVICE_EOF
 [Unit]
-Description=MachinaOs (released, machina start)
+Description=OpenCompany (released, company start)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-EnvironmentFile=/etc/machinaos/machina.env
-WorkingDirectory=/usr/lib/node_modules/machinaos
-ExecStart=$MACHINA_BIN start
+EnvironmentFile=/etc/opencompany/opencompany.env
+WorkingDirectory=/usr/lib/node_modules/opencompany
+ExecStart=$OPENCOMPANY_BIN start
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=30
@@ -213,24 +213,24 @@ WantedBy=multi-user.target
 SERVICE_EOF
 
 systemctl daemon-reload
-systemctl enable --now machinaos
-systemctl restart machinaos
-echo "[machinaos] done."
+systemctl enable --now opencompany
+systemctl restart opencompany
+echo "[opencompany] done."
 ```
 
 On Windows, force LF endings after writing:
 
 ```powershell
-$p = "$env:TEMP\machinaos-startup.sh"
+$p = "$env:TEMP\opencompany-startup.sh"
 [IO.File]::WriteAllText($p, [IO.File]::ReadAllText($p).Replace("`r`n","`n"))
 ```
 
 ## Step 3 — Firewall + VM
 
 ```bash
-gcloud compute firewall-rules create machinaos-allow-http \
+gcloud compute firewall-rules create opencompany-allow-http \
   --project=<PROJECT> --direction=INGRESS --action=ALLOW \
-  --rules=tcp:80,tcp:443 --source-ranges=0.0.0.0/0 --target-tags=machinaos
+  --rules=tcp:80,tcp:443 --source-ranges=0.0.0.0/0 --target-tags=opencompany
 ```
 
 ```bash
@@ -239,13 +239,13 @@ gcloud compute instances create <VM_NAME> \
   --machine-type=e2-standard-2 \
   --image-family=ubuntu-2404-lts-amd64 --image-project=ubuntu-os-cloud \
   --boot-disk-size=30GB --boot-disk-type=pd-balanced \
-  --tags=machinaos --address=<STATIC_IP> \
-  --metadata-from-file=startup-script=machinaos-startup.sh
+  --tags=opencompany --address=<STATIC_IP> \
+  --metadata-from-file=startup-script=opencompany-startup.sh
 ```
 
 Notes: `e2-standard-2` (2 vCPU / 8 GB) is comfortable; the old `e2-micro` is too small.
 Updating an existing firewall rule uses `--rules=` (not `--allow=`):
-`gcloud compute firewall-rules update machinaos-allow-http --rules="tcp:80,tcp:443"`.
+`gcloud compute firewall-rules update opencompany-allow-http --rules="tcp:80,tcp:443"`.
 
 ## Step 4 — DNS via cf CLI
 
@@ -257,7 +257,7 @@ cf zones list                          # find the zone; grab account id from the
 cf context set account-id <ACCOUNT_ID>
 cf context set zone <ZONE_DOMAIN>      # e.g. zeenie.xyz
 cf dns records list                    # check the name is free
-cf dns records create --body '{"type":"A","name":"<SUBDOMAIN>","content":"<STATIC_IP>","proxied":true,"ttl":1,"comment":"MachinaOs VM <ZONE> (gcloud, machinaos@latest)"}'
+cf dns records create --body '{"type":"A","name":"<SUBDOMAIN>","content":"<STATIC_IP>","proxied":true,"ttl":1,"comment":"OpenCompany VM <ZONE> (gcloud, opencompany@latest)"}'
 ```
 
 Delete a record by id: `cf dns records delete <RECORD_ID>`.
@@ -278,9 +278,9 @@ If it never comes up, debug in this order:
 
 ```bash
 # startup script progress / errors:
-gcloud compute instances get-serial-port-output <VM_NAME> --zone=<ZONE> | grep -E "machinaos|error"
+gcloud compute instances get-serial-port-output <VM_NAME> --zone=<ZONE> | grep -E "opencompany|error"
 # service state:
-gcloud compute ssh <VM_NAME> --zone=<ZONE> --quiet --command="systemctl is-active machinaos nginx; sudo journalctl -u machinaos -n 40 --no-pager"
+gcloud compute ssh <VM_NAME> --zone=<ZONE> --quiet --command="systemctl is-active opencompany nginx; sudo journalctl -u opencompany -n 40 --no-pager"
 ```
 
 ## Step 6 — Register the owner (this IS the login setup)
@@ -308,7 +308,7 @@ All of these must pass before declaring success:
 # 1. health via domain (Cloudflare -> origin TLS):
 curl -s https://<DOMAIN>/health                    # 200, {"status":"healthy",...}
 # 2. SPA serves:
-curl -s https://<DOMAIN>/ | grep -o "<title>[^<]*</title>"   # <title>MachinaOS</title>
+curl -s https://<DOMAIN>/ | grep -o "<title>[^<]*</title>"   # <title>OpenCompany</title>
 # 3. auth gate on, registration closed:
 curl -s https://<DOMAIN>/api/auth/status
 # expect: {"auth_enabled":true,"auth_mode":"single","can_register":false,...}
@@ -341,7 +341,7 @@ Origin CA cert.
 ```bash
 gcloud compute instances delete <VM_NAME> --zone=<ZONE> --project=<PROJECT> --quiet
 gcloud compute addresses delete <IP_NAME> --region=<REGION> --project=<PROJECT> --quiet
-gcloud compute firewall-rules delete machinaos-allow-http --project=<PROJECT> --quiet
+gcloud compute firewall-rules delete opencompany-allow-http --project=<PROJECT> --quiet
 cf dns records list   # find the record id
 cf dns records delete <RECORD_ID>
 ```
@@ -350,13 +350,13 @@ cf dns records delete <RECORD_ID>
 
 ```bash
 # logs:
-gcloud compute ssh <VM_NAME> --zone=<ZONE> --quiet --command="sudo journalctl -u machinaos -f"
+gcloud compute ssh <VM_NAME> --zone=<ZONE> --quiet --command="sudo journalctl -u opencompany -f"
 # restart app:
-gcloud compute ssh <VM_NAME> --zone=<ZONE> --quiet --command="sudo systemctl restart machinaos"
+gcloud compute ssh <VM_NAME> --zone=<ZONE> --quiet --command="sudo systemctl restart opencompany"
 # upgrade to a new release:
-gcloud compute ssh <VM_NAME> --zone=<ZONE> --quiet --command="sudo npm install -g machinaos@latest && sudo systemctl restart machinaos"
+gcloud compute ssh <VM_NAME> --zone=<ZONE> --quiet --command="sudo npm install -g opencompany@latest && sudo systemctl restart opencompany"
 # env (secrets live here):
-#   /etc/machinaos/machina.env   (chmod 600; service reads it via EnvironmentFile)
+#   /etc/opencompany/opencompany.env   (chmod 600; service reads it via EnvironmentFile)
 # data:
-#   /var/lib/machinaos           (DATA_DIR: DBs, workspaces, packages)
+#   /var/lib/opencompany           (DATA_DIR: DBs, workspaces, packages)
 ```

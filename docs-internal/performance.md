@@ -1,6 +1,6 @@
 # Performance — Cold-Start, Bundle, Runtime Latency
 
-Living record of MachinaOs's performance posture: where launch time is
+Living record of OpenCompany's performance posture: where launch time is
 spent, what each optimisation cost / saved, and how to reproduce the
 measurements. Update this file when you ship a perf-affecting change
 or take a new measurement; numbers without timestamps and a commit
@@ -8,7 +8,7 @@ reference rot fast.
 
 ## Headline numbers (current baseline)
 
-Measured on Windows, dev mode (`pnpm run dev` → `python -m machina dev`),
+Measured on Windows, dev mode (`pnpm run dev` → `company dev`),
 warm OS file cache, with bytecode pre-compile applied:
 
 | Metric | Value | Source |
@@ -23,7 +23,7 @@ warm OS file cache, with bytecode pre-compile applied:
 
 The cold-disk first launch on the same code is ~2× slower because the
 Python interpreter regenerates `.pyc` files on the fly. Run
-`machina build` once to pre-compile (see ["Pre-compile Python bytecode"]
+`company build` once to pre-compile (see ["Pre-compile Python bytecode"]
 below) and subsequent launches hit the warm number.
 
 ## Optimisation history
@@ -126,7 +126,7 @@ cd server
 uv run python -O -m compileall -q -j 0 services core nodes routers models middleware main.py constants.py
 ```
 
-`machina build` runs this as step `[5/6]`. The path list lives in
+`company build` runs this as step `[5/6]`. The path list lives in
 [cli/commands/build.py](../cli/commands/build.py)'s
 `COMPILEALL_SOURCE_DIRS` constant; install.js mirrors the same list.
 Tests at
@@ -144,7 +144,7 @@ but the user-visible "first run after `git pull`" is dominated by it.
 
 ```bash
 # Warm path (typical dev iteration):
-machina start > start.log 2>&1
+company start > start.log 2>&1
 # In another shell, wait for "Status broadcasters settled" then Ctrl-C the first.
 ```
 

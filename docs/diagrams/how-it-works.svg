@@ -39,7 +39,7 @@
   <rect width="1100" height="620" class="bg"/>
 
   <!-- Header -->
-  <text x="550" y="40" text-anchor="middle" class="header">How MachinaOS Works</text>
+  <text x="550" y="40" text-anchor="middle" class="header">How OpenCompany Works</text>
   <text x="550" y="62" text-anchor="middle" class="subheader">Build AI workflows visually. Connect them to your apps. Run everything on your own computer.</text>
 
   <!-- ============ STEP 1: YOU PICK NODES ============ -->
@@ -189,6 +189,6 @@
   <!-- ============ FOOTER STRIP ============ -->
   <rect x="40" y="540" width="1020" height="60" class="footer-strip"/>
   <text x="550" y="568" text-anchor="middle" class="footer-text">🏠  Everything runs on your computer</text>
-  <text x="550" y="588" text-anchor="middle" class="footer-sub">Your API keys, your data, your conversations — never sent to MachinaOS servers. Free local AI via Ollama and LM Studio.</text>
+  <text x="550" y="588" text-anchor="middle" class="footer-sub">Your API keys, your data, your conversations — never sent to OpenCompany servers. Free local AI via Ollama and LM Studio.</text>
 
 </svg>

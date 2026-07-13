@@ -15,4 +15,4 @@ from ._events import dispatch_email_received  # noqa: F401 — re-export
 from ._filters import build_filter as build_email_filter
 
 register_filter_builder("emailReceive", build_email_filter)
-register_canary_trigger_type("emailReceive", "com.machinaos.email.message.received")
+register_canary_trigger_type("emailReceive", "com.opencompany.email.message.received")

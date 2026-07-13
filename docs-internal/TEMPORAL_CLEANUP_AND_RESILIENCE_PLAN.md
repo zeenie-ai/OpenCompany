@@ -31,7 +31,7 @@
 
 ## §1 Motivation
 
-Wave 12 made the Temporal-native CloudEvents canary path the production default (`event_framework_enabled=True`, `core/config.py:95-98`; 8/9 trigger types canary-registered, Twitter deferred). That migration stranded three legacy subsystems that now run as unreachable or fallback-only code, and it exposed four infrastructure gaps that matter for MachinaOS's two deployment topologies (developer laptop that sleeps/hard-kills vs always-on cloud VM):
+Wave 12 made the Temporal-native CloudEvents canary path the production default (`event_framework_enabled=True`, `core/config.py:95-98`; 8/9 trigger types canary-registered, Twitter deferred). That migration stranded three legacy subsystems that now run as unreachable or fallback-only code, and it exposed four infrastructure gaps that matter for OpenCompany's two deployment topologies (developer laptop that sleeps/hard-kills vs always-on cloud VM):
 
 1. **Dead code** (~556 LOC): the `event_waiter.py` Redis-Streams branch, the APScheduler cron stack, and one orphaned CloudEvents factory.
 2. **Declared-but-disabled queue routing**: 75 plugin `task_queue` declarations across 9 queues are silently ignored — every activity runs in one 100-slot pool on `"machina-tasks"`.

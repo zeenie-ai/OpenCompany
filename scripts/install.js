@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * MachinaOS Installation Script
+ * OpenCompany Installation Script
  *
  * Called by postinstall.js after npm install.
  * Installs all dependencies including Python and uv.
@@ -12,9 +12,14 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 // Prevent recursive execution when npm install runs in subdirectories
-if (process.env.MACHINAOS_INSTALLING === 'true') {
+if (
+  process.env.OPENCOMPANY_INSTALLING === 'true'
+  || process.env.MACHINAOS_INSTALLING === 'true'
+) {
   process.exit(0);
 }
+process.env.OPENCOMPANY_INSTALLING = 'true';
+// Keep mixed-version nested installs from invoking an older hook recursively.
 process.env.MACHINAOS_INSTALLING = 'true';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -24,7 +29,7 @@ process.env.PYTHONUTF8 = '1';
 
 function run(cmd, cwd = ROOT, timeoutMs = 300000) {
   // Strip VIRTUAL_ENV from the spawned env. When the user runs
-  // ``npm install -g machinaos`` from a shell that has activated a
+  // ``npm install -g opencompany`` from a shell that has activated a
   // venv (very common during dev), uv emits a noisy ``VIRTUAL_ENV
   // ... does not match the project environment path`` warning per
   // invocation. uv only honours VIRTUAL_ENV with ``--active``, which
@@ -36,7 +41,11 @@ function run(cmd, cwd = ROOT, timeoutMs = 300000) {
     stdio: 'inherit',
     shell: true,
     timeout: timeoutMs,
-    env: { ...cleanEnv, MACHINAOS_INSTALLING: 'true' }
+    env: {
+      ...cleanEnv,
+      OPENCOMPANY_INSTALLING: 'true',
+      MACHINAOS_INSTALLING: 'true',
+    }
   });
 }
 
@@ -127,14 +136,15 @@ if (uvVersion) {
 }
 
 // Temporal binary: downloaded eagerly during install (step [6/6])
-// by ``python -m services.temporal._install``, same call ``machina
-// build`` already makes. The pooch cache (~/.cache/MachinaOs/...)
+// by ``python -m services.temporal._install``, the same call that
+// ``company build`` already makes. The pooch cache
+// (~/.cache/OpenCompany/...)
 // makes re-runs sub-second. Done eagerly because
 // ``TemporalServerRuntime._pre_spawn`` unconditionally calls
 // ``ensure_temporal_binaries`` -- the runtime always uses the
 // pooch-downloaded binary regardless of any system ``temporal`` on
 // PATH -- so pre-fetching here eliminates a 30-90 s stall on the
-// user's first ``machina start``.
+// user's first ``company start``.
 let temporalVersion = getVersion('temporal --version');
 console.log(
   temporalVersion
@@ -144,7 +154,7 @@ console.log(
 
 // agent-browser is managed by the Python backend
 // (server/nodes/browser/_install.py) — npm-installed into
-// platformdirs.user_cache_path("MachinaOs")/browser/npm/ on first
+// platformdirs.user_cache_path("OpenCompany")/browser/npm/ on first
 // use, with the Chromium runtime fetched by ``agent-browser install``
 // when the browser node first spawns. No npm dep, no postinstall step.
 
@@ -233,23 +243,23 @@ try {
   run(`uv pip install --python "${cliVenvPython}" --quiet -e .`, ROOT);
 
   // Eagerly fetch the official Temporal CLI binary (~90 MB tarball
-  // from temporal.download/cli/archive/latest). Same call ``machina
+  // from temporal.download/cli/archive/latest). Same call ``company
   // build`` step [6/6] makes. The runtime supervisor unconditionally
   // uses this pooch-cached copy via
   // ``TemporalServerRuntime._pre_spawn`` -- it ignores any system
   // ``temporal`` on PATH -- so pre-fetching at install time turns a
-  // 30-90 s stall on first ``machina start`` into a sub-second
+  // 30-90 s stall on first ``company start`` into a sub-second
   // cache hit. Idempotent on re-install (pooch cache).
   step++;
   console.log(`[${step}/${totalSteps}] Installing Temporal binaries...`);
   // Non-fatal: TemporalServerRuntime._pre_spawn() re-runs this download
-  // lazily on first `machina start` — a failed fetch must never fail
+  // lazily on first `company start` — a failed fetch must never fail
   // `npm install`.
   try {
     run('uv run python -m services.temporal._install', serverDir, 600000);
   } catch (err) {
     console.log(`  Warning: Temporal CLI download failed (non-fatal): ${err.message}`);
-    console.log('  It will be fetched automatically on first `machina start`.');
+    console.log('  It will be fetched automatically on first `company start`.');
   }
 
   // WhatsApp RPC is now an npm dependency - binary downloaded via postinstall

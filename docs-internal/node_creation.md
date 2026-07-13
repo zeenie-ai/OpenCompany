@@ -2,7 +2,7 @@
 
 > **Companion docs:** [Plugin System](./plugin_system.md) (Wave 11 architecture + Wave 12 event framework) and the inline [Nodes Cookbook](../server/nodes/README.md) next to the plugin files.
 
-This guide is a fast index for adding a new node to MachinaOs. The
+This guide is a fast index for adding a new node to OpenCompany. The
 deep technical details live in [`plugin_system.md`](./plugin_system.md);
 this file picks the right entry point based on what you're adding.
 

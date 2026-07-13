@@ -8,7 +8,7 @@
 > [`claude_code_cli_reference.md`](./claude_code_cli_reference.md).
 
 This is the set of environment variables Claude Code reads at startup. Where
-relevant we annotate which ones MachinaOs's `services/cli_agent/` framework
+relevant we annotate which ones OpenCompany's `services/cli_agent/` framework
 sets or relies on.
 
 ## Authentication & API configuration
@@ -63,8 +63,8 @@ sets or relies on.
 |---|---|
 | `MCP_TIMEOUT` | MCP server connect timeout. |
 | `MCP_TOOL_TIMEOUT` | Per-tool-call timeout. |
-| `MAX_MCP_OUTPUT_TOKENS` | Per-tool output ceiling. Default `25000`; warn at `10000`. **Relevant for MachinaOs** — workflow tools that return large blobs (browser screenshots, file contents) silently hit this. See [`cli_agent_canonical_patterns_rfc.md` §2.9](./cli_agent_canonical_patterns_rfc.md). |
-| `ENABLE_TOOL_SEARCH` | Tool deferral control: `true` (default, defer all MCP tools, agent calls `ToolSearch`), `false` (load all upfront), `auto` (load if all fit in 10 % of context), `auto:<N>` (custom %). **MachinaOs sidesteps this** by setting `"alwaysLoad": true` on the `machinaos` mcp-config entry instead — see canonical patterns RFC §2.4 / R2. Requires Sonnet 4 / Opus 4 or later; Haiku has no tool search. |
+| `MAX_MCP_OUTPUT_TOKENS` | Per-tool output ceiling. Default `25000`; warn at `10000`. **Relevant for OpenCompany** — workflow tools that return large blobs (browser screenshots, file contents) silently hit this. See [`cli_agent_canonical_patterns_rfc.md` §2.9](./cli_agent_canonical_patterns_rfc.md). |
+| `ENABLE_TOOL_SEARCH` | Tool deferral control: `true` (default, defer all MCP tools, agent calls `ToolSearch`), `false` (load all upfront), `auto` (load if all fit in 10 % of context), `auto:<N>` (custom %). **OpenCompany sidesteps this** by setting `"alwaysLoad": true` on the `opencompany` mcp-config entry instead — see canonical patterns RFC §2.4 / R2. Requires Sonnet 4 / Opus 4 or later; Haiku has no tool search. |
 
 ## Telemetry & disable flags
 
@@ -119,7 +119,7 @@ sets or relies on.
 
 | Variable | Purpose |
 |---|---|
-| `CLAUDE_CONFIG_DIR` | Override the root config directory. Defaults to `~/.claude/`. **MachinaOs sets this** to `<DATA_DIR>/claude/` (= `~/.machina/claude/` by default) so credentials are project-local and isolated from the user's own `~/.claude/` session — see `nodes/agent/claude_code_agent/_oauth.py:MACHINA_CLAUDE_DIR` (`= data_path("claude")`). This is the directory under which claude's session JSONL lives at `<CLAUDE_CONFIG_DIR>/projects/<project_key>/<session_id>.jsonl`. The npm-installed CLI binary is separate, in the shared tree at `<DATA_DIR>/packages/node_modules/.bin/claude[.cmd]`. |
+| `CLAUDE_CONFIG_DIR` | Override the root config directory. Defaults to `~/.claude/`. **OpenCompany sets this** to `<DATA_DIR>/claude/` (= `~/.opencompany/claude/` by default) so credentials are project-local and isolated from the user's own `~/.claude/` session — see `nodes/agent/claude_code_agent/_oauth.py:OPENCOMPANY_CLAUDE_DIR` (`= data_path("claude")`). This is the directory under which claude's session JSONL lives at `<CLAUDE_CONFIG_DIR>/projects/<project_key>/<session_id>.jsonl`. The npm-installed CLI binary is separate, in the shared tree at `<DATA_DIR>/packages/node_modules/.bin/claude[.cmd]`. |
 | `CLAUDE_REMOTE_CONTROL_SESSION_NAME_PREFIX` | Default prefix for auto-generated Remote Control session names. |
 
 ## Timeouts
@@ -137,13 +137,13 @@ sets or relies on.
 
 ---
 
-## Env vars MachinaOs explicitly sets on the spawn env
+## Env vars OpenCompany explicitly sets on the spawn env
 
 From [`services/cli_agent/session.py:env()`](../server/services/cli_agent/session.py):
 
 | Variable | Set to | Reason |
 |---|---|---|
 | `PYTHONUNBUFFERED` | `1` | Line-buffered output (we parse stream-json line by line). |
-| `CLAUDE_CONFIG_DIR` | `MACHINA_CLAUDE_DIR` (claude provider only) | Project-local credential isolation; also where claude writes its session JSONL — load-bearing for the memory bridge (`<key>/projects/<cwd-encoded>/<session_id>.jsonl`). |
+| `CLAUDE_CONFIG_DIR` | `OPENCOMPANY_CLAUDE_DIR` (claude provider only) | Project-local credential isolation; also where claude writes its session JSONL — load-bearing for the memory bridge (`<key>/projects/<cwd-encoded>/<session_id>.jsonl`). |
 | `<provider.ide_lock_env_var>` | path to per-spawn lockfile | VSCode-style IDE auto-discovery. |
-| `MACHINA_PARENT_RUN_ID` | `<workflow_id>:<node_id>:<batch_token[:8]>` | Composio-style parent-run-id for MCP correlation. |
+| `OPENCOMPANY_PARENT_RUN_ID` | `<workflow_id>:<node_id>:<batch_token[:8]>` | Composio-style parent-run-id for MCP correlation. |

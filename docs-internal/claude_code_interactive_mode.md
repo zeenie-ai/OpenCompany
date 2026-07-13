@@ -12,7 +12,7 @@
 
 ## Why we cut over from `-p`
 
-Pre-cutover MachinaOs spawned `claude -p --output-format stream-json`
+Pre-cutover OpenCompany spawned `claude -p --output-format stream-json`
 and parsed NDJSON events on stdout. Two reasons to leave `-p`:
 
 1. **Anthropic billing change (2026-06-15).** Per
@@ -253,10 +253,10 @@ methods on
 
 | Event type | When fired |
 |---|---|
-| `com.machinaos.claude.session.spawned` | Cold spawn (new subprocess) |
-| `com.machinaos.claude.session.cleared` | Explicit `pool.clear` → new UUID on next acquire |
-| `com.machinaos.claude.session.terminated` | Pool terminate (reason: `idle` / `crashed` / `evicted` / `shutdown` / `explicit`) |
-| `com.machinaos.claude.session.usage` | Each `result` event (per-turn cost + tokens + duration + num_turns) |
+| `com.opencompany.claude.session.spawned` | Cold spawn (new subprocess) |
+| `com.opencompany.claude.session.cleared` | Explicit `pool.clear` → new UUID on next acquire |
+| `com.opencompany.claude.session.terminated` | Pool terminate (reason: `idle` / `crashed` / `evicted` / `shutdown` / `explicit`) |
+| `com.opencompany.claude.session.usage` | Each `result` event (per-turn cost + tokens + duration + num_turns) |
 
 The usage event is the source of truth for the simpleMemory usage panel
 — `/usage` is TUI-only plain text per Anthropic and not parseable.
@@ -268,10 +268,10 @@ store that renders the panel.
 
 **Tools (MCP) — strict allowlist, no claude built-ins.** Spawn argv
 carries `--mcp-config <json>` (HTTP transport, bearer header) +
-`--strict-mcp-config` so the spawned claude only loads MachinaOs's
-FastMCP server. The `mcpServers.machinaos` block sets `alwaysLoad:
+`--strict-mcp-config` so the spawned claude only loads OpenCompany's
+FastMCP server. The `mcpServers.opencompany` block sets `alwaysLoad:
 true` to opt out of MCP tool-search deferral so all
-`mcp__machinaos__*` tools enter context at session start.
+`mcp__opencompany__*` tools enter context at session start.
 `--allowedTools` is the explicit allowlist, and it does NOT include
 claude's built-in escape hatches (`Read`, `Edit`, `Bash`, `Glob`,
 `Grep`, `Write`, `WebSearch`, `WebFetch`) — every workflow already
@@ -281,7 +281,7 @@ built-ins were the leakage path that let the agent invoke
 capabilities the workflow didn't explicitly grant. The default
 allowlist is:
 
-- `mcp__machinaos__<node_type>` per node connected to the agent's
+- `mcp__opencompany__<node_type>` per node connected to the agent's
   `input-tools` handle (LLM sees their typed Pydantic schemas via
   FastMCP's `tools/list` reflection on the plugin `Params`).
 - The claude built-in `Skill` — **conditional**, present iff at
@@ -294,7 +294,7 @@ allowlist is:
   agent to load every skill through the `getSkill` MCP round-trip)
   is materially worse UX for the common case where the workflow
   pre-wired which skills should be on the table.
-- The five MachinaOs MCP infrastructure tools — `getWorkspaceFiles`,
+- The five OpenCompany MCP infrastructure tools — `getWorkspaceFiles`,
   `listSkills`, `getSkill`, `getCredential`, `broadcastLog` — which
   are how the agent reads its workspace, discovers connected skills
   (when no wiring is present), fetches scoped credentials, and
@@ -311,7 +311,7 @@ was the wrong default).
 [`nodes/agent/claude_code_agent/_skills.py::materialise_skills`](../server/nodes/agent/claude_code_agent/_skills.py)
 writes one `SKILL.md` tree per connected-and-enabled skill under
 `<workspace_dir>/.claude/skills/<name>/`. The workspace dir
-(`~/.machina/workspaces/<workflow_slug>/` — Wave 14 keys it by the
+(`~/.opencompany/workspaces/<workflow_slug>/` — Wave 14 keys it by the
 human-readable slug, not the UUID id) is already passed via
 `--add-dir`, and per the skills spec's
 [Automatic discovery from parent and nested directories](https://code.claude.com/docs/en/skills#automatic-discovery-from-parent-and-nested-directories)
@@ -348,7 +348,7 @@ future runs only write into per-workflow workspaces. Run
 `rm -rf .claude/skills/` once from the repo root to clean
 accumulated trees — we deliberately do NOT auto-prune because
 the repo's `.claude/` may contain user-authored skills outside
-the MachinaOs registry.
+the OpenCompany registry.
 
 **Why filesystem (not MCP).** We surveyed alternatives: MCP
 `resources`/`prompts` require explicit `@mention`/`/command`
@@ -362,7 +362,7 @@ skill-injection channel — workspace-dir + live-watch is canonical.
 **Workspace dir — routed via `--add-dir`.**
 [`AICliService.run_batch`](../server/services/cli_agent/service.py)
 splices the per-workflow workspace
-(`~/.machina/workspaces/<workflow_slug>/`, injected into `ctx.raw` by
+(`~/.opencompany/workspaces/<workflow_slug>/`, injected into `ctx.raw` by
 `workflow.py:_get_workspace_dir`) into each task's `add_dir` list
 right after `task_list` is built — `interactive_argv` already emits
 `--add-dir <path>` per entry. Runs BEFORE the pool/non-pool branch

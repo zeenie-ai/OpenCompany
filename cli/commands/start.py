@@ -1,4 +1,4 @@
-"""``machina start`` -- replaces ``scripts/start.js``.
+"""``company start`` -- replaces ``scripts/start.js``.
 
 Production launcher: validates the build exists, runs the sqlalchemy
 preflight probe (Windows Defender workaround), frees configured ports,
@@ -84,7 +84,7 @@ def _sqlalchemy_preflight(root: Path) -> None:
             details.extend(
                 [
                     f"Check that {server_venv(root)} exists and is populated.",
-                    "Run `machina build` to recreate the server venv.",
+                    "Run `company build` to recreate the server venv.",
                 ]
             )
         details.append("See docs-internal/errors.md #1 / #1a for details.")
@@ -121,13 +121,18 @@ def _read_version(root: Path) -> str:
 
 
 def _build_specs(root: Path, cfg, *, temporal_running: bool) -> list[ServiceSpec]:
-    # Bind host: ``MACHINA_BIND_HOST`` overrides the auto-pick (escape
+    # Bind host: ``OPENCOMPANY_BIND_HOST`` overrides the auto-pick. The
+    # pre-rebrand ``MACHINA_BIND_HOST`` spelling remains a compatibility
     # hatch when the platform detection is wrong or the operator wants
-    # a specific interface). Default — native Windows stays private on
+    # a specific interface. By default, native Windows stays private on
     # 127.0.0.1; WSL + POSIX bind 0.0.0.0 so the service is reachable
     # both via in-VM ``localhost`` AND via the WSL VM IP from the
     # Windows host, regardless of WSL2's localhostForwarding state.
-    backend_host = os.environ.get("MACHINA_BIND_HOST") or ("127.0.0.1" if IS_WINDOWS else "0.0.0.0")
+    backend_host = (
+        os.environ.get("OPENCOMPANY_BIND_HOST")
+        or os.environ.get("MACHINA_BIND_HOST")
+        or ("127.0.0.1" if IS_WINDOWS else "0.0.0.0")
+    )
 
     specs: list[ServiceSpec] = [
         ServiceSpec(
@@ -160,7 +165,7 @@ def start_command() -> None:
 
     version = _read_version(root)
     console.print()
-    console.print(f"  [bold]MachinaOS[/] v{version}")
+    console.print(f"  [bold]OpenCompany[/] v{version}")
     console.print(f"  Frontend:  http://localhost:{cfg.client_port}")
     console.print(f"  Backend:   http://localhost:{cfg.backend_port}")
     console.print(f"  Platform:  {platform_name()}")

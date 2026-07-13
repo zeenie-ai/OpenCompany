@@ -1,4 +1,4 @@
-"""``machina version sync`` -- replaces ``scripts/sync-version.js``.
+"""``company version sync`` -- replaces ``scripts/sync-version.js``.
 
 Reads the latest git tag (or one supplied on the command line), strips
 the ``v`` prefix, and writes the resulting semver into both

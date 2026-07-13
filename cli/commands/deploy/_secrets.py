@@ -1,8 +1,8 @@
-"""Secret + environment generation for ``machina deploy``.
+"""Secret + environment generation for ``company deploy``.
 
 Generates the cryptographic keys + owner password the login gate needs, and
 assembles the full env-var map (``app_env``) that Terraform renders into the
-VM's ``/etc/machinaos/machina.env`` (a systemd ``EnvironmentFile``). The map
+VM's brand-specific systemd ``EnvironmentFile``. The map
 carries only the deployment overrides + secrets; the VM's ``.env`` (copied
 from ``.env.template`` by the package build) supplies the rest of the required
 settings, and OS env (the EnvironmentFile) wins over ``.env`` in
@@ -32,7 +32,7 @@ def build_app_env(
     owner_email: str,
     owner_password: str,
     port: int,
-    data_dir: str = "/var/lib/machinaos",
+    data_dir: str = "/var/lib/opencompany",
 ) -> dict[str, str]:
     """The systemd EnvironmentFile map: gate overrides + freshly minted secrets.
 
@@ -59,6 +59,11 @@ def build_app_env(
         "JWT_SECRET_KEY": new_key(),
         "SECRET_KEY": new_key(),
         "API_KEY_ENCRYPTION_KEY": new_key(),
+        "OPENCOMPANY_OWNER_EMAIL": owner_email,
+        "OPENCOMPANY_OWNER_NAME": "Owner",
+        "OPENCOMPANY_OWNER_PASSWORD": owner_password,
+        # Compatibility for servers deployed before the rebrand. Remove only
+        # after the legacy settings aliases have completed their deprecation.
         "MACHINA_OWNER_EMAIL": owner_email,
         "MACHINA_OWNER_NAME": "Owner",
         "MACHINA_OWNER_PASSWORD": owner_password,

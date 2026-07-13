@@ -46,8 +46,8 @@ def skill_lifecycle_event(
     writes without re-querying.
     """
     return WorkflowEvent(
-        source="machinaos://nodes/master_skill",
-        type=f"com.machinaos.skill.{stage}",
+        source="opencompany://nodes/master_skill",
+        type=f"com.opencompany.skill.{stage}",
         subject=name,
         data=dict(data) if data else {"name": name},
     )

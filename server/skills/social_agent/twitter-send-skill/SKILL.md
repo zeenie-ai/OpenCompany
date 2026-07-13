@@ -3,7 +3,7 @@ name: twitter-send-skill
 description: Post tweets, reply to tweets, retweet, like/unlike, and delete tweets on Twitter/X. Supports threading, 280-char tweets, and automatic token refresh.
 allowed-tools: twitter_send
 metadata:
-  author: machina
+  author: opencompany
   version: "2.0"
   category: social
 

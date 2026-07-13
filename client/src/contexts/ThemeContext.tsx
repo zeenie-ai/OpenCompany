@@ -15,6 +15,7 @@
  */
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { BRAND_STORAGE_KEYS, readAndMigrateStorageValue } from '../lib/brandStorage';
 
 export type ThemeName =
   | 'light' | 'dark'
@@ -29,7 +30,7 @@ export const AVAILABLE_THEMES: readonly ThemeName[] = [
   'cyber', 'wasteland', 'rot', 'plague', 'surveillance',
 ];
 
-const THEME_STORAGE_KEY = 'machinaos-theme';
+const THEME_STORAGE_KEYS = BRAND_STORAGE_KEYS.theme;
 const LEGACY_DARK_MODE_KEY = 'darkMode';
 
 /** Themes whose backgrounds are dark — also flip the legacy `.dark`
@@ -55,15 +56,15 @@ function isThemeName(value: string | null | undefined): value is ThemeName {
 }
 
 function loadInitialTheme(): ThemeName {
-  // 1. Honour the new key first.
-  const stored = localStorage.getItem(THEME_STORAGE_KEY);
+  // 1. Honour the OpenCompany key first, migrating the pre-rebrand key once.
+  const stored = readAndMigrateStorageValue(localStorage, THEME_STORAGE_KEYS);
   if (isThemeName(stored)) return stored;
 
   // 2. Migrate the legacy `darkMode` boolean key (was 'true' / 'false' / null).
   const legacy = localStorage.getItem(LEGACY_DARK_MODE_KEY);
   if (legacy !== null) {
     const migrated: ThemeName = legacy === 'false' ? 'light' : 'dark';
-    localStorage.setItem(THEME_STORAGE_KEY, migrated);
+    localStorage.setItem(THEME_STORAGE_KEYS.canonical, migrated);
     localStorage.removeItem(LEGACY_DARK_MODE_KEY);
     return migrated;
   }
@@ -83,7 +84,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } else {
       html.classList.remove('dark');
     }
-    localStorage.setItem(THEME_STORAGE_KEY, theme);
+    localStorage.setItem(THEME_STORAGE_KEYS.canonical, theme);
   }, [theme]);
 
   const setTheme = useCallback((next: ThemeName) => {

@@ -3,7 +3,7 @@ name: wifi-skill
 description: Control Android WiFi - enable, disable, get status, scan for networks, and get current connection info.
 allowed-tools: wifi_automation
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: android
 

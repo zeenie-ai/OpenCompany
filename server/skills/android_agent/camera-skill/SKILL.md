@@ -3,7 +3,7 @@ name: camera-skill
 description: Control Android camera - get camera info, take photos, and access camera capabilities.
 allowed-tools: camera_control
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: android
 

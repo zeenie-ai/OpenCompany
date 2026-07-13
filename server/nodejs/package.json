@@ -1,5 +1,5 @@
 {
-  "name": "machinaos-nodejs-executor",
+  "name": "opencompany-nodejs-executor",
   "version": "1.0.0",
   "description": "Persistent Node.js server for JavaScript/TypeScript code execution",
   "type": "module",

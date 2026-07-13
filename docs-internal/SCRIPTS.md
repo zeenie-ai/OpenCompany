@@ -1,10 +1,10 @@
-# MachinaOS Scripts Reference
+# OpenCompany Scripts Reference
 
 ## Quick Start
 
 ```bash
-npm install -g machina
-machina start
+npm install -g opencompany
+company start
 ```
 
 Open http://localhost:3000
@@ -15,15 +15,15 @@ Open http://localhost:3000
 
 | Command | Description |
 |---------|-------------|
-| `machina start` | Start the development server (checks dependencies first) |
-| `machina stop` | Stop all running services |
-| `machina build` | Build the project for production (checks dependencies first) |
-| `machina clean` | Clean build artifacts and node_modules |
-| `machina docker:up` | Start with Docker Compose (detached) |
-| `machina docker:down` | Stop Docker Compose services |
-| `machina docker:build` | Build Docker images |
-| `machina docker:logs` | View Docker logs (follows) |
-| `machina help` | Show help message |
+| `company start` | Start the development server (checks dependencies first) |
+| `company stop` | Stop all running services |
+| `company build` | Build the project for production (checks dependencies first) |
+| `company clean` | Clean build artifacts and node_modules |
+| `company docker:up` | Start with Docker Compose (detached) |
+| `company docker:down` | Stop Docker Compose services |
+| `company docker:build` | Build Docker images |
+| `company docker:logs` | View Docker logs (follows) |
+| `company help` | Show help message |
 
 ### Dependency Checks
 
@@ -56,7 +56,7 @@ Run with `npm run <script>` from the project root.
 | `python:start` | `cd server && uv run uvicorn main:app ...` | Start Python backend |
 | `temporal:worker` | `cd server && uv run python -m services.temporal.worker` | Start standalone Temporal worker |
 
-Temporal server lifecycle is managed by `machina start` / `machina dev` / `machina stop` directly (see [Temporal Architecture](./TEMPORAL_ARCHITECTURE.md)). The official `temporal` CLI is downloaded by `pooch` to `<DATA_DIR>/packages/temporal/` (= `~/.machina/packages/temporal/` by default) during `machina build` and spawned as a supervised subprocess.
+Temporal server lifecycle is managed by `company start` / `company dev` / `company stop` directly (see [Temporal Architecture](./TEMPORAL_ARCHITECTURE.md)). The official `temporal` CLI is downloaded by `pooch` to `<DATA_DIR>/packages/temporal/` (= `~/.opencompany/packages/temporal/` by default) during `company build` and spawned as a supervised subprocess.
 
 ### Docker Scripts (Development)
 
@@ -81,9 +81,9 @@ Temporal server lifecycle is managed by `machina start` / `machina dev` / `machi
 
 | Script | Command | Description |
 |--------|---------|-------------|
-| `deploy` | `python -m cli deploy` | Self-deploy to a cloud VM (`machina deploy up/status/destroy` — gcloud preflight + Terraform; see `cli/commands/deploy/`) |
+| `deploy` | `python -m cli deploy` | Self-deploy to a cloud VM (`company deploy up/status/destroy` — gcloud preflight + Terraform; see `cli/commands/deploy/`) |
 
-The legacy `deploy.sh` (SCP + docker-compose to a GCE box) was removed; `machina deploy`
+The legacy `deploy.sh` (SCP + docker-compose to a GCE box) was removed; `company deploy`
 provisions a login-gated VM natively via the operator's cloud CLI + Terraform.
 
 ---
@@ -96,7 +96,7 @@ provisions a login-gated VM natively via the operator's cloud CLI + Terraform.
 
 Cross-platform start script that runs all services concurrently.
 
-**What it does** (mirrored by the canonical `machina start` / `machina dev` CLI commands):
+**What it does** (mirrored by the canonical `company start` / `company dev` CLI commands):
 1. Validates build artifacts exist
 2. Creates `.env` from `.env.template` if missing
 3. Frees configured app ports (client, backend, WhatsApp, Node.js executor, Temporal gRPC, Temporal UI)
@@ -105,7 +105,7 @@ Cross-platform start script that runs all services concurrently.
    - Python backend (uvicorn) -- supervises the edgymeow Go binary lazily via [server/nodes/whatsapp/_runtime.py](../server/nodes/whatsapp/_runtime.py)
    - Temporal dev server -- the supervised-runtime shim ([server/services/temporal/_supervised_runtime.py](../server/services/temporal/_supervised_runtime.py)) spawning `temporal server start-dev`
 
-**Temporal handling:** The supervisor's TCP readiness probe on 7233 short-circuits if Temporal is already running, so launching `machina start` against a pre-existing Temporal works without conflict.
+**Temporal handling:** The supervisor's TCP readiness probe on 7233 short-circuits if Temporal is already running, so launching `company start` against a pre-existing Temporal works without conflict.
 
 **Ports (configurable in .env):**
 - `VITE_CLIENT_PORT` - Frontend (default: 3000)
@@ -140,7 +140,7 @@ Production build script that compiles all components.
 
 **Location:** `scripts/stop.js`
 
-Cross-platform stop script that kills all MachinaOS processes.
+Cross-platform stop script that kills all OpenCompany processes.
 
 **What it does:**
 1. Reads port configuration from `.env`
@@ -171,7 +171,7 @@ Removes build artifacts and dependencies.
 - `client/dist/` - Built frontend
 - `client/.vite/` - Vite cache
 - `server/.venv/` - Python virtual environment
-- `.machina/` - Repo-local DATA_DIR opt-out (only present when `DATA_DIR=.machina`; the default `~/.machina/` lives in your home dir and is never touched)
+- `.opencompany/` - Repo-local DATA_DIR opt-out (only present when `DATA_DIR=.opencompany`; the default `~/.opencompany/` lives in your home dir and is never touched)
 
 ---
 
@@ -252,18 +252,18 @@ Key variables in `.env` (see `.env.template` for full list):
 
 ```bash
 # Development
-machina start          # Start all services
-machina stop           # Stop all services
+company start          # Start all services
+company stop           # Stop all services
 
 # Build
-machina build          # Build for production
-machina clean          # Clean everything
+company build          # Build for production
+company clean          # Clean everything
 
 # Docker (development)
-machina docker:up      # Start containers
-machina docker:down    # Stop containers
-machina docker:logs    # View logs
-machina docker:build   # Rebuild images
+company docker:up      # Start containers
+company docker:down    # Stop containers
+company docker:logs    # View logs
+company docker:build   # Rebuild images
 
 # Docker (production)
 npm run docker:prod:up   # Start production

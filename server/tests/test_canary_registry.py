@@ -28,13 +28,13 @@ from unittest.mock import MagicMock
 import pytest
 
 
-if "machina" not in sys.modules:
-    _machina = types.ModuleType("cli")
-    _machina.__path__ = []
-    sys.modules["cli"] = _machina
-    _machina_tcp = types.ModuleType("cli.tcp")
-    _machina_tcp.probe_tcp_port = MagicMock(return_value=False)
-    sys.modules["cli.tcp"] = _machina_tcp
+if "cli" not in sys.modules:
+    _cli_stub = types.ModuleType("cli")
+    _cli_stub.__path__ = []
+    sys.modules["cli"] = _cli_stub
+    _opencompany_tcp = types.ModuleType("cli.tcp")
+    _opencompany_tcp.probe_tcp_port = MagicMock(return_value=False)
+    sys.modules["cli.tcp"] = _opencompany_tcp
 
 
 @pytest.fixture
@@ -48,9 +48,9 @@ def fresh_registry(monkeypatch):
 
 # Dummy CloudEvents types used in registry tests — the real values come
 # from each plugin's ``_events.py`` factory.
-_CE_WEBHOOK = "com.machinaos.webhook.received"
-_CE_CHAT = "com.machinaos.chat.message.received"
-_CE_TASK = "com.machinaos.agent.task.completed"
+_CE_WEBHOOK = "com.opencompany.webhook.received"
+_CE_CHAT = "com.opencompany.chat.message.received"
+_CE_TASK = "com.opencompany.agent.task.completed"
 
 
 class TestRegistryContract:
@@ -79,7 +79,7 @@ class TestRegistryContract:
         producer envelope shape without coordinating with the listener."""
         fresh_registry.register_canary_trigger_type("chatTrigger", _CE_CHAT)
         with pytest.raises(ValueError, match="diverging"):
-            fresh_registry.register_canary_trigger_type("chatTrigger", "com.machinaos.chat.message.changed")
+            fresh_registry.register_canary_trigger_type("chatTrigger", "com.opencompany.chat.message.changed")
 
     def test_multiple_types_coexist(self, fresh_registry):
         for t, ce in (
@@ -191,9 +191,9 @@ class TestPluginSelfRegistration:
     @pytest.mark.parametrize(
         "plugin_module,expected_type,expected_cloudevent_type",
         [
-            ("nodes.trigger.webhook_trigger", "webhookTrigger", "com.machinaos.webhook.received"),
-            ("nodes.trigger.chat_trigger", "chatTrigger", "com.machinaos.chat.message.received"),
-            ("nodes.trigger.task_trigger", "taskTrigger", "com.machinaos.agent.task.completed"),
+            ("nodes.trigger.webhook_trigger", "webhookTrigger", "com.opencompany.webhook.received"),
+            ("nodes.trigger.chat_trigger", "chatTrigger", "com.opencompany.chat.message.received"),
+            ("nodes.trigger.task_trigger", "taskTrigger", "com.opencompany.agent.task.completed"),
         ],
     )
     def test_plugin_import_registers_its_type(self, plugin_module, expected_type, expected_cloudevent_type):
@@ -238,7 +238,7 @@ class TestCloudEventTypeMatchesSearchAttribute:
 
     def test_every_registered_type_has_reverse_dns_cloudevent_type(self):
         """All registered cloudevent_types are reverse-DNS strings
-        (``com.machinaos.*``) — that's the CloudEvents §3.1.2 type
+        (``com.opencompany.*``) — that's the CloudEvents §3.1.2 type
         convention this codebase declares (see envelope.py:_TYPE_PREFIX).
         Anything else means a plugin registered the legacy snake_case
         event_waiter event_type by mistake."""
@@ -249,9 +249,9 @@ class TestCloudEventTypeMatchesSearchAttribute:
             assert ce_type is not None, (
                 f"canary_trigger_types includes {node_type!r} but " f"cloudevent_type_for() returned None — registry corrupted."
             )
-            assert ce_type.startswith("com.machinaos."), (
+            assert ce_type.startswith("com.opencompany."), (
                 f"{node_type!r} registered with cloudevent_type={ce_type!r}; "
-                f"expected a reverse-DNS string starting with 'com.machinaos.'. "
+                f"expected a reverse-DNS string starting with 'com.opencompany.'. "
                 f"That's the format dispatch.emit's Visibility query "
                 f"substitutes from envelope.type — anything else fails to "
                 f"match the listener's EventType Search Attribute."

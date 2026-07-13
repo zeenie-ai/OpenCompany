@@ -1,6 +1,6 @@
 # Known Errors & Troubleshooting
 
-Documented root causes and fixes for errors encountered in MachinaOs development and production.
+Documented root causes and fixes for errors encountered in OpenCompany development and production.
 
 ---
 
@@ -23,14 +23,14 @@ Documented root causes and fixes for errors encountered in MachinaOs development
 git worktree remove .claude/worktrees/<name>
 
 # Or move them outside the project root
-git worktree move .claude/worktrees/<name> ../machinaos-worktrees/<name>
+git worktree move .claude/worktrees/<name> ../opencompany-worktrees/<name>
 ```
 
 **Prevention**: Keep git worktrees as siblings of the project, not nested inside it. For example:
 ```
 d:/startup/projects/
-  MachinaOs/                  # main project
-  machinaos-worktrees/        # worktrees outside the project root
+  OpenCompany/                  # main project
+  opencompany-worktrees/        # worktrees outside the project root
     credentials-scaling/
     native-llm-sdk/
 ```
@@ -81,10 +81,10 @@ component=matching-engine wf-namespace=temporal-system
 
 **If you do hit a stuck DB**: delete the db file and let `temporal server start-dev` recreate it on next boot:
 ```bash
-machina stop
-rm ~/.machina/temporal.db          # macOS / Linux
-rm "$env:USERPROFILE/.machina/temporal.db"   # Windows PowerShell
-machina start
+company stop
+rm ~/.opencompany/temporal.db          # macOS / Linux
+rm "$env:USERPROFILE/.opencompany/temporal.db"   # Windows PowerShell
+company start
 ```
 
 ---
@@ -180,9 +180,9 @@ Failed to check auth status (attempt 4/6): TypeError: Failed to fetch
 ```
 FileNotFoundError: temporal binary not found at ...
 ```
-or pooch fails to download during `machina start`.
+or pooch fails to download during `company start`.
 
-**Root cause**: The official `temporal` CLI archive is downloaded by `pooch` to `<DATA_DIR>/packages/temporal/` (= `~/.machina/packages/temporal/` by default, on every OS — via `core.paths.package_dir("temporal")`) during `machina build` step [6/6]. If the build was skipped or interrupted, or if network access to `temporal.download` was blocked, the binary is missing.
+**Root cause**: The official `temporal` CLI archive is downloaded by `pooch` to `<DATA_DIR>/packages/temporal/` (= `~/.opencompany/packages/temporal/` by default, on every OS — via `core.paths.package_dir("temporal")`) during `company build` step [6/6]. If the build was skipped or interrupted, or if network access to `temporal.download` was blocked, the binary is missing.
 
 **Fix**:
 ```bash
@@ -191,7 +191,7 @@ cd server
 uv run python -m services.temporal._install
 
 # Or re-run the build step
-machina build
+company build
 ```
 
 If pooch keeps failing, check connectivity to `https://temporal.download/cli/archive/latest?platform=<os>&arch=<arch>` (the URL the docs document at https://docs.temporal.io/develop/python/set-up-your-local-python). Behind a corporate proxy, set `HTTPS_PROXY` in your environment before running.
@@ -251,7 +251,7 @@ with no "Signed in" page — yet the backend log shows the login succeeded and c
 
 **Fix** (landed at tag v0.0.88): `services/events/cli.py::run_cli_command()` gained an optional `stdin` parameter (default `None` = inherit, unchanged for every existing caller). `nodes/agent/claude_code_agent/_oauth.py::_run_auth` passes `stdin=asyncio.subprocess.PIPE` **for the `login` subcommand only** so the CLI's stdin read blocks instead of EOFing, keeping the callback server alive until the flow completes naturally. `status` / `logout` stay on inherit-stdin (one-shot, no stdin read).
 
-Note the binary install path also moved this release: the claude CLI now lives in the shared MachinaOs npm tree at `<DATA_DIR>/packages/node_modules/.bin/claude[.cmd]` (was `<DATA_DIR>/claude/npm/...`). The fresh `npm install` triggered by that move is what pulled the 2.1.162 native binary that surfaced this bug — the path change was the trigger, the `stdin=PIPE` is the actual fix.
+Note the binary install path also moved this release: the claude CLI now lives in the shared OpenCompany npm tree at `<DATA_DIR>/packages/node_modules/.bin/claude[.cmd]` (was `<DATA_DIR>/claude/npm/...`). The fresh `npm install` triggered by that move is what pulled the 2.1.162 native binary that surfaced this bug — the path change was the trigger, the `stdin=PIPE` is the actual fix.
 
 ---
 
@@ -266,7 +266,7 @@ The "auth successful" line fires even when you only *initiated* the login and ne
 
 **Root cause**: `_complete_login` used two signals that each lie in isolation:
 1. **CLI exit code** — `stripe login --complete` is known to exit `1` with `stderr='exceeded max attempts'` *even after* successfully writing credentials. Exit code alone can't confirm failure.
-2. **`is_logged_in()`** — only checks for `_api_key` presence in `~/.config/stripe/config.toml`, which is `True` for *any* prior login (the Stripe CLI manages that file globally, outside MachinaOs). On-disk presence alone can't confirm *this* attempt wrote anything.
+2. **`is_logged_in()`** — only checks for `_api_key` presence in `~/.config/stripe/config.toml`, which is `True` for *any* prior login (the Stripe CLI manages that file globally, outside OpenCompany). On-disk presence alone can't confirm *this* attempt wrote anything.
 
 So an incomplete login against a config left over from a previous session was reported as success.
 

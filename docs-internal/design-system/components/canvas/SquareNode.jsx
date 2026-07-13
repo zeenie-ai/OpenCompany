@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 /**
- * SquareNode — MachinaOS canvas node. 64px icon square with accent-tinted
+ * SquareNode — OpenCompany canvas node. 64px icon square with accent-tinted
  * 2px border + 135° gradient fill, status pip (top-left), gear button
  * (top-right), in/out connection handles, label below. Executing nodes
  * pulse a three-layer glow (requires tokens/animations.css).
@@ -72,7 +72,7 @@ export function SquareNode({
       }}
     >
       <div
-        className={executing ? 'machina-pulse' : armed ? 'machina-trigger-armed' : undefined}
+        className={executing ? 'opencompany-pulse' : armed ? 'opencompany-trigger-armed' : undefined}
         style={{
           '--node-pulse-color': glow,
           position: 'relative',
@@ -99,7 +99,7 @@ export function SquareNode({
 
         {/* status pip */}
         <span
-          className={status === 'listening' ? 'machina-pip-pulse' : undefined}
+          className={status === 'listening' ? 'opencompany-pip-pulse' : undefined}
           style={{
             position: 'absolute',
             top: -4,
@@ -120,7 +120,7 @@ export function SquareNode({
         {trigger ? (
           <span
             title="Trigger — starts the workflow"
-            className={armed ? 'machina-bolt' : undefined}
+            className={armed ? 'opencompany-bolt' : undefined}
             style={{
               position: 'absolute',
               bottom: -4,

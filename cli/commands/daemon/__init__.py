@@ -1,4 +1,4 @@
-"""``machina daemon`` -- run the backend as a detached process.
+"""``company daemon`` -- run the backend as a detached process.
 
 Pure-Python, all-platforms. No NSSM / systemd / launchd integration.
 Spawns ``uvicorn main:app`` in a new session (POSIX) or detached
@@ -29,10 +29,10 @@ import typer
 # The ``app`` Typer instance is declared FIRST so the verb modules can
 # import it via ``from . import app`` and register themselves via
 # ``@app.command``. The verb-module imports BELOW are what trigger that
-# registration -- without them, ``machina daemon`` would be empty.
+# registration -- without them, ``company daemon`` would be empty.
 app = typer.Typer(
     name="daemon",
-    help="Run the MachinaOs backend as a detached process.",
+    help="Run the OpenCompany backend as a detached process.",
     no_args_is_help=True,
     add_completion=False,
 )

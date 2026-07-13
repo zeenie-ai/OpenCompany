@@ -105,7 +105,7 @@ flowchart TD
 ## Side Effects
 
 - **Database writes**: `_persist_canvas_mutation` applies `add_node` / `add_edge` / `set_node_parameters` ops to `workflow.data` via `database.get_workflow` + `database.save_workflow` (adopts the BE-minted `minted_id` so FE/BE node ids align). `create_workflow` (when enabled) persists a fresh workflow row.
-- **Broadcasts**: `broadcast_workflow_ops` (in `_events.py`) emits a flat `workflow_ops_apply` WS frame consumed by the frontend `useWorkflowOpsListener` hook. NOT a `dispatch.emit` event (no Temporal/event_waiter consumer for canvas mutations). A `WorkflowEvent` envelope (`com.machinaos.workflow.ops.applied`) is constructed for parity but not put on the wire today.
+- **Broadcasts**: `broadcast_workflow_ops` (in `_events.py`) emits a flat `workflow_ops_apply` WS frame consumed by the frontend `useWorkflowOpsListener` hook. NOT a `dispatch.emit` event (no Temporal/event_waiter consumer for canvas mutations). A `WorkflowEvent` envelope (`com.opencompany.workflow.ops.applied`) is constructed for parity but not put on the wire today.
 - **External API calls**: none.
 - **File I/O**: reads `server/skills/**` to validate skill folders (`_skill_folder_exists`) and catalogue skills.
 - **Subprocess**: none.

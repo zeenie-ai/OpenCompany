@@ -2,7 +2,7 @@
 
 > **Authoring model (post-Wave-11):** each chat-model node is a self-contained Python plugin folder under `server/nodes/model/<provider>_chat_model/` that emits a `NodeSpec`. The frontend reads specs via [client/src/lib/nodeSpec.ts](../client/src/lib/nodeSpec.ts) + [adapters/nodeSpecToDescription.ts](../client/src/adapters/nodeSpecToDescription.ts) and renders through `SquareNode` with zero TS edits. See [plugin_system.md](./plugin_system.md) and [server/nodes/README.md](../server/nodes/README.md) for the plugin model, and "Adding a New Provider" below for the chat-model recipe.
 
-MachinaOS uses a hybrid LLM architecture: a native SDK layer in `server/services/llm/` for direct chat completions and model fetching, and a LangChain-backed agent loop in `server/services/ai.py` (the plain `_run_agent_loop` async function) for agent tool-calling. This document describes the native layer, its design, and how both paths coexist.
+OpenCompany uses a hybrid LLM architecture: a native SDK layer in `server/services/llm/` for direct chat completions and model fetching, and a LangChain-backed agent loop in `server/services/ai.py` (the plain `_run_agent_loop` async function) for agent tool-calling. This document describes the native layer, its design, and how both paths coexist.
 
 ## Why a Native Layer
 
@@ -345,7 +345,7 @@ AI providers support optional proxy-based authentication — requests route thro
 1. User configures a proxy URL in the Credentials Modal (e.g., `http://localhost:11434`).
 2. Requests route through the proxy instead of directly to the provider API.
 3. Proxy handles authentication (token set to `"ollama"` automatically).
-4. No API key storage needed in MachinaOs — auth delegated to proxy.
+4. No API key storage needed in OpenCompany — auth delegated to proxy.
 
 **Configuration:** proxy URLs are stored in the credentials DB under the `{provider}_proxy` pattern (e.g., `anthropic_proxy`, `openai_proxy`). Falls back to direct API key if no proxy configured. This is the SAME mechanism the native Ollama / LM Studio path uses (see "Local LLM Providers" above) — the validator persists the user's server URL under `{provider}_proxy`, and at runtime it carries into `OpenAIProvider`'s `base_url`.
 

@@ -3,7 +3,7 @@ name: advisor
 description: ALWAYS call the wired chat-model tool (anthropic_chat_model / openai_chat_model / gemini_chat_model) at the START of any complex task to get a plan from a stronger model. Also call when stuck and before declaring done. Pass only the `prompt` field — the operator configured `model` and `api_key`. Returns brief tactical advice; you do the work.
 allowed-tools: anthropic_chat_model openai_chat_model gemini_chat_model
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: general
 ---

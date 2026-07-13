@@ -106,7 +106,7 @@ function ValidateButton({ disabled, loading, isStored, onClick, label }) {
       }}
     >
       {loading ? (
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ animation: 'machina-spin 0.9s linear infinite' }}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ animation: 'opencompany-spin 0.9s linear infinite' }}>
           <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round"></path>
         </svg>
       ) : isStored ? (
@@ -115,7 +115,7 @@ function ValidateButton({ disabled, loading, isStored, onClick, label }) {
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
       )}
       {label}
-      <style>{'@keyframes machina-spin { to { transform: rotate(360deg); } }'}</style>
+      <style>{'@keyframes opencompany-spin { to { transform: rotate(360deg); } }'}</style>
     </button>
   );
 }

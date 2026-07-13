@@ -21,17 +21,23 @@
 
 import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister';
 import type { Query } from '@tanstack/react-query';
+import { BRAND_STORAGE_KEYS, readAndMigrateStorageValue } from './brandStorage';
 
 declare const __APP_VERSION__: string;
 
 const APP_VERSION =
   typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0';
 
-const STORAGE_KEY = 'machina-query-cache';
+const STORAGE_KEYS = BRAND_STORAGE_KEYS.queryCache;
+const storage = typeof window !== 'undefined' ? window.localStorage : undefined;
+
+// Retain the warm cache across the product rename, then write only the
+// canonical OpenCompany key from this point forward.
+readAndMigrateStorageValue(storage, STORAGE_KEYS);
 
 export const queryPersister = createSyncStoragePersister({
-  storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-  key: STORAGE_KEY,
+  storage,
+  key: STORAGE_KEYS.canonical,
   // Throttle persistence writes so high-frequency cache mutations do
   // not thrash localStorage. Default is 1000ms which is fine.
 });

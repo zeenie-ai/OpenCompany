@@ -1,4 +1,4 @@
-"""``machina daemon status`` -- report whether the backend is running."""
+"""``company daemon status`` -- report whether the backend is running."""
 
 from __future__ import annotations
 

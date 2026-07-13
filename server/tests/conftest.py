@@ -109,26 +109,39 @@ sys.modules["core.ansi"] = _ansi_mod
 _ansi_spec.loader.exec_module(_ansi_mod)
 setattr(_core_pkg, "ansi", _ansi_mod)
 
+# core.auth_cookies is dependency-free and its canonical/legacy lookup is
+# part of the auth migration contract, so expose the real module under the
+# otherwise stubbed core package.
+_auth_cookies_spec = _importlib_util.spec_from_file_location(
+    "core.auth_cookies",
+    SERVER_DIR / "core" / "auth_cookies.py",
+)
+_auth_cookies_mod = _importlib_util.module_from_spec(_auth_cookies_spec)
+sys.modules["core.auth_cookies"] = _auth_cookies_mod
+_auth_cookies_spec.loader.exec_module(_auth_cookies_mod)
+setattr(_core_pkg, "auth_cookies", _auth_cookies_mod)
+
 # core.paths — central path resolution. Stub the public surface with
 # tmpdir-rooted Paths so plugin module imports don't trip over the
 # real ``Path.home()`` lookup during test collection. Tests that
 # actually exercise on-disk behaviour use ``tempfile.TemporaryDirectory``
-# locally; the stub just keeps import-time ``MACHINA_CLAUDE_DIR =
+# locally; the stub just keeps import-time ``OPENCOMPANY_CLAUDE_DIR =
 # data_path("claude")`` calls from blowing up.
-_TEST_MACHINA_ROOT = Path(__file__).parent / "_test_machina_root"
+_TEST_OPENCOMPANY_ROOT = Path(__file__).parent / "_test_opencompany_root"
 _make_submodule(
     "core",
     "paths",
     {
-        "project_root": lambda: _TEST_MACHINA_ROOT.parent,
-        "machina_root": lambda: _TEST_MACHINA_ROOT,
-        "data_path": lambda sub="": _TEST_MACHINA_ROOT / sub if sub else _TEST_MACHINA_ROOT,
-        "packages_dir": lambda: _TEST_MACHINA_ROOT / "packages",
-        "package_dir": lambda name: _TEST_MACHINA_ROOT / "packages" / name,
-        "daemons_dir": lambda: _TEST_MACHINA_ROOT / "daemons",
-        "workspaces_dir": lambda: _TEST_MACHINA_ROOT / "workspaces",
-        "workspace_dir": lambda wf: _TEST_MACHINA_ROOT / "workspaces" / wf,
-        "example_workflows_dir": lambda: _TEST_MACHINA_ROOT / "workflows",
+        "project_root": lambda: _TEST_OPENCOMPANY_ROOT.parent,
+        "opencompany_root": lambda: _TEST_OPENCOMPANY_ROOT,
+        "machina_root": lambda: _TEST_OPENCOMPANY_ROOT,
+        "data_path": lambda sub="": _TEST_OPENCOMPANY_ROOT / sub if sub else _TEST_OPENCOMPANY_ROOT,
+        "packages_dir": lambda: _TEST_OPENCOMPANY_ROOT / "packages",
+        "package_dir": lambda name: _TEST_OPENCOMPANY_ROOT / "packages" / name,
+        "daemons_dir": lambda: _TEST_OPENCOMPANY_ROOT / "daemons",
+        "workspaces_dir": lambda: _TEST_OPENCOMPANY_ROOT / "workspaces",
+        "workspace_dir": lambda wf: _TEST_OPENCOMPANY_ROOT / "workspaces" / wf,
+        "example_workflows_dir": lambda: _TEST_OPENCOMPANY_ROOT / "workflows",
     },
 )
 

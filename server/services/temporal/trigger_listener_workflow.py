@@ -87,10 +87,10 @@ class TriggerListenerWorkflow:
 
         ``listener_data`` shape (deployment-supplied):
             {
-                "workflow_id": str,        # MachinaOs deployment workflow_id
+                "workflow_id": str,        # OpenCompany deployment workflow_id
                 "trigger_node_id": str,    # node id that "fires" on each event
                 "node_type": str,          # e.g. "webhookTrigger"
-                "event_type": str,         # e.g. "com.machinaos.webhook.received"
+                "event_type": str,         # e.g. "com.opencompany.webhook.received"
                 "filter_params": Dict,     # used by the event-side filter via dispatch.emit
                 "nodes": List[Dict],       # full deployment graph snapshot
                 "edges": List[Dict],

@@ -2,7 +2,7 @@
 
 Spawns N parallel Claude Code / Codex CLI sessions per workflow node,
 each isolated in its own git worktree, with a shared MCP server hosting
-MachinaOs tools (``mcp__machina__*``) discovered via VSCode-style
+OpenCompany tools (``mcp__opencompany__*``) discovered via VSCode-style
 lockfile.
 
 Self-registers per-provider WebSocket handlers

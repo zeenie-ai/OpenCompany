@@ -2,7 +2,7 @@
 
 > **Source:** [code.claude.com/docs/en/headless](https://code.claude.com/docs/en/headless)
 > **Fetched:** 2026-05-11
-> **Why this lives in-repo:** MachinaOs spawns `claude -p` via
+> **Why this lives in-repo:** OpenCompany spawns `claude -p` via
 > `services/cli_agent/`. The argv flags this doc describes
 > (`--output-format stream-json`, `--include-partial-messages`,
 > `--include-hook-events`, `--max-budget-usd`, `--max-turns`,
@@ -263,7 +263,7 @@ claude -p "Continue that review" --resume "$session_id"
 
 ---
 
-## What MachinaOs reads from this stream
+## What OpenCompany reads from this stream
 
 `services/cli_agent/session.py:_consume_stdout` parses every line of
 `--output-format stream-json` output. The event types we touch:

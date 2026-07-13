@@ -284,7 +284,7 @@ All under [components/ui/](../client/src/components/ui/). Editable — add varia
 | Toast | `Sonner` `<Toaster />` | Patched for our ThemeContext |
 
 **Rules for adding primitives:**
-- Always use the CLI: `MACHINAOS_INSTALLING=true npx shadcn@latest add <name>` from `client/` (the env var suppresses the project's recursive postinstall hook).
+- Always use the CLI: `OPENCOMPANY_INSTALLING=true npx shadcn@latest add <name>` from `client/` (the env var suppresses the project's recursive postinstall hook).
 - New variants go inside the generated file (we own it).
 - Don't wrap primitives in `<Stack>`/`<Inline>`/`<Text>`/`<Heading>`. Use raw Tailwind classes. The Tailwind utility API IS the design system for layout/typography.
 
@@ -502,9 +502,9 @@ pnpm exec tsc --noEmit  # Typecheck
 **Adding shadcn components:**
 ```bash
 cd client
-MACHINAOS_INSTALLING=true npx shadcn@latest add <name>
+OPENCOMPANY_INSTALLING=true npx shadcn@latest add <name>
 ```
-The `MACHINAOS_INSTALLING=true` env var suppresses the recursive project postinstall hook during shadcn's internal `pnpm install`. Without it the hook's `machina build` run fails and shadcn aborts before writing the component file.
+The `OPENCOMPANY_INSTALLING=true` env var suppresses the recursive project postinstall hook during shadcn's internal `pnpm install`. Without it the hook's `company build` run fails and shadcn aborts before writing the component file.
 
 ## Migration history (for context)
 

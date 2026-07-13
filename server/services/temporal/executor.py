@@ -1,4 +1,4 @@
-"""Temporal executor for MachinaOs workflow execution.
+"""Temporal executor for OpenCompany workflow execution.
 
 Provides the same interface as WorkflowExecutor but delegates
 execution to Temporal for durable workflow orchestration.

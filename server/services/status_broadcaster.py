@@ -271,7 +271,7 @@ class StatusBroadcaster:
         from services.events import WorkflowEvent
 
         event = WorkflowEvent(
-            source="machinaos://services/credentials",
+            source="opencompany://services/credentials",
             type=event_type,
             subject=provider,
             workflow_id=workflow_id,

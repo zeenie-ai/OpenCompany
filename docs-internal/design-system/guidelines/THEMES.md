@@ -1,4 +1,4 @@
-# MachinaOS theming architecture — analysis
+# OpenCompany theming architecture — analysis
 
 Source: `client/src/themes/*.css` + `client/src/index.css` in https://github.com/zeenie-ai/MachinaOS (full copies in `reference/themes/`). The app ships **12 themes**: 2 canonical (light, dark) + 10 "skins" (Renaissance, Greek, Edo, Steampunk, Atomic, Cyber, Wasteland, Rot, Plague, Surveillance).
 
@@ -15,7 +15,7 @@ Every theme is **one CSS file, zero component changes**. The system is layered s
 
 ## 2. What a theme is allowed to change
 
-Beyond color: **typeface trio, base font size (13–15px), letter case, tracking (0–0.18em), all four radii (0 → 999px), motion speed (60ms → 680ms), easing curve *shape* (smooth bezier / bouncy overshoot / `steps()` strobe / `linear`), a named `--motion-style`, a sound pack, the cursor itself (SVG data-URI), the canvas background pattern (SVG tile), scrollbar chrome, and selection color.** That breadth is the design insight: MachinaOS themes are *material systems*, not palettes.
+Beyond color: **typeface trio, base font size (13–15px), letter case, tracking (0–0.18em), all four radii (0 → 999px), motion speed (60ms → 680ms), easing curve *shape* (smooth bezier / bouncy overshoot / `steps()` strobe / `linear`), a named `--motion-style`, a sound pack, the cursor itself (SVG data-URI), the canvas background pattern (SVG tile), scrollbar chrome, and selection color.** That breadth is the design insight: OpenCompany themes are *material systems*, not palettes.
 
 ## 3. The 12 themes at a glance
 

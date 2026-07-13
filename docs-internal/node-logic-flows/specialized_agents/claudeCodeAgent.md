@@ -29,7 +29,7 @@ Standard `std_agent_handles()` topology (same as the generic agents).
 | `input-main` | Auto-prompt fallback (reads `source.message / text / content / str`) |
 | `input-skill` | Connected skill names collected; SKILL.md trees materialised under `<workspace>/.claude/skills/` and exposed to the CLI (not injected into a system prompt) |
 | `input-memory` | When wired, sets `continue_session=True` so claude emits `--continue` and resumes its on-disk session under the stable cwd |
-| `input-tools` | Connected tool nodes exposed to the CLI as `mcp__machinaos__<type>` MCP tools |
+| `input-tools` | Connected tool nodes exposed to the CLI as `mcp__opencompany__<type>` MCP tools |
 | `input-task` | Collected by the edge-walker; `task_data` is unpacked but the 5th element is ignored (`_`) here |
 
 ## Parameters
@@ -148,13 +148,13 @@ flowchart TD
 
 ## External Dependencies
 
-- **Binaries**: `@anthropic-ai/claude-code`, MachinaOs-managed — auto-installed on first use into the shared npm tree at `<DATA_DIR>/packages/` (binary at `<DATA_DIR>/packages/node_modules/.bin/claude[.cmd]`); requires `npm` on PATH.
+- **Binaries**: `@anthropic-ai/claude-code`, OpenCompany-managed — auto-installed on first use into the shared npm tree at `<DATA_DIR>/packages/` (binary at `<DATA_DIR>/packages/node_modules/.bin/claude[.cmd]`); requires `npm` on PATH.
 - **Python packages**: standard library + the `services/cli_agent/` framework
   (FastMCP bridge, session pool).
 - **Credentials**: Claude Code handles its own authentication via
-  `CLAUDE_CONFIG_DIR=<DATA_DIR>/claude/` (= `~/.machina/claude/` by
+  `CLAUDE_CONFIG_DIR=<DATA_DIR>/claude/` (= `~/.opencompany/claude/` by
   default; see [Claude OAuth](../../claude_code_agent_architecture.md));
-  MachinaOs does not inject an API key.
+  OpenCompany does not inject an API key.
 
 ## Edge cases & known limits
 
@@ -170,7 +170,7 @@ flowchart TD
   `ValidationError` at the Output boundary instead of emitting an
   unparseable shape downstream.
 - **Strict tool allowlist**: `--permission-mode dontAsk` enforces
-  `--allowedTools` (only wired `mcp__machinaos__*` tools, conditional `Skill`,
+  `--allowedTools` (only wired `mcp__opencompany__*` tools, conditional `Skill`,
   5 infra tools); claude's own built-in Read/Edit/Bash/etc. do NOT fire
   unless wired.
 - **Per-workflow skill isolation**: SKILL.md trees materialise under the

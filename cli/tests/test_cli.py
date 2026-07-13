@@ -13,10 +13,11 @@ runner = CliRunner()
 def test_help_lists_stop():
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
+    assert "company" in result.output
     assert "stop" in result.output
 
 
 def test_stop_help():
     result = runner.invoke(app, ["stop", "--help"])
     assert result.exit_code == 0
-    assert "Stop all MachinaOS services" in result.output
+    assert "Stop all OpenCompany services" in result.output

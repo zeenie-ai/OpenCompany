@@ -1,6 +1,6 @@
 # Agent Teams Pattern
 
-This document describes the Claude SDK Agent Teams pattern implementation in MachinaOs, enabling multi-agent coordination through AI Employee and Orchestrator nodes.
+This document describes the Claude SDK Agent Teams pattern implementation in OpenCompany, enabling multi-agent coordination through AI Employee and Orchestrator nodes.
 
 ## Overview
 

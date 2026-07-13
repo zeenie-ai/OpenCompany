@@ -289,7 +289,7 @@ def _gemini_headers(api_key: str) -> dict:
 
 
 def _openrouter_headers(api_key: str) -> dict:
-    return {"Authorization": f"Bearer {api_key}", "HTTP-Referer": "http://localhost:3000", "X-Title": "MachinaOS"}
+    return {"Authorization": f"Bearer {api_key}", "HTTP-Referer": "http://localhost:3000", "X-Title": "OpenCompany"}
 
 
 def _groq_headers(api_key: str) -> dict:

@@ -1,4 +1,4 @@
-"""``machina build`` -- replaces ``scripts/build.js``.
+"""``company build`` -- replaces ``scripts/build.js``.
 
 Checks toolchain (node, npm, python, uv), then runs the 6-step
 build: ``.env`` bootstrap -> ``pnpm install`` -> client build ->
@@ -7,13 +7,13 @@ Node.js sidecar bundle -> ``uv sync`` -> compile Python bytecode
 
 Layers ``.env.dev`` (when present in the checkout) BEFORE running
 those steps so the build's ``DATA_DIR`` matches the runtime's
-expected location. Without that, ``machina build`` would pooch
-Temporal under ``~/.machina/`` and ``machina dev`` would re-fetch
-it into ``<repo>/.machina/`` — a redundant download on every fresh
+expected location. Without that, ``company build`` would pooch
+Temporal under ``~/.opencompany/`` and ``company dev`` would re-fetch
+it into ``<repo>/.opencompany/`` — a redundant download on every fresh
 clone. Production (global-install) operators never have
 ``.env.dev`` in their checkout, so the layering is a no-op there.
 
-The ``MACHINAOS_BUILDING`` env var is set so ``scripts/postinstall.js``
+The ``OPENCOMPANY_BUILDING`` env var is set so ``scripts/postinstall.js``
 skips its own ``install.js`` invocation when build is the orchestrator.
 """
 
@@ -32,7 +32,7 @@ from cli.colors import console
 from cli.platform_ import node_modules_dir, project_root, server_dir
 
 
-# Source dirs / entry-point modules under ``server/`` that ``machina build``
+# Source dirs / entry-point modules under ``server/`` that ``company build``
 # pre-compiles to optimised bytecode in step [5/6]. Public so tests and
 # ``scripts/install.js`` (which mirrors this list) stay in sync — both
 # the install pipeline and tests should read this constant rather than
@@ -107,21 +107,21 @@ def build_command() -> None:
     root = project_root()
 
     # Layer ``.env.dev`` (if present) BEFORE the install steps so the
-    # build's ``DATA_DIR`` matches what the runtime (``machina dev``)
-    # will see. Without this, ``machina build`` reads
-    # ``DATA_DIR=~/.machina`` from ``.env.template`` and lands the
-    # Temporal CLI under user home, but ``machina dev`` then reads
-    # ``DATA_DIR=.machina`` from ``.env.dev`` and re-downloads into
-    # ``<repo>/.machina/`` — a cache-miss the operator pays on every
+    # build's ``DATA_DIR`` matches what the runtime (``company dev``)
+    # will see. Without this, ``company build`` reads
+    # ``DATA_DIR=~/.opencompany`` from ``.env.template`` and lands the
+    # Temporal CLI under user home, but ``company dev`` then reads
+    # ``DATA_DIR=.opencompany`` from ``.env.dev`` and re-downloads into
+    # ``<repo>/.opencompany/`` — a cache-miss the operator pays on every
     # fresh checkout.
     #
     # Safe for global installs: ``.env.dev`` is committed to git for
     # repo-clone contributors but is NOT in the npm ``files`` list, so
-    # ``npm install -g machinaos`` doesn't ship it. Without
+    # ``npm install -g opencompany`` doesn't ship it. Without
     # ``.env.dev`` on disk, :func:`load_dev_overrides` is a no-op and
     # the build falls through to ``.env.template`` defaults
-    # (``DATA_DIR=~/.machina``) — identical to today's behaviour and
-    # matching what ``machina start`` / ``machina daemon`` use at
+    # (``DATA_DIR=~/.opencompany``) — identical to today's behaviour and
+    # matching what ``company start`` / ``company daemon`` use at
     # runtime.
     from cli.config import load_dev_overrides
 
@@ -129,6 +129,8 @@ def build_command() -> None:
 
     # Prevent the postinstall orchestrator from re-running install.js when
     # we're orchestrating ourselves (matches the existing JS contract).
+    os.environ["OPENCOMPANY_BUILDING"] = "true"
+    # Mixed-version installs may still contain the old postinstall hook.
     os.environ["MACHINAOS_BUILDING"] = "true"
     os.environ.setdefault("PYTHONUTF8", "1")
 
@@ -188,7 +190,7 @@ def build_command() -> None:
     # whenever the executor is launched. The bundle keeps Express
     # external (it stays in node_modules), so the patch flow is intact.
     console.log("[3/6] Building Node.js sidecar...")
-    run(["pnpm", "--filter", "machinaos-nodejs-executor", "run", "build"], cwd=root)
+    run(["pnpm", "--filter", "opencompany-nodejs-executor", "run", "build"], cwd=root)
 
     console.log("[4/6] Installing Python dependencies...")
     # ``server/`` is its own standalone uv project; ``uv sync`` at that
@@ -219,7 +221,7 @@ def build_command() -> None:
     )
 
     # Temporal is a required runtime dep: fetch + verify the binaries
-    # now so first ``machina start`` is instant instead of paying the
+    # now so first ``company start`` is instant instead of paying the
     # ~90 MB pooch download cost inside ``_pre_spawn``. The ``-m
     # services.temporal._install`` entry runs ``ensure_temporal_binaries``
     # then asserts every extracted path exists; non-zero exit aborts

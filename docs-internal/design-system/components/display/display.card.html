@@ -13,7 +13,7 @@
 <body style="background: var(--bg-panel); margin: 0; padding: 16px;">
 <div id="root"></div>
 <script type="text/babel">
-const { Badge, Card, Tabs, Avatar, Kbd, LogLine, ChatBubble } = window.MachinaOSDesignSystem_2559cf;
+const { Badge, Card, Tabs, Avatar, Kbd, LogLine, ChatBubble } = window.OpenCompanyDesignSystem_2559cf;
 
 function DisplayCard() {
   const [tab, setTab] = React.useState('console');
@@ -58,7 +58,7 @@ function DisplayCard() {
               <ChatBubble role="agent">Done — I scheduled a daily digest. Want it on WhatsApp too?</ChatBubble>
             </div>
           ) : (
-            <LogLine tone="var(--fg-default)"><span style={{ color: 'var(--success)' }}>$</span> machina start</LogLine>
+            <LogLine tone="var(--fg-default)"><span style={{ color: 'var(--success)' }}>$</span> company start</LogLine>
           )}
         </div>
       </div>

@@ -3,7 +3,7 @@ name: http-request-skill
 description: Make HTTP requests to external APIs and web services. Supports GET, POST, PUT, DELETE, PATCH methods with headers and JSON body.
 allowed-tools: http_request
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: integration
 
@@ -127,7 +127,7 @@ Additional options can be configured on the node:
   "url": "https://hooks.slack.com/services/xxx",
   "method": "POST",
   "body": {
-    "text": "Hello from MachinaOS!"
+    "text": "Hello from OpenCompany!"
   }
 }
 ```

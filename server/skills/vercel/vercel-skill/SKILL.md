@@ -3,7 +3,7 @@ name: vercel-skill
 description: Deploy sites and apps to Vercel, inspect deployments, stream logs, and manage projects/env/domains via the Vercel CLI. Deploy a directory and get back the live deployment URL; everything else the CLI supports is available through the custom command passthrough.
 allowed-tools: "vercel"
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: deployment
 
@@ -162,7 +162,7 @@ Credentials Modal → Vercel:
 
 1. **Login with Vercel** — browser device flow driven through the
    CLI. The CLI is auto-installed via npm on first use and keeps its
-   auth state in a MachinaOs-owned config directory.
+   auth state in a OpenCompany-owned config directory.
 2. **Access token** — paste a token from
    [vercel.com/account/tokens](https://vercel.com/account/tokens).
    Injected as `VERCEL_TOKEN` on every call; takes precedence over

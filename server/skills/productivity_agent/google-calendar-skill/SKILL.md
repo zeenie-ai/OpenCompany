@@ -3,7 +3,7 @@ name: google-calendar-skill
 description: Create, list, update, and delete Google Calendar events. Supports attendees, reminders, and recurring events.
 allowed-tools: "google_calendar"
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: productivity
 

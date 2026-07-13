@@ -1,7 +1,7 @@
 """Vertex Managed Agent — Google Gemini Enterprise Agent Platform.
 
 Runs a cloud-hosted managed agent (default: Antigravity) through the
-Interactions API and bridges the MachinaOS canvas into it:
+Interactions API and bridges the OpenCompany canvas into it:
 
 - Connected tool nodes are declared as custom ``function`` tools; the
   cloud agent hands control back with ``status == "requires_action"``

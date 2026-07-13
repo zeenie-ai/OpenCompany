@@ -1,6 +1,6 @@
 # AI CLI Agent Framework
 
-Multi-instance, multi-provider runtime for AI CLI agents (Claude Code, Codex, Gemini). One workflow node spawns N parallel CLI sessions over a list of tasks, each isolated in its own git worktree, each able to call back into MachinaOs over MCP.
+Multi-instance, multi-provider runtime for AI CLI agents (Claude Code, Codex, Gemini). One workflow node spawns N parallel CLI sessions over a list of tasks, each isolated in its own git worktree, each able to call back into OpenCompany over MCP.
 
 | Provider | Status | Login flow |
 |---|---|---|
@@ -22,7 +22,7 @@ AICliService.run_batch(provider, tasks, *, node_id, workflow_id, workspace_dir)
         ├──► AICliSession_0 (BaseProcessSupervisor + ClaudeProvider + ClaudeTaskSpec)
         │       _pre_spawn():   git worktree add  +  write ~/.claude/ide/<pid>.lock
         │       _do_start():    anyio.open_process + NDJSON stdout/stderr consumers
-        │                       env: CLAUDE_IDE_LOCK + MACHINA_PARENT_RUN_ID
+        │                       env: CLAUDE_IDE_LOCK + OPENCOMPANY_PARENT_RUN_ID
         │       wait_for_completion(timeout)
         │       cleanup():      stop()=terminate_then_kill(5s) + rm lockfile + worktree remove
         │
@@ -49,7 +49,7 @@ Reuses (do not duplicate):
 - `services/skill_loader.py` — `scan_skills` / `load_skill` consumed by MCP `listSkills` / `getSkill`
 - `services/auth.py` — `AuthService.get_api_key` consumed by MCP `getCredential`
 - `services/credential_registry.py` — deep-merge `extends` for `_cli_base` entry
-- `nodes/agent/claude_code_agent/_oauth.py` — Claude `auth login` / `auth status` / `auth logout` wrappers, npm install into the shared MachinaOs tree at `<DATA_DIR>/packages/` (binary resolves to `<DATA_DIR>/packages/node_modules/.bin/claude[.cmd]`), `CLAUDE_CONFIG_DIR=<DATA_DIR>/claude/`. The `login` spawn passes `stdin=PIPE` (un-written) so the native CLI's stdin reader blocks instead of EOFing — keeps its localhost OAuth callback server alive until the browser flow completes
+- `nodes/agent/claude_code_agent/_oauth.py` — Claude `auth login` / `auth status` / `auth logout` wrappers, npm install into the shared OpenCompany tree at `<DATA_DIR>/packages/` (binary resolves to `<DATA_DIR>/packages/node_modules/.bin/claude[.cmd]`), `CLAUDE_CONFIG_DIR=<DATA_DIR>/claude/`. The `login` spawn passes `stdin=PIPE` (un-written) so the native CLI's stdin reader blocks instead of EOFing — keeps its localhost OAuth callback server alive until the browser flow completes
 - `nodes/stripe/_handlers.py` — pattern reference for marker-token + catalogue broadcast
 
 ## Provider abstraction (mirrors `services/llm/`)
@@ -98,7 +98,7 @@ the interactive billing bucket (entrypoint `claude-vscode`, NOT
 `sdk-cli`) since `-p` / `--print` is never emitted.
 
 ```
-~/.machina/packages/node_modules/.bin/claude[.cmd]
+~/.opencompany/packages/node_modules/.bin/claude[.cmd]
   --output-format stream-json     # events on stdout
   --input-format stream-json      # user turns to stdin as JSON
   --verbose                       # required with stream-json for full event detail
@@ -198,7 +198,7 @@ Each plugin's `Params.tasks` is hard-typed to one variant — the LLM tool-schem
 
 ## Auth model — Stripe-style CLI-managed OAuth
 
-CLI auth is delegated to the CLI's own login flow + a synthetic marker token in MachinaOs's catalogue. Mirrors `nodes/stripe/_handlers.py` (commit `a32f671`).
+CLI auth is delegated to the CLI's own login flow + a synthetic marker token in OpenCompany's catalogue. Mirrors `nodes/stripe/_handlers.py` (commit `a32f671`).
 
 **Per-provider WS handler names** (Twitter / Google / Stripe convention — frontend dispatches `{}` payload, handler name encodes provider):
 
@@ -219,7 +219,7 @@ Steps:
 
 1. Run `claude auth status`. If it exits 0, write the marker + broadcast and return immediately (idempotent re-click).
 2. Otherwise schedule `_finalize_claude_login()` (in `nodes/agent/claude_code_agent/_handlers.py`), which calls `run_claude_login()` from `_oauth.py`:
-   - MachinaOs-managed install of `@anthropic-ai/claude-code` into the shared npm tree at `<DATA_DIR>/packages/` via `npm install --prefix <packages_dir>` (same tree as `edgymeow` / `agent-browser`; skipped if already installed). Binary resolves to `<DATA_DIR>/packages/node_modules/.bin/claude[.cmd]`.
+   - OpenCompany-managed install of `@anthropic-ai/claude-code` into the shared npm tree at `<DATA_DIR>/packages/` via `npm install --prefix <packages_dir>` (same tree as `edgymeow` / `agent-browser`; skipped if already installed). Binary resolves to `<DATA_DIR>/packages/node_modules/.bin/claude[.cmd]`.
    - `claude auth login` via `run_cli_command(..., env={..., CLAUDE_CONFIG_DIR=<DATA_DIR>/claude/}, stdin=asyncio.subprocess.PIPE)` — same way the VSCode Claude Code extension delegates to the binary. Anthropic doesn't expose `--print-url` or a programmatic OAuth helper (issue [anthropics/claude-code#7100](https://github.com/anthropics/claude-code/issues/7100), closed "not planned"), so we let the CLI open the user's browser via its own OS-level call. `stdin=PIPE` is **load-bearing** for claude-code >= 2.1.162's native binary: it reads stdin while waiting for the browser callback, and an inherited (closed) stdin EOFs it into an early exit that kills the localhost callback server before the redirect arrives — `stdin=PIPE` (never written) makes the read block so the server stays up.
 3. Schedule a background task that polls `claude auth status` every 2s up to 600s. On exit-0, write the synthetic `"cli-managed"` marker via `auth_service.store_oauth_tokens("claude_code", ...)` and broadcast `credential_catalogue_updated`. The catalogue's `stored` flag flips and the existing `OAuthConnect.tsx` primitive renders the modal as Connected.
 
@@ -231,7 +231,7 @@ Steps:
 
 ## VSCode-style IDE MCP server
 
-Spawned CLI sessions auto-discover MachinaOs over MCP via the lockfile pattern VSCode's Claude Code extension uses. No custom IPC.
+Spawned CLI sessions auto-discover OpenCompany over MCP via the lockfile pattern VSCode's Claude Code extension uses. No custom IPC.
 
 Lockfile path: `~/.claude/ide/<pid>.lock` (Claude) or `<tmpdir>/gemini/ide/gemini-ide-server-<pid>-<port>.json` (Gemini, v2). Format mirrors VSCode exactly:
 
@@ -241,7 +241,7 @@ Lockfile path: `~/.claude/ide/<pid>.lock` (Claude) or `<tmpdir>/gemini/ide/gemin
   "url": "http://127.0.0.1:3010/mcp/ide",
   "authToken": "<32-byte hex>",
   "workspaceFolders": ["<absolute path to per-task git worktree>"],
-  "ideName": "machinaos",
+  "ideName": "opencompany",
   "transport": "http",
   "pid": 12345
 }
@@ -249,15 +249,15 @@ Lockfile path: `~/.claude/ide/<pid>.lock` (Claude) or `<tmpdir>/gemini/ide/gemin
 
 Bearer-token middleware (`mcp_server.py:_BearerAuthMiddleware`) validates each request against an in-memory per-batch `BatchContext` registry. **Non-pool path**: tokens registered at `AICliService.run_batch()` entry, unregistered in `finally` so 401s flip immediately when a batch settles. **Pool path** (`use_pool=True`, see [Claude Code Interactive Mode](./claude_code_interactive_mode.md#mcp-bearer-token-lifecycle) for the full lifecycle): claude bakes the bearer into argv (`--mcp-config`) at spawn time and can't rotate without respawning, so the pool stashes the spawn-time token on `PooledClaudeSession.batch_token` and rebinds the `BatchContext` in place on warm reuse via `rebind_batch(token, connected_tools=..., ...)` — closes the "disconnected tool still works" leak by (a) diffing `connected_tools` and decrementing FastMCP refcounts for tools dropped between batches, and (b) updating the per-handler scope check's data so `workflow_tools._build_handler` returns 403 for stale tools. `_terminate_locked` calls `unregister_batch(session.batch_token)` so refcounts drain on pool eviction / `clear` / `shutdown_all`.
 
-Tools exposed (mirror MachinaOs capabilities; deferred ones marked):
+Tools exposed (mirror OpenCompany capabilities; deferred ones marked):
 
 | Tool | Maps to | Returns |
 |---|---|---|
-| `mcp__machina__getWorkspaceFiles` | `Path.rglob` over `workspace_dir` | `{files: [{path, size, mtime, content?}]}` |
-| `mcp__machina__listSkills` | `SkillLoader.scan_skills()` filtered to `BatchContext.connected_skill_names` | `{skills: [{name, description, allowed_tools, category}]}` (~100 tokens each) |
-| `mcp__machina__getSkill` | `SkillLoader.load_skill(name)` | `{name, instructions, allowed_tools, scripts, references}` |
-| `mcp__machina__getCredential` | `auth_service.get_api_key(name)`, gated by `BatchContext.allowed_credentials` | `{name, value}` or 403 |
-| `mcp__machina__broadcastLog` | `broadcaster.broadcast_terminal_log()` | `{success}` |
+| `mcp__opencompany__getWorkspaceFiles` | `Path.rglob` over `workspace_dir` | `{files: [{path, size, mtime, content?}]}` |
+| `mcp__opencompany__listSkills` | `SkillLoader.scan_skills()` filtered to `BatchContext.connected_skill_names` | `{skills: [{name, description, allowed_tools, category}]}` (~100 tokens each) |
+| `mcp__opencompany__getSkill` | `SkillLoader.load_skill(name)` | `{name, instructions, allowed_tools, scripts, references}` |
+| `mcp__opencompany__getCredential` | `auth_service.get_api_key(name)`, gated by `BatchContext.allowed_credentials` | `{name, value}` or 403 |
+| `mcp__opencompany__broadcastLog` | `broadcaster.broadcast_terminal_log()` | `{success}` |
 
 Lifespan: `main.py` enters `mcp_app.router.lifespan_context()` so `StreamableHTTPSessionManager`'s task group is alive (Starlette doesn't auto-propagate `app.mount()` lifespans). Stale-PID lockfile sweep on startup (mirrors VSCode's behaviour).
 
@@ -276,7 +276,7 @@ Shared by every CLI provider plugin. Imports nothing from `nodes/`.
 | `factory.py` | Three registries (`register_provider`, `register_session_pool`, `register_skill_materialiser`) + lookups + `create_cli_provider(name)`. |
 | `lockfile.py` | VSCode-style IDE lockfile read/write/sweep. |
 | `mcp_server.py` | FastMCP sub-app at `/mcp/ide` with bearer-token middleware + 5 tools + `rebind_batch` for warm-reuse context updates. |
-| `workflow_tools.py` | Per-batch MCP tool exposure (`mcp__machinaos__<node_type>`) + handler scope check + `tools/list_changed` notify. |
+| `workflow_tools.py` | Per-batch MCP tool exposure (`mcp__opencompany__<node_type>`) + handler scope check + `tools/list_changed` notify. |
 | `session.py` | `AICliSession(BaseProcessSupervisor)` — generic non-pool path (still PTY on POSIX). |
 | `service.py` | `AICliService.run_batch()` — dispatcher; routes to pool when memory-bound via `factory.get_session_pool(provider_name)`. |
 | `_cli_auth.py` | CLI-agnostic `mark_logged_in` / `mark_logged_out` / `broadcast_credential_event` + `"cli-managed"` marker token. Shared by claude + codex handlers. |
@@ -298,7 +298,7 @@ the reference implementation). Four self-registration calls in
 | `_provider.py` | `AnthropicClaudeProvider` — full claude argv builder + stream-json event parsers + ide_lockfile_dir derivation. |
 | `_pool.py` | `ClaudeSessionPool` — subprocess + stream-json warm-reuse pool, MCP rebind on acquire, skill diff on warm reuse. |
 | `_skills.py` | `materialise_skills(workspace_dir, names, previous_skill_names)` — per-workflow SKILL.md materialisation + diff-based add/remove. |
-| `_oauth.py` | `MACHINA_CLAUDE_DIR`, `claude_binary_path`, `claude_auth_*` — project-local install + the documented CLI subcommands. |
+| `_oauth.py` | `OPENCOMPANY_CLAUDE_DIR`, `claude_binary_path`, `claude_auth_*` — project-local install + the documented CLI subcommands. |
 | `_handlers.py` | `claude_code_login` / `claude_code_logout` WS handlers (registered from `__init__.py` via `register_ws_handlers`). |
 
 ### Other touchpoints
@@ -323,7 +323,7 @@ the reference implementation). Four self-registration calls in
     "session_id": "<UUID|null>",
     "provider": "claude|codex|gemini",
     "prompt": "...",
-    "branch": "machina/t_<8hex>",
+    "branch": "opencompany/t_<8hex>",
     "worktree_path": "<abs path, removed after batch>",
     "response": "<truncated to 4000 chars>",
     "cost_usd": 0.42,
@@ -352,7 +352,7 @@ the reference implementation). Four self-registration calls in
 }
 ```
 
-`cost_usd` is the provider's reported value when available (Claude). For Codex (no native USD), `service.py:_derive_cost` falls back to `services.pricing.PricingService.calculate_cost()` from `canonical_usage` — single source of truth for LLM cost across MachinaOs. `summary.total_cost_usd` is `null` if any task didn't surface cost.
+`cost_usd` is the provider's reported value when available (Claude). For Codex (no native USD), `service.py:_derive_cost` falls back to `services.pricing.PricingService.calculate_cost()` from `canonical_usage` — single source of truth for LLM cost across OpenCompany. `summary.total_cost_usd` is `null` if any task didn't surface cost.
 
 ## Memory bridge — `simpleMemory` → `claude_code_agent`
 
@@ -370,7 +370,7 @@ key doesn't drift.
 
 Claude derives `project_key` from cwd via `re.sub(r"[^a-zA-Z0-9.-]", "-", str(cwd))`
 — every `:`, `\`, `/`, `_` becomes `-`. Verified against the on-disk
-`~/.machina/claude/projects/` listing — Python reproduces three
+`~/.opencompany/claude/projects/` listing — Python reproduces three
 encoded directory names byte-for-byte. The pre-bridge per-task
 worktree (`<workspace>/<node_id>/wt_t_<random_8hex>`) changed cwd on
 every spawn → fresh project_key every run → `--resume <UUID>` looked
@@ -443,8 +443,8 @@ ClaudeCodeAgentNode.execute_op
                     # Emits a CloudEvents v1.0 envelope (RFC §6.4):
                     #   { type: "node_parameters_updated",
                     #     data: { specversion, id, time,
-                    #             source: "machinaos://services/parameters",
-                    #             type: "com.machinaos.node.parameters.updated",
+                    #             source: "opencompany://services/parameters",
+                    #             type: "com.opencompany.node.parameters.updated",
                     #             subject: <memory_node_id>,
                     #             workflow_id?,
                     #             data: { node_id, parameters, version, source } } }
@@ -548,11 +548,11 @@ Plugin contract: `tests/test_plugin_contract.py` + `tests/test_node_spec.py` —
 
 Live verification (needs a real Claude install + auth):
 
-1. Empty `~/.machina/claude/` + `~/.machina/packages/`. Open Credentials Modal → click "Login with Claude Code CLI". Confirm the npm install runs (visible in backend logs), `~/.machina/packages/node_modules/.bin/claude[.cmd]` appears, browser opens for Anthropic OAuth. Modal flips Connected within ~2s of CLI exit (background `claude auth status` poll detects success). The browser tab should render the CLI's own "Signed in" success page (this needs the `stdin=PIPE` spawn — without it the native binary exits early and the tab is left on the bare `localhost/callback` URL).
+1. Empty `~/.opencompany/claude/` + `~/.opencompany/packages/`. Open Credentials Modal → click "Login with Claude Code CLI". Confirm the npm install runs (visible in backend logs), `~/.opencompany/packages/node_modules/.bin/claude[.cmd]` appears, browser opens for Anthropic OAuth. Modal flips Connected within ~2s of CLI exit (background `claude auth status` poll detects success). The browser tab should render the CLI's own "Signed in" success page (this needs the `stdin=PIPE` spawn — without it the native binary exits early and the tab is left on the bare `localhost/callback` URL).
 2. Refresh the page. Modal stays Connected (`auth_service.get_oauth_tokens("claude_code")` still returns the marker; idempotent re-click also stays Connected).
 3. Click Disconnect. Modal flips Disconnected (`claude auth logout` clears CLI creds + marker dropped).
 4. Add a `claude_code_agent` node, set `tasks=[{prompt:"echo A"},{prompt:"echo B"},{prompt:"echo C"}]`, run. Three distinct `claude:<task_id>` Terminal streams interleaved. Three distinct session_ids. Three worktrees created and removed. `summary.wall_clock_ms < sum(duration_ms)` (proves parallelism).
-5. With a Claude task running, `cat ~/.claude/ide/<pid>.lock` and confirm format. Stream-json shows an `mcp__machina__*` tool invocation.
+5. With a Claude task running, `cat ~/.claude/ide/<pid>.lock` and confirm format. Stream-json shows an `mcp__opencompany__*` tool invocation.
 6. `curl -H "Authorization: Bearer <wrong>" http://127.0.0.1:3010/mcp/ide/...` → 401.
 
 ## Risks / open considerations

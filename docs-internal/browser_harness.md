@@ -25,7 +25,7 @@ browserHarness node ──> BrowserHarnessService.run_code(code)
 ## Chrome prerequisite
 
 The harness needs a CDP-reachable Chrome, discovered in this order (upstream `daemon.py`):
-1. `BU_CDP_URL` / `BU_CDP_WS` env override (dedicated automation Chrome) — passed through from the MachinaOS process env untouched.
+1. `BU_CDP_URL` / `BU_CDP_WS` env override (dedicated automation Chrome) — passed through from the OpenCompany process env untouched.
 2. `DevToolsActivePort` written by Chrome when the user enables **chrome://inspect/#remote-debugging** ("Allow remote debugging for this browser instance").
 3. Port probe on 9222/9223 (e.g. `chrome --remote-debugging-port=9222`).
 
@@ -51,6 +51,6 @@ Default to `browser`; reach for `browserHarness` when the task needs the user's 
 
 ## Ops notes
 
-- Install is lazy: first use runs `uv tool install --python 3.12 browser-harness` (requires `uv` on PATH — already a MachinaOS toolchain dependency).
+- Install is lazy: first use runs `uv tool install --python 3.12 browser-harness` (requires `uv` on PATH — already a OpenCompany toolchain dependency).
 - Daemon shutdown: FastAPI lifespan runs the `browser_harness` shutdown hook → kills the daemon via `<DATA_DIR>/daemons/browser-harness/bu.pid`.
 - Upgrades: delete `<DATA_DIR>/packages/browser-harness/` and let the next use reinstall, or run the CLI's `--update`.

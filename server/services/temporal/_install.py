@@ -6,11 +6,11 @@ https://docs.temporal.io/develop/python/set-up-your-local-python
 
 The binary lands at ``<DATA_DIR>/packages/temporal/`` — the same root
 that holds the Stripe and agent-browser binaries (see
-:func:`core.paths.package_dir`). Pre-fix this used
+:func:`core.paths.package_dir`). Legacy MachinaOS builds used
 ``pooch.os_cache("machinaos-temporal")`` which landed the binary
 under a separate ``%LOCALAPPDATA%\\machinaos-temporal\\Cache\\``
 (Windows) / ``~/.cache/machinaos-temporal/`` (Linux) tree outside
-the operator-visible ``~/.machina/`` root.
+the operator-visible state root.
 
 Pooch still drives archive extraction (zip on Windows, tar.gz
 elsewhere); we just point its cache at our DATA_DIR-rooted package
@@ -58,11 +58,10 @@ def _cache_dir() -> Path:
     """Per-service install dir under :func:`core.paths.package_dir`.
 
     Lands at ``<DATA_DIR>/packages/temporal/`` — same root that
-    holds ``stripe`` and ``browser`` binaries. Pre-fix this used
-    ``pooch.os_cache("machinaos-temporal")`` which landed the binary
+    holds ``stripe`` and ``browser`` binaries. Legacy MachinaOS builds
+    used ``pooch.os_cache("machinaos-temporal")`` which landed the binary
     at ``%LOCALAPPDATA%\\machinaos-temporal\\Cache\\`` (Windows) /
-    ``~/.cache/machinaos-temporal/`` (Linux) — outside the
-    operator-visible ``~/.machina/`` tree.
+    ``~/.cache/machinaos-temporal/`` (Linux), outside the data root.
     """
     from core.paths import package_dir
 
@@ -154,9 +153,9 @@ __all__ = ["ensure_temporal_binaries"]
 def _main() -> int:
     """Standalone entry: ``python -m services.temporal._install``.
 
-    Used by ``machina build`` step [6/6] to materialise the Temporal
+    Used by ``company build`` step [6/6] to materialise the Temporal
     CLI at build time instead of paying the download cost on first
-    ``machina start``. Fetches, verifies the binary exists on disk,
+    ``company start``. Fetches, verifies the binary exists on disk,
     prints the resolved location. Non-zero exit on any failure.
     """
     import sys as _sys

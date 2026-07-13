@@ -105,7 +105,7 @@ class PtyTransport(Protocol):
         (e.g. ConPTY not available on a too-old Windows build).
 
         The handle is registered with the process tree supervisor
-        (:mod:`machina.tree` on Windows, ``os.setsid`` on POSIX) so the
+        (:mod:`cli.tree` on Windows, ``os.setsid`` on POSIX) so the
         child is reaped on host shutdown — see the existing
         ``BaseProcessSupervisor`` patterns.
         """

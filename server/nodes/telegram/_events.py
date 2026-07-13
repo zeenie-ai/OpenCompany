@@ -70,8 +70,8 @@ def telegram_connection_status(
     if has_stored_token is not None:
         data["has_stored_token"] = has_stored_token
     return WorkflowEvent(
-        source="machinaos://nodes/telegram",
-        type=("com.machinaos.telegram.connection.opened" if connected else "com.machinaos.telegram.connection.closed"),
+        source="opencompany://nodes/telegram",
+        type=("com.opencompany.telegram.connection.opened" if connected else "com.opencompany.telegram.connection.closed"),
         subject=bot_username,
         data=data,
     )
@@ -84,8 +84,8 @@ def telegram_message_received(event_data: Mapping[str, Any]) -> WorkflowEvent:
     payload = dict(event_data)
     chat_id = payload.get("chat_id")
     return WorkflowEvent(
-        source="machinaos://nodes/telegram",
-        type="com.machinaos.telegram.message.received",
+        source="opencompany://nodes/telegram",
+        type="com.opencompany.telegram.message.received",
         subject=str(chat_id) if chat_id is not None else None,
         data=payload,
     )

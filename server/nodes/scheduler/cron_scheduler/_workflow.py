@@ -54,7 +54,7 @@ class CronTriggerWorkflow:
         schedule creation)::
 
             {
-                "workflow_id": str,        # MachinaOs deployment workflow_id
+                "workflow_id": str,        # OpenCompany deployment workflow_id
                 "trigger_node_id": str,    # cron node id
                 "node_type": "cronScheduler",
                 "cron_expression": str,    # raw crontab string

@@ -362,7 +362,7 @@ class BrowserNode(ActionNode):
         op = params.operation
         # Typed accessor (not ctx.raw.get) — the key can be present-but-None
         # on the agent tool-dispatch path; `or` covers both missing and None.
-        session = params.session.strip() or f"machina_{ctx.execution_id or 'default'}"
+        session = params.session.strip() or f"opencompany_{ctx.execution_id or 'default'}"
         timeout = params.timeout
         browser_sel = params.browser or "chrome"
         if browser_sel == "bundled":

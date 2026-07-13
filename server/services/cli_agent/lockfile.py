@@ -1,7 +1,7 @@
 """VSCode-style IDE lockfile writer + remover + stale-PID sweep.
 
 Each spawned CLI session writes a discovery lockfile that the CLI reads
-to auto-connect to MachinaOs's MCP server. We mirror the format the
+to auto-connect to OpenCompany's MCP server. We mirror the format the
 official VSCode Claude Code extension writes
 (``~/.claude/ide/<pid>.lock`` containing
 ``{port, url, authToken, workspaceFolders, ideName, transport, pid}``)

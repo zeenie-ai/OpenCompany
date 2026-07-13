@@ -277,7 +277,7 @@ class TestEmailReceive:
         # is canary-registered and the legacy collector has no consumer).
         emit_mock.assert_called_once()
         envelope = emit_mock.call_args.args[0]
-        assert envelope.type == "com.machinaos.email.message.received"
+        assert envelope.type == "com.opencompany.email.message.received"
         assert emit_mock.call_args.kwargs["wire_routing_key"] == "email_received"
 
     async def test_mark_as_read_adds_seen_flag(self, harness):

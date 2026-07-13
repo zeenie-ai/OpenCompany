@@ -1,4 +1,4 @@
-# Contributing to MachinaOS
+# Contributing to OpenCompany
 
 Welcome! This guide is a contributor's map to the codebase. It tells you *where things live* and *where to start reading* when you want to add a feature. For the full architecture tour, use the [DeepWiki badge](https://deepwiki.com/zeenie-ai/MachinaOS) on the README or browse [docs-internal/](docs-internal/).
 

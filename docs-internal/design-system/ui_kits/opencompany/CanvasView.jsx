@@ -1,6 +1,6 @@
-// MachinaOS UI kit — node canvas: dot grid, dashed edges, square nodes,
+// OpenCompany UI kit — node canvas: dot grid, dashed edges, square nodes,
 // rectangular AI Agent node. Click nodes to select; Start runs the flow.
-const DS_CV = window.MachinaOSDesignSystem_2559cf;
+const DS_CV = window.OpenCompanyDesignSystem_2559cf;
 
 // Rectangular agent node (the larger card-style node from the product).
 function AgentNode({ x, y, status, selected, executing, onClick, onGearClick }) {
@@ -8,7 +8,7 @@ function AgentNode({ x, y, status, selected, executing, onClick, onGearClick }) 
   return (
     <div
       onClick={onClick}
-      className={executing ? 'machina-pulse' : undefined}
+      className={executing ? 'opencompany-pulse' : undefined}
       style={{
         '--node-pulse-color': color,
         position: 'absolute', left: x, top: y, width: 190,
@@ -150,4 +150,4 @@ function CanvasView({ running, extraNodes, selectedId, onSelect, onConfigure }) 
   );
 }
 
-window.MachinaKit = Object.assign(window.MachinaKit || {}, { CanvasView });
+window.OpenCompanyKit = Object.assign(window.OpenCompanyKit || {}, { CanvasView });

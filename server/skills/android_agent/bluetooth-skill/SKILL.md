@@ -3,7 +3,7 @@ name: bluetooth-skill
 description: Control Android Bluetooth - enable, disable, get status, and list paired devices.
 allowed-tools: bluetooth_automation
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: android
 

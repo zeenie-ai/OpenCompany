@@ -3,7 +3,7 @@ name: google-contacts-skill
 description: Create, list, and search Google Contacts. Supports names, emails, phone numbers, and organizations.
 allowed-tools: "google_contacts"
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: productivity
 

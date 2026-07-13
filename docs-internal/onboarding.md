@@ -178,7 +178,7 @@ All steps are shadcn/Tailwind compositions using `lucide-react` icons (`Card` / 
 
 | Step | Component | Title | Purpose | Primitives used |
 |------|-----------|-------|---------|-----------------|
-| 0 | `WelcomeStep` | Welcome to MachinaOs | Platform intro + 2×2 feature grid | `Card` / `CardContent`, lucide `Rocket` / `Plug` / `Move` / `Zap`, `bg-node-agent-soft` |
+| 0 | `WelcomeStep` | Welcome to OpenCompany | Platform intro + 2×2 feature grid | `Card` / `CardContent`, lucide `Rocket` / `Plug` / `Move` / `Zap`, `bg-node-agent-soft` |
 | 1 | `ConceptsStep` | Key Concepts | Nodes, Edges, AI Agents, Skills & Tools, Normal vs Dev Mode | role-token cards via `NODE_ROLE_CLASSES`, lucide `LayoutGrid` / `GitBranch` / `Bot` / `Wrench` / `ArrowLeftRight` |
 | 2 | `ApiKeyStep` | API Key Setup | Provider list + "Open Credentials" button | shadcn `Button`, `Alert variant="info"`, `AIProviderIcons`, lucide `Key` / `ExternalLink` |
 | 3 | `CanvasStep` | Canvas Tour | Visual UI layout diagram + keyboard shortcuts | `Badge`, role-token region tints, lucide `Layout` / `Wrench` / `Terminal` |
@@ -270,17 +270,17 @@ No new handlers were needed. The onboarding system reuses existing generic handl
 | Browser closed mid-wizard | `onboarding_step` saved on each transition, resumes from last step |
 | Multiple tabs | Completing in one tab doesn't update others until query refetch |
 | Replay from Settings | Resets local state and reopens wizard from step 0 |
-| Fresh database (no machina.db) | Onboarding appears after first settings query resolves |
+| Fresh database (no workflow.db) | Onboarding appears after first settings query resolves |
 
 ## Verification Checklist
 
-1. **Fresh database**: Delete `server/machina.db` (or the configured DB), start server -- wizard appears
+1. **Fresh database**: Delete `server/workflow.db` (or the configured DB), start server -- wizard appears
 2. **Step navigation**: Click through all 5 steps -- the `<ol>` stepper updates, Back/Next work
 3. **Skip**: Click "Skip for now" -- wizard closes, doesn't reappear on refresh
 4. **Resume**: Advance to step 3, close browser, reopen -- wizard resumes at step 3
 5. **Complete**: Finish all steps via "Start Building" -- wizard doesn't reappear
 6. **API Key step**: Click "Open Credentials" button -- CredentialsModal opens
-7. **Existing user migration**: With existing `machina.db` where `examples_loaded=1` -- onboarding does NOT appear
+7. **Existing user migration**: With existing `workflow.db` where `examples_loaded=1` -- onboarding does NOT appear
 8. **Theme support**: Switch themes -- role-token cards and region tints adapt correctly
 9. **Replay**: Open Settings, click "Replay Welcome Guide" -- wizard reopens from step 0
 10. **TypeScript**: `tsgo --noEmit` (or `npx tsc --noEmit`) passes clean

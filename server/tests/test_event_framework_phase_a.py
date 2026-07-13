@@ -37,17 +37,17 @@ from unittest.mock import MagicMock
 
 import pytest
 
-# Stub the `machina` package (lives at project root, outside server/) so
+# Stub the root `cli` package (lives at project root, outside server/) so
 # `services.temporal.__init__` → `_runtime.py` → `from cli.tcp import
 # probe_tcp_port` doesn't crash collection. Conftest stubs core.* but
-# not machina.*.
-if "machina" not in sys.modules:
-    _machina = types.ModuleType("cli")
-    _machina.__path__ = []
-    sys.modules["cli"] = _machina
-    _machina_tcp = types.ModuleType("cli.tcp")
-    _machina_tcp.probe_tcp_port = MagicMock(return_value=False)
-    sys.modules["cli.tcp"] = _machina_tcp
+# not cli.*.
+if "cli" not in sys.modules:
+    _cli_stub = types.ModuleType("cli")
+    _cli_stub.__path__ = []
+    sys.modules["cli"] = _cli_stub
+    _opencompany_tcp = types.ModuleType("cli.tcp")
+    _opencompany_tcp.probe_tcp_port = MagicMock(return_value=False)
+    sys.modules["cli.tcp"] = _opencompany_tcp
 
 from services.events.envelope import WorkflowEvent
 from services.plugin.scaling import RetryPolicy
@@ -241,8 +241,8 @@ class TestA6DispatchEmitFeatureFlag:
         from services.events.dispatch import emit
 
         event = WorkflowEvent(
-            source="machinaos://services/test",
-            type="com.machinaos.test.disabled",
+            source="opencompany://services/test",
+            type="com.opencompany.test.disabled",
         )
         returned = await emit(event)
         assert returned is event
@@ -271,8 +271,8 @@ class TestA6DispatchEmitFeatureFlag:
         monkeypatch.setattr(dispatch, "_broadcast_in_process", fake_broadcast)
 
         event = WorkflowEvent(
-            source="machinaos://services/test",
-            type="com.machinaos.test.enabled",
+            source="opencompany://services/test",
+            type="com.opencompany.test.enabled",
         )
         await dispatch.emit(event, wire_routing_key="custom_wire_key")
 
@@ -309,7 +309,7 @@ class TestA7MachinaWorkflowSignalHandler:
         from services.temporal.workflow import MachinaWorkflow
 
         wf = MachinaWorkflow()
-        payload = {"id": "evt-1", "type": "com.machinaos.test.x"}
+        payload = {"id": "evt-1", "type": "com.opencompany.test.x"}
 
         await wf.on_event(payload)
         await wf.on_event(payload)  # duplicate
@@ -322,7 +322,7 @@ class TestA7MachinaWorkflowSignalHandler:
         from services.temporal.workflow import MachinaWorkflow
 
         wf = MachinaWorkflow()
-        await wf.on_event({"type": "com.machinaos.test.x"})  # no 'id'
+        await wf.on_event({"type": "com.opencompany.test.x"})  # no 'id'
         assert wf._matched_events == []
 
     def test_has_event_matching_empty_state(self):
@@ -335,7 +335,7 @@ class TestA7MachinaWorkflowSignalHandler:
         from services.temporal.workflow import MachinaWorkflow
 
         wf = MachinaWorkflow()
-        wf._matched_events.append({"id": "e1", "type": "com.machinaos.whatsapp.message.received"})
+        wf._matched_events.append({"id": "e1", "type": "com.opencompany.whatsapp.message.received"})
 
         # No-predicate: any queued event matches.
         assert wf._has_event_matching() is True
@@ -357,8 +357,8 @@ class TestA7MachinaWorkflowSignalHandler:
         from services.temporal.workflow import MachinaWorkflow
 
         wf = MachinaWorkflow()
-        first = {"id": "e1", "type": "com.machinaos.x.received"}
-        second = {"id": "e2", "type": "com.machinaos.y.received"}
+        first = {"id": "e1", "type": "com.opencompany.x.received"}
+        second = {"id": "e2", "type": "com.opencompany.y.received"}
         wf._matched_events.extend([first, second])
 
         popped = wf._pop_matching_event()
@@ -369,12 +369,12 @@ class TestA7MachinaWorkflowSignalHandler:
         from services.temporal.workflow import MachinaWorkflow
 
         wf = MachinaWorkflow()
-        first = {"id": "e1", "type": "com.machinaos.x.received"}
-        second = {"id": "e2", "type": "com.machinaos.y.received"}
-        third = {"id": "e3", "type": "com.machinaos.x.delivered"}
+        first = {"id": "e1", "type": "com.opencompany.x.received"}
+        second = {"id": "e2", "type": "com.opencompany.y.received"}
+        third = {"id": "e3", "type": "com.opencompany.x.delivered"}
         wf._matched_events.extend([first, second, third])
 
-        popped = wf._pop_matching_event(lambda e: e["type"].startswith("com.machinaos.y"))
+        popped = wf._pop_matching_event(lambda e: e["type"].startswith("com.opencompany.y"))
         assert popped is second
         # Order preserved for non-matching siblings.
         assert wf._matched_events == [first, third]
@@ -383,7 +383,7 @@ class TestA7MachinaWorkflowSignalHandler:
         from services.temporal.workflow import MachinaWorkflow
 
         wf = MachinaWorkflow()
-        wf._matched_events.append({"id": "e1", "type": "com.machinaos.x.received"})
+        wf._matched_events.append({"id": "e1", "type": "com.opencompany.x.received"})
         result = wf._pop_matching_event(lambda e: e["type"].endswith(".nope"))
         assert result is None
         # Queue untouched on miss.
@@ -408,8 +408,8 @@ class TestA8EmitEventActivity:
         from services.temporal.activities import emit_event_activity
 
         payload = WorkflowEvent(
-            source="machinaos://services/test",
-            type="com.machinaos.test.a8",
+            source="opencompany://services/test",
+            type="com.opencompany.test.a8",
         ).model_dump(mode="json")
 
         # Activities decorated with @activity.defn are still callable
@@ -417,7 +417,7 @@ class TestA8EmitEventActivity:
         result = await emit_event_activity(payload)
 
         assert result["delivered"] is True
-        assert result["event_type"] == "com.machinaos.test.a8"
+        assert result["event_type"] == "com.opencompany.test.a8"
         assert len(captured) == 1
 
     @pytest.mark.asyncio
@@ -456,7 +456,7 @@ class TestTriggerOutputPersistenceForTemplateResolution:
             "store_node_output_activity must be async — workflow.execute_activity " "awaits it."
         )
 
-    def test_machina_workflow_calls_persist_activity_for_pre_executed(self):
+    def test_opencompany_workflow_calls_persist_activity_for_pre_executed(self):
         """Source-introspection regression: MachinaWorkflow.run's
         pre-executed handler must call store_node_output_activity so
         ParameterResolver can read the trigger output back."""

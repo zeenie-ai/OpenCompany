@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 /**
- * SquareNode — MachinaOS canvas node: accent-bordered icon square with
+ * SquareNode — OpenCompany canvas node: accent-bordered icon square with
  * status pip, gear button, connection handles, and label below.
  *
  * @startingPoint section="Canvas" subtitle="Workflow canvas node with pip, gear and handles" viewport="700x220"

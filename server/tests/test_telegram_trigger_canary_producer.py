@@ -23,13 +23,13 @@ from unittest.mock import MagicMock
 import pytest
 
 
-if "machina" not in sys.modules:
-    _machina = types.ModuleType("cli")
-    _machina.__path__ = []
-    sys.modules["cli"] = _machina
-    _machina_tcp = types.ModuleType("cli.tcp")
-    _machina_tcp.probe_tcp_port = MagicMock(return_value=False)
-    sys.modules["cli.tcp"] = _machina_tcp
+if "cli" not in sys.modules:
+    _cli_stub = types.ModuleType("cli")
+    _cli_stub.__path__ = []
+    sys.modules["cli"] = _cli_stub
+    _opencompany_tcp = types.ModuleType("cli.tcp")
+    _opencompany_tcp.probe_tcp_port = MagicMock(return_value=False)
+    sys.modules["cli.tcp"] = _opencompany_tcp
 
 
 _EVENT_WAITER_DISPATCH_PATTERN = re.compile(r"event_waiter\.dispatch\s*\(")
@@ -89,7 +89,7 @@ class TestTelegramProducerCanaryEmit:
 
         assert len(emit_calls) == 1
         envelope = emit_calls[0]["event"]
-        assert envelope.type == "com.machinaos.telegram.message.received"
+        assert envelope.type == "com.opencompany.telegram.message.received"
         # subject is the chat_id cast to str — CloudEvents spec requires string.
         assert envelope.subject == "12345"
         assert emit_calls[0]["wire_routing_key"] == "telegram_message_received"

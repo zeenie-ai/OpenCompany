@@ -35,8 +35,8 @@ def gmail_message_received(email_data: Mapping[str, Any]) -> WorkflowEvent:
     payload = dict(email_data)
     message_id = payload.get("message_id") or payload.get("id")
     return WorkflowEvent(
-        source="machinaos://nodes/google",
-        type="com.machinaos.gmail.message.received",
+        source="opencompany://nodes/google",
+        type="com.opencompany.gmail.message.received",
         subject=str(message_id) if message_id else None,
         data=payload,
     )

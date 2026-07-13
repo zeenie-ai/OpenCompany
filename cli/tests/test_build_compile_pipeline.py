@@ -1,8 +1,8 @@
-"""Tests for the compile-pipeline additions to ``machina build``.
+"""Tests for the compile-pipeline additions to ``company build``.
 
 Covers the two new steps wired into ``cli.commands.build.build_command``:
 
-- ``[3/6] Building Node.js sidecar`` -> ``pnpm --filter machinaos-nodejs-executor run build``
+- ``[3/6] Building Node.js sidecar`` -> ``pnpm --filter opencompany-nodejs-executor run build``
 - ``[5/6] Compiling Python bytecode`` -> ``uv run python -O -m compileall -q -j 0 ...``
 
 The orchestrator is exercised once per test with every external surface
@@ -125,10 +125,10 @@ def test_build_invokes_sidecar_pnpm_filter(tmp_path: Path):
         captured,
         lambda c: c[:1] == ["pnpm"]
         and "--filter" in c
-        and "machinaos-nodejs-executor" in c,
+        and "opencompany-nodejs-executor" in c,
     )
     assert match is not None, (
-        "expected `pnpm --filter machinaos-nodejs-executor run build` in "
+        "expected `pnpm --filter opencompany-nodejs-executor run build` in "
         f"{[c['argv'] for c in captured]}"
     )
     argv = match[1]["argv"]
@@ -144,7 +144,7 @@ def test_sidecar_build_runs_after_client_build(tmp_path: Path):
     """
     captured = _run_build_capture_invocations(tmp_path)
     client = _find_call(captured, lambda c: "react-flow-client" in c)
-    sidecar = _find_call(captured, lambda c: "machinaos-nodejs-executor" in c)
+    sidecar = _find_call(captured, lambda c: "opencompany-nodejs-executor" in c)
     assert client is not None and sidecar is not None
     assert (
         client[0] < sidecar[0]
@@ -154,7 +154,7 @@ def test_sidecar_build_runs_after_client_build(tmp_path: Path):
 def test_only_one_sidecar_bundle_invocation(tmp_path: Path):
     """Sidecar bundle must fire exactly once per build."""
     captured = _run_build_capture_invocations(tmp_path)
-    matches = [c for c in captured if "machinaos-nodejs-executor" in c["argv"]]
+    matches = [c for c in captured if "opencompany-nodejs-executor" in c["argv"]]
     assert len(matches) == 1, f"expected exactly 1 sidecar bundle, got {len(matches)}"
 
 
@@ -303,7 +303,7 @@ def test_temporal_install_is_fatal_on_failure(tmp_path: Path):
     """Temporal is a required runtime dep, so the install step must NOT
     pass ``check=False`` — a pooch failure (network, SHA mismatch,
     missing asset) has to abort the build cleanly rather than silently
-    deferring the failure to ``machina start``.
+    deferring the failure to ``company start``.
     """
     captured = _run_build_capture_invocations(tmp_path)
     match = _find_temporal_install_call(captured)
@@ -347,7 +347,7 @@ def test_pipeline_order_client_then_sidecar_then_uv_then_compileall(tmp_path: Pa
     """Full ordering invariant for the new pipeline:
 
     1. client build  (``pnpm --filter react-flow-client run build``)
-    2. sidecar bundle (``pnpm --filter machinaos-nodejs-executor run build``)
+    2. sidecar bundle (``pnpm --filter opencompany-nodejs-executor run build``)
     3. uv sync       (``uv sync``)
     4. compileall    (``uv run python -O -m compileall ...``)
 
@@ -356,7 +356,7 @@ def test_pipeline_order_client_then_sidecar_then_uv_then_compileall(tmp_path: Pa
     """
     captured = _run_build_capture_invocations(tmp_path)
     client = _find_call(captured, lambda c: "react-flow-client" in c)
-    sidecar = _find_call(captured, lambda c: "machinaos-nodejs-executor" in c)
+    sidecar = _find_call(captured, lambda c: "opencompany-nodejs-executor" in c)
     uv_sync = _find_call(captured, lambda c: c[:2] == ["uv", "sync"])
     compileall = _find_call(captured, lambda c: "compileall" in c)
     for label, match in (

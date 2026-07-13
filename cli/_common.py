@@ -1,4 +1,4 @@
-"""Cross-verb helpers shared by ``machina`` commands.
+"""Cross-verb helpers shared by ``company`` commands.
 
 Centralises the four patterns that previously appeared inlined in
 ``start.py`` / ``dev.py`` / ``stop.py`` / ``clean.py`` / ``build.py``:
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 # ``cli.run`` (and ``cli.supervisor`` via ``cli.colors``) transitively
 # pull in ``rich``. They're only needed by ``build_backend_spec`` /
 # ``error_block`` which themselves lazy-import. Keeping them out of the
-# top-level import list means ``machina clean`` (which calls only
+# top-level import list means ``company clean`` (which calls only
 # ``preflight`` and ``free_all_ports``) loads even when ``rich`` /
 # ``psutil`` / ``platformdirs`` are unavailable.
 
@@ -56,13 +56,13 @@ def free_all_ports(cfg: Config) -> list[KillResult]:
     results.
 
     Returns a list (not a count) so callers can render per-port status
-    -- ``machina stop`` shows ``[OK]`` / ``[!!]`` markers and the killed
-    PIDs, ``machina start`` and ``clean`` just want them gone. The
+    -- ``company stop`` shows ``[OK]`` / ``[!!]`` markers and the killed
+    PIDs, ``company start`` and ``clean`` just want them gone. The
     helper centralises the iteration, callers pick the rendering.
 
     ``cli.ports`` is imported lazily so this module loads even when
     ``psutil`` (a transitive dep) is missing -- important for the
-    recovery verb ``machina clean``.
+    recovery verb ``company clean``.
     """
     from cli.ports import kill_port
 
@@ -84,7 +84,7 @@ def build_backend_spec(
 
     ``cli.run`` and ``cli.supervisor`` are lazy-imported so this module
     stays importable when their transitive ``rich`` dep is missing --
-    ``machina clean`` doesn't call this and shouldn't pay for it.
+    ``company clean`` doesn't call this and shouldn't pay for it.
     """
     from cli.run import uv_run
     from cli.supervisor import ServiceSpec

@@ -35,9 +35,9 @@ const TriggerNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
   const whatsappStatus = useWhatsAppStatus();
 
   // Triggers have two DISTINCT active visuals (design-system animations.css):
-  // - waiting   -> .machina-trigger-armed: a gentle continuous "listening"
+  // - waiting   -> .opencompany-trigger-armed: a gentle continuous "listening"
   //                heartbeat while deployed and waiting for events, paired
-  //                with the .machina-bolt ⚡ badge pulse.
+  //                with the .opencompany-bolt ⚡ badge pulse.
   // - executing -> the one-shot execution pulse (base.css token-driven rule,
   //                bound via data-executing on the wrapper).
   const isExecuting = executionStatus === 'executing';
@@ -141,7 +141,7 @@ const TriggerNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
           (size, flex), and per-theme decorations like Cyber neon glow,
           Renaissance wax seal, and Steampunk rivets reach the pixels. */}
       <div
-        className={`sq-node-box ${isArmed ? 'machina-trigger-armed' : ''}`}
+        className={`sq-node-box ${isArmed ? 'opencompany-trigger-armed' : ''}`}
         style={{
           position: 'relative',
           width: theme.nodeSize.square,
@@ -222,10 +222,10 @@ const TriggerNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
         {/* NO INPUT HANDLE - Trigger nodes don't have inputs */}
 
         {/* Trigger Badge - Lightning bolt indicator on bottom-left.
-            `.machina-bolt` adds the soft armed-pulse (design-system
+            `.opencompany-bolt` adds the soft armed-pulse (design-system
             animations.css) while the trigger is listening for events. */}
         <div
-          className={isArmed ? 'machina-bolt' : undefined}
+          className={isArmed ? 'opencompany-bolt' : undefined}
           style={{
             position: 'absolute',
             bottom: '-4px',

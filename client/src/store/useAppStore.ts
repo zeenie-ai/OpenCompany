@@ -11,6 +11,7 @@ import {
 import type { ImportedWorkflow } from '../utils/workflowExport';
 import { workflowApi } from '../services/workflowApi';
 import { queryClient } from '../lib/queryClient';
+import { BRAND_STORAGE_KEYS, readAndMigrateStorageValue } from '../lib/brandStorage';
 import { WORKFLOWS_QUERY_KEY } from '../hooks/useWorkflowsQuery';
 
 const invalidateWorkflowsList = (): void => {
@@ -57,7 +58,7 @@ interface AppStore {
   proMode: boolean;  // false = noob mode (only AI categories), true = pro mode (all categories)
   /** WebAudio sound effects toggle (per-theme pack picked from
    *  --sound-pack CSS token by `useSoundSync()`). Persisted to
-   *  localStorage as `machinaos-sound`; default ON (user disables in
+   *  localStorage as `opencompany-sound`; default ON (user disables in
    *  Settings -> Audio). The AudioContext starts suspended per
    *  browser autoplay policy — `Sounds.unlock()` resumes it on the
    *  user's first interaction (no separate audio permission needed). */
@@ -146,16 +147,21 @@ const STORAGE_KEYS = {
   componentPaletteVisible: 'ui_component_palette_visible',
   consolePanelVisible: 'ui_console_panel_visible',
   proMode: 'ui_pro_mode',
-  /** Sound enabled key — matches the design handoff's
-   *  `localStorage['machinaos-sound']` convention so a returning user's
-   *  prior choice rehydrates regardless of which session set it. */
-  soundEnabled: 'machinaos-sound',
+  /** Canonical OpenCompany sound preference. The pre-rebrand key is read
+   *  once during initialization so a returning user's choice survives. */
+  soundEnabled: BRAND_STORAGE_KEYS.sound.canonical,
 };
 
 // Helper to load boolean from localStorage
-const loadBooleanFromStorage = (key: string, defaultValue: boolean): boolean => {
+const loadBooleanFromStorage = (
+  key: string,
+  defaultValue: boolean,
+  legacyKey?: string,
+): boolean => {
   try {
-    const saved = localStorage.getItem(key);
+    const saved = legacyKey
+      ? readAndMigrateStorageValue(localStorage, { canonical: key, legacy: legacyKey })
+      : localStorage.getItem(key);
     if (saved !== null) {
       return saved === 'true';
     }
@@ -183,7 +189,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
   componentPaletteVisible: loadBooleanFromStorage(STORAGE_KEYS.componentPaletteVisible, true),
   consolePanelVisible: loadBooleanFromStorage(STORAGE_KEYS.consolePanelVisible, false),
   proMode: loadBooleanFromStorage(STORAGE_KEYS.proMode, false),  // Default to noob mode
-  soundEnabled: loadBooleanFromStorage(STORAGE_KEYS.soundEnabled, true),  // On by default; user can disable in Settings -> Audio. Browsers gesture-gate WebAudio (no separate permission), so the AC unlocks on first interaction via Sounds.unlock().
+  soundEnabled: loadBooleanFromStorage(
+    STORAGE_KEYS.soundEnabled,
+    true,
+    BRAND_STORAGE_KEYS.sound.legacy,
+  ),  // On by default; user can disable in Settings -> Audio. Browsers gesture-gate WebAudio (no separate permission), so the AC unlocks on first interaction via Sounds.unlock().
   renamingNodeId: null,
 
   // Workflow management

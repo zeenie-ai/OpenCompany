@@ -12,7 +12,7 @@
 
 Fires when the user sends a message from the Console Panel chat tab. The
 producer [`server/nodes/trigger/chat_trigger/_events.py`](../../../server/nodes/trigger/chat_trigger/_events.py)
-emits a CloudEvents `WorkflowEvent` (`type: com.machinaos.chat.message.received`)
+emits a CloudEvents `WorkflowEvent` (`type: com.opencompany.chat.message.received`)
 via `dispatch.emit`. `chatTrigger` is canary-registered
 (`register_canary_trigger_type`), so `DeploymentManager` starts a
 `TriggerListenerWorkflow` for it; the listener receives the event via Temporal
@@ -61,7 +61,7 @@ Wrapped in the standard envelope.
 
 ```mermaid
 flowchart TD
-  P[chat tab sends message] --> Q[_events.py dispatch.emit<br/>WorkflowEvent com.machinaos.chat.message.received]
+  P[chat tab sends message] --> Q[_events.py dispatch.emit<br/>WorkflowEvent com.opencompany.chat.message.received]
   Q --> R[TriggerListenerWorkflow receives via Temporal Signal]
   R --> S[ChatTriggerNode.build_filter:<br/>if session_id != 'default' require exact match]
   S -- match --> T[spawn child MachinaWorkflow<br/>trigger pre-executed with event payload]

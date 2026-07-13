@@ -1,4 +1,4 @@
-Lucide icon by name, colored via currentColor — the only icon system in MachinaOS.
+Lucide icon by name, colored via currentColor — the only icon system in OpenCompany.
 
 ```jsx
 <span style={{ color: 'var(--action-run-ink)' }}>

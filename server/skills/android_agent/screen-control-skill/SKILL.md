@@ -3,7 +3,7 @@ name: screen-control-skill
 description: Control Android screen - brightness, wake screen, auto-brightness toggle, and screen timeout settings.
 allowed-tools: screen_control_automation
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: android
 

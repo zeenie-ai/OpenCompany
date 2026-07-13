@@ -42,7 +42,7 @@ const OAuthConnect: React.FC<Props> = ({
   onSaveCredentials, onLogin, onLogout, onRefresh, extraSection,
 }) => {
   // Some providers (e.g. Stripe) delegate auth entirely to an external
-  // CLI tool — they have no MachinaOs-side credentials to paste, so
+  // CLI tool — they have no OpenCompany-side credentials to paste, so
   // there's nothing to "store" before Login is meaningful. Only
   // *required* fields gate the Login button: optional fields are an
   // alternative auth path, not a prerequisite (e.g. Vercel's access

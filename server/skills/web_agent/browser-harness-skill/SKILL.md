@@ -3,7 +3,7 @@ name: browser-harness-skill
 description: Drive the user's real Chrome over raw CDP by writing Python against browser-harness helpers - screenshot, coordinate clicks, JS evaluation, form fill, tabs. For tasks needing full freedom or the user's own logins.
 allowed-tools: browserHarness
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: web
 
@@ -92,7 +92,7 @@ print(page_info())
 
 **Fill a login/search form**:
 ```python
-fill_input("input[name=q]", "machina os")
+fill_input("input[name=q]", "opencompany")
 dispatch_key("input[name=q]", "Enter")
 wait_for_load()
 print(page_info())

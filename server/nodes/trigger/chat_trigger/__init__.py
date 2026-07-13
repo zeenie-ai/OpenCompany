@@ -72,4 +72,4 @@ class ChatTriggerNode(TriggerNode):
 # ./_events.py calls dispatch.emit unconditionally; the canary registry
 # tells DeploymentManager to start a listener for this type. See
 # services/deployment/canary_registry.py.
-register_canary_trigger_type(ChatTriggerNode.type, "com.machinaos.chat.message.received")
+register_canary_trigger_type(ChatTriggerNode.type, "com.opencompany.chat.message.received")

@@ -3,10 +3,10 @@ env/argv builders, login-output parsing.
 
 Auth-state isolation: every ``vercel`` invocation passes
 ``--global-config <DATA_DIR>/vercel/`` so the CLI's ``auth.json`` /
-``config.json`` live in a MachinaOs-owned directory instead of the
+``config.json`` live in a OpenCompany-owned directory instead of the
 platform-varying ``com.vercel.cli`` default. Same philosophy as
 ``CLAUDE_CONFIG_DIR = data_path("claude")`` in
-``nodes/agent/claude_code_agent/_oauth.py`` — MachinaOs-managed auth
+``nodes/agent/claude_code_agent/_oauth.py`` — OpenCompany-managed auth
 never collides with the user's own system-wide ``vercel login``, and
 the pinned path makes :func:`is_logged_in` deterministic across
 platforms. Composed inline per the ``core.paths`` rule (generic
@@ -32,7 +32,7 @@ TOKEN_KEY = "vercel_token"
 
 
 def vercel_config_dir() -> Path:
-    """MachinaOs-pinned ``--global-config`` directory."""
+    """OpenCompany-pinned ``--global-config`` directory."""
     p = data_path("vercel")
     p.mkdir(parents=True, exist_ok=True)
     return p

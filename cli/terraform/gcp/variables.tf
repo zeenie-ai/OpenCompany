@@ -1,5 +1,5 @@
 # Shared deployment variable interface (every provider module declares the
-# same set, so `machina deploy` writes one tfvars shape regardless of provider).
+# same set, so `company deploy` writes one tfvars shape regardless of provider).
 
 variable "project" {
   type        = string
@@ -36,9 +36,14 @@ variable "source_mode" {
   description = "Install source: 'local' (npm pack tarball via bucket) or 'release' (npm registry)."
 }
 
-variable "machinaos_version" {
+variable "opencompany_version" {
   type        = string
-  description = "machinaos version to install when source_mode = 'release'."
+  description = "opencompany version to install when source_mode = 'release'."
+}
+
+variable "resource_name" {
+  type        = string
+  description = "Durable cloud/systemd id. New deploys use opencompany; upgrades retain machinaos."
 }
 
 variable "pack_tarball" {
@@ -50,5 +55,5 @@ variable "pack_tarball" {
 variable "app_env" {
   type        = map(string)
   sensitive   = true
-  description = "KEY=VALUE map rendered into the VM's /etc/machinaos/machina.env."
+  description = "KEY=VALUE map rendered into the VM's brand-specific systemd EnvironmentFile."
 }

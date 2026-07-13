@@ -6,11 +6,11 @@
 
 ## 1. Abstract
 
-MachinaOs maintains a fully custom multi-provider LLM layer: a `ChatUnifier` facade over
+OpenCompany maintains a fully custom multi-provider LLM layer: a `ChatUnifier` facade over
 12 hand-written provider integrations, plus a parallel LangChain path for the agent loop.
 This RFC proposes replacing the provider *internals* with [LiteLLM](https://github.com/BerriAI/litellm)
 (`litellm.acompletion`, in-process, exact-pinned, lazy-imported) while keeping every
-architectural seam MachinaOs actually relies on: the `ChatUnifier` facade, the
+architectural seam OpenCompany actually relies on: the `ChatUnifier` facade, the
 `NodeUserError` error contract, `llm_defaults.json` as the quirk SSOT, our
 temperature/max-tokens resolution, `fetch_models`, and the pricing/model-registry/
 compaction services.
@@ -148,7 +148,7 @@ These matter because parity must be defined against reality, not aspiration:
 
 LiteLLM removes the implementation row entirely and replaces the hand-curated
 token-limit/pricing research with its maintained metadata. The node package and
-detection rows remain MachinaOs product surface — migration cuts per-provider cost from
+detection rows remain OpenCompany product surface — migration cuts per-provider cost from
 "~250 LOC + research" to "config-only", not to zero.
 
 ### 3.2 Drift risk
@@ -195,7 +195,7 @@ Three usage modes:
 3. **Proxy server (AI Gateway)** — standalone OpenAI-compatible HTTP service with
    virtual keys, budgets, spend tracking, admin UI; database-backed.
 
-Current: **v1.90.0** (2026-06-26), weekly-ish release cadence, Python >=3.9 (MachinaOs
+Current: **v1.90.0** (2026-06-26), weekly-ish release cadence, Python >=3.9 (OpenCompany
 server pins >=3.11,<3.13 — compatible). License: MIT core with a separately-licensed
 `enterprise/` directory (bundled in the wheel; never imported by us — dead weight, not
 license risk).
@@ -221,17 +221,17 @@ terminator for auth/rate-limiting/callbacks in proxy mode.
 As of 2026-07-02 the main branch is ~85.9% Python / 0.4% Rust — **the Rust router is not
 shipped yet**. The Rust gains land primarily in the *proxy server*; the in-process SDK
 call path this RFC adopts is the least-changed, stability-promised surface. Adopting now
-positions MachinaOs to inherit the Rust work without a second migration.
+positions OpenCompany to inherit the Rust work without a second migration.
 
 Rust-native gateway alternatives considered and rejected (all are sidecars, not
 in-process Python SDKs): TensorZero (pure Rust, <1ms P99), Helicone AI Gateway (Rust),
 Bifrost (Go, ~11us overhead). See section 5.
 
-### 4.3 Provider coverage for MachinaOs's 12 providers
+### 4.3 Provider coverage for OpenCompany's 12 providers
 
 All 12 are supported. The prefix mapping this RFC adds to `llm_defaults.json`:
 
-| MachinaOs provider | `litellm_prefix` | api_base sent |
+| OpenCompany provider | `litellm_prefix` | api_base sent |
 |---|---|---|
 | openai | `openai` | only if proxy_url set |
 | anthropic | `anthropic` | only if proxy_url set |
@@ -285,7 +285,7 @@ untouched.
 **Adopt LiteLLM now, in-process, as `litellm.acompletion` behind the retained
 `ChatUnifier` facade — chat path first (Stage A), agent loop second (Stage B).**
 
-Scored against MachinaOs's constraints (local-first, single-user, Windows-primary,
+Scored against OpenCompany's constraints (local-first, single-user, Windows-primary,
 2.90s cold-start budget, one API key per provider):
 
 | Option | Effort | Runtime perf | Cold-start | Maintenance saved | Features | Risk | Verdict |
@@ -299,9 +299,9 @@ Scored against MachinaOs's constraints (local-first, single-user, Windows-primar
 
 Why not the Router class (c), specifically:
 
-- Router's core value is load balancing across multiple deployments per model — MachinaOs
+- Router's core value is load balancing across multiple deployments per model — OpenCompany
   has one key per provider; the machinery is structurally unused.
-- Router requires a pre-declared `model_list`; MachinaOs model names are dynamic (users
+- Router requires a pre-declared `model_list`; OpenCompany model names are dynamic (users
   pick anything `fetch_models` returns — OpenRouter alone returns hundreds). Wildcard
   deployments would duplicate `llm_defaults.json` as a second config SSOT.
 - Context-window fallback silently switches models under a result payload that reports

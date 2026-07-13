@@ -1,4 +1,4 @@
-"""``machina deploy`` -- provision a fresh cloud VM running MachinaOs.
+"""``company deploy`` -- provision a fresh cloud VM running OpenCompany.
 
 A thin wrapper over **Terraform**: the command generates secrets + a tfvars
 file and drives ``terraform init/apply/destroy``. Terraform owns every cloud

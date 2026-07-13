@@ -52,7 +52,7 @@ EVENT_SEARCH_ATTRIBUTES: Sequence[SearchAttributeSpec] = (
         indexed_type=IndexedValueType.INDEXED_VALUE_TYPE_KEYWORD,
         description=(
             "CloudEvents type the workflow is consuming "
-            "(e.g. com.machinaos.whatsapp.message.received). Used by "
+            "(e.g. com.opencompany.whatsapp.message.received). Used by "
             "dispatch.emit to find running consumers via Visibility "
             "queries: ListWorkflows(query=f\"EventType='{event.type}' "
             "AND ExecutionStatus='Running'\")."
@@ -63,7 +63,7 @@ EVENT_SEARCH_ATTRIBUTES: Sequence[SearchAttributeSpec] = (
         indexed_type=IndexedValueType.INDEXED_VALUE_TYPE_KEYWORD,
         description=(
             "CloudEvents source URI fragment "
-            "(e.g. machinaos://nodes/whatsapp). Used for routing when "
+            "(e.g. opencompany://nodes/whatsapp). Used for routing when "
             "the same type can arrive from multiple sources."
         ),
     ),
@@ -71,7 +71,7 @@ EVENT_SEARCH_ATTRIBUTES: Sequence[SearchAttributeSpec] = (
         name="EventWorkflowId",
         indexed_type=IndexedValueType.INDEXED_VALUE_TYPE_KEYWORD,
         description=(
-            "MachinaOs workflow_id the event belongs to (distinct from "
+            "OpenCompany workflow_id the event belongs to (distinct from "
             "the Temporal Workflow ID which addresses the workflow run). "
             "Used to scope event delivery to a specific deployment."
         ),

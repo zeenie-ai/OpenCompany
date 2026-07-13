@@ -54,7 +54,7 @@ def uv_run(*args: str) -> list[str]:
     (https://docs.astral.sh/uv/concepts/projects/sync/).
 
     ``--no-sync`` skips the per-invocation lockfile re-check that ``uv
-    run`` does by default. ``machina build`` is the single place that
+    run`` does by default. ``company build`` is the single place that
     actually re-syncs; every other entry point (start, dev, daemon,
     supervised runtimes, preflight) trusts the lockfile and just
     activates the env. This is the documented optimisation for hot

@@ -3,7 +3,7 @@ name: powershell-skill
 description: Windows PowerShell commands and patterns for process management, file operations, and system administration.
 allowed-tools: "process_manager shell"
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: terminal
 

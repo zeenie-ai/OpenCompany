@@ -1,8 +1,8 @@
 """``edgymeow`` (WhatsApp Go bridge) local install — landed in the
-shared MachinaOs npm tree at :func:`core.paths.packages_dir`
+shared OpenCompany npm tree at :func:`core.paths.packages_dir`
 (``<DATA_DIR>/packages/``).
 
-All MachinaOs-managed npm packages (``edgymeow``,
+All OpenCompany-managed npm packages (``edgymeow``,
 ``@anthropic-ai/claude-code``, ``agent-browser``) share a single
 ``<packages_dir>/node_modules/`` so npm manages them with one
 ``package.json`` + ``package-lock.json``. ``npm install <pkg>
@@ -11,9 +11,9 @@ All MachinaOs-managed npm packages (``edgymeow``,
 Pre-fix this lived as a top-level ``edgymeow`` dep in the root
 ``package.json`` and landed at ``<repo>/node_modules/edgymeow/`` via
 ``pnpm install``. Operators had to re-run ``pnpm install`` after
-``machina clean`` to recover. After this move, the WhatsApp binary
+``company clean`` to recover. After this move, the WhatsApp binary
 follows the same on-demand install pattern as every other
-MachinaOs-managed CLI.
+OpenCompany-managed CLI.
 """
 
 from __future__ import annotations

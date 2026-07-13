@@ -2,7 +2,7 @@
 name: humanify-skill
 description: Output human-readable text in pretty formats instead of raw markdown or code blocks
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: formatting
   icon: "✨"

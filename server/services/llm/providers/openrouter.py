@@ -27,7 +27,7 @@ class OpenRouterProvider(OpenAIProvider):
             "base_url": proxy_url or "https://openrouter.ai/api/v1",
             "default_headers": {
                 "HTTP-Referer": "http://localhost:3000",
-                "X-Title": "MachinaOS",
+                "X-Title": "OpenCompany",
             },
         }
         self._client = openai.AsyncOpenAI(**kwargs)
@@ -62,7 +62,7 @@ class OpenRouterProvider(OpenAIProvider):
                 headers={
                     "Authorization": f"Bearer {api_key}",
                     "HTTP-Referer": "http://localhost:3000",
-                    "X-Title": "MachinaOS",
+                    "X-Title": "OpenCompany",
                 },
                 timeout=15.0,
             )

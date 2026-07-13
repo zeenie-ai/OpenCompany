@@ -164,7 +164,7 @@ async def handle_save_node_parameters(data: Dict[str, Any], websocket: WebSocket
     )
     await database.save_node_parameters(node_id, parameters)
     # CloudEvents v1.0 envelope (RFC §6.4) — type is
-    # ``com.machinaos.node.parameters.updated``; ``source_hint="user"``
+    # ``com.opencompany.node.parameters.updated``; ``source_hint="user"``
     # because this handler fires from the parameter-panel save flow.
     await broadcaster.broadcast_node_parameters_updated(
         node_id,
@@ -1453,7 +1453,9 @@ async def websocket_status_endpoint(websocket: WebSocket):
 
     if not auth_disabled:
         # Auth enabled - verify token
-        token = websocket.cookies.get(settings.jwt_cookie_name)
+        from core.auth_cookies import get_session_token
+
+        token = get_session_token(websocket.cookies, settings)
 
         if not token:
             await websocket.close(code=4001, reason="Not authenticated")
@@ -1565,7 +1567,7 @@ async def websocket_internal_endpoint(websocket: WebSocket):
     """Internal WebSocket endpoint for Temporal workers.
 
     This endpoint bypasses authentication and is intended for internal
-    service-to-service communication (e.g., Temporal activity -> MachinaOs).
+    service-to-service communication (e.g., Temporal activity -> OpenCompany).
 
     Security: Should only be exposed on localhost/internal network.
     """

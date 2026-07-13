@@ -3,7 +3,7 @@ name: location-skill
 description: Get Android device GPS location - latitude, longitude, accuracy, speed, and provider information.
 allowed-tools: location
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: android
 

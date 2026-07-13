@@ -80,4 +80,4 @@ class TaskTriggerNode(TriggerNode):
 # consumer path. The producer side lives in nodes/agent/_events.py
 # (broadcast_agent_task_completed / _failed dual-emit via dispatch.emit).
 # See services/deployment/canary_registry.py for the contract.
-register_canary_trigger_type(TaskTriggerNode.type, "com.machinaos.agent.task.completed")
+register_canary_trigger_type(TaskTriggerNode.type, "com.opencompany.agent.task.completed")

@@ -82,7 +82,7 @@ flowchart TD
 
 - **Database writes**: none.
 - **Broadcasts**: none from this handler (the chat backend may broadcast on its
-  side but that is external to MachinaOs).
+  side but that is external to OpenCompany).
 - **External API calls**: JSON-RPC 2.0 WebSocket to `ws://<host>:<port>` via
   `services.chat_client.send_chat_message`.
 - **File I/O**: none.
@@ -106,7 +106,7 @@ flowchart TD
   or out-of-range value fails Param validation before the op runs.
 - Templates in `content` (e.g. `{{aiAgent.response}}`) are resolved upstream by
   `ParameterResolver`; this handler never sees unresolved `{{...}}`.
-- `session_id` here is the chat-backend session, not the MachinaOs workflow
+- `session_id` here is the chat-backend session, not the OpenCompany workflow
   `session_id` from `context`. They are unrelated.
 
 ## Related

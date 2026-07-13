@@ -3,7 +3,7 @@ name: task-manager-skill
 description: Manage delegated tasks. List active tasks, check task status, get results from completed delegations, and mark tasks as done.
 allowed-tools: task_manager
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: automation
 

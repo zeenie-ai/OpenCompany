@@ -3,7 +3,7 @@ name: twitter-search-skill
 description: Search for recent tweets on Twitter/X using keywords, hashtags, mentions, and advanced query operators. Returns rich tweet data with expanded URLs, author info, media, metrics, and referenced tweets.
 allowed-tools: twitter_search
 metadata:
-  author: machina
+  author: opencompany
   version: "2.1"
   category: social
 

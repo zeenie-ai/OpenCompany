@@ -3,7 +3,7 @@ name: timer-skill
 description: Set one-time delayed timers. Execute actions after a specified duration (seconds, minutes, hours, days).
 allowed-tools: timer
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: automation
 

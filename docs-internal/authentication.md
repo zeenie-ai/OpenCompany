@@ -143,7 +143,7 @@ VITE_AUTH_ENABLED=true              # 'true' or 'false' - disable to bypass logi
 AUTH_MODE=single                    # 'single' or 'multi'
 JWT_SECRET_KEY=your-secret-key-32   # Min 32 chars
 JWT_EXPIRE_MINUTES=10080            # 7 days
-JWT_COOKIE_NAME=machina_token
+JWT_COOKIE_NAME=opencompany_token
 JWT_COOKIE_SECURE=false             # true for HTTPS
 JWT_COOKIE_SAMESITE=lax
 ```

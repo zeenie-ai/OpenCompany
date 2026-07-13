@@ -3,7 +3,7 @@ name: monty-skill
 description: Run AI-generated Python in a hard sandbox (Pydantic Monty) with enforced time + memory limits and opt-in capabilities. Use for untrusted code; supports a Python subset.
 allowed-tools: "monty_executor"
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: code
 

@@ -1,6 +1,6 @@
-// MachinaOS UI kit — app shell wiring all panels together.
-const DS_APP = window.MachinaOSDesignSystem_2559cf;
-const KIT = window.MachinaKit;
+// OpenCompany UI kit — app shell wiring all panels together.
+const DS_APP = window.OpenCompanyDesignSystem_2559cf;
+const KIT = window.OpenCompanyKit;
 
 const WORKFLOWS = [
   { id: 'wa', name: 'WhatsApp Assistant', nodeCount: 6, modified: 'Jun 11, 09:14' },

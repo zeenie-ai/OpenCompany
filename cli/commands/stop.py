@@ -1,6 +1,6 @@
-"""``machina stop`` -- replaces ``scripts/stop.js``.
+"""``company stop`` -- replaces ``scripts/stop.js``.
 
-Kills configured ports + orphaned MachinaOS processes + the Temporal
+Kills configured ports + orphaned OpenCompany processes + the Temporal
 binary. Same exit-code semantics as the JS version: 0 on full success,
 1 if any port is still in use afterward.
 """
@@ -16,7 +16,7 @@ from cli.colors import console
 from cli.platform_ import platform_name
 from cli.ports import (
     kill_by_pattern,
-    kill_orphaned_machina_processes,
+    kill_orphaned_opencompany_processes,
 )
 
 
@@ -24,7 +24,7 @@ def stop_command() -> None:
     cfg, root = preflight()
 
     console.print()
-    console.print("[bold]Stopping MachinaOS services...[/]")
+    console.print("[bold]Stopping OpenCompany services...[/]")
     console.print(f"Platform: {platform_name()}")
     console.print(f"Ports:    {', '.join(str(p) for p in cfg.all_ports)}")
     console.print("Temporal: enabled" if cfg.temporal_enabled else "Temporal: disabled")
@@ -51,11 +51,11 @@ def stop_command() -> None:
             f"[green]\\[OK][/] Temporal: Killed {len(temporal_pids)} process(es)"
         )
 
-    orphaned_pids = kill_orphaned_machina_processes(str(root))
+    orphaned_pids = kill_orphaned_opencompany_processes(str(root))
     if orphaned_pids:
         time.sleep(0.2)  # let DB locks release
         console.print(
-            f"[green]\\[OK][/] Orphaned: Killed {len(orphaned_pids)} MachinaOS process(es)"
+            f"[green]\\[OK][/] Orphaned: Killed {len(orphaned_pids)} OpenCompany process(es)"
         )
         console.print(f"    PIDs: {', '.join(str(p) for p in orphaned_pids)}")
 

@@ -14,14 +14,14 @@ const WelcomeStep: React.FC = () => {
     <div className="py-2 text-center">
       <Rocket className="mx-auto mb-2 h-10 w-10 text-node-agent" />
 
-      <h3 className="m-0 mb-1 text-xl font-semibold">Welcome to MachinaOs</h3>
+      <h3 className="m-0 mb-1 text-xl font-semibold">Welcome to OpenCompany</h3>
 
       <p className="text-[15px] font-semibold text-node-agent">
         Visual workflow automation powered by AI agents
       </p>
 
       <p className="mx-auto mt-4 mb-6 max-w-[480px] text-sm text-muted-foreground">
-        MachinaOs lets you build intelligent automation workflows by connecting
+        OpenCompany lets you build intelligent automation workflows by connecting
         AI models, tools, and services together on an interactive canvas.
         No coding required for most tasks.
       </p>

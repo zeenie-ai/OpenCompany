@@ -3,7 +3,7 @@ name: shell-skill
 description: Execute short-lived shell commands inside the per-workflow workspace. The shell is Nushell (cross-platform, same syntax on Windows/macOS/Linux). External tools on PATH (npm, node, python, git, ...) are available.
 allowed-tools: "shell"
 metadata:
-  author: machina
+  author: opencompany
   version: "4.1"
   category: execution
 

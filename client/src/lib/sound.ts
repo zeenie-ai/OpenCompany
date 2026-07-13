@@ -12,7 +12,7 @@
  *   1. Reads `--sound-pack` from `:root` whenever the active theme
  *      changes and calls `Sounds.setPack(...)`.
  *   2. Wires `Sounds.setEnabled(...)` to the `soundEnabled` Zustand
- *      slice (persisted to localStorage as `machinaos-sound`).
+ *      slice (persisted to localStorage as `opencompany-sound`).
  *
  * Ported from design_handoff_machinaos_themes/app/sound.js. The DOM
  * autocapture (`document.addEventListener('click', ...)`) at the

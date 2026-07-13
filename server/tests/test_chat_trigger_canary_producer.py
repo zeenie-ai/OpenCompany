@@ -24,14 +24,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-# Stub `machina` namespace.
-if "machina" not in sys.modules:
-    _machina = types.ModuleType("cli")
-    _machina.__path__ = []
-    sys.modules["cli"] = _machina
-    _machina_tcp = types.ModuleType("cli.tcp")
-    _machina_tcp.probe_tcp_port = MagicMock(return_value=False)
-    sys.modules["cli.tcp"] = _machina_tcp
+# Stub the root `cli` namespace.
+if "cli" not in sys.modules:
+    _cli_stub = types.ModuleType("cli")
+    _cli_stub.__path__ = []
+    sys.modules["cli"] = _cli_stub
+    _opencompany_tcp = types.ModuleType("cli.tcp")
+    _opencompany_tcp.probe_tcp_port = MagicMock(return_value=False)
+    sys.modules["cli.tcp"] = _opencompany_tcp
 
 
 _EVENT_WAITER_DISPATCH_PATTERN = re.compile(r"event_waiter\.dispatch\s*\(")
@@ -96,6 +96,6 @@ class TestChatTriggerProducerCanaryEmit:
 
         assert len(emit_calls) == 1
         event = emit_calls[0]["event"]
-        assert event.type == "com.machinaos.chat.message.received"
+        assert event.type == "com.opencompany.chat.message.received"
         assert event.subject == "sess-1"
         assert emit_calls[0]["wire_routing_key"] == "chat_message_received"

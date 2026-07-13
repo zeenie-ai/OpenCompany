@@ -3,7 +3,7 @@ name: github-skill
 description: Work with GitHub via the gh CLI — clone repositories, create/list/merge pull requests, create/list issues, and run any other gh command (API calls, workflow runs, releases, repo administration). List operations return parsed JSON.
 allowed-tools: "github"
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: developer
 
@@ -109,7 +109,7 @@ spaces with single quotes: `custom: "release create v1.0.0 --notes 'First releas
 
 ## Authentication
 
-The gh CLI owns its auth — MachinaOs never stores a token. Three
+The gh CLI owns its auth — OpenCompany never stores a token. Three
 equivalent ways to connect (any one is enough):
 
 1. **Credentials Modal → GitHub → Login with GitHub** — gh (auto-installed)

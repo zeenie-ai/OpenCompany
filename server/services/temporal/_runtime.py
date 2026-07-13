@@ -174,7 +174,7 @@ class TemporalServerRuntime(BaseProcessSupervisor):
             return False
         # gRPC frontend port — configured via
         # ``settings.temporal_frontend_grpc_port``. Same shared probe
-        # MachinaOS uses for every other supervised TCP service.
+        # OpenCompany uses for every other supervised TCP service.
         return await _probe_tcp_port(self.settings.temporal_frontend_grpc_port)
 
     def _extra_status(self) -> dict[str, Any]:

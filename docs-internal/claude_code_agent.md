@@ -1,6 +1,6 @@
 # Claude Code Agent — Documentation Hub
 
-`claude_code_agent` is a MachinaOs agent node that drives the real `claude` CLI as a
+`claude_code_agent` is a OpenCompany agent node that drives the real `claude` CLI as a
 long-lived **interactive** subprocess (stdio pipes, no PTY) over the VSCode-extension
 stream-json protocol — not the `claude -p` headless path. A warm `ClaudeSessionPool`
 (keyed by the connected `simpleMemory.node_id`) preserves the session across turns;
@@ -21,7 +21,7 @@ This page is a **router**. The detail lives in the documents below — start her
 | Does our implementation match the official Claude Code spec? (six invariants + status) | [cli_agent_canonical_patterns_rfc.md](./cli_agent_canonical_patterns_rfc.md) |
 | Which CLI subcommands/flags exist, and which subset we emit | [claude_code_cli_reference.md](./claude_code_cli_reference.md) (snapshot) |
 | Environment variables (`CLAUDE_CONFIG_DIR`, `MAX_MCP_OUTPUT_TOKENS`, `ENABLE_TOOL_SEARCH`, Bedrock/Vertex, telemetry) | [claude_code_env_vars_reference.md](./claude_code_env_vars_reference.md) (snapshot) |
-| Permission-mode semantics (`default` / `acceptEdits` / `plan` / `dontAsk` / `bypassPermissions`); why MachinaOs uses `dontAsk` | [claude_code_permission_modes_reference.md](./claude_code_permission_modes_reference.md) (snapshot) |
+| Permission-mode semantics (`default` / `acceptEdits` / `plan` / `dontAsk` / `bypassPermissions`); why OpenCompany uses `dontAsk` | [claude_code_permission_modes_reference.md](./claude_code_permission_modes_reference.md) (snapshot) |
 | Headless / print mode (`claude -p`, `--output-format`, stream-json event schema) — the schema the pool parses off stdout | [claude_code_headless_reference.md](./claude_code_headless_reference.md) (snapshot) |
 | SKILL.md frontmatter spec, discovery paths, `context: fork` — what we materialise skills against | [claude_code_skills_reference.md](./claude_code_skills_reference.md) (snapshot) |
 

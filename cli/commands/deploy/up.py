@@ -1,4 +1,4 @@
-"""``machina deploy up`` -- provision + run MachinaOs on a fresh cloud VM.
+"""``company deploy up`` -- provision + run OpenCompany on a fresh cloud VM.
 
 Two stages:
   STAGE 1 (cloud CLI): the provider adapter verifies the CLI is installed +
@@ -8,7 +8,8 @@ Two stages:
     pack -> write tfvars -> ``terraform init`` + ``apply`` -> read outputs ->
     poll ``/health`` -> print URL + credentials.
 
-The VM instance is always named ``machinaos`` (one deployment per project).
+New VM instances are named ``opencompany``. Existing ``machinaos`` resources
+retain that durable id and Terraform state during upgrades.
 """
 
 from __future__ import annotations
@@ -35,7 +36,7 @@ def _npm_pack(root: Path) -> str:
     if not out:
         error_block(
             "`npm pack` produced no output.",
-            ["Ensure Node/npm are installed and you are in a MachinaOs checkout."],
+            ["Ensure Node/npm are installed and you are in an OpenCompany checkout."],
         )
         raise typer.Exit(code=1)
     tarball = out.strip().splitlines()[-1].strip()
@@ -85,16 +86,22 @@ def up_command(
     cli.ensure_terraform_auth()
     cli.enable_apis(ctx)
 
+    resource_name = _state.resource_name()
     if _state.exists() and (_state.workdir() / "terraform.tfstate").exists():
         console.print(
-            "[yellow]A 'machinaos' deployment already exists. Re-running will "
-            "re-apply Terraform (safe), or run `machina deploy destroy` first.[/]"
+            "[yellow]An OpenCompany deployment already exists. Re-running will "
+            "re-apply Terraform (safe), or run `company deploy destroy` first.[/]"
         )
 
     # --- STAGE 2: secrets + source + Terraform -----------------------------
     pw = owner_password or _secrets.new_password()
     pw_generated = owner_password is None
-    app_env = _secrets.build_app_env(owner_email=owner_email, owner_password=pw, port=port)
+    app_env = _secrets.build_app_env(
+        owner_email=owner_email,
+        owner_password=pw,
+        port=port,
+        data_dir=f"/var/lib/{resource_name}",
+    )
 
     pack_tarball = _npm_pack(root) if source == "local" else ""
 
@@ -104,7 +111,8 @@ def up_command(
         "allow_cidr": allow_cidr,
         "app_env": app_env,
         "source_mode": source,
-        "machinaos_version": version,
+        "opencompany_version": version,
+        "resource_name": resource_name,
         "pack_tarball": pack_tarball,
     }
     tfvars.update(cli.tfvars_extra(ctx))
@@ -112,7 +120,14 @@ def up_command(
     wd = _state.workdir()
     _terraform.prepare_workdir(wd, provider)
     _terraform.write_tfvars(wd, tfvars)
-    _state.write_meta({"provider": provider, "port": port, "owner_email": owner_email})
+    _state.write_meta(
+        {
+            "provider": provider,
+            "port": port,
+            "owner_email": owner_email,
+            "resource_name": resource_name,
+        }
+    )
 
     console.log("terraform init...")
     _terraform.tf(wd, "init", "-input=false")
@@ -123,7 +138,9 @@ def up_command(
     url = _terraform.tf_output(wd, "url") or (f"http://{ip}:{port}" if ip else None)
 
     console.print()
-    console.print("  [bold green]VM 'machinaos' provisioned.[/]")
+    console.print("  [bold green]OpenCompany VM provisioned.[/]")
+    if resource_name == _state.LEGACY_NAME:
+        console.print("  Resource ID:  machinaos (retained for upgrade compatibility)")
     if ip:
         console.print(f"  External IP: {ip}")
     if url:
@@ -136,11 +153,11 @@ def up_command(
     console.print()
 
     if url:
-        console.log("The VM is installing MachinaOs (Node + npm + build); this takes a few minutes.")
+        console.log("The VM is installing OpenCompany (Node + npm + build); this takes a few minutes.")
         if _poll_health(url):
             console.print(f"  [bold green]Ready.[/] Open {url} and log in.")
         else:
             console.print(
                 "  [yellow]Still provisioning.[/] Check again with "
-                "`machina deploy status` in a few minutes."
+                "`company deploy status` in a few minutes."
             )

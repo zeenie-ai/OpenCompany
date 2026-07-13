@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 /**
- * ActionButton — MachinaOS's signature soft-tinted toolbar button.
+ * ActionButton — OpenCompany's signature soft-tinted toolbar button.
  * Semantic intent picks the Dracula accent: run=green (deploy/run),
  * stop=pink (destructive), save=cyan (commit/panels), config=orange
  * (settings), secret=yellow (credentials), tools=purple (palette).

@@ -36,7 +36,7 @@ from services.events.envelope import WorkflowEvent
 # ---- Wire-routing keys (outer ``type`` field the FE switches on) -----------
 #
 # Unchanged from the pre-B2 shape per RFC §11 (FE still routes on the
-# legacy keys). Only the INNER ``data.type`` gains the ``com.machinaos.``
+# legacy keys). Only the INNER ``data.type`` gains the ``com.opencompany.``
 # reverse-DNS prefix via the typed CloudEvents factories below.
 
 _STATUS_TYPED_WIRE_KEY = "plugin_connection_status"  # shared cross-plugin channel
@@ -69,8 +69,8 @@ def whatsapp_connection_status(
     """Connection-state envelope. ``subject`` is the device_id so the
     FE can route per-device updates."""
     return WorkflowEvent(
-        source="machinaos://nodes/whatsapp",
-        type=("com.machinaos.whatsapp.connection.opened" if connected else "com.machinaos.whatsapp.connection.closed"),
+        source="opencompany://nodes/whatsapp",
+        type=("com.opencompany.whatsapp.connection.opened" if connected else "com.opencompany.whatsapp.connection.closed"),
         subject=device_id,
         data={
             "connected": connected,
@@ -92,8 +92,8 @@ def whatsapp_message_event(
     payload = dict(params)
     subject = payload.get("chat_id") or payload.get("sender") or payload.get("from")
     return WorkflowEvent(
-        source="machinaos://nodes/whatsapp",
-        type=f"com.machinaos.whatsapp.message.{direction}",
+        source="opencompany://nodes/whatsapp",
+        type=f"com.opencompany.whatsapp.message.{direction}",
         subject=str(subject) if subject else None,
         data=payload,
     )
@@ -108,8 +108,8 @@ def whatsapp_newsletter_event(
     payload = dict(params)
     subject = payload.get("newsletter_jid") or payload.get("jid")
     return WorkflowEvent(
-        source="machinaos://nodes/whatsapp",
-        type=f"com.machinaos.whatsapp.newsletter.{verb}",
+        source="opencompany://nodes/whatsapp",
+        type=f"com.opencompany.whatsapp.newsletter.{verb}",
         subject=str(subject) if subject else None,
         data=payload,
     )
@@ -121,8 +121,8 @@ def whatsapp_history_synced(params: Mapping[str, Any]) -> WorkflowEvent:
     payload = dict(params)
     subject = payload.get("device_id")
     return WorkflowEvent(
-        source="machinaos://nodes/whatsapp",
-        type="com.machinaos.whatsapp.history.synced",
+        source="opencompany://nodes/whatsapp",
+        type="com.opencompany.whatsapp.history.synced",
         subject=str(subject) if subject else None,
         data=payload,
     )

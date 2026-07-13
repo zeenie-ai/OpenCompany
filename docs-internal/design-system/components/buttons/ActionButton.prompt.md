@@ -1,4 +1,4 @@
-Soft-tinted toolbar button — the most recognizable MachinaOS pattern. Pick intent by meaning, never by color.
+Soft-tinted toolbar button — the most recognizable OpenCompany pattern. Pick intent by meaning, never by color.
 
 ```jsx
 <ActionButton intent="run"><Icon name="Play" size={12} /> Start</ActionButton>

@@ -223,7 +223,7 @@ const ProviderRow = memo<RowProps>(function ProviderRow({ provider, selected, on
       value={provider.id}
       onSelect={handleClick}
       className={cn(
-        'machinaos-palette-row flex cursor-pointer items-center gap-3 rounded-sm border px-3 py-2 text-sm text-foreground',
+        'opencompany-palette-row flex cursor-pointer items-center gap-3 rounded-sm border px-3 py-2 text-sm text-foreground',
         selected
           ? 'border-node-agent-border bg-node-agent-soft'
           : 'border-transparent bg-transparent'

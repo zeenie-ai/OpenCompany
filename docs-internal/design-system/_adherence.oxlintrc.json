@@ -23,7 +23,7 @@
               "components/forms/**",
               "components/icons/**",
               "components/panels/**",
-              "ui_kits/machinaos/**"
+              "ui_kits/opencompany/**"
             ],
             "message": "Import design-system components from 'index.js', not component internals."
           }

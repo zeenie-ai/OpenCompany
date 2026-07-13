@@ -4,7 +4,7 @@ probe, workspace path resolution.
 Auth model — **the gh CLI owns its own auth** (Stripe CLI pattern):
 ``gh auth login`` (driven by the modal's Login button or run by the
 user in a terminal) stores the token in the system credential store;
-MachinaOs never stores or injects a token — a synthetic ``cli-managed``
+OpenCompany never stores or injects a token — a synthetic ``cli-managed``
 marker OAuth row flips the catalogue's ``stored`` badge, exactly like
 Stripe. Users who prefer a PAT pipe it to ``gh auth login
 --with-token`` themselves. Ambient ``GH_TOKEN`` in the server's own

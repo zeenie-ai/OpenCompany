@@ -1,5 +1,5 @@
-// MachinaOS UI kit — workflow sidebar (280px) + component palette (320px).
-const DS_PN = window.MachinaOSDesignSystem_2559cf;
+// OpenCompany UI kit — workflow sidebar (280px) + component palette (320px).
+const DS_PN = window.OpenCompanyDesignSystem_2559cf;
 
 function SidebarPanel({ workflows, currentId, onSelect }) {
   const { WorkflowCard, Icon } = DS_PN;
@@ -148,4 +148,4 @@ function PalettePanel({ mode, onDropNode }) {
   );
 }
 
-window.MachinaKit = Object.assign(window.MachinaKit || {}, { SidebarPanel, PalettePanel });
+window.OpenCompanyKit = Object.assign(window.OpenCompanyKit || {}, { SidebarPanel, PalettePanel });

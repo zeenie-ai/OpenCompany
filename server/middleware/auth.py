@@ -5,6 +5,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from core.auth_cookies import get_session_token
 from core.container import container
 
 logger = logging.getLogger(__name__)
@@ -60,7 +61,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Auth enabled - check token
-        token = request.cookies.get(settings.jwt_cookie_name)
+        token = get_session_token(request.cookies, settings)
 
         if not token:
             return JSONResponse(status_code=401, content={"detail": "Not authenticated"})

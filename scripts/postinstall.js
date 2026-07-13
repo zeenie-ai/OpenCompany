@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Postinstall script for MachinaOS.
+ * Postinstall script for OpenCompany.
  *
  * Runs install.js to check deps, install npm/Python packages, build.
  * WhatsApp RPC is now an npm dependency - binary downloaded by its own postinstall.
@@ -19,6 +19,7 @@ function fixPermissions() {
 
   const files = [
     resolve(ROOT, 'bin/cli.js'),
+    resolve(ROOT, 'bin/machina.js'),
     resolve(ROOT, 'scripts/install.js'),
     resolve(ROOT, 'install.sh'),
   ];
@@ -35,7 +36,8 @@ function fixPermissions() {
 }
 
 const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
-const isBuilding = process.env.MACHINAOS_BUILDING === 'true';
+const isBuilding = process.env.OPENCOMPANY_BUILDING === 'true'
+  || process.env.MACHINAOS_BUILDING === 'true';
 
 if (isCI) {
   console.log('CI detected, skipping postinstall.');
@@ -50,7 +52,7 @@ if (isBuilding) {
 
 console.log('');
 console.log('========================================');
-console.log('  MachinaOS - Installing...');
+console.log('  OpenCompany - Installing...');
 console.log('========================================');
 console.log('');
 
@@ -83,11 +85,11 @@ async function main() {
     await runScript(resolve(__dirname, 'install.js'));
 
     // Note: we deliberately do NOT `pip install -e ./cli` here. An
-    // editable install creates a `Scripts/machina.exe` (or
-    // `bin/machina`) entry-point that imports `cli.cli` from the
+    // editable install creates a Python console-script entry-point that
+    // imports `cli.cli` from the
     // package's npm install directory. When npm later moves, prunes,
     // or upgrades that directory, the shim survives but its target
-    // disappears -- the user runs `machina start` and gets
+    // disappears -- the user runs `company start` and gets
     // `ModuleNotFoundError: No module named 'cli'`. The same
     // shim also wins PATH precedence over the npm bin shim at
     // bin/cli.js, masking the real entry point.
@@ -101,11 +103,9 @@ async function main() {
     // Detect a stale `Scripts/machina.exe` (or `bin/machina`) left
     // behind by a prior version's `pip install -e ./machina` (the dir
     // was renamed from `machina/` to `cli/`; pip's metadata can lag).
-    // The pip distribution name is still ``machina`` (the public CLI
-    // name); the source dir is ``cli/``. If pip shows the package
-    // installed but the current `machina` on PATH is NOT our Node
-    // shim, surface the cleanup command -- otherwise the user keeps
-    // hitting the dead Python entry-point even after upgrading.
+    // The legacy pip distribution name was ``machina``; the source dir is
+    // ``cli/``. If pip shows that old package, surface the cleanup command.
+    // The supported public CLI is the npm-provided `company` shim.
     try {
       const pipShow = execSync('python -m pip show machina 2>nul || python3 -m pip show machina 2>/dev/null', {
         encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], shell: true,
@@ -124,10 +124,10 @@ async function main() {
 
     console.log('');
     console.log('========================================');
-    console.log('  MachinaOS installed successfully!');
+    console.log('  OpenCompany installed successfully!');
     console.log('========================================');
     console.log('');
-    console.log('Run: machina start');
+    console.log('Run: company start');
     console.log('Open: http://localhost:3000');
     console.log('');
 
@@ -139,7 +139,7 @@ async function main() {
     console.log('');
     console.log(`Error: ${err.message}`);
     console.log('');
-    console.log('Try: machina build');
+    console.log('Try: company build');
     console.log('');
     process.exit(1);
   }

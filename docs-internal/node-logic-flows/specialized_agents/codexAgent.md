@@ -13,7 +13,7 @@
 
 Runs N parallel OpenAI Codex CLI sessions over a list of `CodexTaskSpec`
 tasks via `AICliService.run_batch("codex", ...)`. Sandbox-first companion to
-`claude_code_agent`: the sandbox is enforced by Codex itself (not MachinaOs),
+`claude_code_agent`: the sandbox is enforced by Codex itself (not OpenCompany),
 and each task runs in its own git worktree. Codex exposes no
 session/resume/budget/turns surface — only `sandbox` + `ask_for_approval` are
 task-level overrides. The common case is a single `prompt` that synthesises a
@@ -123,9 +123,9 @@ flowchart TD
 - **Binaries**: the OpenAI Codex CLI (provider `"codex"` in the cli_agent
   framework).
 - **Python packages**: the `services/cli_agent/` framework.
-- **Credentials**: Codex handles its own authentication; MachinaOs does not
+- **Credentials**: Codex handles its own authentication; OpenCompany does not
   inject an API key here. `allowed_credentials` gates what the CLI may fetch
-  via the MachinaOs MCP bridge.
+  via the OpenCompany MCP bridge.
 
 ## Edge cases & known limits
 

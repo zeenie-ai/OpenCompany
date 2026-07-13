@@ -3,7 +3,7 @@ name: agent-builder-skill
 description: How to use the Agent Builder tool's five canvas-mutation operations to inspect and grow your own toolset / skills / teammates / workflows mid-execution
 allowed-tools: "agentBuilder"
 metadata:
-  author: machina
+  author: opencompany
   version: "3.0"
   category: autonomous
 ---

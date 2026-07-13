@@ -19,7 +19,7 @@
 
 ## 1. Summary
 
-Codify the canonical plugin authoring shape for MachinaOs: every plugin is a self-contained folder under `server/nodes/<group>/<plugin>/`, its code and media co-located, inheriting shared base classes; the backend auto-registers a per-plugin Temporal activity; every server→FE event flows through a CloudEvents v1.0 `WorkflowEvent` envelope. Update the docs to match the code, fix three real CloudEvents spec violations, and migrate the 117 legacy single-file plugins.
+Codify the canonical plugin authoring shape for OpenCompany: every plugin is a self-contained folder under `server/nodes/<group>/<plugin>/`, its code and media co-located, inheriting shared base classes; the backend auto-registers a per-plugin Temporal activity; every server→FE event flows through a CloudEvents v1.0 `WorkflowEvent` envelope. Update the docs to match the code, fix three real CloudEvents spec violations, and migrate the 117 legacy single-file plugins.
 
 ## 2. Motivation
 
@@ -118,13 +118,13 @@ A new plugin in group `X` checks `nodes/X/_base.py` for a domain base first; inh
 
 **Envelope.** Every server→FE broadcast wraps `WorkflowEvent` (CloudEvents v1.0; `server/services/events/envelope.py`). Pydantic model stronger than `cloudevents/sdk-python` (which is dict-based). Locked by pytest invariants in `tests/credentials/test_credential_broadcasts.py:120-152` and `tests/test_status_broadcasts.py:87-473`.
 
-**Wire shape** on the WebSocket: `{"type": "<legacy_routing_key>", "data": <WorkflowEvent JSON>}`. Outer wrapper is a MachinaOs transport envelope (not strict CloudEvents WS binding) — defensible because the WS channel multiplexes non-CloudEvent traffic. Inner `data` is the typed envelope and consumers route on `data.type`.
+**Wire shape** on the WebSocket: `{"type": "<legacy_routing_key>", "data": <WorkflowEvent JSON>}`. Outer wrapper is a OpenCompany transport envelope (not strict CloudEvents WS binding) — defensible because the WS channel multiplexes non-CloudEvent traffic. Inner `data` is the typed envelope and consumers route on `data.type`.
 
 **Three real spec-compliance fixes** (this RFC):
 
 1. **Extension attribute naming.** CloudEvents v1.0 mandates lowercase-alphanumeric extension keys (no underscores, dashes, dots). Today's `workflow_id`, `trigger_node_id`, `correlation_id` are non-conformant. Rename to `workflowid`, `triggernodeid`, `correlationid`. Update all 9 typed factories, frontend `cloudEvents.ts` interface, WebSocketContext readers, pytest assertions.
-2. **`type` reverse-DNS prefix.** CloudEvents Primer SHOULDs the reverse-DNS convention. Today's `credential.api_key.connected`, `agent.progress` become `com.machinaos.credential.api_key.connected`, `com.machinaos.agent.progress`. Affects all 9 typed factories and frontend glob patterns.
-3. **`dataschema` URI per event type.** Add `dataschema = f"machinaos://schemas/events/{type_segment}.json"` to each factory; pair with `GET /api/schemas/events/<type>.json` endpoint returning the Pydantic-derived JSON Schema for the event's `data` field.
+2. **`type` reverse-DNS prefix.** CloudEvents Primer SHOULDs the reverse-DNS convention. Today's `credential.api_key.connected`, `agent.progress` become `com.opencompany.credential.api_key.connected`, `com.opencompany.agent.progress`. Affects all 9 typed factories and frontend glob patterns.
+3. **`dataschema` URI per event type.** Add `dataschema = f"opencompany://schemas/events/{type_segment}.json"` to each factory; pair with `GET /api/schemas/events/<type>.json` endpoint returning the Pydantic-derived JSON Schema for the event's `data` field.
 
 **Two factory tiers — plugin-specific factories live in the plugin folder.**
 
@@ -140,10 +140,10 @@ A new plugin in group `X` checks `nodes/X/_base.py` for a domain base first; inh
 
    def telegram_message_received(*, chat_id: str, text: str, workflowid: str | None = None) -> WorkflowEvent:
        return WorkflowEvent(
-           source="machinaos://nodes/telegram",
-           type="com.machinaos.telegram.message.received",
+           source="opencompany://nodes/telegram",
+           type="com.opencompany.telegram.message.received",
            subject=chat_id,
-           dataschema="machinaos://schemas/events/telegram.message.received.json",
+           dataschema="opencompany://schemas/events/telegram.message.received.json",
            data={"chat_id": chat_id, "text": text},
            workflowid=workflowid,
        )
@@ -178,14 +178,14 @@ A new plugin in group `X` checks `nodes/X/_base.py` for a domain base first; inh
 
 **Definition — plugin-specific vs cross-cutting:**
 
-A factory is **plugin-specific** if its `type` string names a single plugin AND its payload shape differs from peers in the same domain (`com.machinaos.telegram.message.received` carries `chat_id`; `com.machinaos.whatsapp.message.received` carries `phone_number` + `group_jid`). These belong in `_events.py` in the plugin folder.
+A factory is **plugin-specific** if its `type` string names a single plugin AND its payload shape differs from peers in the same domain (`com.opencompany.telegram.message.received` carries `chat_id`; `com.opencompany.whatsapp.message.received` carries `phone_number` + `group_jid`). These belong in `_events.py` in the plugin folder.
 
 A factory is **cross-cutting** if either (a) its `type` is the same shape across plugins and the payload is identical, OR (b) its construction is invoked from a single centralized helper that fans out per plugin: `credential.<action>` (every plugin with credentials), `oauth.completed` (every OAuth plugin), `agent.progress` (every agent), `task.completed` (every delegated task), `workflow.<stage>` (workflow lifecycle), `deployment.snapshot` (deployment state), `connection_status` (single `_emit_connection_typed` helper in `StatusBroadcaster` fans out to every plugin status method). These stay in central `envelope.py`.
 
 **Phase 5b audit outcome:**
 - `WorkflowEvent.message(plugin, direction, data)` — **removed** in Phase 5b. Zero callers in the codebase; it was speculative. Plugins that later need to emit message envelopes add a typed factory in their own `_events.py`.
 - `WorkflowEvent.connection_status(plugin, ...)` — **kept** in central `envelope.py`. Single call site (`StatusBroadcaster._emit_connection_typed`); the parametrization is genuinely shared. Moving per-plugin would duplicate the broadcast helper across plugins with no payload divergence.
-- `nodes/stripe/_source.py` hand-constructs `WorkflowEvent(...)` directly. Stripe webhook events keep their producer-side type (`stripe.charge.succeeded` — no `com.machinaos.` prefix since MachinaOs isn't the producer). Already in the plugin folder. No move needed.
+- `nodes/stripe/_source.py` hand-constructs `WorkflowEvent(...)` directly. Stripe webhook events keep their producer-side type (`stripe.charge.succeeded` — no `com.opencompany.` prefix since OpenCompany isn't the producer). Already in the plugin folder. No move needed.
 
 ### 6.5 Icon and media handling — backend owns, frontend consumes
 
@@ -296,7 +296,7 @@ Per-batch verification: `pytest tests/test_node_spec.py -x && pytest tests/test_
 ## 9. Backward compatibility
 
 - **Legacy `asset:<key>` wire format** stays during transition. Frontend resolver: URL paths (start with `/`) → `<img>`; `asset:<key>` → bundled `ICON_REGISTRY`; emoji/text → inline; `lobehub:<brand>` → React component. Bundled registry removed after Phase 9.
-- **CloudEvents wire keys** (the outer `type` value) stay unchanged for existing event types — only the inner `WorkflowEvent.type` gains the `com.machinaos.` prefix. Frontend handlers route on the outer wire key (e.g., `case 'credential_catalogue_updated'`) so they continue to work without coordination.
+- **CloudEvents wire keys** (the outer `type` value) stay unchanged for existing event types — only the inner `WorkflowEvent.type` gains the `com.opencompany.` prefix. Frontend handlers route on the outer wire key (e.g., `case 'credential_catalogue_updated'`) so they continue to work without coordination.
 - **Plugin imports.** Migrating `server/nodes/tool/calculator_tool.py` to `server/nodes/tool/calculator_tool/__init__.py` preserves the import path `from nodes.tool.calculator_tool import CalculatorToolNode`. Sub-module imports like `from nodes.tool.calculator_tool.calculator_tool import X` work for multi-class plugins. Audit `server/tests/` before each batch for deeper imports.
 
 ## 10. Open questions
@@ -313,7 +313,7 @@ None blocking. Status of the three original follow-ups:
 - `git grep -E "cls\.icon|cls\.color"` in `server/services/plugin/base.py` → 0 hits.
 - `git grep -E "(icon|color): ClassVar"` in `server/` → 0 hits.
 - `git grep -E "\bworkflow_id\b|\btrigger_node_id\b|\bcorrelation_id\b" server/services/events/envelope.py` → 0 hits.
-- `git grep -E '"type":\s*"(credential|agent|workflow|team|connection)\.[^c]'` in `envelope.py` → 0 hits (every event type starts with `com.machinaos.`).
+- `git grep -E '"type":\s*"(credential|agent|workflow|team|connection)\.[^c]'` in `envelope.py` → 0 hits (every event type starts with `com.opencompany.`).
 - Boot backend; `GET /api/schemas/nodes/aiAgent/spec.json` returns populated `metadata.icon` pointing at `/api/schemas/nodes/aiAgent/icon`.
 - `GET /api/schemas/nodes/aiAgent/icon` returns SVG with `Content-Type: image/svg+xml`.
 - `pytest server/tests/ -x` passes, including the three load-bearing suites: `test_node_spec.py`, `test_plugin_self_containment.py`, `test_credential_broadcasts.py`, `test_status_broadcasts.py`.
@@ -333,7 +333,7 @@ None blocking. Status of the three original follow-ups:
 
 ## 12. References
 
-**MachinaOs (internal):**
+**OpenCompany (internal):**
 - `server/services/plugin/base.py:428-454` — `as_activity()`.
 - `server/services/plugin/scaling.py:17-37` — `TaskQueue` enum, retry defaults.
 - `server/services/temporal/workflow.py:177-183` — orchestrator scheduling (gap noted).
@@ -360,7 +360,7 @@ None blocking. Status of the three original follow-ups:
 - n8n per-node folder + co-located SVG — https://github.com/n8n-io/n8n/tree/master/packages/nodes-base/nodes/Telegram
 - Pipedream `components/<app>/` + `common/` folder pattern — https://github.com/PipedreamHQ/pipedream/tree/master/components
 - Prefect block + capability-mixin pattern — https://github.com/PrefectHQ/prefect/blob/main/src/prefect/blocks/core.py
-- Nango YAML provider registry (rejected for MachinaOs) — https://github.com/NangoHQ/nango/tree/master/packages/providers
+- Nango YAML provider registry (rejected for OpenCompany) — https://github.com/NangoHQ/nango/tree/master/packages/providers
 - Composio cloud-registry model (rejected — we're self-hosted) — https://docs.composio.dev
 
 ## 13. Diff size (rough)

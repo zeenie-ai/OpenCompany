@@ -9,7 +9,7 @@ a `custom` passthrough covering the entire gh surface (`gh api`, runs,
 releases, gists, repo administration).
 
 **Auth model: the gh CLI owns its own auth** — the Stripe CLI pattern,
-strictly. MachinaOs never stores, reads, or injects a token:
+strictly. OpenCompany never stores, reads, or injects a token:
 
 - `gh auth login` puts the token in the **system credential store**;
   ops read it from there (or from an ambient `GH_TOKEN` env var, per

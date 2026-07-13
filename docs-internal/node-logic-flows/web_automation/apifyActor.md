@@ -12,7 +12,7 @@
 
 Run an Apify actor (pre-built scraper / automation) via the official
 `apify-client` async SDK, wait for it to finish, and return the dataset
-items. Used for platforms that have no first-class integration in MachinaOs
+items. Used for platforms that have no first-class integration in OpenCompany
 (Instagram, TikTok, Twitter/X, LinkedIn, Facebook, YouTube, Google Search /
 Maps, website content crawlers).
 

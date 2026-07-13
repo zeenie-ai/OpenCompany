@@ -3,7 +3,7 @@ name: file-modify-skill
 description: Write new files or edit existing files with string replacement.
 allowed-tools: file_modify
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: filesystem
 

@@ -65,7 +65,7 @@ register_output_schema("telegramSend", TelegramSendOutput)
 # unconditionally; emit() is gated by Settings.event_framework_enabled
 # so the legacy path stays default. See
 # services/deployment/canary_registry.py.
-register_canary_trigger_type(TelegramReceiveNode.type, "com.machinaos.telegram.message.received")
+register_canary_trigger_type(TelegramReceiveNode.type, "com.opencompany.telegram.message.received")
 
 __all__ = [
     "TelegramCredential",

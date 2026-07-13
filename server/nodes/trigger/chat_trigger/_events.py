@@ -20,7 +20,7 @@ from services.events.envelope import WorkflowEvent
 
 # Outer wire-routing key. Matches ``ChatTriggerNode.event_type`` and the
 # FE WS channel; the inner envelope carries
-# ``com.machinaos.chat.message.received``.
+# ``com.opencompany.chat.message.received``.
 _WIRE_ROUTING_KEY = "chat_message_received"
 
 
@@ -30,8 +30,8 @@ def chat_message_received(event_data: Mapping[str, Any]) -> WorkflowEvent:
     payload = dict(event_data)
     session_id = payload.get("session_id")
     return WorkflowEvent(
-        source="machinaos://nodes/chat_trigger",
-        type="com.machinaos.chat.message.received",
+        source="opencompany://nodes/chat_trigger",
+        type="com.opencompany.chat.message.received",
         subject=str(session_id) if session_id else None,
         data=payload,
     )

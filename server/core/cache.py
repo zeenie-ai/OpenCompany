@@ -86,7 +86,7 @@ class CacheService:
             self._streams_available = False
             return
 
-        test_stream = "_machina_streams_test"
+        test_stream = "_opencompany_streams_test"
         try:
             # Try XADD - this will fail if Streams aren't supported
             msg_id = await self.redis.xadd(test_stream, {"test": "1"}, maxlen=1)

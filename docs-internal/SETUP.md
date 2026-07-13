@@ -1,9 +1,9 @@
-# MachinaOs - Development Setup
+# OpenCompany - Development Setup
 
 ## Project Structure
 
 ```
-MachinaOs/
+OpenCompany/
 ├── client/                 # React frontend (port 3000)
 │   ├── src/
 │   └── package.json
@@ -21,8 +21,8 @@ MachinaOs/
 ## Quick Start
 
 ```bash
-npm install -g machina
-machina start
+npm install -g opencompany
+company start
 ```
 
 Open http://localhost:3000
@@ -32,8 +32,8 @@ Open http://localhost:3000
 **Prerequisites:** Node.js 22+, Python 3.12+, uv, 
 
 ```bash
-git clone https://github.com/zeenie-ai/MachinaOS.git
-cd MachinaOS
+git clone https://github.com/zeenie-ai/MachinaOS.git OpenCompany
+cd OpenCompany
 npm run build
 npm run start
 ```
@@ -41,8 +41,8 @@ npm run start
 ### Docker
 
 ```bash
-git clone https://github.com/zeenie-ai/MachinaOS.git
-cd MachinaOS
+git clone https://github.com/zeenie-ai/MachinaOS.git OpenCompany
+cd OpenCompany
 npm run docker:up
 ```
 
@@ -80,8 +80,8 @@ Services will be available at:
 
 ### Temporal Server (Distributed Execution)
 - Provides durable workflow execution with per-node retry and horizontal scaling
-- Official `temporal` CLI downloaded by `pooch` from `https://temporal.download/cli/archive/latest` on `machina build` (or first `machina start`)
-- Supervised by MachinaOS as `temporal server start-dev` — single process, SQLite at `~/.machina/temporal.db`
+- Official `temporal` CLI downloaded by `pooch` from `https://temporal.download/cli/archive/latest` on `company build` (or first `company start`)
+- Supervised by OpenCompany as `temporal server start-dev` — single process, SQLite at `~/.opencompany/temporal.db`
 - Ports: gRPC 7233, Web UI 8080
 - Embedded worker runs inside Python backend (`TemporalWorkerManager` in `main.py`)
 - Workflow auto-resumption disabled at startup (history preserved); see `TEMPORAL_TERMINATE_RUNNING_ON_STARTUP`

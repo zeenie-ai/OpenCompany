@@ -74,7 +74,7 @@ register_option_loader("whatsappGroupMembers", load_group_members)
 # fans out via services.events.dispatch.emit; emit() is gated by
 # Settings.event_framework_enabled so the legacy path stays default.
 # See services/deployment/canary_registry.py.
-register_canary_trigger_type("whatsappReceive", "com.machinaos.whatsapp.message.received")
+register_canary_trigger_type("whatsappReceive", "com.opencompany.whatsapp.message.received")
 
 # Wave 12 C4 sub-piece A: opt this plugin into the social-provider
 # registry so the social node dispatches by platform identifier

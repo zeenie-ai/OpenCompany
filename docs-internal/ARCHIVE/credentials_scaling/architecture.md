@@ -2,7 +2,7 @@
 
 # Credentials Panel Architecture (Scalable to 5000 Providers)
 
-The architecture for the MachinaOs credentials panel after scaling work.
+The architecture for the OpenCompany credentials panel after scaling work.
 Built on the Phase 1 refactor (21-file modular structure) with five additional
 layers: server-owned registry, bulk-fetch cache, command palette, lazy panels,
 and react-hook-form detail panels.
@@ -156,7 +156,7 @@ Response → setStored(true), clear password field
 
 ## JSON schema with `extends` inheritance
 
-MachinaOs uses JSON for all backend config (`email_providers.json`, `llm_defaults.json`,
+OpenCompany uses JSON for all backend config (`email_providers.json`, `llm_defaults.json`,
 `pricing.json`, `google_apis.json`). Credential registry follows the same convention.
 
 ```json

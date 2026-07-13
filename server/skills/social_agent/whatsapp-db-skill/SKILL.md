@@ -3,7 +3,7 @@ name: whatsapp-db-skill
 description: Query WhatsApp database for contacts, groups, channels, and chat history. Look up contact info, search groups, manage channels, retrieve messages.
 allowed-tools: whatsapp_db
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: messaging
 

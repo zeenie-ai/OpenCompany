@@ -25,13 +25,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-if "machina" not in sys.modules:
-    _machina = types.ModuleType("cli")
-    _machina.__path__ = []
-    sys.modules["cli"] = _machina
-    _machina_tcp = types.ModuleType("cli.tcp")
-    _machina_tcp.probe_tcp_port = MagicMock(return_value=False)
-    sys.modules["cli.tcp"] = _machina_tcp
+if "cli" not in sys.modules:
+    _cli_stub = types.ModuleType("cli")
+    _cli_stub.__path__ = []
+    sys.modules["cli"] = _cli_stub
+    _opencompany_tcp = types.ModuleType("cli.tcp")
+    _opencompany_tcp.probe_tcp_port = MagicMock(return_value=False)
+    sys.modules["cli.tcp"] = _opencompany_tcp
 
 
 _SEND_CUSTOM_EVENT_PATTERN = re.compile(r"send_custom_event\s*\(")
@@ -92,7 +92,7 @@ class TestTaskTriggerProducerCanaryEmit:
         # discrimination lives in data.status.
         assert len(emit_calls) == 1
         envelope = emit_calls[0]["event"]
-        assert envelope.type == "com.machinaos.agent.task.completed"
+        assert envelope.type == "com.opencompany.agent.task.completed"
         assert envelope.subject == "task-1"
         assert envelope.data["status"] == "completed"
         assert envelope.data["result"] == "done"
@@ -125,7 +125,7 @@ class TestTaskTriggerProducerCanaryEmit:
 
         assert len(emit_calls) == 1
         envelope = emit_calls[0]
-        assert envelope.type == "com.machinaos.agent.task.completed"
+        assert envelope.type == "com.opencompany.agent.task.completed"
         assert envelope.subject == "task-2"
         assert envelope.data["status"] == "error"
         assert envelope.data["error"] == "timeout"

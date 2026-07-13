@@ -52,7 +52,7 @@ _POLL_INTERVAL_SECONDS = 3.0
 # Set on a client instance after the surface rejects a streaming create
 # (400 "Precondition check failed" on the enterprise agent surface) so
 # later turns in the same run skip straight to the background+poll path.
-_STREAM_UNSUPPORTED_ATTR = "_machina_stream_unsupported"
+_STREAM_UNSUPPORTED_ATTR = "_opencompany_stream_unsupported"
 
 
 def is_genai_error(exc: BaseException) -> bool:

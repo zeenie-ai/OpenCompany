@@ -1,6 +1,6 @@
 """Anthropic Claude Code CLI provider — interactive TUI mode.
 
-Reference implementation for the `AICliProvider` Protocol. MachinaOs
+Reference implementation for the `AICliProvider` Protocol. OpenCompany
 drives the same interactive `claude` invocation a normal user runs at
 their terminal — not `claude -p` headless. The PTY keeps the process
 alive in TUI mode while we read events from the on-disk session JSONL
@@ -14,8 +14,8 @@ Subprocess: ``claude --permission-mode bypassPermissions
 -- "<prompt>"``
 
 **Tools + skills are preserved**:
-  - ``--mcp-config`` registers MachinaOs's FastMCP server; the spawned
-    `claude` discovers `mcp__machinaos__*` tools via `tools/list`.
+  - ``--mcp-config`` registers OpenCompany's FastMCP server; the spawned
+    `claude` discovers `mcp__opencompany__*` tools via `tools/list`.
   - ``--allowedTools`` carries the explicit allowlist (built-ins +
     every wired MCP tool) — same shape as the prior headless path.
   - Skills are materialised under ``<cwd>/.claude/skills/`` by the
@@ -40,8 +40,8 @@ on-disk JSONL gives us the same data without `-p`):
 external monitors (Phase 2).
 
 Binary + auth: shared with the auth surface via
-``._oauth.claude_binary_path()`` — single project-local
-install at ``<repo>/data/claude-machina/npm/`` and ``CLAUDE_CONFIG_DIR``
+``._oauth.claude_binary_path()`` — single managed install under
+``<DATA_DIR>/packages/`` and ``CLAUDE_CONFIG_DIR``
 set on the spawn env so the agent picks up the same credentials the
 Login button wrote.
 
@@ -61,7 +61,7 @@ from typing import Any, Dict, List, Optional
 from core.logging import get_logger
 
 from services.cli_agent.config import get_provider_config
-from ._oauth import claude_binary_path, MACHINA_CLAUDE_DIR
+from ._oauth import claude_binary_path, OPENCOMPANY_CLAUDE_DIR
 from services.cli_agent.protocol import CanonicalUsage
 from services.cli_agent.types import ClaudeTaskSpec
 
@@ -84,16 +84,16 @@ class AnthropicClaudeProvider:
         # IDE lockfile lives at ``<CLAUDE_CONFIG_DIR>/ide/<pid>.lock``
         # per claude's own resolution rules — there is no separate
         # "lockfile path" knob. We set
-        # ``CLAUDE_CONFIG_DIR=MACHINA_CLAUDE_DIR`` on every spawn (see
+        # ``CLAUDE_CONFIG_DIR=OPENCOMPANY_CLAUDE_DIR`` on every spawn (see
         # ``service.py``, ``session.py``, ``claude_oauth.py``), so the
         # canonical lockfile dir is unambiguously
-        # ``MACHINA_CLAUDE_DIR/ide``. Deriving it directly from the
+        # ``OPENCOMPANY_CLAUDE_DIR/ide``. Deriving it directly from the
         # single source of truth keeps the lockfile-write side (here)
         # in sync with the lockfile-read side (spawned claude) without
-        # a duplicated JSON path that can drift. ``MACHINA_CLAUDE_DIR``
+        # a duplicated JSON path that can drift. ``OPENCOMPANY_CLAUDE_DIR``
         # is imported at module top from ``_oauth`` (the canonical
         # source of truth for this plugin's filesystem layout).
-        self.ide_lockfile_dir = MACHINA_CLAUDE_DIR / "ide"
+        self.ide_lockfile_dir = OPENCOMPANY_CLAUDE_DIR / "ide"
         self._defaults = cfg.defaults
         self._supports = cfg.supports
         self._login_argv = cfg.login_argv
@@ -106,7 +106,7 @@ class AnthropicClaudeProvider:
 
         Delegates to ``._oauth.claude_binary_path`` — same
         path used by the credentials Login button. Lazy-installs into
-        ``<repo>/data/claude-machina/npm/`` on first miss. Raises
+        ``<DATA_DIR>/packages/`` on first miss. Raises
         ``FileNotFoundError`` if ``npm`` isn't on PATH.
         """
         return Path(claude_binary_path())
@@ -152,8 +152,8 @@ class AnthropicClaudeProvider:
 
         ``mcp_endpoint_url`` + ``mcp_bearer_token`` (if both set) are
         emitted as ``--mcp-config <json>`` so the spawned claude
-        registers MachinaOs's FastMCP server. Tools allowlist
-        (``--allowedTools``) lists every wired ``mcp__machinaos__*``
+        registers OpenCompany's FastMCP server. Tools allowlist
+        (``--allowedTools``) lists every wired ``mcp__opencompany__*``
         plus the 5 built-ins. Skill materialisation under
         ``<cwd>/.claude/skills/`` is unchanged.
         """
@@ -171,7 +171,7 @@ class AnthropicClaudeProvider:
         # detail (without it, only the final result line is emitted).
         # ``--ide`` makes claude discover the IDE lockfile we write at
         # ``<CLAUDE_CONFIG_DIR>/ide/<pid>.lock`` for auto-connection to
-        # MachinaOs's MCP server.
+        # OpenCompany's MCP server.
         argv += [
             "--output-format",
             "stream-json",
@@ -186,14 +186,14 @@ class AnthropicClaudeProvider:
         # identically in interactive mode.
         if mcp_endpoint_url and mcp_bearer_token:
             # `alwaysLoad: true` opts this server out of MCP tool-search
-            # deferral so all `mcp__machinaos__*` tools enter context at
+            # deferral so all `mcp__opencompany__*` tools enter context at
             # session start instead of waiting for a `ToolSearch` call
             # the agent often doesn't make
             # (https://code.claude.com/docs/en/mcp#scale-with-mcp-tool-search).
             mcp_payload = json.dumps(
                 {
                     "mcpServers": {
-                        "machinaos": {
+                        "opencompany": {
                             "type": "http",
                             "url": mcp_endpoint_url,
                             "headers": {
@@ -232,7 +232,7 @@ class AnthropicClaudeProvider:
             argv += ["--continue"]
 
         # Allowed tools — STRICTLY scoped to what the operator wired
-        # through ``input-tools`` plus MachinaOs's own MCP infrastructure
+        # through ``input-tools`` plus OpenCompany's own MCP infrastructure
         # tools. Claude's built-in escape hatches (Read, Edit, Bash,
         # Glob, Grep, Write, Skill, WebSearch, WebFetch) are intentionally
         # NOT in the default allowlist: they let the agent invoke
@@ -240,7 +240,7 @@ class AnthropicClaudeProvider:
         # filesystem / shell / search functionality is wired via the
         # ``fileRead`` / ``fileModify`` / ``fsSearch`` / ``shell`` /
         # ``browser`` / ``perplexitySearch`` workflow tools, and
-        # connected skills are surfaced via MachinaOs's own
+        # connected skills are surfaced via OpenCompany's own
         # ``listSkills`` / ``getSkill`` MCP tools (no materialisation
         # under ``.claude/skills/`` on the pool path, so the built-in
         # ``Skill`` tool has nothing to load anyway).
@@ -255,7 +255,7 @@ class AnthropicClaudeProvider:
         )
         allowed_list: List[str] = [t.strip() for t in allowed_extra.split(",") if t.strip()] if allowed_extra else []
         if connected_tool_names:
-            allowed_list += [f"mcp__machinaos__{name}" for name in connected_tool_names]
+            allowed_list += [f"mcp__opencompany__{name}" for name in connected_tool_names]
         # Conditionally enable claude's built-in ``Skill`` tool ONLY
         # when at least one skill is wired through ``input-skill``.
         # The spawn path (pool + non-pool) materialises connected
@@ -268,16 +268,16 @@ class AnthropicClaudeProvider:
         # ``test_no_claude_builtins_in_default_allowlist``).
         if connected_skill_names:
             allowed_list.append("Skill")
-        # MachinaOs's own MCP infrastructure tools — needed for the
+        # OpenCompany's own MCP infrastructure tools — needed for the
         # agent to discover connected skills, read its workspace, and
         # surface intermediate progress. These are OUR tools, not
         # claude's, so they stay regardless.
         allowed_list += [
-            "mcp__machinaos__getWorkspaceFiles",
-            "mcp__machinaos__listSkills",
-            "mcp__machinaos__getSkill",
-            "mcp__machinaos__getCredential",
-            "mcp__machinaos__broadcastLog",
+            "mcp__opencompany__getWorkspaceFiles",
+            "mcp__opencompany__listSkills",
+            "mcp__opencompany__getSkill",
+            "mcp__opencompany__getCredential",
+            "mcp__opencompany__broadcastLog",
         ]
         if allowed_list:
             argv += ["--allowedTools", ",".join(allowed_list)]

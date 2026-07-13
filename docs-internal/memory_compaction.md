@@ -4,7 +4,7 @@
 
 ## Overview
 
-The compaction service enables automatic memory compaction, token tracking, and **cost calculation** for MachinaOs specialized agents. It uses a hybrid approach leveraging native provider APIs (Anthropic, OpenAI) when available, with comprehensive token and cost tracking for all providers.
+The compaction service enables automatic memory compaction, token tracking, and **cost calculation** for OpenCompany specialized agents. It uses a hybrid approach leveraging native provider APIs (Anthropic, OpenAI) when available, with comprehensive token and cost tracking for all providers.
 
 **Inspired by:** Claude Code's compaction pattern from the Anthropic SDK
 **Threshold Strategy:** per-session `custom_threshold` > per-user `UserSettings.compaction_ratio` > env `Settings.compaction_ratio` (default **0.8** = 80% of context window) > JSON `llm_defaults.json:agent.compaction.ratio` fallback

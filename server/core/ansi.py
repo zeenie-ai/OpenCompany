@@ -1,7 +1,7 @@
 """Strip ANSI escape sequences from captured terminal output.
 
 Subprocess output (vite / npm / git / etc.) embeds ANSI CSI colour and
-cursor-control codes. MachinaOs renders terminal output as plain text — the
+cursor-control codes. OpenCompany renders terminal output as plain text — the
 Terminal tab (``process_service`` broadcasts + log files) and node Output panels
 (the shell node's ``stdout``) — so the raw codes surface as garbage like
 ``[36mvite v7.3.3[39m``. Strip them at the capture boundary so stored logs,

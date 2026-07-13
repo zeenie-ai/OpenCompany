@@ -2,7 +2,7 @@
 
 ## Overview
 
-The MachinaOs execution engine implements a robust workflow orchestration system combining industry-standard patterns from **Netflix Conductor**, **Prefect 3.0**, **Temporal**, and **Redis Streams**. This document details the architectural decisions, design patterns, and standards used.
+The OpenCompany execution engine implements a robust workflow orchestration system combining industry-standard patterns from **Netflix Conductor**, **Prefect 3.0**, **Temporal**, and **Redis Streams**. This document details the architectural decisions, design patterns, and standards used.
 
 Related docs:
 - [TEMPORAL_ARCHITECTURE.md](TEMPORAL_ARCHITECTURE.md) - distributed execution via Temporal activities

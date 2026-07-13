@@ -1,7 +1,7 @@
-"""``agent-browser`` local install — landed in the shared MachinaOs
+"""``agent-browser`` local install — landed in the shared OpenCompany
 npm tree at :func:`core.paths.packages_dir` (``<DATA_DIR>/packages/``).
 
-All MachinaOs-managed npm packages (``agent-browser``,
+All OpenCompany-managed npm packages (``agent-browser``,
 ``@anthropic-ai/claude-code``, ``edgymeow``) live under a single
 ``<packages_dir>/node_modules/`` so npm manages them with one
 ``package.json`` + ``package-lock.json`` rather than us carving out

@@ -1,7 +1,7 @@
-# MachinaOS Installer for Windows
+# OpenCompany Installer for Windows
 # Usage: iwr -useb https://raw.githubusercontent.com/zeenie-ai/MachinaOS/main/install.ps1 | iex
 #
-# This script installs MachinaOS and its dependencies:
+# This script installs OpenCompany and its dependencies:
 # - Node.js 22+ (via winget/choco)
 # - Python 3.12+ (via winget/choco)
 # - uv (Python package manager)
@@ -24,11 +24,7 @@ function Error-Exit { Write-Color "[ERROR] $args" "Red"; exit 1 }
 
 # Banner
 Write-Host ""
-Write-Color "  __  __            _     _             ___  ____  " "Cyan"
-Write-Color " |  \/  | __ _  ___| |__ (_)_ __   __ _/ _ \/ ___| " "Cyan"
-Write-Color " | |\/| |/ _`` |/ __| '_ \| | '_ \ / _`` | | | \___ \ " "Cyan"
-Write-Color " | |  | | (_| | (__| | | | | | | | (_| | |_| |___) |" "Cyan"
-Write-Color " |_|  |_|\__,_|\___|_| |_|_|_| |_|\__,_|\___/|____/ " "Cyan"
+Write-Color "  OpenCompany" "Cyan"
 Write-Host ""
 Write-Host "Open-source workflow automation with AI agents"
 Write-Host ""
@@ -178,19 +174,19 @@ function Main {
     if (-not (Check-Uv)) { Install-Uv }
 
     Write-Host ""
-    Info "Installing MachinaOS..."
+    Info "Installing OpenCompany..."
     Write-Host ""
 
-    # Install machinaos from npm
-    npm install -g machinaos
+    # Install OpenCompany from npm
+    npm install -g opencompany
 
     Write-Host ""
     Write-Color "============================================" "Green"
-    Write-Color "  MachinaOS installed successfully!" "Green"
+    Write-Color "  OpenCompany installed successfully!" "Green"
     Write-Color "============================================" "Green"
     Write-Host ""
-    Write-Host "  Start MachinaOS:"
-    Write-Host "    machina start"
+    Write-Host "  Start OpenCompany:"
+    Write-Host "    company start"
     Write-Host ""
     Write-Host "  Open in browser:"
     Write-Host "    http://localhost:3000"
@@ -199,7 +195,7 @@ function Main {
     Write-Host "    npm install -g pnpm"
     Write-Host ""
     Write-Host "  Run diagnostics:"
-    Write-Host "    machina doctor"
+    Write-Host "    company doctor"
     Write-Host ""
 }
 

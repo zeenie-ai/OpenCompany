@@ -1,6 +1,6 @@
 # Plugin System (Wave 11)
 
-The MachinaOs plugin system is a class-based, declarative node
+The OpenCompany plugin system is a class-based, declarative node
 authoring model inspired by n8n's `INodeType`, Nango's
 `providers.yaml`, Pipedream's app/component split, and Temporal's
 activity pattern. One folder under `server/nodes/<group>/<plugin>/`
@@ -968,7 +968,7 @@ directly.
 
 Mirrors CloudEvents v1.0 verbatim
 ([spec](https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/spec.md))
-plus three MachinaOs routing extras (`workflow_id`,
+plus three OpenCompany routing extras (`workflow_id`,
 `trigger_node_id`, `correlation_id`). Field set:
 `specversion / id / source / type / time / subject / datacontenttype /
 dataschema / data` plus the extras.
@@ -1099,7 +1099,7 @@ class StripeListenSource(DaemonEventSource):
 
     async def has_credential(self) -> bool:
         # Override the default ``secrets["api_key"]`` gate when auth lives
-        # outside MachinaOs (e.g. the CLI's own ~/.config/stripe/config.toml).
+        # outside OpenCompany (e.g. the CLI's own ~/.config/stripe/config.toml).
         return is_logged_in()
 
     def parse_line(self, stream: str, line: str) -> Optional[WorkflowEvent]:

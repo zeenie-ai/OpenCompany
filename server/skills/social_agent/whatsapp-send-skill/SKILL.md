@@ -3,7 +3,7 @@ name: whatsapp-send-skill
 description: Send WhatsApp messages to contacts, groups, or channels. Supports text, images, videos, audio, documents, stickers, locations, and contacts.
 allowed-tools: whatsapp_send
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: messaging
 

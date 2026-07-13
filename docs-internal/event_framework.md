@@ -1,6 +1,6 @@
 # Event Framework (Wave 12)
 
-Temporal-native event-routing layer for MachinaOs. Implements RFC sections
+Temporal-native event-routing layer for OpenCompany. Implements RFC sections
 6.3 (Temporal worker contract) + 6.4 (CloudEvents broadcast contract) from
 [plugin_authoring_rfc.md](./ARCHIVE/plugin_authoring_rfc.md).
 
@@ -98,7 +98,7 @@ connect** (`services/temporal/client.py:TemporalClientWrapper.connect`):
 |---|---|---|
 | `EventType` | KEYWORD | Visibility query — find consumers by CloudEvents type |
 | `EventSource` | KEYWORD | Routing when same type arrives from multiple sources |
-| `EventWorkflowId` | KEYWORD | Scope events to a MachinaOs workflow_id |
+| `EventWorkflowId` | KEYWORD | Scope events to a OpenCompany workflow_id |
 | `TriggerNodeId` | KEYWORD | Per-trigger event-history queries |
 | `EventTriggerKind` | KEYWORD | Coarse classification (webhook / polling / …) |
 | `EventReceivedAt` | DATETIME | Time-range queries |
@@ -154,7 +154,7 @@ or hand back to the server for retry instead of being killed mid-call.
 
 Every server→FE broadcast wraps `WorkflowEvent` (CloudEvents v1.0;
 `services/events/envelope.py`). Spec-compliant ID, source, type, time,
-plus MachinaOs extension attributes (`workflow_id`, `trigger_node_id`,
+plus OpenCompany extension attributes (`workflow_id`, `trigger_node_id`,
 `correlation_id` — kept in snake_case per the documented internal-naming
 rationale at `envelope.py:4-12`).
 
@@ -164,7 +164,7 @@ parses for spec-compliant routing + dataschema lookup.
 
 ### Plugin-owned event factories
 
-Plugin-specific events (e.g. `com.machinaos.telegram.message.received`)
+Plugin-specific events (e.g. `com.opencompany.telegram.message.received`)
 live in `nodes/<plugin>/_events.py`. Cross-cutting factories
 (`credential`, `oauth_completed`, `agent_progress`, `task_completed`,
 `workflow_lifecycle`, `deployment_snapshot`, `team_event`,
@@ -200,7 +200,7 @@ inspection surface:
 
 This is why Wave 12 explicitly does NOT add a custom `event_dlq` SQLModel table. Doing so would reinvent the Temporal primitives the rest of the framework was built AROUND, not against. The pre-Temporal `services/execution/models.py::DLQEntry` for the legacy `WorkflowExecutor` is a separate concern and stays where it is.
 
-Wave 12 D3 (pending) adds thin WS handlers that wrap these Visibility queries for the FE admin surface, so operators can inspect failed runs without leaving the MachinaOs UI.
+Wave 12 D3 (pending) adds thin WS handlers that wrap these Visibility queries for the FE admin surface, so operators can inspect failed runs without leaving the OpenCompany UI.
 
 ## Wave 13 fixes
 
@@ -208,12 +208,12 @@ Six load-bearing corrections to the Wave 12 canary path. All locked by regressio
 
 ### 1. `EventType` Search Attribute must equal the producer's `event.type`
 
-Pre-fix the deployment manager registered the **legacy snake_case** `event_type` from `TriggerConfig` (e.g. `"chat_message_received"`) as the `EventType` SA on every canary listener. But `dispatch.emit` Visibility-queries by `event.type` from the CloudEvents envelope (reverse-DNS, e.g. `"com.machinaos.chat.message.received"`). The strings never matched — the listener started OK, never reacted to incoming events.
+Pre-fix the deployment manager registered the **legacy snake_case** `event_type` from `TriggerConfig` (e.g. `"chat_message_received"`) as the `EventType` SA on every canary listener. But `dispatch.emit` Visibility-queries by `event.type` from the CloudEvents envelope (reverse-DNS, e.g. `"com.opencompany.chat.message.received"`). The strings never matched — the listener started OK, never reacted to incoming events.
 
 Fix:
 - `register_canary_trigger_type(node_type, cloudevent_type)` now requires the CloudEvents type as a second arg ([canary_registry.py](../server/services/deployment/canary_registry.py)). Re-registering with a diverging `cloudevent_type` raises `ValueError` so plugin upgrades that change the envelope shape surface loudly.
 - `cloudevent_type_for(node_type)` lookup, used by `DeploymentManager._start_canary_listener` for the `EventType` SA value (was `config.event_type`).
-- `WorkflowEvent.task_completed` factory unified to single type `com.machinaos.agent.task.completed` (was `.succeeded` / `.failed` split — broke single-SA listener matching).
+- `WorkflowEvent.task_completed` factory unified to single type `com.opencompany.agent.task.completed` (was `.succeeded` / `.failed` split — broke single-SA listener matching).
 
 Locked by `TestCloudEventTypeMatchesSearchAttribute` in [`test_canary_registry.py`](../server/tests/test_canary_registry.py).
 

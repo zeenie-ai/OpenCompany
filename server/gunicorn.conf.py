@@ -41,7 +41,7 @@ errorlog = "-"
 loglevel = log_level
 
 # Process naming
-proc_name = "machina-backend"
+proc_name = "opencompany-backend"
 
 # Preload app for faster worker startup (disable in debug for reload)
 preload_app = not debug

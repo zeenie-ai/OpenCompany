@@ -1,6 +1,6 @@
-# MachinaOS Design System (zeenie.ai)
+# OpenCompany Design System (zeenie.ai)
 
-Design system for **MachinaOS** — zeenie.ai's open-source, local-first AI workflow OS. "Your own AI assistant that does real work": users drag, drop, and connect AI agents to email, calendar, messages, phone, and 50+ services on a visual node canvas, then run or deploy workflows that keep running in the background. No code, no subscription; bring your own API keys or run models locally.
+Design system for **OpenCompany** — zeenie.ai's open-source, local-first AI workflow OS. "Your own AI assistant that does real work": users drag, drop, and connect AI agents to email, calendar, messages, phone, and 50+ services on a visual node canvas, then run or deploy workflows that keep running in the background. No code, no subscription; bring your own API keys or run models locally.
 
 **Sources** (explore these to design even better against this product):
 - GitHub: https://github.com/zeenie-ai/MachinaOS — primary source. Key design files: `client/src/index.css` (all color/role tokens), `client/src/themes/{base,light,dark}.css` (contract tokens: surfaces, type, motion), `client/tailwind.config.js`, `client/src/components/ui/` (TopToolbar, ComponentPalette, ActionButton, StatusBar, WorkflowSidebar…), `client/src/components/SquareNode.tsx` (canvas node anatomy), `client/src/assets/icons/index.ts` (icon resolver).
@@ -8,7 +8,7 @@ Design system for **MachinaOS** — zeenie.ai's open-source, local-first AI work
 - Reference screenshot: `assets/product-canvas-screenshot.png` (real product — dark canvas, neon nodes, WhatsApp automation demo).
 
 ## Product surfaces
-1. **MachinaOS app** (`localhost:3000`) — the core product. A three-zone desktop workspace: workflow sidebar (left), node canvas (center), component palette (right), top toolbar, bottom status bar, multi-tab console dock. Recreated in `ui_kits/machinaos/`.
+1. **OpenCompany app** (`localhost:3000`) — the core product. A three-zone desktop workspace: workflow sidebar (left), node canvas (center), component palette (right), top toolbar, bottom status bar, multi-tab console dock. Recreated in `ui_kits/opencompany/`.
 2. **Marketing/docs** (zeenie.ai, docs.zeenie.xyz) — not in the repo; no UI kit was fabricated for them. Use the foundations here plus the README voice when designing those.
 
 The app ships 12 visual themes (light, dark, Renaissance, Cyber, Edo, Steampunk…). This design system encodes the two canonical ones: **light** (default `:root`) and **dark** (`class="dark"` — the signature look used in every screenshot and demo).
@@ -58,7 +58,7 @@ The app ships 12 visual themes (light, dark, Renaissance, Cyber, Edo, Steampunk�
 1. Link `styles.css`; add `class="dark"` on `<html>` for the signature dark look (default for product UI; light for docs/print).
 2. Color = role, not decoration. Pick the action intent or node role first, then use its `-soft`/`-border`/ink triplet.
 3. Geist for words, mono for numbers/state. 14px base, sentence case, terse copy.
-4. Compose from `components/` (namespace `window.MachinaOSDS` — see `check_design_system`/cards): ActionButton, Button, Badge, Input, Select, RadioGroup, Textarea, Switch, Checkbox, Card, Tabs, Avatar, Kbd, LogLine, ChatBubble, Modal, Toast, Tooltip, Spinner, Progress, EmptyState, SquareNode, ComponentItem, WorkflowCard, StatusBar, ModeToggle, Icon.
+4. Compose from `components/` (namespace `window.OpenCompanyDS` — see `check_design_system`/cards): ActionButton, Button, Badge, Input, Select, RadioGroup, Textarea, Switch, Checkbox, Card, Tabs, Avatar, Kbd, LogLine, ChatBubble, Modal, Toast, Tooltip, Spinner, Progress, EmptyState, SquareNode, ComponentItem, WorkflowCard, StatusBar, ModeToggle, Icon.
 
 ## Index
 
@@ -74,12 +74,12 @@ The app ships 12 visual themes (light, dark, Renaissance, Cyber, Edo, Steampunk�
 - `components/panels/` — PanelModal, SettingsSection (+SettingsRow), CollapsibleSection, DataCard — the workspace panel anatomy (Node Configuration, Settings, Credentials).
 - `components/canvas/` — SquareNode, ComponentItem, WorkflowCard, StatusBar, ModeToggle.
 - `components/icons/` — Icon (Lucide bridge).
-- `ui_kits/machinaos/` — interactive recreation of the workflow canvas app, including the Settings panel (toolbar ⚙), API Credentials panel (🔑), and the three-column Node Configuration panel (gear on any node).
+- `ui_kits/opencompany/` — interactive recreation of the workflow canvas app, including the Settings panel (toolbar ⚙), API Credentials panel (🔑), and the three-column Node Configuration panel (gear on any node).
 - `SKILL.md` — agent-skill entry point.
 
 ## Caveats
 - **Fonts substituted:** Geist served from Google Fonts instead of the app's bundled `@fontsource-variable/geist` (same typeface, different delivery). Drop real `.woff2` files into `tokens/` + add `@font-face` if pixel-exact metrics matter.
-- **No official logo found in the repo** (favicon is the Vite placeholder; README hero is a GitHub user-attachment). The wordmark card sets "MachinaOS" in Geist 600 as a stand-in — replace with the real mark when available.
+- **No official logo found in the repo** (favicon is the Vite placeholder; README hero is a GitHub user-attachment). The wordmark card sets "OpenCompany" in Geist 600 as a stand-in — replace with the real mark when available.
 - zeenie.ai marketing site isn't in the repo; no marketing UI kit was invented.
 - The app's 10 themed skins are analyzed in `guidelines/THEMES.md` (token contract, per-theme matrix, porting recipe) with sources in `reference/themes/` — but only light/dark are encoded as live token scopes here. Ask to port a skin (e.g. Cyber) into `tokens/` if you want it usable.
 - **Motion** is documented in `guidelines/ANIMATIONS.md` and encoded in `tokens/animations.css` (per-theme `--dur`/`--ease`/`--motion-style` scopes + signature keyframes for all 12 themes). Live demo: `guidelines/animations-all-themes.html`.

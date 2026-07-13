@@ -3,7 +3,7 @@ name: stripe-skill
 description: Process payments, manage customers, issue refunds, and handle subscriptions via the Stripe CLI. Pass any Stripe command (customers, charges, payment_intents, refunds, invoices, products, prices, subscriptions) and the tool runs it for you and returns parsed JSON.
 allowed-tools: "stripe_action"
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: payments
 
@@ -220,7 +220,7 @@ include it when reporting issues.
 ## Webhooks (`stripeReceive` trigger)
 
 When the Stripe daemon is connected (Credentials Modal → Stripe →
-Connect), every event Stripe sends is forwarded to MachinaOs and
+Connect), every event Stripe sends is forwarded to OpenCompany and
 delivered to any active `stripeReceive` trigger nodes after
 HMAC-SHA256 signature verification (`Stripe-Signature` header).
 
@@ -244,7 +244,7 @@ The trigger output mirrors Stripe's event shape: `event_id`,
 ## Authentication — `stripe login` (browser OAuth)
 
 Authentication is delegated entirely to the Stripe CLI. There is no
-API key to paste into MachinaOs. The Credentials Modal's **Login
+API key to paste into OpenCompany. The Credentials Modal's **Login
 with Stripe** button drives the CLI's two-step machine-friendly
 login:
 
@@ -256,7 +256,7 @@ login:
    then writes credentials (one restricted key per mode, valid for
    90 days) to `~/.config/stripe/config.toml` (or
    `$XDG_CONFIG_HOME/stripe/config.toml`).
-3. **MachinaOs-side**: when login completes, the listen daemon
+3. **OpenCompany-side**: when login completes, the listen daemon
    starts automatically and captures the webhook signing secret.
 
 After login, every `stripe …` command run via this tool reads its
@@ -291,7 +291,7 @@ and runs `stripe logout --all` to clear the config file.
    - System install (`brew install stripe/stripe-cli/stripe`,
      `scoop install stripe`, `apt install stripe`, or a direct
      binary from <https://stripe.com/docs/stripe-cli#install>).
-   - MachinaOs package cache at
+   - OpenCompany package cache at
      `<DATA_DIR>/packages/stripe/bin/stripe[.exe]` (populated
      automatically from GitHub releases — pinned to a known-good
      CLI version).

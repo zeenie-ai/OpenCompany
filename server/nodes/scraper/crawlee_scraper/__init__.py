@@ -23,7 +23,7 @@ _MAX_CONTENT_LENGTH = 100_000
 
 
 async def _get_proxy_config(parameters: Dict[str, Any], url: str):
-    """Bridge MachinaOs ProxyService to Crawlee ProxyConfiguration."""
+    """Bridge OpenCompany ProxyService to Crawlee ProxyConfiguration."""
     if not parameters.get("use_proxy", False):
         return None
     try:

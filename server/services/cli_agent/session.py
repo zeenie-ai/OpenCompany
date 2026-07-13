@@ -57,7 +57,7 @@ logger = get_logger(__name__)
 
 # Claude derives its project_key from cwd by replacing every char that
 # isn't [a-zA-Z0-9.-] with `-`. Verified byte-for-byte against the
-# on-disk `~/.claude-machina/projects/` listing in the memory-bridge
+# on-disk `<DATA_DIR>/claude/projects/` listing in the memory-bridge
 # research.
 _PROJECT_KEY_RE = re.compile(r"[^a-zA-Z0-9.-]")
 
@@ -107,14 +107,14 @@ class AICliSession(BaseProcessSupervisor):
         # ``repo_root`` which would otherwise be shared across workflows).
         self._workspace_dir = Path(workspace_dir).resolve()
         self._worktree_dir = self._workspace_dir / node_id / f"wt_{self._task_id}"
-        self._branch = task.branch or f"machina/{self._task_id}"
+        self._branch = task.branch or f"opencompany/{self._task_id}"
         self._broadcaster = broadcaster
         self._defaults = defaults
         self._mcp_port = mcp_port
         self._batch_token = batch_token
         self._node_id = node_id
         self._workflow_id = workflow_id
-        # Names of `mcp__machinaos__*` tools to add to `--allowedTools`.
+        # Names of `mcp__opencompany__*` tools to add to `--allowedTools`.
         self._connected_tool_names: List[str] = list(connected_tool_names or [])
         # Skills to materialise into `<worktree>/.claude/skills/<name>/SKILL.md`
         # so claude auto-discovers them per the documented project-scope
@@ -181,7 +181,7 @@ class AICliSession(BaseProcessSupervisor):
         )
 
     def _mcp_endpoint_url(self) -> str:
-        """Absolute URL of MachinaOs's FastMCP JSON-RPC endpoint.
+        """Absolute URL of OpenCompany's FastMCP JSON-RPC endpoint.
 
         Mirrors the ``url`` written into the IDE lockfile. FastMCP serves
         at ``/mcp`` of the sub-app; ``main.py`` mounts it at ``/mcp/ide``;
@@ -197,7 +197,7 @@ class AICliSession(BaseProcessSupervisor):
         return self._worktree_dir
 
     def env(self) -> Dict[str, str]:
-        # Inherit parent env, then redirect provider config to MachinaOs's
+        # Inherit parent env, then redirect provider config to OpenCompany's
         # project-local isolation dir for providers that support it (Claude
         # via CLAUDE_CONFIG_DIR; Codex/Gemini still use their native auth
         # paths until isolation is wired). Without this, the agent's
@@ -205,13 +205,15 @@ class AICliSession(BaseProcessSupervisor):
         # instead of the ones the credentials modal's Login button wrote.
         e: Dict[str, str] = {**os.environ, "PYTHONUNBUFFERED": "1"}
         if self._provider.name == "claude":
-            from nodes.agent.claude_code_agent._oauth import MACHINA_CLAUDE_DIR
+            from nodes.agent.claude_code_agent._oauth import OPENCOMPANY_CLAUDE_DIR
 
-            e["CLAUDE_CONFIG_DIR"] = str(MACHINA_CLAUDE_DIR)
+            e["CLAUDE_CONFIG_DIR"] = str(OPENCOMPANY_CLAUDE_DIR)
         if self._lockfile_path and self._provider.ide_lock_env_var:
             e[self._provider.ide_lock_env_var] = str(self._lockfile_path)
         # Composio-style parent-run-ID for MCP correlation
-        e["MACHINA_PARENT_RUN_ID"] = f"{self._workflow_id}:{self._node_id}:{self._batch_token[:8]}"
+        parent_run_id = f"{self._workflow_id}:{self._node_id}:{self._batch_token[:8]}"
+        e["OPENCOMPANY_PARENT_RUN_ID"] = parent_run_id
+        e["MACHINA_PARENT_RUN_ID"] = parent_run_id  # legacy child-process contract
         return e
 
     async def _pre_spawn(self) -> None:
@@ -415,19 +417,19 @@ class AICliSession(BaseProcessSupervisor):
 
     def _project_dir(self) -> Path:
         """Return the dir where claude writes its session JSONLs for
-        our cwd. ``<MACHINA_CLAUDE_DIR>/projects/<project_key>/``.
+        our cwd. ``<OPENCOMPANY_CLAUDE_DIR>/projects/<project_key>/``.
 
         Claude derives ``project_key`` by replacing every non-
         ``[a-zA-Z0-9.-]`` char in ``str(cwd)`` with ``-``. Verified
         byte-for-byte against the on-disk
-        ``data/claude-machina/projects/`` listing in the memory-bridge
+        ``<DATA_DIR>/claude/projects/`` listing in the memory-bridge
         research.
         """
-        from nodes.agent.claude_code_agent._oauth import MACHINA_CLAUDE_DIR
+        from nodes.agent.claude_code_agent._oauth import OPENCOMPANY_CLAUDE_DIR
 
         cwd = self.cwd() or self._repo_root
         project_key = _PROJECT_KEY_RE.sub("-", str(cwd))
-        return Path(MACHINA_CLAUDE_DIR) / "projects" / project_key
+        return Path(OPENCOMPANY_CLAUDE_DIR) / "projects" / project_key
 
     async def _wait_for_session_jsonl(
         self,

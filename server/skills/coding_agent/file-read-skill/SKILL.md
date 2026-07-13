@@ -3,7 +3,7 @@ name: file-read-skill
 description: Read file contents with line numbers and pagination support.
 allowed-tools: file_read
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: filesystem
 

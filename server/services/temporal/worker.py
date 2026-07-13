@@ -57,12 +57,12 @@ def _worker_identity(queue: str) -> str:
 
     Default SDK identity is ``<pid>@<hostname>`` which makes the
     Workers tab unreadable once the per-queue pool runs 9 workers on
-    one host. ``machina-<queue>-<deployment_mode>`` names the role and
+    one host. ``opencompany-<queue>-<deployment_mode>`` names the role and
     the topology at a glance.
     """
     from core.config import Settings
 
-    return f"machina-{queue}-{Settings().deployment_mode}"
+    return f"opencompany-{queue}-{Settings().deployment_mode}"
 
 
 def _sticky_cache_size() -> int:

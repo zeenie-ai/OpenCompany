@@ -2,7 +2,7 @@
 
 > **Source:** [code.claude.com/docs/en/permission-modes](https://code.claude.com/docs/en/permission-modes)
 > **Fetched:** 2026-05-11
-> **Why this lives in-repo:** MachinaOs's claude_code_agent defaults to
+> **Why this lives in-repo:** OpenCompany's claude_code_agent defaults to
 > `--permission-mode acceptEdits` and exposes the full enum
 > (`default`, `acceptEdits`, `plan`, `auto`, `dontAsk`,
 > `bypassPermissions`) on `ClaudeTaskSpec.permission_mode`. See
@@ -279,7 +279,7 @@ Writes to a small set of paths are never auto-approved, in every mode except `by
 
 ---
 
-## What MachinaOs uses
+## What OpenCompany uses
 
 | Mode | Where | Notes |
 |---|---|---|

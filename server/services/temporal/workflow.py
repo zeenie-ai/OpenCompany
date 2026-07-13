@@ -73,7 +73,10 @@ AGENT_WORKFLOW_TYPES = frozenset(
 )
 
 
-@workflow.defn(sandboxed=False)
+# Durable protocol identifier: existing Temporal histories and child-workflow
+# start calls replay against this exact type string. It intentionally retains
+# the pre-rebrand name even though the product is now OpenCompany.
+@workflow.defn(name="MachinaWorkflow", sandboxed=False)
 class MachinaWorkflow:
     """Distributed workflow orchestrator.
 

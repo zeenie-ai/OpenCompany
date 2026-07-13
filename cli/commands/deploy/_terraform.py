@@ -1,4 +1,4 @@
-"""Terraform driver for ``machina deploy``.
+"""Terraform driver for ``company deploy``.
 
 Thin helpers over the ``terraform`` CLI (via ``cli.run``): preflight that it
 exists, copy the chosen provider module into the deployment working dir, write
@@ -27,7 +27,7 @@ def ensure_terraform() -> None:
             "Terraform is required but was not found on PATH.",
             [
                 "Install it: https://developer.hashicorp.com/terraform/install",
-                "Then re-run `machina deploy up`.",
+                "Then re-run `company deploy up`.",
             ],
         )
         raise typer.Exit(code=1)

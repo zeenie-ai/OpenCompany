@@ -2,7 +2,7 @@
 
 The Stripe CLI manages its own auth state at
 ``~/.config/stripe/config.toml`` (populated by ``stripe login`` and
-cleared by ``stripe logout``). MachinaOs doesn't store an API key
+cleared by ``stripe logout``). OpenCompany doesn't store an API key
 itself — only the captured webhook signing secret rides along as an
 extra field so :class:`StripeWebhookSource` can verify
 ``Stripe-Signature`` on incoming events.

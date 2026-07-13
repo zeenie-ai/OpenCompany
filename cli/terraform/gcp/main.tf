@@ -14,11 +14,13 @@ provider "google" {
 }
 
 locals {
-  # The instance is always named "machinaos" (one deployment per project).
+  # ``resource_name`` is persisted by the CLI. Existing deployments retain
+  # ``machinaos`` to avoid replacing live resources; new deployments use
+  # ``company``.
   use_local   = var.source_mode == "local"
-  res_name    = "machinaos"
-  bucket_name = "${var.project}-machinaos"
-  object_name = "machinaos.tgz"
+  res_name    = var.resource_name
+  bucket_name = "${var.project}-${var.resource_name}"
+  object_name = "${var.resource_name}.tgz"
 }
 
 # --- Artifact bucket + object (local source only) --------------------------
@@ -42,7 +44,7 @@ resource "google_storage_bucket_object" "pkg" {
 
 resource "google_service_account" "vm" {
   account_id   = local.res_name
-  display_name = "MachinaOs VM"
+  display_name = "OpenCompany VM"
 }
 
 resource "google_storage_bucket_iam_member" "vm_read" {
@@ -100,11 +102,12 @@ resource "google_compute_instance" "vm" {
 
   metadata = {
     startup-script = templatefile("${path.module}/startup.sh.tftpl", {
-      app_env     = var.app_env
-      source_mode = var.source_mode
-      version     = var.machinaos_version
-      bucket      = local.use_local ? google_storage_bucket.artifact[0].name : ""
-      object      = local.object_name
+      app_env       = var.app_env
+      source_mode   = var.source_mode
+      version       = var.opencompany_version
+      resource_name = var.resource_name
+      bucket        = local.use_local ? google_storage_bucket.artifact[0].name : ""
+      object        = local.object_name
     })
   }
 

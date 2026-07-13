@@ -126,7 +126,7 @@ flowchart TD
     {"phase": "todo_update", "todos": [...]}, workflow_id=...)` — drives the
     canvas glow; only when a broadcaster is present on `ctx.raw`.
   - `dispatch_todos_updated(...)` — typed `todos_updated` CloudEvent
-    (`com.machinaos.todos.updated`) via `services.events.dispatch.emit`
+    (`com.opencompany.todos.updated`) via `services.events.dispatch.emit`
     (`server/nodes/tool/write_todos/_events.py`), refreshing the open Current
     Todos panel's `['todos', session_key]` query. Fires unconditionally.
 - **External API calls**: none.

@@ -40,7 +40,7 @@ from ._workflow import CronTriggerWorkflow
 logger = get_logger(__name__)
 
 register_temporal_plugin(SimplePlugin(name="cron-scheduler", workflows=[CronTriggerWorkflow]))
-register_canary_trigger_type("cronScheduler", "com.machinaos.cron.tick")
+register_canary_trigger_type("cronScheduler", "com.opencompany.cron.tick")
 
 
 def _calculate_wait_seconds(p: Dict[str, Any]) -> int:

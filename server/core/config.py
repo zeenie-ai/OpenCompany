@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     auth_mode: Literal["single", "multi"] = Field(default="single", env="AUTH_MODE")
     jwt_secret_key: str = Field(env="JWT_SECRET_KEY", min_length=32)
     jwt_expire_minutes: int = Field(default=10080, env="JWT_EXPIRE_MINUTES", ge=60)  # 7 days
-    jwt_cookie_name: str = Field(default="machina_token", env="JWT_COOKIE_NAME")
+    jwt_cookie_name: str = Field(default="opencompany_token", env="JWT_COOKIE_NAME")
     jwt_cookie_secure: bool = Field(default=False, env="JWT_COOKIE_SECURE")  # True in production
     jwt_cookie_samesite: Literal["lax", "strict", "none"] = Field(default="lax", env="JWT_COOKIE_SAMESITE")
 
@@ -119,7 +119,7 @@ class Settings(BaseSettings):
     # of an always-on cloud VM; explicit TEMPORAL_<QUEUE>_CONCURRENCY
     # env vars always win).
     #   local       — developer machine; sleeps/hibernates; 4-8 cores
-    #   cloud       — always-on server (machina deploy)
+    #   cloud       — always-on server (company deploy)
     #   self_hosted — user-managed always-on box
     deployment_mode: Literal["local", "cloud", "self_hosted"] = Field(
         default="local",
@@ -152,7 +152,7 @@ class Settings(BaseSettings):
     # Terminate every workflow in ``Running`` state on server boot.
     # Preserves history (workflows show as ``Terminated`` in the
     # Temporal UI, not deleted) but prevents auto-resumption, since
-    # MachinaOS's ``DeploymentManager`` has no boot-time reconcile
+    # OpenCompany's ``DeploymentManager`` has no boot-time reconcile
     # against Temporal Visibility yet — resumed workflows would
     # otherwise be invisible to the UI.
     temporal_terminate_running_on_startup: bool = Field(
@@ -240,15 +240,16 @@ class Settings(BaseSettings):
 
     # Data directory (base for all persistent storage: DBs, workspaces,
     # workflows, claude state). Default is the user's home dir
-    # (``~/.machina``) — same convention claude code itself uses
+    # (``~/.opencompany``) — same convention claude code itself uses
     # (``~/.claude/``), Stripe (``~/.config/stripe/``), ngrok
     # (``~/.ngrok2/``). Survives ``rm -rf`` of the repo. Resolution
     # rules (``~``, absolute, repo-relative) live in
-    # :func:`core.paths.machina_root`. No auto-migration from the
+    # :func:`core.paths.opencompany_root`. The path resolver falls back to
+    # an existing sibling ``.machina`` root so upgrades retain state.
     # pre-cutover ``data/`` + ``workflows/`` layout — operators
     # either set ``DATA_DIR=data`` to keep the old layout or move
     # the contents manually (see ``paths.py`` docstring).
-    data_dir: str = Field(default="~/.machina", env="DATA_DIR")
+    data_dir: str = Field(default="~/.opencompany", env="DATA_DIR")
 
     # Credentials Database (separate encrypted database for API keys and OAuth tokens)
     # Resolved relative to data_dir unless absolute
@@ -346,7 +347,7 @@ class Settings(BaseSettings):
 
     # Filesystem-path fields that may use ``~`` in ``.env``. Expanded
     # once at load time so every downstream consumer
-    # (``core.paths.machina_root``, ``Settings._resolve_under_data``,
+    # (``core.paths.opencompany_root``, ``Settings._resolve_under_data``,
     # the Temporal SQLite path, WhatsApp runtime dir, ...) sees
     # a real path. ``Path.expanduser()`` is a no-op when ``~`` isn't
     # present, so we can run it unconditionally.
@@ -360,10 +361,10 @@ class Settings(BaseSettings):
         """Compose the SQLAlchemy URL from ``DATA_DIR`` + ``WORKFLOW_DB_FILENAME``.
 
         Always ``sqlite+aiosqlite:///<abspath>`` — the only DB engine
-        MachinaOS uses. Parent dir is mkdir'd here so the DB file can
+        OpenCompany uses. Parent dir is mkdir'd here so the DB file can
         be opened on first access without a separate bootstrap step.
         Reads :meth:`_resolve_under_data` so the same DEV / daemon
-        toggle (``.env.dev`` swapping ``DATA_DIR=.machina``) that moves
+        toggle (``.env.dev`` swapping ``DATA_DIR=.opencompany``) that moves
         every other state path moves ``workflow.db`` too.
         """
         db_path = Path(self._resolve_under_data(self.workflow_db_filename))

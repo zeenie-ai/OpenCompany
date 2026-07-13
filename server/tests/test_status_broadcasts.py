@@ -233,7 +233,7 @@ class TestEventWaiterDispatchAcceptsEnvelope:
         from services.events.envelope import WorkflowEvent
 
         event = WorkflowEvent(
-            source="machinaos://test",
+            source="opencompany://test",
             type="test.something.happened",
             subject="test-subject",
             data={"k": "v"},

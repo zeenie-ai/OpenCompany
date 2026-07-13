@@ -345,7 +345,7 @@ class TestExecutionIdPropagation:
             "mints a fresh uuid per tool call."
         )
 
-    def test_machina_workflow_threads_execution_id(self):
+    def test_opencompany_workflow_threads_execution_id(self):
         import inspect
 
         from services.temporal.workflow import MachinaWorkflow

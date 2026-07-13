@@ -3,7 +3,7 @@ name: javascript-skill
 description: Execute JavaScript code for calculations, data processing, and JSON manipulation. Full ES6+ support with Node.js runtime.
 allowed-tools: "javascript_executor"
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: code
 

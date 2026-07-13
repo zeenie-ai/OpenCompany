@@ -3,7 +3,7 @@ name: proxy-config-skill
 description: Configure residential proxy providers and make proxied HTTP requests with geo-targeting.
 allowed-tools: "proxy_config proxy_request proxy_status python_executor"
 metadata:
-  author: machina
+  author: opencompany
   version: "3.0"
   category: integration
 

@@ -69,7 +69,7 @@ Either path is sufficient; the token wins when both exist.
 Every invocation appends `--global-config <DATA_DIR>/vercel/` (plus
 `--no-color`; env gets `NO_COLOR=1`). The CLI's default
 `com.vercel.cli` location varies wildly by OS — pinning makes the
-`auth.json` sniff deterministic and isolates MachinaOs-managed auth
+`auth.json` sniff deterministic and isolates OpenCompany-managed auth
 from the user's own system `vercel login` (the
 `CLAUDE_CONFIG_DIR = data_path("claude")` idiom). The path is composed
 inline in `_service.vercel_config_dir()` per the `core.paths` rule.

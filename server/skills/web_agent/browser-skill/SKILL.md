@@ -3,7 +3,7 @@ name: browser-skill
 description: Interactive browser automation - navigate, click, type, fill forms, take screenshots, get accessibility snapshots. Supports system Chrome/Edge via auto-detection.
 allowed-tools: browser
 metadata:
-  author: machina
+  author: opencompany
   version: "2.0"
   category: web
 
@@ -161,11 +161,11 @@ Browser detection uses `shutil.which()` on Linux/macOS (PATH lookup) and the Win
 
 ### Lifecycle
 
-The browser daemon auto-starts on first use and persists between commands (for session reuse). It is automatically shut down when MachinaOs stops -- no manual cleanup needed.
+The browser daemon auto-starts on first use and persists between commands (for session reuse). It is automatically shut down when OpenCompany stops -- no manual cleanup needed.
 
 ### Sessions
 
-Each distinct session name maps to ONE browser instance. When the `session` field is left empty (the normal case), it auto-derives as `machina_<execution_id>` -- stable for the whole workflow/agent run, including delegated sub-agents -- so every browser call in a run reuses the same browser window and keeps its cookies, tabs, and login state.
+Each distinct session name maps to ONE browser instance. When the `session` field is left empty (the normal case), it auto-derives as `opencompany_<execution_id>` -- stable for the whole workflow/agent run, including delegated sub-agents -- so every browser call in a run reuses the same browser window and keeps its cookies, tabs, and login state.
 
 - **Leave `session` empty.** Do not invent a session name per call; the auto-derived session already chains your calls onto one browser.
 - Set `session` explicitly only to persist state across separate runs (e.g. `my_login_session`) or to isolate parallel flows within one run.

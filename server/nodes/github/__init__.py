@@ -4,7 +4,7 @@ Self-contained CLI-managed-auth plugin (Stripe pattern): the gh CLI
 owns its auth end-to-end — ``gh auth login --web`` driven from the
 credentials modal (or the user's own terminal), token in the system
 credential store, a synthetic ``cli-managed`` marker OAuth row for the
-catalogue badge. MachinaOs never stores or injects a token. On login
+catalogue badge. OpenCompany never stores or injects a token. On login
 success ``gh auth setup-git`` configures git's credential helper (the
 official bridge), so a future git node needs zero auth code.
 """

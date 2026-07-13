@@ -15,6 +15,20 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 
+def _default_skill_dirs() -> List[Path]:
+    """Built-ins plus legacy and canonical project skill directories."""
+
+    server_dir = Path(__file__).parent.parent
+    cwd = Path.cwd()
+    # Later directories win in scan_skills(), so canonical project skills
+    # override a same-named legacy skill during the transition.
+    return [
+        server_dir / "skills",
+        cwd / ".machina" / "skills",
+        cwd / ".opencompany" / "skills",
+    ]
+
+
 @dataclass
 class SkillMetadata:
     """Metadata from SKILL.md frontmatter (loaded at startup for all skills)."""
@@ -42,7 +56,8 @@ class SkillLoader:
 
     Skills are loaded from multiple directories with priority:
     1. Built-in skills: server/skills/
-    2. Project skills: .machina/skills/ (in current directory)
+    2. Project skills: .opencompany/skills/ (legacy .machina/skills is
+       scanned at lower priority)
     3. User skills from database (created via UI)
 
     Follows progressive disclosure pattern:
@@ -436,13 +451,7 @@ def get_skill_loader() -> SkillLoader:
     """
     global _skill_loader
     if _skill_loader is None:
-        # Default directories
-        server_dir = Path(__file__).parent.parent
-        skill_dirs = [
-            server_dir / "skills",  # Built-in skills
-            Path.cwd() / ".machina" / "skills",  # Project skills
-        ]
-        _skill_loader = SkillLoader(skill_dirs=skill_dirs, database=_resolve_database())
+        _skill_loader = SkillLoader(skill_dirs=_default_skill_dirs(), database=_resolve_database())
         _skill_loader.scan_skills()
     elif _skill_loader._database is None:
         # Created before the container was wired -- bind the DB now so
@@ -461,11 +470,6 @@ def init_skill_loader(database=None) -> SkillLoader:
         Initialized SkillLoader
     """
     global _skill_loader
-    server_dir = Path(__file__).parent.parent
-    skill_dirs = [
-        server_dir / "skills",  # Built-in skills
-        Path.cwd() / ".machina" / "skills",  # Project skills
-    ]
-    _skill_loader = SkillLoader(skill_dirs=skill_dirs, database=database)
+    _skill_loader = SkillLoader(skill_dirs=_default_skill_dirs(), database=database)
     _skill_loader.scan_skills()
     return _skill_loader

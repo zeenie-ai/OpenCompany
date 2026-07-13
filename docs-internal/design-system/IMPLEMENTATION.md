@@ -1,6 +1,6 @@
-# MachinaOS Design System — Claude Code Implementation Guide
+# OpenCompany Design System — Claude Code Implementation Guide
 
-This bundle is the **MachinaOS (zeenie.ai) design system**: real design tokens, reference React components, full-screen UI-kit recreations, and foundation/theme documentation. Hand it to Claude Code to implement MachinaOS-branded UI in a real codebase.
+This bundle is the **OpenCompany (zeenie.ai) design system**: real design tokens, reference React components, full-screen UI-kit recreations, and foundation/theme documentation. Hand it to Claude Code to implement OpenCompany-branded UI in a real codebase.
 
 > **What these files are.** `styles.css` + everything under `tokens/` is **production-ready CSS** — ship it as-is. Everything under `components/`, `ui_kits/`, and `guidelines/` is a **design reference**: faithful prototypes (React with inline styles that read the CSS variables) showing the intended look, anatomy, and behavior. Recreate them in the target codebase's own environment and patterns (your component library, your styling system) rather than copying verbatim. If there's no environment yet, React + plain CSS variables is the path of least resistance because the components are already written that way.
 
@@ -94,7 +94,7 @@ Fixed chrome: `--h-toolbar 48` `--h-statusbar 24` `--h-control 32` `--w-sidebar 
 `--dur-fast 90ms` `--dur-default 180ms` `--dur-slow 320ms` · `--ease-default cubic-bezier(.2,.7,.3,1)` · `--ease-emphasis cubic-bezier(.6,-.05,.3,1.4)`. Hover lifts -1px; press translates +1px; disabled opacity .5. Honor `prefers-reduced-motion`.
 
 ### Motion / animation (`tokens/animations.css` — see §6)
-Motion is theme-scoped: each `[data-theme]` overrides `--dur-*`, `--ease-default`, a named `--motion-style`, and which executing-pulse keyframe it uses. The glow color is **`--node-pulse-color`** — a theme-chosen contrast accent, never the node's own fill. Signature keyframes: `node-pulse` (default 3-layer glow), `trigger-listening` (armed heartbeat), `cyber-*` (steps strobe + CRT + scanline), `surv-*`, `ren-pulse-exec`. Helper classes: `.machina-pulse`, `.machina-trigger-armed`, `.machina-bolt`, `.machina-crt`, `.machina-scanline`.
+Motion is theme-scoped: each `[data-theme]` overrides `--dur-*`, `--ease-default`, a named `--motion-style`, and which executing-pulse keyframe it uses. The glow color is **`--node-pulse-color`** — a theme-chosen contrast accent, never the node's own fill. Signature keyframes: `node-pulse` (default 3-layer glow), `trigger-listening` (armed heartbeat), `cyber-*` (steps strobe + CRT + scanline), `surv-*`, `ren-pulse-exec`. Helper classes: `.opencompany-pulse`, `.opencompany-trigger-armed`, `.opencompany-bolt`, `.opencompany-crt`, `.opencompany-scanline`.
 
 ---
 
@@ -121,7 +121,7 @@ Implementation notes:
 
 ## 4. UI kits (full screens to match)
 
-`ui_kits/machinaos/` is an interactive recreation of the product — the source of truth for how components compose into real views. Open `ui_kits/machinaos/index.html`.
+`ui_kits/opencompany/` is an interactive recreation of the product — the source of truth for how components compose into real views. Open `ui_kits/opencompany/index.html`.
 
 - `Toolbar.jsx` — 48px top toolbar (file menu, workflow name, Normal/Dev toggle, action cluster, save state).
 - `Panels.jsx` — 280px workflow sidebar + 320px component palette (search, categorized node catalogue, count badges).
@@ -144,9 +144,9 @@ Visual verification pages (open in a browser): `guidelines/theme-comparison-full
 
 Motion is part of each theme's identity — the personality lives in the **easing function**, not just duration (smooth · organic · mechanical · bouncy 1.6-overshoot · steps glitch · jittery · 680ms drift · stiff · linear scanline). Per-`[data-theme]` scopes set `--dur-*`, `--ease-*`, `--motion-style`, and `--pulse-keyframe/-duration/-timing`.
 
-- **Executing pulse:** add `.machina-pulse` to a running node; it reads the theme's keyframe + `--node-pulse-color` (the theme's contrast glow color — set it on/above the node).
-- **Trigger nodes:** `.machina-trigger-armed` is the continuous "listening" heartbeat while a trigger waits for events (distinct from the one-shot execution pulse); pair with the lightning ⚡ badge (`.machina-bolt`) and no input handle. `trigger-fire` flashes when an event lands.
-- **Ambient:** `.machina-crt` (CRT flicker) + `.machina-scanline` (rolling band) for Cyber/Surveillance frames.
+- **Executing pulse:** add `.opencompany-pulse` to a running node; it reads the theme's keyframe + `--node-pulse-color` (the theme's contrast glow color — set it on/above the node).
+- **Trigger nodes:** `.opencompany-trigger-armed` is the continuous "listening" heartbeat while a trigger waits for events (distinct from the one-shot execution pulse); pair with the lightning ⚡ badge (`.opencompany-bolt`) and no input handle. `trigger-fire` flashes when an event lands.
+- **Ambient:** `.opencompany-crt` (CRT flicker) + `.opencompany-scanline` (rolling band) for Cyber/Surveillance frames.
 - All loops stop under `prefers-reduced-motion`; always ship the static end-state so print/PDF render meaningfully.
 
 ---
@@ -161,7 +161,7 @@ Second person, possessive ("your own AI assistant"). Terse declarative fragments
 
 - `styles.css` — global entry (import this). `tokens/` — the seven token files including `animations.css` (ship as-is).
 - `components/<group>/` — 38 components (`.jsx` + `.d.ts` + `.prompt.md`) + one `*.card.html` specimen per group.
-- `ui_kits/machinaos/` — interactive full-app recreation (`index.html` + JSX) incl. Settings / Credentials / Node-Config panels.
+- `ui_kits/opencompany/` — interactive full-app recreation (`index.html` + JSX) incl. Settings / Credentials / Node-Config panels.
 - `guidelines/` — foundation specimen cards, `THEMES.md`, `ANIMATIONS.md`, and the theme/panel/animation comparison pages.
 - `reference/themes/` — verbatim repo theme CSS (porting reference; not shipped to consumers).
 - `assets/` — product screenshot + official architecture diagrams (SVG).

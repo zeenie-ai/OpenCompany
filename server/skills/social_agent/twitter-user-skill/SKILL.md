@@ -3,7 +3,7 @@ name: twitter-user-skill
 description: Look up Twitter/X user profiles with descriptions, get authenticated user info, and retrieve followers/following lists with profile details.
 allowed-tools: twitter_user
 metadata:
-  author: machina
+  author: opencompany
   version: "2.0"
   category: social
 

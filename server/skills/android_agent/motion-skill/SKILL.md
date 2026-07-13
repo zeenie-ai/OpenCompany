@@ -3,7 +3,7 @@ name: motion-skill
 description: Get Android motion sensor data - accelerometer, gyroscope, detect motion, shake gestures, and device orientation.
 allowed-tools: motion_detection
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: android
 

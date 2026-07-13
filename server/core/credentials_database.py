@@ -4,7 +4,7 @@ This module provides a dedicated SQLite database for storing sensitive credentia
 with field-level Fernet encryption. Credentials are encrypted before storage and
 decrypted on retrieval.
 
-The database is separate from the main application database (machina.db) to:
+The database is separate from the main application database (workflow.db) to:
 1. Isolate sensitive data from application data
 2. Allow different backup/security policies
 3. Enable easier credential rotation and management

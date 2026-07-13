@@ -64,4 +64,4 @@ register_option_loader("googleTasklists", load_tasklists)
 # Temporal activity is emitted by GmailReceiveNode.as_poll_activity()
 # and registered via collect_polling_activities() in the worker. See
 # services/deployment/canary_registry.py.
-register_canary_trigger_type("googleGmailReceive", "com.machinaos.gmail.message.received")
+register_canary_trigger_type("googleGmailReceive", "com.opencompany.gmail.message.received")

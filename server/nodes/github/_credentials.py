@@ -2,7 +2,7 @@
 
 The gh CLI manages its own auth state (system credential store,
 populated by ``gh auth login`` and cleared by ``gh auth logout``).
-MachinaOs stores no token — the credentials modal's connected badge is
+OpenCompany stores no token — the credentials modal's connected badge is
 driven by the synthetic ``cli-managed`` marker OAuth row written by
 ``_handlers.py`` after a successful login.
 """

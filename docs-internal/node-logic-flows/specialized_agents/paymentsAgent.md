@@ -11,7 +11,7 @@
 ## Purpose
 
 AI agent pre-configured for payment processing and financial workflows.
-No first-party payment tools ship with MachinaOs yet, so users typically
+No first-party payment tools ship with OpenCompany yet, so users typically
 wire `httpRequest` against a payment provider (Stripe, Razorpay) as a tool.
 
 ## What is unique to this node

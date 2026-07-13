@@ -3,7 +3,7 @@ name: app-list-skill
 description: Get list of installed Android applications with package names, versions, and metadata.
 allowed-tools: app_list
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: android
 

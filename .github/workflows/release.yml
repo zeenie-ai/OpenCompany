@@ -53,7 +53,7 @@ jobs:
         run: |
           node -e "
             const pkg = require('./package.json');
-            pkg.name = '@zeenie-ai/machinaos';
+            pkg.name = '@zeenie-ai/opencompany';
             pkg.publishConfig = { registry: 'https://npm.pkg.github.com' };
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "

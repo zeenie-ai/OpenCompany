@@ -8,7 +8,7 @@ inline; every consumer imports the named helper. This keeps layout
 knowledge centralised so a future repo rename / directory relocation
 is a single-file edit.
 
-The CLI is **independent of the server's uv environment**: ``machina``
+The CLI is **independent of the server's uv environment**: ``company``
 is installable via pipx / system Python without involving uv, and
 shells out to ``uv run --no-sync ...`` (via :func:`cli.run.uv_run`)
 for any server-side command. :func:`server_venv` exists so build /
@@ -93,7 +93,7 @@ def server_venv(root: Path | None = None) -> Path:
     this -- relative overrides resolve against ``server/`` (matching
     uv's own behaviour), absolute paths are used verbatim.
 
-    The CLI itself does NOT live in this venv; ``machina`` is
+    The CLI itself does NOT live in this venv; ``company`` is
     independently installable (pipx / system python). This helper
     exists so build / clean / preflight code can check or report the
     server venv's location without anyone composing the path inline.
@@ -113,13 +113,13 @@ def node_modules_dir(root: Path | None = None) -> Path:
 
 def client_dist_entry(root: Path | None = None) -> Path:
     """The Vite-built client entrypoint -- proof that the client side
-    of ``machina build`` completed."""
+    of ``company build`` completed."""
     return _root(root) / "client" / "dist" / "index.html"
 
 
 def static_client_script(root: Path | None = None) -> Path:
     """The Node.js static-server script that serves the built client
-    (used by ``machina start``)."""
+    (used by ``company start``)."""
     return _root(root) / "scripts" / "serve-client.js"
 
 
@@ -129,13 +129,42 @@ def static_client_script(root: Path | None = None) -> Path:
 # inside each helper, NOT at module level, so the rest of
 # ``cli.platform_`` (path-prefix helpers, project_root, the platform
 # booleans) keeps loading even when the wheel hasn't been installed
-# yet -- the recovery-verb scenario (``machina clean`` against a
+# yet -- the recovery-verb scenario (``company clean`` against a
 # half-broken env). Callers that actually need a user dir trigger the
 # import on first call; if missing, the natural ``ModuleNotFoundError``
 # surfaces at that callsite, not at every CLI import.
 # ---------------------------------------------------------------------------
 
-_APP_NAME = "MachinaOs"
+_APP_NAME = "OpenCompany"
+_LEGACY_APP_NAME = "MachinaOs"
+
+
+def _prefer_existing_legacy(new_path: Path, legacy_path: Path) -> Path:
+    """Use an existing pre-rebrand directory until the user migrates it.
+
+    New installations resolve to the OpenCompany path. An upgrade must not
+    silently strand databases, daemon state, or Terraform state that already
+    lives in a legacy directory. The repository ships
+    ``.opencompany/workflows`` seed files, so mere directory existence is not
+    evidence that runtime state has migrated: a legacy root with real state
+    still wins while the canonical root contains only those seeds.
+    """
+
+    def has_runtime_state(path: Path) -> bool:
+        if not path.exists():
+            return False
+        if not path.is_dir():
+            return True
+        try:
+            return any(child.name != "workflows" for child in path.iterdir())
+        except OSError:
+            # If an existing directory cannot be inspected, do not redirect
+            # away from it and risk hiding state behind a permissions issue.
+            return True
+
+    if has_runtime_state(legacy_path) and not has_runtime_state(new_path):
+        return legacy_path
+    return new_path
 
 
 def user_data_dir() -> Path:
@@ -143,14 +172,27 @@ def user_data_dir() -> Path:
 
     Honours the project's ``DATA_DIR`` env override (see
     ``.env.template``) -- the convention shared with the server's
-    ``core.paths.machina_root``. Otherwise delegates to platformdirs.
+    ``core.paths.opencompany_root``. Otherwise delegates to platformdirs.
     """
     override = os.environ.get("DATA_DIR")
     if override:
-        return Path(override).expanduser()
+        configured = Path(override).expanduser()
+        # Released versions commonly configured ``~/.machina`` or
+        # ``<repo>/.machina``. The new defaults use the sibling
+        # ``.opencompany`` directory; discover the old sibling until real
+        # runtime state is written to the canonical location. Custom DATA_DIR
+        # values remain exact operator choices and are never rewritten.
+        if configured.name == ".opencompany":
+            return _prefer_existing_legacy(
+                configured, configured.with_name(".machina")
+            )
+        return configured
     import platformdirs
 
-    return platformdirs.user_data_path(_APP_NAME, appauthor=_APP_NAME)
+    return _prefer_existing_legacy(
+        platformdirs.user_data_path(_APP_NAME, appauthor=_APP_NAME),
+        platformdirs.user_data_path(_LEGACY_APP_NAME, appauthor=_LEGACY_APP_NAME),
+    )
 
 
 def user_cache_dir() -> Path:
@@ -158,18 +200,27 @@ def user_cache_dir() -> Path:
     Matches ``server/core/paths.py::packages_dir``."""
     import platformdirs
 
-    return platformdirs.user_cache_path(_APP_NAME, appauthor=_APP_NAME)
+    return _prefer_existing_legacy(
+        platformdirs.user_cache_path(_APP_NAME, appauthor=_APP_NAME),
+        platformdirs.user_cache_path(_LEGACY_APP_NAME, appauthor=_LEGACY_APP_NAME),
+    )
 
 
 def user_config_dir() -> Path:
     """User config directory."""
     import platformdirs
 
-    return platformdirs.user_config_path(_APP_NAME, appauthor=_APP_NAME)
+    return _prefer_existing_legacy(
+        platformdirs.user_config_path(_APP_NAME, appauthor=_APP_NAME),
+        platformdirs.user_config_path(_LEGACY_APP_NAME, appauthor=_LEGACY_APP_NAME),
+    )
 
 
 def user_log_dir() -> Path:
     """User log directory."""
     import platformdirs
 
-    return platformdirs.user_log_path(_APP_NAME, appauthor=_APP_NAME)
+    return _prefer_existing_legacy(
+        platformdirs.user_log_path(_APP_NAME, appauthor=_APP_NAME),
+        platformdirs.user_log_path(_LEGACY_APP_NAME, appauthor=_LEGACY_APP_NAME),
+    )

@@ -3,7 +3,7 @@ name: google-sheets-skill
 description: Read, write, and append data to Google Sheets spreadsheets. Supports cell ranges, formulas, and batch operations.
 allowed-tools: "google_sheets"
 metadata:
-  author: machina
+  author: opencompany
   version: "1.0"
   category: productivity
 

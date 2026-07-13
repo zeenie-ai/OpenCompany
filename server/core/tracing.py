@@ -58,7 +58,7 @@ def _compact_span_formatter(span: ReadableSpan) -> str:
     return " ".join(parts) + "\n"
 
 
-def init_tracing(service_name: str = "machinaos-backend") -> None:
+def init_tracing(service_name: str = "opencompany-backend") -> None:
     """Configure the global TracerProvider.
 
     Idempotent — safe to call multiple times. Subsequent calls are

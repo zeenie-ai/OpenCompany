@@ -3,7 +3,7 @@ name: duckduckgo-search-skill
 description: Search the web using DuckDuckGo for free, privacy-focused results with no API key required.
 allowed-tools: "duckduckgo_search"
 metadata:
-  author: machina
+  author: opencompany
   version: "2.0"
   category: search
 

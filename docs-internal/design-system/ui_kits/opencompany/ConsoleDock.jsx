@@ -1,5 +1,5 @@
-// MachinaOS UI kit — multi-tab console dock (Chat / Console / Terminal).
-const DS_CD = window.MachinaOSDesignSystem_2559cf;
+// OpenCompany UI kit — multi-tab console dock (Chat / Console / Terminal).
+const DS_CD = window.OpenCompanyDesignSystem_2559cf;
 
 const CONSOLE_LINES = [
   { t: '12:01:31', tone: 'var(--fg-muted)', text: 'Workflow "WhatsApp Assistant" loaded · 6 nodes' },
@@ -55,8 +55,8 @@ function ConsoleDock({ open, onToggle }) {
             </div>
           ) : (
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--fg-default)' }}>
-              <div><span style={{ color: 'var(--success)' }}>$</span> machina start</div>
-              <div style={{ color: 'var(--fg-muted)', marginTop: 4 }}>MachinaOS running at http://localhost:3000</div>
+              <div><span style={{ color: 'var(--success)' }}>$</span> company start</div>
+              <div style={{ color: 'var(--fg-muted)', marginTop: 4 }}>OpenCompany running at http://localhost:3000</div>
               <div style={{ color: 'var(--fg-muted)' }}>Temporal · Python backend · WhatsApp service — all up</div>
             </div>
           )}
@@ -66,4 +66,4 @@ function ConsoleDock({ open, onToggle }) {
   );
 }
 
-window.MachinaKit = Object.assign(window.MachinaKit || {}, { ConsoleDock });
+window.OpenCompanyKit = Object.assign(window.OpenCompanyKit || {}, { ConsoleDock });
