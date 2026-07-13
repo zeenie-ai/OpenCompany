@@ -31,7 +31,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
       - run: python -m cli version sync
-      - run: npm publish --access public --provenance
+      - name: Verify npm credentials and scope access
+        run: |
+          npm whoami
+          npm access list packages @zeenie --json
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish public npm package
+        run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

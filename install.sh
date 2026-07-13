@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # OpenCompany Installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/zeenie-ai/MachinaOS/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/zeenie-ai/OpenCompany/main/install.sh | bash
 #
 # This script installs OpenCompany and its dependencies:
 # - Node.js 22+ (via brew/apt/dnf/pacman)
@@ -99,6 +99,25 @@ setup_wsl_npm() {
     fi
 
     success "npm configured for WSL"
+  fi
+}
+
+# The pre-rebrand package owns the deprecated `machina` binary too. Remove it
+# before installing OpenCompany so npm does not fail with an EEXIST shim clash.
+remove_legacy_machinaos() {
+  if ! npm list -g --depth=0 machinaos &> /dev/null; then
+    return 0
+  fi
+
+  info "Removing legacy machinaos package..."
+  if npm uninstall -g machinaos &> /dev/null; then
+    success "Legacy machinaos package removed"
+  elif command -v sudo &> /dev/null; then
+    info "Retrying legacy package removal with sudo..."
+    sudo npm uninstall -g machinaos
+    success "Legacy machinaos package removed"
+  else
+    error_exit "Unable to remove legacy machinaos. Try: sudo npm uninstall -g machinaos"
   fi
 }
 
@@ -269,19 +288,22 @@ main() {
   # Configure npm for WSL before installing
   setup_wsl_npm
 
+  # Avoid a collision with the deprecated `machina` compatibility shim.
+  remove_legacy_machinaos
+
   echo ""
   info "Installing OpenCompany..."
   echo ""
 
   # Install OpenCompany from npm
   # On Linux/WSL without nvm, global npm install needs sudo unless prefix is user-writable
-  if npm install -g opencompany 2>/dev/null; then
+  if npm install -g '@zeenie/opencompany' 2>/dev/null; then
     : # Installed successfully
   elif command -v sudo &> /dev/null; then
     info "Retrying with sudo..."
-    sudo npm install -g opencompany
+    sudo npm install -g '@zeenie/opencompany'
   else
-    error_exit "npm install -g failed. Try: sudo npm install -g opencompany"
+    error_exit "npm install -g failed. Try: sudo npm install -g @zeenie/opencompany"
   fi
 
   echo ""

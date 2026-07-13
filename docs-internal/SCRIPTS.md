@@ -3,7 +3,7 @@
 ## Quick Start
 
 ```bash
-npm install -g opencompany
+npm install -g @zeenie/opencompany
 company start
 ```
 

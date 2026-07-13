@@ -14,7 +14,7 @@ ROOT = project_root()
 def test_npm_bins_expose_company_and_deprecated_machina_only():
     package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
 
-    assert package["name"] == "opencompany"
+    assert package["name"] == "@zeenie/opencompany"
     assert package["bin"] == {
         "company": "./bin/cli.js",
         "machina": "./bin/machina.js",
@@ -39,10 +39,38 @@ def test_cloud_service_resolves_company_then_legacy_machina():
         encoding="utf-8"
     )
 
-    assert "npm install -g opencompany@${version}" in template
+    assert "npm install -g @zeenie/opencompany@${version}" in template
+    assert "npm uninstall -g machinaos" in template
     assert "command -v company || command -v machina" in template
     assert "command -v opencompany" not in template
     assert "ExecStart=$OPENCOMPANY_BIN serve" in template
+
+
+def test_installers_target_scoped_package_without_touching_unscoped_package():
+    installers = {
+        "install.sh": (ROOT / "install.sh").read_text(encoding="utf-8"),
+        "install.ps1": (ROOT / "install.ps1").read_text(encoding="utf-8"),
+        "gcp startup": (
+            ROOT / "cli" / "terraform" / "gcp" / "startup.sh.tftpl"
+        ).read_text(encoding="utf-8"),
+    }
+
+    assert "npm install -g '@zeenie/opencompany'" in installers["install.sh"]
+    assert 'npm install -g "@zeenie/opencompany"' in installers["install.ps1"]
+    assert "npm install -g @zeenie/opencompany@${version}" in installers["gcp startup"]
+
+    for source in installers.values():
+        assert "npm install -g opencompany" not in source
+        assert "npm uninstall -g opencompany" not in source
+        assert "npm uninstall -g machinaos" in source
+
+
+def test_uninstaller_removes_only_scoped_and_official_legacy_packages():
+    uninstaller = (ROOT / "uninstall.sh").read_text(encoding="utf-8")
+
+    assert "remove_global_package '@zeenie/opencompany'" in uninstaller
+    assert "remove_global_package 'machinaos'" in uninstaller
+    assert "npm uninstall -g opencompany" not in uninstaller
 
 
 def test_node_shims_print_canonical_name_and_deprecation_warning():

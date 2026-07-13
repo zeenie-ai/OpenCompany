@@ -1,7 +1,7 @@
 # company
 
 Project supervisor CLI for the OpenCompany stack. The public command is
-`company`; the npm package is `opencompany`, and the legacy `machina` bin
+`company`; the npm package is `@zeenie/opencompany`, and the legacy `machina` bin
 remains as a deprecated compatibility alias. It is also backwards-compatible
 with `pnpm run start`/`dev`/`stop`/etc.
 

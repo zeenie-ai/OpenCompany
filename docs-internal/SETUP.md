@@ -21,7 +21,7 @@ OpenCompany/
 ## Quick Start
 
 ```bash
-npm install -g opencompany
+npm install -g @zeenie/opencompany
 company start
 ```
 
@@ -32,7 +32,7 @@ Open http://localhost:3000
 **Prerequisites:** Node.js 22+, Python 3.12+, uv, 
 
 ```bash
-git clone https://github.com/zeenie-ai/MachinaOS.git OpenCompany
+git clone https://github.com/zeenie-ai/OpenCompany.git OpenCompany
 cd OpenCompany
 npm run build
 npm run start
@@ -41,7 +41,7 @@ npm run start
 ### Docker
 
 ```bash
-git clone https://github.com/zeenie-ai/MachinaOS.git OpenCompany
+git clone https://github.com/zeenie-ai/OpenCompany.git OpenCompany
 cd OpenCompany
 npm run docker:up
 ```

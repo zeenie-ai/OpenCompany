@@ -167,4 +167,4 @@ Second person, possessive ("your own AI assistant"). Terse declarative fragments
 - `assets/` — product screenshot + official architecture diagrams (SVG).
 - `readme.md` — design guide (voice, visual foundations, iconography). `SKILL.md` — Agent-Skill entry point.
 
-**Upstream source:** https://github.com/zeenie-ai/MachinaOS (`client/src/index.css`, `client/src/themes/*.css`, `client/src/components/ui/*`). Explore it for any detail this bundle doesn't cover.
+**Upstream source:** https://github.com/zeenie-ai/OpenCompany (`client/src/index.css`, `client/src/themes/*.css`, `client/src/components/ui/*`). Explore it for any detail this bundle doesn't cover.

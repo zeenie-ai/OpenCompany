@@ -3,8 +3,8 @@
 Design system for **OpenCompany** — zeenie.ai's open-source, local-first AI workflow OS. "Your own AI assistant that does real work": users drag, drop, and connect AI agents to email, calendar, messages, phone, and 50+ services on a visual node canvas, then run or deploy workflows that keep running in the background. No code, no subscription; bring your own API keys or run models locally.
 
 **Sources** (explore these to design even better against this product):
-- GitHub: https://github.com/zeenie-ai/MachinaOS — primary source. Key design files: `client/src/index.css` (all color/role tokens), `client/src/themes/{base,light,dark}.css` (contract tokens: surfaces, type, motion), `client/tailwind.config.js`, `client/src/components/ui/` (TopToolbar, ComponentPalette, ActionButton, StatusBar, WorkflowSidebar…), `client/src/components/SquareNode.tsx` (canvas node anatomy), `client/src/assets/icons/index.ts` (icon resolver).
-- Hosted docs: https://docs.zeenie.xyz/ · DeepWiki: https://deepwiki.com/zeenie-ai/MachinaOS
+- GitHub: https://github.com/zeenie-ai/OpenCompany — primary source. Key design files: `client/src/index.css` (all color/role tokens), `client/src/themes/{base,light,dark}.css` (contract tokens: surfaces, type, motion), `client/tailwind.config.js`, `client/src/components/ui/` (TopToolbar, ComponentPalette, ActionButton, StatusBar, WorkflowSidebar…), `client/src/components/SquareNode.tsx` (canvas node anatomy), `client/src/assets/icons/index.ts` (icon resolver).
+- Hosted docs: https://docs.zeenie.xyz/ · DeepWiki: https://deepwiki.com/zeenie-ai/OpenCompany
 - Reference screenshot: `assets/product-canvas-screenshot.png` (real product — dark canvas, neon nodes, WhatsApp automation demo).
 
 ## Product surfaces

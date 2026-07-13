@@ -29,7 +29,7 @@ process.env.PYTHONUTF8 = '1';
 
 function run(cmd, cwd = ROOT, timeoutMs = 300000) {
   // Strip VIRTUAL_ENV from the spawned env. When the user runs
-  // ``npm install -g opencompany`` from a shell that has activated a
+  // ``npm install -g @zeenie/opencompany`` from a shell that has activated a
   // venv (very common during dev), uv emits a noisy ``VIRTUAL_ENV
   // ... does not match the project environment path`` warning per
   // invocation. uv only honours VIRTUAL_ENV with ``--active``, which
