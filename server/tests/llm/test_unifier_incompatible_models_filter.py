@@ -36,7 +36,7 @@ def _swap_provider_factory(name: str, models: list[str]):
     _registry._REGISTRY[name] = ProviderSpec(
         name=original.name,
         factory=lambda **kwargs: stub_client,
-        sdk_exception_types=original.sdk_exception_types,
+        sdk_exception_refs=original.sdk_exception_refs,
         client_kwargs=original.client_kwargs,
     )
     return original

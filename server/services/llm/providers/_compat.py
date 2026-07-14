@@ -17,8 +17,6 @@ from __future__ import annotations
 
 from typing import Tuple
 
-import openai as _openai_sdk
-
 from core.logging import get_logger
 from services.llm.providers.openai import OpenAIProvider
 from services.llm.registry import ProviderSpec, register_provider
@@ -100,7 +98,7 @@ def _register_compat_providers() -> None:
             ProviderSpec(
                 name=name,
                 factory=OpenAIProvider,
-                sdk_exception_types=(_openai_sdk.OpenAIError,),
+                sdk_exception_refs=("openai:OpenAIError",),
                 client_kwargs={"base_url": base_url},
             )
         )

@@ -268,14 +268,17 @@ class GeminiProvider:
 # translates it into ``NodeUserError`` at one catch site so the error
 # surfaces as a single WARN line through ``BaseNode.execute()`` instead
 # of bubbling up as a bare ``RuntimeError`` traceback.
+#
+# Declared as a lazy "module:Class" ref — ``google.genai`` is the single
+# most expensive SDK import on the boot path (~4s warm / ~15s cold via
+# google.auth + api_core + protobuf); the ref defers it to first use.
 
-from google.genai import errors as _google_genai_errors
 from services.llm.registry import ProviderSpec, register_provider
 
 register_provider(
     ProviderSpec(
         name="gemini",
         factory=GeminiProvider,
-        sdk_exception_types=(_google_genai_errors.APIError,),
+        sdk_exception_refs=("google.genai.errors:APIError",),
     )
 )

@@ -33,13 +33,13 @@ from typing import Awaitable, Dict, Any, List, Optional, Callable, Type, TYPE_CH
 from langchain_core.messages import BaseMessage  # eager: type hint for _run_agent_loop
 import json
 
-# Eager imports — both are tiny and read on every chat/agent execution
-# path. ``openai`` is the canonical SDK whose typed exception hierarchy
-# (``BadRequestError`` / ``AuthenticationError`` / ``RateLimitError`` / …)
-# is the contract this module dispatches on; ``NodeUserError`` is the
-# framework's "user-correctable, no-traceback" sentinel used to surface
-# those typed errors cleanly through ``BaseNode.execute()``.
-import openai
+# ``NodeUserError`` is the framework's "user-correctable, no-traceback"
+# sentinel used to surface typed SDK errors cleanly through
+# ``BaseNode.execute()``. The ``openai`` SDK itself is imported
+# function-locally in ``execute_agent`` / ``execute_chat_agent`` (its
+# only consumers here, via ``except openai.OpenAIError``) — a top-level
+# import cost seconds of boot time and re-created the eager-LLM-SDK
+# anti-pattern (docs-internal/performance.md).
 from services.plugin import NodeUserError
 
 if TYPE_CHECKING:
@@ -1583,6 +1583,8 @@ class AIService:
             workflow_id: Optional workflow ID for scoped status broadcasts
             context: Optional execution context with nodes, edges for nested agent delegation
         """
+        import openai  # local: bound before the try whose except clause needs it
+
         from langchain_core.messages import HumanMessage, SystemMessage
 
         start_time = time.time()
@@ -2131,6 +2133,8 @@ class AIService:
             workflow_id: Optional workflow ID for scoped status broadcasts
             context: Optional execution context with nodes, edges for nested agent delegation
         """
+        import openai  # local: bound before the try whose except clause needs it
+
         from langchain_core.messages import HumanMessage, SystemMessage
 
         start_time = time.time()

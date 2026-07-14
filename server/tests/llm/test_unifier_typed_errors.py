@@ -45,11 +45,11 @@ def _replace_factory(provider_name: str, exc: Exception):
     """Re-register the named provider with a factory returning the failing client."""
     original = get_provider(provider_name)
     failing_client = _stub_client_that_raises(exc)
-    # Build a wrapping spec — same exception tuple, factory swapped for a stub
+    # Build a wrapping spec — same exception refs, factory swapped for a stub
     spec = ProviderSpec(
         name=original.name,
         factory=lambda **kwargs: failing_client,
-        sdk_exception_types=original.sdk_exception_types,
+        sdk_exception_refs=original.sdk_exception_refs,
         client_kwargs=original.client_kwargs,
     )
     # Direct registry write (bypasses register_provider's conflict guard
