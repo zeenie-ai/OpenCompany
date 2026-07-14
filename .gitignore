@@ -163,12 +163,6 @@ server/tests/_test_machina_root/
 server/tests/_test_opencompany_root/
 
 # =============================================================================
-# Documentation (the hosted docs tree is a separate project)
-# =============================================================================
-docs-OpenCompany/
-docs-MachinaOs/
-
-# =============================================================================
 # Experiments (work in progress)
 # =============================================================================
 server/experiments/

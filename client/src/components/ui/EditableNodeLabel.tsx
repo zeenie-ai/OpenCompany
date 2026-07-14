@@ -2,7 +2,7 @@
  * EditableNodeLabel — shared inline-rename input for canvas node components.
  *
  * Encapsulates the dup'd pattern across StartNode, SquareNode, TriggerNode,
- * ToolkitNode, GenericNode:
+ * ToolkitNode:
  *   - sync local edit state with the global `useAppStore.renamingNodeId`
  *   - focus + select the input on enter
  *   - Enter saves, Escape cancels, blur saves
