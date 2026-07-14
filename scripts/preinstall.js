@@ -14,6 +14,10 @@ import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const currentPackageDir = resolve(__dirname, '..');
+const legacyTempPrefixes = ['.machina-'];
+const scopedTempPrefixes = ['.opencompany-', '.machina-'];
+const packageScopes = ['@zeenie', '@zeenie-ai'];
 
 // Skip in CI
 if (process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true') {
@@ -52,21 +56,21 @@ function getGlobalNodeModules() {
   return null;
 }
 
-function cleanup() {
-  const nodeModules = getGlobalNodeModules();
-  if (!nodeModules) return;
-
+function cleanupTempDirectories(parentDir, prefixes) {
   try {
-    const entries = readdirSync(nodeModules);
+    const entries = readdirSync(parentDir);
 
-    // Clean current and pre-rebrand npm temp directories.
+    // Clean current and pre-rebrand npm temp directories without deleting the
+    // temporary package directory that is running this preinstall script.
     for (const name of entries) {
-      if (name.startsWith('.opencompany-') || name.startsWith('.machina-')) {
-        const fullPath = resolve(nodeModules, name);
+      if (prefixes.some((prefix) => name.startsWith(prefix))) {
+        const fullPath = resolve(parentDir, name);
+        if (fullPath === currentPackageDir) continue;
+
         try {
           if (statSync(fullPath).isDirectory()) {
             rmSync(fullPath, { recursive: true, force: true });
-            console.log(`Cleaned: ${name}`);
+            console.log(`Cleaned: ${fullPath}`);
           }
         } catch {
           // Ignore
@@ -74,7 +78,23 @@ function cleanup() {
       }
     }
   } catch {
-    // Can't read node_modules - that's fine
+    // Missing or unreadable directory is fine.
+  }
+}
+
+function cleanup() {
+  const nodeModules = getGlobalNodeModules();
+  if (!nodeModules) return;
+
+  // Only the official legacy `machinaos` package owned a top-level package
+  // here. Never remove `.opencompany-*` at this level: the unscoped
+  // `opencompany` package belongs to an unrelated publisher.
+  cleanupTempDirectories(nodeModules, legacyTempPrefixes);
+
+  // Scoped installs place them inside the package scope. Cover the canonical
+  // npmjs scope and the GitHub Packages mirror scope.
+  for (const scope of packageScopes) {
+    cleanupTempDirectories(resolve(nodeModules, scope), scopedTempPrefixes);
   }
 }
 

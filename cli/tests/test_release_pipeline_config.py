@@ -84,6 +84,22 @@ def install_js_src(root: Path) -> str:
     return (root / "scripts" / "install.js").read_text(encoding="utf-8")
 
 
+@pytest.fixture(scope="module")
+def root_pkg(root: Path) -> dict:
+    return _load_pkg_json(root)
+
+
+@pytest.fixture(scope="module")
+def release_yml(root: Path) -> dict:
+    path = root / ".github" / "workflows" / "release.yml"
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+@pytest.fixture(scope="module")
+def preinstall_js_src(root: Path) -> str:
+    return (root / "scripts" / "preinstall.js").read_text(encoding="utf-8")
+
+
 # ---------------------------------------------------------------------------
 # Node.js sidecar — package.json & .gitignore
 # ---------------------------------------------------------------------------
@@ -347,6 +363,107 @@ def test_predeploy_typecheck_step_routes_through_pnpm_script(predeploy_yml: dict
         "predeploy.yml still calls `tsc --noEmit` directly — switch to "
         "the typecheck script so tsgo is used"
     )
+
+
+# ---------------------------------------------------------------------------
+# Release publication — package.json, release.yml, preinstall.js
+# ---------------------------------------------------------------------------
+
+
+def _run_steps(job: dict) -> list[dict]:
+    return [step for step in job.get("steps", []) if "run" in step]
+
+
+def test_root_package_uses_public_zeenie_scope(root_pkg: dict):
+    assert root_pkg["name"] == "@zeenie/opencompany"
+    assert root_pkg["publishConfig"] == {
+        "access": "public",
+        "registry": "https://registry.npmjs.org",
+    }
+    assert root_pkg["bin"] == {
+        "company": "./bin/cli.js",
+        "machina": "./bin/machina.js",
+    }
+
+
+def test_root_package_uses_canonical_github_urls(root_pkg: dict):
+    canonical = "https://github.com/zeenie-ai/OpenCompany"
+    assert root_pkg["homepage"] == f"{canonical}#readme"
+    assert root_pkg["repository"] == {
+        "type": "git",
+        "url": f"git+{canonical}.git",
+    }
+    assert root_pkg["bugs"] == {"url": f"{canonical}/issues"}
+
+
+def test_npm_release_authenticates_and_checks_scope_before_publish(
+    release_yml: dict,
+):
+    steps = _run_steps(release_yml["jobs"]["publish-npm"])
+    preflight_index = next(
+        i for i, step in enumerate(steps) if "npm whoami" in step["run"]
+    )
+    publish_index = next(
+        i for i, step in enumerate(steps) if "npm publish" in step["run"]
+    )
+    preflight = steps[preflight_index]
+
+    assert "npm access list packages @zeenie --json" in preflight["run"]
+    assert preflight["env"]["NODE_AUTH_TOKEN"] == "${{ secrets.NPM_TOKEN }}"
+    assert preflight_index < publish_index
+
+
+def test_npm_release_publishes_public_package_with_provenance(release_yml: dict):
+    steps = _run_steps(release_yml["jobs"]["publish-npm"])
+    publish = next(step for step in steps if "npm publish" in step["run"])
+
+    assert publish["run"] == "npm publish --access public --provenance"
+    assert publish["env"]["NODE_AUTH_TOKEN"] == "${{ secrets.NPM_TOKEN }}"
+
+
+def test_github_packages_release_keeps_github_owner_scope(release_yml: dict):
+    steps = _run_steps(release_yml["jobs"]["publish-github-packages"])
+    configure = next(
+        step for step in steps if "pkg.name = '@zeenie-ai/opencompany'" in step["run"]
+    )
+
+    registry_assignment = next(
+        line.strip()
+        for line in configure["run"].splitlines()
+        if line.strip().startswith("pkg.publishConfig =")
+    )
+    assert registry_assignment == (
+        "pkg.publishConfig = { registry: 'https://npm.pkg.github.com' };"
+    )
+    assert any(step["run"] == "npm publish" for step in steps)
+
+
+@pytest.mark.parametrize("scope", ["@zeenie", "@zeenie-ai"])
+def test_preinstall_cleans_scoped_npm_temp_directories(
+    preinstall_js_src: str, scope: str
+):
+    assert repr(scope) in preinstall_js_src
+    assert (
+        "cleanupTempDirectories(resolve(nodeModules, scope), scopedTempPrefixes)"
+        in preinstall_js_src
+    )
+    assert "prefixes.some((prefix) => name.startsWith(prefix))" in preinstall_js_src
+
+
+def test_preinstall_does_not_touch_unrelated_unscoped_opencompany_temps(
+    preinstall_js_src: str,
+):
+    assert "const legacyTempPrefixes = ['.machina-']" in preinstall_js_src
+    assert (
+        "cleanupTempDirectories(nodeModules, legacyTempPrefixes)"
+        in preinstall_js_src
+    )
+    assert "cleanupTempDirectories(nodeModules, scopedTempPrefixes)" not in preinstall_js_src
+
+
+def test_preinstall_never_removes_current_package_directory(preinstall_js_src: str):
+    assert "const currentPackageDir = resolve(__dirname, '..')" in preinstall_js_src
+    assert "if (fullPath === currentPackageDir) continue" in preinstall_js_src
 
 
 # ---------------------------------------------------------------------------

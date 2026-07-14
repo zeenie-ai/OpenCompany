@@ -1,6 +1,6 @@
 {
-  "name": "opencompany",
-  "version": "0.0.93",
+  "name": "@zeenie/opencompany",
+  "version": "0.0.94",
   "description": "Open source workflow automation platform with AI agents, React Flow, and n8n-inspired architecture",
   "type": "module",
   "keywords": [
@@ -17,13 +17,17 @@
   ],
   "author": "Rohit G <trohitg@gmail.com>",
   "license": "MIT",
-  "homepage": "https://github.com/zeenie-ai/MachinaOS#readme",
+  "homepage": "https://github.com/zeenie-ai/OpenCompany#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zeenie-ai/MachinaOS.git"
+    "url": "git+https://github.com/zeenie-ai/OpenCompany.git"
   },
   "bugs": {
-    "url": "https://github.com/zeenie-ai/MachinaOS/issues"
+    "url": "https://github.com/zeenie-ai/OpenCompany/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
   },
   "bin": {
     "company": "./bin/cli.js",

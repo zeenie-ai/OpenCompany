@@ -1,6 +1,6 @@
 /* ============================================================================
  * OpenCompany — color tokens
- * Source: zeenie-ai/MachinaOS client/src/index.css + client/src/themes/{light,dark}.css
+ * Source: zeenie-ai/OpenCompany client/src/index.css + client/src/themes/{light,dark}.css
  * Light = grey-blue "paper" workspace. Dark = neutral slate dark (the same
  * family inverted, NOT Solarized teal) with Dracula vibrant accents.
  * Toggle dark mode with class="dark" or data-theme="dark" on <html>.

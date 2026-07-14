@@ -1,6 +1,6 @@
 # OpenCompany theming architecture — analysis
 
-Source: `client/src/themes/*.css` + `client/src/index.css` in https://github.com/zeenie-ai/MachinaOS (full copies in `reference/themes/`). The app ships **12 themes**: 2 canonical (light, dark) + 10 "skins" (Renaissance, Greek, Edo, Steampunk, Atomic, Cyber, Wasteland, Rot, Plague, Surveillance).
+Source: `client/src/themes/*.css` + `client/src/index.css` in https://github.com/zeenie-ai/OpenCompany (full copies in `reference/themes/`). The app ships **12 themes**: 2 canonical (light, dark) + 10 "skins" (Renaissance, Greek, Edo, Steampunk, Atomic, Cyber, Wasteland, Rot, Plague, Surveillance).
 
 ## 1. How it works — a four-layer contract
 

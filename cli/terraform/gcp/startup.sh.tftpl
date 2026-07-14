@@ -21,12 +21,17 @@ corepack enable || true
 curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
 
 echo "[${resource_name}] installing OpenCompany package..."
+# The pre-rebrand package owns the deprecated `machina` binary too. Remove it
+# first so npm can create OpenCompany's compatibility shim during an upgrade.
+if npm list -g --depth=0 machinaos >/dev/null 2>&1; then
+  npm uninstall -g machinaos
+fi
 %{ if source_mode == "local" ~}
 TOKEN=$(curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" | python3 -c 'import sys, json; print(json.load(sys.stdin)["access_token"])')
 curl -fsS -H "Authorization: Bearer $TOKEN" -o /tmp/${resource_name}.tgz "https://storage.googleapis.com/storage/v1/b/${bucket}/o/${object}?alt=media"
 npm install -g /tmp/${resource_name}.tgz
 %{ else ~}
-npm install -g opencompany@${version}
+npm install -g @zeenie/opencompany@${version}
 %{ endif ~}
 
 echo "[${resource_name}] writing login-gate env..."

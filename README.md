@@ -3,10 +3,10 @@
 
 # OpenCompany
 
-<a href="https://www.npmjs.com/package/opencompany" target="_blank"><img src="https://img.shields.io/npm/v/opencompany.svg" alt="npm version"></a>
+<a href="https://www.npmjs.com/package/@zeenie/opencompany" target="_blank"><img src="https://img.shields.io/npm/v/%40zeenie%2Fopencompany.svg" alt="npm version"></a>
 <a href="https://opensource.org/licenses/MIT" target="_blank"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
 <a href="https://discord.gg/c9pCJ7d8Ce" target="_blank"><img src="https://img.shields.io/discord/1455977012308086895?logo=discord&logoColor=white&label=Discord" alt="Discord"></a>
-<a href="https://deepwiki.com/zeenie-ai/MachinaOS" target="_blank"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
+<a href="https://deepwiki.com/zeenie-ai/OpenCompany" target="_blank"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
 
 Your own AI assistant that does real work. Drag, drop, and connect AI agents to your email, calendar, messages, phone, and 50+ other services. Runs on your own machine — your data stays with you.
 
@@ -17,9 +17,13 @@ No code required. No subscription. No usage limits. Bring your own API keys (or 
 **Prerequisites:** Node.js 22+, Python 3.12+
 
 ```bash
-npm install -g opencompany
+npm install -g @zeenie/opencompany
 company start
 ```
+
+The canonical npm package is `@zeenie/opencompany`. The unscoped
+`opencompany` package is unrelated to this project and is neither installed nor
+removed by OpenCompany's tooling.
 
 Open http://localhost:3000 and click **Credentials** to connect your first AI provider.
 
@@ -33,7 +37,7 @@ available as a deprecated legacy alias; new scripts should use `company`.
 
 ```bash
 npm install -g pnpm
-git clone https://github.com/zeenie-ai/MachinaOS.git OpenCompany
+git clone https://github.com/zeenie-ai/OpenCompany.git OpenCompany
 cd OpenCompany
 pnpm run build
 pnpm run dev
@@ -57,13 +61,13 @@ https://github.com/user-attachments/assets/5798fe61-8d26-4d3a-90aa-189bf4eec79f
 
 ## How It Works
 
-[![How OpenCompany Works](docs/diagrams/how-it-works.svg)](https://raw.githubusercontent.com/zeenie-ai/MachinaOS/main/docs/diagrams/how-it-works.svg)
+[![How OpenCompany Works](docs/diagrams/how-it-works.svg)](https://raw.githubusercontent.com/zeenie-ai/OpenCompany/main/docs/diagrams/how-it-works.svg)
 
 Pick nodes from the palette, drag them onto a canvas, connect them with lines, give your AI agent some memory and skills, and hit Play. Or **deploy** the workflow so it runs forever in the background — waiting for emails, responding to messages, checking in on a schedule, doing the work you'd rather not.
 
 ## Three Example Workflows For Reference.
 
-[![Default workflows that ship with OpenCompany](docs/diagrams/default-workflows.svg)](https://raw.githubusercontent.com/zeenie-ai/MachinaOS/main/docs/diagrams/default-workflows.svg)
+[![Default workflows that ship with OpenCompany](docs/diagrams/default-workflows.svg)](https://raw.githubusercontent.com/zeenie-ai/OpenCompany/main/docs/diagrams/default-workflows.svg)
 
 The first time you open OpenCompany, three example workflows load automatically. Open them on the canvas to see exactly how the pieces fit together, then edit any node and save your own version.
 
@@ -172,7 +176,7 @@ Every LLM call and API request is tracked with USD cost. See per-provider spend 
 
 ## Quick Setup Tour
 
-1. **Install** with `npm install -g opencompany` (or run from source)
+1. **Install** with `npm install -g @zeenie/opencompany` (or run from source)
 2. **Start** with `company start` — opens at http://localhost:3000
 3. **Connect a provider** — click the **Credentials** button, paste an API key or click through OAuth
 4. **Drag a node** from the left palette onto the canvas
@@ -190,7 +194,7 @@ Want to add a node, LLM provider, skill, or integration? One Python file = one n
 - **[docs-internal/](docs-internal/)** — deep-dive architecture docs (execution engine, Temporal, LLM layer, credentials, event system, performance, build pipeline)
 - **[CLAUDE.md](CLAUDE.md)** — comprehensive project memory (great for AI-assisted contributions)
 - **Hosted docs:** https://docs.zeenie.xyz/
-- **DeepWiki:** https://deepwiki.com/zeenie-ai/MachinaOS
+- **DeepWiki:** https://deepwiki.com/zeenie-ai/OpenCompany
 
 ## Community
 

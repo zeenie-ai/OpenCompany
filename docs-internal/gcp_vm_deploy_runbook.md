@@ -1,12 +1,15 @@
 # GCP VM Deploy Runbook (released npm package, manual gcloud + cf)
 
-Step-by-step runbook for deploying the **released** `opencompany` npm package on a fresh
+Step-by-step runbook for deploying the **released** `@zeenie/opencompany` npm package on a fresh
 GCP VM behind a Cloudflare-proxied domain, with the single-owner login gate enabled.
 Written to be executable by an AI agent (or a human) with no other context.
 
 This is the manual path — it does NOT use `company deploy` / Terraform
 (`cli/commands/deploy/`, `cli/terraform/`). It was derived from a real deployment to
-`demo.zeenie.xyz` (June 2026, opencompany@0.0.88) and encodes every pitfall hit on the way.
+`demo.zeenie.xyz` (June 2026, before the scoped-package cutover) and encodes every pitfall hit on the way.
+
+The unscoped `opencompany` package belongs to a different publisher. Do not install
+or remove it while following this runbook.
 
 ## Parameters
 
@@ -46,7 +49,7 @@ print('ENC='+secrets.token_hex(24))"
 ## Known pitfalls (read first — these each cost a redeploy or a debugging loop)
 
 1. **Debian 12 fails.** The npm package's `postinstall` hard-requires Python 3.12+;
-   Debian 12 ships 3.11 and `npm install -g opencompany` exits 1
+   Debian 12 ships 3.11 and `npm install -g @zeenie/opencompany` exits 1
    (`ERROR: Python 3.12+ is required.`). Use **Ubuntu 24.04** (`ubuntu-2404-lts-amd64`
    in `ubuntu-os-cloud`), which ships Python 3.12.
 2. **The released package has no `company serve`.** Released CLI commands are only
@@ -113,7 +116,7 @@ corepack enable || true
 curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
 
 echo "[opencompany] installing OpenCompany released package..."
-npm install -g opencompany@latest
+npm install -g @zeenie/opencompany@latest
 
 echo "[opencompany] writing login-gate env..."
 mkdir -p /etc/opencompany
@@ -193,6 +196,8 @@ systemctl reload nginx
 
 echo "[opencompany] installing systemd service (README usage: company start)..."
 OPENCOMPANY_BIN=$(command -v company)
+OPENCOMPANY_PACKAGE_DIR="$(npm root -g)/@zeenie/opencompany"
+test -d "$OPENCOMPANY_PACKAGE_DIR"
 cat > /etc/systemd/system/opencompany.service <<SERVICE_EOF
 [Unit]
 Description=OpenCompany (released, company start)
@@ -202,7 +207,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 EnvironmentFile=/etc/opencompany/opencompany.env
-WorkingDirectory=/usr/lib/node_modules/opencompany
+WorkingDirectory=$OPENCOMPANY_PACKAGE_DIR
 ExecStart=$OPENCOMPANY_BIN start
 Restart=on-failure
 RestartSec=5
@@ -354,7 +359,7 @@ gcloud compute ssh <VM_NAME> --zone=<ZONE> --quiet --command="sudo journalctl -u
 # restart app:
 gcloud compute ssh <VM_NAME> --zone=<ZONE> --quiet --command="sudo systemctl restart opencompany"
 # upgrade to a new release:
-gcloud compute ssh <VM_NAME> --zone=<ZONE> --quiet --command="sudo npm install -g opencompany@latest && sudo systemctl restart opencompany"
+gcloud compute ssh <VM_NAME> --zone=<ZONE> --quiet --command="sudo npm install -g @zeenie/opencompany@latest && sudo systemctl restart opencompany"
 # env (secrets live here):
 #   /etc/opencompany/opencompany.env   (chmod 600; service reads it via EnvironmentFile)
 # data:

@@ -1,5 +1,5 @@
 # OpenCompany Installer for Windows
-# Usage: iwr -useb https://raw.githubusercontent.com/zeenie-ai/MachinaOS/main/install.ps1 | iex
+# Usage: iwr -useb https://raw.githubusercontent.com/zeenie-ai/OpenCompany/main/install.ps1 | iex
 #
 # This script installs OpenCompany and its dependencies:
 # - Node.js 22+ (via winget/choco)
@@ -159,6 +159,20 @@ function Install-Uv {
     }
 }
 
+# The pre-rebrand package owns the deprecated `machina` command too. Remove it
+# before installing OpenCompany so npm does not fail with an existing shim.
+function Remove-LegacyMachinaOs {
+    npm list -g --depth=0 machinaos *> $null
+    if ($LASTEXITCODE -ne 0) { return }
+
+    Info "Removing legacy machinaos package..."
+    npm uninstall -g machinaos
+    if ($LASTEXITCODE -ne 0) {
+        Error-Exit "Unable to remove legacy machinaos. Run PowerShell as Administrator and retry."
+    }
+    Success "Legacy machinaos package removed"
+}
+
 # =============================================================================
 # Main Installation Flow
 # =============================================================================
@@ -173,12 +187,18 @@ function Main {
     if (-not (Check-Python)) { Install-Python }
     if (-not (Check-Uv)) { Install-Uv }
 
+    # Avoid a collision with the deprecated `machina` compatibility shim.
+    Remove-LegacyMachinaOs
+
     Write-Host ""
     Info "Installing OpenCompany..."
     Write-Host ""
 
     # Install OpenCompany from npm
-    npm install -g opencompany
+    npm install -g "@zeenie/opencompany"
+    if ($LASTEXITCODE -ne 0) {
+        Error-Exit "npm install -g failed. Run PowerShell as Administrator and retry."
+    }
 
     Write-Host ""
     Write-Color "============================================" "Green"
