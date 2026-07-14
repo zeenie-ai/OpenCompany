@@ -3,7 +3,7 @@
 Covers the two new steps wired into ``cli.commands.build.build_command``:
 
 - ``[3/6] Building Node.js sidecar`` -> ``pnpm --filter opencompany-nodejs-executor run build``
-- ``[5/6] Compiling Python bytecode`` -> ``uv run python -O -m compileall -q -j 0 ...``
+- ``[5/6] Compiling Python bytecode`` -> ``uv run python -m compileall -q -j 0 ...``
 
 The orchestrator is exercised once per test with every external surface
 mocked (toolchain probes, ``run``, ``project_root``) so the assertions
@@ -163,9 +163,12 @@ def test_only_one_sidecar_bundle_invocation(tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 
-def test_compileall_uses_optimised_flag_quiet_and_parallel(tmp_path: Path):
-    """``-O`` strips asserts; ``-q`` silences per-file output; ``-j 0``
-    parallelises across all CPU cores.
+def test_compileall_emits_plain_pyc_quiet_and_parallel(tmp_path: Path):
+    """No ``-O``: every runtime launches python without ``-O`` and per
+    PEP 488 a non-optimized interpreter only loads plain ``.pyc`` —
+    ``.opt-1.pyc`` from ``-O`` would never be loaded and sources would
+    recompile on first import anyway. ``-q`` silences per-file output;
+    ``-j 0`` parallelises across all CPU cores.
     """
     captured = _run_build_capture_invocations(tmp_path)
     match = _find_call(captured, lambda c: "compileall" in c)
@@ -173,7 +176,10 @@ def test_compileall_uses_optimised_flag_quiet_and_parallel(tmp_path: Path):
         match is not None
     ), f"compileall step missing in {[c['argv'] for c in captured]}"
     argv = match[1]["argv"]
-    assert "-O" in argv, "must use -O for .opt-1.pyc output"
+    assert "-O" not in argv, (
+        "-O emits .opt-1.pyc that the non-optimized runtime never loads "
+        "(PEP 488) — compile plain .pyc instead"
+    )
     assert "-q" in argv, "must use -q to silence per-file logging"
     assert "-j" in argv, "must enable parallelism via -j"
     j_idx = argv.index("-j")
@@ -195,9 +201,9 @@ def test_compileall_runs_via_uv_run_python(tmp_path: Path):
         "run",
         "--no-sync",
         "python",
-        "-O",
         "-m",
-    ], f"expected `uv run --no-sync python -O -m compileall ...`, got {argv[:7]}"
+        "compileall",
+    ], f"expected `uv run --no-sync python -m compileall ...`, got {argv[:7]}"
 
 
 def test_compileall_path_list_matches_source_dirs_constant(tmp_path: Path):
@@ -349,7 +355,7 @@ def test_pipeline_order_client_then_sidecar_then_uv_then_compileall(tmp_path: Pa
     1. client build  (``pnpm --filter react-flow-client run build``)
     2. sidecar bundle (``pnpm --filter opencompany-nodejs-executor run build``)
     3. uv sync       (``uv sync``)
-    4. compileall    (``uv run python -O -m compileall ...``)
+    4. compileall    (``uv run python -m compileall ...``)
 
     compileall MUST follow uv sync because it invokes ``uv run python``,
     which requires the venv to exist.

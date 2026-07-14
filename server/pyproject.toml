@@ -245,3 +245,9 @@ ignore = [
 
 [tool.uv]
 index-url = "https://pypi.org/simple"
+# Compile site-packages to .pyc at `uv sync` time (uv default is false —
+# without this, all ~9,700 dependency .py files compile lazily on the
+# FIRST import after a fresh sync, adding tens of seconds to a post-clean
+# cold boot on Windows). Trades longer sync for faster startup, per the
+# uv docs' recommendation for startup-critical applications.
+compile-bytecode = true
