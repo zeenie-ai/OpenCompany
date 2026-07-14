@@ -31,8 +31,8 @@ This is a React Flow-based workflow automation platform implementing n8n-inspire
 | **[Vercel Service](./docs-internal/vercel_service.md)** | Vercel CLI integration — `vercelAction` (deploy / inspect / list + `custom` CLI passthrough; AI tool `vercel`). Second reference for the CLI-managed-auth pattern: the **device-flow variant** (`vercel login` is one blocking process — no two-step `--complete`; direct `create_subprocess_exec` + chunk-based banner read for the code-embedding URL, pumps drain pipes for the process lifetime, success gate = auth.json mtime advance + sniff). Dual auth: optional `vercel_token` field (injected as `VERCEL_TOKEN` env, never argv) OR CLI login with marker tokens. All invocations pin `--global-config <DATA_DIR>/vercel/` (the `CLAUDE_CONFIG_DIR` isolation idiom). npm install into the shared packages tree (pinned version). First-deploy project guard raises `NodeUserError` instead of letting Vercel derive an invalid name from the workspace dir. Shipped with the generic OAuthConnect change: Login gates on **required** fields only, so optional fields never block CLI login. |
 | **[GitHub Service](./docs-internal/github_service.md)** | GitHub CLI integration — `githubAction` (repo_clone / pr_create / pr_list / pr_merge / issue_create / issue_list + `custom` passthrough; AI tool `github`). **Strict Stripe pattern: the gh CLI owns its own auth** — no token stored/injected by OpenCompany, no auth pre-flight (gh's own error surfaces), marker OAuth row for the modal badge, fieldless catalogue entry. Login = spawned `gh auth login --hostname github.com --git-protocol https --web` — source-verified: headless takes the `isInteractive=false` branch (no Press-Enter), prints one-time code + `github.com/login/device` URL on stderr; the modal shows the code via the generic `verificationCode` plumbing (`useCredentialPanel` → `OAuthConnect`). `login_env()` strips `GH_TOKEN`/`GITHUB_TOKEN` (login aborts otherwise). Success gate = `gh auth status` exit 0, then best-effort **`gh auth setup-git`** (official bridge — the future git node needs zero auth code). gh binary: **project-local, pooch-driven** (temporal `_install.py` idiom) — pinned release under `package_dir("gh")`, system gh never consulted (auth state still shared: gh config paths are user-level). Palette group `vcs`. |
 | **[CI/CD Pipeline](./docs-internal/ci_cd.md)** | GitHub Actions workflows, predeploy validation, release publishing, and composite setup action |
-| **[Performance](./docs-internal/performance.md)** | Cold-start measurements (Application startup complete 2.90 s warm, first WS connect 8.29 s) + per-phase timeline + optimisation history (lazy LangChain imports, esbuild sidecar bundle, scoped `compileall`, PartySocket reconnect, TanStack Query auth bootstrap, `manualChunks`) + bottleneck inventory + reproduction commands + anti-patterns to never reintroduce. Pairs with the build-time pipeline doc below. |
-| **[Release Build Pipeline](./docs-internal/release_build_pipeline.md)** | npm-distribution build pipeline: `tsgo` for type-check (5× faster than tsc), Vite `manualChunks` + `target: 'es2022'`, esbuild Node.js sidecar bundle (drops `tsx` interpreter cost), `python -O -m compileall` for project-source bytecode (excludes `.venv/`, `tests/`). Single source of truth for the bytecode-compile path list: `cli.commands.build.COMPILEALL_SOURCE_DIRS`. |
+| **[Performance](./docs-internal/performance.md)** | Cold-start measurements (Application startup complete 2.90 s warm, 21.5 s cold post-`company clean` — was 71 s before the 2026-07-14 boot-delay fixes; first WS connect 8.29 s) + warm and cold per-phase timelines + optimisation history (lazy LangChain imports, lazy LLM-SDK exception refs, esbuild sidecar bundle, bytecode-at-build, PartySocket reconnect, TanStack Query auth bootstrap, `manualChunks`, Vite dep-cache preservation, off-loop Temporal build-id hash) + bottleneck inventory + reproduction commands + anti-patterns to never reintroduce (incl. eager SDK import at LLM provider registration, unconditional `.vite` wipe, synchronous `Worker()` on the event loop). Pairs with the build-time pipeline doc below. |
+| **[Release Build Pipeline](./docs-internal/release_build_pipeline.md)** | npm-distribution build pipeline: `tsgo` for type-check (5× faster than tsc), Vite `manualChunks` + `target: 'es2022'`, esbuild Node.js sidecar bundle (drops `tsx` interpreter cost), bytecode pre-compile in two halves — `[tool.uv] compile-bytecode = true` (uv sync compiles `.venv/` site-packages) + `python -m compileall` for project source (plain `.pyc`, **no `-O`** — per PEP 488 the non-`-O` runtimes never load `.opt-1.pyc`; excludes `.venv/`, `tests/`). Single source of truth for the bytecode-compile path list: `cli.commands.build.COMPILEALL_SOURCE_DIRS`. |
 | **[Workflow Schema](./docs-internal/workflow-schema.md)** | JSON schema for workflows, edge handle conventions, config node architecture |
 | **[Execution Engine Design](./docs-internal/DESIGN.md)** | Architecture patterns, design standards, and implementation details for the workflow execution engine |
 | **[Execution Roadmap](./docs-internal/ROADMAP.md)** | Implementation status, completed phases, and pending features |
@@ -138,13 +138,16 @@ server/services/
 │   ├── triggers.py          # Generic event-trigger handler
 │   ├── todo.py              # writeTodos execution shim (used by every agent)
 │   └── __init__.py          # Docstring only (google_auth.py retired into nodes/google/_auth_helper.py)
-├── llm/                     # Native LLM provider SDKs (replaces LangChain for chat)
+├── llm/                     # Native LLM provider SDKs (chat path; the agent loop in ai.py is still LangChain)
 │   ├── __init__.py          # Public API exports
 │   ├── protocol.py          # ThinkingConfig, Message, LLMResponse, LLMProvider Protocol
 │   ├── config.py            # ProviderConfig, resolve_max_tokens, resolve_temperature
 │   ├── factory.py           # create_provider() lazy-import factory
+│   ├── registry.py          # ProviderSpec + register_provider — sdk_exception_refs are LAZY "module:Class" strings resolved via pkgutil.resolve_name at except/read time; NEVER import an SDK at registration (locked by tests/llm/test_lazy_sdk_imports.py)
+│   ├── unifier.py           # ChatUnifier facade — routes chat/fetch_models, translates typed SDK errors → NodeUserError, applies incompatible_models filter
+│   ├── vertex.py            # Vertex / Agent-Platform key handling
 │   ├── messages.py          # filter_empty_messages, is_valid_message_content
-│   └── providers/           # Per-provider implementations
+│   └── providers/           # Per-provider implementations (+ _compat.py for the 8 OpenAI-compatible providers)
 │       ├── anthropic.py     # AnthropicProvider (anthropic SDK)
 │       ├── openai.py        # OpenAIProvider (openai SDK)
 │       ├── gemini.py        # GeminiProvider (google-genai SDK)
@@ -690,12 +693,13 @@ Workflows execute via Temporal for durability and horizontal scaling, gated by `
 
 ### CLI Commands (after the global install)
 ```bash
-company start      # Start all services
-company stop       # Stop all services
-company build      # Build for production
-company clean      # Clean build artifacts
-company docker:up  # Start with Docker
-company help       # Show all commands
+company start        # Start all services (production mode)
+company dev          # Start all services in dev mode (Vite HMR)
+company dev --force  # ...forcing Vite to re-bundle deps (recovers "Outdated Optimize Dep"; sets VITE_FORCE -> optimizeDeps.force — the dep cache is otherwise preserved across boots)
+company stop         # Stop all services
+company build        # Build for production
+company clean        # Clean build artifacts
+company help         # Show all commands
 ```
 
 ### npm Scripts

@@ -18,13 +18,21 @@ warm OS file cache, with bytecode pre-compile applied:
 | First WebSocket client connected | **8.29 s** | same |
 | Status broadcasters fully settled | **12.27 s** | same |
 | AIService import (warm) | **703 ms** | same — was ~31 s on v0.0.75 |
+| Application startup complete (cold, post-`company clean` first launch) | **21.5 s** | `cold.txt` 18:44 (2026-07-14, post boot-delay fixes; was **71 s** the same day pre-fix) |
+| LLM provider registration (all 12, cold) | **17 ms** | same — was 44.6 s pre-fix (eager SDK imports) |
 | Vite production build | **~16 s** | last `vite build` run |
 | Vite main bundle | **234 KB gz** | `client/dist/assets/index-*.js` |
 
-The cold-disk first launch on the same code is ~2× slower because the
-Python interpreter regenerates `.pyc` files on the fly. Run
-`company build` once to pre-compile (see ["Pre-compile Python bytecode"]
-below) and subsequent launches hit the warm number.
+The cold-disk first launch on the same code is slower because Windows
+Defender first-touch-scans freshly written files (the rebuilt `.venv`
+is ~389 MB / 18,300 files) and fresh DBs/salt are created. Before the
+2026-07-14 boot-delay fixes a post-`company clean` boot measured
+**71 s** (5.2× the warm boot / 24× the baseline; `cold.txt` 12:55);
+after the fixes the same cycle measures **21.5 s** (`cold.txt` 18:44).
+The remaining cold gap over the 2.90 s warm number is Defender/disk
+I/O plus the items in "Open follow-ups" — not bytecode compilation,
+which now happens at build time (`[tool.uv] compile-bytecode = true`
++ the `-O`-less compileall step below).
 
 ## Optimisation history
 
@@ -40,6 +48,7 @@ corresponding `start.log` measurement.
 | 2026-05-05 | Scoped `python -O -m compileall` over project source dirs (excludes `.venv/`, `tests/`) | 3-5 s on warm-disk imports | `0b45fb1` | same |
 | 2026-05-05 | Test coverage: 12 build-orchestrator + 32 config-contract tests under `cli/tests/` | n/a (regression guard) | `0f1e55e` | same |
 | 2026-05-06 | Frontend WS reconnect → PartySocket; auth bootstrap → TanStack Query; CloudEvents envelope typed | **~20 s** (eliminates +12 s WS drop + +7 s reconnect cycle on cold start) | `e77215c` | inline plan |
+| 2026-07-14 | Boot-delay fix set: (1) lazy `"module:Class"` SDK exception refs on `ProviderSpec` (no SDK import at provider registration); (2) `[tool.uv] compile-bytecode = true` + `-O`-less compileall (bytecode compiled at build for the interpreter that actually runs); (3) Vite dep cache preserved across `company dev` boots (`--force` → `VITE_FORCE` → `optimizeDeps.force`) + `optimizeDeps.include` for heavy lazily-reached deps; (4) temporalio build-id hash pre-warmed off-loop via `asyncio.to_thread` | **~50 s** on post-clean cold boot (71 s → 21.5 s); ~7 s on warm boot (AIService import back to baseline); ~2 min of Vite re-optimize per warm dev boot; event loop no longer frozen ~3 s during Temporal worker start | this change | plan file `analyze-the-log-txt-file-eager-locket.md`; log evidence `log.txt` / `cold.txt` (2026-07-14) |
 
 ## Where launch time is spent today (post `e77215c`, warm cache)
 
@@ -68,6 +77,31 @@ T+8.29 — First WebSocket client connected ◀ UI-interactive point
        ├── Telegram bot validated + polling started
        └── WhatsApp RPC connected (10.93 s)
 T+12.27 — Status broadcasters settled ◀ "everything green"
+```
+
+## Cold post-clean boot (2026-07-14, `cold.txt` 18:44, post-fix)
+
+First launch after `company clean` → `company build` (fresh `.venv`,
+fresh DATA_DIR: new salt + example import). Segment deltas vs the
+same-day pre-fix cold boot in parentheses:
+
+```
+T+0.00 — port-free begin
+T+2.6  — container: core imports done          (was 10.2 s → 1.2 s segment)
+T+3.2  — AIService imported, 12 providers in 17 ms  (was 44.6 s segment)
+T+8.7  — 152 node plugins loaded               (was 10.8 s → 4.7 s segment)
+T+11.9 — Lifespan startup begin                (3.2 s gap: CLI-agent MCP mount)
+T+21.5 — Application startup complete          (lifespan 9.6 s: fresh-DB init 4.4 s,
+                                                salt/PBKDF2 + encryption ~3 s — see follow-ups)
+T+22.2 — ready on port 3010                    (pre-fix: probe timed out at 30 s,
+                                                line never printed)
+T+27    — Temporal worker registered; worker_start span 7.6 s wall but OFF-LOOP:
+          broadcaster refreshes + WhatsApp RPC handshake interleave mid-hash
+          (pre-fix: 3.1 s synchronous loop freeze)
+T+44    — browser connects once, full init burst answered in <0.6 s
+          (pre-fix: insta-disconnect + reload churn + 8 s starved gap;
+           ~40 s here is post-clean one-time Vite dep optimize + human open)
+T+51    — example workflows imported (still inline — see follow-ups)
 ```
 
 ## The remaining +5 s gap (HTTP-ready → first WS connect)
@@ -110,7 +144,7 @@ optimisations above; sum is what hurts.
 
 | # | Bottleneck | Cost | Class | Notes |
 |---|---|---|---|---|
-| 1 | Plugin walker on lifespan (137 modules under `server/nodes/`) | ~0.8 s | Backend | Out-of-scope per user direction; `_HANDLER_REGISTRY` populates via `BaseNode.__init_subclass__`. Lazy-load would shave another ~0.5 s. |
+| 1 | Plugin walker at import time (152 modules under `server/nodes/`; ~2 s warm / ~4.7 s cold, dominated by `nodes/google`'s eager `googleapiclient` import) | ~2 s | Backend | `_HANDLER_REGISTRY` populates via `BaseNode.__init_subclass__` at import. Lazy `googleapiclient` is the cheap win (see follow-ups); full lazy-loading of the walker is the big-blast-radius option. |
 | 2 | TanStack Query auth bootstrap retry window | ~3-5 s | Frontend | See "remaining +5 s gap" above. |
 | 3 | LangChain ecosystem imports inside `services/ai.py` | ~0.7 s | Backend | Already lazied; further wins require refactoring `AgentState`'s `Annotated[Sequence[BaseMessage], ...]` to defer `BaseMessage` resolution. |
 | 4 | Status-broadcaster refresh (`refresh_all_services`, 2.6 s) | ~2.6 s | Backend | Runs after `Application startup complete`, doesn't block server-ready. WhatsApp + Telegram are the long tails. |
@@ -118,25 +152,38 @@ optimisations above; sum is what hurts.
 
 ## Pre-compile Python bytecode
 
-The build-pipeline step that produces `.opt-1.pyc` files for the
-project's own modules (excludes `.venv/`, `tests/`):
+Two halves, both required — measured on a post-`company clean` cold
+boot (2026-07-14, `cold.txt`): without them the boot hit **71 s** to
+"Application startup complete" (5.2× the warm boot, 24× the 2.90 s
+baseline), not the "~2×" this doc previously claimed.
+
+**1. Site-packages** — `server/pyproject.toml` sets
+`[tool.uv] compile-bytecode = true` so `uv sync` compiles the ~9,700
+dependency `.py` files at install time. uv's default is **false**;
+without it every dependency compiles lazily on the FIRST import after
+a fresh sync — tens of seconds on Windows where Defender also
+first-touch-scans each newly written file.
+
+**2. Project source** — the build-pipeline step (excludes `.venv/`,
+`tests/`):
 
 ```bash
 cd server
-uv run python -O -m compileall -q -j 0 services core nodes routers models middleware main.py constants.py
+uv run python -m compileall -q -j 0 services core nodes routers models middleware main.py constants.py
 ```
+
+No `-O`: every runtime launches python without `-O`, and per PEP 488 a
+non-optimized interpreter only loads plain `.pyc` — the previous `-O`
+invocation produced `.opt-1.pyc` files that nothing ever loaded.
 
 `company build` runs this as step `[5/6]`. The path list lives in
 [cli/commands/build.py](../cli/commands/build.py)'s
 `COMPILEALL_SOURCE_DIRS` constant; install.js mirrors the same list.
 Tests at
 [cli/tests/test_build_compile_pipeline.py](../cli/tests/test_build_compile_pipeline.py)
-lock the contract.
-
-Without this step on first launch, every `.py` import compiles
-on-the-fly and the first launch is ~2× slower. Repeated launches use
-the OS file cache anyway, so the steady-state difference is small —
-but the user-visible "first run after `git pull`" is dominated by it.
+and
+[cli/tests/test_release_pipeline_config.py](../cli/tests/test_release_pipeline_config.py)
+lock the contract (including the `compile-bytecode = true` setting).
 
 ## How to reproduce a measurement
 
@@ -182,6 +229,9 @@ formula bound check across 100 × MAX_ATTEMPTS draws.
 These were observed and fixed; the lessons are durable.
 
 - **Eager `from langchain_openai import ChatOpenAI` at module top.** Cost ~21 s cold on Windows because it transitively pulls openai SDK + tiktoken + httpx wrappers. With `from __future__ import annotations` already in place, all type hints become strings; no eager import was structurally required. Lazy via per-function local imports + a small `BaseMessage`-only eager hold-out.
+- **Eager SDK import at LLM provider registration, just to reference typed exception classes.** The `services/llm/providers/*` registration blocks did `import anthropic` / `import openai` / `from google.genai import errors` at module bottom solely to populate `ProviderSpec.sdk_exception_types` — re-creating the anti-pattern above through the raw SDKs (~7.6 s warm / ~45 s cold for the AIService import vs the 703 ms baseline; google.genai alone was ~4 s warm / ~15 s cold). Fixed with lazy `"module:ClassName"` refs (`ProviderSpec.sdk_exception_refs`) resolved via `pkgutil.resolve_name` at except/read time — by then the provider factory has already imported the SDK, so resolution is a `sys.modules` cache hit. Locked by [server/tests/llm/test_lazy_sdk_imports.py](../server/tests/llm/test_lazy_sdk_imports.py) (subprocess purity probe). When adding a provider: pass a string ref, never import the SDK at module level.
+- **Unconditional `client/node_modules/.vite` wipe on every `company dev`.** Forced a full esbuild dependency re-optimization (1-2 minutes on Windows) on every first page load. Vite self-invalidates the dep cache via lockfile/config/NODE_ENV hashes in `.vite/deps/_metadata.json`; the wipe was pure waste on a stable lockfile. Replaced with `company dev --force` → `VITE_FORCE=1` → `optimizeDeps.force` (Vite's own re-bundle mechanism), plus `optimizeDeps.include` for the heavy lazily-reached deps so late discovery can't trigger the mid-session re-optimization behind the "Outdated Optimize Dep" 504 (vitejs/vite#14284).
+- **Synchronous temporalio `Worker()` construction on the event loop.** The constructor derives a default build id by MD5-hashing the bytecode of every module in `sys.modules` (disk reads included) — ~3.1 s at our module count, freezing the loop and inflating concurrent boot work (`broadcaster.refresh_whatsapp` measured 4.2 s vs its ~0.4 s siblings). The value is memoized SDK-globally, so `TemporalWorkerManager.start()` pre-warms it once via `asyncio.to_thread(load_default_build_id)` before constructing the manager worker; all pool workers then construct cheaply. Any new long synchronous call in an async startup path should get the same `to_thread` treatment.
 - **Recursive `setTimeout` retry chain in `useEffect` without `AbortController`.** Survived unmount, leaked timers, called `setState` on stale closures. The React docs explicitly flag this in [https://react.dev/reference/react/useEffect](https://react.dev/reference/react/useEffect). Replaced with TanStack Query's `signal`-aware `queryFn`.
 - **Flat `setTimeout(connect, 3000)` reconnect loop.** No exponential backoff, no jitter, no `code === 1000` honouring, no message replay. Replaced with PartySocket — see [client/src/contexts/WebSocketContext.tsx](../client/src/contexts/WebSocketContext.tsx).
 - **`if (event.code !== 1000)` magic numbers** scattered through the WS lifecycle. Replaced with `WS_CLOSE.NORMAL_CLOSURE` from [connectionConfig.ts](../client/src/lib/connectionConfig.ts) per RFC 6455 §7.4.1.
@@ -193,9 +243,13 @@ Tracked but explicitly **not** in any active plan.
 
 | Item | Estimated saving | Notes |
 |---|---|---|
+| Lazy `googleapiclient` import in `nodes/google` (`_option_loaders.py` / `_oauth.py` / `_base.py` import `googleapiclient.discovery` at module top) | ~2-4 s of the cold plugin walk | googleapiclient is 98 MB / 612 files on disk; now the single biggest import cost left on the cold boot path. Move `from googleapiclient.discovery import build` into function bodies (same idiom as `services/plugin/credential.py`). `nodes/telegram/_service.py`'s top-level `telegram` imports are the smaller sibling. |
+| Defer first-launch example import off the workflows REST request | ~8-10 s of first-launch first paint | `routers/database.py:get_all_workflows` awaits `import_examples_for_user` inline, holding the HTTP response. Move to a lifespan background task (pattern: `_refresh_registry` / `_refresh_all_services` / Temporal init in `main.py`) + emit `workflow_lifecycle("imported")` per example so the sidebar refreshes. Secondary: negative cache in `AuthService.has_valid_key` (validation does one credentials-DB read per declared credential per node). |
+| Cold-boot lifespan I/O (9.6 s measured 2026-07-14 vs 1.5 s pre-fix cold boot) | unclear — needs a re-run | Fresh-DB creation 4.4 s + salt/PBKDF2 + encryption ~3 s under Defender/disk contention now that the whole boot compresses into ~20 s. May be noise; measure before optimising. |
 | Plugin walker lazy-loading | ~0.5-0.8 s on server-ready | Would need to defer registration until first NodeSpec request rather than at module-import time. Touches every `BaseNode` subclass — biggest blast radius of the candidates. |
 | `BaseMessage`-free agent loop (drop the only eager `langchain_core.messages` import in `services/ai.py`) | ~0.3-0.5 s | Native-SDK provider classes already use their own message types; `_run_agent_loop` could be retyped against them and the eager import dropped. |
 | `+5 s` HTTP-ready → first-WS-connect gap | up to 5 s | Diagnostics needed (see "remaining +5 s gap"). May reveal nothing actionable. |
+| Supervisor backend `ready_timeout` (default 30 s, shortest of the three services) | cosmetic | The probe is inert (one-shot, no restart/gating) but a >30 s boot prints an alarming "timed out waiting for port 3010" and skips the ready line. Post-fix boots fit the window; revisit only if cold boots regress past 30 s. |
 | Standalone Nuitka / PyOxidizer release binary | full Python interpreter init (~0.4 s) + `.pyc` regeneration on cold disk | User explicitly declined when scoping the build pipeline; revisit if "ship a single binary" becomes a product requirement. |
 
 ## References

@@ -11,7 +11,7 @@ User scope (confirmed before this work): stay on npm distribution; **no** Nuitka
 | TypeScript type-check | `@typescript/native-preview` (tsgo) | Microsoft's Go-port of `tsc`, ~10x faster on `--noEmit`. Type-check only — JS emit in tsgo is still preview. Vite/esbuild keep producing the actual JS bundles. Stays in `devDependencies`, never ships to users. |
 | Vite output | `manualChunks` + `target: 'es2022'` | Split heavy libs (reactflow, radix-ui, lobehub, react-markdown stack) so the main bundle no longer hits the 1500KB warning ceiling. ES2022 unlocks `findLast` / optional-chaining-assignment without polyfills (Chrome 94+, FF 93+, Safari 15.4+ — within React 19 / Tailwind 4 baseline). |
 | Node sidecar | `esbuild` bundle to `dist/index.js`, run via `node` | Drops tsx interpreter startup (~500ms-1s every server boot). `--packages=external` keeps Express in `node_modules/` for patch flow. |
-| Python | `python -O -m compileall -q -j 0 server/` | Pre-compile bytecode. Implemented as step `[5/6]` in [`cli/commands/build.py`](../cli/commands/build.py) (`COMPILEALL_SOURCE_DIRS` constant lists the dirs). ~5-10s cold-start gain. `-O` strips asserts + `__debug__` branches. |
+| Python | `python -m compileall -q -j 0 <project dirs>` + `[tool.uv] compile-bytecode = true` | Pre-compile bytecode. Implemented as step `[5/6]` in [`cli/commands/build.py`](../cli/commands/build.py) (`COMPILEALL_SOURCE_DIRS` constant lists the dirs); `server/pyproject.toml`'s `compile-bytecode = true` makes `uv sync` (step `[4/6]`) compile `.venv/` site-packages too. No `-O`: every runtime launches python without `-O`, and per PEP 488 a non-optimized interpreter only loads plain `.pyc` — the earlier `-O` invocation produced `.opt-1.pyc` that nothing ever loaded (fixed 2026-07-14; ~30-50s cold-start gain, see [performance.md](performance.md)). |
 
 ## Implementation steps
 
@@ -48,15 +48,26 @@ Keep `sourcemap: analyze` (already correct), keep React Compiler config.
 
 ### 4. Python bytecode pre-compile
 
-- [`cli/commands/build.py`](../cli/commands/build.py) → after `uv sync` (step `[4/6]`), step `[5/6]` runs:
+Two halves (both required; see [performance.md](performance.md) for the
+2026-07-14 cold-boot measurements that motivated the split):
+
+- `server/pyproject.toml` → `[tool.uv] compile-bytecode = true` makes
+  `uv sync` (step `[4/6]`) compile all `.venv/` site-packages at install
+  time. uv's default is **false** — without this, every dependency `.py`
+  compiles lazily on the first import after a fresh sync.
+- [`cli/commands/build.py`](../cli/commands/build.py) → step `[5/6]`
+  covers the project's own source:
   ```python
   run(
-      uv_run("python", "-O", "-m", "compileall", "-q", "-j", "0", *COMPILEALL_SOURCE_DIRS),
+      uv_run("python", "-m", "compileall", "-q", "-j", "0", *COMPILEALL_SOURCE_DIRS),
       cwd=server_cwd,
       check=False,  # missing pyc is non-fatal — runtime regenerates as needed
   )
   ```
-  The list of source dirs is the public `cli.commands.build.COMPILEALL_SOURCE_DIRS` constant — `scripts/install.js` mirrors it.
+  No `-O`: runtimes never launch python with `-O`, so plain `.pyc` is the
+  only bytecode flavor that gets loaded (PEP 488). The list of source
+  dirs is the public `cli.commands.build.COMPILEALL_SOURCE_DIRS`
+  constant — `scripts/install.js` mirrors it.
 
 The npm tarball still excludes `__pycache__/` per `package.json` `files` (cross-Python-minor pyc fragility) — `compileall` runs on the user's machine via `company build` or `scripts/install.js` post-install.
 
@@ -70,7 +81,7 @@ The npm tarball still excludes `__pycache__/` per `package.json` `files` (cross-
 
 - `scripts/install.js` → after `uv sync`:
   1. `npm --prefix server/nodejs run build` — produce `dist/index.js`
-  2. `python -O -m compileall -q -j 0 server/` — same as build.py
+  2. `python -m compileall -q -j 0 <COMPILEALL_SOURCE_DIRS>` — same shape as build.py (no `-O`; locked in sync by `cli/tests/test_release_pipeline_config.py`)
 
 Idempotent on re-runs (compileall only rewrites stale pyc; esbuild is deterministic).
 
@@ -86,8 +97,9 @@ Idempotent on re-runs (compileall only rewrites stale pyc; esbuild is determinis
 | `client/vite.config.js` | + manualChunks, target, lower warning |
 | `server/nodejs/package.json` | + esbuild devDep, build script, change start |
 | `server/nodejs/.gitignore` | new — ignore `dist/` |
-| `cli/commands/build.py` | + compileall step (`[5/6]`), `COMPILEALL_SOURCE_DIRS` constant |
+| `cli/commands/build.py` | + compileall step (`[5/6]`, plain `.pyc` — no `-O`), `COMPILEALL_SOURCE_DIRS` constant |
 | `scripts/install.js` | + sidecar bundle + compileall calls |
+| `server/pyproject.toml` | `[tool.uv] compile-bytecode = true` — `uv sync` compiles `.venv/` site-packages |
 | `.github/workflows/release.yml` | + typecheck gate before build |
 
 ## Verification
@@ -95,7 +107,7 @@ Idempotent on re-runs (compileall only rewrites stale pyc; esbuild is determinis
 1. `pnpm --filter react-flow-client run typecheck` → <5s, zero errors.
 2. `ANALYZE=1 pnpm --filter react-flow-client run build` → open `client/dist/stats.html`. Expect: no chunk above 600 KB gz, main < 200 KB gz, `vendor-flow` split.
 3. `cd server/nodejs && npm run build && node dist/index.js` → starts on :3020 in <100ms.
-4. `cd server && uv run python -O -m compileall -q -j 0 .` → `__pycache__/*.opt-1.pyc` present.
+4. `cd server && uv run python -m compileall -q -j 0 services` → plain `__pycache__/*.pyc` present (no `.opt-1.pyc` — nothing loads those).
 5. Cold-start: clean install + `company start > start.log 2>&1` → `Application startup complete` at ≤+50s (was +66.9s).
 6. `npm pack --dry-run` → `server/nodejs/dist/index.js` included; no `__pycache__/`; tarball size ≤ v0.0.76.
 7. Smoke: `company start` → load http://localhost:3000 → run "AI Assistant" example → agent responds.
