@@ -25,11 +25,12 @@ The repo currently ships **exactly 4 workflows** plus one composite action. A nu
                                   |                    +---------------------+
                                   +-- publish-npm
                                   +-- publish-github-packages
-
-  push to main under      +------------------+
-  docs-OpenCompany/ ------> |    docs.yml      |  Mintlify documentation deploy
-                          +------------------+
 ```
+
+> Documentation is NOT deployed from this repo: the Mintlify docs live in
+> the separate [zeenie-ai/docs-OpenCompany](https://github.com/zeenie-ai/docs-OpenCompany)
+> repo and auto-deploy to docs.zeenie.xyz via the Mintlify GitHub app
+> (that repo's own workflow only runs `mintlify validate` + broken-links).
 
 ### Workflow summary
 
@@ -38,7 +39,6 @@ The repo currently ships **exactly 4 workflows** plus one composite action. A nu
 | CI | `.github/workflows/ci.yml` | push/PR → main | Delegates to predeploy.yml |
 | Predeploy | `.github/workflows/predeploy.yml` | `workflow_call` | build/lint + backend tests + CLI tests + cross-OS build/start smoke |
 | Release | `.github/workflows/release.yml` | `v*.*.*` tag, `workflow_dispatch` | predeploy gate → publish (npm + GitHub Packages) |
-| Docs | `.github/workflows/docs.yml` | push to `docs-OpenCompany/**` on main + manual | Mintlify deploy |
 | Setup | `.github/actions/setup/action.yml` | (composite) | pnpm 9 + Node 22 + Python 3.12 + uv v8 + editable CLI install |
 
 ### Toolchain pin
@@ -51,7 +51,6 @@ The repo currently ships **exactly 4 workflows** plus one composite action. A nu
 |--------|---------|-------------|
 | `NPM_TOKEN` | release.yml | npmjs publish access to the public `@zeenie` scope (`publish-npm`) |
 | `GITHUB_TOKEN` | release.yml | GitHub Packages publish (auto-provided) |
-| `MINTLIFY_TOKEN` | docs.yml | Mintlify documentation deployment |
 
 ---
 
@@ -134,11 +133,15 @@ There is currently no audit gate, no PyPI publish, no SLSA `attest-build-provena
 
 ---
 
-## Docs workflow
+## Documentation deployment (separate repo)
 
-**File:** [.github/workflows/docs.yml](../.github/workflows/docs.yml)
-
-Triggers on push to `main` touching `docs-OpenCompany/**` + manual dispatch. Single `deploy` job: `actions/checkout` → `actions/setup-node@v4` (Node 22) → `npm install -g mintlify` → `mintlify deploy` from `docs-OpenCompany/` with `MINTLIFY_TOKEN`. No predeploy gate — docs are static, independent of the application build.
+The public Mintlify docs (docs.zeenie.xyz) live in the separate
+[zeenie-ai/docs-OpenCompany](https://github.com/zeenie-ai/docs-OpenCompany)
+repo. Deployment happens automatically via the Mintlify GitHub app on
+pushes to that repo's `main`; its own workflow only validates
+(`mintlify validate` + broken-links). This repo previously carried a
+`docs.yml` deploy workflow targeting an in-repo `docs-OpenCompany/`
+folder — both the folder and the workflow are gone.
 
 ---
 
@@ -149,7 +152,6 @@ Triggers on push to `main` touching `docs-OpenCompany/**` + manual dispatch. Sin
 | `.github/workflows/ci.yml` | CI entry point (delegates to predeploy.yml) |
 | `.github/workflows/predeploy.yml` | Reusable validation (build/lint + backend tests + CLI tests + OS matrix build/start) |
 | `.github/workflows/release.yml` | Tag / manual release: predeploy gate → publish npm + GitHub Packages |
-| `.github/workflows/docs.yml` | Mintlify documentation deploy |
 | `.github/actions/setup/action.yml` | Composite: pnpm + Node + Python + uv + editable CLI install |
 | `.python-version` | Toolchain pin (`3.12`) — single source of truth |
 
