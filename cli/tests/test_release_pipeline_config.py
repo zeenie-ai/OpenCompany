@@ -427,7 +427,14 @@ def test_github_packages_release_keeps_github_owner_scope(release_yml: dict):
         step for step in steps if "pkg.name = '@zeenie-ai/opencompany'" in step["run"]
     )
 
-    assert "https://npm.pkg.github.com" in configure["run"]
+    registry_assignment = next(
+        line.strip()
+        for line in configure["run"].splitlines()
+        if line.strip().startswith("pkg.publishConfig =")
+    )
+    assert registry_assignment == (
+        "pkg.publishConfig = { registry: 'https://npm.pkg.github.com' };"
+    )
     assert any(step["run"] == "npm publish" for step in steps)
 
 
