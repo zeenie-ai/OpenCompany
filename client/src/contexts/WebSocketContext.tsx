@@ -23,6 +23,7 @@ import { nodeParamsQueryKey } from '../hooks/useNodeParamsQuery';
 import { WORKFLOWS_QUERY_KEY } from '../hooks/useWorkflowsQuery';
 import type { WorkflowEvent } from '../types/cloudEvents';
 import { WS_CLOSE, WS_RECONNECT } from '../lib/connectionConfig';
+import { todoQueryKeyFromEvent } from '../lib/todoQuery';
 import {
   useNodeStatusStore,
   useNodeStatusForId,
@@ -337,7 +338,7 @@ interface WebSocketContextValue {
 
   // Node Execution
   executeNode: (nodeId: string, nodeType: string, parameters: Record<string, any>, nodes?: any[], edges?: any[]) => Promise<any>;
-  executeWorkflow: (nodes: any[], edges: any[], sessionId?: string) => Promise<any>;
+  executeWorkflow: (nodes: any[], edges: any[], sessionId?: string, workflowId?: string) => Promise<any>;
   getNodeOutput: (nodeId: string, outputName?: string) => Promise<any>;
 
   // Trigger/Event Waiting
@@ -761,12 +762,18 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           // server/nodes/tool/write_todos/_events.py, emitted via the
           // centralized dispatcher on both the write_todos tool run AND
           // manual edits from the Current Todos panel (set_todos). Refresh
-          // the open panel's ['todos', session_key] query so it reflects the
-          // new list live, across clients, without polling.
-          const event = data as WorkflowEvent<{ session_key?: string; todos?: unknown[] }>;
-          const sessionKey = event?.data?.session_key || event?.subject;
-          if (sessionKey) {
-            queryClient.setQueryData(['todos', sessionKey], event?.data?.todos ?? []);
+          // the exact workflow + node query so sibling writeTodos panels do
+          // not overwrite one another. Missing-node legacy events retain the
+          // historical session-key route.
+          const event = data as WorkflowEvent<{
+            session_key?: string;
+            workflow_id?: string | null;
+            node_id?: string | null;
+            todos?: unknown[];
+          }>;
+          const queryKey = todoQueryKeyFromEvent(event?.data, event?.subject);
+          if (queryKey) {
+            queryClient.setQueryData(queryKey, event?.data?.todos ?? []);
           }
           break;
         }
@@ -2154,7 +2161,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const executeWorkflowAsync = useCallback(async (
     nodes: any[],
     edges: any[],
-    sessionId?: string
+    sessionId?: string,
+    workflowId?: string,
   ): Promise<any> => {
     try {
       const response = await sendRequest<any>('execute_workflow', {
@@ -2170,7 +2178,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           sourceHandle: edge.sourceHandle || undefined,
           targetHandle: edge.targetHandle || undefined
         })),
-        session_id: sessionId || 'default'
+        session_id: sessionId || 'default',
+        workflow_id: workflowId,
       });
 
       return response;

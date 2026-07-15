@@ -160,6 +160,7 @@ const CollectionRenderer: React.FC<{
 
 // Group ID Selector - with Load Groups button and dropdown
 const GroupIdSelector: React.FC<{
+  requestKey: string;
   value: string;
   onChange: (value: string) => void;
   onNameChange?: (name: string) => void;
@@ -169,7 +170,7 @@ const GroupIdSelector: React.FC<{
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
-}> = ({ value, onChange, onNameChange, storedName, placeholder, isDragOver, onDragOver, onDragLeave, onDrop }) => {
+}> = ({ requestKey, value, onChange, onNameChange, storedName, placeholder, isDragOver, onDragOver, onDragLeave, onDrop }) => {
   const [groups, setGroups] = useState<Array<{ jid: string; name: string; topic?: string; size?: number; is_community?: boolean }>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -178,6 +179,21 @@ const GroupIdSelector: React.FC<{
   const [localGroupName, setLocalGroupName] = useState<string | null>(null);
   const selectedGroupName = storedName || localGroupName;
   const { getWhatsAppGroups } = useWebSocket();
+  const requestGeneration = React.useRef(0);
+  const activeRequestKey = React.useRef(requestKey);
+  activeRequestKey.current = requestKey;
+
+  useEffect(() => {
+    requestGeneration.current += 1;
+    setGroups([]);
+    setLocalGroupName(null);
+    setShowDropdown(false);
+    setError(null);
+    setIsLoading(false);
+    return () => {
+      requestGeneration.current += 1;
+    };
+  }, [requestKey]);
 
   // Sync local state with stored name
   useEffect(() => {
@@ -187,10 +203,17 @@ const GroupIdSelector: React.FC<{
   }, [storedName]);
 
   const handleLoadGroups = async () => {
+    const request = ++requestGeneration.current;
+    const requestKeyAtStart = requestKey;
+    const isCurrent = () => (
+      request === requestGeneration.current
+      && activeRequestKey.current === requestKeyAtStart
+    );
     setIsLoading(true);
     setError(null);
     try {
       const result = await getWhatsAppGroups();
+      if (!isCurrent()) return;
       console.log('[GroupIdSelector] Raw groups from API:', result.groups?.map(g => ({ name: g.name, jid: g.jid, is_community: g.is_community })));
       if (result.success && result.groups.length > 0) {
         // Filter out communities - they don't have regular chat history
@@ -216,9 +239,13 @@ const GroupIdSelector: React.FC<{
         setError('No groups found');
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to load groups');
+      if (isCurrent()) {
+        setError(err.message || 'Failed to load groups');
+      }
     } finally {
-      setIsLoading(false);
+      if (isCurrent()) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -305,6 +332,7 @@ const GroupIdSelector: React.FC<{
 
 // Sender Number Selector - with Load Members button and dropdown (loads from selected group)
 const SenderNumberSelector: React.FC<{
+  requestKey: string;
   value: string;
   onChange: (value: string) => void;
   onNameChange?: (name: string) => void;
@@ -315,7 +343,7 @@ const SenderNumberSelector: React.FC<{
   onDragLeave: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
   groupId: string; // The selected group to load members from
-}> = ({ value, onChange, onNameChange, storedName, placeholder, isDragOver, onDragOver, onDragLeave, onDrop, groupId }) => {
+}> = ({ requestKey, value, onChange, onNameChange, storedName, placeholder, isDragOver, onDragOver, onDragLeave, onDrop, groupId }) => {
   const [members, setMembers] = useState<Array<{ phone: string; name: string; jid: string; is_admin?: boolean }>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -324,6 +352,22 @@ const SenderNumberSelector: React.FC<{
   const [localMemberName, setLocalMemberName] = useState<string | null>(null);
   const selectedMemberName = storedName || localMemberName;
   const { getWhatsAppGroupInfo } = useWebSocket();
+  const requestGeneration = React.useRef(0);
+  const selectorIdentity = `${requestKey}\u0000${groupId}`;
+  const activeSelectorIdentity = React.useRef(selectorIdentity);
+  activeSelectorIdentity.current = selectorIdentity;
+
+  useEffect(() => {
+    requestGeneration.current += 1;
+    setMembers([]);
+    setLocalMemberName(null);
+    setShowDropdown(false);
+    setError(null);
+    setIsLoading(false);
+    return () => {
+      requestGeneration.current += 1;
+    };
+  }, [requestKey, groupId]);
 
   // Sync local state with stored name
   useEffect(() => {
@@ -338,10 +382,17 @@ const SenderNumberSelector: React.FC<{
       return;
     }
 
+    const request = ++requestGeneration.current;
+    const identityAtStart = selectorIdentity;
+    const isCurrent = () => (
+      request === requestGeneration.current
+      && activeSelectorIdentity.current === identityAtStart
+    );
     setIsLoading(true);
     setError(null);
     try {
       const result = await getWhatsAppGroupInfo(groupId);
+      if (!isCurrent()) return;
       if (result.success && result.participants && result.participants.length > 0) {
         setMembers(result.participants);
         setShowDropdown(true);
@@ -362,9 +413,13 @@ const SenderNumberSelector: React.FC<{
         setError('No members found');
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to load members');
+      if (isCurrent()) {
+        setError(err.message || 'Failed to load members');
+      }
     } finally {
-      setIsLoading(false);
+      if (isCurrent()) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -471,6 +526,7 @@ const SenderNumberSelector: React.FC<{
 
 // Channel JID Selector - with Load Channels button and dropdown
 const ChannelJidSelector: React.FC<{
+  requestKey: string;
   value: string;
   onChange: (value: string) => void;
   onNameChange?: (name: string) => void;
@@ -480,7 +536,7 @@ const ChannelJidSelector: React.FC<{
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
-}> = ({ value, onChange, onNameChange, storedName, placeholder, isDragOver, onDragOver, onDragLeave, onDrop }) => {
+}> = ({ requestKey, value, onChange, onNameChange, storedName, placeholder, isDragOver, onDragOver, onDragLeave, onDrop }) => {
   const [channels, setChannels] = useState<Array<{ jid: string; name: string; subscriber_count?: number; role?: string }>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -488,16 +544,38 @@ const ChannelJidSelector: React.FC<{
   const [localChannelName, setLocalChannelName] = useState<string | null>(null);
   const selectedChannelName = storedName || localChannelName;
   const { getWhatsAppChannels } = useWebSocket();
+  const requestGeneration = React.useRef(0);
+  const activeRequestKey = React.useRef(requestKey);
+  activeRequestKey.current = requestKey;
+
+  useEffect(() => {
+    requestGeneration.current += 1;
+    setChannels([]);
+    setLocalChannelName(null);
+    setShowDropdown(false);
+    setError(null);
+    setIsLoading(false);
+    return () => {
+      requestGeneration.current += 1;
+    };
+  }, [requestKey]);
 
   useEffect(() => {
     if (storedName) setLocalChannelName(storedName);
   }, [storedName]);
 
   const handleLoadChannels = async () => {
+    const request = ++requestGeneration.current;
+    const requestKeyAtStart = requestKey;
+    const isCurrent = () => (
+      request === requestGeneration.current
+      && activeRequestKey.current === requestKeyAtStart
+    );
     setIsLoading(true);
     setError(null);
     try {
       const result = await getWhatsAppChannels();
+      if (!isCurrent()) return;
       if (result.success && result.channels.length > 0) {
         setChannels(result.channels);
         setShowDropdown(true);
@@ -514,9 +592,13 @@ const ChannelJidSelector: React.FC<{
         setError('No channels found');
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to load channels');
+      if (isCurrent()) {
+        setError(err.message || 'Failed to load channels');
+      }
     } finally {
-      setIsLoading(false);
+      if (isCurrent()) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -689,6 +771,10 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
   const selectedNode = useAppStore((s) => s.selectedNode);
   const { getNodeParameters, sendRequest } = useWebSocket();
   const { getStoredApiKey, hasStoredKey, getStoredModels, getProviderDefaults } = useApiKeys();
+  const activeNodeIdRef = React.useRef<string | null>(selectedNode?.id ?? null);
+  activeNodeIdRef.current = selectedNode?.id ?? null;
+  const onChangeRef = React.useRef(onChange);
+  onChangeRef.current = onChange;
 
   // Don't render hidden parameters
   if (parameter.type === 'hidden') {
@@ -697,13 +783,29 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
 
   // Load node parameters for expression resolution
   useEffect(() => {
+    const nodeId = selectedNode?.id;
+    let cancelled = false;
+
+    if (!nodeId) {
+      setNodeParameters({});
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // Never render a previous node's derived parameter snapshot while the
+    // request for the newly selected node is pending.
+    setNodeParameters({});
     const loadParameters = async () => {
-      if (selectedNode?.id) {
-        const result = await getNodeParameters(selectedNode.id);
-        if (result?.parameters) setNodeParameters(result.parameters);
+      const result = await getNodeParameters(nodeId);
+      if (!cancelled && activeNodeIdRef.current === nodeId && result?.parameters) {
+        setNodeParameters(result.parameters);
       }
     };
-    loadParameters();
+    void loadParameters();
+    return () => {
+      cancelled = true;
+    };
   }, [selectedNode?.id, getNodeParameters]);
 
   // Auto-load stored API key and models when provider changes
@@ -716,9 +818,15 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
   useEffect(() => {
     hasAutoSelectedRef.current = false;
     prevProviderRef.current = null;
+    setDynamicOptions([]);
   }, [selectedNode?.id]);
 
   useEffect(() => {
+    const nodeId = selectedNode?.id;
+    const selectedNodeType = selectedNode?.type || selectedNode?.data?.nodeType;
+    let cancelled = false;
+    const isCurrent = () => !cancelled && !!nodeId && activeNodeIdRef.current === nodeId;
+
     const loadStoredKeyForProvider = async () => {
       // Only run for api_key or model parameters. Schema-canonical
       // name from the chat-model `_base.py` Pydantic model is
@@ -730,13 +838,12 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
 
       // Get provider from allParameters or derive from node type
       let provider = allParameters?.provider;
-      if (!provider && selectedNode) {
-        const nodeType = selectedNode.type || selectedNode.data?.nodeType;
-        if (nodeType) {
-          provider = NODE_TYPE_TO_PROVIDER[nodeType];
+      if (!provider && selectedNodeType) {
+        if (selectedNodeType) {
+          provider = NODE_TYPE_TO_PROVIDER[selectedNodeType];
         }
       }
-      if (!provider) return;
+      if (!provider || !nodeId || !isCurrent()) return;
 
       // Distinguish between initial load (prevProvider was null) and actual user-initiated provider change
       // On initial load: respect saved model if it exists
@@ -754,26 +861,31 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
 
       try {
         const hasKey = await hasStoredKey(provider);
+        if (!isCurrent()) return;
 
         if (hasKey) {
           // Auto-load API key for api_key parameter - always update when provider changes
           if (parameter.name === 'api_key' && isActualProviderChange) {
             const storedKey = await getStoredApiKey(provider);
+            if (!isCurrent()) return;
             if (storedKey) {
-              onChange(storedKey);
+              onChangeRef.current(storedKey);
             }
           }
 
           // Auto-load models for model parameter
-          if (shouldAutoSelectModel && selectedNode) {
+          if (shouldAutoSelectModel) {
             const models = await getStoredModels(provider);
+            if (!isCurrent()) return;
             if (models?.length) {
               const modelOptions = DynamicParameterService.createModelOptions(models);
-              DynamicParameterService.updateParameterOptions(selectedNode.id, 'model', modelOptions);
 
               // Get the configured default model for this provider
               const providerDefaults = await getProviderDefaults(provider);
+              if (!isCurrent()) return;
               const configuredDefaultModel = providerDefaults?.default_model || '';
+
+              DynamicParameterService.updateParameterOptions(nodeId, 'model', modelOptions);
 
               // Extract model ID (handles both string and object formats)
               const getModelId = (model: any) => typeof model === 'string' ? model : model.id;
@@ -790,12 +902,12 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
               // When user actively changes provider, reset to default model
               // to prevent mismatched provider/model combinations (e.g., OpenAI model with Anthropic provider)
               if (isActualProviderChange) {
-                onChange(defaultModelToUse);
+                onChangeRef.current(defaultModelToUse);
               } else {
                 // Initial load or no provider change - only auto-select if no saved model exists
                 const savedModel = value || allParameters?.model;
                 if (!savedModel || savedModel === '') {
-                  onChange(defaultModelToUse);
+                  onChangeRef.current(defaultModelToUse);
                 }
                 // If saved model exists, keep it (don't call onChange)
               }
@@ -803,22 +915,28 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
             }
           }
         } else {
+          if (!isCurrent()) return;
           // No stored key for this provider - clear the fields
           if (parameter.name === 'api_key') {
-            onChange('');
+            onChangeRef.current('');
           }
           if (parameter.name === 'model') {
-            onChange('');
+            onChangeRef.current('');
             hasAutoSelectedRef.current = true;
           }
         }
       } catch (error) {
-        console.warn('Error loading stored key info:', error);
+        if (isCurrent()) {
+          console.warn('Error loading stored key info:', error);
+        }
       }
     };
 
-    loadStoredKeyForProvider();
-  }, [allParameters?.provider, parameter.name, hasStoredKey, getStoredApiKey, getStoredModels, getProviderDefaults, selectedNode?.id, selectedNode?.type, onChange, isLoadingParameters, value, allParameters?.model]);
+    void loadStoredKeyForProvider();
+    return () => {
+      cancelled = true;
+    };
+  }, [allParameters?.provider, parameter.name, hasStoredKey, getStoredApiKey, getStoredModels, getProviderDefaults, selectedNode?.id, selectedNode?.type, isLoadingParameters, value, allParameters?.model]);
 
   // Merge database params with current form params (current takes precedence)
   const resolvedParameters = { ...nodeParameters, ...allParameters };
@@ -830,10 +948,16 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
 
   // Load dynamic options based on loadOptionsMethod
   useEffect(() => {
-    const loadDynamicOptions = async () => {
-      if (!selectedNode || !isINodeProperties(parameter) || !parameter.typeOptions?.loadOptionsMethod) return;
+    const nodeId = selectedNode?.id;
+    const nodeType = selectedNode?.data?.nodeType || selectedNode?.type;
+    const method = isINodeProperties(parameter) ? parameter.typeOptions?.loadOptionsMethod : undefined;
+    let cancelled = false;
+    const isCurrent = () => !cancelled && !!nodeId && activeNodeIdRef.current === nodeId;
 
-      const dependsOn = parameter.typeOptions.loadOptionsDependsOn || [];
+    const loadDynamicOptions = async () => {
+      if (!nodeId || !nodeType || !isINodeProperties(parameter) || !method) return;
+
+      const dependsOn = parameter.typeOptions?.loadOptionsDependsOn || [];
       const allParamsResolved = { ...nodeParameters, ...allParameters };
 
       // Check if all dependencies are satisfied
@@ -842,11 +966,9 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
 
       try {
         // Get the node definition to access methods
-        const nodeType = selectedNode.data?.nodeType || selectedNode.type;
         const nodeDef = nodeType ? resolveNodeDescription(nodeType) : null;
 
         let rawOptions: Array<{ value: any; name?: string; label?: string }> = [];
-        const method = parameter.typeOptions.loadOptionsMethod;
 
         if (nodeDef?.methods?.loadOptions?.[method]) {
           // Legacy frontend-defined loader (rare — most nodes are slimmed).
@@ -867,17 +989,22 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
               {
                 method,
                 params: {
-                  node_id: selectedNode.id,
+                  node_id: nodeId,
                   node_type: nodeType,
                   ...allParamsResolved,
                 },
               },
             );
+            if (!isCurrent()) return;
             rawOptions = res?.options ?? [];
           } catch (err) {
-            console.error(`[ParameterRenderer] backend load_options(${method}) failed:`, err);
+            if (isCurrent()) {
+              console.error(`[ParameterRenderer] backend load_options(${method}) failed:`, err);
+            }
           }
         }
+
+        if (!isCurrent()) return;
 
         // Backend returns `{value, label}`; INodePropertyOption wants
         // `{name, value}`. Normalise while preserving the original label.
@@ -887,33 +1014,41 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
         }));
 
         setDynamicOptions(options);
-        DynamicParameterService.updateParameterOptions(selectedNode.id, parameter.name, options);
+        DynamicParameterService.updateParameterOptions(nodeId, parameter.name, options);
         if (options.length > 0 && (!currentValue || currentValue === '')) {
-          onChange(options[0].value);
+          onChangeRef.current(options[0].value);
         }
       } catch (error) {
-        console.error('Error loading dynamic options:', error);
+        if (isCurrent()) {
+          console.error('Error loading dynamic options:', error);
+        }
       }
     };
 
-    loadDynamicOptions();
+    void loadDynamicOptions();
+    return () => {
+      cancelled = true;
+    };
   }, [selectedNode?.id, isINodeProperties(parameter) && parameter.typeOptions?.loadOptionsMethod, nodeParameters, allParameters, parameter.name]);
 
   // Load default parameters for Android service nodes when service_id or action changes
   useEffect(() => {
-    const loadDefaultParameters = async () => {
-      if (!selectedNode || parameter.name !== 'parameters') return;
+    const nodeId = selectedNode?.id;
+    const nodeType = selectedNode?.data?.nodeType || selectedNode?.type;
+    const allParamsResolved = { ...nodeParameters, ...allParameters };
+    const serviceId = allParamsResolved.service_id;
+    const action = allParamsResolved.action;
+    const abortController = new AbortController();
+    let cancelled = false;
+    const isCurrent = () => !cancelled && !!nodeId && activeNodeIdRef.current === nodeId;
 
-      const nodeType = selectedNode.data?.nodeType || selectedNode.type;
+    const loadDefaultParameters = async () => {
+      if (!nodeId || !nodeType || parameter.name !== 'parameters') return;
+
       // Wave 10.E: backend group membership with bundled-definition fallback
       const isAndroid = isNodeInBackendGroup(nodeType, 'android')
         ?? (resolveNodeDescription(nodeType)?.group ?? []).includes('android');
       if (!isAndroid) return;
-
-      // Merge database params with current form params (current takes precedence)
-      const allParamsResolved = { ...nodeParameters, ...allParameters };
-      const serviceId = allParamsResolved.service_id;
-      const action = allParamsResolved.action;
 
       if (!serviceId || !action) {
         console.log('[AndroidService] Skipping - missing serviceId or action:', { serviceId, action });
@@ -923,22 +1058,30 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
       try {
         console.log('[AndroidService] Fetching default parameters for:', { serviceId, action });
         const response = await fetch(`${API_CONFIG.PYTHON_BASE_URL}/api/android/services/${serviceId}/actions/${action}/parameters`, {
-          credentials: 'include'
+          credentials: 'include',
+          signal: abortController.signal,
         });
         const data = await response.json();
+        if (!isCurrent()) return;
         console.log('[AndroidService] Default parameters response:', data);
 
         if (data.success && data.default_parameters) {
           // Always update with new defaults when service/action changes
           console.log('[AndroidService] Setting parameters to:', data.default_parameters);
-          onChange(data.default_parameters);
+          onChangeRef.current(data.default_parameters);
         }
       } catch (error) {
-        console.error('[AndroidService] Error loading default parameters:', error);
+        if (isCurrent() && (error as Error)?.name !== 'AbortError') {
+          console.error('[AndroidService] Error loading default parameters:', error);
+        }
       }
     };
 
-    loadDefaultParameters();
+    void loadDefaultParameters();
+    return () => {
+      cancelled = true;
+      abortController.abort();
+    };
   }, [
     selectedNode?.id,
     parameter.name,
@@ -950,18 +1093,19 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
 
   // Subscribe to dynamic parameter updates
   useEffect(() => {
-    if (!selectedNode) return;
+    const nodeId = selectedNode?.id;
+    if (!nodeId) return;
 
 
-    const unsubscribe = DynamicParameterService.subscribe((nodeId, parameterName, options) => {
+    const unsubscribe = DynamicParameterService.subscribe((updatedNodeId, parameterName, options) => {
 
-      if (nodeId === selectedNode.id && parameterName === parameter.name) {
+      if (updatedNodeId === nodeId && activeNodeIdRef.current === nodeId && parameterName === parameter.name) {
         setDynamicOptions(options);
       }
     });
 
     // Check for existing dynamic options
-    const existingOptions = DynamicParameterService.getParameterOptions(selectedNode.id, parameter.name);
+    const existingOptions = DynamicParameterService.getParameterOptions(nodeId, parameter.name);
 
     if (existingOptions) {
       setDynamicOptions(existingOptions);
@@ -972,20 +1116,20 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
 
   // Handle API key validation success
   const handleApiKeyValidationSuccess = (models: string[]) => {
-
-    if (!selectedNode) {
-      console.warn('ParameterRenderer: No selected node for dynamic options update');
+    const nodeId = selectedNode?.id;
+    if (!nodeId || activeNodeIdRef.current !== nodeId) {
+      console.warn('ParameterRenderer: Ignoring validation result for an inactive node');
       return;
     }
 
     // Always update the 'model' parameter with dynamic options when API key validation succeeds
     // This callback can be triggered from any parameter (usually the apiKey parameter)
     const modelOptions = DynamicParameterService.createModelOptions(models);
-    DynamicParameterService.updateParameterOptions(selectedNode.id, 'model', modelOptions);
+    DynamicParameterService.updateParameterOptions(nodeId, 'model', modelOptions);
 
     // If this callback is triggered from the model parameter itself and it's empty, auto-select first model
     if (parameter.name === 'model' && !currentValue && models.length > 0) {
-      onChange(models[0]);
+      onChangeRef.current(models[0]);
     }
   };
 
@@ -1144,6 +1288,7 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
 
           return (
             <APIKeyValidator
+              requestKey={`${selectedNode?.id ?? 'unselected'}:${String(resolvedProvider ?? '')}`}
               value={currentValue || ''}
               onChange={onChange}
               placeholder={parameter.placeholder}
@@ -1232,6 +1377,7 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
           const storedGroupName = allParameters?.group_name || '';
           return (
             <GroupIdSelector
+              requestKey={selectedNode?.id ?? 'unselected'}
               value={currentValue || ''}
               onChange={onChange}
               onNameChange={(name) => onParameterChange?.('group_name', name)}
@@ -1249,6 +1395,7 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
           const storedChannelName = allParameters?.channel_display_name || '';
           return (
             <ChannelJidSelector
+              requestKey={selectedNode?.id ?? 'unselected'}
               value={currentValue || ''}
               onChange={onChange}
               onNameChange={(name) => onParameterChange?.('channel_display_name', name)}
@@ -1267,6 +1414,7 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
           const storedSenderName = allParameters?.sender_name || '';
           return (
             <SenderNumberSelector
+              requestKey={selectedNode?.id ?? 'unselected'}
               value={currentValue || ''}
               onChange={onChange}
               onNameChange={(name) => onParameterChange?.('sender_name', name)}

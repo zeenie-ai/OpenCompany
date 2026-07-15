@@ -41,6 +41,7 @@ import { NodeIcon } from '../../assets/icons';
 import { ExecutionResult } from '../../services/executionService';
 import { Edge } from 'reactflow';
 import { shouldShowParameter } from '../../utils/parameterVisibility';
+import { latestResultForNode } from '../../utils/executionResults';
 
 import { resolveNodeDescription, getCachedNodeSpec } from '../../lib/nodeSpec';
 
@@ -491,7 +492,10 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
   const getConsoleOutput = (): string => {
     if (executionResults.length === 0) return '';
 
-    const latestResult = executionResults[0];
+    // Results are newest-first, but the panel can retain entries for nodes
+    // whose executions completed while another node was selected.
+    const latestResult = latestResultForNode(executionResults, nodeId);
+    if (!latestResult) return '';
     const outputs = latestResult.outputs || latestResult.data || latestResult.nodeData?.[0]?.[0]?.json;
 
     if (!outputs) return '';
