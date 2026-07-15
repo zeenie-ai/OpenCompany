@@ -681,6 +681,7 @@ class BaseNode:
 
             node_id = context["node_id"]
             workflow_id = context.get("workflow_id")
+            execution_id = context.get("execution_id")
             broadcaster = get_status_broadcaster()
 
             # Pre-executed trigger nodes — return cached output without dispatching.
@@ -692,6 +693,7 @@ class BaseNode:
                     "node_type": cls.type,
                     "result": context.get("trigger_output", {}),
                     "pre_executed": True,
+                    "execution_id": execution_id,
                     "timestamp": datetime.now().isoformat(),
                 }
                 await broadcaster.update_node_status(
@@ -712,12 +714,13 @@ class BaseNode:
                     "node_type": cls.type,
                     "skipped": True,
                     "reason": "disabled",
+                    "execution_id": execution_id,
                     "timestamp": datetime.now().isoformat(),
                 }
                 await broadcaster.update_node_status(
                     node_id,
                     "skipped",
-                    {"disabled": True},
+                    {"disabled": True, "execution_id": execution_id},
                     workflow_id=workflow_id,
                 )
                 return result
@@ -726,7 +729,7 @@ class BaseNode:
             await broadcaster.update_node_status(
                 node_id,
                 "executing",
-                {"node_type": cls.type},
+                {"node_type": cls.type, "execution_id": execution_id},
                 workflow_id=workflow_id,
             )
 
@@ -762,8 +765,15 @@ class BaseNode:
                 # ``auto_rebind_tools`` for agentBuilder) through the
                 # ``extras`` channel so they land in NodeContext.raw.
                 extras: Dict[str, Any] = {}
-                if "auto_rebind_tools" in context:
-                    extras["auto_rebind_tools"] = context["auto_rebind_tools"]
+                for key in (
+                    "auto_rebind_tools",
+                    "invoking_agent_node_id",
+                    "agent_iteration",
+                    "tool_call_index",
+                    "tool_call_id",
+                ):
+                    if key in context:
+                        extras[key] = context[key]
                 result = await workflow_service.execute_node(
                     node_id=node_id,
                     node_type=cls.type,
@@ -779,6 +789,7 @@ class BaseNode:
 
                 result["node_id"] = node_id
                 result["node_type"] = cls.type
+                result.setdefault("execution_id", execution_id)
                 result["timestamp"] = datetime.now().isoformat()
 
                 # Polymorphic dispatch — each node base class owns its
@@ -788,16 +799,21 @@ class BaseNode:
                 # payload, error_message).
                 success, payload, error = cls.interpret_result(result)
                 if success:
+                    correlated_payload = (
+                        {**payload, "execution_id": execution_id}
+                        if isinstance(payload, dict)
+                        else {"result": payload, "execution_id": execution_id}
+                    )
                     activity.logger.info(f"Node {node_id} succeeded")
                     await broadcaster.update_node_status(
                         node_id,
                         "success",
-                        payload,
+                        correlated_payload,
                         workflow_id=workflow_id,
                     )
                     await broadcaster.update_node_output(
                         node_id,
-                        payload,
+                        correlated_payload,
                         workflow_id=workflow_id,
                     )
                 else:
@@ -805,7 +821,7 @@ class BaseNode:
                     await broadcaster.update_node_status(
                         node_id,
                         "error",
-                        {"error": error},
+                        {"error": error, "execution_id": execution_id},
                         workflow_id=workflow_id,
                     )
 
@@ -818,7 +834,7 @@ class BaseNode:
                 await broadcaster.update_node_status(
                     node_id,
                     "error",
-                    {"error": error_msg},
+                    {"error": error_msg, "execution_id": execution_id},
                     workflow_id=workflow_id,
                 )
                 raise

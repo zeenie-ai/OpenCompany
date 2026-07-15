@@ -72,6 +72,17 @@ AGENT_WORKFLOW_TYPES = frozenset(
     ]
 )
 
+# Temporal patch marker for the root -> agent child-workflow identity change.
+# Keep the legacy branch until every pre-patch history is outside the
+# namespace's replay/reset window, then deprecate the marker in a later
+# release before removing that branch.
+AGENT_CHILD_ID_V2_PATCH = "machina-agent-child-id-v2"
+
+
+def _agent_child_workflow_id_v2(root_workflow_id: str, agent_node_id: str) -> str:
+    """Return a deterministic child id unique to one canvas agent and run."""
+    return f"{root_workflow_id}-agent-{agent_node_id}"
+
 
 # Durable protocol identifier: existing Temporal histories and child-workflow
 # start calls replay against this exact type string. It intentionally retains
@@ -208,6 +219,11 @@ class MachinaWorkflow:
         # session-keyed nodes (browser) share one instance per run instead
         # of minting a fresh uuid per call (node_executor.py fallback).
         execution_id = workflow_data.get("execution_id") or workflow.info().workflow_id
+        # Command attributes are part of Temporal Event History. Existing
+        # histories must keep the label-derived child ids they recorded;
+        # new histories use the root Temporal id + exact canvas node id so
+        # two same-label agents can start in the same graph execution.
+        use_agent_child_id_v2 = workflow.patched(AGENT_CHILD_ID_V2_PATCH)
 
         workflow.logger.info(f"Starting workflow orchestration: {len(nodes)} nodes, {len(edges)} edges")
 
@@ -348,15 +364,22 @@ class MachinaWorkflow:
                     # blocking on child completion). The handle is a
                     # Task-like with ``.done()`` so it slots into the same
                     # FIRST_COMPLETED loop as activity handles.
-                    # Child id format: ``<slug>-<node_label>`` — same
-                    # ``<workflow_slug>-<node_label>`` convention as the
-                    # trigger ids. ``node_label`` is the user-renamed
-                    # F2 label or the node type (``aiAgent`` / ``orchestrator_agent``
-                    # / ...) — already conveys "agent" so no middle tag.
+                    # Patch-gated for replay safety. The legacy label-derived
+                    # id is preserved for histories recorded before
+                    # ``machina-agent-child-id-v2``. New runs use the actual
+                    # root Temporal workflow id plus the exact canvas node id;
+                    # labels are mutable and need not be unique.
+                    if use_agent_child_id_v2:
+                        child_workflow_id = _agent_child_workflow_id_v2(
+                            workflow.info().workflow_id,
+                            node_id,
+                        )
+                    else:
+                        child_workflow_id = f"{workflow_slug}-{node_label_slug(node)}"
                     handle = await workflow.start_child_workflow(
                         dispatch["name"],
                         args=[context],
-                        id=f"{workflow_slug}-{node_label_slug(node)}",
+                        id=child_workflow_id,
                         # Child workflow execution timeout: agent loops can run
                         # 10+ minutes with multiple LLM turns. Set generously.
                         execution_timeout=timedelta(hours=1),

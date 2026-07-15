@@ -14,6 +14,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional, TYPE_CHECKING
+from uuid import uuid4
 
 from core.logging import get_logger
 from constants import WORKFLOW_TRIGGER_TYPES
@@ -409,6 +410,7 @@ class WorkflowService:
 
     async def _execute_sequential(self, nodes, edges, session_id, status_callback, start_time, workflow_id: Optional[str] = None) -> Dict:
         """Execute nodes sequentially (fallback mode)."""
+        execution_id = uuid4().hex
         start_node = self._find_start_node(nodes)
         execution_order = self._build_execution_order(start_node, nodes, edges)
 
@@ -450,6 +452,7 @@ class WorkflowService:
                 nodes=nodes,
                 edges=edges,
                 session_id=session_id,
+                execution_id=execution_id,
                 workflow_id=workflow_id,
             )
 
@@ -469,6 +472,7 @@ class WorkflowService:
 
         return {
             "success": all(r.get("success", False) for r in results.values()),
+            "execution_id": execution_id,
             "nodes_executed": executed,
             "node_results": results,
             "execution_time": time.time() - start_time,

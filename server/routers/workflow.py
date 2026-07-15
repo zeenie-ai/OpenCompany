@@ -2,7 +2,8 @@
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
+from uuid import uuid4
 
 from core.container import container
 from services.workflow import WorkflowService
@@ -20,6 +21,8 @@ class WorkflowExecutionRequest(BaseModel):
     nodes: List[Dict[str, Any]] = []
     edges: List[Dict[str, Any]] = []
     session_id: str = "default"
+    workflow_id: Optional[str] = None
+    execution_id: Optional[str] = None
 
 
 @router.post("/execute-node")
@@ -28,10 +31,16 @@ async def execute_workflow_node(
 ):
     """Execute a single node in a workflow with parameter resolution."""
     logger.debug(f"[DEBUG ROUTER] Received execution request: node_id={request.node_id}, node_type={request.node_type}")
+    execution_id = request.execution_id or uuid4().hex
 
     # Get broadcaster and send "executing" status
     broadcaster = get_status_broadcaster()
-    await broadcaster.update_node_status(node_id=request.node_id, status="executing", data={"node_type": request.node_type})
+    await broadcaster.update_node_status(
+        node_id=request.node_id,
+        status="executing",
+        data={"node_type": request.node_type, "execution_id": execution_id},
+        workflow_id=request.workflow_id,
+    )
 
     try:
         result = await workflow_service.execute_node(
@@ -41,21 +50,48 @@ async def execute_workflow_node(
             nodes=request.nodes,
             edges=request.edges,
             session_id=request.session_id,
+            execution_id=execution_id,
+            workflow_id=request.workflow_id,
         )
+        result.setdefault("execution_id", execution_id)
 
         # Broadcast completion status based on result
         if result.get("success"):
+            success_data = {
+                "node_type": request.node_type,
+                "execution_id": execution_id,
+                "execution_time": result.get("execution_time"),
+                "result": result.get("result"),
+            }
             await broadcaster.update_node_status(
                 node_id=request.node_id,
                 status="success",
-                data={"node_type": request.node_type, "execution_time": result.get("execution_time"), "result": result.get("result")},
+                data=success_data,
+                workflow_id=request.workflow_id,
             )
             # Also broadcast the output
             if result.get("result"):
-                await broadcaster.update_node_output(node_id=request.node_id, output=result.get("result"))
+                raw_result = result.get("result")
+                correlated_output = (
+                    {**raw_result, "execution_id": execution_id}
+                    if isinstance(raw_result, dict)
+                    else {"result": raw_result, "execution_id": execution_id}
+                )
+                await broadcaster.update_node_output(
+                    node_id=request.node_id,
+                    output=correlated_output,
+                    workflow_id=request.workflow_id,
+                )
         else:
             await broadcaster.update_node_status(
-                node_id=request.node_id, status="error", data={"node_type": request.node_type, "error": result.get("error")}
+                node_id=request.node_id,
+                status="error",
+                data={
+                    "node_type": request.node_type,
+                    "execution_id": execution_id,
+                    "error": result.get("error"),
+                },
+                workflow_id=request.workflow_id,
             )
 
         return result
@@ -63,7 +99,14 @@ async def execute_workflow_node(
     except Exception as e:
         # Broadcast error status
         await broadcaster.update_node_status(
-            node_id=request.node_id, status="error", data={"node_type": request.node_type, "error": str(e)}
+            node_id=request.node_id,
+            status="error",
+            data={
+                "node_type": request.node_type,
+                "execution_id": execution_id,
+                "error": str(e),
+            },
+            workflow_id=request.workflow_id,
         )
         raise
 
@@ -149,6 +192,17 @@ async def execute_node_for_temporal(
 
     context = request.context
     try:
+        invocation_extras = {
+            key: context[key]
+            for key in (
+                "auto_rebind_tools",
+                "invoking_agent_node_id",
+                "agent_iteration",
+                "tool_call_index",
+                "tool_call_id",
+            )
+            if key in context
+        }
         result = await workflow_service.execute_node(
             node_id=request.node_id,
             node_type=request.node_type,
@@ -156,7 +210,9 @@ async def execute_node_for_temporal(
             nodes=context.get("nodes", []),
             edges=context.get("edges", []),
             session_id=context.get("session_id", "temporal"),
+            execution_id=context.get("execution_id"),
             workflow_id=context.get("workflow_id"),
+            extras=invocation_extras or None,
         )
         logger.info(
             "Temporal endpoint node result",

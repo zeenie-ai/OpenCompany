@@ -93,6 +93,7 @@ class NodeExecutionActivities:
         node_type = context["node_type"]
         node_data = context.get("node_data", {})
         workflow_id = context.get("workflow_id")
+        execution_id = context.get("execution_id")
         tenant_id = context.get("tenant_id")
 
         activity.logger.info(
@@ -112,6 +113,7 @@ class NodeExecutionActivities:
                 "node_type": node_type,
                 "result": context.get("trigger_output", {}),
                 "pre_executed": True,
+                "execution_id": execution_id,
                 "timestamp": datetime.now().isoformat(),
             }
             await self._broadcast_status(node_id, "success", result, workflow_id)
@@ -126,16 +128,22 @@ class NodeExecutionActivities:
                 "node_type": node_type,
                 "skipped": True,
                 "reason": "disabled",
+                "execution_id": execution_id,
                 "timestamp": datetime.now().isoformat(),
             }
-            await self._broadcast_status(node_id, "skipped", {"disabled": True}, workflow_id)
+            await self._broadcast_status(
+                node_id,
+                "skipped",
+                {"disabled": True, "execution_id": execution_id},
+                workflow_id,
+            )
             return result
 
         # Broadcast "executing" status for UI updates
         await self._broadcast_status(
             node_id=node_id,
             status="executing",
-            data={"node_type": node_type},
+            data={"node_type": node_type, "execution_id": execution_id},
             workflow_id=workflow_id,
         )
 
@@ -172,7 +180,7 @@ class NodeExecutionActivities:
             await self._broadcast_status(
                 node_id=node_id,
                 status="error",
-                data={"error": error_msg},
+                data={"error": error_msg, "execution_id": execution_id},
                 workflow_id=workflow_id,
             )
 
@@ -210,10 +218,20 @@ class NodeExecutionActivities:
             "edges": context.get("edges", []),
             "session_id": context.get("session_id", "default"),
             "workflow_id": context.get("workflow_id"),
+            "execution_id": context.get("execution_id"),
             # CRITICAL: Pass upstream node outputs for downstream nodes to access
             # This enables taskTrigger -> chatAgent data flow via input-task handle
             "outputs": context.get("inputs", {}),
         }
+        for key in (
+            "auto_rebind_tools",
+            "invoking_agent_node_id",
+            "agent_iteration",
+            "tool_call_index",
+            "tool_call_id",
+        ):
+            if key in context:
+                message[key] = context[key]
 
         activity.logger.debug(f"WebSocket execute for {node_id}")
 
