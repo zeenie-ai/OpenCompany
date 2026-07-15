@@ -100,6 +100,96 @@ def _default_max_iterations() -> int:
 # failures inside the LLM step fail fast instead of burning 3 retries.
 AGENT_ACTIVITY_RETRY: RetryPolicy = DEFAULT_ACTIVITY_RETRY
 
+# Temporal patch marker for per-call command identity and duplicate-name
+# validation. Existing histories must retain their recorded activity/child
+# ids and last-wins tool index; new histories take the isolated path.
+TOOL_CALL_IDENTITY_V2_PATCH = "agent-tool-call-identity-v2"
+DUPLICATE_TOOL_NAME_ERROR_TYPE = "DuplicateToolNameError"
+
+
+def _tool_activity_id_v2(tool_node_id: str, iteration: int, call_index: int) -> str:
+    """Return a stable, unique id for one tool call in one agent turn."""
+    return f"tool-{tool_node_id}-{iteration + 1}-{call_index + 1}"
+
+
+def _delegation_child_id_v2(
+    agent_workflow_id: str,
+    tool_node_id: str,
+    iteration: int,
+    call_index: int,
+) -> str:
+    """Return a stable child id for one delegation call."""
+    return f"{agent_workflow_id}-delegate-{tool_node_id}-{iteration + 1}-{call_index + 1}"
+
+
+def _refresh_tools_activity_id_v2(tool_node_id: str, iteration: int, call_index: int) -> str:
+    """Return a stable id for the hot-refresh owned by one tool call."""
+    return f"refresh-tools-{tool_node_id}-{iteration + 1}-{call_index + 1}"
+
+
+def _tool_call_metadata(
+    *,
+    agent_node_id: str,
+    iteration: int,
+    call_index: int,
+    call: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Serializable correlation fields shared by one call's commands."""
+    return {
+        "invoking_agent_node_id": agent_node_id,
+        "agent_iteration": iteration + 1,
+        "tool_call_index": call_index + 1,
+        "tool_call_id": str(call.get("id", "") or ""),
+    }
+
+
+def _duplicate_visible_tool_name_conflicts(
+    tools: List[Dict[str, Any]],
+) -> Dict[str, List[Dict[str, str]]]:
+    """Return deterministic provider-name conflicts for one agent."""
+    grouped: Dict[str, List[Dict[str, str]]] = {}
+    for tool in tools:
+        name = str(tool.get("name", "") or "")
+        tool_info = tool.get("tool_info") or {}
+        grouped.setdefault(name, []).append(
+            {
+                "node_id": str(tool.get("tool_node_id") or "<missing-node-id>"),
+                "label": str(tool_info.get("label") or tool.get("node_type") or "tool"),
+            }
+        )
+    return {
+        name: sorted(entries, key=lambda entry: (entry["node_id"], entry["label"]))
+        for name, entries in sorted(grouped.items())
+        if len(entries) > 1
+    }
+
+
+def _duplicate_visible_tool_name_error(tools: List[Dict[str, Any]]) -> Optional[str]:
+    """Describe duplicate provider-visible names, or return ``None``.
+
+    Tool dispatch is name based and providers also require a unique function
+    surface. Reporting every conflicting node is safer than silently selecting
+    the last entry or inventing aliases that change the LLM contract.
+    """
+    conflicts = _duplicate_visible_tool_name_conflicts(tools)
+    if not conflicts:
+        return None
+
+    details: List[str] = []
+    for name in sorted(conflicts):
+        identities: List[str] = []
+        for identity in conflicts[name]:
+            identities.append(
+                f"{identity['label']} ({identity['node_id']})"
+            )
+        details.append(f"{name!r}: {', '.join(identities)}")
+
+    return (
+        "Duplicate LLM-visible tool names are not allowed: "
+        + "; ".join(details)
+        + ". Assign a unique Tool Name to each connected tool."
+    )
+
 
 @workflow.defn(sandboxed=False, name="AgentWorkflow")
 class AgentWorkflow:
@@ -180,6 +270,12 @@ class AgentWorkflow:
         ``services/ai.py:execute_agent`` returns today so downstream
         code (OutputPanel, edge inputs, etc.) doesn't change.
         """
+        # Activity inputs and command ids are recorded in Temporal Event
+        # History. Old histories take the exact legacy branches below; new
+        # runs record this marker and receive per-call command identity plus
+        # deterministic duplicate-name validation.
+        use_tool_call_identity_v2 = workflow.patched(TOOL_CALL_IDENTITY_V2_PATCH)
+
         # ---- Step 0: Resolve payload via the prep activity --------------
         # DB lookups + edge walking + tool schema build happen here, NOT
         # in the workflow body (workflows must be deterministic).
@@ -197,6 +293,51 @@ class AgentWorkflow:
         # the ``child_context`` spread below. ``workflow.info().run_id``
         # is deterministic — safe inside workflow code.
         execution_id = str(context.get("execution_id") or "") or workflow.info().run_id[:8]
+        max_iterations = int(payload.get("max_iterations") or _default_max_iterations())
+        agent_node_id = payload["node_id"]
+        agent_workflow_id = payload.get("workflow_id")
+        self._parent_node_id: Optional[str] = context.get("parent_node_id")
+
+        # The provider-visible name is the dispatch key. The legacy dict
+        # comprehension silently selected the last connected node when two
+        # tools shared a name. New histories fail before the first billed LLM
+        # call and identify every conflicting canvas node.
+        tools = payload.get("tools") or []
+        duplicate_tool_error = (
+            _duplicate_visible_tool_name_error(tools)
+            if use_tool_call_identity_v2
+            else None
+        )
+        duplicate_tool_conflicts = (
+            _duplicate_visible_tool_name_conflicts(tools)
+            if duplicate_tool_error
+            else {}
+        )
+        if duplicate_tool_error:
+            await self._emit_phase(
+                agent_node_id,
+                agent_workflow_id,
+                0,
+                max_iterations,
+                phase="failed",
+                status="error",
+                extra={
+                    "error_type": DUPLICATE_TOOL_NAME_ERROR_TYPE,
+                    "error": duplicate_tool_error,
+                    "conflicts": duplicate_tool_conflicts,
+                },
+            )
+            return {
+                "success": False,
+                "error_type": DUPLICATE_TOOL_NAME_ERROR_TYPE,
+                "error": duplicate_tool_error,
+                "conflicts": duplicate_tool_conflicts,
+                "node_id": agent_node_id,
+                "node_type": payload.get("node_type"),
+                "execution_id": execution_id,
+                "result": {"iterations": 0, "usage": {}},
+            }
+
         # ---- Build initial message list ---------------------------------
         # Workflow state is JSON dicts in LangChain's canonical shape
         # ({"type": "<role>", "data": {"content": "...", ...}}) so the
@@ -228,19 +369,13 @@ class AgentWorkflow:
         # Map LLM tool name -> {node_type, version, task_queue, node_id,
         # parameters} so the workflow can schedule the right activity
         # when the LLM emits a tool_call.
-        tools = payload.get("tools") or []
         tool_index: Dict[str, Dict[str, Any]] = {t["name"]: t for t in tools}
 
-        max_iterations = int(payload.get("max_iterations") or _default_max_iterations())
         token_total = 0
         compaction_threshold = payload.get("compaction_threshold")
         thinking_accumulated = ""
         final_content: Optional[str] = None
         usage_total: Dict[str, int] = {}
-
-        agent_node_id = payload["node_id"]
-        agent_workflow_id = payload.get("workflow_id")
-        self._parent_node_id: Optional[str] = context.get("parent_node_id")
 
         # Emit "executing" + phase="starting" via the existing
         # broadcast_agent_progress activity (CloudEvents
@@ -353,7 +488,7 @@ class AgentWorkflow:
             calls = step_result.get("calls") or []
             workflow.logger.info(f"AgentWorkflow scheduling {len(calls)} tool call(s)")
 
-            for call in calls:
+            for call_index, call in enumerate(calls):
                 tool_info = tool_index.get(call.get("name", ""))
                 if tool_info is None:
                     workflow.logger.warning(f"AgentWorkflow: LLM called unknown tool {call.get('name')!r}; " "returning error to model")
@@ -447,6 +582,16 @@ class AgentWorkflow:
                         child_nodes = []
                         child_edges = []
 
+                call_metadata = (
+                    _tool_call_metadata(
+                        agent_node_id=agent_node_id,
+                        iteration=iteration,
+                        call_index=call_index,
+                        call=call,
+                    )
+                    if use_tool_call_identity_v2
+                    else {}
+                )
                 tool_payload = {
                     "node_id": tool_info["tool_node_id"],
                     "node_type": tool_info["node_type"],
@@ -461,6 +606,7 @@ class AgentWorkflow:
                     # so canvas-mutating tools (agentBuilder) render their
                     # summary text to match the user's current preference.
                     "auto_rebind_tools": bool(payload.get("auto_rebind_tools", True)),
+                    **call_metadata,
                 }
 
                 tool_activity_name = f"node.{tool_info['node_type']}.v{tool_info['version']}"
@@ -484,18 +630,37 @@ class AgentWorkflow:
                                 "context": task_context,
                             },
                         }
+                        delegation_child_id = (
+                            _delegation_child_id_v2(
+                                workflow.info().workflow_id,
+                                tool_info["tool_node_id"],
+                                iteration,
+                                call_index,
+                            )
+                            if use_tool_call_identity_v2
+                            else f"{workflow.info().workflow_id}-delegate-{tool_info['tool_node_id']}-{iteration}"
+                        )
                         tool_result = await workflow.execute_child_workflow(
                             "AgentWorkflow",
                             args=[child_context],
-                            id=f"{workflow.info().workflow_id}-delegate-{tool_info['tool_node_id']}-{iteration}",
+                            id=delegation_child_id,
                             execution_timeout=timedelta(hours=1),
                             run_timeout=timedelta(hours=1),
                         )
                     else:
+                        tool_activity_id = (
+                            _tool_activity_id_v2(
+                                tool_info["tool_node_id"],
+                                iteration,
+                                call_index,
+                            )
+                            if use_tool_call_identity_v2
+                            else f"tool-{tool_info['tool_node_id']}-{iteration + 1}"
+                        )
                         tool_result = await workflow.execute_activity(
                             tool_activity_name,
                             args=[tool_payload],
-                            activity_id=f"tool-{tool_info['tool_node_id']}-{iteration + 1}",
+                            activity_id=tool_activity_id,
                             start_to_close_timeout=TOOL_STEP_TIMEOUT,
                             heartbeat_timeout=TOOL_HEARTBEAT_TIMEOUT,
                         )
@@ -525,14 +690,63 @@ class AgentWorkflow:
                             # step's one-shot LLM_STEP_RETRY): rebuilding
                             # the tool surface from canvas state is fully
                             # idempotent, so retries are free.
+                            refresh_activity_id = (
+                                _refresh_tools_activity_id_v2(
+                                    tool_info["tool_node_id"],
+                                    iteration,
+                                    call_index,
+                                )
+                                if use_tool_call_identity_v2
+                                else f"refresh-tools-{tool_info['tool_node_id']}-{iteration + 1}"
+                            )
+                            refresh_payload = {
+                                "operations": ops_from_tool,
+                                **call_metadata,
+                            }
                             refresh_result = await workflow.execute_activity(
                                 "agent.refresh_tools.v1",
-                                args=[{"operations": ops_from_tool}],
-                                activity_id=f"refresh-tools-{tool_info['tool_node_id']}-{iteration + 1}",
+                                args=[refresh_payload],
+                                activity_id=refresh_activity_id,
                                 start_to_close_timeout=timedelta(seconds=30),
                                 retry_policy=AGENT_ACTIVITY_RETRY,
                             )
                             added_tools = refresh_result.get("tools") or []
+                            refresh_duplicate_error = (
+                                _duplicate_visible_tool_name_error([*tools, *added_tools])
+                                if use_tool_call_identity_v2
+                                else None
+                            )
+                            refresh_duplicate_conflicts = (
+                                _duplicate_visible_tool_name_conflicts([*tools, *added_tools])
+                                if refresh_duplicate_error
+                                else {}
+                            )
+                            if refresh_duplicate_error:
+                                workflow.logger.warning(
+                                    "AgentWorkflow rejected hot-rebound tools: %s",
+                                    refresh_duplicate_error,
+                                )
+                                tool_content = _serialise_tool_result(
+                                    {
+                                        "error_type": DUPLICATE_TOOL_NAME_ERROR_TYPE,
+                                        "error": refresh_duplicate_error,
+                                        "conflicts": refresh_duplicate_conflicts,
+                                    }
+                                )
+                                await self._emit_phase(
+                                    agent_node_id,
+                                    agent_workflow_id,
+                                    iteration,
+                                    max_iterations,
+                                    phase="tool_error",
+                                    extra={
+                                        "error_type": DUPLICATE_TOOL_NAME_ERROR_TYPE,
+                                        "error": refresh_duplicate_error,
+                                        "conflicts": refresh_duplicate_conflicts,
+                                        **call_metadata,
+                                    },
+                                )
+                                added_tools = []
                             for new_tool in added_tools:
                                 tools.append(new_tool)
                                 tool_index[new_tool["name"]] = new_tool

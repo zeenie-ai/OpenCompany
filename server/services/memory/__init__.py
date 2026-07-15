@@ -32,6 +32,10 @@ from services.memory.jsonl import (
     parse_jsonl,
     trim_window,
 )
+from services.memory.runtime import (
+    append_memory_turns_atomic,
+    update_memory_parameters_atomic,
+)
 
 __all__ = [
     # Markdown helpers — used by every agent bridge (aiAgent /
@@ -49,4 +53,7 @@ __all__ = [
     "parse_jsonl",
     "append_message",
     "trim_window",
+    # Transactional runtime writes.
+    "append_memory_turns_atomic",
+    "update_memory_parameters_atomic",
 ]

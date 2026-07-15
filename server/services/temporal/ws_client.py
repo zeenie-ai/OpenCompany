@@ -117,7 +117,17 @@ class WSConnectionPool:
             "edges": context.get("edges", []),
             "session_id": context.get("session_id", "default"),
             "workflow_id": context.get("workflow_id"),
+            "execution_id": context.get("execution_id"),
         }
+        for key in (
+            "auto_rebind_tools",
+            "invoking_agent_node_id",
+            "agent_iteration",
+            "tool_call_index",
+            "tool_call_id",
+        ):
+            if key in context:
+                message[key] = context[key]
 
         try:
             async with self.connection() as ws:

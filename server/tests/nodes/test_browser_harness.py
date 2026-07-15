@@ -11,11 +11,21 @@ mapping. All subprocess side-effects are mocked:
 
 from __future__ import annotations
 
+import asyncio
+import threading
+import time
 from unittest.mock import patch
 
 import pytest
 
 pytestmark = pytest.mark.node_contract
+
+
+async def _wait_for_thread_event(event: threading.Event) -> None:
+    """Yield deterministically until a worker thread reaches its barrier."""
+    async with asyncio.timeout(2):
+        while not event.is_set():
+            await asyncio.sleep(0)
 
 
 # ============================================================================
@@ -192,6 +202,55 @@ class TestBrowserHarnessService:
         svc = self._svc()
         with pytest.raises(NodeUserError, match="code is required"):
             await svc.run_code("   ")
+
+    async def test_parallel_scripts_are_serialized_for_the_single_daemon(self):
+        svc = self._svc()
+        state = {"active": 0, "maximum": 0}
+        guard = threading.Lock()
+
+        def fake(*_args, **_kwargs):
+            with guard:
+                state["active"] += 1
+                state["maximum"] = max(state["maximum"], state["active"])
+            time.sleep(0.03)
+            with guard:
+                state["active"] -= 1
+            return '{"ok": true}'
+
+        with patch.object(svc, "_run_sync", side_effect=fake):
+            await asyncio.gather(
+                svc.run_code("print(1)"),
+                svc.run_code("print(2)"),
+            )
+
+        assert state["maximum"] == 1
+
+    async def test_cancellation_keeps_operation_lock_until_subprocess_finishes(self):
+        svc = self._svc()
+        entered = threading.Event()
+        release = threading.Event()
+
+        def blocking(*_args, **_kwargs):
+            entered.set()
+            if not release.wait(timeout=2):
+                raise AssertionError("test subprocess was not released")
+            return '{"ok": true}'
+
+        with patch.object(svc, "_run_sync", side_effect=blocking):
+            operation = asyncio.create_task(svc.run_code("print(1)"))
+            await _wait_for_thread_event(entered)
+
+            operation.cancel()
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+            assert operation.done() is False
+            assert svc._operation_lock.locked() is True
+
+            release.set()
+            with pytest.raises(asyncio.CancelledError):
+                await operation
+
+        assert svc._operation_lock.locked() is False
 
     def test_chrome_hint_maps_to_user_error(self):
         """stderr containing a Chrome-connection fragment must raise

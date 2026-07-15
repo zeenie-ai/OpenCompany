@@ -328,14 +328,25 @@ class VertexManagedAgentNode(ActionNode):
                 prev_interaction_id
                 and cause is not None
                 and (is_expired_environment_error(cause) or is_precondition_failure(cause))
-            ):
+                ):
                 logger.warning(
                     "[Vertex Agent] unresumable interaction chain for %s (%s) — retrying fresh",
                     node_id,
                     str(cause).replace("\n", " ")[:120],
                 )
                 if memory_node_id:
-                    await self._save_chain_ids(database, memory_node_id, None, None)
+                    await self._save_chain_ids(
+                        database,
+                        memory_node_id,
+                        None,
+                        None,
+                        mutation_id=(
+                            f"vertex-chain-reset:{ctx.execution_id}:"
+                            f"{node_id}:{memory_node_id}"
+                            if ctx.execution_id
+                            else None
+                        ),
+                    )
                 prev_interaction_id = None
                 environment = "remote"
                 interaction = await run_turn(input=prompt, environment="remote")
@@ -441,6 +452,11 @@ class VertexManagedAgentNode(ActionNode):
                 human=prompt,
                 assistant=response_text,
                 window_size=int((memory_data or {}).get("window_size") or 10),
+                mutation_id=(
+                    f"vertex-memory:{ctx.execution_id}:{node_id}:{memory_node_id}"
+                    if ctx.execution_id
+                    else None
+                ),
             )
 
         # ---- usage bookkeeping (tokens billed by Google; recorded for stats)
@@ -986,28 +1002,40 @@ class VertexManagedAgentNode(ActionNode):
         human: Optional[str] = None,
         assistant: Optional[str] = None,
         window_size: int = 10,
+        mutation_id: Optional[str] = None,
     ) -> None:
         """Persist chain ids (and optionally the turn) onto simpleMemory."""
-        from services.memory.markdown import (
-            append_to_memory_markdown,
-            trim_markdown_window,
+        from services.memory.runtime import (
+            append_memory_turns_atomic,
+            update_memory_parameters_atomic,
         )
 
-        params = await database.get_node_parameters(memory_node_id) or {}
+        updates: Dict[str, Any] = {}
+        removals: List[str] = []
         if interaction_id:
-            params["vertex_interaction_id"] = interaction_id
+            updates["vertex_interaction_id"] = interaction_id
         else:
-            params.pop("vertex_interaction_id", None)
+            removals.append("vertex_interaction_id")
         if environment_id:
-            params["vertex_environment_id"] = environment_id
+            updates["vertex_environment_id"] = environment_id
         else:
-            params.pop("vertex_environment_id", None)
+            removals.append("vertex_environment_id")
 
         if human and assistant:
-            content = params.get("memory_content") or ""
-            content = append_to_memory_markdown(content, "human", human)
-            content = append_to_memory_markdown(content, "assistant", assistant)
-            content, _removed = trim_markdown_window(content, window_size)
-            params["memory_content"] = content
-
-        await database.save_node_parameters(memory_node_id, params)
+            await append_memory_turns_atomic(
+                database,
+                memory_node_id,
+                [("human", human), ("assistant", assistant)],
+                window_size=window_size,
+                mutation_id=mutation_id,
+                parameter_updates=updates,
+                remove_parameters=removals,
+            )
+        else:
+            await update_memory_parameters_atomic(
+                database,
+                memory_node_id,
+                parameter_updates=updates,
+                remove_parameters=removals,
+                mutation_id=mutation_id,
+            )

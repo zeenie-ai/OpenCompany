@@ -2,14 +2,13 @@
  * TodoEditor — editable Current Todos manager for the writeTodos node.
  *
  * Replaces the empty generic-params card ("Todos — No properties") in the
- * parameter panel's middle section. Sourced from the LIVE workflow todos in
- * the backend TodoService (keyed by the open workflow, node_id fallback) via
+ * parameter panel's middle section. Sourced from the LIVE node todos in the
+ * backend TodoService (keyed by workflow + writeTodos node) via
  * the `get_todos` / `set_todos` WS handlers — NOT from `parameters.todos`.
  *
- * Because TodoService keys by workflow, all writeTodos nodes in one workflow
- * share a single list (surfaced in the header). The list updates live when an
- * agent calls the write_todos tool mid-run (the `todos_updated` CloudEvent
- * lands in this query's cache via WebSocketContext).
+ * Each writeTodos node owns an independent list. The list updates live when
+ * an agent calls the write_todos tool mid-run (the `todos_updated` CloudEvent
+ * lands in this node's exact query cache via WebSocketContext).
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -20,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ActionButton } from '@/components/ui/action-button';
 import { cn } from '@/lib/utils';
+import { todoQueryKey } from '@/lib/todoQuery';
 import { useWebSocket } from '../../contexts/WebSocketContext';
 import { useAppStore } from '../../store/useAppStore';
 
@@ -60,11 +60,10 @@ const TodoEditor: React.FC<Props> = ({ nodeId }) => {
   const currentWorkflowId = useAppStore((s) => s.currentWorkflow?.id);
   const queryClient = useQueryClient();
 
-  // Session key mirrors the backend write op (`workflow_id or node_id`).
-  const sessionKey = currentWorkflowId ?? nodeId;
+  const queryKey = todoQueryKey(currentWorkflowId, nodeId);
 
   const { data: serverTodos } = useQuery<ServerTodo[]>({
-    queryKey: ['todos', sessionKey],
+    queryKey,
     queryFn: async () => {
       const resp = await sendRequest<{ todos?: ServerTodo[] }>('get_todos', {
         workflow_id: currentWorkflowId,
@@ -82,6 +81,14 @@ const TodoEditor: React.FC<Props> = ({ nodeId }) => {
   // credentials Default-Parameters fix).
   const editingRef = useRef<string | null>(null);
 
+  // This component instance is reused while the parameter panel switches
+  // nodes. Drop node-A's draft/edit lock immediately so it cannot suppress
+  // the node-B query sync or remain visible while B is loading.
+  useEffect(() => {
+    editingRef.current = null;
+    setRows([]);
+  }, [currentWorkflowId, nodeId]);
+
   // Sync local rows from the server query — only when not actively editing.
   useEffect(() => {
     if (editingRef.current !== null) return;
@@ -97,7 +104,7 @@ const TodoEditor: React.FC<Props> = ({ nodeId }) => {
         .filter((r) => r.content.trim() !== '')
         .map((r) => ({ content: r.content.trim(), status: r.status }));
       // Optimistic cache update so other consumers (and a reopen) see it now.
-      queryClient.setQueryData(['todos', sessionKey], payload);
+      queryClient.setQueryData(queryKey, payload);
       void sendRequest('set_todos', {
         workflow_id: currentWorkflowId,
         node_id: nodeId,
@@ -107,7 +114,7 @@ const TodoEditor: React.FC<Props> = ({ nodeId }) => {
         // get_todos / todos_updated reconciles. Surface nothing noisy here.
       });
     },
-    [queryClient, sendRequest, currentWorkflowId, nodeId, sessionKey],
+    [queryClient, sendRequest, currentWorkflowId, nodeId, queryKey],
   );
 
   const addTodo = useCallback(() => {
@@ -169,7 +176,7 @@ const TodoEditor: React.FC<Props> = ({ nodeId }) => {
       </div>
 
       <p className="mb-3 text-xs text-muted-foreground">
-        Live todo list for this workflow (shared by every Write Todos node in the workflow).
+        Live todo list for this Write Todos node.
       </p>
 
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">

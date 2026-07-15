@@ -389,6 +389,7 @@ class ClaudeCodeAgentNode(ActionNode):
             connected_skill_names=connected_skills,
             connected_tools=tool_data,
             connected_memory=memory_data,
+            execution_id=ctx.execution_id,
             allowed_credentials=params.allowed_credentials,
             max_parallel=params.max_parallel,
         )

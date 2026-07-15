@@ -7,6 +7,7 @@ import { useWebSocket } from './contexts/WebSocketContext';
 import { ExecutionService, ExecutionResult } from './services/executionService';
 import { ActionButton } from './components/ui/action-button';
 import { NodeIcon } from './assets/icons';
+import { nodeExecutionReducer } from './utils/parameterPanelExecutionState';
 
 const ParameterPanel: React.FC = () => {
   const {
@@ -27,9 +28,14 @@ const ParameterPanel: React.FC = () => {
   const nodeStatus = selectedNode ? getNodeStatus(selectedNode.id) : null;
   const isWaiting = nodeStatus?.status === 'waiting';
 
-  // Execution state
-  const [isExecuting, setIsExecuting] = React.useState(false);
-  const [executionResults, setExecutionResults] = React.useState<ExecutionResult[]>([]);
+  // Execution state is owned by the physical node. A run may remain in
+  // flight while the user inspects or starts another node, so a panel-wide
+  // boolean/result list would let one node block or overwrite another.
+  const [executionByNode, dispatchExecution] = React.useReducer(nodeExecutionReducer, {});
+
+  const selectedExecution = selectedNode
+    ? executionByNode[selectedNode.id] ?? { running: false, results: [] }
+    : { running: false, results: [] };
   
 
   const handleModalClose = () => {
@@ -39,15 +45,23 @@ const ParameterPanel: React.FC = () => {
   // Execute the current node
   const handleRun = async () => {
     if (!selectedNode || !nodeDefinition) return;
+
+    // Capture identity before the first await. Selecting another node while
+    // this run is pending must not redirect its result or finally block.
+    const runNode = selectedNode;
+    const runDefinition = nodeDefinition;
+    const runNodeId = runNode.id;
     
-    // Save parameters first if there are unsaved changes
-    if (hasUnsavedChanges) {
-      await handleSave();
-    }
-    
-    setIsExecuting(true);
-    
+    dispatchExecution({ type: 'start', nodeId: runNodeId });
+
     try {
+      // Save parameters first if there are unsaved changes. The per-node run
+      // flag is already set so a second click cannot start an overlapping run
+      // while this await is pending.
+      if (hasUnsavedChanges) {
+        await handleSave();
+      }
+
       
       // Get current workflow nodes and edges from app store
       const nodes = currentWorkflow?.nodes || [];
@@ -55,8 +69,8 @@ const ParameterPanel: React.FC = () => {
       
       // Execute node via WebSocket
       const result: ExecutionResult = await ExecutionService.executeNodeViaWebSocket(
-        selectedNode.id,
-        nodeDefinition.name,
+        runNodeId,
+        runDefinition.name,
         executeNode,
         getNodeParameters,
         nodes,
@@ -67,10 +81,10 @@ const ParameterPanel: React.FC = () => {
       console.log('[ParameterPanel] Execution result:', result);
       console.log('[ParameterPanel] Result nodeId:', result.nodeId);
       console.log('[ParameterPanel] Result outputs:', result.outputs);
-      console.log('[ParameterPanel] Selected node id:', selectedNode.id);
+      console.log('[ParameterPanel] Selected node id:', runNodeId);
 
       // Add result to the beginning of the array (newest first)
-      setExecutionResults(prev => [result, ...prev]);
+      dispatchExecution({ type: 'append', nodeId: runNodeId, result });
       
     } catch (error: any) {
       console.error('Execution failed:', error);
@@ -78,35 +92,35 @@ const ParameterPanel: React.FC = () => {
       // Add error result
       const errorResult: ExecutionResult = {
         success: false,
-        nodeId: selectedNode.id,
-        nodeType: nodeDefinition.name,
-        nodeName: nodeDefinition.displayName,
+        nodeId: runNodeId,
+        nodeType: runDefinition.name,
+        nodeName: runDefinition.displayName,
         timestamp: new Date().toISOString(),
         executionTime: 0,
         error: error.message || 'Unknown execution error',
         nodeData: [[{
           json: {
             error: error.message || 'Unknown execution error',
-            nodeId: selectedNode.id,
+            nodeId: runNodeId,
             success: false,
             timestamp: new Date().toISOString()
           }
         }]]
       };
       
-      setExecutionResults(prev => [errorResult, ...prev]);
+      dispatchExecution({ type: 'append', nodeId: runNodeId, result: errorResult });
     } finally {
-      setIsExecuting(false);
+      dispatchExecution({ type: 'finish', nodeId: runNodeId });
     }
   };
 
   // Clear execution results (both local state and WebSocket nodeStatuses)
   const handleClearResults = () => {
-    setExecutionResults([]);
+    if (!selectedNode) return;
+    const nodeId = selectedNode.id;
+    dispatchExecution({ type: 'clear', nodeId });
     // Also clear the node status from WebSocket context
-    if (selectedNode) {
-      clearNodeStatus(selectedNode.id);
-    }
+    clearNodeStatus(nodeId);
   };
 
 
@@ -147,13 +161,13 @@ const ParameterPanel: React.FC = () => {
           <ActionButton
             intent="run"
             onClick={handleRun}
-            disabled={isExecuting}
-            title={isExecuting ? 'Execution in progress...' : 'Execute this node'}
+            disabled={selectedExecution.running}
+            title={selectedExecution.running ? 'Execution in progress...' : 'Execute this node'}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
               <path d="M8 5v14l11-7z" />
             </svg>
-            {isExecuting ? 'Running...' : 'Run'}
+            {selectedExecution.running ? 'Running...' : 'Run'}
           </ActionButton>
         )}
         <ActionButton intent="tools" onClick={handleSave} disabled={!hasUnsavedChanges}>
@@ -211,7 +225,7 @@ const ParameterPanel: React.FC = () => {
         parameters={parameters}
         hasUnsavedChanges={hasUnsavedChanges}
         onParameterChange={handleParameterChange}
-        executionResults={executionResults}
+        executionResults={selectedExecution.results}
         onClearResults={handleClearResults}
         showInputSection={!hideInputSection}
         showOutputSection={!hideOutputSection}

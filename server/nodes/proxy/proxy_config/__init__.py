@@ -320,7 +320,7 @@ async def _add_routing_rule(p: Dict[str, Any], proxy_svc) -> Dict[str, Any]:
         }
     )
     if proxy_svc:
-        await proxy_svc.reload_providers()
+        await proxy_svc.reload_routing_rules()
     return {"success": True, "domain_pattern": domain_pattern}
 
 
@@ -333,7 +333,7 @@ async def _remove_routing_rule(p: Dict[str, Any], proxy_svc) -> Dict[str, Any]:
     db = get_database()
     await db.delete_proxy_routing_rule(int(rule_id))
     if proxy_svc:
-        await proxy_svc.reload_providers()
+        await proxy_svc.reload_routing_rules()
     return {"success": True, "rule_id": rule_id}
 
 

@@ -30,6 +30,9 @@ to call something that isn't there yet.
 
 from __future__ import annotations
 
+import hashlib
+import inspect
+import json
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
@@ -76,7 +79,118 @@ _CREATE_WORKFLOW_ENABLED = False
 # ----------------------------------------------------------------------------
 
 
-async def _persist_canvas_mutation(workflow_id: Optional[str], ops: List[Dict[str, Any]]) -> None:
+def _apply_canvas_ops(
+    data: Dict[str, Any],
+    ops: List[Dict[str, Any]],
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    """Apply an agentBuilder batch to one current workflow snapshot.
+
+    Minted node IDs and exact edge identities are de-duplicated so retrying
+    the same batch is harmless. Distinct batches retain their distinct minted
+    nodes even when they happen to add the same type concurrently.
+    """
+    data = dict(data or {})
+    nodes = [dict(node) for node in (data.get("nodes") or [])]
+    edges = [dict(edge) for edge in (data.get("edges") or [])]
+    ref_to_id: Dict[str, str] = {}
+    changed = False
+
+    def _resolve(ref: Any) -> Optional[str]:
+        if isinstance(ref, str):
+            return ref
+        if isinstance(ref, dict) and "client_ref" in ref:
+            return ref_to_id.get(ref["client_ref"])
+        return None
+
+    for op in ops:
+        op_type = op.get("type")
+        if op_type == "add_node":
+            node_type = op.get("node_type") or ""
+            if not node_type:
+                continue
+            new_id = op.get("minted_id") or op.get("client_ref") or ""
+            if not new_id:
+                continue
+            client_ref = op.get("client_ref") or ""
+
+            if client_ref:
+                ref_to_id[client_ref] = new_id
+            if any(node.get("id") == new_id for node in nodes):
+                continue
+            params = op.get("parameters") or {}
+            nodes.append(
+                {
+                    "id": new_id,
+                    "type": node_type,
+                    "position": (
+                        op.get("position")
+                        if isinstance(op.get("position"), dict)
+                        and "x" in op["position"]
+                        else {"x": 0, "y": 0}
+                    ),
+                    "data": {
+                        "label": op.get("label") or params.get("label") or node_type,
+                        "parameters": dict(params),
+                    },
+                }
+            )
+            changed = True
+        elif op_type == "add_edge":
+            source = _resolve(op.get("source"))
+            target = _resolve(op.get("target"))
+            if not source or not target:
+                continue
+            identity = (
+                source,
+                target,
+                op.get("source_handle"),
+                op.get("target_handle"),
+            )
+            if any(
+                (
+                    edge.get("source"),
+                    edge.get("target"),
+                    edge.get("sourceHandle"),
+                    edge.get("targetHandle"),
+                )
+                == identity
+                for edge in edges
+            ):
+                continue
+            edges.append(
+                {
+                    "id": f"e-{source}-{target}",
+                    "source": source,
+                    "target": target,
+                    "sourceHandle": op.get("source_handle"),
+                    "targetHandle": op.get("target_handle"),
+                }
+            )
+            changed = True
+        elif op_type == "set_node_parameters":
+            node_id = op.get("node_id")
+            merge = op.get("parameters") or {}
+            for node in nodes:
+                if node.get("id") != node_id:
+                    continue
+                node_data = dict(node.get("data") or {})
+                existing = dict(node_data.get("parameters") or {})
+                merged = {**existing, **merge}
+                if merged != existing:
+                    node_data["parameters"] = merged
+                    node["data"] = node_data
+                    changed = True
+                break
+
+    data["nodes"] = nodes
+    data["edges"] = edges
+    return data, {"changed": changed, "nodes": len(nodes), "edges": len(edges)}
+
+
+async def _persist_canvas_mutation(
+    workflow_id: Optional[str],
+    ops: List[Dict[str, Any]],
+) -> Optional[bool]:
     """Apply the three op types agentBuilder emits to the persisted
     ``workflow.data`` via the existing ``database.get_workflow`` +
     ``database.save_workflow`` round-trip.
@@ -91,85 +205,60 @@ async def _persist_canvas_mutation(workflow_id: Optional[str], ops: List[Dict[st
     ops for FE alignment) so the persisted row matches the React Flow
     state exactly — no id divergence on reload.
     """
-    if not ops or not workflow_id:
-        return
+    if not ops:
+        return False
+    if not workflow_id:
+        return None
     try:
         from services.plugin.deps import get_database
 
         database = get_database()
+        atomic_mutate = getattr(database, "mutate_workflow_data_atomic", None)
+        if atomic_mutate is not None and inspect.iscoroutinefunction(atomic_mutate):
+            canonical_ops = json.dumps(
+                ops,
+                sort_keys=True,
+                separators=(",", ":"),
+                default=str,
+            )
+            mutation_id = (
+                f"agent-builder:{workflow_id}:"
+                f"{hashlib.sha256(canonical_ops.encode('utf-8')).hexdigest()}"
+            )
+            workflow, metadata, applied = await atomic_mutate(
+                workflow_id,
+                lambda current: _apply_canvas_ops(current, ops),
+                mutation_id=mutation_id,
+                operation="agent_builder_ops",
+            )
+            if workflow is None or not metadata.get("found", True):
+                logger.debug(
+                    "[agentBuilder] persist skipped: workflow %s not found",
+                    workflow_id,
+                )
+                return None
+            logger.info(
+                "[agentBuilder] transactionally persisted %s ops to workflow %s "
+                "(nodes=%d edges=%d applied=%s)",
+                [op.get("type") for op in ops],
+                workflow_id,
+                metadata.get("nodes", 0),
+                metadata.get("edges", 0),
+                applied,
+            )
+            return bool(applied and metadata.get("changed"))
+
+        # Compatibility path for existing isolated test doubles.
         workflow = await database.get_workflow(workflow_id)
         if workflow is None:
             logger.debug("[agentBuilder] persist skipped: workflow %s not found", workflow_id)
-            return
-
-        data = dict(workflow.data or {})
-        nodes = list(data.get("nodes") or [])
-        edges = list(data.get("edges") or [])
-        ref_to_id: Dict[str, str] = {}
-
-        def _resolve(ref: Any) -> Optional[str]:
-            if isinstance(ref, str):
-                return ref
-            if isinstance(ref, dict) and "client_ref" in ref:
-                return ref_to_id.get(ref["client_ref"])
             return None
 
-        for op in ops:
-            op_type = op.get("type")
-            if op_type == "add_node":
-                node_type = op.get("node_type") or ""
-                if not node_type:
-                    continue
-                # ``minted_id`` is set by add_tool / add_skill / add_subagent
-                # so the FE applier adopts the same id. Reuse it for the
-                # persisted row to keep BE/FE views aligned.
-                new_id = op.get("minted_id") or op.get("client_ref") or ""
-                if not new_id:
-                    continue
-                client_ref = op.get("client_ref") or ""
-                if client_ref:
-                    ref_to_id[client_ref] = new_id
-                params = op.get("parameters") or {}
-                nodes.append(
-                    {
-                        "id": new_id,
-                        "type": node_type,
-                        "position": op.get("position") if isinstance(op.get("position"), dict) and "x" in op["position"] else {"x": 0, "y": 0},
-                        "data": {
-                            "label": op.get("label") or params.get("label") or node_type,
-                            "parameters": dict(params),
-                        },
-                    }
-                )
-            elif op_type == "add_edge":
-                source = _resolve(op.get("source"))
-                target = _resolve(op.get("target"))
-                if not source or not target:
-                    continue
-                edges.append(
-                    {
-                        "id": f"e-{source}-{target}",
-                        "source": source,
-                        "target": target,
-                        "sourceHandle": op.get("source_handle"),
-                        "targetHandle": op.get("target_handle"),
-                    }
-                )
-            elif op_type == "set_node_parameters":
-                node_id = op.get("node_id")
-                merge = op.get("parameters") or {}
-                for n in nodes:
-                    if n.get("id") != node_id:
-                        continue
-                    node_data = dict(n.get("data") or {})
-                    existing = dict(node_data.get("parameters") or {})
-                    existing.update(merge)
-                    node_data["parameters"] = existing
-                    n["data"] = node_data
-                    break
-
-        data["nodes"] = nodes
-        data["edges"] = edges
+        data, metadata = _apply_canvas_ops(dict(workflow.data or {}), ops)
+        nodes = data.get("nodes") or []
+        edges = data.get("edges") or []
+        if not metadata.get("changed"):
+            return False
         await database.save_workflow(
             workflow_id=workflow_id,
             name=workflow.name,
@@ -184,10 +273,12 @@ async def _persist_canvas_mutation(workflow_id: Optional[str], ops: List[Dict[st
             len(nodes),
             len(edges),
         )
+        return True
     except Exception as exc:
         logger.warning(
             "[agentBuilder] persist failed for workflow %s: %s", workflow_id, exc, exc_info=True
         )
+        return None
 
 
 async def _broadcast(workflow_id: Optional[str], caller_id: str, ops: List[Dict[str, Any]]) -> None:
@@ -203,7 +294,12 @@ async def _broadcast(workflow_id: Optional[str], caller_id: str, ops: List[Dict[
     """
     if not ops:
         return
-    await _persist_canvas_mutation(workflow_id, ops)
+    persisted = await _persist_canvas_mutation(workflow_id, ops)
+    # ``None`` means persistence was unavailable/missing and is explicitly
+    # best-effort: the live canvas still needs the operation event. ``False``
+    # is a known idempotent no-op and should not be rebroadcast.
+    if persisted is False:
+        return
     try:
         from ._events import broadcast_workflow_ops
 

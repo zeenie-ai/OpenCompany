@@ -127,9 +127,9 @@ async def handle_write_todos(
     """Legacy flat-envelope shim. Drops invalid items at the service
     layer rather than raising at the pydantic boundary (matches the
     pre-refactor handler contract)."""
-    from services.todo_service import get_todo_service
+    from services.todo_service import get_todo_service, todo_session_key
 
-    session_key = context.get("workflow_id") or node_id or "default"
+    session_key = todo_session_key(context.get("workflow_id"), node_id)
     raw_todos = parameters.get("todos", [])
     service = get_todo_service()
     stored = service.write(session_key, raw_todos)

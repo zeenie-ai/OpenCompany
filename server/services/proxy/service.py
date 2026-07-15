@@ -5,6 +5,7 @@ scoring, geo-targeting, sticky sessions, failover, and cost tracking.
 Follows the CompactionService singleton pattern.
 """
 
+import asyncio
 import json
 import time
 from collections import deque
@@ -134,6 +135,11 @@ class ProxyService:
         self._settings = settings
         self._providers: Dict[str, _ProviderRuntime] = {}
         self._routing_rules: List[RoutingRule] = []
+        # Serialize fetch + async credential/build + pointer swap. Atomic
+        # assignment prevents partial snapshots, while these locks prevent an
+        # older slow reload from publishing after a newer one.
+        self._provider_reload_lock = asyncio.Lock()
+        self._routing_reload_lock = asyncio.Lock()
         self._daily_spend_usd: float = 0.0
         self._initialized = False
 
@@ -145,11 +151,10 @@ class ProxyService:
         """
         try:
             # Load provider configs from database
-            db_providers = await self._database.get_proxy_providers()
-            await self._load_providers(db_providers)
+            await self.reload_providers()
 
             # Load routing rules from database
-            await self._reload_routing_rules()
+            await self.reload_routing_rules()
 
             self._initialized = True
             provider_names = [p.config.name for p in self._providers.values() if p.config.enabled]
@@ -286,14 +291,14 @@ class ProxyService:
         """Save a routing rule to database and refresh in-memory list."""
         success = await self._database.save_proxy_routing_rule(rule_data)
         if success:
-            await self._reload_routing_rules()
+            await self.reload_routing_rules()
         return success
 
     async def delete_routing_rule(self, rule_id: int) -> bool:
         """Delete a routing rule and refresh in-memory list."""
         success = await self._database.delete_proxy_routing_rule(rule_id)
         if success:
-            await self._reload_routing_rules()
+            await self.reload_routing_rules()
         return success
 
     async def test_provider(self, provider_name: str) -> Dict[str, Any]:
@@ -357,13 +362,25 @@ class ProxyService:
 
     async def reload_providers(self) -> None:
         """Reload provider configs from database (called after tool/UI changes)."""
-        db_providers = await self._database.get_proxy_providers()
-        await self._load_providers(db_providers)
+        async with self._provider_reload_lock:
+            db_providers = await self._database.get_proxy_providers()
+            await self._load_providers(db_providers)
         logger.info("Proxy providers reloaded", count=len(self._providers))
 
+    async def reload_routing_rules(self) -> None:
+        """Reload routing rules after an out-of-service database write."""
+        async with self._routing_reload_lock:
+            await self._reload_routing_rules()
+        logger.info("Proxy routing rules reloaded", count=len(self._routing_rules))
+
     async def _load_providers(self, db_providers: list) -> None:
-        """Build _ProviderRuntime instances from database rows."""
-        self._providers.clear()
+        """Build and atomically publish a complete provider snapshot.
+
+        Credential lookups await.  Mutating ``self._providers`` in place used
+        to expose an empty or half-built routing table to requests arriving
+        during a reload.
+        """
+        providers: Dict[str, _ProviderRuntime] = {}
         for row in db_providers:
             template = json.loads(row.get("url_template", "{}"))
             provider = TemplateProxyProvider(name=row["name"], template=template)
@@ -395,7 +412,12 @@ class ProxyService:
             else:
                 logger.warning("No credentials for proxy provider", name=config.name)
 
-            self._providers[config.name] = runtime
+            providers[config.name] = runtime
+
+        # A dict reference assignment is atomic for readers in this event
+        # loop; every request now observes either the old complete snapshot
+        # or the new complete snapshot.
+        self._providers = providers
 
     # ---- Internal helpers ----
 
@@ -438,11 +460,11 @@ class ProxyService:
         return candidates[0]
 
     async def _reload_routing_rules(self) -> None:
-        """Reload routing rules from database."""
+        """Reload and atomically publish a complete routing-rule snapshot."""
         db_rules = await self._database.get_proxy_routing_rules()
-        self._routing_rules = []
+        routing_rules: List[RoutingRule] = []
         for row in db_rules:
-            self._routing_rules.append(
+            routing_rules.append(
                 RoutingRule(
                     id=row.get("id"),
                     domain_pattern=row["domain_pattern"],
@@ -456,7 +478,8 @@ class ProxyService:
                     priority=row.get("priority", 0),
                 )
             )
-        self._routing_rules.sort(key=lambda r: r.priority)
+        routing_rules.sort(key=lambda r: r.priority)
+        self._routing_rules = routing_rules
 
 
 # ---- Singleton accessor (CompactionService pattern) ----

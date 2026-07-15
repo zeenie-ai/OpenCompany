@@ -677,7 +677,7 @@ const DashboardContent: React.FC = () => {
       console.log('[Workflow Run] Execution order:', order);
 
       // Execute the entire workflow via WebSocket
-      const workflowResult = await executeWorkflow(nodes, edges);
+      const workflowResult = await executeWorkflow(nodes, edges, undefined, workflowId);
 
       console.log('[Workflow Run] Execution complete:', workflowResult);
 

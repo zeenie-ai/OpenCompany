@@ -36,6 +36,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from core.logging import get_logger
+from services.tool_identity import ensure_unique_tool_names
 
 logger = get_logger(__name__)
 
@@ -57,6 +58,7 @@ class BatchContext:
     workflow_id: str
     node_id: str
     workspace_dir: Path
+    execution_id: Optional[str] = None
     connected_skill_names: Set[str] = field(default_factory=set)
     allowed_credentials: Set[str] = field(default_factory=set)
     # Connected ``input-tools`` nodes (entries from
@@ -73,11 +75,25 @@ class BatchContext:
 # Token -> BatchContext registry. Lives in-memory only; tokens never
 # touch disk or the credentials.db.
 _active_tokens: Dict[str, BatchContext] = {}
+_UNSET = object()
 
 
 def issue_token() -> str:
     """Mint a new bearer token (32 bytes hex)."""
     return secrets.token_hex(32)
+
+
+def _validate_connected_tool_names(connected_tools: List[Dict[str, Any]]) -> None:
+    """Reject ambiguous node-type dispatch within one CLI agent surface."""
+    ensure_unique_tool_names(
+        {
+            "name": tool["node_type"],
+            "node_id": tool.get("node_id") or "",
+            "label": tool.get("label") or tool["node_type"],
+        }
+        for tool in connected_tools
+        if tool.get("node_type")
+    )
 
 
 def register_batch(token: str, ctx: BatchContext) -> None:
@@ -88,6 +104,11 @@ def register_batch(token: str, ctx: BatchContext) -> None:
         if existing is not ctx:
             raise ValueError("Token collision in MCP server batch registry")
         return
+    # Validate before either the bearer-token registry or FastMCP's global
+    # tool registry changes.  The MCP handler dispatches by node_type, so two
+    # physical nodes of the same effective name would otherwise select the
+    # first one silently.
+    _validate_connected_tool_names(ctx.connected_tools)
     _active_tokens[token] = ctx
     tool_names = [t.get("node_type") for t in ctx.connected_tools]
     logger.info(
@@ -125,6 +146,10 @@ def lookup_batch(token: str) -> Optional[BatchContext]:
 def rebind_batch(
     token: str,
     *,
+    workflow_id: Optional[str] = None,
+    node_id: Optional[str] = None,
+    execution_id: Any = _UNSET,
+    broadcaster: Any = _UNSET,
     connected_tools: Optional[List[Dict[str, Any]]] = None,
     connected_skill_names: Optional[Set[str]] = None,
     allowed_credentials: Optional[Set[str]] = None,
@@ -154,6 +179,19 @@ def rebind_batch(
     ctx = _active_tokens.get(token)
     if ctx is None:
         return None
+    # Rebinding is transactional from the caller's perspective: an invalid
+    # tool surface must not partially refresh identity, credentials, or MCP
+    # refcounts on the warm process's persistent context.
+    if connected_tools is not None:
+        _validate_connected_tool_names(connected_tools)
+    if workflow_id is not None:
+        ctx.workflow_id = workflow_id
+    if node_id is not None:
+        ctx.node_id = node_id
+    if execution_id is not _UNSET:
+        ctx.execution_id = execution_id
+    if broadcaster is not _UNSET:
+        ctx.broadcaster = broadcaster
     if connected_tools is not None:
         from services.cli_agent.workflow_tools import (
             expose_workflow_tools,

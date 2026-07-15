@@ -113,6 +113,7 @@ async def execute_node(request: NodeExecuteRequest, workflow_service: WorkflowSe
             nodes=request.nodes or [],
             edges=request.edges or [],
             session_id="default",
+            execution_id=execution_id,
         )
 
         # Transform result to match Node.js format
@@ -198,6 +199,7 @@ async def legacy_execute_node(
             nodes=request.get("nodes", []),
             edges=request.get("edges", []),
             session_id="default",
+            execution_id=execution_id,
         )
 
         # Return in Node.js format

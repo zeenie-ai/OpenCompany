@@ -78,6 +78,7 @@ class AICliService:
         connected_skill_names: Optional[List[str]] = None,
         connected_tools: Optional[List[Dict[str, Any]]] = None,
         connected_memory: Optional[Dict[str, Any]] = None,
+        execution_id: Optional[str] = None,
         allowed_credentials: Optional[List[str]] = None,
         max_parallel: int = DEFAULT_MAX_PARALLEL,
         mcp_port: Optional[int] = None,
@@ -172,6 +173,7 @@ class AICliService:
             workflow_id=workflow_id,
             node_id=node_id,
             workspace_dir=Path(workspace_dir).resolve(),
+            execution_id=execution_id,
             connected_skill_names=set(connected_skill_names or []),
             allowed_credentials=set(allowed_credentials or []),
             connected_tools=list(connected_tools or []),
@@ -318,6 +320,12 @@ class AICliService:
                     connected_memory,
                     results,
                     broadcaster=broadcaster,
+                    mutation_id=(
+                        f"cli-memory:{execution_id}:{node_id}:"
+                        f"{connected_memory.get('node_id', '')}"
+                        if execution_id
+                        else None
+                    ),
                 )
             except Exception as exc:  # pragma: no cover — best-effort
                 logger.warning(
@@ -461,19 +469,28 @@ class AICliService:
         env["OPENCOMPANY_PARENT_RUN_ID"] = parent_run_id
         env["MACHINA_PARENT_RUN_ID"] = parent_run_id  # legacy child-process contract
 
-        pooled = await pool.acquire(
-            memory_node_id,
-            spec=task,
-            cwd=cwd,
-            env=env,
-            defaults=defaults,
-            mcp_endpoint_url=mcp_endpoint_url,
-            mcp_bearer_token=mcp_bearer_token,
-            connected_tool_names=tool_names,
-            connected_skill_names=connected_skill_names,
-            workspace_dir=workspace_dir,
-            workflow_id=workflow_id,
-        )
+        try:
+            pooled = await pool.acquire(
+                memory_node_id,
+                spec=task,
+                cwd=cwd,
+                env=env,
+                defaults=defaults,
+                mcp_endpoint_url=mcp_endpoint_url,
+                mcp_bearer_token=mcp_bearer_token,
+                connected_tool_names=tool_names,
+                connected_skill_names=connected_skill_names,
+                workspace_dir=workspace_dir,
+                workflow_id=workflow_id,
+            )
+        except BaseException:
+            # A cold spawn can fail before the pool adopts the token. The
+            # run_batch pool branch intentionally does not unregister in its
+            # outer finally, so close this otherwise-orphaned context here.
+            from services.cli_agent.mcp_server import unregister_batch
+
+            unregister_batch(mcp_bearer_token)
+            raise
         try:
             return await pool.send_turn(
                 pooled,
@@ -504,8 +521,13 @@ class AICliService:
         prior = params.get("last_session_id")
         if not prior:
             return  # already cleared
-        params["last_session_id"] = None
-        await db.save_node_parameters(memory_node_id, params)
+        from services.memory.runtime import update_memory_parameters_atomic
+
+        await update_memory_parameters_atomic(
+            db,
+            memory_node_id,
+            parameter_updates={"last_session_id": None},
+        )
         logger.warning(
             "[CC-Agent _persist_memory] cleared stale last_session_id=%s "
             "from memory_node=%s; next run will spawn a fresh claude "
@@ -519,6 +541,7 @@ class AICliService:
         connected_memory: Dict[str, Any],
         results: List[SessionResult],
         broadcaster: Any = None,
+        mutation_id: Optional[str] = None,
     ) -> None:
         """Append each successful run's user prompt + assistant response
         to ``simpleMemory.memory_content`` (markdown). Mirrors aiAgent /
@@ -554,38 +577,37 @@ class AICliService:
                 await AICliService._clear_stale_session_id(connected_memory)
             return
 
-        from services.memory import (
-            append_to_memory_markdown,
-            trim_markdown_window,
-        )
+        from services.memory.runtime import append_memory_turns_atomic
         from services.plugin.deps import get_database
 
         db = get_database()
         memory_node_id = connected_memory["node_id"]
-        params = await db.get_node_parameters(memory_node_id) or {}
 
         # 1. Persist claude's returned session_id from the most recent
         # successful run. Drives `--resume <UUID>` on the next spawn so
         # claude finds and continues its own JSONL transcript on disk.
         last_run = next((r for r in reversed(successful) if r.session_id), None)
-        if last_run is not None:
-            params["last_session_id"] = last_run.session_id
-
-        # 2. Update the user-visible markdown mirror.
-        content = params.get("memory_content") or ("# Conversation History\n\n*No messages yet.*\n")
-        for r in successful:
-            content = append_to_memory_markdown(content, "human", r.prompt)
-            content = append_to_memory_markdown(
-                content,
-                "ai",
-                r.response or "",
-            )
-
         window = int(connected_memory.get("window_size") or 100)
-        content, removed_texts = trim_markdown_window(content, window)
-        params["memory_content"] = content
-
-        await db.save_node_parameters(memory_node_id, params)
+        params, removed_texts, _applied = await append_memory_turns_atomic(
+            db,
+            memory_node_id,
+            [
+                turn
+                for result in successful
+                for turn in (
+                    ("human", result.prompt),
+                    ("ai", result.response or ""),
+                )
+            ],
+            window_size=window,
+            mutation_id=mutation_id,
+            parameter_updates=(
+                {"last_session_id": last_run.session_id}
+                if last_run is not None
+                else None
+            ),
+        )
+        content = params.get("memory_content") or ""
         logger.info(
             "[CC-Agent _persist_memory] saved memory_node=%s "
             "last_session_id=%s appended_turns=%d archived_blocks=%d "

@@ -210,6 +210,9 @@ def _build_handler(node_type: str, params_cls: type):
             "node_type": node_type,
             "node_id": entry.get("node_id"),
             "workflow_id": ctx.workflow_id,
+            "execution_id": ctx.execution_id,
+            "workspace_dir": str(ctx.workspace_dir),
+            "parent_node_id": ctx.node_id,
             "label": entry.get("label") or node_type,
             "parameters": dict(entry.get("parameters") or {}),
         }

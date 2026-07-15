@@ -381,7 +381,7 @@ class TestWriteTodos:
 
     async def test_happy_path_stores_todos_and_broadcasts(self):
         from tests.nodes._compat import handle_write_todos
-        from services.todo_service import get_todo_service
+        from services.todo_service import get_todo_service, todo_session_key
 
         broadcaster = MagicMock()
         broadcaster.update_node_status = AsyncMock(return_value=None)
@@ -405,8 +405,8 @@ class TestWriteTodos:
         assert result["count"] == 3
         assert "Updated todo list (3 items)" == result["message"]
 
-        # TodoService persists validated list under workflow_id
-        stored = get_todo_service().get("wf-42")
+        # TodoService persists the list under workflow + node identity.
+        stored = get_todo_service().get(todo_session_key("wf-42", "todo-node-1"))
         assert len(stored) == 3
         assert stored[0] == {"content": "Design schema", "status": "completed"}
 
@@ -431,7 +431,7 @@ class TestWriteTodos:
 
         from nodes.tool.write_todos import WriteTodosNode
         from services.plugin import NodeContext
-        from services.todo_service import get_todo_service
+        from services.todo_service import get_todo_service, todo_session_key
 
         node = WriteTodosNode()
         ctx = NodeContext.from_legacy(
@@ -454,11 +454,11 @@ class TestWriteTodos:
         json.dumps(result)  # whole payload JSON-safe for node_outputs
 
         # Service state matches what the output reported.
-        assert get_todo_service().get("wf-str") == result["todos"]
+        assert get_todo_service().get(todo_session_key("wf-str", "todo-node-2")) == result["todos"]
 
     async def test_invalid_items_are_silently_dropped_or_coerced(self):
         from tests.nodes._compat import handle_write_todos
-        from services.todo_service import get_todo_service
+        from services.todo_service import get_todo_service, todo_session_key
 
         todos = [
             {"content": "valid", "status": "pending"},
@@ -477,11 +477,39 @@ class TestWriteTodos:
         assert result["success"] is True
         assert result["count"] == 2
 
-        stored = get_todo_service().get("wf")
+        stored = get_todo_service().get(todo_session_key("wf", "n"))
         assert stored == [
             {"content": "valid", "status": "pending"},
             {"content": "bad-status", "status": "pending"},
         ]
+
+    async def test_unsaved_workflow_runtime_is_still_scoped_to_node(self, monkeypatch):
+        from nodes.tool.write_todos import WriteTodosNode
+        from services.plugin import NodeContext
+        from services.todo_service import get_todo_service, todo_session_key
+
+        async def _noop_dispatch(**_kwargs):
+            return None
+
+        monkeypatch.setattr(
+            "nodes.tool.write_todos._events.dispatch_todos_updated",
+            _noop_dispatch,
+        )
+
+        node_id = "todo-unsaved-runtime"
+        ctx = NodeContext.from_legacy(
+            node_id=node_id,
+            node_type="writeTodos",
+            context={},
+        )
+        result = await WriteTodosNode().execute(
+            node_id,
+            {"todos": [{"content": "unsaved", "status": "pending"}]},
+            ctx,
+        )
+
+        assert result["todos"] == [{"content": "unsaved", "status": "pending"}]
+        assert get_todo_service().get(todo_session_key(None, node_id)) == result["todos"]
 
     async def test_falls_back_to_default_session_key_without_workflow_id_or_node_id(self):
         from services.handlers.todo import execute_write_todos
@@ -497,7 +525,7 @@ class TestWriteTodos:
 
     async def test_empty_todos_list_yields_empty_stored_state(self):
         from tests.nodes._compat import handle_write_todos
-        from services.todo_service import get_todo_service
+        from services.todo_service import get_todo_service, todo_session_key
 
         result = await handle_write_todos(
             node_id="n",
@@ -508,13 +536,13 @@ class TestWriteTodos:
 
         assert result["success"] is True
         assert result["count"] == 0
-        assert get_todo_service().get("wf") == []
+        assert get_todo_service().get(todo_session_key("wf", "n")) == []
 
     async def test_no_broadcaster_no_broadcast_but_still_success(self):
         """If the caller omits broadcaster (e.g. test harness, CLI), the
         handler must still succeed and persist state."""
         from tests.nodes._compat import handle_write_todos
-        from services.todo_service import get_todo_service
+        from services.todo_service import get_todo_service, todo_session_key
 
         result = await handle_write_todos(
             node_id="n",
@@ -524,7 +552,7 @@ class TestWriteTodos:
         )
 
         assert result["success"] is True
-        assert get_todo_service().get("wf") == [{"content": "x", "status": "pending"}]
+        assert get_todo_service().get(todo_session_key("wf", "n")) == [{"content": "x", "status": "pending"}]
 
 
 # ============================================================================

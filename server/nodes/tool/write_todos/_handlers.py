@@ -6,9 +6,9 @@ core router needs no edit (same self-containment pattern as
 ``nodes/telegram/_handlers.py``).
 
 These give the parameter-panel Current Todos editor a read/write path
-into the live ``TodoService`` state, which is keyed by ``workflow_id``
-(``node_id`` fallback) — the same precedence the ``write`` op uses, so
-the panel sees exactly what the agent wrote at runtime.
+into the live ``TodoService`` state, keyed by the workflow + ``writeTodos``
+node pair. Legacy requests that omit ``node_id`` retain the historical
+workflow-only fallback.
 """
 
 from __future__ import annotations
@@ -23,14 +23,15 @@ from ._events import dispatch_todos_updated
 
 
 def _session_key(data: Dict[str, Any]) -> str:
-    """Mirror the write op's keying precedence
-    (``__init__.py``: ``ctx.workflow_id or ctx.node_id or "default"``)."""
-    return data.get("workflow_id") or data.get("node_id") or "default"
+    """Mirror the write op's canonical workflow + node key."""
+    from services.todo_service import todo_session_key
+
+    return todo_session_key(data.get("workflow_id"), data.get("node_id"))
 
 
 @ws_response
 async def handle_get_todos(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
-    """Return the current todo list for the open workflow (node_id fallback)."""
+    """Return the current todo list for the selected writeTodos node."""
     from services.todo_service import get_todo_service
 
     session_key = _session_key(data)
@@ -55,7 +56,6 @@ async def handle_set_todos(data: Dict[str, Any], websocket: WebSocket) -> Dict[s
     stored = get_todo_service().write(session_key, data.get("todos", []) or [])
 
     await dispatch_todos_updated(
-        session_key=session_key,
         todos=stored,
         node_id=data.get("node_id"),
         workflow_id=data.get("workflow_id"),

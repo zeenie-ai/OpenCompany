@@ -30,9 +30,11 @@ from services.cli_agent.mcp_server import (
     get_mcp_app,
     issue_token,
     lookup_batch,
+    rebind_batch,
     register_batch,
     unregister_batch,
 )
+from services.tool_identity import DuplicateToolNameError
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +78,80 @@ class TestTokenRegistry:
         register_batch(token, ctx1)
         with pytest.raises(ValueError, match="collision"):
             register_batch(token, ctx2)
+
+    def test_duplicate_effective_names_fail_before_registration(self):
+        token = issue_token()
+        ctx = BatchContext(
+            workflow_id="wf",
+            node_id="agent-a",
+            workspace_dir=Path("."),
+            connected_tools=[
+                {"node_id": "tool-a", "node_type": "httpRequest", "label": "HTTP A"},
+                {"node_id": "tool-b", "node_type": "httpRequest", "label": "HTTP B"},
+            ],
+        )
+
+        with pytest.raises(DuplicateToolNameError) as raised:
+            register_batch(token, ctx)
+
+        assert lookup_batch(token) is None
+        assert active_batch_count() == 0
+        assert [item["node_id"] for item in raised.value.conflicts["httpRequest"]] == [
+            "tool-a",
+            "tool-b",
+        ]
+
+    def test_duplicate_rebind_leaves_existing_context_unchanged(self):
+        token = issue_token()
+        ctx = BatchContext(
+            workflow_id="wf-old",
+            node_id="agent-old",
+            execution_id="run-old",
+            workspace_dir=Path("."),
+            connected_tools=[{"node_id": "tool-a", "node_type": "httpRequest"}],
+        )
+        register_batch(token, ctx)
+
+        with pytest.raises(DuplicateToolNameError):
+            rebind_batch(
+                token,
+                workflow_id="wf-new",
+                node_id="agent-new",
+                execution_id="run-new",
+                connected_tools=[
+                    {"node_id": "tool-b", "node_type": "calculatorTool"},
+                    {"node_id": "tool-c", "node_type": "calculatorTool"},
+                ],
+            )
+
+        assert ctx.workflow_id == "wf-old"
+        assert ctx.node_id == "agent-old"
+        assert ctx.execution_id == "run-old"
+        assert ctx.connected_tools == [{"node_id": "tool-a", "node_type": "httpRequest"}]
+
+    def test_same_name_is_valid_on_different_agents(self):
+        token_a = issue_token()
+        token_b = issue_token()
+        register_batch(
+            token_a,
+            BatchContext(
+                workflow_id="wf",
+                node_id="agent-a",
+                workspace_dir=Path("."),
+                connected_tools=[{"node_id": "tool-a", "node_type": "httpRequest"}],
+            ),
+        )
+        register_batch(
+            token_b,
+            BatchContext(
+                workflow_id="wf",
+                node_id="agent-b",
+                workspace_dir=Path("."),
+                connected_tools=[{"node_id": "tool-b", "node_type": "httpRequest"}],
+            ),
+        )
+
+        assert active_batch_count() == 2
 
 
 # ---------------------------------------------------------------------------

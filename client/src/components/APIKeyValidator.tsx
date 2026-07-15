@@ -9,6 +9,7 @@ import { useApiKeyValidation } from '../hooks/useApiKeyValidation';
 import { cn } from '@/lib/utils';
 
 interface APIKeyValidatorProps {
+  requestKey?: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
@@ -24,6 +25,7 @@ interface APIKeyValidatorProps {
 }
 
 const APIKeyValidator: React.FC<APIKeyValidatorProps> = ({
+  requestKey,
   value,
   onChange,
   placeholder,
@@ -36,21 +38,26 @@ const APIKeyValidator: React.FC<APIKeyValidatorProps> = ({
 }) => {
   const { status, hasStoredKey, validate, clear, getStoredKey, isValidating, isValid } = useApiKeyValidation({
     provider: validationConfig.provider,
+    requestKey,
     onSuccess: onValidationSuccess
   });
 
   useEffect(() => {
+    let cancelled = false;
     if (hasStoredKey && !value) {
       getStoredKey().then((storedKey) => {
-        if (storedKey) onChange(storedKey);
+        if (!cancelled && storedKey) onChange(storedKey);
       });
     }
-  }, [hasStoredKey, value, onChange, getStoredKey]);
+    return () => {
+      cancelled = true;
+    };
+  }, [hasStoredKey, value, onChange, getStoredKey, requestKey]);
 
   const handleValidate = () => validate(value);
   const handleClear = async () => {
-    await clear();
-    onChange('');
+    const cleared = await clear();
+    if (cleared) onChange('');
   };
 
   return (

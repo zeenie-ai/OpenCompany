@@ -411,7 +411,18 @@ async def handle_execute_node(data: Dict[str, Any], websocket: WebSocket) -> Dic
     broadcaster = get_status_broadcaster()
     node_id, node_type = data["node_id"], data["node_type"]
     workflow_id = data.get("workflow_id")  # Per-workflow isolation
-    execution_id = uuid.uuid4().hex
+    execution_id = str(data.get("execution_id") or uuid.uuid4().hex)
+    invocation_extras = {
+        key: data[key]
+        for key in (
+            "auto_rebind_tools",
+            "invoking_agent_node_id",
+            "agent_iteration",
+            "tool_call_index",
+            "tool_call_id",
+        )
+        if key in data
+    }
 
     await broadcaster.update_node_status(
         node_id,
@@ -431,12 +442,22 @@ async def handle_execute_node(data: Dict[str, Any], websocket: WebSocket) -> Dic
             nodes=data.get("nodes", []),
             edges=data.get("edges", []),
             session_id=data.get("session_id", "default"),
+            execution_id=execution_id,
             workflow_id=workflow_id,
             outputs=data.get("outputs", {}),  # Upstream node outputs for data flow
+            extras=invocation_extras or None,
         )
 
         if result.get("success"):
-            success_payload = {**(result.get("result") or {}), "execution_id": execution_id}
+            raw_result = result.get("result")
+            success_payload = (
+                {**raw_result, "execution_id": execution_id}
+                if isinstance(raw_result, dict)
+                else {
+                    **({"result": raw_result} if raw_result is not None else {}),
+                    "execution_id": execution_id,
+                }
+            )
             await broadcaster.update_node_status(node_id, "success", success_payload, workflow_id=workflow_id)
             await broadcaster.update_node_output(node_id, success_payload, workflow_id=workflow_id)
         elif result.get("error") == "Cancelled by user":
@@ -905,6 +926,7 @@ async def handle_execute_workflow(data: Dict[str, Any], websocket: WebSocket) ->
         "error": result.get("error"),
         "total_nodes": result.get("total_nodes", 0),
         "completed_nodes": result.get("completed_nodes", 0),
+        "execution_id": result.get("execution_id"),
         "execution_time": result.get("execution_time", 0),
         "timestamp": time.time(),
     }
@@ -930,8 +952,9 @@ async def handle_execute_ai_node(data: Dict[str, Any], websocket: WebSocket) -> 
     broadcaster = get_status_broadcaster()
     node_id, node_type = data["node_id"], data["node_type"]
     workflow_id = data.get("workflow_id")  # Per-workflow isolation for tool node glowing
+    execution_id = str(data.get("execution_id") or uuid.uuid4().hex)
 
-    await broadcaster.update_node_status(node_id, "executing", workflow_id=workflow_id)
+    await broadcaster.update_node_status(node_id, "executing", {"execution_id": execution_id}, workflow_id=workflow_id)
     await broadcaster.workflow_run_started(workflow_id)
     result: Dict[str, Any]
     try:
@@ -942,16 +965,36 @@ async def handle_execute_ai_node(data: Dict[str, Any], websocket: WebSocket) -> 
             nodes=data.get("nodes", []),
             edges=data.get("edges", []),
             session_id=data.get("session_id", "default"),
+            execution_id=execution_id,
             workflow_id=workflow_id,
         )
 
         if result.get("success"):
-            await broadcaster.update_node_status(node_id, "success", result.get("result"), workflow_id=workflow_id)
-            await broadcaster.update_node_output(node_id, result.get("result"), workflow_id=workflow_id)
+            raw_result = result.get("result")
+            success_payload = {
+                **(
+                    raw_result
+                    if isinstance(raw_result, dict)
+                    else ({"result": raw_result} if raw_result is not None else {})
+                ),
+                "execution_id": execution_id,
+            }
+            await broadcaster.update_node_status(node_id, "success", success_payload, workflow_id=workflow_id)
+            await broadcaster.update_node_output(node_id, success_payload, workflow_id=workflow_id)
         else:
-            await broadcaster.update_node_status(node_id, "error", {"error": result.get("error")}, workflow_id=workflow_id)
+            await broadcaster.update_node_status(
+                node_id,
+                "error",
+                {"error": result.get("error"), "execution_id": execution_id},
+                workflow_id=workflow_id,
+            )
     except Exception:
-        await broadcaster.update_node_status(node_id, "error", {"error": "execution crashed"}, workflow_id=workflow_id)
+        await broadcaster.update_node_status(
+            node_id,
+            "error",
+            {"error": "execution crashed", "execution_id": execution_id},
+            workflow_id=workflow_id,
+        )
         raise
     finally:
         await broadcaster.workflow_run_ended(workflow_id)
@@ -959,6 +1002,7 @@ async def handle_execute_ai_node(data: Dict[str, Any], websocket: WebSocket) -> 
     return {
         "success": result.get("success", False),
         "node_id": node_id,
+        "execution_id": execution_id,
         "result": result.get("result"),
         "error": result.get("error"),
         "execution_time": result.get("execution_time"),

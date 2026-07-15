@@ -41,6 +41,7 @@ import json
 # those typed errors cleanly through ``BaseNode.execute()``.
 import openai
 from services.plugin import NodeUserError
+from services.tool_identity import DuplicateToolNameError, ensure_unique_tool_names
 
 if TYPE_CHECKING:
     from langchain_openai import ChatOpenAI  # noqa: F401
@@ -851,6 +852,13 @@ async def _run_agent_loop(
                     added = await rebind_from_operations(result["operations"])
                     if added:
                         iteration_new_tools.extend(added)
+                except DuplicateToolNameError as exc:
+                    # Reject the whole hot-rebind batch before mutating the
+                    # bound surface.  Return the structured conflict to the
+                    # model so it can rename/rebuild the ambiguous tool.
+                    logger.warning("[Agent loop] rejected ambiguous tool rebind: %s", exc)
+                    result = dict(result)
+                    result["rebind_error"] = exc.as_dict()
                 except Exception as exc:  # noqa: BLE001 — defensive; rebind is opt-in
                     logger.warning(
                         "[Agent loop] rebind_from_operations raised: %s", exc, exc_info=True
@@ -1731,6 +1739,8 @@ class AIService:
             # Build tools if provided
             tools = []
             tool_configs = {}
+            tool_identities: List[Dict[str, str]] = []
+            tool_bindings: List[tuple[Any, Dict[str, Any]]] = []
 
             if tool_data:
                 await broadcast_status("building_tools", {"message": f"Building {len(tool_data)} tool(s)...", "tool_count": len(tool_data)})
@@ -1739,13 +1749,20 @@ class AIService:
                     tool, config = await self._build_tool_from_node(tool_info)
                     if tool:
                         tools.append(tool)
-                        tool_configs[tool.name] = config
+                        tool_bindings.append((tool, config))
+                        tool_identities.append(
+                            {
+                                "name": tool.name,
+                                "node_id": str(config.get("node_id") or tool_info.get("node_id") or ""),
+                                "label": str(config.get("label") or tool_info.get("label") or tool_info.get("node_type") or "tool"),
+                            }
+                        )
                         logger.debug(f"[Agent] Registered tool: name={tool.name}, node_id={config.get('node_id')}")
 
                 logger.debug(f"[Agent] Built {len(tools)} tools")
 
                 # Auto-inject check_delegated_tasks tool when delegation tools present
-                if any(name.startswith("delegate_to_") for name in tool_configs):
+                if any(tool.name.startswith("delegate_to_") for tool in tools):
                     check_info = {
                         "node_type": "_builtin_check_delegated_tasks",
                         "node_id": f"{node_id}_check_tasks",
@@ -1755,17 +1772,30 @@ class AIService:
                     check_tool, check_config = await self._build_tool_from_node(check_info)
                     if check_tool:
                         tools.append(check_tool)
-                        tool_configs[check_tool.name] = check_config
+                        tool_bindings.append((check_tool, check_config))
+                        tool_identities.append(
+                            {
+                                "name": check_tool.name,
+                                "node_id": str(check_config.get("node_id") or check_info["node_id"]),
+                                "label": str(check_config.get("label") or check_info["label"]),
+                            }
+                        )
                         logger.debug("[Agent] Auto-injected check_delegated_tasks tool")
 
                     # Add delegation guidance to system message
-                    delegate_names = [n for n in tool_configs if n.startswith("delegate_to_")]
+                    delegate_names = [tool.name for tool in tools if tool.name.startswith("delegate_to_")]
                     system_message += (
                         "\n\n## Agent Delegation\n"
                         "When delegating to sub-agents, use 'task' for the mission directive "
                         "(role and goal) and 'context' for input data the agent needs to work with.\n"
                         f"Available agents: {', '.join(delegate_names)}"
                     )
+
+                # Name-based dispatch is only safe after validating the full
+                # surface.  Build the lookup map after this check so a later
+                # duplicate can never silently replace an earlier node.
+                ensure_unique_tool_names(tool_identities)
+                tool_configs.update({tool.name: config for tool, config in tool_bindings})
 
             # Now that ``system_message`` is final (skill prompt + delegation
             # guidance both folded in), prepend it as the first message.
@@ -1860,7 +1890,7 @@ class AIService:
                 """
                 from services.node_registry import get_node_class
 
-                new_tools: List[Any] = []
+                new_bindings: List[tuple[Any, Dict[str, Any]]] = []
                 for op in operations:
                     if op.get("type") != "add_node":
                         continue
@@ -1896,10 +1926,21 @@ class AIService:
                         continue
                     if tool is None:
                         continue
-                    new_tools.append(tool)
-                    if tool_config:
-                        tool_configs[tool.name] = tool_config
-                return new_tools
+                    new_bindings.append((tool, tool_config or tool_info))
+
+                new_identities = [
+                    {
+                        "name": tool.name,
+                        "node_id": str(config.get("node_id") or ""),
+                        "label": str(config.get("label") or config.get("node_type") or "tool"),
+                    }
+                    for tool, config in new_bindings
+                ]
+                ensure_unique_tool_names([*tool_identities, *new_identities])
+                for tool, tool_config in new_bindings:
+                    tool_configs[tool.name] = tool_config
+                tool_identities.extend(new_identities)
+                return [tool for tool, _ in new_bindings]
 
             # Broadcast: Building agent
             await broadcast_status(
@@ -2014,22 +2055,33 @@ class AIService:
                     },
                 )
 
-                # If compaction happened, use compacted summary as base
-                if compaction_result and compaction_result.get("success") and compaction_result.get("summary"):
-                    # Start fresh with compacted summary, then add current exchange
-                    updated_content = compaction_result["summary"]
-                    updated_content = _append_to_memory_markdown(updated_content, "human", prompt)
-                    updated_content = _append_to_memory_markdown(updated_content, "ai", response_content)
-                    logger.info("[Agent Memory] Using compacted summary as new base")
-                else:
-                    # Normal flow: append to existing memory
-                    updated_content = memory_data.get("memory_content", "# Conversation History\n\n*No messages yet.*\n")
-                    updated_content = _append_to_memory_markdown(updated_content, "human", prompt)
-                    updated_content = _append_to_memory_markdown(updated_content, "ai", response_content)
+                from services.memory.runtime import append_memory_turns_atomic
 
-                # Trim to window size, archive removed to vector DB
-                window_size = memory_data.get("window_size", 10)
-                updated_content, removed_texts = _trim_markdown_window(updated_content, window_size)
+                # Compaction may take long enough for another worker to append.
+                # The atomic helper installs the summary only if the content it
+                # compacted is still current; otherwise it preserves the newer
+                # transcript and appends this exchange to it.
+                compacted_summary = None
+                if compaction_result and compaction_result.get("success") and compaction_result.get("summary"):
+                    compacted_summary = compaction_result["summary"]
+                    logger.info("[Agent Memory] Using compacted summary as new base")
+
+                memory_node_id = memory_data["node_id"]
+                execution_id = (context or {}).get("execution_id")
+                mutation_id = (
+                    f"ai-memory:{execution_id}:{node_id}:{memory_node_id}"
+                    if execution_id
+                    else None
+                )
+                _current_params, removed_texts, _applied = await append_memory_turns_atomic(
+                    self.database,
+                    memory_node_id,
+                    [("human", prompt), ("ai", response_content)],
+                    window_size=int(memory_data.get("window_size", 10)),
+                    mutation_id=mutation_id,
+                    replacement_content=compacted_summary,
+                    expected_content=memory_data.get("memory_content", ""),
+                )
 
                 # Store removed messages in long-term vector DB
                 if removed_texts and memory_data.get("long_term_enabled"):
@@ -2041,14 +2093,6 @@ class AIService:
                         except Exception as e:
                             logger.warning(f"[Agent Memory] Failed to archive to vector store: {e}")
 
-                # Save updated markdown to node parameters. Schema-
-                # canonical key is snake_case; drop any pre-migration
-                # camelCase mirror so the saved params stay clean.
-                memory_node_id = memory_data["node_id"]
-                current_params = await self.database.get_node_parameters(memory_node_id) or {}
-                current_params["memory_content"] = updated_content
-                current_params.pop("memoryContent", None)
-                await self.database.save_node_parameters(memory_node_id, current_params)
                 logger.info(f"[Agent Memory] Saved markdown to memory node '{memory_node_id}'")
 
             result = {
@@ -2080,6 +2124,17 @@ class AIService:
                 "node_type": "aiAgent",
                 "result": result,
                 "execution_time": time.time() - start_time,
+            }
+
+        except DuplicateToolNameError as e:
+            logger.warning("[Agent] Duplicate tool surface rejected: %s", e)
+            return {
+                "success": False,
+                "node_id": node_id,
+                "node_type": "aiAgent",
+                **e.as_dict(),
+                "execution_time": time.time() - start_time,
+                "timestamp": datetime.now().isoformat(),
             }
 
         except openai.OpenAIError as e:
@@ -2167,6 +2222,8 @@ class AIService:
             # This supports ALL tool types: calculatorTool, currentTimeTool, duckduckgoSearch, androidTool, httpRequest
             all_tools = []
             tool_node_configs = {}  # Map tool name to node config (same as AI Agent's tool_configs)
+            tool_identities: List[Dict[str, str]] = []
+            tool_bindings: List[tuple[Any, Dict[str, Any]]] = []
             if tool_data:
                 await broadcast_status("building_tools", {"message": f"Building {len(tool_data)} tool(s)...", "tool_count": len(tool_data)})
 
@@ -2175,7 +2232,14 @@ class AIService:
                     tool, config = await self._build_tool_from_node(tool_info)
                     if tool:
                         all_tools.append(tool)
-                        tool_node_configs[tool.name] = config
+                        tool_bindings.append((tool, config))
+                        tool_identities.append(
+                            {
+                                "name": tool.name,
+                                "node_id": str(config.get("node_id") or tool_info.get("node_id") or ""),
+                                "label": str(config.get("label") or tool_info.get("label") or tool_info.get("node_type") or "tool"),
+                            }
+                        )
                         logger.debug(
                             f"[ChatAgent] Built tool: {tool.name} (type={config.get('node_type')}, node_id={config.get('node_id')})"
                         )
@@ -2183,7 +2247,7 @@ class AIService:
                 logger.debug(f"[ChatAgent] Built {len(all_tools)} tools from tool_data")
 
                 # Auto-inject check_delegated_tasks tool when delegation tools present
-                if any(name.startswith("delegate_to_") for name in tool_node_configs):
+                if any(tool.name.startswith("delegate_to_") for tool in all_tools):
                     check_info = {
                         "node_type": "_builtin_check_delegated_tasks",
                         "node_id": f"{node_id}_check_tasks",
@@ -2193,17 +2257,27 @@ class AIService:
                     check_tool, check_config = await self._build_tool_from_node(check_info)
                     if check_tool:
                         all_tools.append(check_tool)
-                        tool_node_configs[check_tool.name] = check_config
+                        tool_bindings.append((check_tool, check_config))
+                        tool_identities.append(
+                            {
+                                "name": check_tool.name,
+                                "node_id": str(check_config.get("node_id") or check_info["node_id"]),
+                                "label": str(check_config.get("label") or check_info["label"]),
+                            }
+                        )
                         logger.debug("[ChatAgent] Auto-injected check_delegated_tasks tool")
 
                     # Add delegation guidance to system message
-                    delegate_names = [n for n in tool_node_configs if n.startswith("delegate_to_")]
+                    delegate_names = [tool.name for tool in all_tools if tool.name.startswith("delegate_to_")]
                     system_message += (
                         "\n\n## Agent Delegation\n"
                         "When delegating to sub-agents, use 'task' for the mission directive "
                         "(role and goal) and 'context' for input data the agent needs to work with.\n"
                         f"Available agents: {', '.join(delegate_names)}"
                     )
+
+                ensure_unique_tool_names(tool_identities)
+                tool_node_configs.update({tool.name: config for tool, config in tool_bindings})
 
             logger.debug(f"[ChatAgent] Total tools available: {len(all_tools)}")
             # Debug: log all tool schemas to verify they're correct
@@ -2389,7 +2463,7 @@ class AIService:
                     (``tool_configs`` vs ``tool_node_configs``)."""
                     from services.node_registry import get_node_class
 
-                    new_tools: List[Any] = []
+                    new_bindings: List[tuple[Any, Dict[str, Any]]] = []
                     for op in operations:
                         if op.get("type") != "add_node":
                             continue
@@ -2424,10 +2498,21 @@ class AIService:
                             continue
                         if tool is None:
                             continue
-                        new_tools.append(tool)
-                        if tool_config:
-                            tool_node_configs[tool.name] = tool_config
-                    return new_tools
+                        new_bindings.append((tool, tool_config or tool_info))
+
+                    new_identities = [
+                        {
+                            "name": tool.name,
+                            "node_id": str(config.get("node_id") or ""),
+                            "label": str(config.get("label") or config.get("node_type") or "tool"),
+                        }
+                        for tool, config in new_bindings
+                    ]
+                    ensure_unique_tool_names([*tool_identities, *new_identities])
+                    for tool, tool_config in new_bindings:
+                        tool_node_configs[tool.name] = tool_config
+                    tool_identities.extend(new_identities)
+                    return [tool for tool, _ in new_bindings]
 
                 # Run the agent loop. See ``execute_agent`` for the
                 # rationale on ``recursion_limit`` + the truncation
@@ -2513,21 +2598,29 @@ class AIService:
                     "saving_memory", {"message": "Saving to conversation memory...", "session_id": session_id, "has_memory": True}
                 )
 
-                # If compaction happened, use compacted summary as base
-                if compaction_result and compaction_result.get("success") and compaction_result.get("summary"):
-                    updated_content = compaction_result["summary"]
-                    updated_content = _append_to_memory_markdown(updated_content, "human", prompt)
-                    updated_content = _append_to_memory_markdown(updated_content, "ai", response_content)
-                    logger.info("[ChatAgent Memory] Using compacted summary as new base")
-                else:
-                    # Normal flow: append to existing memory
-                    updated_content = memory_content or "# Conversation History\n\n*No messages yet.*\n"
-                    updated_content = _append_to_memory_markdown(updated_content, "human", prompt)
-                    updated_content = _append_to_memory_markdown(updated_content, "ai", response_content)
+                from services.memory.runtime import append_memory_turns_atomic
 
-                # Trim to window size, archive removed to vector DB
-                window_size = memory_data.get("window_size", 10)
-                updated_content, removed_texts = _trim_markdown_window(updated_content, window_size)
+                compacted_summary = None
+                if compaction_result and compaction_result.get("success") and compaction_result.get("summary"):
+                    compacted_summary = compaction_result["summary"]
+                    logger.info("[ChatAgent Memory] Using compacted summary as new base")
+
+                memory_node_id = memory_data["node_id"]
+                execution_id = (context or {}).get("execution_id")
+                mutation_id = (
+                    f"chat-memory:{execution_id}:{node_id}:{memory_node_id}"
+                    if execution_id
+                    else None
+                )
+                _current_params, removed_texts, _applied = await append_memory_turns_atomic(
+                    self.database,
+                    memory_node_id,
+                    [("human", prompt), ("ai", response_content)],
+                    window_size=int(memory_data.get("window_size", 10)),
+                    mutation_id=mutation_id,
+                    replacement_content=compacted_summary,
+                    expected_content=memory_content,
+                )
 
                 # Store removed messages in long-term vector DB
                 if removed_texts and memory_data.get("long_term_enabled"):
@@ -2539,14 +2632,6 @@ class AIService:
                         except Exception as e:
                             logger.warning(f"[ChatAgent Memory] Failed to archive to vector store: {e}")
 
-                # Save updated markdown to node parameters. Schema-
-                # canonical key is snake_case; drop any pre-migration
-                # camelCase mirror so the saved params stay clean.
-                memory_node_id = memory_data["node_id"]
-                current_params = await self.database.get_node_parameters(memory_node_id) or {}
-                current_params["memory_content"] = updated_content
-                current_params.pop("memoryContent", None)
-                await self.database.save_node_parameters(memory_node_id, current_params)
                 logger.info(f"[ChatAgent Memory] Saved markdown to memory node '{memory_node_id}'")
 
             # Determine agent type based on configuration
@@ -2595,6 +2680,17 @@ class AIService:
                 "node_type": "chatAgent",
                 "result": result,
                 "execution_time": time.time() - start_time,
+            }
+
+        except DuplicateToolNameError as e:
+            logger.warning("[ChatAgent] Duplicate tool surface rejected: %s", e)
+            return {
+                "success": False,
+                "node_id": node_id,
+                "node_type": "chatAgent",
+                **e.as_dict(),
+                "execution_time": time.time() - start_time,
+                "timestamp": datetime.now().isoformat(),
             }
 
         except openai.OpenAIError as e:

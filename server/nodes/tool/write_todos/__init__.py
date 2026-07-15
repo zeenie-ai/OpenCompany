@@ -84,9 +84,9 @@ class WriteTodosNode(ToolNode):
     async def write(self, ctx: NodeContext, params: WriteTodosParams) -> Any:
         """Inlined from handlers/todo.py (Wave 11.D.1)."""
         from core.logging import get_logger
-        from services.todo_service import get_todo_service
+        from services.todo_service import get_todo_service, todo_session_key
 
-        session_key = ctx.workflow_id or ctx.node_id or "default"
+        session_key = todo_session_key(ctx.workflow_id, ctx.node_id)
         service = get_todo_service()
         stored = service.write(session_key, [t.model_dump() for t in params.todos])
 
@@ -103,12 +103,11 @@ class WriteTodosNode(ToolNode):
         # Typed todos_updated CloudEvent via the centralized dispatcher so an
         # open Current Todos panel refreshes live during the run. (The
         # node_status broadcast above drives canvas glow; this drives the
-        # panel's ['todos', session_key] query — same wire frame the panel's
+        # panel's exact workflow + node query — same wire frame the panel's
         # manual set_todos edits emit.)
         from ._events import dispatch_todos_updated
 
         await dispatch_todos_updated(
-            session_key=session_key,
             todos=stored,
             node_id=ctx.node_id,
             workflow_id=ctx.workflow_id,

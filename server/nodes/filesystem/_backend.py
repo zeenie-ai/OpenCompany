@@ -14,15 +14,92 @@ installed.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import shutil
+import stat
 import subprocess
+import tempfile
 from pathlib import PureWindowsPath
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
+from weakref import WeakValueDictionary
 
 from deepagents.backends import LocalShellBackend
 from deepagents.backends.protocol import ExecuteResponse
 from deepagents.backends.utils import validate_path
+
+
+_path_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
+
+
+def get_path_lock(path: os.PathLike[str] | str) -> asyncio.Lock:
+    """Return the process-local lock for one resolved workspace path."""
+    key = os.path.normcase(os.path.abspath(os.fspath(path)))
+    lock = _path_locks.get(key)
+    if lock is None:
+        lock = asyncio.Lock()
+        _path_locks[key] = lock
+    return lock
+
+
+async def run_sync_until_complete(func: Callable[..., Any], /, *args: Any, **kwargs: Any) -> Any:
+    """Run sync filesystem work without abandoning it on cancellation.
+
+    Worker threads cannot be cancelled. Keep the caller suspended until the
+    mutation finishes so its path lock remains held for the whole operation,
+    then propagate the original cancellation.
+    """
+    worker = asyncio.create_task(asyncio.to_thread(func, *args, **kwargs))
+    cancellation: Optional[asyncio.CancelledError] = None
+
+    while not worker.done():
+        try:
+            await asyncio.shield(worker)
+        except asyncio.CancelledError as exc:
+            cancellation = cancellation or exc
+        except BaseException:
+            break
+
+    if cancellation is not None:
+        if not worker.cancelled():
+            try:
+                worker.result()
+            except BaseException:
+                pass
+        raise cancellation
+
+    return worker.result()
+
+
+def atomic_write_text(path: os.PathLike[str] | str, content: str) -> None:
+    """Replace ``path`` atomically with UTF-8 text from the same directory."""
+    resolved = os.path.abspath(os.fspath(path))
+    parent = os.path.dirname(resolved)
+    os.makedirs(parent, exist_ok=True)
+    existing_mode: Optional[int] = None
+    try:
+        existing_mode = stat.S_IMODE(os.stat(resolved, follow_symlinks=False).st_mode)
+    except OSError:
+        pass
+    fd, temporary = tempfile.mkstemp(prefix=".opencompany-write-", dir=parent)
+    try:
+        # newline="" preserves the caller's bytes instead of translating LF
+        # to CRLF on Windows. Preserve an existing file's permission bits
+        # before the same-directory atomic replacement where chmod is
+        # supported.
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if existing_mode is not None:
+            os.chmod(temporary, existing_mode)
+        os.replace(temporary, resolved)
+    except Exception:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
 
 
 def normalize_virtual_path(path: str) -> str:

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Database,
   Link as LinkIcon,
@@ -158,19 +158,35 @@ const InputSection: React.FC<InputSectionProps> = ({ nodeId, visible = true }) =
   const currentWorkflow = useAppStore((s) => s.currentWorkflow);
   const { getNodeOutput, sendRequest } = useWebSocket();
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
-  const [connectedNodes, setConnectedNodes] = useState<NodeData[]>([]);
-  const [loading, setLoading] = useState(false);
+  const requestKey = `${currentWorkflow?.id ?? ''}:${nodeId}`;
+  const [connectedState, setConnectedState] = useState<{
+    key: string;
+    nodes: NodeData[];
+    loading: boolean;
+  }>({ key: '', nodes: [], loading: false });
+  const activeRequestKey = useRef(requestKey);
+  activeRequestKey.current = requestKey;
+  const connectedNodes = connectedState.key === requestKey ? connectedState.nodes : [];
+  const loading = connectedState.key !== requestKey || connectedState.loading;
   const { handleVariableDragStart, getTemplateVariableName } = useDragVariable(nodeId);
 
   // Fetch connected node data with execution results from backend
   useEffect(() => {
+    const fetchKey = requestKey;
+    let cancelled = false;
+    const isCurrent = () => !cancelled && activeRequestKey.current === fetchKey;
+
     const fetchConnectedNodes = async () => {
       if (!currentWorkflow || !nodeId) {
-        setConnectedNodes([]);
+        if (isCurrent()) {
+          setConnectedState({ key: fetchKey, nodes: [], loading: false });
+          setExpandedNodes(new Set());
+        }
         return;
       }
 
-      setLoading(true);
+      setConnectedState({ key: fetchKey, nodes: [], loading: true });
+      setExpandedNodes(new Set());
       const nodes = currentWorkflow.nodes || [];
       const edges = currentWorkflow.edges || [];
 
@@ -327,14 +343,17 @@ const InputSection: React.FC<InputSectionProps> = ({ nodeId, visible = true }) =
       });
 
       const nodeDataResults = await Promise.all(nodeDataPromises);
-      setConnectedNodes(nodeDataResults);
+      if (!isCurrent()) return;
+      setConnectedState({ key: fetchKey, nodes: nodeDataResults, loading: false });
       setExpandedNodes(new Set(nodeDataResults.map(n => n.id)));
-      setLoading(false);
     };
 
-    fetchConnectedNodes();
+    void fetchConnectedNodes();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sendRequest is a stable WS-context callback; including it would re-fetch on every reconnect.
-  }, [nodeId, currentWorkflow, getNodeOutput]);
+  }, [nodeId, currentWorkflow, getNodeOutput, requestKey]);
 
   const toggleNode = (id: string) => {
     setExpandedNodes(prev => {
