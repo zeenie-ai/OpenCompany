@@ -378,10 +378,8 @@ class BrowserNode(ActionNode):
             auto_connect=params.auto_connect,
             chrome_profile=params.chrome_profile.strip() or None,
             new_window=params.new_window and executable_path is not None,
+            action_delay=params.action_delay,
         )
-
-        if params.action_delay > 0:
-            await svc.run(["wait", str(params.action_delay)], session, timeout, **run_kw)
 
         p = params.model_dump()
         if op == "batch":

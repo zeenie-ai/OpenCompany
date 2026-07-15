@@ -23,8 +23,11 @@ Windows .CMD files natively via ``CreateProcessW``, avoiding the BatBadBut
 import asyncio
 import json
 import os
+import queue
 import subprocess
-from typing import Any, Dict, List, Optional
+import threading
+from typing import Any, Callable, Dict, List, Optional
+from weakref import WeakValueDictionary
 
 from core.logging import get_logger
 from nodes.browser._install import agent_browser_binary_path
@@ -33,6 +36,38 @@ from services._supervisor.util import kill_tree
 logger = get_logger(__name__)
 
 _MAX_OUTPUT = 100_000
+
+
+async def _to_thread_until_complete(func: Callable[..., Any], /, *args: Any, **kwargs: Any) -> Any:
+    """Run sync work without abandoning it when the waiter is cancelled.
+
+    ``asyncio.to_thread`` cannot stop its worker thread.  If the awaiting task
+    is cancelled while it owns a resource lock, releasing that lock would let
+    another command overlap the still-running subprocess.  Defer cancellation
+    until the worker has finished (the subprocess itself has a hard timeout).
+    """
+    worker = asyncio.create_task(asyncio.to_thread(func, *args, **kwargs))
+    cancellation: Optional[asyncio.CancelledError] = None
+
+    while not worker.done():
+        try:
+            await asyncio.shield(worker)
+        except asyncio.CancelledError as exc:
+            cancellation = cancellation or exc
+        except BaseException:  # The worker failed; retrieve it below.
+            break
+
+    if cancellation is not None:
+        # Retrieve a worker failure so asyncio does not report it as an
+        # unhandled task exception; the caller's cancellation remains primary.
+        if not worker.cancelled():
+            try:
+                worker.result()
+            except BaseException:
+                pass
+        raise cancellation
+
+    return worker.result()
 
 
 def _max_instances() -> int:
@@ -103,6 +138,10 @@ class BrowserService:
         # on every command. The daemon registry stays the authority.
         self._gated_sessions: set = set()
         self._gate_lock = asyncio.Lock()
+        # Commands targeting one browser session share mutable tabs, refs and
+        # navigation state. Serialize only that session; unrelated sessions
+        # continue to execute in parallel.
+        self._session_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
 
     async def run(
         self,
@@ -117,6 +156,7 @@ class BrowserService:
         auto_connect: bool = False,
         chrome_profile: Optional[str] = None,
         new_window: bool = False,
+        action_delay: float = 0,
     ) -> Dict[str, Any]:
         """Execute an agent-browser command and return parsed JSON output.
 
@@ -124,6 +164,55 @@ class BrowserService:
         daemon process alive. We read just the first line via Popen in a
         thread, then kill the process — never wait for exit.
         """
+        session_lock = self._session_locks.get(session)
+        if session_lock is None:
+            session_lock = asyncio.Lock()
+            self._session_locks[session] = session_lock
+        async with session_lock:
+            if action_delay > 0:
+                await self._run_locked(
+                    args=["wait", str(action_delay)],
+                    session=session,
+                    timeout=timeout,
+                    stdin=None,
+                    headed=headed,
+                    user_agent=user_agent,
+                    proxy=proxy,
+                    executable_path=executable_path,
+                    auto_connect=auto_connect,
+                    chrome_profile=chrome_profile,
+                    new_window=new_window,
+                )
+            return await self._run_locked(
+                args=args,
+                session=session,
+                timeout=timeout,
+                stdin=stdin,
+                headed=headed,
+                user_agent=user_agent,
+                proxy=proxy,
+                executable_path=executable_path,
+                auto_connect=auto_connect,
+                chrome_profile=chrome_profile,
+                new_window=new_window,
+            )
+
+    async def _run_locked(
+        self,
+        *,
+        args: List[str],
+        session: str,
+        timeout: int,
+        stdin: Optional[bytes],
+        headed: bool,
+        user_agent: Optional[str],
+        proxy: Optional[str],
+        executable_path: Optional[str],
+        auto_connect: bool,
+        chrome_profile: Optional[str],
+        new_window: bool,
+    ) -> Dict[str, Any]:
+        """Execute one command while the caller holds ``session``'s lock."""
         await self._enforce_instance_cap(session)
 
         argv = [
@@ -150,7 +239,7 @@ class BrowserService:
 
         logger.debug("agent-browser exec", argv=argv)
 
-        raw = await asyncio.to_thread(self._run_sync, argv, timeout, stdin)
+        raw = await _to_thread_until_complete(self._run_sync, argv, timeout, stdin)
 
         if len(raw) > _MAX_OUTPUT:
             raw = raw[:_MAX_OUTPUT] + "\n...(truncated)"
@@ -177,10 +266,29 @@ class BrowserService:
             names = [str(s) for s in (listing.get("data") or {}).get("sessions") or []]
             if session not in names:
                 cap = _max_instances()
-                for stale in names[: max(0, len(names) - cap + 1)]:
+                required = max(0, len(names) - cap + 1)
+                closed = 0
+                for stale in names:
+                    if closed >= required:
+                        break
+                    stale_lock = self._session_locks.get(stale)
+                    if stale_lock is not None and stale_lock.locked():
+                        logger.info(
+                            "[Browser] instance cap reached; preserving active session %s",
+                            stale,
+                        )
+                        continue
                     logger.info("[Browser] instance cap %d reached; closing session %s", cap, stale)
                     await self._session_cmd(["close", "--session", stale])
                     self._gated_sessions.discard(stale)
+                    closed += 1
+                if closed < required:
+                    logger.warning(
+                        "[Browser] instance cap %d temporarily exceeded; "
+                        "%d session(s) are active",
+                        cap,
+                        required - closed,
+                    )
             self._gated_sessions.add(session)
 
     async def _session_cmd(self, args: List[str]) -> Dict[str, Any]:
@@ -189,7 +297,12 @@ class BrowserService:
         block an actual browser operation.
         """
         try:
-            raw = await asyncio.to_thread(self._run_sync, [*self._prefix, *args, "--json"], 15, None)
+            raw = await _to_thread_until_complete(
+                self._run_sync,
+                [*self._prefix, *args, "--json"],
+                15,
+                None,
+            )
             return json.loads(raw)
         except Exception as e:  # noqa: BLE001
             logger.debug("agent-browser session command failed: args=%s error=%s", args, e)
@@ -222,6 +335,23 @@ class BrowserService:
             env=_spawn_env(),
         )
 
+        first_line: queue.Queue[tuple[bool, Any]] = queue.Queue(maxsize=1)
+
+        def _read_first_line() -> None:
+            try:
+                if proc.stdout is None:
+                    raise RuntimeError("agent-browser stdout pipe was not created")
+                first_line.put((True, proc.stdout.readline()))
+            except BaseException as exc:  # Hand the reader failure to caller thread.
+                first_line.put((False, exc))
+
+        reader = threading.Thread(
+            target=_read_first_line,
+            name=f"agent-browser-read-{proc.pid}",
+            daemon=True,
+        )
+        reader.start()
+
         try:
             if stdin_data and proc.stdin:
                 proc.stdin.write(stdin_data)
@@ -230,11 +360,23 @@ class BrowserService:
             # Read the first line — that's the JSON result.
             # The daemon keeps the process alive after this, so we must
             # not call communicate() or wait() before killing it.
-            line = proc.stdout.readline().decode(errors="replace").strip()
+            try:
+                ok, value = first_line.get(timeout=max(float(timeout), 0.001))
+            except queue.Empty as exc:
+                raise TimeoutError(f"agent-browser timed out after {timeout}s") from exc
+
+            if not ok:
+                raise value
+            line = value.decode(errors="replace").strip()
 
             if not line:
                 # No output — check stderr for errors.
-                err = proc.stderr.read().decode(errors="replace").strip()
+                # ``read`` is safe only after process exit; otherwise stderr
+                # may also be held open by the daemon and would defeat the
+                # command timeout we just enforced.
+                err = ""
+                if proc.poll() is not None and proc.stderr is not None:
+                    err = proc.stderr.read().decode(errors="replace").strip()
                 raise RuntimeError(err or "agent-browser returned empty output")
 
             return line
@@ -242,8 +384,26 @@ class BrowserService:
             # npx -> node -> agent-browser daemon -> Chromium. Killing only
             # proc.pid leaves the daemon orphaned. psutil.children(recursive=True)
             # walks the tree natively on every platform.
-            kill_tree(proc.pid)
-            proc.wait()
+            try:
+                kill_tree(proc.pid)
+            except Exception as exc:  # Ensure the direct child is still reaped.
+                logger.debug("agent-browser tree cleanup failed for pid=%s: %s", proc.pid, exc)
+                try:
+                    proc.kill()
+                except OSError:
+                    pass
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                try:
+                    proc.kill()
+                except OSError:
+                    pass
+                try:
+                    proc.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    logger.warning("agent-browser process pid=%s did not exit after kill", proc.pid)
+            reader.join(timeout=1)
 
 
 # -- Module-level lazy singleton (NodeJSClient pattern) -----------------

@@ -32,7 +32,7 @@ import asyncio
 import json
 import os
 import subprocess
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from core.logging import get_logger
 from core.paths import daemons_dir
@@ -63,6 +63,35 @@ _CHROME_GUIDANCE = (
 )
 
 
+async def _to_thread_until_complete(func: Callable[..., Any], /, *args: Any, **kwargs: Any) -> Any:
+    """Wait for non-cancellable thread work before propagating cancellation.
+
+    The harness subprocess owns the single daemon/CDP connection.  Letting an
+    ``asyncio`` cancellation release ``_operation_lock`` while
+    ``subprocess.run`` continues would permit the next script to overlap it.
+    """
+    worker = asyncio.create_task(asyncio.to_thread(func, *args, **kwargs))
+    cancellation: Optional[asyncio.CancelledError] = None
+
+    while not worker.done():
+        try:
+            await asyncio.shield(worker)
+        except asyncio.CancelledError as exc:
+            cancellation = cancellation or exc
+        except BaseException:
+            break
+
+    if cancellation is not None:
+        if not worker.cancelled():
+            try:
+                worker.result()
+            except BaseException:
+                pass
+        raise cancellation
+
+    return worker.result()
+
+
 def _runtime_dir():
     d = daemons_dir() / "browser-harness"
     d.mkdir(parents=True, exist_ok=True)
@@ -89,6 +118,9 @@ class BrowserHarnessService:
 
     def __init__(self, binary: str) -> None:
         self._binary = binary
+        # browser-harness owns one daemon/CDP websocket. Concurrent scripts
+        # would otherwise race over the same tabs and coordinate space.
+        self._operation_lock = asyncio.Lock()
 
     async def run_code(self, code: str, timeout: int = 60) -> Dict[str, Any]:
         """Pipe Python ``code`` to the harness and return its output.
@@ -101,13 +133,21 @@ class BrowserHarnessService:
         if not code.strip():
             raise NodeUserError("code is required — Python to run against the browser-harness helpers")
 
-        raw = await asyncio.to_thread(self._run_sync, [self._binary], code, timeout)
+        async with self._operation_lock:
+            raw = await _to_thread_until_complete(self._run_sync, [self._binary], code, timeout)
         return self._shape_output(raw)
 
     async def doctor(self) -> Dict[str, Any]:
         """Run ``browser-harness doctor``. Exit 1 = checks failed, which
         is a *report*, not an error — always return the output."""
-        raw = await asyncio.to_thread(self._run_sync, [self._binary, "doctor"], None, 30, check=False)
+        async with self._operation_lock:
+            raw = await _to_thread_until_complete(
+                self._run_sync,
+                [self._binary, "doctor"],
+                None,
+                30,
+                check=False,
+            )
         return {"output": raw}
 
     @staticmethod
