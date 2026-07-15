@@ -195,7 +195,7 @@ function Main {
     Write-Host ""
 
     # Install OpenCompany from npm
-    npm install -g "@zeenie/opencompany"
+    npm install -g "@zeenie-ai/opencompany"
     if ($LASTEXITCODE -ne 0) {
         Error-Exit "npm install -g failed. Run PowerShell as Administrator and retry."
     }

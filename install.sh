@@ -297,13 +297,13 @@ main() {
 
   # Install OpenCompany from npm
   # On Linux/WSL without nvm, global npm install needs sudo unless prefix is user-writable
-  if npm install -g '@zeenie/opencompany' 2>/dev/null; then
+  if npm install -g '@zeenie-ai/opencompany' 2>/dev/null; then
     : # Installed successfully
   elif command -v sudo &> /dev/null; then
     info "Retrying with sudo..."
-    sudo npm install -g '@zeenie/opencompany'
+    sudo npm install -g '@zeenie-ai/opencompany'
   else
-    error_exit "npm install -g failed. Try: sudo npm install -g @zeenie/opencompany"
+    error_exit "npm install -g failed. Try: sudo npm install -g @zeenie-ai/opencompany"
   fi
 
   echo ""
