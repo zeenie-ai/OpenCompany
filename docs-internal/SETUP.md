@@ -122,9 +122,9 @@ Add these to `.env` or configure via the Credentials UI:
 ### Authentication Toggle
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VITE_AUTH_ENABLED` | true | Set to `false` to bypass login entirely |
+| `VITE_AUTH_ENABLED` | false | Auth is OFF by default (`.env.template`); set to `true` to require login. `company deploy` cloud installs enable it automatically |
 
-When `VITE_AUTH_ENABLED=false`:
+When `VITE_AUTH_ENABLED=false` (the default):
 - Login page is skipped entirely
 - User is set as anonymous with owner privileges
 - Encryption service auto-initializes with `API_KEY_ENCRYPTION_KEY` as the password

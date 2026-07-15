@@ -12,6 +12,8 @@ Your own AI assistant that does real work. Drag, drop, and connect AI agents to 
 
 No code required. No subscription. No usage limits. Bring your own API keys (or run models locally with Ollama / LM Studio for free).
 
+**[Read the docs →](https://docs.zeenie.xyz)**
+
 ## Quick Start
 
 **Prerequisites:** Node.js 22+, Python 3.12+
@@ -19,6 +21,18 @@ No code required. No subscription. No usage limits. Bring your own API keys (or 
 ```bash
 npm install -g @zeenie-ai/opencompany
 company start
+```
+
+Or use the one-command installers, which set up Node and Python for you:
+
+```bash
+# macOS / Linux / WSL
+curl -fsSL https://raw.githubusercontent.com/zeenie-ai/OpenCompany/main/install.sh | bash
+```
+
+```powershell
+# Windows (PowerShell)
+iwr -useb https://raw.githubusercontent.com/zeenie-ai/OpenCompany/main/install.ps1 | iex
 ```
 
 The canonical npm package is `@zeenie-ai/opencompany`. The unscoped
@@ -111,7 +125,7 @@ RAG pipeline out of the box: parse PDFs and HTML, chunk into searchable pieces, 
 
 ## AI Capabilities
 
-### 11 LLM providers — bring your own keys or run locally
+### 12 providers (11 dedicated model nodes, plus xAI through the OpenAI-compatible path) — bring your own keys or run locally
 
 | Provider     | Notes                                                                    |
 |--------------|--------------------------------------------------------------------------|
