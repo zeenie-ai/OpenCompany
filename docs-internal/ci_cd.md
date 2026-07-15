@@ -49,7 +49,7 @@ The repo currently ships **exactly 4 workflows** plus one composite action. A nu
 
 | Secret | Used by | Description |
 |--------|---------|-------------|
-| `NPM_TOKEN` | release.yml | npmjs publish access to the public `@zeenie` scope (`publish-npm`) |
+| `NPM_TOKEN` | release.yml | npmjs publish access to the public `@zeenie-ai` scope (`publish-npm`) |
 | `GITHUB_TOKEN` | release.yml | GitHub Packages publish (auto-provided) |
 | `MINTLIFY_TOKEN` | docs.yml | Mintlify documentation deployment |
 
@@ -116,19 +116,18 @@ publish-npm                    publish-github-packages
    |                              |
    +- build                       +- build
    +- cli version sync            +- cli version sync
-   +- verify npm auth/scope       +- rewrite package name
+   +- verify npm auth             +- rewrite package name
    +- publish canonical package   +- publish mirror package
-      @zeenie/opencompany            @zeenie-ai/opencompany
+      @zeenie-ai/opencompany         @zeenie-ai/opencompany
       npmjs, public + provenance     npm.pkg.github.com
 ```
 
 - Both publish jobs `needs: predeploy`, run on `ubuntu-latest`, and share the same prefix: `actions/checkout` → composite setup → `actions/setup-node@v4` (with the target `registry-url`) → `pnpm install --frozen-lockfile` → `pnpm run build` → `python -m cli version sync`.
-- `publish-npm` — validates the token with `npm whoami` and `npm access list packages @zeenie --json`, then publishes the canonical public npmjs package `@zeenie/opencompany` via `npm publish --access public --provenance` with `NODE_AUTH_TOKEN=secrets.NPM_TOKEN`. The `--provenance` flag emits an npm provenance attestation (backed by the workflow's `id-token: write`).
+- `publish-npm` — validates the token with `npm whoami`, then publishes the canonical public npmjs package `@zeenie-ai/opencompany` via `npm publish --access public --provenance` with `NODE_AUTH_TOKEN=secrets.NPM_TOKEN`. The `--provenance` flag emits an npm provenance attestation (backed by the workflow's `id-token: write`).
 - `publish-github-packages` — rewrites `package.json` `name` to `@zeenie-ai/opencompany` and sets `publishConfig.registry = https://npm.pkg.github.com`, then `npm publish` with `NODE_AUTH_TOKEN=secrets.GITHUB_TOKEN`.
 
-These names intentionally differ by registry: `@zeenie/opencompany` is the
-canonical npmjs package users install, while `@zeenie-ai/opencompany` is the
-GitHub Packages mirror whose scope matches the GitHub organization.
+Both registries use `@zeenie-ai/opencompany`, matching the npm and GitHub
+organization owned by the project.
 
 There is currently no audit gate, no PyPI publish, no SLSA `attest-build-provenance` step, and no `create-github-release` / test-install stage — see [Planned](#planned-not-yet-implemented).
 

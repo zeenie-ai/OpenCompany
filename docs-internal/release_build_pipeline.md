@@ -1,6 +1,6 @@
 # Release Build Pipeline
 
-Compile-step plan for the npm distribution `@zeenie/opencompany`. Goal: cut cold-start ~20s further on top of the lazy-LangChain fix already in v0.0.76, shrink the Vite main bundle below 200 KB gz, and drop the `tsx` interpreter cost from the Node.js sidecar.
+Compile-step plan for the npm distribution `@zeenie-ai/opencompany`. Goal: cut cold-start ~20s further on top of the lazy-LangChain fix already in v0.0.76, shrink the Vite main bundle below 200 KB gz, and drop the `tsx` interpreter cost from the Node.js sidecar.
 
 User scope (confirmed before this work): stay on npm distribution; **no** Nuitka/PyOxidizer standalone binary channel; optimize Vite output too; **skip** the plugin-walker (~11s) and service-status-refresh (~20s) hotspots — those are runtime concerns, not compile-time.
 

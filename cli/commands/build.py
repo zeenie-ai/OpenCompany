@@ -117,7 +117,7 @@ def build_command() -> None:
     #
     # Safe for global installs: ``.env.dev`` is committed to git for
     # repo-clone contributors but is NOT in the npm ``files`` list, so
-    # ``npm install -g @zeenie/opencompany`` doesn't ship it. Without
+    # ``npm install -g @zeenie-ai/opencompany`` doesn't ship it. Without
     # ``.env.dev`` on disk, :func:`load_dev_overrides` is a no-op and
     # the build falls through to ``.env.template`` defaults
     # (``DATA_DIR=~/.opencompany``) — identical to today's behaviour and

@@ -32,7 +32,7 @@ remove_global_package() {
   echo "$display_name removed"
 }
 
-remove_global_package '@zeenie/opencompany' '@zeenie/opencompany'
+remove_global_package '@zeenie-ai/opencompany' '@zeenie-ai/opencompany'
 remove_global_package 'machinaos' 'legacy machinaos package'
 
 echo ""

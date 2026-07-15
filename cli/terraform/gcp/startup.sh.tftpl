@@ -31,7 +31,7 @@ TOKEN=$(curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/co
 curl -fsS -H "Authorization: Bearer $TOKEN" -o /tmp/${resource_name}.tgz "https://storage.googleapis.com/storage/v1/b/${bucket}/o/${object}?alt=media"
 npm install -g /tmp/${resource_name}.tgz
 %{ else ~}
-npm install -g @zeenie/opencompany@${version}
+npm install -g @zeenie-ai/opencompany@${version}
 %{ endif ~}
 
 echo "[${resource_name}] writing login-gate env..."

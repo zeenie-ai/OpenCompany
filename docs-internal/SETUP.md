@@ -21,7 +21,7 @@ OpenCompany/
 ## Quick Start
 
 ```bash
-npm install -g @zeenie/opencompany
+npm install -g @zeenie-ai/opencompany
 company start
 ```
 

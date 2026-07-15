@@ -3,7 +3,7 @@
 
 # OpenCompany
 
-<a href="https://www.npmjs.com/package/@zeenie/opencompany" target="_blank"><img src="https://img.shields.io/npm/v/%40zeenie%2Fopencompany.svg" alt="npm version"></a>
+<a href="https://www.npmjs.com/package/@zeenie-ai/opencompany" target="_blank"><img src="https://img.shields.io/npm/v/%40zeenie-ai%2Fopencompany.svg" alt="npm version"></a>
 <a href="https://opensource.org/licenses/MIT" target="_blank"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
 <a href="https://discord.gg/c9pCJ7d8Ce" target="_blank"><img src="https://img.shields.io/discord/1455977012308086895?logo=discord&logoColor=white&label=Discord" alt="Discord"></a>
 <a href="https://deepwiki.com/zeenie-ai/OpenCompany" target="_blank"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
@@ -17,11 +17,11 @@ No code required. No subscription. No usage limits. Bring your own API keys (or 
 **Prerequisites:** Node.js 22+, Python 3.12+
 
 ```bash
-npm install -g @zeenie/opencompany
+npm install -g @zeenie-ai/opencompany
 company start
 ```
 
-The canonical npm package is `@zeenie/opencompany`. The unscoped
+The canonical npm package is `@zeenie-ai/opencompany`. The unscoped
 `opencompany` package is unrelated to this project and is neither installed nor
 removed by OpenCompany's tooling.
 
@@ -176,7 +176,7 @@ Every LLM call and API request is tracked with USD cost. See per-provider spend 
 
 ## Quick Setup Tour
 
-1. **Install** with `npm install -g @zeenie/opencompany` (or run from source)
+1. **Install** with `npm install -g @zeenie-ai/opencompany` (or run from source)
 2. **Start** with `company start` — opens at http://localhost:3000
 3. **Connect a provider** — click the **Credentials** button, paste an API key or click through OAuth
 4. **Drag a node** from the left palette onto the canvas

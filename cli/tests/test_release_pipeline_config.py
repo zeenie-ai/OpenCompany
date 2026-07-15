@@ -375,7 +375,7 @@ def _run_steps(job: dict) -> list[dict]:
 
 
 def test_root_package_uses_public_zeenie_scope(root_pkg: dict):
-    assert root_pkg["name"] == "@zeenie/opencompany"
+    assert root_pkg["name"] == "@zeenie-ai/opencompany"
     assert root_pkg["publishConfig"] == {
         "access": "public",
         "registry": "https://registry.npmjs.org",
@@ -396,7 +396,7 @@ def test_root_package_uses_canonical_github_urls(root_pkg: dict):
     assert root_pkg["bugs"] == {"url": f"{canonical}/issues"}
 
 
-def test_npm_release_authenticates_and_checks_scope_before_publish(
+def test_npm_release_authenticates_before_publish(
     release_yml: dict,
 ):
     steps = _run_steps(release_yml["jobs"]["publish-npm"])
@@ -408,7 +408,7 @@ def test_npm_release_authenticates_and_checks_scope_before_publish(
     )
     preflight = steps[preflight_index]
 
-    assert "npm access list packages @zeenie --json" in preflight["run"]
+    assert preflight["run"] == "npm whoami"
     assert preflight["env"]["NODE_AUTH_TOKEN"] == "${{ secrets.NPM_TOKEN }}"
     assert preflight_index < publish_index
 
