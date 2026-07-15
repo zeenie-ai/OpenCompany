@@ -243,23 +243,32 @@ async def persist_agent_turn(payload: Dict[str, Any]) -> Dict[str, Any]:
         return {"appended": False, "trimmed_count": 0}
 
     from core.container import container
-    from services.memory.markdown import (
-        append_to_memory_markdown,
-        trim_markdown_window,
-    )
+    from services.memory.runtime import append_memory_turns_atomic
 
     database = container.database()
-    params = await database.get_node_parameters(memory_node_id) or {}
-    current = params.get("memory_content", "")
+    mutation_id = payload.get("mutation_id")
+    if not mutation_id:
+        # Temporal keeps activity_id stable across automatic retries, making
+        # it a durable idempotency key without changing workflow payloads.
+        try:
+            info = activity.info()
+            mutation_id = (
+                f"temporal-memory:{info.workflow_id}:{info.activity_id}:"
+                f"{memory_node_id}"
+            )
+        except Exception:  # pragma: no cover - direct unit invocation
+            mutation_id = None
 
-    updated = append_to_memory_markdown(current, "human", payload.get("human_text", ""))
-    updated = append_to_memory_markdown(updated, "ai", payload.get("assistant_text", ""))
-
-    window_size = int(payload.get("window_size", 10))
-    trimmed_content, trimmed_pairs = trim_markdown_window(updated, window_size)
-
-    params["memory_content"] = trimmed_content
-    await database.save_node_parameters(memory_node_id, params)
+    params, trimmed_pairs, applied = await append_memory_turns_atomic(
+        database,
+        memory_node_id,
+        [
+            ("human", payload.get("human_text", "")),
+            ("ai", payload.get("assistant_text", "")),
+        ],
+        window_size=int(payload.get("window_size", 10)),
+        mutation_id=mutation_id,
+    )
 
     # Broadcast so the parameter panel auto-refetches mid-run.
     # CloudEvents v1.0 envelope (RFC §6.4) — type is
@@ -271,13 +280,18 @@ async def persist_agent_turn(payload: Dict[str, Any]) -> Dict[str, Any]:
     from services.status_broadcaster import get_status_broadcaster
 
     broadcaster = get_status_broadcaster()
-    await broadcaster.broadcast_node_parameters_updated(
-        memory_node_id,
-        parameters=params,
-        source_hint="agent",
-    )
+    if applied:
+        await broadcaster.broadcast_node_parameters_updated(
+            memory_node_id,
+            parameters=params,
+            source_hint="agent",
+        )
 
-    return {"appended": True, "trimmed_count": len(trimmed_pairs)}
+    return {
+        "appended": applied,
+        "applied": applied,
+        "trimmed_count": len(trimmed_pairs),
+    }
 
 
 @activity.defn(name="agent.compact_memory.v1")

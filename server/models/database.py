@@ -22,6 +22,31 @@ class NodeParameter(SQLModel, table=True):
     )
 
 
+class RuntimeMutation(SQLModel, table=True):
+    """Durable idempotency ledger for shared runtime state mutations.
+
+    Runtime workers (including Temporal activity retries) can execute the
+    same logical write more than once.  Keeping the mutation key in the
+    same SQLite transaction as the state change makes those retries a
+    no-op, even across processes or server restarts.
+    """
+
+    __tablename__ = "runtime_mutations"
+
+    # The idempotency identity is scoped to the mutated resource.  A caller
+    # may legitimately reuse a transport-level mutation id for two different
+    # nodes; those writes must not suppress one another.
+    mutation_id: str = Field(primary_key=True, max_length=512)
+    resource_type: str = Field(primary_key=True, max_length=100)
+    resource_id: str = Field(primary_key=True, max_length=512)
+    operation: str = Field(default="update", max_length=100)
+    result: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), server_default=func.now()),
+    )
+
+
 class Workflow(SQLModel, table=True):
     """Workflow definitions.
 

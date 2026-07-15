@@ -130,10 +130,13 @@ class AgentTeamService:
 
     async def claim_task(self, team_id: str, task_id: str, agent_node_id: str) -> Optional[Dict[str, Any]]:
         """Claim a task for an agent."""
-        # Update member status to working
-        await self.database.update_member_status(team_id, agent_node_id, "working")
-
         task = await self.database.claim_task(task_id, agent_node_id)
+
+        # Only the winner of the conditional database claim becomes working.
+        # Updating first left every losing parallel contender stuck in the
+        # working state even though exactly one owned the task.
+        if task:
+            await self.database.update_member_status(team_id, agent_node_id, "working")
 
         if task and self.broadcaster:
             await self.broadcaster.broadcast_team_event(team_id, "task_claimed", {**task, "claimed_by": agent_node_id})

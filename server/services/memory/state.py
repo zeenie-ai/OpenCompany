@@ -10,7 +10,7 @@ accumulated todos every run).
 
 When a ``memory_node_id`` is provided, the simpleMemory node's own
 fields (``memory_content``, ``memory_jsonl``, ``last_session_id``) are
-also reset to defaults via ``database.save_node_parameters`` so the
+also reset through the atomic parameter mutation path so the
 claude_code_agent JSONL bridge surface clears alongside.
 """
 
@@ -32,10 +32,9 @@ async def clear_agent_session_state(
 ) -> Dict[str, Any]:
     """Clear every store keyed by an agent's conversational scope.
 
-    ``TodoService`` is keyed by ``ctx.workflow_id or ctx.node_id or
-    "default"`` (see ``server/nodes/tool/write_todos.py``). We clear all
-    three candidate keys to match whichever fallback the agent actually
-    used at write time.
+    Modern ``TodoService`` entries are keyed by workflow + writeTodos node.
+    Clearing a workflow removes every v2 node-scoped key plus the historical
+    workflow/session/default fallbacks used by legacy callers.
 
     Args:
         session_id: ``simpleMemory`` node's ``session_id`` parameter.
@@ -60,7 +59,7 @@ async def clear_agent_session_state(
     # consolidate). Lazy import keeps ``services.ai``'s heavy LangChain
     # deps off the hot path.
     from services.ai import _memory_vector_stores as _live_vector_stores
-    from services.todo_service import get_todo_service
+    from services.todo_service import UNSAVED_WORKFLOW_ID, get_todo_service
 
     cleared_vector_store = False
     if clear_long_term and session_id in _live_vector_stores:
@@ -70,6 +69,11 @@ async def clear_agent_session_state(
 
     todo_service = get_todo_service()
     cleared_todo_keys: List[str] = []
+
+    cleared_todo_keys.extend(
+        todo_service.clear_workflow(workflow_id or UNSAVED_WORKFLOW_ID)
+    )
+
     seen = set()
     for key in (workflow_id, session_id, "default"):
         if key and key not in seen:
@@ -82,20 +86,24 @@ async def clear_agent_session_state(
         from services.plugin.deps import get_database
 
         db = get_database()
-        params = await db.get_node_parameters(memory_node_id) or {}
-        params["memory_content"] = DEFAULT_MEMORY_CONTENT
-        # Wipe `last_session_id` so claude_code_agent starts a fresh
-        # session on next spawn instead of `--resume`-ing into the now-
-        # cleared transcript. Drop any orphan JSONL field from the
-        # earlier bridge revision.
-        params["last_session_id"] = None
-        params.pop("memory_jsonl", None)
-        # Wipe the Vertex managed-agent chain so the next run starts a
-        # fresh interaction + sandbox instead of continuing the cleared
-        # conversation (vertex_managed_agent memory bridge).
-        params.pop("vertex_interaction_id", None)
-        params.pop("vertex_environment_id", None)
-        await db.save_node_parameters(memory_node_id, params)
+        from services.memory.runtime import update_memory_parameters_atomic
+
+        # This shares the same BEGIN IMMEDIATE transaction path as runtime
+        # appends, preventing a clear from restoring a stale parameter
+        # snapshot over unrelated concurrent updates.
+        await update_memory_parameters_atomic(
+            db,
+            memory_node_id,
+            parameter_updates={
+                "memory_content": DEFAULT_MEMORY_CONTENT,
+                "last_session_id": None,
+            },
+            remove_parameters=(
+                "memory_jsonl",
+                "vertex_interaction_id",
+                "vertex_environment_id",
+            ),
+        )
         cleared_memory_node = True
         logger.info(
             "[Memory] Cleared simpleMemory node fields memory_node=%s " "(memory_content reset + last_session_id wiped)",

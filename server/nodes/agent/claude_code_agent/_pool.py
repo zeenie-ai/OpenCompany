@@ -147,6 +147,11 @@ class PooledClaudeSession:
     # watcher picks up add/remove events without respawning.
     materialised_skills: frozenset = field(default_factory=frozenset)
     last_used_at: float = field(default_factory=time.monotonic)
+    # Lease held from ``acquire`` through context rebinding, ``send_turn``,
+    # and ``release``.  The narrower ``lock`` below only protected stdin;
+    # without this lease a second batch could replace the MCP BatchContext
+    # after the first batch acquired the session but before its turn ran.
+    turn_lease: asyncio.Lock = field(default_factory=asyncio.Lock)
     # Per-session lock; held throughout a turn. The reaper consults
     # ``lock.locked()`` to skip in-flight sessions.
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -246,141 +251,190 @@ class ClaudeSessionPool:
 
         Caller MUST call :meth:`release` so the reaper can mark idle.
         """
-        async with self._pool_lock:
-            existing = self._pool.get(memory_node_id)
-            crashed_uuid = ""
-            if existing is not None and existing.process.returncode is not None:
-                logger.info(
-                    "[ClaudeSessionPool] dropping dead session " "memory_node=%s pid=%s exit=%s — will respawn",
-                    memory_node_id,
-                    existing.process.pid,
-                    existing.process.returncode,
-                )
-                crashed_uuid = existing.current_session_uuid
-                await self._terminate_locked(memory_node_id, reason="crashed")
-                existing = None
-
-            if existing is not None:
-                existing.last_used_at = time.monotonic()
-                # Rebind the persistent :class:`BatchContext` bound to
-                # the warm subprocess's argv-baked bearer token to the
-                # surface the current batch declares. Without this the
-                # per-handler scope check in
-                # ``workflow_tools._build_handler`` still sees the
-                # stale ``connected_tools`` from the spawn batch and
-                # lets disconnected tools fire (and FastMCP refcounts
-                # leak by 1 per batch indefinitely).
-                #
-                # Service.py just issued ``mcp_bearer_token`` (T_new)
-                # for this batch and called ``register_batch`` on it.
-                # We transplant T_new's BatchContext values onto
-                # T_warm (the argv-baked one), then drop T_new — it
-                # would otherwise sit orphaned in ``_active_tokens``
-                # until app shutdown.
-                if existing.batch_token and mcp_bearer_token and mcp_bearer_token != existing.batch_token:
-                    from services.cli_agent.mcp_server import (
-                        lookup_batch,
-                        rebind_batch,
-                        unregister_batch,
+        while True:
+            # Capture or create the entry under the global map lock, but do
+            # not wait for a busy per-memory lease here: a queued turn for M1
+            # must never prevent an unrelated M2 from being acquired.
+            async with self._pool_lock:
+                existing = self._pool.get(memory_node_id)
+                crashed_uuid = ""
+                if existing is not None and existing.process.returncode is not None:
+                    logger.info(
+                        "[ClaudeSessionPool] dropping dead session "
+                        "memory_node=%s pid=%s exit=%s — will respawn",
+                        memory_node_id,
+                        existing.process.pid,
+                        existing.process.returncode,
                     )
+                    crashed_uuid = existing.current_session_uuid
+                    await self._terminate_locked(memory_node_id, reason="crashed")
+                    existing = None
 
-                    new_ctx = lookup_batch(mcp_bearer_token)
-                    if new_ctx is not None:
-                        rebind_batch(
-                            existing.batch_token,
-                            connected_tools=new_ctx.connected_tools,
-                            connected_skill_names=new_ctx.connected_skill_names,
-                            allowed_credentials=new_ctx.allowed_credentials,
-                            workspace_dir=new_ctx.workspace_dir,
-                        )
-                        unregister_batch(mcp_bearer_token)
-                # Live skill-tree update — claude live-watches
-                # ``<workspace_dir>/.claude/skills/`` so add/remove
-                # takes effect within the current session per the
-                # skills spec's "Live change detection" rule
-                # (code.claude.com/docs/en/skills#live-change-detection).
-                # Same diff semantics as the MCP rebind above:
-                # ``apply_skill_diff`` walks (added, removed) against
-                # ``existing.materialised_skills`` and only touches
-                # the delta on disk.
-                if existing.workspace_dir is not None:
-                    from ._skills import materialise_skills
+                if existing is None:
+                    if len(self._pool) >= self._max_size:
+                        await self._evict_lru_locked()
 
-                    new_set = frozenset(connected_skill_names or [])
-                    added, removed = await materialise_skills(
-                        existing.workspace_dir,
-                        new_set,
-                        previous_skill_names=existing.materialised_skills,
-                        log_label=f"pool {memory_node_id}",
+                    # When recovering from a crash, splice the captured UUID
+                    # into the spec so the spawn emits ``--resume <UUID>``.
+                    if crashed_uuid and not spec.resume_session_id:
+                        spec.resume_session_id = crashed_uuid
+                        spec.continue_session = False
+
+                    session = await self._spawn(
+                        memory_node_id=memory_node_id,
+                        spec=spec,
+                        cwd=cwd,
+                        env=env,
+                        defaults=defaults,
+                        mcp_endpoint_url=mcp_endpoint_url,
+                        mcp_bearer_token=mcp_bearer_token,
+                        connected_tool_names=connected_tool_names,
+                        connected_skill_names=connected_skill_names,
+                        workspace_dir=workspace_dir,
                     )
-                    if added or removed:
+                    if mcp_bearer_token:
+                        session.batch_token = mcp_bearer_token
+                    session.workspace_dir = workspace_dir
+                    session.materialised_skills = frozenset(
+                        connected_skill_names or []
+                    )
+                    if crashed_uuid:
+                        session.current_session_uuid = crashed_uuid
+                    self._pool[memory_node_id] = session
+                    await session.turn_lease.acquire()  # new; never contended
+                    try:
                         logger.info(
-                            "[ClaudeSessionPool] skill diff " "memory_node=%s +%d -%d (now %d wired)",
+                            "[ClaudeSessionPool] spawned new session memory_node=%s pid=%s",
                             memory_node_id,
-                            added,
-                            removed,
-                            len(new_set),
+                            session.process.pid,
                         )
-                    existing.materialised_skills = new_set
-                logger.info(
-                    "[ClaudeSessionPool] warm reuse memory_node=%s pid=%s uuid=%s",
-                    memory_node_id,
-                    existing.process.pid,
-                    existing.current_session_uuid or "(unresolved)",
-                )
-                return existing
+                        await self._emit_event(
+                            "spawned",
+                            memory_node_id=memory_node_id,
+                            workflow_id=workflow_id,
+                            session_uuid=session.current_session_uuid,
+                            pid=session.process.pid,
+                        )
+                    except BaseException:
+                        if session.turn_lease.locked():
+                            session.turn_lease.release()
+                        await self._terminate_locked(
+                            memory_node_id,
+                            reason="acquire_failed",
+                        )
+                        raise
+                    return session
 
-            if len(self._pool) >= self._max_size:
-                await self._evict_lru_locked()
+            # ``existing`` was captured while holding the map lock. Wait only
+            # on its own lease, then verify it was not evicted/replaced while
+            # we waited before rebinding any context.
+            await existing.turn_lease.acquire()
+            try:
+                async with self._pool_lock:
+                    still_current = (
+                        self._pool.get(memory_node_id) is existing
+                        and existing.process.returncode is None
+                    )
+            except BaseException:
+                # Cancellation can land while waiting for the map lock after
+                # this turn already acquired its per-memory lease.
+                if existing.turn_lease.locked():
+                    existing.turn_lease.release()
+                raise
+            if not still_current:
+                existing.turn_lease.release()
+                continue
 
-            # When recovering from a crash, splice the captured UUID
-            # into the spec so the spawn emits ``--resume <UUID>``.
-            if crashed_uuid and not spec.resume_session_id:
-                spec.resume_session_id = crashed_uuid
-                spec.continue_session = False
-
-            session = await self._spawn(
+            return await self._prepare_warm_reuse(
+                existing,
                 memory_node_id=memory_node_id,
-                spec=spec,
-                cwd=cwd,
-                env=env,
-                defaults=defaults,
-                mcp_endpoint_url=mcp_endpoint_url,
                 mcp_bearer_token=mcp_bearer_token,
-                connected_tool_names=connected_tool_names,
                 connected_skill_names=connected_skill_names,
-                workspace_dir=workspace_dir,
             )
-            # Track the spawn-time bearer token so subsequent batches can
-            # rebind the persistent BatchContext in place (warm-reuse
-            # path above) and ``_terminate_locked`` can drain FastMCP
-            # tool refcounts on death.
-            if mcp_bearer_token:
-                session.batch_token = mcp_bearer_token
-            # Track the workspace + initial skill set so warm-reuse
-            # paths know where to materialise live updates and what
-            # the prior set was for the diff.
-            session.workspace_dir = workspace_dir
-            session.materialised_skills = frozenset(connected_skill_names or [])
-            if crashed_uuid:
-                # The new subprocess is resuming the prior session; pre-seed
-                # the UUID so the first turn's emitted CloudEvents carry
-                # the right id even before the result event lands.
-                session.current_session_uuid = crashed_uuid
-            self._pool[memory_node_id] = session
+
+    async def _prepare_warm_reuse(
+        self,
+        existing: PooledClaudeSession,
+        *,
+        memory_node_id: str,
+        mcp_bearer_token: Optional[str],
+        connected_skill_names: Optional[List[str]],
+    ) -> PooledClaudeSession:
+        """Rebind one already-leased warm process for the next turn."""
+        try:
+            existing.last_used_at = time.monotonic()
+            if (
+                existing.batch_token
+                and mcp_bearer_token
+                and mcp_bearer_token != existing.batch_token
+            ):
+                from services.cli_agent.mcp_server import (
+                    lookup_batch,
+                    rebind_batch,
+                    unregister_batch,
+                )
+
+                new_ctx = lookup_batch(mcp_bearer_token)
+                if new_ctx is not None:
+                    rebind_batch(
+                        existing.batch_token,
+                        workflow_id=new_ctx.workflow_id,
+                        node_id=new_ctx.node_id,
+                        execution_id=new_ctx.execution_id,
+                        broadcaster=new_ctx.broadcaster,
+                        connected_tools=new_ctx.connected_tools,
+                        connected_skill_names=new_ctx.connected_skill_names,
+                        allowed_credentials=new_ctx.allowed_credentials,
+                        workspace_dir=new_ctx.workspace_dir,
+                    )
+                    unregister_batch(mcp_bearer_token)
+
+            if existing.workspace_dir is not None:
+                from ._skills import materialise_skills
+
+                new_set = frozenset(connected_skill_names or [])
+                added, removed = await materialise_skills(
+                    existing.workspace_dir,
+                    new_set,
+                    previous_skill_names=existing.materialised_skills,
+                    log_label=f"pool {memory_node_id}",
+                )
+                if added or removed:
+                    logger.info(
+                        "[ClaudeSessionPool] skill diff "
+                        "memory_node=%s +%d -%d (now %d wired)",
+                        memory_node_id,
+                        added,
+                        removed,
+                        len(new_set),
+                    )
+                existing.materialised_skills = new_set
+
             logger.info(
-                "[ClaudeSessionPool] spawned new session memory_node=%s pid=%s",
+                "[ClaudeSessionPool] warm reuse memory_node=%s pid=%s uuid=%s",
                 memory_node_id,
-                session.process.pid,
+                existing.process.pid,
+                existing.current_session_uuid or "(unresolved)",
             )
-            await self._emit_event(
-                "spawned",
-                memory_node_id=memory_node_id,
-                workflow_id=workflow_id,
-                session_uuid=session.current_session_uuid,
-                pid=session.process.pid,
-            )
-            return session
+            return existing
+        except BaseException:
+            # ``acquire`` did not return a session, so its caller has no
+            # object it can pass to ``release``. Also discard the fresh token
+            # allocated for a failed warm rebind; service.py deliberately
+            # leaves pool-path token ownership to this class.
+            if (
+                mcp_bearer_token
+                and mcp_bearer_token != existing.batch_token
+            ):
+                try:
+                    from services.cli_agent.mcp_server import unregister_batch
+
+                    unregister_batch(mcp_bearer_token)
+                except Exception:
+                    pass
+            if existing.turn_lease.locked():
+                existing.turn_lease.release()
+            raise
 
     async def clear(
         self,
@@ -413,8 +467,10 @@ class ClaudeSessionPool:
         return ""
 
     async def release(self, session: PooledClaudeSession) -> None:
-        """Update ``last_used_at`` so the reaper measures from now."""
+        """Release the context+turn lease and start the idle clock."""
         session.last_used_at = time.monotonic()
+        if session.turn_lease.locked():
+            session.turn_lease.release()
 
     async def terminate(self, memory_node_id: str) -> None:
         """Force-drop a specific pooled session."""
@@ -889,7 +945,11 @@ class ClaudeSessionPool:
     async def _evict_lru_locked(self) -> None:
         """Caller holds ``self._pool_lock``. Evicts the least-recently-
         used non-in-flight entry."""
-        idle_entries = [(key, sess) for key, sess in self._pool.items() if not sess.lock.locked()]
+        idle_entries = [
+            (key, sess)
+            for key, sess in self._pool.items()
+            if not sess.lock.locked() and not sess.turn_lease.locked()
+        ]
         if not idle_entries:
             logger.info(
                 "[ClaudeSessionPool] all %d entries in-flight; pool over cap",
@@ -992,7 +1052,11 @@ class ClaudeSessionPool:
                 now = time.monotonic()
                 async with self._pool_lock:
                     expired_keys = [
-                        key for key, sess in self._pool.items() if not sess.lock.locked() and now - sess.last_used_at >= self._idle_ttl
+                        key
+                        for key, sess in self._pool.items()
+                        if not sess.lock.locked()
+                        and not sess.turn_lease.locked()
+                        and now - sess.last_used_at >= self._idle_ttl
                     ]
                     for key in expired_keys:
                         logger.info(

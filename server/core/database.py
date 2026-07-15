@@ -1,18 +1,21 @@
 """Modern async database service with SQLModel and SQLAlchemy 2.0."""
 
 import json
+import inspect
+from copy import deepcopy
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+from typing import Awaitable, Callable, Dict, Any, List, Optional, Tuple, Union
 from pydantic_core import to_jsonable_python
 from sqlmodel import SQLModel, select
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import text, func
+from sqlalchemy import case, text, func, update
 from contextlib import asynccontextmanager
 
 from core.config import Settings
 from models.database import (
     NodeParameter,
+    RuntimeMutation,
     Workflow,
     Execution,
     APIKey,
@@ -39,6 +42,18 @@ from models.cache import CacheEntry  # SQLite-backed cache for Redis alternative
 from core.logging import get_logger
 
 logger = get_logger(__name__)
+
+RuntimeMutationCallback = Callable[
+    [AsyncSession],
+    Union[Optional[Dict[str, Any]], Awaitable[Optional[Dict[str, Any]]]],
+]
+ParameterMutator = Callable[
+    [Dict[str, Any]],
+    Union[
+        Dict[str, Any],
+        Tuple[Dict[str, Any], Optional[Dict[str, Any]]],
+    ],
+]
 
 
 class Database:
@@ -230,6 +245,165 @@ class Database:
                 raise
             finally:
                 await session.close()
+
+    async def run_runtime_mutation(
+        self,
+        *,
+        resource_type: str,
+        resource_id: str,
+        operation: str,
+        mutate: RuntimeMutationCallback,
+        mutation_id: Optional[str] = None,
+    ) -> Tuple[Dict[str, Any], bool]:
+        """Run one shared-state mutation under a reserved write transaction.
+
+        SQLite's normal deferred transactions allow two workers to read the
+        same JSON value before either writes it.  ``BEGIN IMMEDIATE`` obtains
+        the write reservation *before* the read, serialising the complete
+        read/modify/write cycle.  When ``mutation_id`` is supplied, the
+        durable ledger row is committed in that same transaction and a retry
+        returns the original result with ``applied=False``.
+
+        The callback receives the transaction's :class:`AsyncSession` and
+        must not commit it.  This method also works with non-SQLite test or
+        future production databases, using their regular transaction begin.
+        """
+        if not self.async_session:
+            raise RuntimeError("Database not initialized")
+
+        async with self.async_session() as session:
+            try:
+                if self.engine is not None and self.engine.dialect.name == "sqlite":
+                    await session.execute(text("BEGIN IMMEDIATE"))
+                else:
+                    await session.begin()
+
+                if mutation_id:
+                    found = await session.execute(
+                        select(RuntimeMutation).where(
+                            RuntimeMutation.mutation_id == mutation_id,
+                            RuntimeMutation.resource_type == resource_type,
+                            RuntimeMutation.resource_id == resource_id,
+                        )
+                    )
+                    existing = found.scalar_one_or_none()
+                    if existing is not None:
+                        result = deepcopy(existing.result or {})
+                        await session.rollback()
+                        return result, False
+
+                result_or_awaitable = mutate(session)
+                if inspect.isawaitable(result_or_awaitable):
+                    result = await result_or_awaitable
+                else:
+                    result = result_or_awaitable
+                result = deepcopy(result or {})
+
+                if mutation_id:
+                    session.add(
+                        RuntimeMutation(
+                            mutation_id=mutation_id,
+                            resource_type=resource_type,
+                            resource_id=resource_id,
+                            operation=operation,
+                            result=result,
+                        )
+                    )
+
+                await session.commit()
+                return result, True
+            except Exception:
+                await session.rollback()
+                raise
+
+    async def mutate_node_parameters_atomic(
+        self,
+        node_id: str,
+        mutator: ParameterMutator,
+        *,
+        mutation_id: Optional[str] = None,
+        operation: str = "update",
+    ) -> Tuple[Dict[str, Any], Dict[str, Any], bool]:
+        """Atomically transform one node's parameters.
+
+        ``mutator`` receives an isolated copy and may return either the new
+        parameter dict or ``(new_parameters, result_metadata)``.  The final
+        persisted parameters, metadata, and whether this call applied the
+        write are returned.
+        """
+
+        async def _mutate(session: AsyncSession) -> Dict[str, Any]:
+            selected = await session.execute(
+                select(NodeParameter).where(NodeParameter.node_id == node_id)
+            )
+            row = selected.scalar_one_or_none()
+            current = deepcopy(row.parameters if row is not None else {})
+            transformed = mutator(current)
+            if isinstance(transformed, tuple):
+                new_parameters, metadata = transformed
+            else:
+                new_parameters, metadata = transformed, {}
+            if not isinstance(new_parameters, dict):
+                raise TypeError("node parameter mutator must return a dict")
+            if row is None:
+                session.add(
+                    NodeParameter(
+                        node_id=node_id,
+                        parameters=deepcopy(new_parameters),
+                    )
+                )
+            else:
+                row.parameters = deepcopy(new_parameters)
+                row.updated_at = datetime.now(timezone.utc)
+            return deepcopy(metadata or {})
+
+        metadata, applied = await self.run_runtime_mutation(
+            resource_type="node_parameters",
+            resource_id=node_id,
+            operation=operation,
+            mutation_id=mutation_id,
+            mutate=_mutate,
+        )
+        parameters = await self.get_node_parameters(node_id) or {}
+        return parameters, metadata, applied
+
+    async def mutate_workflow_data_atomic(
+        self,
+        workflow_id: str,
+        mutator: ParameterMutator,
+        *,
+        mutation_id: Optional[str] = None,
+        operation: str = "update",
+    ) -> Tuple[Optional[Workflow], Dict[str, Any], bool]:
+        """Atomically transform ``Workflow.data`` without stale overwrites."""
+
+        async def _mutate(session: AsyncSession) -> Dict[str, Any]:
+            selected = await session.execute(
+                select(Workflow).where(Workflow.id == workflow_id)
+            )
+            workflow = selected.scalar_one_or_none()
+            if workflow is None:
+                return {"found": False}
+            transformed = mutator(deepcopy(workflow.data or {}))
+            if isinstance(transformed, tuple):
+                new_data, metadata = transformed
+            else:
+                new_data, metadata = transformed, {}
+            if not isinstance(new_data, dict):
+                raise TypeError("workflow data mutator must return a dict")
+            workflow.data = deepcopy(new_data)
+            workflow.updated_at = datetime.now(timezone.utc)
+            return {"found": True, **deepcopy(metadata or {})}
+
+        metadata, applied = await self.run_runtime_mutation(
+            resource_type="workflow",
+            resource_id=workflow_id,
+            operation=operation,
+            mutation_id=mutation_id,
+            mutate=_mutate,
+        )
+        workflow = await self.get_workflow(workflow_id)
+        return workflow, metadata, applied
 
     # ============================================================================
     # Node Parameters
@@ -2300,60 +2474,146 @@ class Database:
             return []
 
     async def claim_task(self, task_id: str, agent_node_id: str) -> Optional[Dict[str, Any]]:
-        """Claim a pending task. Returns None if already claimed."""
+        """Atomically claim a pending task; same-agent retries are safe."""
         try:
             async with self.get_session() as session:
-                result = await session.execute(
-                    select(TeamTask).where(TeamTask.id == task_id, TeamTask.status == "pending", TeamTask.assigned_to.is_(None))
+                claimed = await session.execute(
+                    update(TeamTask)
+                    .where(
+                        TeamTask.id == task_id,
+                        TeamTask.status == "pending",
+                        TeamTask.assigned_to.is_(None),
+                    )
+                    .values(
+                        assigned_to=agent_node_id,
+                        status="in_progress",
+                        started_at=datetime.now(timezone.utc),
+                    )
                 )
-                task = result.scalar_one_or_none()
-                if not task:
+                # The guarded UPDATE is the compare-and-swap. It remains
+                # correct on databases where a SELECT + Python mutation would
+                # race because there is no SQLite BEGIN IMMEDIATE reservation.
+                selected = await session.execute(
+                    select(TeamTask).where(TeamTask.id == task_id)
+                )
+                task = selected.scalar_one_or_none()
+                if task is None:
+                    await session.rollback()
                     return None
-                task.assigned_to = agent_node_id
-                task.status = "in_progress"
-                task.started_at = datetime.now(timezone.utc)
+
+                won = bool(claimed.rowcount == 1)
+                same_agent_retry = (
+                    task.status == "in_progress"
+                    and task.assigned_to == agent_node_id
+                )
+                if not won and not same_agent_retry:
+                    await session.rollback()
+                    return None
+
                 await session.commit()
-                return {"id": task.id, "title": task.title, "assigned_to": agent_node_id}
+                return {
+                    "id": task.id,
+                    "title": task.title,
+                    "assigned_to": agent_node_id,
+                }
         except Exception as e:
             logger.error(f"Failed to claim task: {e}")
             return None
 
     async def complete_task(self, task_id: str, result_data: Optional[Dict[str, Any]] = None) -> bool:
-        """Mark task as completed."""
+        """Atomically transition an in-progress task to completed."""
         try:
-            async with self.get_session() as session:
-                result = await session.execute(select(TeamTask).where(TeamTask.id == task_id))
-                task = result.scalar_one_or_none()
-                if not task:
-                    return False
-                task.status = "completed"
-                task.result = result_data
-                task.progress = 100
-                task.completed_at = datetime.now(timezone.utc)
-                await session.commit()
-                return True
+            async def _complete(session: AsyncSession) -> Dict[str, Any]:
+                completed = await session.execute(
+                    update(TeamTask)
+                    .where(
+                        TeamTask.id == task_id,
+                        TeamTask.status == "in_progress",
+                    )
+                    .values(
+                        status="completed",
+                        result=result_data,
+                        progress=100,
+                        completed_at=datetime.now(timezone.utc),
+                    )
+                )
+                if completed.rowcount == 1:
+                    return {"success": True}
+
+                selected = await session.execute(
+                    select(TeamTask).where(TeamTask.id == task_id)
+                )
+                task = selected.scalar_one_or_none()
+                return {
+                    "success": bool(
+                        task is not None and task.status == "completed"
+                    )
+                }
+
+            result, _applied = await self.run_runtime_mutation(
+                resource_type="team_task",
+                resource_id=task_id,
+                operation="complete",
+                mutate=_complete,
+            )
+            return bool(result.get("success"))
         except Exception as e:
             logger.error(f"Failed to complete task: {e}")
             return False
 
     async def fail_task(self, task_id: str, error: str) -> bool:
-        """Mark task as failed."""
+        """Atomically record one failed attempt and release or fail it."""
         try:
-            async with self.get_session() as session:
-                result = await session.execute(select(TeamTask).where(TeamTask.id == task_id))
-                task = result.scalar_one_or_none()
-                if not task:
-                    return False
-                task.error = error
-                task.retry_count += 1
-                if task.retry_count < task.max_retries:
-                    task.status = "pending"
-                    task.assigned_to = None
-                else:
-                    task.status = "failed"
-                    task.completed_at = datetime.now(timezone.utc)
-                await session.commit()
-                return True
+            async def _fail(session: AsyncSession) -> Dict[str, Any]:
+                next_retry = TeamTask.retry_count + 1
+                retryable = next_retry < TeamTask.max_retries
+                failed = await session.execute(
+                    update(TeamTask)
+                    .where(
+                        TeamTask.id == task_id,
+                        TeamTask.status == "in_progress",
+                    )
+                    .values(
+                        error=error,
+                        retry_count=next_retry,
+                        status=case(
+                            (retryable, "pending"),
+                            else_="failed",
+                        ),
+                        assigned_to=case(
+                            (retryable, None),
+                            else_=TeamTask.assigned_to,
+                        ),
+                        completed_at=case(
+                            (retryable, TeamTask.completed_at),
+                            else_=datetime.now(timezone.utc),
+                        ),
+                    )
+                )
+                if failed.rowcount == 1:
+                    return {"success": True}
+
+                selected = await session.execute(
+                    select(TeamTask).where(TeamTask.id == task_id)
+                )
+                task = selected.scalar_one_or_none()
+                # A transport retry after this exact failure observes the
+                # released/terminal state and must not increment twice.
+                return {
+                    "success": bool(
+                        task is not None
+                        and task.status in {"pending", "failed"}
+                        and task.error == error
+                    )
+                }
+
+            result, _applied = await self.run_runtime_mutation(
+                resource_type="team_task",
+                resource_id=task_id,
+                operation="fail",
+                mutate=_fail,
+            )
+            return bool(result.get("success"))
         except Exception as e:
             logger.error(f"Failed to fail task: {e}")
             return False
