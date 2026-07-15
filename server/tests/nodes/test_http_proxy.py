@@ -40,6 +40,7 @@ def _make_proxy_service_mock(
     svc.get_proxy_url = AsyncMock(return_value=proxy_url)
     svc.report_result = MagicMock(return_value=None)
     svc.reload_providers = AsyncMock(return_value=None)
+    svc.reload_routing_rules = AsyncMock(return_value=None)
     svc.get_providers = MagicMock(return_value=providers or [])
     svc.get_routing_rules = MagicMock(return_value=[])
     svc.get_stats = MagicMock(return_value=stats or {})

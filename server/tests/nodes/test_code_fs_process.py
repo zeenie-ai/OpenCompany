@@ -24,13 +24,27 @@ Mocking strategy:
 
 from __future__ import annotations
 
+import asyncio
+import os
+import stat
+import threading
+import time
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 import pytest
 
 
 pytestmark = pytest.mark.node_contract
+
+
+async def _wait_for_thread_event(event: threading.Event) -> None:
+    """Yield deterministically until a worker thread reaches its barrier."""
+    async with asyncio.timeout(2):
+        while not event.is_set():
+            await asyncio.sleep(0)
 
 
 # ============================================================================
@@ -84,6 +98,11 @@ def _patch_fs_backend(backend: MagicMock):
         "nodes.filesystem._backend.get_backend",
         return_value=backend,
     )
+
+
+def _writable_test_path(name: str) -> Path:
+    """Use the writable checkout; the managed sandbox blocks pytest tmp dirs."""
+    return Path.cwd() / f".test-{uuid4().hex}-{name}"
 
 
 # ============================================================================
@@ -384,48 +403,53 @@ class TestFileRead:
 class TestFileModify:
     async def test_write_happy_path(self, harness):
         backend = MagicMock(name="LocalShellBackend")
-        backend.write = MagicMock(return_value=_FakeWriteResult(path="/hello.txt"))
-        # ``write`` now does a pre-flight ``backend._resolve_path(...).exists()``
-        # check so it can unlink-and-replace; teach the mock that the target
-        # doesn't exist yet so the wholesale-write path proceeds.
-        backend._resolve_path.return_value.exists.return_value = False
+        destination = _writable_test_path("hello.txt")
+        backend._resolve_path.return_value = destination
 
-        with _patch_fs_backend(backend):
-            result = await harness.execute(
-                "fileModify",
-                {
-                    "operation": "write",
-                    "file_path": "hello.txt",
-                    "content": "hi there",
-                },
-            )
+        try:
+            with _patch_fs_backend(backend):
+                result = await harness.execute(
+                    "fileModify",
+                    {
+                        "operation": "write",
+                        "file_path": "hello.txt",
+                        "content": "hi there",
+                    },
+                )
 
-        harness.assert_envelope(result, success=True)
-        harness.assert_output_shape(result, ["operation", "file_path"])
-        assert result["result"]["operation"] == "write"
-        assert result["result"]["file_path"] == "/hello.txt"
-        backend.write.assert_called_once_with("/hello.txt", "hi there")
+            harness.assert_envelope(result, success=True)
+            harness.assert_output_shape(result, ["operation", "file_path"])
+            assert result["result"]["operation"] == "write"
+            assert result["result"]["file_path"] == "/hello.txt"
+            assert destination.read_text(encoding="utf-8") == "hi there"
+        finally:
+            destination.unlink(missing_ok=True)
 
     async def test_edit_happy_path_returns_occurrences(self, harness):
         backend = MagicMock(name="LocalShellBackend")
-        backend.edit = MagicMock(return_value=_FakeWriteResult(path="README.md", occurrences=3))
+        destination = _writable_test_path("README.md")
+        destination.write_text("foo foo foo", encoding="utf-8")
+        backend._resolve_path.return_value = destination
 
-        with _patch_fs_backend(backend):
-            result = await harness.execute(
-                "fileModify",
-                {
-                    "operation": "edit",
-                    "file_path": "README.md",
-                    "old_string": "foo",
-                    "new_string": "bar",
-                    "replace_all": True,
-                },
-            )
+        try:
+            with _patch_fs_backend(backend):
+                result = await harness.execute(
+                    "fileModify",
+                    {
+                        "operation": "edit",
+                        "file_path": "README.md",
+                        "old_string": "foo",
+                        "new_string": "bar",
+                        "replace_all": True,
+                    },
+                )
 
-        harness.assert_envelope(result, success=True)
-        harness.assert_output_shape(result, ["operation", "file_path", "occurrences"])
-        assert result["result"]["occurrences"] == 3
-        backend.edit.assert_called_once_with("/README.md", "foo", "bar", replace_all=True)
+            harness.assert_envelope(result, success=True)
+            harness.assert_output_shape(result, ["operation", "file_path", "occurrences"])
+            assert result["result"]["occurrences"] == 3
+            assert destination.read_text(encoding="utf-8") == "bar bar bar"
+        finally:
+            destination.unlink(missing_ok=True)
 
     async def test_edit_missing_old_string_short_circuits(self, harness):
         backend = MagicMock(name="LocalShellBackend")
@@ -446,22 +470,137 @@ class TestFileModify:
 
     async def test_backend_reports_error_in_result(self, harness):
         backend = MagicMock(name="LocalShellBackend")
-        backend.edit = MagicMock(return_value=_FakeWriteResult(error="old_string found 2 times; need unique"))
+        destination = _writable_test_path("x.md")
+        destination.write_text("foo foo", encoding="utf-8")
+        backend._resolve_path.return_value = destination
 
-        with _patch_fs_backend(backend):
-            result = await harness.execute(
-                "fileModify",
-                {
-                    "operation": "edit",
-                    "file_path": "x.md",
-                    "old_string": "foo",
-                    "new_string": "bar",
-                    "replace_all": False,
-                },
-            )
+        try:
+            with _patch_fs_backend(backend):
+                result = await harness.execute(
+                    "fileModify",
+                    {
+                        "operation": "edit",
+                        "file_path": "x.md",
+                        "old_string": "foo",
+                        "new_string": "bar",
+                        "replace_all": False,
+                    },
+                )
 
-        harness.assert_envelope(result, success=False)
-        assert "2 times" in result["error"]
+            harness.assert_envelope(result, success=False)
+            assert "2 times" in result["error"]
+        finally:
+            destination.unlink(missing_ok=True)
+
+    async def test_same_path_mutations_are_serialized(self, harness):
+        backend = MagicMock(name="LocalShellBackend")
+        destination = _writable_test_path("shared.txt")
+        backend._resolve_path.return_value = destination
+        state = {"active": 0, "maximum": 0}
+        guard = threading.Lock()
+
+        def slow_atomic_write(path, content):
+            with guard:
+                state["active"] += 1
+                state["maximum"] = max(state["maximum"], state["active"])
+            time.sleep(0.03)
+            path.write_text(content, encoding="utf-8")
+            with guard:
+                state["active"] -= 1
+
+        try:
+            with _patch_fs_backend(backend), patch(
+                "nodes.filesystem._backend.atomic_write_text",
+                side_effect=slow_atomic_write,
+            ):
+                first, second = await asyncio.gather(
+                    harness.execute(
+                        "fileModify",
+                        {"operation": "write", "file_path": "shared.txt", "content": "one"},
+                    ),
+                    harness.execute(
+                        "fileModify",
+                        {"operation": "write", "file_path": "shared.txt", "content": "two"},
+                    ),
+                )
+
+            harness.assert_envelope(first, success=True)
+            harness.assert_envelope(second, success=True)
+            assert state["maximum"] == 1
+            assert destination.read_text(encoding="utf-8") in {"one", "two"}
+        finally:
+            destination.unlink(missing_ok=True)
+
+    async def test_cancellation_keeps_path_lock_until_write_finishes(self, harness):
+        from nodes.filesystem._backend import get_path_lock
+
+        backend = MagicMock(name="LocalShellBackend")
+        destination = _writable_test_path("cancelled-write.txt")
+        backend._resolve_path.return_value = destination
+        entered = threading.Event()
+        release = threading.Event()
+
+        def blocking_atomic_write(path, content):
+            entered.set()
+            if not release.wait(timeout=2):
+                raise AssertionError("test write was not released")
+            path.write_text(content, encoding="utf-8", newline="")
+
+        try:
+            with _patch_fs_backend(backend), patch(
+                "nodes.filesystem._backend.atomic_write_text",
+                side_effect=blocking_atomic_write,
+            ):
+                operation = asyncio.create_task(
+                    harness.execute(
+                        "fileModify",
+                        {"operation": "write", "file_path": "cancelled-write.txt", "content": "done"},
+                    )
+                )
+                await _wait_for_thread_event(entered)
+                path_lock = get_path_lock(destination)
+
+                operation.cancel()
+                await asyncio.sleep(0)
+                await asyncio.sleep(0)
+                assert operation.done() is False
+                assert path_lock.locked() is True
+
+                release.set()
+                result = await operation
+
+            harness.assert_envelope(result, success=False)
+            assert "cancel" in (result.get("error") or "").lower()
+            assert path_lock.locked() is False
+            assert destination.read_bytes() == b"done"
+        finally:
+            release.set()
+            destination.unlink(missing_ok=True)
+
+    def test_atomic_write_preserves_lf_bytes(self):
+        from nodes.filesystem._backend import atomic_write_text
+
+        destination = _writable_test_path("line-endings.txt")
+        try:
+            destination.write_bytes(b"old\n")
+            atomic_write_text(destination, "first\nsecond\n")
+            assert destination.read_bytes() == b"first\nsecond\n"
+        finally:
+            destination.unlink(missing_ok=True)
+
+    def test_atomic_write_preserves_existing_mode(self):
+        from nodes.filesystem._backend import atomic_write_text
+
+        destination = _writable_test_path("mode.txt")
+        try:
+            destination.write_text("old", encoding="utf-8")
+            if os.name != "nt":
+                destination.chmod(0o754)
+            expected_mode = stat.S_IMODE(destination.stat().st_mode)
+            atomic_write_text(destination, "new")
+            assert stat.S_IMODE(destination.stat().st_mode) == expected_mode
+        finally:
+            destination.unlink(missing_ok=True)
 
     async def test_unknown_operation_returns_error(self, harness):
         backend = MagicMock(name="LocalShellBackend")

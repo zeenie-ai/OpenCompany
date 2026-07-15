@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders as render } from '../../../test/providers';
 
 // --- Mocks -----------------------------------------------------------------
@@ -130,6 +130,50 @@ describe('InputSection -- direct main edges', () => {
     render(<InputSection nodeId="tgt" />);
     await waitFor(() => {
       expect(screen.getByText(/Cron Scheduler|Cron/)).toBeInTheDocument();
+    });
+  });
+
+  it('ignores a previous node request that resolves after the new selection', async () => {
+    let resolveA!: (value: any) => void;
+    let resolveB!: (value: any) => void;
+    const pendingA = new Promise((resolve) => { resolveA = resolve; });
+    const pendingB = new Promise((resolve) => { resolveB = resolve; });
+
+    setWorkflow(
+      [
+        { id: 'src-a', type: 'cronScheduler', data: { label: 'Source A' }, position: { x: 0, y: 0 } },
+        { id: 'src-b', type: 'httpRequest', data: { label: 'Source B' }, position: { x: 0, y: 100 } },
+        { id: 'target-a', type: 'aiAgent', data: {}, position: { x: 100, y: 0 } },
+        { id: 'target-b', type: 'aiAgent', data: {}, position: { x: 100, y: 100 } },
+      ],
+      [
+        { id: 'ea', source: 'src-a', target: 'target-a', sourceHandle: 'output-main', targetHandle: 'input-main' },
+        { id: 'eb', source: 'src-b', target: 'target-b', sourceHandle: 'output-main', targetHandle: 'input-main' },
+      ],
+    );
+    wsMock.getNodeOutput.mockImplementation((sourceId: string) => (
+      sourceId === 'src-a' ? pendingA : pendingB
+    ));
+
+    const view = render(<InputSection nodeId="target-a" />);
+    await waitFor(() => expect(wsMock.getNodeOutput).toHaveBeenCalledWith('src-a', 'output_main'));
+
+    view.rerender(<InputSection nodeId="target-b" />);
+    await waitFor(() => expect(wsMock.getNodeOutput).toHaveBeenCalledWith('src-b', 'output_main'));
+
+    await act(async () => {
+      resolveB([[{ json: { value: 'from-b' } }]]);
+      await pendingB;
+    });
+    expect(await screen.findByText(/Source B/)).toBeInTheDocument();
+
+    await act(async () => {
+      resolveA([[{ json: { value: 'from-a' } }]]);
+      await pendingA;
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Source B/)).toBeInTheDocument();
+      expect(screen.queryByText(/Source A/)).not.toBeInTheDocument();
     });
   });
 });

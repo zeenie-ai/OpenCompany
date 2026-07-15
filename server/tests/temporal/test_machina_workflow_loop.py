@@ -32,6 +32,10 @@ def _patch_workflow_logger(monkeypatch):
     from temporalio import workflow as temporal_workflow
 
     monkeypatch.setattr(temporal_workflow, "logger", MagicMock())
+    # Direct workflow-body tests run outside Temporal's workflow event loop.
+    # New executions take the v2 branch; replay compatibility is locked by
+    # focused source/helper tests in test_temporal_identity.py.
+    monkeypatch.setattr(temporal_workflow, "patched", lambda _patch_id: True)
 
 
 def _graph():

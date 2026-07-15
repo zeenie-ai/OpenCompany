@@ -26,6 +26,7 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
 from services import ai as ai_module
+from services.tool_identity import DuplicateToolNameError
 
 
 # ----------------------------------------------------------------------------
@@ -219,6 +220,43 @@ class TestAgentLoopRebind:
 
         assert not called
         assert len(chat_model.bind_calls) == 1
+
+    async def test_duplicate_hot_rebind_is_structured_and_not_bound(self):
+        """An ambiguous hot refresh is rejected before the model surface
+        changes, and the conflict is returned in the originating tool result."""
+        responses = [
+            AIMessage(content="", tool_calls=[{"name": "agentBuilder", "args": {}, "id": "c1"}]),
+            AIMessage(content="done"),
+        ]
+        chat_model = _FakeChatModel(responses)
+        initial_tool = _FakeTool("agentBuilder")
+
+        async def tool_executor(name, args):
+            return {"operations": [{"type": "add_node", "node_type": "agentBuilder"}]}
+
+        async def rebind_from_operations(ops):
+            raise DuplicateToolNameError(
+                {
+                    "agentBuilder": [
+                        {"node_id": "builder-a", "label": "Builder A"},
+                        {"node_id": "builder-b", "label": "Builder B"},
+                    ]
+                }
+            )
+
+        state = await ai_module._run_agent_loop(
+            chat_model,
+            [HumanMessage(content="go")],
+            tools=[initial_tool],
+            tool_executor=tool_executor,
+            max_iterations=5,
+            rebind_from_operations=rebind_from_operations,
+        )
+
+        assert len(chat_model.bind_calls) == 1
+        tool_message = state["messages"][2]
+        assert "DuplicateToolNameError" in tool_message.content
+        assert "builder-a" in tool_message.content
 
 
 # ----------------------------------------------------------------------------
