@@ -29,14 +29,14 @@ _TODOS_UPDATED_WIRE_KEY = "todos_updated"
 
 def todos_updated(
     *,
-    session_key: str,
     todos: List[dict],
     node_id: Optional[str] = None,
     workflow_id: Optional[str] = None,
 ) -> WorkflowEvent:
-    """Todo-list-changed envelope. ``subject`` is the session key (the
-    workflow the list is shared under) so the FE can route the update to
-    the right ``['todos', session_key]`` query."""
+    """Build an exactly routable todo-list-changed envelope."""
+    from services.todo_service import todo_session_key
+
+    session_key = todo_session_key(workflow_id, node_id)
     data: Dict[str, Any] = {
         "session_key": session_key,
         "todos": todos,
@@ -53,7 +53,6 @@ def todos_updated(
 
 async def dispatch_todos_updated(
     *,
-    session_key: str,
     todos: List[dict],
     node_id: Optional[str] = None,
     workflow_id: Optional[str] = None,
@@ -64,7 +63,6 @@ async def dispatch_todos_updated(
 
     await emit(
         todos_updated(
-            session_key=session_key,
             todos=todos,
             node_id=node_id,
             workflow_id=workflow_id,

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from services.todo_service import get_todo_service
+from services.todo_service import get_todo_service, todo_session_key
 
 
 async def execute_write_todos(
@@ -20,11 +20,11 @@ async def execute_write_todos(
 ) -> Dict[str, Any]:
     """Legacy (args, config) -> dict contract.
 
-    session_key picks config.workflow_id > config.node_id > 'default'
-    (matches pre-refactor handler precedence).
+    Modern calls use a workflow + node composite key. Calls missing node
+    identity keep the pre-refactor workflow/default fallback.
     """
     config = config or {}
-    session_key = config.get("workflow_id") or config.get("node_id") or "default"
+    session_key = todo_session_key(config.get("workflow_id"), config.get("node_id"))
     todos = args.get("todos", [])
     service = get_todo_service()
     stored = service.write(session_key, todos)
@@ -38,6 +38,16 @@ async def execute_write_todos(
             {"phase": "todo_update", "todos": stored},
             workflow_id=config.get("workflow_id"),
         )
+
+    # Keep compatibility callers on the same event path as the plugin so an
+    # open Current Todos panel receives only this workflow+node update.
+    from nodes.tool.write_todos._events import dispatch_todos_updated
+
+    await dispatch_todos_updated(
+        todos=stored,
+        node_id=node_id,
+        workflow_id=config.get("workflow_id"),
+    )
 
     return {
         "success": True,
