@@ -50,6 +50,7 @@ import Ollama from '@lobehub/icons/es/Ollama';
 import LmStudio from '@lobehub/icons/es/LmStudio';
 import Vercel from '@lobehub/icons/es/Vercel';
 import Github from '@lobehub/icons/es/Github';
+import Cloudflare from '@lobehub/icons/es/Cloudflare';
 import VertexAI from '@lobehub/icons/es/VertexAI';
 import GoogleCloud from '@lobehub/icons/es/GoogleCloud';
 
@@ -158,6 +159,7 @@ const LOBEHUB_BRANDS: Readonly<Record<string, any>> = {
   lmstudio: LmStudio,
   vercel: Vercel,
   github: Github,
+  cloudflare: Cloudflare,
   vertexai: VertexAI,
   googlecloud: GoogleCloud,
 };

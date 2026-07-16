@@ -69,6 +69,7 @@
   "emailSend": "email_send",
   "emailRead": "email_read",
   "stripeAction": "stripe_action",
+  "cloudflareAction": "cloudflare",
   "typescriptExecutor": "typescript_code",
   "apifyActor": "apify_actor",
   "agentBuilder": "agent_builder",

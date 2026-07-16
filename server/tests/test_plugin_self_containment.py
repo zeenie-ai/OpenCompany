@@ -59,6 +59,7 @@ from services import ws_handler_registry
 _MIGRATED_PLUGINS = (
     "android",
     "browser",
+    "cloudflare",
     "code",
     "email",
     "github",
@@ -74,6 +75,7 @@ _MIGRATED_PLUGINS = (
 # ``register_ws_handlers`` from its package ``__init__.py``.
 _PLUGINS_WITH_HANDLERS = (
     "android",
+    "cloudflare",
     "github",
     "google",
     "stripe",

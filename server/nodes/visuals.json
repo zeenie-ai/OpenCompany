@@ -69,6 +69,14 @@
   "claude_code_agent": {
     "icon": "lobehub:Claude"
   },
+  "cloudflare": {
+    "icon": "lobehub:Cloudflare",
+    "color": "#F38020"
+  },
+  "cloudflareAction": {
+    "icon": "lobehub:Cloudflare",
+    "skill": "cloudflare-skill"
+  },
   "codex_agent": {
     "icon": "lobehub:OpenAI"
   },
