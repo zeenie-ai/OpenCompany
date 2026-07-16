@@ -47,16 +47,16 @@ The native layer currently supports **12 providers**, grouped by implementation:
 | `mistral` | `providers/openai.py` + base_url | `openai` | OpenAI-compatible |
 | `ollama` | `providers/openai.py` + `{provider}_proxy` URL | `openai` (chat) + `ollama` (probe) | Local server. Validator probes via `ollama.AsyncClient.ps()` for typed `context_length` per loaded model. Runtime uses `OpenAIProvider` with `base_url={user URL}` so traffic stays on `localhost`. |
 | `lmstudio` | `providers/openai.py` + `{provider}_proxy` URL | `openai` (chat) + `lmstudio` (probe) | Local server. Validator probes via `lmstudio.AsyncClient.llm.list_loaded()` for typed `LlmInstanceInfo.context_length`. Same OpenAI-compat runtime path as Ollama. |
-| `groq` | LangChain fallback | `langchain-groq` | Not yet on native path |
-| `cerebras` | LangChain fallback | `langchain-cerebras` | Not yet on native path |
+| `groq` | `providers/_compat.py` + base_url | `openai` | OpenAI-compatible (chat-path LangChain fallback retired in Phase D) |
+| `cerebras` | `providers/_compat.py` + base_url | `openai` | OpenAI-compatible (chat-path LangChain fallback retired in Phase D) |
 
-Source of truth for this list: `server/config/llm_defaults.json` (the `providers` dict) and `server/services/llm/factory.py` (`NATIVE_PROVIDERS` constant).
+Source of truth for this list: `server/config/llm_defaults.json` (the `providers` dict) and the `register_provider(ProviderSpec(...))` calls in `server/services/llm/providers/` (each provider module registers itself at import; `factory.py` is legacy and no longer consulted by `ai.py`).
 
 ### Native chat path vs agent dropdown — two different counts
 
-- **Native chat path (`execute_chat` / `fetch_models`) supports 12 providers** — 10 truly native (8 via the shared OpenAI-compatible client: openai, openrouter, xai, deepseek, kimi, mistral, ollama, lmstudio; plus the Anthropic/Gemini native SDKs); Groq/Cerebras fall back to LangChain inside `execute_chat`. `xai` lives here.
+- **Native chat path (`execute_chat` / `fetch_models`) supports 12 providers, all native** — Anthropic and Gemini via their own SDKs; OpenAI and OpenRouter via the openai SDK; and 8 more through the shared OpenAI-compatible client with a per-provider `base_url` (xai, deepseek, kimi, mistral, groq, cerebras, ollama, lmstudio — registered in `providers/_compat.py`). `execute_chat` delegates every provider to `ChatUnifier.chat`; there is no per-provider branch and no chat-path LangChain fallback. `xai` lives here.
 - **The agent dropdown exposes 11 providers** for `aiAgent`, `chatAgent` (Zeenie), and all specialized agents — the `provider` Literal in [`nodes/agent/ai_agent/__init__.py`](../server/nodes/agent/ai_agent/__init__.py), [`chat_agent.py`](../server/nodes/agent/chat_agent/__init__.py), and [`_specialized.py`](../server/nodes/agent/_specialized.py): `openai`, `anthropic`, `gemini`, `openrouter`, `groq`, `cerebras`, `deepseek`, `kimi`, `mistral`, `ollama`, `lmstudio`. **`xai` is native-chat-only and is NOT in the agent Literal** (no agent dropdown entry).
-- Groq and Cerebras are available as standalone chat-model nodes AND in the agent dropdown, but use the LangChain path for both chat and agent execution.
+- Groq and Cerebras are available as standalone chat-model nodes AND in the agent dropdown. Chat runs on the native OpenAI-compatible client; only the agent path uses LangChain (`ChatGroq` / `ChatCerebras`) — the same chat-native / agent-LangChain split every provider has.
 
 ### Provider / model reference table
 

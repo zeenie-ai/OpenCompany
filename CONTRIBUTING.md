@@ -36,7 +36,7 @@ Deep dives: [DESIGN.md](docs-internal/DESIGN.md) - [TEMPORAL_ARCHITECTURE.md](do
 
 [![AI Agent Routing](docs/diagrams/ai-agent-routing.svg)](https://raw.githubusercontent.com/zeenie-ai/OpenCompany/main/docs/diagrams/ai-agent-routing.svg)
 
-AI execution splits into two paths. `execute_chat()` for direct chat completions prefers the native SDK layer in [services/llm/](server/services/llm/) (12 providers, lazy imports, normalized `LLMResponse`), falling back to LangChain for Groq and Cerebras. `execute_agent()` and `execute_chat_agent()` build a LangChain chat model (`ChatOpenAI` / `ChatAnthropic` / etc.) and drive it through `_run_agent_loop` — a plain async `for iteration in range(max):` that calls `chat_model.ainvoke`, dispatches any `tool_calls`, appends `ToolMessage` results, and loops. Team leads (`orchestrator_agent`, `ai_employee`) auto-inject `delegate_to_<type>` tools for every agent connected to their `input-teammates` handle. The RLM Agent uses a REPL-based recursive language model pattern. Long-running activities (browser automation, claude_code_agent) stay alive across Temporal's 2-minute heartbeat window via per-message `activity.heartbeat()` calls in the WebSocket read loop.
+AI execution splits into two paths. `execute_chat()` for direct chat completions delegates every provider to the native SDK layer in [services/llm/](server/services/llm/) via `ChatUnifier` (12 providers, lazy imports, normalized `LLMResponse`; Groq, Cerebras, and the local servers ride the OpenAI-compatible client with a custom `base_url` — the old chat-path LangChain fallback is retired). `execute_agent()` and `execute_chat_agent()` build a LangChain chat model (`ChatOpenAI` / `ChatAnthropic` / etc.) and drive it through `_run_agent_loop` — a plain async `for iteration in range(max):` that calls `chat_model.ainvoke`, dispatches any `tool_calls`, appends `ToolMessage` results, and loops. Team leads (`orchestrator_agent`, `ai_employee`) auto-inject `delegate_to_<type>` tools for every agent connected to their `input-teammates` handle. The RLM Agent uses a REPL-based recursive language model pattern. Long-running activities (browser automation, claude_code_agent) stay alive across Temporal's 2-minute heartbeat window via per-message `activity.heartbeat()` calls in the WebSocket read loop.
 
 Deep dives: [agent_architecture.md](docs-internal/agent_architecture.md) - [native_llm_sdk.md](docs-internal/native_llm_sdk.md) - [agent_teams.md](docs-internal/agent_teams.md) - [memory_compaction.md](docs-internal/memory_compaction.md)
 
@@ -61,7 +61,7 @@ Deep dives: [agent_architecture.md](docs-internal/agent_architecture.md) - [nati
 
 [![Node Anatomy](docs/diagrams/node-anatomy.svg)](https://raw.githubusercontent.com/zeenie-ai/OpenCompany/main/docs/diagrams/node-anatomy.svg)
 
-The diagram above shows the full lifecycle of a workflow node from TypeScript definition to Python handler. Use these recipes as a starting point:
+The diagram above shows the full lifecycle of a workflow node: one self-contained Python plugin folder that auto-registers on import and renders itself on the frontend with zero TypeScript edits. Use these recipes as a starting point:
 
 **Add a workflow node**
 - Author a plugin folder: `server/nodes/<category>/<node>/__init__.py` — subclasses `BaseNode` (or `ActionNode` / `TriggerNode` / `ToolNode`), declares Pydantic `Params`/`Output` + `@Operation` methods; auto-registers on import
@@ -70,7 +70,7 @@ The diagram above shows the full lifecycle of a workflow node from TypeScript de
 
 **Add an LLM provider**
 - OpenAI-compatible (DeepSeek, Kimi, Mistral pattern): config-only in `server/config/llm_defaults.json`
-- Custom-SDK provider: new file in `server/services/llm/providers/`, branch in `factory.py`
+- Custom-SDK provider: new file in `server/services/llm/providers/` that calls `register_provider(ProviderSpec(...))` at module bottom (lazy factory + `sdk_exception_refs`)
 - Backend plugin: `server/nodes/model/<provider>_chat_model/__init__.py`
 - Guide: [native_llm_sdk.md](docs-internal/native_llm_sdk.md)
 

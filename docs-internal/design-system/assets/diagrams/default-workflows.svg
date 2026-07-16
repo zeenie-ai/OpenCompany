@@ -1,274 +1,186 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 1020" width="100%" preserveAspectRatio="xMidYMid meet" font-family="-apple-system, BlinkMacSystemFont, &#39;Segoe UI&#39;, Roboto, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 1320" width="100%" preserveAspectRatio="xMidYMid meet" font-family="ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace">
   <defs>
-    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#6b7280"></path>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f8f8f2"/>
     </marker>
-    <marker id="arr-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#8b5cf6"></path>
-    </marker>
-    <marker id="arr-cyan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#06b6d4"></path>
-    </marker>
-    <marker id="arr-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#10b981"></path>
-    </marker>
-    
+    <style>
+      .bg { fill: #282a36; }
+      .panel { fill: #44475a; stroke-width: 2; }
+      .p-cyan { stroke: #8be9fd; } .p-purple { stroke: #bd93f9; } .p-orange { stroke: #ffb86c; } .p-green { stroke: #50fa7b; } .p-pink { stroke: #ff79c6; }
+      .title { fill: #f8f8f2; font-size: 20px; font-weight: 700; }
+      .h1 { fill: #f8f8f2; font-size: 18px; font-weight: 700; }
+      .h2 { fill: #f8f8f2; font-size: 14px; font-weight: 700; }
+      .sub { fill: #f8f8f2; font-size: 12px; }
+      .small { fill: #f8f8f2; font-size: 10px; }
+      .label { fill: #f1fa8c; font-size: 11px; font-style: italic; }
+      .conn { stroke: #f8f8f2; stroke-width: 1.8; fill: none; }
+      .conn-dot { stroke: #6272a4; stroke-width: 1.5; fill: none; stroke-dasharray: 4 4; }
+      .box { fill: #282a36; stroke-width: 1.5; }
+      .tier-label { fill: #6272a4; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+      .accent-cyan { fill: #8be9fd; } .accent-purple { fill: #bd93f9; } .accent-green { fill: #50fa7b; } .accent-orange { fill: #ffb86c; } .accent-pink { fill: #ff79c6; }
+    </style>
   </defs>
-
-  <rect width="1100" height="1020" class="bg"></rect>
-
-  
-  <text x="550" y="40" text-anchor="middle" class="header-text">Three Workflows You Get on Day One</text>
-  <text x="550" y="62" text-anchor="middle" class="header-sub">Open OpenCompany for the first time and these are already loaded. Each shows a different pattern you can copy.</text>
-
-  
-  
-  
-  <rect x="30" y="90" width="1040" height="240" class="row-card row-1"></rect>
-  <circle cx="58" cy="118" r="14" class="num-bg-1"></circle>
-  <text x="58" y="123" text-anchor="middle" class="num-txt">1</text>
-  <text x="84" y="118" class="row-title">AI Assistant</text>
-  <text x="84" y="135" class="row-tag">16 nodes · one smart agent with a full toolbox</text>
-
-  
-  <rect x="50" y="180" width="120" height="38" class="node-box node-trigger" rx="8"></rect>
-  <text x="110" y="198" text-anchor="middle" class="node-txt">💬 Chat</text>
-  <text x="110" y="212" text-anchor="middle" class="node-sub">in-app panel</text>
-
-  <rect x="50" y="232" width="120" height="38" class="node-box node-trigger" rx="8"></rect>
-  <text x="110" y="250" text-anchor="middle" class="node-txt">📱 Telegram</text>
-  <text x="110" y="264" text-anchor="middle" class="node-sub">incoming message</text>
-
-  
-  <rect x="280" y="195" width="160" height="60" class="node-box node-agent-1" rx="10"></rect>
-  <text x="360" y="220" text-anchor="middle" class="node-txt" style="font-size: 14px;">🤖 AI Agent</text>
-  <text x="360" y="240" text-anchor="middle" class="node-sub">thinks, decides, acts</text>
-
-  
-  <path d="M 175 199 L 280 215" class="conn-flow-1" marker-end="url(#arr-purple)"></path>
-  <path d="M 175 251 L 280 235" class="conn-flow-1" marker-end="url(#arr-purple)"></path>
-
-  
-  <rect x="220" y="280" width="100" height="32" class="node-box node-helper" rx="6"></rect>
-  <text x="270" y="299" text-anchor="middle" class="node-txt">🧠 Memory</text>
-
-  <rect x="330" y="280" width="100" height="32" class="node-box node-helper" rx="6"></rect>
-  <text x="380" y="299" text-anchor="middle" class="node-txt">📚 Skills</text>
-
-  <path d="M 320 255 L 270 280" class="conn-dotted"></path>
-  <path d="M 400 255 L 380 280" class="conn-dotted"></path>
-
-  
-  <rect x="490" y="170" width="280" height="120" class="node-box" rx="10" style="fill: #fafafa; stroke: #d1d5db;"></rect>
-  <text x="630" y="190" text-anchor="middle" class="node-txt" style="fill: #6b7280;">🔧 Toolbox</text>
-
-  <rect x="500" y="200" width="84" height="22" class="node-tool" rx="5"></rect>
-  <text x="542" y="215" text-anchor="middle" class="node-sub">🔍 Web search</text>
-
-  <rect x="592" y="200" width="84" height="22" class="node-tool" rx="5"></rect>
-  <text x="634" y="215" text-anchor="middle" class="node-sub">🌐 Browser</text>
-
-  <rect x="684" y="200" width="84" height="22" class="node-tool" rx="5"></rect>
-  <text x="726" y="215" text-anchor="middle" class="node-sub">📄 Files</text>
-
-  <rect x="500" y="228" width="84" height="22" class="node-tool" rx="5"></rect>
-  <text x="542" y="243" text-anchor="middle" class="node-sub">💻 Shell</text>
-
-  <rect x="592" y="228" width="84" height="22" class="node-tool" rx="5"></rect>
-  <text x="634" y="243" text-anchor="middle" class="node-sub">🐍 Python</text>
-
-  <rect x="684" y="228" width="84" height="22" class="node-tool" rx="5"></rect>
-  <text x="726" y="243" text-anchor="middle" class="node-sub">⚙ Processes</text>
-
-  <rect x="546" y="256" width="84" height="22" class="node-tool" rx="5"></rect>
-  <text x="588" y="271" text-anchor="middle" class="node-sub">📋 Todos</text>
-
-  <rect x="638" y="256" width="84" height="22" class="node-tool" rx="5"></rect>
-  <text x="680" y="271" text-anchor="middle" class="node-sub">+ more</text>
-
-  <path d="M 440 225 L 490 225" class="conn-flow-1" marker-end="url(#arr-purple)"></path>
-
-  
-  <rect x="830" y="180" width="180" height="38" class="node-box node-output" rx="8"></rect>
-  <text x="920" y="198" text-anchor="middle" class="node-txt">📤 Telegram Send</text>
-  <text x="920" y="212" text-anchor="middle" class="node-sub">reply to user</text>
-
-  <rect x="830" y="232" width="180" height="38" class="node-box node-output" rx="8"></rect>
-  <text x="920" y="250" text-anchor="middle" class="node-txt">📝 Console</text>
-  <text x="920" y="264" text-anchor="middle" class="node-sub">live log in UI</text>
-
-  <path d="M 770 199 L 830 199" class="conn-flow-1" marker-end="url(#arr-purple)"></path>
-  <path d="M 770 251 L 830 251" class="conn-flow-1" marker-end="url(#arr-purple)"></path>
-
-  
-  <text x="58" y="313" class="row-use">USE WHEN:</text>
-  <text x="155" y="313" class="row-desc">You want one AI that can browse the web, run code on your machine, and chat over Telegram.</text>
-
-  
-  
-  
-  <rect x="30" y="355" width="1040" height="340" class="row-card row-2"></rect>
-  <circle cx="58" cy="383" r="14" class="num-bg-2"></circle>
-  <text x="58" y="388" text-anchor="middle" class="num-txt">2</text>
-  <text x="84" y="383" class="row-title">AI Employee</text>
-  <text x="84" y="400" class="row-tag">58 nodes · a team lead that delegates to 5 specialists</text>
-
-  
-  <rect x="50" y="450" width="120" height="38" class="node-box node-trigger" rx="8"></rect>
-  <text x="110" y="468" text-anchor="middle" class="node-txt">💬 Chat</text>
-  <text x="110" y="482" text-anchor="middle" class="node-sub">in-app panel</text>
-
-  <rect x="50" y="500" width="120" height="38" class="node-box node-trigger" rx="8"></rect>
-  <text x="110" y="518" text-anchor="middle" class="node-txt">📱 Telegram</text>
-  <text x="110" y="532" text-anchor="middle" class="node-sub">incoming message</text>
-
-  
-  <rect x="240" y="465" width="170" height="62" class="node-box node-agent-2" rx="10"></rect>
-  <text x="325" y="490" text-anchor="middle" class="node-txt" style="font-size: 14px;">👔 Zeenie</text>
-  <text x="325" y="510" text-anchor="middle" class="node-sub">team lead — decides</text>
-  <text x="325" y="522" text-anchor="middle" class="node-sub">who handles what</text>
-
-  <path d="M 175 469 L 240 487" class="conn-flow-2" marker-end="url(#arr-cyan)"></path>
-  <path d="M 175 519 L 240 505" class="conn-flow-2" marker-end="url(#arr-cyan)"></path>
-
-  
-  <rect x="245" y="545" width="78" height="26" class="node-box node-helper" rx="5"></rect>
-  <text x="284" y="562" text-anchor="middle" class="node-sub">🧠 Memory</text>
-
-  <rect x="327" y="545" width="78" height="26" class="node-box node-helper" rx="5"></rect>
-  <text x="366" y="562" text-anchor="middle" class="node-sub">📚 Skills</text>
-
-  <path d="M 290 527 L 284 545" class="conn-dotted"></path>
-  <path d="M 360 527 L 366 545" class="conn-dotted"></path>
-
-  
-  <text x="465" y="497" class="label-italic">delegates to →</text>
-
-  
-  <rect x="555" y="395" width="220" height="48" class="node-box node-agent-2" rx="8"></rect>
-  <text x="665" y="414" text-anchor="middle" class="node-txt">💻 Coding Agent</text>
-  <text x="665" y="430" text-anchor="middle" class="node-sub">files · shell · Python · processes</text>
-
-  <rect x="555" y="450" width="220" height="48" class="node-box node-agent-2" rx="8"></rect>
-  <text x="665" y="469" text-anchor="middle" class="node-txt">📧 Productivity Agent</text>
-  <text x="665" y="485" text-anchor="middle" class="node-sub">Gmail · Calendar · Drive · Sheets</text>
-
-  <rect x="555" y="505" width="220" height="48" class="node-box node-agent-2" rx="8"></rect>
-  <text x="665" y="524" text-anchor="middle" class="node-txt">🗺 Travel Agent</text>
-  <text x="665" y="540" text-anchor="middle" class="node-sub">Maps · geocoding · nearby places</text>
-
-  <rect x="555" y="560" width="220" height="48" class="node-box node-agent-2" rx="8"></rect>
-  <text x="665" y="579" text-anchor="middle" class="node-txt">🌐 Web Agent</text>
-  <text x="665" y="595" text-anchor="middle" class="node-sub">browser · HTTP · web search</text>
-
-  <rect x="555" y="615" width="220" height="48" class="node-box node-agent-2" rx="8"></rect>
-  <text x="665" y="634" text-anchor="middle" class="node-txt">💬 Social Agent</text>
-  <text x="665" y="650" text-anchor="middle" class="node-sub">Twitter · WhatsApp</text>
-
-  
-  <path d="M 410 480 Q 480 480 480 419 L 555 419" class="conn-delegate" marker-end="url(#arr-cyan)"></path>
-  <path d="M 410 490 Q 490 490 490 474 L 555 474" class="conn-delegate" marker-end="url(#arr-cyan)"></path>
-  <path d="M 410 500 L 555 529" class="conn-delegate" marker-end="url(#arr-cyan)"></path>
-  <path d="M 410 510 Q 490 510 490 584 L 555 584" class="conn-delegate" marker-end="url(#arr-cyan)"></path>
-  <path d="M 410 520 Q 480 520 480 639 L 555 639" class="conn-delegate" marker-end="url(#arr-cyan)"></path>
-
-  
-  <text x="785" y="430" class="label-italic">each has its own</text>
-  <text x="785" y="445" class="label-italic">memory · skills · tools</text>
-
-  
-  <rect x="830" y="540" width="180" height="38" class="node-box node-output" rx="8"></rect>
-  <text x="920" y="558" text-anchor="middle" class="node-txt">📤 Telegram</text>
-  <text x="920" y="572" text-anchor="middle" class="node-sub">reply to user</text>
-
-  <rect x="830" y="585" width="180" height="38" class="node-box node-output" rx="8"></rect>
-  <text x="920" y="603" text-anchor="middle" class="node-txt">📝 Console</text>
-  <text x="920" y="617" text-anchor="middle" class="node-sub">per-agent logs</text>
-
-  
-  <text x="58" y="678" class="row-use">USE WHEN:</text>
-  <text x="155" y="678" class="row-desc">You want one chat that handles everything — and each domain has a specialist that&#39;s actually good at it.</text>
-
-  
-  
-  
-  <rect x="30" y="720" width="1040" height="240" class="row-card row-3"></rect>
-  <circle cx="58" cy="748" r="14" class="num-bg-3"></circle>
-  <text x="58" y="753" text-anchor="middle" class="num-txt">3</text>
-  <text x="84" y="748" class="row-title">Claude Assistant</text>
-  <text x="84" y="765" class="row-tag">15 nodes · Anthropic&#39;s Claude Code in a workflow, sessions persist across days</text>
-
-  
-  <rect x="50" y="810" width="120" height="38" class="node-box node-trigger" rx="8"></rect>
-  <text x="110" y="828" text-anchor="middle" class="node-txt">💬 Chat</text>
-  <text x="110" y="842" text-anchor="middle" class="node-sub">in-app panel</text>
-
-  <rect x="50" y="862" width="120" height="38" class="node-box node-trigger" rx="8"></rect>
-  <text x="110" y="880" text-anchor="middle" class="node-txt">📱 Telegram</text>
-  <text x="110" y="894" text-anchor="middle" class="node-sub">incoming message</text>
-
-  
-  <rect x="280" y="825" width="160" height="60" class="node-box node-agent-3" rx="10"></rect>
-  <text x="360" y="850" text-anchor="middle" class="node-txt" style="font-size: 14px;">🧠 Claude Code</text>
-  <text x="360" y="870" text-anchor="middle" class="node-sub">session-persistent CLI</text>
-
-  <path d="M 175 829 L 280 845" class="conn-flow-3" marker-end="url(#arr-green)"></path>
-  <path d="M 175 881 L 280 865" class="conn-flow-3" marker-end="url(#arr-green)"></path>
-
-  
-  <rect x="270" y="908" width="80" height="28" class="node-box node-helper" rx="5"></rect>
-  <text x="310" y="926" text-anchor="middle" class="node-sub">🧠 Memory</text>
-
-  <rect x="365" y="908" width="80" height="28" class="node-box node-helper" rx="5"></rect>
-  <text x="405" y="926" text-anchor="middle" class="node-sub">📚 Skills</text>
-
-  <path d="M 320 885 L 310 908" class="conn-dotted"></path>
-  <path d="M 400 885 L 405 908" class="conn-dotted"></path>
-
-  
-  <rect x="490" y="800" width="280" height="120" class="node-box" rx="10" style="fill: #fafafa; stroke: #d1d5db;"></rect>
-  <text x="630" y="820" text-anchor="middle" class="node-txt" style="fill: #6b7280;">🔧 Coding Toolbox</text>
-
-  <rect x="500" y="830" width="84" height="22" class="node-tool" rx="5"></rect>
-  <text x="542" y="845" text-anchor="middle" class="node-sub">📄 Files</text>
-
-  <rect x="592" y="830" width="84" height="22" class="node-tool" rx="5"></rect>
-  <text x="634" y="845" text-anchor="middle" class="node-sub">🔎 FS Search</text>
-
-  <rect x="684" y="830" width="84" height="22" class="node-tool" rx="5"></rect>
-  <text x="726" y="845" text-anchor="middle" class="node-sub">💻 Shell</text>
-
-  <rect x="500" y="858" width="84" height="22" class="node-tool" rx="5"></rect>
-  <text x="542" y="873" text-anchor="middle" class="node-sub">⚙ Processes</text>
-
-  <rect x="592" y="858" width="84" height="22" class="node-tool" rx="5"></rect>
-  <text x="634" y="873" text-anchor="middle" class="node-sub">🌐 Browser</text>
-
-  <rect x="684" y="858" width="84" height="22" class="node-tool" rx="5"></rect>
-  <text x="726" y="873" text-anchor="middle" class="node-sub">🔍 Search</text>
-
-  <rect x="592" y="886" width="84" height="22" class="node-tool" rx="5"></rect>
-  <text x="634" y="901" text-anchor="middle" class="node-sub">📋 Todos</text>
-
-  <path d="M 440 855 L 490 855" class="conn-flow-3" marker-end="url(#arr-green)"></path>
-
-  
-  <rect x="830" y="810" width="180" height="38" class="node-box node-output" rx="8"></rect>
-  <text x="920" y="828" text-anchor="middle" class="node-txt">📤 Telegram Send</text>
-  <text x="920" y="842" text-anchor="middle" class="node-sub">reply to user</text>
-
-  <rect x="830" y="862" width="180" height="38" class="node-box node-output" rx="8"></rect>
-  <text x="920" y="880" text-anchor="middle" class="node-txt">📝 Console</text>
-  <text x="920" y="894" text-anchor="middle" class="node-sub">live log in UI</text>
-
-  <path d="M 770 829 L 830 829" class="conn-flow-3" marker-end="url(#arr-green)"></path>
-  <path d="M 770 881 L 830 881" class="conn-flow-3" marker-end="url(#arr-green)"></path>
-
-  
-  <text x="58" y="945" class="row-use">USE WHEN:</text>
-  <text x="155" y="945" class="row-desc">Your AI needs to actually ship code — refactor, build features, debug — across sessions that persist.</text>
-
-  
-  <text x="550" y="995" text-anchor="middle" class="label-italic" style="font-size: 12px;">All three are real .json files in the /workflows folder. Open them in the canvas, edit anything, save as your own.</text>
-
+  <rect class="bg" width="1240" height="1320"/>
+
+  <!-- Header -->
+  <text x="620" y="42" text-anchor="middle" class="title">Three Workflows You Get on Day One</text>
+  <text x="620" y="68" text-anchor="middle" class="sub">Loaded automatically on first launch. Each shows a different pattern you can copy.</text>
+
+  <!-- ================= ROW 1: AI ASSISTANT (purple) ================= -->
+  <rect class="panel p-purple" x="30" y="95" width="1180" height="340" rx="10"/>
+  <text x="50" y="129" class="h1 accent-purple">AI Assistant</text>
+  <text x="50" y="151" class="sub">16 nodes &#183; one smart agent with a full toolbox</text>
+
+  <!-- triggers -->
+  <rect class="box p-orange" x="50" y="175" width="180" height="40" rx="6"/>
+  <text x="140" y="200" text-anchor="middle" class="h2">Chat Trigger</text>
+  <rect class="box p-orange" x="50" y="235" width="180" height="40" rx="6"/>
+  <text x="140" y="260" text-anchor="middle" class="h2">Telegram Receive</text>
+
+  <!-- agent -->
+  <rect class="box p-purple" x="380" y="195" width="200" height="60" rx="8"/>
+  <text x="480" y="230" text-anchor="middle" class="h2">AI Agent</text>
+
+  <path class="conn" d="M 230 195 L 380 213" marker-end="url(#arrow)"/>
+  <path class="conn" d="M 230 255 L 380 237" marker-end="url(#arrow)"/>
+
+  <!-- outputs -->
+  <rect class="box p-pink" x="700" y="175" width="180" height="40" rx="6"/>
+  <text x="790" y="200" text-anchor="middle" class="h2">Console</text>
+  <rect class="box p-pink" x="700" y="235" width="180" height="40" rx="6"/>
+  <text x="790" y="260" text-anchor="middle" class="h2">Telegram Send</text>
+
+  <path class="conn" d="M 580 213 L 700 195" marker-end="url(#arrow)"/>
+  <path class="conn" d="M 580 237 L 700 255" marker-end="url(#arrow)"/>
+
+  <!-- dotted attachment note -->
+  <path class="conn-dot" d="M 560 195 L 560 160 L 1020 160 L 1020 175"/>
+  <rect class="box p-cyan" x="930" y="175" width="250" height="44" rx="6"/>
+  <text x="1055" y="193" text-anchor="middle" class="sub">Memory + Skills</text>
+  <text x="1055" y="209" text-anchor="middle" class="sub">attached to the agent</text>
+
+  <!-- toolbox cluster -->
+  <path class="conn-dot" d="M 480 255 L 480 305"/>
+  <rect class="box p-purple" x="380" y="305" width="560" height="80" rx="8"/>
+  <text x="660" y="329" text-anchor="middle" class="h2 accent-purple">Toolbox (9 tools)</text>
+  <text x="660" y="351" text-anchor="middle" class="small">web search &#183; browser &#183; file read/write &#183; fs search</text>
+  <text x="660" y="369" text-anchor="middle" class="small">shell &#183; Python &#183; processes &#183; todos</text>
+
+  <text x="50" y="415" class="sub"><tspan class="accent-purple">Use when:</tspan> one AI that browses, runs code, and chats over Telegram.</text>
+
+  <!-- ================= ROW 2: AI EMPLOYEE (cyan) ================= -->
+  <rect class="panel p-cyan" x="30" y="465" width="1180" height="410" rx="10"/>
+  <text x="50" y="499" class="h1 accent-cyan">AI Employee</text>
+  <text x="50" y="521" class="sub">58 nodes &#183; a team lead that delegates to 5 specialists</text>
+
+  <!-- triggers -->
+  <rect class="box p-orange" x="50" y="541" width="180" height="40" rx="6"/>
+  <text x="140" y="566" text-anchor="middle" class="h2">Chat Trigger</text>
+  <rect class="box p-orange" x="50" y="599" width="180" height="40" rx="6"/>
+  <text x="140" y="624" text-anchor="middle" class="h2">Telegram Receive</text>
+  <rect class="box p-orange" x="50" y="657" width="180" height="40" rx="6"/>
+  <text x="140" y="682" text-anchor="middle" class="h2">Task Completed</text>
+
+  <!-- team lead -->
+  <rect class="box p-cyan" x="380" y="589" width="200" height="60" rx="8"/>
+  <text x="480" y="613" text-anchor="middle" class="h2">Zeenie</text>
+  <text x="480" y="633" text-anchor="middle" class="small">team lead</text>
+
+  <path class="conn" d="M 230 561 L 380 604" marker-end="url(#arrow)"/>
+  <path class="conn" d="M 230 619 L 380 619" marker-end="url(#arrow)"/>
+  <path class="conn" d="M 230 677 L 380 634" marker-end="url(#arrow)"/>
+
+  <!-- outputs -->
+  <rect class="box p-pink" x="700" y="570" width="180" height="40" rx="6"/>
+  <text x="790" y="595" text-anchor="middle" class="h2">Console</text>
+  <rect class="box p-pink" x="700" y="628" width="180" height="40" rx="6"/>
+  <text x="790" y="653" text-anchor="middle" class="h2">Telegram Send</text>
+
+  <path class="conn" d="M 580 609 L 700 590" marker-end="url(#arrow)"/>
+  <path class="conn" d="M 580 629 L 700 648" marker-end="url(#arrow)"/>
+
+  <!-- dotted attachment note -->
+  <path class="conn-dot" d="M 560 589 L 560 553 L 1020 553 L 1020 599"/>
+  <rect class="box p-purple" x="930" y="599" width="250" height="44" rx="6"/>
+  <text x="1055" y="617" text-anchor="middle" class="sub">own Memory + Skills</text>
+  <text x="1055" y="633" text-anchor="middle" class="sub">+ todos + processes</text>
+
+  <!-- delegation trunk + bus -->
+  <path class="conn" d="M 480 649 L 480 715"/>
+  <text x="495" y="690" class="label">delegates to</text>
+  <path class="conn" d="M 210 715 L 1050 715"/>
+  <path class="conn" d="M 210 715 L 210 746" marker-end="url(#arrow)"/>
+  <path class="conn" d="M 450 715 L 450 746" marker-end="url(#arrow)"/>
+  <path class="conn" d="M 670 715 L 670 746" marker-end="url(#arrow)"/>
+  <path class="conn" d="M 860 715 L 860 746" marker-end="url(#arrow)"/>
+  <path class="conn" d="M 1050 715 L 1050 746" marker-end="url(#arrow)"/>
+
+  <!-- specialists -->
+  <rect class="box p-cyan" x="110" y="747" width="200" height="56" rx="6"/>
+  <text x="210" y="770" text-anchor="middle" class="h2">Coding Agent</text>
+  <text x="210" y="790" text-anchor="middle" class="small">files &#183; shell &#183; Python</text>
+
+  <rect class="box p-cyan" x="335" y="747" width="230" height="56" rx="6"/>
+  <text x="450" y="770" text-anchor="middle" class="h2">Productivity Agent</text>
+  <text x="450" y="790" text-anchor="middle" class="small">Gmail &#183; Calendar &#183; Drive &#183; Sheets</text>
+
+  <rect class="box p-cyan" x="590" y="747" width="160" height="56" rx="6"/>
+  <text x="670" y="770" text-anchor="middle" class="h2">Travel Agent</text>
+  <text x="670" y="790" text-anchor="middle" class="small">Maps &#183; places</text>
+
+  <rect class="box p-cyan" x="775" y="747" width="170" height="56" rx="6"/>
+  <text x="860" y="770" text-anchor="middle" class="h2">Web Agent</text>
+  <text x="860" y="790" text-anchor="middle" class="small">browser &#183; HTTP &#183; search</text>
+
+  <rect class="box p-cyan" x="970" y="747" width="160" height="56" rx="6"/>
+  <text x="1050" y="770" text-anchor="middle" class="h2">Social Agent</text>
+  <text x="1050" y="790" text-anchor="middle" class="small">Twitter &#183; WhatsApp</text>
+
+  <text x="620" y="828" text-anchor="middle" class="small">each specialist has its own memory &#183; skills &#183; tools &#183; console</text>
+
+  <text x="50" y="856" class="sub"><tspan class="accent-cyan">Use when:</tspan> one chat handles everything, each domain gets a real specialist.</text>
+
+  <!-- ================= ROW 3: CLAUDE ASSISTANT (green) ================= -->
+  <rect class="panel p-green" x="30" y="905" width="1180" height="340" rx="10"/>
+  <text x="50" y="939" class="h1 accent-green">Claude Assistant</text>
+  <text x="50" y="961" class="sub">15 nodes &#183; Claude Code in a workflow, sessions persist across days</text>
+
+  <!-- triggers -->
+  <rect class="box p-orange" x="50" y="985" width="180" height="40" rx="6"/>
+  <text x="140" y="1010" text-anchor="middle" class="h2">Chat Trigger</text>
+  <rect class="box p-orange" x="50" y="1045" width="180" height="40" rx="6"/>
+  <text x="140" y="1070" text-anchor="middle" class="h2">Telegram Receive</text>
+
+  <!-- agent -->
+  <rect class="box p-green" x="380" y="1005" width="200" height="60" rx="8"/>
+  <text x="480" y="1040" text-anchor="middle" class="h2">Claude Code</text>
+
+  <path class="conn" d="M 230 1005 L 380 1023" marker-end="url(#arrow)"/>
+  <path class="conn" d="M 230 1065 L 380 1047" marker-end="url(#arrow)"/>
+
+  <!-- outputs -->
+  <rect class="box p-pink" x="700" y="985" width="180" height="40" rx="6"/>
+  <text x="790" y="1010" text-anchor="middle" class="h2">Console</text>
+  <rect class="box p-pink" x="700" y="1045" width="180" height="40" rx="6"/>
+  <text x="790" y="1070" text-anchor="middle" class="h2">Telegram Send</text>
+
+  <path class="conn" d="M 580 1023 L 700 1005" marker-end="url(#arrow)"/>
+  <path class="conn" d="M 580 1047 L 700 1065" marker-end="url(#arrow)"/>
+
+  <!-- dotted attachment note -->
+  <path class="conn-dot" d="M 560 1005 L 560 970 L 1020 970 L 1020 985"/>
+  <rect class="box p-cyan" x="930" y="985" width="250" height="44" rx="6"/>
+  <text x="1055" y="1011" text-anchor="middle" class="sub">Memory + Skills attached</text>
+
+  <!-- toolbox cluster -->
+  <path class="conn-dot" d="M 480 1065 L 480 1115"/>
+  <rect class="box p-green" x="380" y="1115" width="560" height="80" rx="8"/>
+  <text x="660" y="1139" text-anchor="middle" class="h2 accent-green">Coding toolbox (8 tools)</text>
+  <text x="660" y="1161" text-anchor="middle" class="small">files &#183; fs search &#183; shell &#183; processes</text>
+  <text x="660" y="1179" text-anchor="middle" class="small">browser &#183; web search &#183; todos</text>
+
+  <text x="50" y="1225" class="sub"><tspan class="accent-green">Use when:</tspan> your AI needs to actually ship code - refactor, build, debug.</text>
+
+  <!-- Footer -->
+  <text x="620" y="1285" text-anchor="middle" class="sub">All three are real .json files in the .opencompany/workflows folder. Open them on the canvas, edit anything, save your own version.</text>
 </svg>

@@ -1,114 +1,158 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" width="100%" preserveAspectRatio="xMidYMid meet" font-family="ui-monospace, &#39;SFMono-Regular&#39;, Menlo, Consolas, monospace">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1800 1080" width="100%" preserveAspectRatio="xMidYMid meet" font-family="ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace">
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#f8f8f2"></path>
+      <path d="M0,0 L10,5 L0,10 z" fill="#f8f8f2"/>
     </marker>
-    
+    <style>
+      .bg { fill: #282a36; }
+      .panel { fill: #44475a; stroke-width: 2; }
+      .p-cyan { stroke: #8be9fd; } .p-purple { stroke: #bd93f9; } .p-orange { stroke: #ffb86c; } .p-green { stroke: #50fa7b; } .p-pink { stroke: #ff79c6; }
+      .title { fill: #f8f8f2; font-size: 20px; font-weight: 700; }
+      .h1 { fill: #f8f8f2; font-size: 18px; font-weight: 700; }
+      .h2 { fill: #f8f8f2; font-size: 14px; font-weight: 700; }
+      .sub { fill: #f8f8f2; font-size: 12px; }
+      .small { fill: #f8f8f2; font-size: 10px; }
+      .label { fill: #f1fa8c; font-size: 11px; font-style: italic; }
+      .conn { stroke: #f8f8f2; stroke-width: 1.8; fill: none; }
+      .conn-dot { stroke: #6272a4; stroke-width: 1.5; fill: none; stroke-dasharray: 4 4; }
+      .box { fill: #282a36; stroke-width: 1.5; }
+      .tier-label { fill: #6272a4; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+      .accent-cyan { fill: #8be9fd; } .accent-purple { fill: #bd93f9; } .accent-green { fill: #50fa7b; } .accent-orange { fill: #ffb86c; } .accent-pink { fill: #ff79c6; }
+    </style>
   </defs>
+  <rect class="bg" width="1800" height="1080"/>
 
-  <rect class="bg" width="1200" height="720"></rect>
+  <text class="title" x="900" y="44" text-anchor="middle">OpenCompany - System Overview</text>
+  <text class="sub" x="900" y="70" text-anchor="middle">FastAPI plugin backend + React Flow client + sidecar processes (single-machine dev topology)</text>
 
-  
-  <text x="40" y="55" class="tier-label">Tier 1</text>
-  
-  <rect class="panel panel-frontend" x="40" y="70" width="760" height="110" rx="8"></rect>
-  <text x="60" y="100" class="title">Frontend (client/)</text>
-  <text x="60" y="128" class="sub">React + TypeScript + React Flow + Zustand + Ant Design</text>
-  <text x="60" y="148" class="sub">Dracula-themed canvas, parameter panel, credentials modal</text>
-  <text x="60" y="168" class="sub">96 workflow nodes rendered via INodeProperties interface</text>
+  <!-- ===== Tier: Browser ===== -->
+  <text class="tier-label" x="230" y="96">BROWSER</text>
+  <rect class="panel p-cyan" x="230" y="104" width="960" height="110" rx="10"/>
+  <rect class="box p-cyan" x="500" y="118" width="420" height="82" rx="8"/>
+  <text class="h2" x="710" y="144" text-anchor="middle">React Flow client</text>
+  <text class="sub" x="710" y="163" text-anchor="middle">client/ - Vite dev :3000</text>
+  <text class="sub" x="710" y="181" text-anchor="middle">React 19 + Tailwind v4 + shadcn/ui + Zustand</text>
 
-  
-  <path class="conn" d="M 420 180 L 420 240" marker-end="url(#arrow)"></path>
-  <path class="conn" d="M 420 240 L 420 180" marker-end="url(#arrow)"></path>
-  <text x="435" y="215" class="label">WebSocket /ws/status</text>
+  <!-- Browser <-> Backend -->
+  <path class="conn" d="M 558 218 L 558 314" marker-end="url(#arrow)"/>
+  <path class="conn" d="M 568 314 L 568 218" marker-end="url(#arrow)"/>
+  <text class="label" x="546" y="270" text-anchor="end">WebSocket /ws/status</text>
+  <path class="conn" d="M 860 218 L 860 314" marker-end="url(#arrow)"/>
+  <text class="label" x="874" y="270">REST /api/*</text>
 
-  
-  <text x="40" y="260" class="tier-label">Tier 2</text>
-  
-  <rect class="panel panel-backend" x="40" y="275" width="760" height="130" rx="8"></rect>
-  <text x="60" y="305" class="title">Backend (server/)</text>
-  <text x="60" y="333" class="sub">FastAPI + 89 WebSocket handlers + dependency injection container</text>
-  <text x="60" y="353" class="sub">WorkflowService (facade) -&gt; NodeExecutor -&gt; per-node handlers</text>
-  <text x="60" y="373" class="sub">ParameterResolver -&gt; template {{node.field}} substitution</text>
-  <text x="60" y="393" class="sub">AuthService -&gt; encrypted credentials (Fernet + PBKDF2)</text>
+  <!-- Inbound webhook into backend left edge -->
+  <path class="conn" d="M 40 430 L 226 430" marker-end="url(#arrow)"/>
+  <text class="label" x="130" y="414" text-anchor="middle">/webhook/{path} (inbound)</text>
 
-  
-  <path class="conn" d="M 420 405 L 420 465" marker-end="url(#arrow)"></path>
-  <text x="435" y="440" class="label">async handlers</text>
+  <!-- ===== Tier: Python backend ===== -->
+  <text class="tier-label" x="230" y="310">PYTHON BACKEND</text>
+  <rect class="panel p-purple" x="230" y="318" width="960" height="324" rx="10"/>
+  <text class="h1" x="710" y="348" text-anchor="middle">Python backend - FastAPI :3010 (server/)</text>
 
-  
-  <text x="40" y="485" class="tier-label">Tier 3</text>
-  
-  <rect class="panel panel-exec" x="40" y="500" width="760" height="180" rx="8"></rect>
-  <text x="60" y="530" class="title">Execution tier</text>
+  <rect class="box p-purple" x="250" y="368" width="435" height="70" rx="8"/>
+  <text class="h2" x="467" y="395" text-anchor="middle">WS + REST dispatch</text>
+  <text class="small" x="467" y="417" text-anchor="middle">core MESSAGE_HANDLERS + plugin ws_handler_registry</text>
 
-  
-  <rect class="small-box small-exec" x="60" y="545" width="140" height="50" rx="6"></rect>
-  <text x="130" y="568" class="sub" text-anchor="middle">Temporal</text>
-  <text x="130" y="584" class="sub" text-anchor="middle" font-size="10">distributed workers</text>
+  <rect class="box p-purple" x="735" y="368" width="435" height="70" rx="8"/>
+  <text class="h2" x="952" y="395" text-anchor="middle">WorkflowService -&gt; NodeExecutor</text>
+  <text class="sub" x="952" y="417" text-anchor="middle">ParameterResolver {{node.field}}</text>
 
-  <rect class="small-box small-exec" x="215" y="545" width="140" height="50" rx="6"></rect>
-  <text x="285" y="568" class="sub" text-anchor="middle">Redis</text>
-  <text x="285" y="584" class="sub" text-anchor="middle" font-size="10">cache + locks + streams</text>
+  <rect class="box p-purple" x="250" y="456" width="435" height="84" rx="8"/>
+  <text class="h2" x="467" y="483" text-anchor="middle">Node plugins (115+)</text>
+  <text class="small" x="467" y="503" text-anchor="middle">server/nodes/&lt;group&gt;/&lt;plugin&gt;/</text>
+  <text class="small" x="467" y="521" text-anchor="middle">Pydantic Params/Output = SSOT</text>
 
-  <rect class="small-box small-exec" x="370" y="545" width="140" height="50" rx="6"></rect>
-  <text x="440" y="568" class="sub" text-anchor="middle">SQLite</text>
-  <text x="440" y="584" class="sub" text-anchor="middle" font-size="10">workflow.db + credentials.db</text>
+  <rect class="box p-purple" x="735" y="456" width="435" height="84" rx="8"/>
+  <text class="h2" x="952" y="483" text-anchor="middle">AuthService</text>
+  <text class="sub" x="952" y="507" text-anchor="middle">Fernet + PBKDF2 encrypted credentials</text>
 
-  <rect class="small-box small-exec" x="525" y="545" width="140" height="50" rx="6"></rect>
-  <text x="595" y="568" class="sub" text-anchor="middle">Node.js server</text>
-  <text x="595" y="584" class="sub" text-anchor="middle" font-size="10">JS/TS code executor</text>
+  <rect class="box p-purple" x="250" y="558" width="920" height="64" rx="8"/>
+  <text class="h2" x="710" y="584" text-anchor="middle">Execution engine</text>
+  <text class="sub" x="710" y="607" text-anchor="middle">Temporal -&gt; Redis-parallel -&gt; sequential (auto-fallback)</text>
 
-  <rect class="small-box small-exec" x="60" y="608" width="220" height="50" rx="6"></rect>
-  <text x="170" y="631" class="sub" text-anchor="middle">WhatsApp RPC (port 9400)</text>
-  <text x="170" y="647" class="sub" text-anchor="middle" font-size="10">whatsapp-rpc binary</text>
+  <!-- Backend -> Sidecars -->
+  <path class="conn" d="M 710 646 L 710 722" marker-end="url(#arrow)"/>
+  <text class="label" x="724" y="688">spawns / calls</text>
 
-  <rect class="small-box small-exec" x="295" y="608" width="220" height="50" rx="6"></rect>
-  <text x="405" y="631" class="sub" text-anchor="middle">Android relay</text>
-  <text x="405" y="647" class="sub" text-anchor="middle" font-size="10">persistent WebSocket</text>
+  <!-- ===== Tier: Sidecar processes ===== -->
+  <text class="tier-label" x="230" y="718">SIDECAR PROCESSES</text>
+  <rect class="panel p-orange" x="230" y="726" width="960" height="120" rx="10"/>
 
-  <rect class="small-box small-exec" x="530" y="608" width="250" height="50" rx="6"></rect>
-  <text x="655" y="631" class="sub" text-anchor="middle">Temporal server</text>
-  <text x="655" y="647" class="sub" text-anchor="middle" font-size="10">ports 7233 / 8233 / 8080</text>
+  <rect class="box p-orange" x="250" y="746" width="215" height="80" rx="8"/>
+  <text class="h2" x="357" y="772" text-anchor="middle">Node.js executor :3020</text>
+  <text class="small" x="357" y="792" text-anchor="middle">Express + tsx</text>
+  <text class="small" x="357" y="808" text-anchor="middle">JS/TS code nodes</text>
 
-  
-  <text x="830" y="55" class="tier-label">External</text>
-  <rect class="panel panel-ext" x="830" y="70" width="340" height="610" rx="8"></rect>
-  <text x="850" y="100" class="title">External services</text>
+  <rect class="box p-orange" x="485" y="746" width="215" height="80" rx="8"/>
+  <text class="h2" x="592" y="772" text-anchor="middle">WhatsApp RPC :9400</text>
+  <text class="small" x="592" y="792" text-anchor="middle">Go whatsmeow binary</text>
 
-  <text x="850" y="130" class="sub" font-weight="700" fill="#8be9fd">LLM providers (10)</text>
-  <text x="850" y="150" class="sub">OpenAI, Anthropic, Gemini, OpenRouter,</text>
-  <text x="850" y="168" class="sub">xAI, DeepSeek, Kimi, Mistral, Groq, Cerebras</text>
+  <rect class="box p-orange" x="720" y="746" width="215" height="80" rx="8"/>
+  <text class="h2" x="827" y="772" text-anchor="middle">Temporal server</text>
+  <text class="small" x="827" y="792" text-anchor="middle">gRPC :7233 - Web UI :8080</text>
 
-  <text x="850" y="200" class="sub" font-weight="700" fill="#8be9fd">Google Workspace</text>
-  <text x="850" y="220" class="sub">Gmail, Calendar, Drive, Sheets,</text>
-  <text x="850" y="238" class="sub">Tasks, Contacts (unified OAuth)</text>
+  <rect class="box p-orange" x="955" y="746" width="215" height="80" rx="8"/>
+  <text class="h2" x="1062" y="772" text-anchor="middle">Temporal workers</text>
+  <text class="small" x="1062" y="792" text-anchor="middle">manager + per-queue</text>
+  <text class="small" x="1062" y="808" text-anchor="middle">worker pool</text>
 
-  <text x="850" y="270" class="sub" font-weight="700" fill="#8be9fd">Social platforms</text>
-  <text x="850" y="290" class="sub">WhatsApp, Telegram, Twitter/X,</text>
-  <text x="850" y="308" class="sub">Discord, Slack, Signal (unified)</text>
+  <!-- Backend -> Storage (routed around sidecar tier) -->
+  <path class="conn" d="M 230 610 L 170 610 L 170 985 L 226 985" marker-end="url(#arrow)"/>
+  <text class="label" x="162" y="800" text-anchor="end">read/write</text>
 
-  <text x="850" y="340" class="sub" font-weight="700" fill="#8be9fd">Search APIs</text>
-  <text x="850" y="360" class="sub">Brave, Serper, Perplexity,</text>
-  <text x="850" y="378" class="sub">DuckDuckGo (free)</text>
+  <!-- ===== Tier: Storage ===== -->
+  <text class="tier-label" x="230" y="922">STORAGE</text>
+  <rect class="panel p-pink" x="230" y="930" width="960" height="110" rx="10"/>
+  <rect class="box p-pink" x="250" y="950" width="920" height="70" rx="8"/>
+  <text class="h2" x="710" y="977" text-anchor="middle">~/.opencompany/</text>
+  <text class="sub" x="710" y="1000" text-anchor="middle">workflow.db - credentials.db - temporal.db - Redis cache/locks (optional)</text>
 
-  <text x="850" y="410" class="sub" font-weight="700" fill="#8be9fd">Web scraping</text>
-  <text x="850" y="430" class="sub">Apify actors, Crawlee scraper,</text>
-  <text x="850" y="448" class="sub">residential proxy providers</text>
+  <!-- Backend / Sidecars -> External services -->
+  <path class="conn" d="M 1194 480 L 1316 480" marker-end="url(#arrow)"/>
+  <text class="label" x="1255" y="464" text-anchor="middle">HTTP / SDK / CLI</text>
+  <path class="conn" d="M 1194 786 L 1316 786" marker-end="url(#arrow)"/>
+  <text class="label" x="1255" y="770" text-anchor="middle">HTTP / SDK / CLI</text>
 
-  <text x="850" y="480" class="sub" font-weight="700" fill="#8be9fd">Device integration</text>
-  <text x="850" y="500" class="sub">Android via ADB relay,</text>
-  <text x="850" y="518" class="sub">16 Android service nodes</text>
+  <!-- ===== External services (right column) ===== -->
+  <text class="tier-label" x="1320" y="96">EXTERNAL SERVICES</text>
+  <rect class="panel p-green" x="1320" y="104" width="440" height="936" rx="10"/>
+  <text class="h1" x="1540" y="134" text-anchor="middle">External services</text>
 
-  <text x="850" y="550" class="sub" font-weight="700" fill="#8be9fd">Vector + RAG</text>
-  <text x="850" y="570" class="sub">ChromaDB, Qdrant, Pinecone,</text>
-  <text x="850" y="588" class="sub">HuggingFace embeddings</text>
+  <rect class="box p-green" x="1340" y="152" width="400" height="100" rx="8"/>
+  <text class="h2" x="1540" y="177" text-anchor="middle">LLM providers (12)</text>
+  <text class="sub" x="1540" y="197" text-anchor="middle">OpenAI, Anthropic, Gemini, OpenRouter, xAI,</text>
+  <text class="sub" x="1540" y="215" text-anchor="middle">DeepSeek, Kimi, Mistral, Groq, Cerebras</text>
+  <text class="sub" x="1540" y="233" text-anchor="middle">local: Ollama, LM Studio</text>
 
-  <text x="850" y="620" class="sub" font-weight="700" fill="#8be9fd">Maps</text>
-  <text x="850" y="640" class="sub">Google Maps Geocoding,</text>
-  <text x="850" y="658" class="sub">Places nearbySearch</text>
+  <rect class="box p-green" x="1340" y="280" width="400" height="60" rx="8"/>
+  <text class="h2" x="1540" y="305" text-anchor="middle">Google Workspace</text>
+  <text class="sub" x="1540" y="325" text-anchor="middle">Gmail, Calendar, Drive, Sheets, Tasks, Contacts</text>
 
-  
-  <path class="conn" d="M 800 590 L 830 590" marker-end="url(#arrow)"></path>
-  <text x="805" y="580" class="label">HTTP / SDK</text>
+  <rect class="box p-green" x="1340" y="368" width="400" height="60" rx="8"/>
+  <text class="h2" x="1540" y="393" text-anchor="middle">Messaging</text>
+  <text class="sub" x="1540" y="413" text-anchor="middle">WhatsApp, Telegram, Twitter/X</text>
+
+  <rect class="box p-green" x="1340" y="456" width="400" height="60" rx="8"/>
+  <text class="h2" x="1540" y="481" text-anchor="middle">Search APIs</text>
+  <text class="sub" x="1540" y="501" text-anchor="middle">DuckDuckGo (free), Brave, Serper, Perplexity</text>
+
+  <rect class="box p-green" x="1340" y="544" width="400" height="60" rx="8"/>
+  <text class="h2" x="1540" y="569" text-anchor="middle">Web scraping</text>
+  <text class="sub" x="1540" y="589" text-anchor="middle">Apify actors, Crawlee, residential proxies</text>
+
+  <rect class="box p-green" x="1340" y="632" width="400" height="60" rx="8"/>
+  <text class="h2" x="1540" y="657" text-anchor="middle">Dev CLIs</text>
+  <text class="sub" x="1540" y="677" text-anchor="middle">GitHub (gh), Vercel, Stripe</text>
+
+  <rect class="box p-green" x="1340" y="720" width="400" height="60" rx="8"/>
+  <text class="h2" x="1540" y="745" text-anchor="middle">Device</text>
+  <text class="sub" x="1540" y="765" text-anchor="middle">Android via relay - 16 service nodes</text>
+
+  <rect class="box p-green" x="1340" y="808" width="400" height="60" rx="8"/>
+  <text class="h2" x="1540" y="833" text-anchor="middle">Vector + RAG</text>
+  <text class="sub" x="1540" y="853" text-anchor="middle">ChromaDB, Qdrant, Pinecone</text>
+
+  <rect class="box p-green" x="1340" y="896" width="400" height="60" rx="8"/>
+  <text class="h2" x="1540" y="921" text-anchor="middle">Maps</text>
+  <text class="sub" x="1540" y="941" text-anchor="middle">Google Maps Geocoding + Places</text>
 </svg>

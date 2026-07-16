@@ -1,138 +1,121 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 900" width="100%" preserveAspectRatio="xMidYMid meet" font-family="ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1165 985" width="100%" preserveAspectRatio="xMidYMid meet" font-family="ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace">
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#f8f8f2"/>
     </marker>
     <style>
       .bg { fill: #282a36; }
-      .entry { fill: #44475a; stroke: #f1fa8c; stroke-width: 2.5; }
-      .method { fill: #44475a; stroke: #ffb86c; stroke-width: 2; }
-      .decision { fill: #44475a; stroke: #bd93f9; stroke-width: 2.5; }
-      .native { fill: #44475a; stroke: #8be9fd; stroke-width: 2; }
-      .langchain { fill: #44475a; stroke: #bd93f9; stroke-width: 2; }
-      .shared { fill: #44475a; stroke: #50fa7b; stroke-width: 2.5; }
-      .title { fill: #f8f8f2; font-size: 16px; font-weight: 700; }
-      .big { fill: #f8f8f2; font-size: 17px; font-weight: 700; }
-      .sub { fill: #f8f8f2; font-size: 11px; }
-      .path { fill: #8be9fd; font-size: 11px; }
-      .path-lc { fill: #bd93f9; font-size: 11px; }
+      .panel { fill: #44475a; stroke-width: 2; }
+      .p-cyan { stroke: #8be9fd; } .p-purple { stroke: #bd93f9; } .p-orange { stroke: #ffb86c; } .p-green { stroke: #50fa7b; } .p-pink { stroke: #ff79c6; }
+      .title { fill: #f8f8f2; font-size: 20px; font-weight: 700; }
+      .h1 { fill: #f8f8f2; font-size: 18px; font-weight: 700; }
+      .h2 { fill: #f8f8f2; font-size: 14px; font-weight: 700; }
+      .sub { fill: #f8f8f2; font-size: 12px; }
+      .small { fill: #f8f8f2; font-size: 10px; }
+      .label { fill: #f1fa8c; font-size: 11px; font-style: italic; }
       .conn { stroke: #f8f8f2; stroke-width: 1.8; fill: none; }
-      .conn-native { stroke: #8be9fd; stroke-width: 2; fill: none; }
-      .conn-lc { stroke: #bd93f9; stroke-width: 2; fill: none; }
-      .branch-label { fill: #f1fa8c; font-size: 12px; font-style: italic; font-weight: 700; }
-      .col-header { fill: #6272a4; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; }
-      .caption { fill: #6272a4; font-size: 11px; }
+      .conn-dot { stroke: #6272a4; stroke-width: 1.5; fill: none; stroke-dasharray: 4 4; }
+      .box { fill: #282a36; stroke-width: 1.5; }
+      .tier-label { fill: #6272a4; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+      .accent-cyan { fill: #8be9fd; } .accent-purple { fill: #bd93f9; } .accent-green { fill: #50fa7b; } .accent-orange { fill: #ffb86c; } .accent-pink { fill: #ff79c6; }
     </style>
   </defs>
-
-  <rect class="bg" width="1400" height="900"/>
+  <rect class="bg" width="1165" height="985"/>
 
   <!-- Title -->
-  <text x="700" y="35" class="title" text-anchor="middle" font-size="20">AI Service: Native SDK vs LangChain Routing</text>
-  <text x="700" y="58" class="caption" text-anchor="middle">server/services/ai.py + server/services/llm/</text>
+  <text class="title" x="582" y="42" text-anchor="middle">AI Service - Chat (native SDKs) vs Agent (LangChain loop)</text>
+  <text class="sub" x="582" y="66" text-anchor="middle">server/services/ai.py + server/services/llm/</text>
 
-  <!-- AIService entry -->
-  <rect class="entry" x="540" y="85" width="320" height="70" rx="8"/>
-  <text x="700" y="115" class="big" text-anchor="middle">AIService</text>
-  <text x="700" y="138" class="sub" text-anchor="middle">server/services/ai.py (~4500 lines)</text>
+  <!-- Entry -->
+  <rect class="panel p-pink" x="452" y="85" width="260" height="60" rx="8"/>
+  <text class="h1" x="582" y="112" text-anchor="middle">AIService</text>
+  <text class="sub" x="582" y="133" text-anchor="middle">server/services/ai.py</text>
 
-  <!-- Branch arrows to two methods -->
-  <path class="conn" d="M 700 155 L 700 185 L 300 185 L 300 215" marker-end="url(#arrow)"/>
-  <path class="conn" d="M 700 155 L 700 185 L 1100 185 L 1100 215" marker-end="url(#arrow)"/>
+  <!-- Entry arrows -->
+  <path class="conn" d="M 512 145 V 156 H 340 V 200" marker-end="url(#arrow)"/>
+  <text class="label" x="400" y="152" text-anchor="middle">chat completion</text>
+  <path class="conn" d="M 652 145 V 156 H 900 V 200" marker-end="url(#arrow)"/>
+  <text class="label" x="795" y="152" text-anchor="middle">agent with tools</text>
 
-  <!-- Column headers -->
-  <text x="300" y="205" class="col-header" text-anchor="middle">Method 1: Direct Chat</text>
-  <text x="1100" y="205" class="col-header" text-anchor="middle">Method 2: Agent Tool-Calling</text>
+  <!-- Chat panel (cyan) -->
+  <text class="h2 accent-cyan" x="44" y="172">Chat path - native SDKs, unified</text>
+  <rect class="panel p-cyan" x="40" y="180" width="510" height="470" rx="10"/>
 
-  <!-- LEFT COLUMN: execute_chat -->
-  <rect class="method" x="120" y="215" width="360" height="75" rx="8"/>
-  <text x="300" y="243" class="big" text-anchor="middle">execute_chat(parameters)</text>
-  <text x="300" y="265" class="sub" text-anchor="middle">Used by chat model nodes</text>
-  <text x="300" y="283" class="caption" text-anchor="middle">openaiChatModel, anthropicChatModel, ...</text>
+  <rect class="box p-cyan" x="60" y="200" width="470" height="58" rx="6"/>
+  <text class="h2" x="295" y="224" text-anchor="middle">execute_chat(...)</text>
+  <text class="sub" x="295" y="244" text-anchor="middle">chat-model nodes: openaiChatModel, anthropicChatModel, ...</text>
 
-  <!-- Decision: is_native_provider -->
-  <polygon class="decision" points="300,310 470,385 300,460 130,385"/>
-  <text x="300" y="375" class="big" text-anchor="middle">is_native_provider</text>
-  <text x="300" y="400" class="big" text-anchor="middle">(provider)?</text>
+  <path class="conn" d="M 295 258 L 295 306" marker-end="url(#arrow)"/>
+  <text class="label" x="305" y="286">delegates (every provider)</text>
 
-  <!-- Arrow from method to decision -->
-  <path class="conn" d="M 300 290 L 300 310" marker-end="url(#arrow)"/>
+  <rect class="box p-cyan" x="60" y="306" width="470" height="76" rx="6"/>
+  <text class="h2" x="295" y="330" text-anchor="middle">ChatUnifier.chat(provider=...)</text>
+  <text class="sub" x="295" y="350" text-anchor="middle">single facade - no per-provider branch</text>
+  <text class="sub" x="295" y="368" text-anchor="middle">typed SDK errors -&gt; NodeUserError</text>
 
-  <!-- Branch yes (native) -->
-  <path class="conn-native" d="M 470 385 L 530 385 L 530 495" marker-end="url(#arrow)"/>
-  <text x="505" y="375" class="branch-label">yes</text>
+  <path class="conn" d="M 295 382 L 295 430" marker-end="url(#arrow)"/>
+  <text class="label" x="305" y="410">lookup</text>
 
-  <!-- Branch no (LangChain fallback) -->
-  <path class="conn-lc" d="M 130 385 L 70 385 L 70 495" marker-end="url(#arrow)"/>
-  <text x="95" y="375" class="branch-label">no</text>
+  <rect class="box p-cyan" x="60" y="430" width="470" height="58" rx="6"/>
+  <text class="h2" x="295" y="454" text-anchor="middle">ProviderRegistry</text>
+  <text class="sub" x="295" y="474" text-anchor="middle">get_provider(name) -&gt; ProviderSpec.factory(...)</text>
 
-  <!-- Native path box -->
-  <rect class="native" x="340" y="495" width="380" height="150" rx="8"/>
-  <text x="530" y="522" class="title" text-anchor="middle" fill="#8be9fd">Native SDK Path</text>
-  <text x="530" y="545" class="sub" text-anchor="middle">create_provider(name, api_key)</text>
-  <text x="530" y="563" class="sub" text-anchor="middle">lazy-imports one of:</text>
-  <text x="530" y="582" class="path" text-anchor="middle">AnthropicProvider / OpenAIProvider</text>
-  <text x="530" y="600" class="path" text-anchor="middle">GeminiProvider / OpenRouterProvider</text>
-  <text x="530" y="622" class="sub" text-anchor="middle">OpenAI-compatible (xAI, DeepSeek,</text>
-  <text x="530" y="638" class="sub" text-anchor="middle">Kimi, Mistral): shared OpenAIProvider + base_url</text>
+  <path class="conn" d="M 295 488 L 295 536" marker-end="url(#arrow)"/>
+  <text class="label" x="305" y="516">spec.factory()</text>
 
-  <!-- LangChain fallback box -->
-  <rect class="langchain" x="10" y="495" width="260" height="150" rx="8"/>
-  <text x="140" y="522" class="title" text-anchor="middle" fill="#bd93f9">LangChain Fallback</text>
-  <text x="140" y="545" class="sub" text-anchor="middle">create_model()</text>
-  <text x="140" y="565" class="path-lc" text-anchor="middle">ChatGroq</text>
-  <text x="140" y="583" class="path-lc" text-anchor="middle">ChatCerebras</text>
-  <text x="140" y="608" class="sub" text-anchor="middle">(providers without native</text>
-  <text x="140" y="624" class="sub" text-anchor="middle">SDK implementation yet)</text>
+  <rect class="box p-cyan" x="60" y="536" width="470" height="94" rx="6"/>
+  <text class="h2" x="295" y="560" text-anchor="middle">Native provider clients (12)</text>
+  <text class="sub" x="295" y="580" text-anchor="middle">Anthropic &#183; OpenAI &#183; Gemini &#183; OpenRouter</text>
+  <text class="sub" x="295" y="598" text-anchor="middle">OpenAI-compat via base_url: xAI, DeepSeek, Kimi,</text>
+  <text class="sub" x="295" y="616" text-anchor="middle">Mistral, Groq, Cerebras, Ollama, LM Studio</text>
 
-  <!-- Both converge on LLMResponse -->
-  <path class="conn-native" d="M 530 645 L 530 690" marker-end="url(#arrow)"/>
-  <path class="conn-lc" d="M 140 645 L 140 680 L 340 680 L 340 690" marker-end="url(#arrow)"/>
+  <!-- Agent panel (purple) -->
+  <text class="h2 accent-purple" x="589" y="172">Agent path - LangChain tool loop</text>
+  <rect class="panel p-purple" x="585" y="180" width="540" height="382" rx="10"/>
 
-  <!-- RIGHT COLUMN: execute_agent / execute_chat_agent -->
-  <rect class="method" x="920" y="215" width="360" height="75" rx="8"/>
-  <text x="1100" y="243" class="big" text-anchor="middle">execute_agent(parameters)</text>
-  <text x="1100" y="263" class="sub" text-anchor="middle">execute_chat_agent(parameters)</text>
-  <text x="1100" y="283" class="caption" text-anchor="middle">aiAgent, chatAgent, 11 specialized + 2 team leads</text>
+  <rect class="box p-purple" x="605" y="200" width="500" height="76" rx="6"/>
+  <text class="h2" x="855" y="224" text-anchor="middle">execute_agent / execute_chat_agent</text>
+  <text class="sub" x="855" y="244" text-anchor="middle">aiAgent, chatAgent + specialized agents + team leads</text>
+  <text class="sub" x="855" y="262" text-anchor="middle">(CLI agents rlm / claude_code / codex bypass this loop)</text>
 
-  <!-- Arrow -->
-  <path class="conn-lc" d="M 1100 290 L 1100 330" marker-end="url(#arrow)"/>
+  <path class="conn" d="M 855 276 L 855 324" marker-end="url(#arrow)"/>
+  <text class="label" x="865" y="304">builds model</text>
 
-  <!-- LangChain chat model box -->
-  <rect class="langchain" x="920" y="330" width="360" height="130" rx="8"/>
-  <text x="1100" y="358" class="title" text-anchor="middle" fill="#bd93f9">LangChain chat model</text>
-  <text x="1100" y="382" class="sub" text-anchor="middle">create_model() -&gt; LangChain class</text>
-  <text x="1100" y="402" class="path-lc" text-anchor="middle">ChatOpenAI / ChatAnthropic</text>
-  <text x="1100" y="420" class="path-lc" text-anchor="middle">ChatGoogleGenerativeAI / ChatGroq / ...</text>
-  <text x="1100" y="442" class="sub" text-anchor="middle">.bind_tools([StructuredTool, ...])</text>
+  <rect class="box p-purple" x="605" y="324" width="500" height="76" rx="6"/>
+  <text class="h2" x="855" y="348" text-anchor="middle">create_model() -&gt; LangChain chat model</text>
+  <text class="sub" x="855" y="368" text-anchor="middle">ChatOpenAI / ChatAnthropic / ChatGoogleGenerativeAI / ...</text>
+  <text class="sub" x="855" y="386" text-anchor="middle">.bind_tools([StructuredTool, ...])</text>
 
-  <!-- Arrow to agent loop -->
-  <path class="conn-lc" d="M 1100 460 L 1100 500" marker-end="url(#arrow)"/>
+  <path class="conn" d="M 855 400 L 855 448" marker-end="url(#arrow)"/>
+  <text class="label" x="865" y="428">bind_tools</text>
 
-  <!-- _run_agent_loop box -->
-  <rect class="langchain" x="900" y="500" width="400" height="155" rx="8"/>
-  <text x="1100" y="528" class="title" text-anchor="middle" fill="#bd93f9">_run_agent_loop (plain async)</text>
-  <text x="1100" y="552" class="sub" text-anchor="middle">for iteration in range(max): ainvoke -&gt; tool_calls?</text>
-  <text x="1100" y="572" class="sub" text-anchor="middle">if tools: dispatch each, append ToolMessage, loop</text>
-  <text x="1100" y="592" class="sub" text-anchor="middle">else: return final response</text>
-  <text x="1100" y="615" class="caption" text-anchor="middle">Max iterations guard against tool loops</text>
-  <text x="1100" y="635" class="caption" text-anchor="middle">Agent Teams: delegate_to_&lt;type&gt; tools auto-injected</text>
+  <rect class="box p-purple" x="605" y="448" width="500" height="94" rx="6"/>
+  <text class="h2" x="855" y="472" text-anchor="middle">_run_agent_loop (plain async)</text>
+  <text class="sub" x="855" y="492" text-anchor="middle">loop: ainvoke -&gt; tool_calls? dispatch -&gt; ToolMessage</text>
+  <text class="sub" x="855" y="510" text-anchor="middle">max-iterations guard &#183; delegate_to_&lt;type&gt; auto-injected</text>
+  <text class="sub" x="855" y="528" text-anchor="middle">hot-rebind of tools after canvas mutations</text>
 
-  <!-- Both columns converge on shared LLMResponse -->
-  <rect class="shared" x="340" y="690" width="720" height="85" rx="8"/>
-  <text x="700" y="718" class="title" text-anchor="middle" fill="#50fa7b">Normalized LLMResponse</text>
-  <text x="700" y="740" class="sub" text-anchor="middle">content, thinking, tool_calls, usage (tokens), model, finish_reason</text>
-  <text x="700" y="758" class="caption" text-anchor="middle">services/llm/protocol.py -- dataclass shared across all providers</text>
+  <!-- Convergence arrows -->
+  <path class="conn" d="M 295 630 V 662 H 462 V 706" marker-end="url(#arrow)"/>
+  <text class="label" x="307" y="680">LLMResponse</text>
+  <path class="conn" d="M 855 542 V 662 H 702 V 706" marker-end="url(#arrow)"/>
+  <text class="label" x="867" y="575">final message</text>
 
-  <!-- Arrow from right column to shared -->
-  <path class="conn-lc" d="M 1100 655 L 1100 685 L 720 685 L 720 690" marker-end="url(#arrow)"/>
+  <!-- Shared panel (green) -->
+  <text class="h2 accent-green" x="582" y="682" text-anchor="middle">Shared convergence</text>
+  <rect class="panel p-green" x="282" y="690" width="600" height="254" rx="10"/>
 
-  <!-- Shared infrastructure at bottom -->
-  <rect class="shared" x="200" y="800" width="1000" height="80" rx="8"/>
-  <text x="700" y="828" class="title" text-anchor="middle" fill="#50fa7b">Shared Infrastructure</text>
-  <text x="700" y="850" class="sub" text-anchor="middle">compaction.py: token tracking, cost calculation, model-aware compaction (50% of context window)</text>
-  <text x="700" y="868" class="sub" text-anchor="middle">pricing.py: USD cost per provider from config/pricing.json &#160;|&#160; model_registry.py: context length lookup</text>
+  <rect class="box p-green" x="302" y="706" width="560" height="76" rx="6"/>
+  <text class="h2" x="582" y="730" text-anchor="middle">Normalized response</text>
+  <text class="sub" x="582" y="750" text-anchor="middle">content &#183; thinking &#183; tool_calls &#183; usage &#183; model &#183; finish_reason</text>
+  <text class="sub" x="582" y="768" text-anchor="middle">services/llm/protocol.py (agent path: same fields in a result dict)</text>
 
-  <!-- Arrow from LLMResponse down to shared infra -->
-  <path class="conn" d="M 700 775 L 700 800" marker-end="url(#arrow)"/>
+  <path class="conn" d="M 582 782 L 582 830" marker-end="url(#arrow)"/>
+  <text class="label" x="594" y="810">token/cost tracking after each turn</text>
+
+  <rect class="box p-green" x="302" y="830" width="560" height="94" rx="6"/>
+  <text class="h2" x="582" y="854" text-anchor="middle">Shared infrastructure</text>
+  <text class="sub" x="582" y="874" text-anchor="middle">compaction.py: post-turn token tracking + model-aware compaction</text>
+  <text class="sub" x="582" y="892" text-anchor="middle">pricing.py: USD cost from config/pricing.json</text>
+  <text class="sub" x="582" y="910" text-anchor="middle">model_registry.py: context-length lookup</text>
 </svg>

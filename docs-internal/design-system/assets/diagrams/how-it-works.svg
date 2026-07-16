@@ -1,164 +1,101 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 620" width="100%" preserveAspectRatio="xMidYMid meet" font-family="-apple-system, BlinkMacSystemFont, &#39;Segoe UI&#39;, Roboto, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1800 540" width="100%" preserveAspectRatio="xMidYMid meet" font-family="ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace">
   <defs>
-    <marker id="arrow-flow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#6b7280"></path>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f8f8f2"/>
     </marker>
-    
+    <style>
+      .bg { fill: #282a36; }
+      .panel { fill: #44475a; stroke-width: 2; }
+      .p-cyan { stroke: #8be9fd; } .p-purple { stroke: #bd93f9; } .p-orange { stroke: #ffb86c; } .p-green { stroke: #50fa7b; } .p-pink { stroke: #ff79c6; }
+      .title { fill: #f8f8f2; font-size: 20px; font-weight: 700; }
+      .h1 { fill: #f8f8f2; font-size: 18px; font-weight: 700; }
+      .h2 { fill: #f8f8f2; font-size: 14px; font-weight: 700; }
+      .sub { fill: #f8f8f2; font-size: 12px; }
+      .small { fill: #f8f8f2; font-size: 10px; }
+      .label { fill: #f1fa8c; font-size: 11px; font-style: italic; }
+      .conn { stroke: #f8f8f2; stroke-width: 1.8; fill: none; }
+      .conn-dot { stroke: #6272a4; stroke-width: 1.5; fill: none; stroke-dasharray: 4 4; }
+      .box { fill: #282a36; stroke-width: 1.5; }
+      .tier-label { fill: #6272a4; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+      .accent-cyan { fill: #8be9fd; } .accent-purple { fill: #bd93f9; } .accent-green { fill: #50fa7b; } .accent-orange { fill: #ffb86c; } .accent-pink { fill: #ff79c6; }
+    </style>
   </defs>
+  <rect class="bg" width="1800" height="540"/>
 
-  <rect width="1100" height="620" class="bg"></rect>
+  <!-- Header -->
+  <text class="title" x="900" y="46" text-anchor="middle">How OpenCompany Works</text>
+  <text class="sub" x="900" y="74" text-anchor="middle">Build AI workflows visually, connect them to your apps, run everything on your own computer.</text>
 
-  
-  <text x="550" y="40" text-anchor="middle" class="header">How OpenCompany Works</text>
-  <text x="550" y="62" text-anchor="middle" class="subheader">Build AI workflows visually. Connect them to your apps. Run everything on your own computer.</text>
+  <!-- Step 1: Pick your blocks -->
+  <rect class="panel p-purple" x="43" y="110" width="266" height="140" rx="10"/>
+  <circle class="accent-purple" cx="176" cy="142" r="15"/>
+  <text x="176" y="148" text-anchor="middle" font-size="16" font-weight="700" fill="#282a36">1</text>
+  <text class="h2" x="176" y="172" text-anchor="middle">Pick your blocks</text>
+  <text class="sub" x="176" y="196" text-anchor="middle">Drag nodes from the palette -</text>
+  <text class="sub" x="176" y="214" text-anchor="middle">100+ blocks: AI Agent, Chat,</text>
+  <text class="sub" x="176" y="232" text-anchor="middle">Telegram, Gmail, and more</text>
 
-  
-  <rect x="40" y="100" width="240" height="200" class="step-card-accent accent-1"></rect>
-  <circle cx="68" cy="128" r="14" class="step-num-bg-1"></circle>
-  <text x="68" y="133" text-anchor="middle" class="step-num">1</text>
-  <text x="92" y="133" class="step-title">Pick from 100+ nodes</text>
+  <!-- Arrow 1 -> 2 -->
+  <text class="label" x="357" y="173" text-anchor="middle">drag</text>
+  <path class="conn" d="M 313 185 L 399 185" marker-end="url(#arrow)"/>
 
-  <rect x="60" y="155" width="200" height="22" class="node-mini"></rect>
-  <text x="70" y="170" class="node-mini-text">🤖  AI Agent</text>
+  <!-- Step 2: Connect them -->
+  <rect class="panel p-purple" x="405" y="110" width="266" height="140" rx="10"/>
+  <circle class="accent-purple" cx="538" cy="142" r="15"/>
+  <text x="538" y="148" text-anchor="middle" font-size="16" font-weight="700" fill="#282a36">2</text>
+  <text class="h2" x="538" y="172" text-anchor="middle">Connect them</text>
+  <text class="sub" x="538" y="196" text-anchor="middle">Wire trigger &#8594; AI Agent &#8594; reply.</text>
+  <text class="sub" x="538" y="214" text-anchor="middle">Attach Memory, Skills, and</text>
+  <text class="sub" x="538" y="232" text-anchor="middle">Tools to the agent</text>
 
-  <rect x="60" y="183" width="200" height="22" class="node-mini"></rect>
-  <text x="70" y="198" class="node-mini-text">💬  Chat Trigger</text>
+  <!-- Arrow 2 -> 3 -->
+  <text class="label" x="719" y="173" text-anchor="middle">wire</text>
+  <path class="conn" d="M 675 185 L 761 185" marker-end="url(#arrow)"/>
 
-  <rect x="60" y="211" width="200" height="22" class="node-mini"></rect>
-  <text x="70" y="226" class="node-mini-text">📱  Telegram</text>
+  <!-- Step 3: Add your keys -->
+  <rect class="panel p-purple" x="767" y="110" width="266" height="140" rx="10"/>
+  <circle class="accent-purple" cx="900" cy="142" r="15"/>
+  <text x="900" y="148" text-anchor="middle" font-size="16" font-weight="700" fill="#282a36">3</text>
+  <text class="h2" x="900" y="172" text-anchor="middle">Add your keys</text>
+  <text class="sub" x="900" y="196" text-anchor="middle">Open API Credentials, paste a</text>
+  <text class="sub" x="900" y="214" text-anchor="middle">provider key, pick a model</text>
+  <text class="sub" x="900" y="232" text-anchor="middle">(or run one locally, free)</text>
 
-  <rect x="60" y="239" width="200" height="22" class="node-mini"></rect>
-  <text x="70" y="254" class="node-mini-text">📧  Gmail</text>
+  <!-- Arrow 3 -> 4 -->
+  <text class="label" x="1081" y="173" text-anchor="middle">configure</text>
+  <path class="conn" d="M 1037 185 L 1123 185" marker-end="url(#arrow)"/>
 
-  <rect x="60" y="267" width="200" height="22" class="node-mini"></rect>
-  <text x="70" y="282" class="node-mini-text">+ many more...</text>
+  <!-- Step 4: Test it, then start it -->
+  <rect class="panel p-purple" x="1129" y="110" width="266" height="140" rx="10"/>
+  <circle class="accent-purple" cx="1262" cy="142" r="15"/>
+  <text x="1262" y="148" text-anchor="middle" font-size="16" font-weight="700" fill="#282a36">4</text>
+  <text class="h2" x="1262" y="172" text-anchor="middle">Test it, then start it</text>
+  <text class="sub" x="1262" y="196" text-anchor="middle">Run tests one node in place.</text>
+  <text class="sub" x="1262" y="214" text-anchor="middle">Start deploys the whole workflow</text>
+  <text class="sub" x="1262" y="232" text-anchor="middle">(the button flips to Stop)</text>
+  <text class="label" x="1262" y="272" text-anchor="middle">runs on a schedule, on an event, or in real time</text>
 
-  
-  <path d="M 290 200 L 360 200" class="flow-arrow" marker-end="url(#arrow-flow)"></path>
+  <!-- Arrow 4 -> 5 -->
+  <text class="label" x="1443" y="173" text-anchor="middle">Run or Start</text>
+  <path class="conn" d="M 1399 185 L 1485 185" marker-end="url(#arrow)"/>
 
-  
-  <rect x="370" y="100" width="360" height="200" class="step-card-accent accent-2"></rect>
-  <circle cx="398" cy="128" r="14" class="step-num-bg-2"></circle>
-  <text x="398" y="133" text-anchor="middle" class="step-num">2</text>
-  <text x="422" y="133" class="step-title">Drag and connect them</text>
+  <!-- Step 5: Watch it work -->
+  <rect class="panel p-purple" x="1491" y="110" width="266" height="140" rx="10"/>
+  <circle class="accent-purple" cx="1624" cy="142" r="15"/>
+  <text x="1624" y="148" text-anchor="middle" font-size="16" font-weight="700" fill="#282a36">5</text>
+  <text class="h2" x="1624" y="172" text-anchor="middle">Watch it work</text>
+  <text class="sub" x="1624" y="196" text-anchor="middle">Answers appear in the Chat /</text>
+  <text class="sub" x="1624" y="214" text-anchor="middle">Console panel at the bottom</text>
+  <text class="sub" x="1624" y="232" text-anchor="middle">of the screen</text>
 
-  
-  <rect x="390" y="160" width="92" height="42" class="node-mini node-trigger-mini" rx="8"></rect>
-  <text x="436" y="178" text-anchor="middle" class="node-mini-text">💬 Chat</text>
-  <text x="436" y="194" text-anchor="middle" class="node-mini-text" style="font-size: 9px; fill: #6b7280;">trigger</text>
+  <!-- Value band 1: integrations -->
+  <rect class="panel p-green" x="43" y="304" width="1714" height="78" rx="10"/>
+  <text class="h1" x="900" y="336" text-anchor="middle">Connect the apps you already use</text>
+  <text class="sub" x="900" y="364" text-anchor="middle">Gmail &#183; Calendar &#183; Drive &#183; Sheets &#183; Telegram &#183; WhatsApp &#183; Twitter/X &#183; web browser &#183; web search &#183; Python &#183; JavaScript &#183; Maps + more</text>
 
-  <rect x="515" y="160" width="100" height="42" class="node-mini node-agent-mini" rx="8"></rect>
-  <text x="565" y="178" text-anchor="middle" class="node-mini-text">🤖 AI Agent</text>
-  <text x="565" y="194" text-anchor="middle" class="node-mini-text" style="font-size: 9px; fill: #6b7280;">thinks + acts</text>
-
-  <rect x="648" y="160" width="72" height="42" class="node-mini node-output-mini" rx="8"></rect>
-  <text x="684" y="178" text-anchor="middle" class="node-mini-text">📤 Reply</text>
-  <text x="684" y="194" text-anchor="middle" class="node-mini-text" style="font-size: 9px; fill: #6b7280;">output</text>
-
-  <path d="M 482 181 L 515 181" class="flow-arrow" marker-end="url(#arrow-flow)"></path>
-  <path d="M 615 181 L 648 181" class="flow-arrow" marker-end="url(#arrow-flow)"></path>
-
-  
-  <rect x="430" y="220" width="80" height="22" class="node-mini" rx="6" style="fill: #f0fdfa; stroke: #06b6d4;"></rect>
-  <text x="470" y="235" text-anchor="middle" class="node-mini-text" style="fill: #0e7490;">🧠 Memory</text>
-
-  <rect x="520" y="220" width="80" height="22" class="node-mini" rx="6" style="fill: #f0fdfa; stroke: #06b6d4;"></rect>
-  <text x="560" y="235" text-anchor="middle" class="node-mini-text" style="fill: #0e7490;">📚 Skill</text>
-
-  <rect x="610" y="220" width="80" height="22" class="node-mini" rx="6" style="fill: #f0fdfa; stroke: #06b6d4;"></rect>
-  <text x="650" y="235" text-anchor="middle" class="node-mini-text" style="fill: #0e7490;">🔧 Tool</text>
-
-  <path d="M 545 202 L 470 220" class="dashed-conn"></path>
-  <path d="M 565 202 L 560 220" class="dashed-conn"></path>
-  <path d="M 590 202 L 650 220" class="dashed-conn"></path>
-
-  <text x="550" y="265" text-anchor="middle" class="step-desc">Memory remembers · Skills teach · Tools extend</text>
-  <text x="550" y="285" text-anchor="middle" class="step-desc" style="font-style: italic; fill: #6b7280;">This is the shape of every default workflow.</text>
-
-  
-  <path d="M 740 200 L 810 200" class="flow-arrow" marker-end="url(#arrow-flow)"></path>
-
-  
-  <rect x="820" y="100" width="240" height="200" class="step-card-accent accent-3"></rect>
-  <circle cx="848" cy="128" r="14" class="step-num-bg-3"></circle>
-  <text x="848" y="133" text-anchor="middle" class="step-num">3</text>
-  <text x="872" y="133" class="step-title">AI runs it for you</text>
-
-  <text x="940" y="170" text-anchor="middle" class="step-desc">Click Play, or...</text>
-
-  <rect x="850" y="185" width="180" height="30" class="badge"></rect>
-  <text x="940" y="204" text-anchor="middle" class="badge-text">DEPLOY ON A SCHEDULE</text>
-
-  <rect x="850" y="223" width="180" height="30" class="badge"></rect>
-  <text x="940" y="242" text-anchor="middle" class="badge-text">TRIGGER ON AN EVENT</text>
-
-  <rect x="850" y="261" width="180" height="30" class="badge"></rect>
-  <text x="940" y="280" text-anchor="middle" class="badge-text">RESPOND IN REAL TIME</text>
-
-  
-  <rect x="40" y="340" width="1020" height="180" class="step-card-accent accent-4"></rect>
-  <circle cx="68" cy="368" r="14" class="step-num-bg-4"></circle>
-  <text x="68" y="373" text-anchor="middle" class="step-num">4</text>
-  <text x="92" y="373" class="step-title">Connect to the apps you already use</text>
-
-  
-  <rect x="60" y="395" width="90" height="28" class="integration-pill"></rect>
-  <text x="105" y="414" text-anchor="middle" class="integration-text">📧 Gmail</text>
-
-  <rect x="160" y="395" width="100" height="28" class="integration-pill"></rect>
-  <text x="210" y="414" text-anchor="middle" class="integration-text">📅 Calendar</text>
-
-  <rect x="270" y="395" width="80" height="28" class="integration-pill"></rect>
-  <text x="310" y="414" text-anchor="middle" class="integration-text">📁 Drive</text>
-
-  <rect x="360" y="395" width="90" height="28" class="integration-pill"></rect>
-  <text x="405" y="414" text-anchor="middle" class="integration-text">📊 Sheets</text>
-
-  <rect x="460" y="395" width="110" height="28" class="integration-pill"></rect>
-  <text x="515" y="414" text-anchor="middle" class="integration-text">📱 WhatsApp</text>
-
-  <rect x="580" y="395" width="100" height="28" class="integration-pill"></rect>
-  <text x="630" y="414" text-anchor="middle" class="integration-text">💬 Telegram</text>
-
-  <rect x="690" y="395" width="100" height="28" class="integration-pill"></rect>
-  <text x="740" y="414" text-anchor="middle" class="integration-text">𝕏 Twitter</text>
-
-  <rect x="800" y="395" width="110" height="28" class="integration-pill"></rect>
-  <text x="855" y="414" text-anchor="middle" class="integration-text">📞 Your Phone</text>
-
-  <rect x="920" y="395" width="120" height="28" class="integration-pill"></rect>
-  <text x="980" y="414" text-anchor="middle" class="integration-text">💳 Stripe</text>
-
-  
-  <rect x="60" y="430" width="120" height="28" class="integration-pill"></rect>
-  <text x="120" y="449" text-anchor="middle" class="integration-text">🌐 Web Browser</text>
-
-  <rect x="190" y="430" width="120" height="28" class="integration-pill"></rect>
-  <text x="250" y="449" text-anchor="middle" class="integration-text">🔍 Web Search</text>
-
-  <rect x="320" y="430" width="130" height="28" class="integration-pill"></rect>
-  <text x="385" y="449" text-anchor="middle" class="integration-text">🕷 Web Scraping</text>
-
-  <rect x="460" y="430" width="110" height="28" class="integration-pill"></rect>
-  <text x="515" y="449" text-anchor="middle" class="integration-text">📄 PDF / Docs</text>
-
-  <rect x="580" y="430" width="100" height="28" class="integration-pill"></rect>
-  <text x="630" y="449" text-anchor="middle" class="integration-text">💻 Python</text>
-
-  <rect x="690" y="430" width="120" height="28" class="integration-pill"></rect>
-  <text x="750" y="449" text-anchor="middle" class="integration-text">⚡ JavaScript</text>
-
-  <rect x="820" y="430" width="80" height="28" class="integration-pill"></rect>
-  <text x="860" y="449" text-anchor="middle" class="integration-text">📨 Email</text>
-
-  <rect x="910" y="430" width="130" height="28" class="integration-pill"></rect>
-  <text x="975" y="449" text-anchor="middle" class="integration-text">⏰ Cron / Timers</text>
-
-  <text x="550" y="490" text-anchor="middle" class="step-desc">+ residential proxies, Apify scrapers, Maps, document RAG, and more</text>
-
-  
-  <rect x="40" y="540" width="1020" height="60" class="footer-strip"></rect>
-  <text x="550" y="568" text-anchor="middle" class="footer-text">🏠  Everything runs on your computer</text>
-  <text x="550" y="588" text-anchor="middle" class="footer-sub">Your API keys, your data, your conversations — never sent to OpenCompany servers. Free local AI via Ollama and LM Studio.</text>
-
+  <!-- Value band 2: local-first -->
+  <rect class="panel p-cyan" x="43" y="407" width="1714" height="92" rx="10"/>
+  <text class="h1" x="900" y="437" text-anchor="middle">Everything runs on your computer</text>
+  <text class="sub" x="900" y="463" text-anchor="middle">Your API keys, your data, your conversations - never sent to OpenCompany servers.</text>
+  <text class="sub" x="900" y="485" text-anchor="middle">Free local AI via Ollama and LM Studio.</text>
 </svg>

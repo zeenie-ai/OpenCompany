@@ -1,90 +1,145 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" width="100%" preserveAspectRatio="xMidYMid meet" font-family="ui-monospace, &#39;SFMono-Regular&#39;, Menlo, Consolas, monospace">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1460 1300" width="100%" preserveAspectRatio="xMidYMid meet" font-family="ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace">
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#f8f8f2"></path>
+      <path d="M0,0 L10,5 L0,10 z" fill="#f8f8f2"/>
     </marker>
-    
+    <style>
+      .bg { fill: #282a36; }
+      .panel { fill: #44475a; stroke-width: 2; }
+      .p-cyan { stroke: #8be9fd; } .p-purple { stroke: #bd93f9; } .p-orange { stroke: #ffb86c; } .p-green { stroke: #50fa7b; } .p-pink { stroke: #ff79c6; }
+      .title { fill: #f8f8f2; font-size: 20px; font-weight: 700; }
+      .h1 { fill: #f8f8f2; font-size: 18px; font-weight: 700; }
+      .h2 { fill: #f8f8f2; font-size: 14px; font-weight: 700; }
+      .sub { fill: #f8f8f2; font-size: 12px; }
+      .small { fill: #f8f8f2; font-size: 10px; }
+      .label { fill: #f1fa8c; font-size: 11px; font-style: italic; }
+      .conn { stroke: #f8f8f2; stroke-width: 1.8; fill: none; }
+      .conn-dot { stroke: #6272a4; stroke-width: 1.5; fill: none; stroke-dasharray: 4 4; }
+      .box { fill: #282a36; stroke-width: 1.5; }
+      .tier-label { fill: #6272a4; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+      .accent-cyan { fill: #8be9fd; } .accent-purple { fill: #bd93f9; } .accent-green { fill: #50fa7b; } .accent-orange { fill: #ffb86c; } .accent-pink { fill: #ff79c6; }
+    </style>
   </defs>
+  <rect class="bg" width="1460" height="1300"/>
 
-  <rect class="bg" width="1200" height="800"></rect>
+  <!-- Title -->
+  <text x="40" y="45" class="title">How Workflows Execute</text>
+  <text x="40" y="68" class="sub">Two entry points -&gt; WorkflowService routing -&gt; shared node dispatch</text>
 
-  
-  <rect class="entry" x="460" y="30" width="280" height="60" rx="8"></rect>
-  <text x="600" y="58" class="title" text-anchor="middle">workflow.execute()</text>
-  <text x="600" y="78" class="sub" text-anchor="middle">(WorkflowService facade)</text>
+  <!-- Lane labels -->
+  <text x="250" y="92" class="tier-label" text-anchor="middle">CANVAS RUN PATH</text>
+  <text x="990" y="92" class="tier-label" text-anchor="middle">DEPLOYED PATH</text>
 
-  
-  <path class="conn" d="M 600 90 L 600 135" marker-end="url(#arrow)"></path>
+  <!-- Entry box 1: Per-node Run (cyan) -->
+  <rect class="panel p-cyan" x="40" y="100" width="420" height="96" rx="8"/>
+  <text x="250" y="130" class="h1" text-anchor="middle">Per-node "Run"</text>
+  <text x="250" y="156" class="sub" text-anchor="middle">execute_node WS msg -&gt; WorkflowService.execute_node</text>
+  <text x="250" y="178" class="sub" text-anchor="middle">runs ONE node &#183; no mode routing</text>
 
-  
-  <polygon class="decision" points="600,140 780,210 600,280 420,210"></polygon>
-  <text x="600" y="200" class="big" text-anchor="middle">TEMPORAL_ENABLED</text>
-  <text x="600" y="225" class="big" text-anchor="middle">and reachable?</text>
+  <!-- Entry box 2: Toolbar Start (purple) -->
+  <rect class="panel p-purple" x="780" y="100" width="420" height="96" rx="8"/>
+  <text x="990" y="130" class="h1" text-anchor="middle">Toolbar "Start"</text>
+  <text x="990" y="156" class="sub" text-anchor="middle">deploy_workflow WS msg -&gt; DeploymentManager.deploy</text>
+  <text x="990" y="178" class="sub" text-anchor="middle">(button label is Start, toggles to Stop)</text>
 
-  
-  <path class="conn-yes" d="M 780 210 L 950 210 L 950 320" marker-end="url(#arrow)"></path>
-  <text x="830" y="200" class="branch-label">yes</text>
+  <!-- Canvas lane: straight down to convergence -->
+  <path class="conn" d="M 250 196 L 250 1038" marker-end="url(#arrow)"/>
+  <text x="262" y="250" class="label">direct dispatch</text>
+  <text x="270" y="500" class="small" style="fill:#6272a4">canvas trigger waits use in-memory</text>
+  <text x="270" y="518" class="small" style="fill:#6272a4">event_waiter (asyncio.Future)</text>
 
-  
-  <path class="conn-no" d="M 420 210 L 260 210 L 260 280" marker-end="url(#arrow)"></path>
-  <text x="325" y="200" class="branch-label">no</text>
+  <!-- Deployed lane -->
+  <path class="conn" d="M 990 196 L 990 238" marker-end="url(#arrow)"/>
 
-  
-  <polygon class="decision" points="260,285 430,350 260,415 90,350"></polygon>
-  <text x="260" y="345" class="big" text-anchor="middle">Redis</text>
-  <text x="260" y="370" class="big" text-anchor="middle">available?</text>
+  <rect class="panel p-purple" x="775" y="240" width="430" height="90" rx="8"/>
+  <text x="990" y="266" class="h2" text-anchor="middle">Durable trigger listeners</text>
+  <text x="990" y="288" class="small" text-anchor="middle">TriggerListenerWorkflow (push) &#183; PollingTriggerWorkflow (poll)</text>
+  <text x="990" y="308" class="small" text-anchor="middle">Temporal Schedule (cron, 24h catch-up)</text>
 
-  
-  <path class="conn-yes" d="M 430 350 L 600 350 L 600 320" marker-end="url(#arrow)"></path>
-  <text x="475" y="340" class="branch-label">yes</text>
+  <path class="conn" d="M 990 330 L 990 370" marker-end="url(#arrow)"/>
+  <text x="1002" y="356" class="label">on event</text>
 
-  
-  <path class="conn-no" d="M 260 415 L 260 445" marker-end="url(#arrow)"></path>
-  <text x="200" y="440" class="branch-label">no</text>
+  <rect class="panel p-purple" x="775" y="372" width="430" height="90" rx="8"/>
+  <text x="990" y="398" class="h2" text-anchor="middle">dispatch.emit(event)</text>
+  <text x="990" y="420" class="small" text-anchor="middle">Temporal Visibility query: EventType=... AND Running</text>
+  <text x="990" y="440" class="small" text-anchor="middle">-&gt; Signal each matching listener</text>
 
-  
-  
-  <rect class="path-temporal" x="820" y="320" width="260" height="150" rx="8"></rect>
-  <text x="950" y="348" class="mode-label" text-anchor="middle">Temporal Distributed</text>
-  <text x="950" y="372" class="sub" text-anchor="middle">per-node activities</text>
-  <text x="950" y="392" class="sub" text-anchor="middle">3 retries, 10 min timeout</text>
-  <text x="950" y="412" class="sub" text-anchor="middle">horizontal scaling</text>
-  <text x="950" y="432" class="sub" text-anchor="middle">FIRST_COMPLETED scheduling</text>
-  <text x="950" y="458" class="caption" text-anchor="middle">services/temporal/</text>
+  <path class="conn" d="M 990 462 L 990 502" marker-end="url(#arrow)"/>
+  <text x="1002" y="488" class="label">Signal</text>
 
-  
-  <rect class="path-redis" x="470" y="320" width="260" height="150" rx="8"></rect>
-  <text x="600" y="348" class="mode-label" text-anchor="middle">Parallel Local (Redis)</text>
-  <text x="600" y="372" class="sub" text-anchor="middle">decide loop + Kahn layers</text>
-  <text x="600" y="392" class="sub" text-anchor="middle">asyncio.gather() fork/join</text>
-  <text x="600" y="412" class="sub" text-anchor="middle">Prefect-style input hash cache</text>
-  <text x="600" y="432" class="sub" text-anchor="middle">DLQ + heartbeat recovery</text>
-  <text x="600" y="458" class="caption" text-anchor="middle">services/execution/</text>
+  <rect class="panel p-purple" x="775" y="504" width="430" height="72" rx="8"/>
+  <text x="990" y="530" class="h2" text-anchor="middle">Per-firing child run</text>
+  <text x="990" y="552" class="small" text-anchor="middle">child MachinaWorkflow per event &#183; trigger node _pre_executed</text>
 
-  
-  <rect class="path-seq" x="120" y="445" width="280" height="120" rx="8"></rect>
-  <text x="260" y="473" class="mode-label" text-anchor="middle">Sequential Fallback</text>
-  <text x="260" y="497" class="sub" text-anchor="middle">simple topological walk</text>
-  <text x="260" y="517" class="sub" text-anchor="middle">no cache, no retry, no DLQ</text>
-  <text x="260" y="537" class="sub" text-anchor="middle">minimal environments only</text>
-  <text x="260" y="558" class="caption" text-anchor="middle">_execute_sequential()</text>
+  <!-- Deployed lane into router -->
+  <path class="conn" d="M 990 576 L 990 608 L 620 608 L 620 636" marker-end="url(#arrow)"/>
 
-  
-  <path class="conn" d="M 950 470 L 950 590 L 600 590" marker-end="url(#arrow)"></path>
-  <path class="conn" d="M 600 470 L 600 590" marker-end="url(#arrow)"></path>
-  <path class="conn" d="M 260 565 L 260 590 L 600 590" marker-end="url(#arrow)"></path>
+  <!-- Router diamond 1 -->
+  <polygon class="box p-orange" points="620,638 795,700 620,762 445,700"/>
+  <text x="620" y="696" class="h2" text-anchor="middle">TEMPORAL_ENABLED</text>
+  <text x="620" y="716" class="h2" text-anchor="middle">and worker wired?</text>
 
-  
-  <rect class="shared" x="330" y="595" width="540" height="90" rx="8"></rect>
-  <text x="600" y="625" class="title" text-anchor="middle">NodeExecutor.execute()</text>
-  <text x="600" y="648" class="sub" text-anchor="middle">registry dispatch: {node_type: handler via functools.partial}</text>
-  <text x="600" y="668" class="sub" text-anchor="middle">handlers/*.py -&gt; result dict -&gt; ExecutionContext</text>
+  <!-- D1 no -> D2 -->
+  <path class="conn" d="M 795 700 L 856 700" marker-end="url(#arrow)"/>
+  <text x="812" y="692" class="label">no</text>
 
-  
-  <path class="conn" d="M 600 685 L 600 715" marker-end="url(#arrow)"></path>
+  <!-- D1 yes -> Temporal box -->
+  <path class="conn" d="M 620 762 L 620 788 L 520 788 L 520 828" marker-end="url(#arrow)"/>
+  <text x="630" y="782" class="label">yes</text>
 
-  
-  <rect class="output" x="380" y="720" width="440" height="60" rx="8"></rect>
-  <text x="600" y="745" class="title" text-anchor="middle">Status broadcast via StatusBroadcaster</text>
-  <text x="600" y="765" class="sub" text-anchor="middle">node_status + node_output -&gt; Frontend WebSocket</text>
+  <!-- Router diamond 2 -->
+  <polygon class="box p-orange" points="990,645 1120,700 990,755 860,700"/>
+  <text x="990" y="696" class="h2" text-anchor="middle">Redis</text>
+  <text x="990" y="716" class="h2" text-anchor="middle">available?</text>
+
+  <!-- D2 yes -> Parallel box -->
+  <path class="conn" d="M 990 755 L 990 788 L 935 788 L 935 828" marker-end="url(#arrow)"/>
+  <text x="1000" y="780" class="label">yes</text>
+
+  <!-- D2 no -> Sequential box -->
+  <path class="conn" d="M 1120 700 L 1290 700 L 1290 828" marker-end="url(#arrow)"/>
+  <text x="1140" y="692" class="label">no</text>
+
+  <!-- Mode box: Temporal Distributed -->
+  <rect class="panel p-orange" x="330" y="830" width="380" height="152" rx="8"/>
+  <text x="520" y="856" class="h2" text-anchor="middle">Temporal Distributed</text>
+  <text x="520" y="880" class="sub" text-anchor="middle">MachinaWorkflow orchestrator (FIRST_COMPLETED)</text>
+  <text x="520" y="900" class="sub" text-anchor="middle">per-type activities node.{type}.v{ver}</text>
+  <text x="520" y="920" class="sub" text-anchor="middle">3 retries &#183; 10 min timeout &#183; heartbeats</text>
+  <text x="520" y="940" class="sub" text-anchor="middle">per-queue TemporalWorkerPool (default on)</text>
+  <text x="520" y="964" class="small" style="fill:#6272a4" text-anchor="middle">services/temporal/</text>
+
+  <!-- Mode box: Parallel Local (Redis) -->
+  <rect class="panel p-orange" x="760" y="830" width="350" height="132" rx="8"/>
+  <text x="935" y="856" class="h2" text-anchor="middle">Parallel Local (Redis)</text>
+  <text x="935" y="880" class="sub" text-anchor="middle">decide loop + Kahn layers</text>
+  <text x="935" y="900" class="sub" text-anchor="middle">asyncio.gather() fork/join</text>
+  <text x="935" y="920" class="sub" text-anchor="middle">input-hash cache &#183; DLQ + heartbeat recovery</text>
+  <text x="935" y="944" class="small" style="fill:#6272a4" text-anchor="middle">services/execution/</text>
+
+  <!-- Mode box: Sequential Fallback -->
+  <rect class="panel p-orange" x="1160" y="830" width="260" height="112" rx="8"/>
+  <text x="1290" y="856" class="h2" text-anchor="middle">Sequential Fallback</text>
+  <text x="1290" y="880" class="sub" text-anchor="middle">topological walk</text>
+  <text x="1290" y="900" class="sub" text-anchor="middle">no cache, no retry, no DLQ</text>
+  <text x="1290" y="924" class="small" style="fill:#6272a4" text-anchor="middle">_execute_sequential()</text>
+
+  <!-- Mode boxes -> convergence -->
+  <path class="conn" d="M 520 982 L 520 1038" marker-end="url(#arrow)"/>
+  <path class="conn" d="M 935 962 L 935 1038" marker-end="url(#arrow)"/>
+  <path class="conn" d="M 1290 942 L 1290 1087 L 1004 1087" marker-end="url(#arrow)"/>
+
+  <!-- Convergence box -->
+  <rect class="panel p-green" x="220" y="1040" width="780" height="94" rx="8"/>
+  <text x="610" y="1070" class="h1" text-anchor="middle">NodeExecutor.execute()</text>
+  <text x="610" y="1094" class="sub" text-anchor="middle">plugin registry dispatch &#183; class-based plugins in server/nodes/&lt;group&gt;/</text>
+  <text x="610" y="1114" class="sub" text-anchor="middle">-&gt; result dict</text>
+
+  <!-- Convergence -> output -->
+  <path class="conn" d="M 610 1134 L 610 1166" marker-end="url(#arrow)"/>
+
+  <!-- Output box -->
+  <rect class="panel p-green" x="320" y="1170" width="580" height="78" rx="8"/>
+  <text x="610" y="1198" class="h1" text-anchor="middle">StatusBroadcaster</text>
+  <text x="610" y="1222" class="sub" text-anchor="middle">node_status + node_output (CloudEvents envelope) -&gt; frontend WebSocket</text>
 </svg>

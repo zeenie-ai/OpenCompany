@@ -1,138 +1,119 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 800" width="100%" preserveAspectRatio="xMidYMid meet" font-family="ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1760 800" width="100%" preserveAspectRatio="xMidYMid meet" font-family="ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace">
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#f8f8f2"/>
     </marker>
     <style>
       .bg { fill: #282a36; }
-      .col-header { fill: #6272a4; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; }
-      .col-sub { fill: #6272a4; font-size: 11px; }
-      .fe-box { fill: #44475a; stroke: #8be9fd; stroke-width: 2; }
-      .be-box { fill: #44475a; stroke: #bd93f9; stroke-width: 2; }
-      .comm-box { fill: #44475a; stroke: #f1fa8c; stroke-width: 2; }
-      .ai-box { fill: #44475a; stroke: #50fa7b; stroke-width: 2; }
-      .title { fill: #f8f8f2; font-size: 14px; font-weight: 700; }
-      .path { fill: #8be9fd; font-size: 11px; font-family: ui-monospace, monospace; }
-      .path-be { fill: #bd93f9; font-size: 11px; font-family: ui-monospace, monospace; }
-      .sub { fill: #f8f8f2; font-size: 11px; }
-      .conn { stroke: #f8f8f2; stroke-width: 1.8; fill: none; }
+      .panel { fill: #44475a; stroke-width: 2; }
+      .p-cyan { stroke: #8be9fd; } .p-purple { stroke: #bd93f9; } .p-orange { stroke: #ffb86c; } .p-green { stroke: #50fa7b; } .p-pink { stroke: #ff79c6; }
+      .title { fill: #f8f8f2; font-size: 20px; font-weight: 700; }
+      .h1 { fill: #f8f8f2; font-size: 18px; font-weight: 700; }
+      .h2 { fill: #f8f8f2; font-size: 14px; font-weight: 700; }
+      .sub { fill: #f8f8f2; font-size: 12px; }
+      .small { fill: #f8f8f2; font-size: 10px; }
       .label { fill: #f1fa8c; font-size: 11px; font-style: italic; }
-      .step { fill: #ffb86c; font-size: 12px; font-weight: 700; }
+      .conn { stroke: #f8f8f2; stroke-width: 1.8; fill: none; }
+      .conn-dot { stroke: #6272a4; stroke-width: 1.5; fill: none; stroke-dasharray: 4 4; }
+      .box { fill: #282a36; stroke-width: 1.5; }
+      .tier-label { fill: #6272a4; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+      .accent-cyan { fill: #8be9fd; } .accent-purple { fill: #bd93f9; } .accent-green { fill: #50fa7b; } .accent-orange { fill: #ffb86c; } .accent-pink { fill: #ff79c6; }
     </style>
   </defs>
-
-  <rect class="bg" width="1400" height="800"/>
+  <rect class="bg" width="1760" height="800"/>
 
   <!-- Title -->
-  <text x="700" y="35" class="title" text-anchor="middle" font-size="20">Anatomy of a Workflow Node</text>
-  <text x="700" y="58" class="col-sub" text-anchor="middle" font-size="12">Where to touch code when adding a new node</text>
+  <text x="880" y="42" class="title" text-anchor="middle">Anatomy of a Plugin Node</text>
+  <text x="880" y="68" class="sub" text-anchor="middle">One Python folder = one node. Backend is the single source of truth - the frontend renders itself with zero TypeScript edits.</text>
 
-  <!-- Column headers -->
-  <text x="230" y="100" class="col-header" text-anchor="middle">Frontend (client/)</text>
-  <text x="230" y="118" class="col-sub" text-anchor="middle">TypeScript + React</text>
+  <!-- ================= GROUP 1 (cyan): What you write ================= -->
+  <rect class="panel p-cyan" x="40" y="100" width="460" height="545" rx="10"/>
+  <text x="270" y="130" class="h1" text-anchor="middle">What you write</text>
+  <text x="270" y="150" class="accent-cyan" font-size="12" text-anchor="middle">server/nodes/&lt;group&gt;/&lt;plugin&gt;/</text>
 
-  <text x="700" y="100" class="col-header" text-anchor="middle">Communication</text>
-  <text x="700" y="118" class="col-sub" text-anchor="middle">WebSocket</text>
+  <rect class="box p-cyan" x="60" y="168" width="420" height="78" rx="6"/>
+  <text x="270" y="190" class="h2" text-anchor="middle">__init__.py - the node class</text>
+  <text x="270" y="210" class="sub" text-anchor="middle">class MyNode(ActionNode / TriggerNode / ToolNode)</text>
+  <text x="270" y="228" class="small" text-anchor="middle">type, display_name, group, handles, credentials, task_queue</text>
 
-  <text x="1170" y="100" class="col-header" text-anchor="middle">Backend (server/)</text>
-  <text x="1170" y="118" class="col-sub" text-anchor="middle">Python + FastAPI</text>
+  <rect class="box p-cyan" x="60" y="264" width="420" height="78" rx="6"/>
+  <text x="270" y="286" class="h2" text-anchor="middle">Params / Output (Pydantic)</text>
+  <text x="270" y="306" class="sub" text-anchor="middle">snake_case fields = UI params = LLM tool schema</text>
+  <text x="270" y="324" class="small" text-anchor="middle">Output validated at the serialization boundary</text>
 
-  <!-- Frontend column boxes -->
-  <!-- 1. Node definition -->
-  <rect class="fe-box" x="50" y="145" width="360" height="85" rx="8"/>
-  <text x="70" y="170" class="title">1. Node definition</text>
-  <text x="70" y="190" class="path">server/nodes/&lt;category&gt;/&lt;node&gt;.py</text>
-  <text x="70" y="210" class="sub">INodeProperties: displayName, group, inputs,</text>
-  <text x="70" y="224" class="sub">outputs, properties[], displayOptions.show</text>
+  <rect class="box p-cyan" x="60" y="360" width="420" height="78" rx="6"/>
+  <text x="270" y="382" class="h2" text-anchor="middle">@Operation methods</text>
+  <text x="270" y="402" class="sub" text-anchor="middle">async def op(self, ctx, params) -&gt; Output</text>
+  <text x="270" y="420" class="small" text-anchor="middle">the business logic lives here</text>
 
-  <!-- 2. Parameter renderer -->
-  <rect class="fe-box" x="50" y="255" width="360" height="85" rx="8"/>
-  <text x="70" y="280" class="title">2. Parameter panel</text>
-  <text x="70" y="300" class="path">client/src/components/ParameterRenderer.tsx</text>
-  <text x="70" y="320" class="sub">Renders parameters, conditional display,</text>
-  <text x="70" y="334" class="sub">drag-and-drop template variables</text>
+  <rect class="box p-cyan" x="60" y="456" width="420" height="78" rx="6"/>
+  <text x="270" y="478" class="h2" text-anchor="middle">icon.svg + meta.json</text>
+  <text x="270" y="498" class="sub" text-anchor="middle">co-located icon + {"color": "#..."}</text>
+  <text x="270" y="516" class="small" text-anchor="middle">icon/color are NOT class attributes</text>
 
-  <!-- 3. Canvas / execution -->
-  <rect class="fe-box" x="50" y="365" width="360" height="85" rx="8"/>
-  <text x="70" y="390" class="title">3. Canvas &amp; Run button</text>
-  <text x="70" y="410" class="path">client/src/Dashboard.tsx</text>
-  <text x="70" y="430" class="sub">React Flow canvas, useExecution hook,</text>
-  <text x="70" y="444" class="sub">sends execute_node via WebSocket</text>
+  <rect class="box p-cyan" x="60" y="552" width="420" height="78" rx="6"/>
+  <text x="270" y="574" class="h2" text-anchor="middle">Optional siblings (rich plugins)</text>
+  <text x="270" y="594" class="sub" text-anchor="middle">_service.py / _handlers.py / _credentials.py</text>
+  <text x="270" y="612" class="small" text-anchor="middle">for bots, daemons, signed webhooks</text>
 
-  <!-- 4. Registry/credentials -->
-  <rect class="fe-box" x="50" y="475" width="360" height="85" rx="8"/>
-  <text x="70" y="500" class="title">4. Credentials (if needed)</text>
-  <text x="70" y="520" class="path">client/src/components/CredentialsModal.tsx</text>
-  <text x="70" y="540" class="sub">API key entry + OAuth flows</text>
-  <text x="70" y="554" class="sub">via useApiKeys hook</text>
+  <!-- ================= GROUP 2 (purple): Auto-registration ================= -->
+  <rect class="panel p-purple" x="650" y="100" width="460" height="449" rx="10"/>
+  <text x="880" y="130" class="h1" text-anchor="middle">Auto-registration on import</text>
 
-  <!-- Communication column -->
-  <rect class="comm-box" x="530" y="255" width="340" height="250" rx="8"/>
-  <text x="700" y="290" class="title" text-anchor="middle">WebSocket /ws/status</text>
-  <text x="700" y="315" class="sub" text-anchor="middle">Single persistent connection</text>
-  <text x="700" y="335" class="sub" text-anchor="middle">between UI and backend</text>
+  <rect class="box p-purple" x="670" y="168" width="420" height="78" rx="6"/>
+  <text x="880" y="190" class="h2" text-anchor="middle">__init_subclass__ fires</text>
+  <text x="880" y="210" class="sub" text-anchor="middle">nodes/__init__.py pkgutil walker imports every plugin</text>
+  <text x="880" y="228" class="small" text-anchor="middle">no manual registry edit, no node_executor.py</text>
 
-  <!-- Message type arrows -->
-  <text x="700" y="375" class="label" text-anchor="middle">execute_node</text>
-  <path class="conn" d="M 570 385 L 830 385" marker-end="url(#arrow)"/>
+  <rect class="box p-purple" x="670" y="264" width="420" height="78" rx="6"/>
+  <text x="880" y="286" class="h2" text-anchor="middle">5 registries populated</text>
+  <text x="880" y="306" class="sub" text-anchor="middle">_NODE_CLASS_REGISTRY &#183; NODE_METADATA &#183; _DIRECT_MODELS</text>
+  <text x="880" y="324" class="small" text-anchor="middle">NODE_OUTPUT_SCHEMAS &#183; _HANDLER_REGISTRY</text>
 
-  <text x="700" y="420" class="label" text-anchor="middle">node_status</text>
-  <path class="conn" d="M 830 430 L 570 430" marker-end="url(#arrow)"/>
+  <rect class="box p-purple" x="670" y="360" width="420" height="78" rx="6"/>
+  <text x="880" y="382" class="h2" text-anchor="middle">Temporal activity minted</text>
+  <text x="880" y="402" class="sub" text-anchor="middle">cls.as_activity() -&gt; node.{type}.v{version}</text>
+  <text x="880" y="420" class="small" text-anchor="middle">routed to its task_queue worker pool</text>
 
-  <text x="700" y="465" class="label" text-anchor="middle">node_output</text>
-  <path class="conn" d="M 830 475 L 570 475" marker-end="url(#arrow)"/>
+  <rect class="box p-purple" x="670" y="456" width="420" height="78" rx="6"/>
+  <text x="880" y="478" class="h2" text-anchor="middle">6 self-registration hooks (rich plugins)</text>
+  <text x="880" y="498" class="sub" text-anchor="middle">ws_handlers &#183; router &#183; filter_builder</text>
+  <text x="880" y="516" class="small" text-anchor="middle">trigger_precheck &#183; service_refresh &#183; output_schema</text>
 
-  <text x="700" y="495" class="sub" text-anchor="middle" fill="#6272a4" font-size="10">89 handler message types</text>
+  <!-- ================= GROUP 3 (green): What the frontend sees ================= -->
+  <rect class="panel p-green" x="1260" y="100" width="460" height="353" rx="10"/>
+  <text x="1490" y="130" class="h1" text-anchor="middle">What the frontend sees</text>
+  <text x="1490" y="150" class="accent-green" font-size="12" text-anchor="middle">zero TS edits</text>
 
-  <!-- Arrows from frontend column into comm column -->
-  <path class="conn" d="M 410 405 L 530 385" marker-end="url(#arrow)"/>
+  <rect class="box p-green" x="1280" y="168" width="420" height="78" rx="6"/>
+  <text x="1490" y="190" class="h2" text-anchor="middle">NodeSpec endpoint</text>
+  <text x="1490" y="210" class="sub" text-anchor="middle">GET /api/schemas/nodes/{type}/spec.json</text>
+  <text x="1490" y="228" class="small" text-anchor="middle">display meta + params + output schema</text>
 
-  <!-- Backend column boxes -->
-  <!-- A. Router / dispatch -->
-  <rect class="be-box" x="990" y="145" width="360" height="85" rx="8"/>
-  <text x="1010" y="170" class="title">A. Router / dispatch</text>
-  <text x="1010" y="190" class="path-be">server/routers/websocket.py</text>
-  <text x="1010" y="210" class="sub">@ws_handler decorators, dispatches</text>
-  <text x="1010" y="224" class="sub">incoming messages to handlers</text>
+  <rect class="box p-green" x="1280" y="264" width="420" height="78" rx="6"/>
+  <text x="1490" y="286" class="h2" text-anchor="middle">useNodeSpec renders it</text>
+  <text x="1490" y="306" class="sub" text-anchor="middle">nodeSpecToDescription adapter builds the param panel,</text>
+  <text x="1490" y="324" class="small" text-anchor="middle">palette entry, and canvas handles - no client edits</text>
 
-  <!-- B. Node executor registry -->
-  <rect class="be-box" x="990" y="255" width="360" height="85" rx="8"/>
-  <text x="1010" y="280" class="title">B. Registry dispatch</text>
-  <text x="1010" y="300" class="path-be">server/services/node_executor.py</text>
-  <text x="1010" y="320" class="sub">Dict[node_type, handler] via</text>
-  <text x="1010" y="334" class="sub">functools.partial dependency injection</text>
+  <rect class="box p-green" x="1280" y="360" width="420" height="78" rx="6"/>
+  <text x="1490" y="382" class="h2" text-anchor="middle">Credentials modal</text>
+  <text x="1490" y="402" class="sub" text-anchor="middle">declare a Credential subclass;</text>
+  <text x="1490" y="420" class="small" text-anchor="middle">modal renders from credential_providers.json</text>
 
-  <!-- C. Handler -->
-  <rect class="be-box" x="990" y="365" width="360" height="85" rx="8"/>
-  <text x="1010" y="390" class="title">C. Business logic</text>
-  <text x="1010" y="410" class="path-be">server/services/handlers/&lt;name&gt;.py</text>
-  <text x="1010" y="430" class="sub">handle_&lt;name&gt;(node_id, parameters,</text>
-  <text x="1010" y="444" class="sub">context, ...) -&gt; result dict</text>
+  <!-- ================= Arrows between groups ================= -->
+  <text x="575" y="292" class="label" text-anchor="middle">import re-registers</text>
+  <text x="575" y="307" class="label" text-anchor="middle">everything on</text>
+  <text x="575" y="322" class="label" text-anchor="middle">server restart</text>
+  <path class="conn" d="M 502 340 L 646 340" marker-end="url(#arrow)"/>
 
-  <!-- D. AI service (optional) -->
-  <rect class="ai-box" x="990" y="475" width="360" height="85" rx="8"/>
-  <text x="1010" y="500" class="title">D. AI layer (for AI nodes)</text>
-  <text x="1010" y="520" class="path-be">server/services/ai.py + llm/</text>
-  <text x="1010" y="540" class="sub">Native SDK path or LangChain agent loop</text>
-  <text x="1010" y="554" class="sub">with tool calling</text>
+  <text x="1185" y="270" class="label" text-anchor="middle">served over HTTP</text>
+  <text x="1185" y="285" class="label" text-anchor="middle">as NodeSpec</text>
+  <path class="conn" d="M 1112 300 L 1256 300" marker-end="url(#arrow)"/>
 
-  <!-- Arrows inside backend column (vertical flow) -->
-  <path class="conn" d="M 1170 230 L 1170 255" marker-end="url(#arrow)"/>
-  <path class="conn" d="M 1170 340 L 1170 365" marker-end="url(#arrow)"/>
-  <path class="conn" d="M 1170 450 L 1170 475" marker-end="url(#arrow)"/>
+  <!-- ================= Banner ================= -->
+  <rect class="panel p-pink" x="40" y="675" width="1680" height="58" rx="10"/>
+  <text x="880" y="711" class="accent-pink" font-size="18" font-weight="700" text-anchor="middle">No TypeScript node definition &#183; No node_executor.py registry entry &#183; No frontend edits</text>
 
-  <!-- Arrow from comm column into backend -->
-  <path class="conn" d="M 870 385 L 990 185" marker-end="url(#arrow)"/>
-
-  <!-- Registration step note -->
-  <rect class="be-box" x="450" y="590" width="520" height="80" rx="8" fill="#282a36" stroke="#ff79c6"/>
-  <text x="710" y="615" class="title" text-anchor="middle" fill="#ff79c6">Register the handler</text>
-  <text x="710" y="635" class="sub" text-anchor="middle">Add entry to registry dict in services/node_executor.py:</text>
-  <text x="710" y="655" class="path-be" text-anchor="middle">registry['yourNode'] = partial(handle_your_node, database=self.database)</text>
-
-  <!-- Flow legend -->
-  <text x="50" y="710" class="step">Contribution checklist</text>
-  <text x="50" y="732" class="sub">1. Define node in TypeScript (left col)  -&gt;  2. Write handler in Python (right col)</text>
-  <text x="50" y="750" class="sub">3. Register in node_executor.py  -&gt;  4. Restart dev server  -&gt;  Node appears in palette</text>
-  <text x="50" y="770" class="sub" fill="#6272a4">Full step-by-step guide: docs-internal/node_creation.md</text>
+  <!-- ================= Footnote ================= -->
+  <text x="880" y="763" class="label" text-anchor="middle">Edge case: if tool_name != snake_case(type) and the plugin ships a paired skill, add a visuals.json alias (icon + color) - locked by tests/test_skill_icon_resolution.py</text>
 </svg>
