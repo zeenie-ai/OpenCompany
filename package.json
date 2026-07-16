@@ -1,6 +1,6 @@
 {
   "name": "@zeenie-ai/opencompany",
-  "version": "0.0.94",
+  "version": "0.0.95",
   "description": "Open source workflow automation platform with AI agents, React Flow, and n8n-inspired architecture",
   "type": "module",
   "keywords": [
