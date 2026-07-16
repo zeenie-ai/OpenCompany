@@ -14,7 +14,7 @@ interface ApiKeyStepProps {
 const providers = [
   { name: 'OpenAI', icon: <OpenAIIcon />, desc: 'GPT-4o, o3, o4 models', url: 'platform.openai.com' },
   { name: 'Anthropic', icon: <ClaudeIcon />, desc: 'Claude Opus, Sonnet models', url: 'console.anthropic.com' },
-  { name: 'Google', icon: <GeminiIcon />, desc: 'Gemini Pro, Flash models', url: 'aistudio.google.com' },
+  { name: 'Gemini', icon: <GeminiIcon />, desc: 'Gemini Pro, Flash models', url: 'aistudio.google.com' },
   { name: 'Groq', icon: <GroqIcon />, desc: 'Ultra-fast Llama, Qwen', url: 'console.groq.com' },
   { name: 'OpenRouter', icon: <OpenRouterIcon />, desc: 'Access 200+ models', url: 'openrouter.ai' },
   { name: 'Cerebras', icon: <CerebrasIcon />, desc: 'Fast inference on custom HW', url: 'cloud.cerebras.ai' },
