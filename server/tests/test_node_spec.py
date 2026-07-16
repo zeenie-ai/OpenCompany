@@ -225,6 +225,8 @@ class TestPhase3bCoverage:
         parse_mode = spec["inputs"]["properties"]["parse_mode"]
         # Empty string is the "no parse mode" option (handler coerces to Python None).
         assert set(parse_mode["enum"]) == {"Auto", "", "HTML", "Markdown", "MarkdownV2"}
+        labels = {option["value"]: option["name"] for option in parse_mode["uiHints"]["options"]}
+        assert labels[""] == "None (raw text)"
 
     def test_social_send_platform_enum(self):
         spec = get_node_spec("socialSend")
