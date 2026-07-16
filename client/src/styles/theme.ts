@@ -547,8 +547,8 @@ export const styles = {
     backgroundColor: theme.colors.background,
   },
 
-  // Code block / syntax highlighted JSON (prismjs) — used by
-  // NodeOutputPanel, OutputDisplayPanel, and any future JSON display.
+  // Code block / syntax highlighted JSON (prismjs) — used by JSON
+  // display surfaces (active renderer: components/output/OutputPanel).
   // Token colors use dracula palette for consistency with CodeEditor.
   codeBlock: {
     container: {

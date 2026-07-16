@@ -534,14 +534,14 @@ The frontend uses a layered cache + slice-subscription model so cold refreshes a
 
 ### React.memo every canvas node component ([client/src/components/nodeMemoEquality.ts](./client/src/components/nodeMemoEquality.ts))
 - React Flow's documented requirement. Use the shared `nodePropsEqual` comparator -- it skips drag-state props (`xPos` / `yPos` / `dragging`) so the memo isn't defeated during drag.
-- Applies to `SquareNode`, `AIAgentNode`, `TriggerNode`, `GenericNode`, `ToolkitNode`, `StartNode`, `TeamMonitorNode`. Add new node components the same way.
+- Applies to `SquareNode`, `AIAgentNode`, `TriggerNode`, `ToolkitNode`, `StartNode`, `TeamMonitorNode`. Add new node components the same way.
 - Reference: https://reactflow.dev/learn/advanced-use/performance
 
 ### Icon + color — per-plugin folder + visuals.json fallback
 
 Plugin icons and colors live co-located in the plugin folder; `visuals.json` is the fallback registry for emoji / library icons and the skill reverse-map. Full resolution chain (per-node-type → shared → fallback) is documented in [server/nodes/README.md → Icon + color](./server/nodes/README.md) and [docs-internal/plugin_system.md](./docs-internal/plugin_system.md).
 
-Backend endpoints serve SVGs at `GET /api/schemas/nodes/<type>/icon` (plugin icons) and `GET /api/schemas/credentials/<provider>/icon` (credential brand icons). Frontend resolver at [client/src/assets/icons/index.ts](./client/src/assets/icons/index.ts) dispatches `lib:brand` / URL passthrough / emoji / dead-code `asset:<key>`.
+Backend endpoints serve SVGs at `GET /api/schemas/nodes/<type>/icon` (plugin icons) and `GET /api/schemas/credentials/<provider>/icon` (credential brand icons). Frontend resolver at [client/src/assets/icons/index.ts](./client/src/assets/icons/index.ts) dispatches `lib:brand` / URL passthrough / emoji / `asset:<key>`. The `asset:` branch is currently inert at runtime (the frontend `ICON_REGISTRY` glob finds no SVGs so it resolves to null) but it is NOT dead code — the backend still emits `asset:google` / `asset:stripe` for palette groups (`server/nodes/groups.py`) and the format is invariant-tested on both sides (`test_node_spec.py` Wave 10.B, `icons/index.test.ts`).
 
 **Do not** declare `icon` / `color` as class attributes on a node (the override path was removed in F1). Drop `icon.svg` (or `icon_<nodeType>.svg` for multi-node folders like whatsapp) and `meta.json` into the plugin folder. SKILL.md icon/color resolves from the first node in `allowed-tools` — only orphan skills keep inline `metadata.icon` / `metadata.color`.
 
@@ -583,7 +583,7 @@ AI model nodes route through `SquareNode` via `Dashboard.tsx`'s `COMPONENT_BY_KI
 
 ### Specialized UI
 - `src/components/ui/MapSelector.tsx` - Interactive location picker
-- `src/components/ui/OutputDisplayPanel.tsx` - Execution result display
+- `src/components/output/OutputPanel.tsx` - Execution result display (the active renderer; the legacy `ui/OutputDisplayPanel.tsx` was deleted)
 - `src/components/ui/ComponentPalette.tsx` - Searchable component library with emoji icons and dracula-themed category colors. Categories: Workflow, Triggers, AI Agents, AI Models, AI Skills, AI Abilities, AI Tools, Google Maps, Social Media Platforms (merged WhatsApp + Social), Android, Chat, Code Executors
 - `src/components/ui/ComponentItem.tsx` - Draggable node items with hover effects and icon rendering
 - `src/components/ui/CodeEditor.tsx` - Syntax-highlighted code editor (react-simple-code-editor + prismjs). Token colours come from the per-theme `--code-*` tokens (see [Theme System](./docs-internal/theme_system.md) tier 6) — the code editor, console/output JSON viewers, and chat code blocks all paint in the active theme's syntax palette, not a global dracula scheme. (Retired the old `--prism-*` block + dead `getPrismTokenCSS()`.)
@@ -791,10 +791,9 @@ Three methods for renaming nodes, following n8n UX patterns:
 Global State (useAppStore)          Node Components
 ├── renamingNodeId: string | null   ├── SquareNode.tsx
 ├── setRenamingNodeId()             ├── TriggerNode.tsx
-        ↓                           ├── GenericNode.tsx
-   Coordinates which node           └── StartNode.tsx
-   is currently being renamed           ↓
-                                    Local State:
+        ↓                           └── StartNode.tsx
+   Coordinates which node               ↓
+   is currently being renamed       Local State:
                                     ├── isRenaming: boolean
                                     ├── editLabel: string
                                     └── inputRef: HTMLInputElement
@@ -806,7 +805,6 @@ Global State (useAppStore)          Node Components
 - **`client/src/Dashboard.tsx`** - Context menu handler, F2 keyboard handler
 - **`client/src/components/SquareNode.tsx`** - Inline rename for square nodes (Android, WhatsApp)
 - **`client/src/components/TriggerNode.tsx`** - Inline rename for trigger nodes
-- **`client/src/components/GenericNode.tsx`** - Inline rename for generic colored nodes
 - **`client/src/components/StartNode.tsx`** - Inline rename with label support (was hardcoded "Start")
 
 #### Key Pattern (shared by all node components)
@@ -1144,17 +1142,7 @@ npx tsc --noEmit
 
 # Build verification
 npm run build
-
-# Test WebSocket connection for remote Android devices
-python test_websocket.py
 ```
-
-### WebSocket Testing (`test_websocket.py`)
-- Tests health endpoint configured via `WEBSOCKET_URL` environment variable
-- Tests stats endpoint
-- Tests WebSocket connection
-- Validates connection establishment and ping/pong messaging
-- Comprehensive test results with pass/fail status
 
 ## Production Deployment
 
@@ -2739,12 +2727,12 @@ This function:
   - QR codes generated as base64 PNG in memory (no file I/O, no `data/qr` directory)
   - Source: https://github.com/trohitg/whatsapp-rpc
 - **Node Data Architecture**: `node.data` only stores `label` (display name). All parameters are stored in the database via `save_node_parameters` WebSocket handler. This prevents parameter bloat in workflow JSON exports and keeps React Flow state lightweight. `useDragAndDrop.ts` saves default parameters to DB on drop, not to `node.data`.
-- **Workflow Export/Import with Parameters**: Exported workflow JSON includes a `nodeParameters` field containing all node configuration (provider, model, prompt, skillsConfig, etc.) fetched from the database at export time. On import, embedded `nodeParameters` are saved back to the database. `sanitizeNodes()` in `workflowExport.ts` still strips `node.data` to UI-only fields (`label`, `disabled`, `condition`). A `parameterSanitizer.ts` utility exists for credential stripping but is currently disabled (pass-through). Old exports without `nodeParameters` import cleanly (backward compatible). Key files: `client/src/utils/workflowExport.ts`, `client/src/utils/parameterSanitizer.ts`, `client/src/Dashboard.tsx` (export/import handlers), `server/services/example_loader.py`.
+- **Workflow Export/Import with Parameters**: Exported workflow JSON includes a `nodeParameters` field containing all node configuration (provider, model, prompt, skillsConfig, etc.) fetched from the database at export time. On import, embedded `nodeParameters` are saved back to the database. `sanitizeNodes()` in `workflowExport.ts` still strips `node.data` to UI-only fields (`label`, `disabled`, `condition`). The `parameterSanitizer.ts` utility strips credential-bearing keys (SENSITIVE key sets + substring matching + runtime-key stripping) and is ACTIVE in the export path (`buildExportParameters` in `workflowExport.ts` calls `sanitizeParameters`). Old exports without `nodeParameters` import cleanly (backward compatible). Key files: `client/src/utils/workflowExport.ts`, `client/src/utils/parameterSanitizer.ts`, `client/src/Dashboard.tsx` (export/import handlers), `server/services/example_loader.py`.
 - **Skill System Architecture**: Skills organized in `server/skills/<folder>/` subfolders. Each folder appears in Master Skill dropdown. DB is source of truth for skill instructions (seeded from SKILL.md on first load). Icon resolution mirrors `BaseNode._metadata_dict`: per-plugin `<plugin>/icon.svg` (served as `/api/schemas/nodes/<type>/icon`) → `visuals.json` (emoji / `lobehub:<brand>`); color: per-plugin `<plugin>/meta.json` → `visuals.json`. Lives in [`skill_loader.py::_parse_skill_metadata`](./server/services/skill_loader.py). Native DOM keydown handler prevents React Flow from intercepting Ctrl shortcuts in skill editor. **Mutation broadcasts use the CloudEvents-typed `skill_lifecycle` wire key** with stages `created` / `updated` / `deleted` / `content_saved` — see "Plugin-folder location for plugin-specific CloudEvents factories" below.
 - **Example Workflows**: Auto-load example workflow seeds from `<repo>/.opencompany/workflows/` on first use (git-tracked; the only non-ignored content under `<repo>/.opencompany/`). Path resolved by `core.paths.example_workflows_dir()` — fixed, NOT under `DATA_DIR`, preserved by `company clean` via `_OPENCOMPANY_KEEP`. Uses `UserSettings.examples_loaded` flag; supports anonymous users (`user_id="default"`); embedded `nodeParameters` saved to DB on import.
 - **Onboarding Service**: 5-step welcome wizard (Welcome, Concepts, API Keys, Canvas Tour, Get Started) using shadcn primitives + lucide icons. Database-backed via `UserSettings.onboarding_completed` + `onboarding_step`. Existing users auto-skip (migration marks `examples_loaded=1` as completed). Replayable from Settings "Help" section. No new WebSocket handlers needed. See [Onboarding Service](./docs-internal/onboarding.md) for details.
 - **Node.js Code Executor**: Persistent Node.js server (Express + tsx) at port 3020 for JavaScript/TypeScript execution, replacing subprocess spawning per execution. The code executor plugins under `server/nodes/code/` call `NodeJSClient` which makes HTTP requests to the Node.js server. All config via environment variables (`NODEJS_EXECUTOR_URL`, `NODEJS_EXECUTOR_PORT`, etc.).
-- **writeTodos Tool Node**: Dedicated AI tool for task planning connecting to any agent's `input-tools` handle. `TodoService` singleton (`server/services/todo_service.py`) stores JSON-based per-session todo state keyed by workflow_id. Handler broadcasts `phase: "todo_update"` via WebSocket on each update for real-time UI; `formatTodoOutput()` in `OutputDisplayPanel.tsx` renders the result as a checklist with `[ ]` / `[~]` / `[x]` icons. Schema uses `TodoItem`/`TodoStatus` Pydantic enum. Skill at `server/skills/assistant/write-todos-skill/SKILL.md` teaches the plan-work-update loop.
+- **writeTodos Tool Node**: Dedicated AI tool for task planning connecting to any agent's `input-tools` handle. `TodoService` singleton (`server/services/todo_service.py`) stores JSON-based per-session todo state keyed by workflow_id. Handler broadcasts `phase: "todo_update"` via WebSocket on each update for real-time UI. (The former checklist rendering — `formatTodoOutput()` — lived only in the legacy `ui/OutputDisplayPanel.tsx`, which was deleted as dead code; the active `components/output/OutputPanel.tsx` shows todo results as regular JSON.) Schema uses `TodoItem`/`TodoStatus` Pydantic enum. Skill at `server/skills/assistant/write-todos-skill/SKILL.md` teaches the plan-work-update loop.
 - **Temporal Activity Heartbeats**: Activities send `activity.heartbeat()` on every non-matching WebSocket broadcast inside the read loop in `services/temporal/activities.py`. This keeps long-running browser and claude_code_agent operations alive past the 2-minute `heartbeat_timeout`. Start/end heartbeats alone were causing `TIMEOUT_TYPE_HEARTBEAT` failures on ops taking 5-10 minutes. Connection config: `heartbeat=30`, `receive_timeout=540` (fits within 10-min `start_to_close_timeout`).
 - **WebSocket `_safe_send` Guard**: `server/routers/websocket.py` checks `websocket.client_state.name != "CONNECTED"` before sending and logs at `debug` level (not `error`) on failure. Prevents "ASGI message after websocket.close" errors when broadcasts race with disconnects.
 - **Claude Code CLI Flag**: the Claude Code agent (`nodes/agent/claude_code_agent/`) uses `--max-budget-usd <amount>` (previously incorrectly `--max-cost`, which caused "unknown option" errors on every run).

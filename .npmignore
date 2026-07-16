@@ -88,10 +88,6 @@ CLAUDE.md
 # Experiments (work in progress)
 server/experiments/
 
-# Duplicate folders
-OpenCompany/
-MachinaOS/
-
 # WhatsApp RPC is now an npm dependency (@anthropic/whatsapp-rpc)
 # No local whatsapp-rpc directory to exclude
 

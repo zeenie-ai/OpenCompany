@@ -9,203 +9,100 @@ company start
 
 Open http://localhost:3000
 
-## CLI Commands
+## CLI Commands (`company`, Python Typer app under `cli/`)
 
-### Available Commands
+The CLI is the single orchestration surface — every `npm run <verb>` at
+the root is a thin wrapper over `python -m cli <verb>`. The old
+`scripts/{start,stop,build,clean,docker}.js` orchestrators were retired
+(each `cli/commands/<verb>.py` docstring records what it replaced).
+`machina` remains as a deprecated alias of `company` (prints a
+deprecation warning; kept for upgrade compatibility).
 
 | Command | Description |
 |---------|-------------|
-| `company start` | Start the development server (checks dependencies first) |
-| `company stop` | Stop all running services |
-| `company build` | Build the project for production (checks dependencies first) |
-| `company clean` | Clean build artifacts and node_modules |
-| `company docker:up` | Start with Docker Compose (detached) |
-| `company docker:down` | Stop Docker Compose services |
-| `company docker:build` | Build Docker images |
-| `company docker:logs` | View Docker logs (follows) |
-| `company help` | Show help message |
+| `company start` | Start all services in production mode (static client + uvicorn + temporal) |
+| `company dev` | Start in dev mode (Vite HMR + uvicorn + temporal). `--force` re-bundles Vite deps (recovers "Outdated Optimize Dep"); `--daemon` binds backend to 0.0.0.0 |
+| `company serve` | Single-port production runtime (uvicorn serves API + WS + built SPA + Node sidecar) — the systemd `ExecStart` on deployed VMs |
+| `company stop` | Stop all services and free configured ports |
+| `company build` | Full production build (pnpm install → client → sidecar → uv sync → bytecode → temporal binary) |
+| `company clean` | Stop services, then remove build artifacts, node_modules, `.venv`, repo-local state (preserves `.opencompany/{workflows,deploy,packages}`) |
+| `company deploy up/status/destroy` | Self-deploy a login-gated VM (gcloud preflight + Terraform; see `cli/commands/deploy/`) |
+| `company daemon start/stop/status/restart` | Detached backend management (PID file under user data dir) |
+| `company version sync` | Propagate the root package.json version |
+| `company docs nodes [--check]` | Regenerate (or verify) the `docs-internal/node-logic-flows/` index |
+| `company help` | Show help |
 
-### Dependency Checks
+### Dependency checks
 
-The `start` and `build` commands verify these dependencies before running:
-- Node.js 22+
-- Python 3.12+
-- uv (Python package manager)
+`start` and `build` verify Node.js 22+, Python 3.12+, and uv before
+running.
 
 ---
 
 ## npm Scripts
 
-Run with `npm run <script>` from the project root.
+Run with `npm run <script>` from the project root (`package.json` is
+the source of truth).
 
-### Core Scripts
+### CLI wrappers
+
+| Script | Command |
+|--------|---------|
+| `start` / `dev` / `serve` / `build` / `clean` / `stop` / `deploy` | `python -m cli <verb>` |
+| `start:temporal` | `cross-env TEMPORAL_ENABLED=true python -m cli start` |
+| `daemon:start` / `daemon:stop` / `daemon:status` / `daemon:restart` | `python -m cli daemon <verb>` |
+| `version:sync` | `python -m cli version sync` |
+| `docs:nodes` / `docs:nodes:check` | `python -m cli docs nodes [--check]` |
+
+### Service scripts
 
 | Script | Command | Description |
 |--------|---------|-------------|
-| `start` | `node scripts/start.js` | Start all services concurrently |
-| `start:temporal` | `cross-env TEMPORAL_ENABLED=true node scripts/start.js` | Start with Temporal enabled |
-| `stop` | `node scripts/stop.js` | Stop all running services |
-| `build` | `node scripts/build.js` | Build entire project |
-| `clean` | `node scripts/clean.js` | Remove build artifacts |
-
-### Service Scripts
-
-| Script | Command | Description |
-|--------|---------|-------------|
-| `client:start` | `cd client && npm run start` | Start React frontend (Vite) |
-| `python:start` | `cd server && uv run uvicorn main:app ...` | Start Python backend |
-| `temporal:worker` | `cd server && uv run python -m services.temporal.worker` | Start standalone Temporal worker |
+| `client:start` | `cd client && npm run start` | React frontend (Vite dev server) |
+| `python:start` | `cd server && uv run uvicorn main:app --host 127.0.0.1 --port 3010 ...` | Backend only |
+| `python:daemon` | same, bound to `0.0.0.0` | Backend only, LAN-reachable |
+| `temporal:worker` | `cd server && uv run python -m services.temporal.worker` | Standalone Temporal worker |
 
 Temporal server lifecycle is managed by `company start` / `company dev` / `company stop` directly (see [Temporal Architecture](./TEMPORAL_ARCHITECTURE.md)). The official `temporal` CLI is downloaded by `pooch` to `<DATA_DIR>/packages/temporal/` (= `~/.opencompany/packages/temporal/` by default) during `company build` and spawned as a supervised subprocess.
 
-### Docker Scripts (Development)
+### Tests
 
-| Script | Command | Description |
-|--------|---------|-------------|
-| `docker:up` | `node scripts/docker.js up` | Start dev stack (detached) |
-| `docker:down` | `node scripts/docker.js down` | Stop dev stack |
-| `docker:build` | `node scripts/docker.js build` | Build dev images |
-| `docker:logs` | `node scripts/docker.js logs` | View logs (follows) |
-| `docker:restart` | `node scripts/docker.js restart` | Restart dev stack |
+| Script | Command |
+|--------|---------|
+| `test` | backend + frontend suites |
+| `test:backend` | `cd server && uv run pytest tests/ -v` |
+| `test:frontend` | `cd client && npm run test` (vitest) |
+| `test:nodes` | node-plugin tests with handler coverage |
 
-### Docker Scripts (Production)
+### Lifecycle hooks
 
-| Script | Command | Description |
-|--------|---------|-------------|
-| `docker:prod:up` | `docker-compose -f docker-compose.prod.yml up -d` | Start production stack |
-| `docker:prod:down` | `docker-compose -f docker-compose.prod.yml down` | Stop production stack |
-| `docker:prod:build` | `docker-compose -f docker-compose.prod.yml build` | Build production images |
-| `docker:prod:logs` | `docker-compose -f docker-compose.prod.yml logs -f` | View production logs |
-
-### Deployment Scripts
-
-| Script | Command | Description |
-|--------|---------|-------------|
-| `deploy` | `python -m cli deploy` | Self-deploy to a cloud VM (`company deploy up/status/destroy` — gcloud preflight + Terraform; see `cli/commands/deploy/`) |
-
-The legacy `deploy.sh` (SCP + docker-compose to a GCE box) was removed; `company deploy`
-provisions a login-gated VM natively via the operator's cloud CLI + Terraform.
+| Script | File | Purpose |
+|--------|------|---------|
+| `preinstall` / `preuninstall` | `scripts/preinstall.js` | Removes the legacy `machinaos` global package / stale temp dirs before (un)install |
+| `postinstall` | `scripts/postinstall.js` | End-user install pipeline for the npm tarball (delegates to `scripts/install.js`) |
 
 ---
 
-## Script Details
+## Files actually in `scripts/`
 
-### start.js
+| File | Purpose |
+|------|---------|
+| `install.js` | npm-tarball install pipeline (pnpm/uv install, client + sidecar build, bytecode compile, temporal binary fetch) — mirrors `company build`; the compileall command shape is locked in sync by `cli/tests/test_release_pipeline_config.py` |
+| `preinstall.js` | Legacy-package/temp cleanup (also runs on uninstall) |
+| `postinstall.js` | npm lifecycle entry that guards recursion and invokes install.js |
+| `serve-client.js` | Static client server used by `company start` (production mode, no Vite) |
+| `migrate_icons.py`, `migrate_skill_icons.py` | One-off icon-migration utilities (historical) |
 
-**Location:** `scripts/start.js`
-
-Cross-platform start script that runs all services concurrently.
-
-**What it does** (mirrored by the canonical `company start` / `company dev` CLI commands):
-1. Validates build artifacts exist
-2. Creates `.env` from `.env.template` if missing
-3. Frees configured app ports (client, backend, WhatsApp, Node.js executor, Temporal gRPC, Temporal UI)
-4. Spawns each service in its own process group (Windows: `CREATE_NEW_PROCESS_GROUP` for graceful `CTRL_BREAK_EVENT` shutdown):
-   - Static client server (`serve-client.js`)
-   - Python backend (uvicorn) -- supervises the edgymeow Go binary lazily via [server/nodes/whatsapp/_runtime.py](../server/nodes/whatsapp/_runtime.py)
-   - Temporal dev server -- the supervised-runtime shim ([server/services/temporal/_supervised_runtime.py](../server/services/temporal/_supervised_runtime.py)) spawning `temporal server start-dev`
-
-**Temporal handling:** The supervisor's TCP readiness probe on 7233 short-circuits if Temporal is already running, so launching `company start` against a pre-existing Temporal works without conflict.
-
-**Ports (configurable in .env):**
-- `VITE_CLIENT_PORT` - Frontend (default: 3000)
-- `PYTHON_BACKEND_PORT` - Backend (default: 3010)
-- `WHATSAPP_RPC_PORT` - WhatsApp (default: 9400)
-
-**Platform support:** Windows, macOS, Linux, WSL, Git Bash
-
----
-
-### build.js
-
-**Location:** `scripts/build.js`
-
-Production build script that compiles all components.
-
-**Build steps:**
-1. `[0/6]` Create `.env` from template if missing
-2. `[1/6]` Install root dependencies (`npm ci` or `npm install`)
-3. `[2/6]` Install client dependencies
-4. `[3/6]` Build client (`vite build`)
-5. `[4/6]` Install Python dependencies (`uv venv && uv sync`)
-6. `[5/6]` Install WhatsApp dependencies
-7. `[6/6]` Build WhatsApp Go binary
-
-**Dependencies checked:**
-- Node.js, npm, Python, uv, Go
-
----
-
-### stop.js
-
-**Location:** `scripts/stop.js`
-
-Cross-platform stop script that kills all OpenCompany processes.
-
-**What it does:**
-1. Reads port configuration from `.env`
-2. Finds processes on each port
-3. Kills processes including child processes
-4. Verifies processes are stopped
-5. Retries stubborn processes with force kill
-6. Kills Temporal processes via `killByPattern('temporal')`
-
-**Platform-specific commands:**
-| Platform | Find processes | Kill process |
-|----------|----------------|--------------|
-| Unix/Mac | `lsof -ti:PORT` | `kill -15`, then `kill -9` |
-| Linux | `ss -tlnp` (fallback) | `kill -15`, then `kill -9` |
-| Windows | `netstat -ano \| findstr` | `taskkill /PID` |
-
----
-
-### clean.js
-
-**Location:** `scripts/clean.js`
-
-Removes build artifacts and dependencies.
-
-**Directories removed:**
-- `node_modules/` - Root dependencies
-- `client/node_modules/` - Frontend dependencies
-- `client/dist/` - Built frontend
-- `client/.vite/` - Vite cache
-- `server/.venv/` - Python virtual environment
-- `.opencompany/` - Repo-local DATA_DIR opt-out (only present when `DATA_DIR=.opencompany`; the default `~/.opencompany/` lives in your home dir and is never touched)
-
----
-
-### docker.js
-
-**Location:** `scripts/docker.js`
-
-Docker Compose wrapper with automatic Redis profile detection.
-
-**Usage:**
-```bash
-node scripts/docker.js <command> [args...]
-```
-
-**Commands:** `up`, `down`, `build`, `logs`, `restart`
-
-**Features:**
-- Creates `.env` from template if missing
-- Reads `REDIS_ENABLED` from `.env`
-- Adds `--profile redis` flag when Redis is enabled
-- `up` runs detached (`-d`) by default
-- `logs` follows (`-f`) by default
-
-**Example output:**
-```
-[Docker] Redis profile enabled (REDIS_ENABLED=true in .env)
-[Docker] Running: docker-compose --profile redis up -d
-```
+There is no Docker tooling: Docker Compose support was removed
+(historical topology preserved in
+[deployment_legacy.md](./deployment_legacy.md)); deployment is
+`company deploy` (Terraform → GCP VM → systemd).
 
 ---
 
 ## Environment Variables
 
-Key variables in `.env` (see `.env.template` for full list):
+Key variables in `.env` (see `.env.template` for the full list):
 
 ### Ports
 | Variable | Default | Description |
@@ -213,38 +110,25 @@ Key variables in `.env` (see `.env.template` for full list):
 | `VITE_CLIENT_PORT` | 3000 | Frontend port |
 | `PYTHON_BACKEND_PORT` | 3010 | Backend port |
 | `WHATSAPP_RPC_PORT` | 9400 | WhatsApp API port |
+| `NODEJS_EXECUTOR_PORT` | 3020 | Node.js code-executor sidecar |
+| — | 7233 / 8080 | Temporal gRPC / Temporal Web UI |
 
 ### Features
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TEMPORAL_ENABLED` | false | Enable Temporal worker |
-| `REDIS_ENABLED` | false | Enable Redis cache (uses SQLite if false) |
-
-### Redis (when enabled)
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `REDIS_URL` | redis://redis:6379 | Redis connection URL |
-| `REDIS_PORT` | 6379 | Redis port |
+| `TEMPORAL_ENABLED` | (see `.env.template`) | Temporal execution engine |
+| `REDIS_ENABLED` | false | Redis cache (SQLite fallback when false) |
 
 ---
 
 ## Required Dependencies
 
-### For `start` and `build` commands
-
 | Dependency | Version | Install |
 |------------|---------|---------|
-| Node.js | 18+ | https://nodejs.org/ |
-| Python | 3.11+ | https://python.org/ |
+| Node.js | 22+ | https://nodejs.org/ |
+| Python | 3.12+ (CLI); server venv accepts 3.11–3.12 | https://python.org/ |
 | uv | latest | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
-| Go | latest | https://go.dev/dl/ (for WhatsApp binary) |
-
-### For Docker commands
-
-| Dependency | Install |
-|------------|---------|
-| Docker | https://docs.docker.com/get-docker/ |
-| Docker Compose | Included with Docker Desktop |
+| pnpm | 9.x | `corepack enable` (root `packageManager` pin) |
 
 ---
 
@@ -252,21 +136,17 @@ Key variables in `.env` (see `.env.template` for full list):
 
 ```bash
 # Development
-company start          # Start all services
+company dev            # Vite HMR + backend + temporal
+company dev --force    # ...forcing a Vite dependency re-bundle
+company start          # Production mode (static client)
 company stop           # Stop all services
 
-# Build
-company build          # Build for production
-company clean          # Clean everything
+# Build / clean
+company build          # Full production build
+company clean          # Clean everything (keeps workflows/deploy/packages state)
 
-# Docker (development)
-company docker:up      # Start containers
-company docker:down    # Stop containers
-company docker:logs    # View logs
-company docker:build   # Rebuild images
-
-# Docker (production)
-npm run docker:prod:up   # Start production
-npm run docker:prod:down # Stop production
-npm run deploy           # Deploy to server
+# Deploy
+company deploy up --provider gcp --owner-email you@example.com
+company deploy status
+company deploy destroy
 ```

@@ -2,7 +2,7 @@
  * Tests for OutputSection -- specifically the combineResults logic.
  *
  * Locks in:
- *   - executionResults are passed through to NodeOutputPanel
+ *   - executionResults are passed through to the output panel
  *   - nodeStatus from WebSocket is folded in (newest first) when not already present
  *   - Duplicate detection compares outputs via JSON.stringify
  *   - visible=false renders nothing
