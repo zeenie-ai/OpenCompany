@@ -347,6 +347,19 @@ Full reference: [docs-internal/plugin_system.md → "Self-contained plugin folde
   `model_dump(by_alias=True)`. `displayOptions.show["driver_field"]` must
   match a property name in the same `Params` class — the frontend's
   visibility evaluator looks up that exact key.
+- **A custom `tool_name` breaks the paired skill's icon unless you add a
+  `visuals.json` alias.** The skill icon resolver
+  (`SkillLoader._parse_skill_metadata`) maps each SKILL.md
+  `allowed-tools` token — which is the LLM tool name — through
+  snake→camel into a `visuals.json` lookup. Keep `tool_name =
+  "<snake_case_of_node_type>"` and this just works. If you deliberately
+  pick a short brand name (`github` for `githubAction`, `vercel` for
+  `vercelAction`), you MUST add a `visuals.json` entry keyed by that
+  tool name carrying the same icon plus the plugin's `meta.json` color:
+  `"github": {"icon": "lobehub:Github", "color": "#8250df"}`. Otherwise
+  the Master Skill row renders a blank icon and no color. Locked by
+  `tests/test_skill_icon_resolution.py` (every shipped skill must
+  resolve a non-empty icon).
 - **LLM tool schemas must be flat.** If your Params uses nested
   Pydantic models or `Union`, the LLM-schema emission will add `$defs`
   and fail the invariant. Keep tool-facing Params flat; move nested

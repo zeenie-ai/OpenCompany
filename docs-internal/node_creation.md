@@ -207,6 +207,7 @@ What you **do** still write:
 
 - Drop `icon.svg` (or `icon_<nodeType>.svg` for multi-node folders) and `meta.json` (`{"color": "#xxx"}`) inside the plugin folder. The class-attribute icon/color override was removed in F1 — declaring `icon` or `color` as class attrs has no effect.
 - An entry in `server/nodes/visuals.json` ONLY if you want an emoji or `lobehub:<brand>` icon (no folder SVG). Post-F1/F7 visuals.json carries zero `asset:<key>` values.
+- A **lowercase alias entry in `visuals.json` keyed by the LLM `tool_name`** whenever you set `tool_name` to something other than `<snake_case_of_node_type>` AND ship a paired skill. The skill icon resolver maps the SKILL.md `allowed-tools` token (= the tool name) through snake→camel into `visuals.json`; a custom tool name misses the node-type key and the Master Skill row renders a blank icon. The alias carries the same icon plus the plugin's `meta.json` color — precedent: `"github": {"icon": "lobehub:Github", "color": "#8250df"}`, `"vercel": {"icon": "lobehub:Vercel", "color": "#666666"}`. Locked by `server/tests/test_skill_icon_resolution.py`.
 - An entry in `server/nodes/groups.py` if you introduce a new palette group.
 
 ## Where to look next

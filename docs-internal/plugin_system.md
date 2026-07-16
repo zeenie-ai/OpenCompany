@@ -1300,6 +1300,23 @@ registered. Stick to `<snake_case_of_node_type>` unless you're
 prepared to maintain alias entries in `visuals.json`. See
 [`server/skills/GUIDE.md → Tool naming`](../server/skills/GUIDE.md#tool-naming--snake_case--camelcase-contract).
 
+This is not hypothetical: `githubAction` / `vercelAction` deliberately
+use the short LLM tool names `github` / `vercel`, and their Master
+Skill rows shipped with blank icons until lowercase alias entries were
+added. The alias must carry BOTH `icon` and `color` — color normally
+comes from the plugin's `meta.json`, which is keyed by node type and
+therefore also misses for a custom tool name:
+
+```json
+"github":  { "icon": "lobehub:Github", "color": "#8250df" },
+"vercel":  { "icon": "lobehub:Vercel", "color": "#666666" }
+```
+
+The invariant is locked by
+`server/tests/test_skill_icon_resolution.py` — every shipped skill must
+resolve a non-empty icon, so a new plugin/skill pairing that breaks
+this contract fails CI instead of shipping a blank row.
+
 ### When to use the framework
 
 Use it for any new event-source plugin:

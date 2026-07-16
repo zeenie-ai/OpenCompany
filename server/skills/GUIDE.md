@@ -136,6 +136,8 @@ The skill resolver (`SkillLoader._parse_skill_metadata`) takes each `allowed-too
 
 **Common pitfall:** picking a "creative" LLM tool name that doesn't snake-back to the node type. For example, calling a `stripeAction` node's tool `stripe_cli` (because it wraps a CLI) breaks the convention — `stripe_cli` snakes to `stripeCli`, not `stripeAction`, so `visuals.json` lookup fails. Stick to `<node_type_in_snake_case>` unless you're prepared to also add an alias entry to `visuals.json`.
 
+**If you do keep a short tool name, the alias entry is mandatory, not optional.** Real precedent: `githubAction` / `vercelAction` use the tool names `github` / `vercel`, and their skills rendered blank Master Skill rows until `visuals.json` gained lowercase alias entries keyed by the tool name. The alias must carry both `icon` and `color` (the color fallback via the plugin's `meta.json` is keyed by node type, so it misses too): `"github": {"icon": "lobehub:Github", "color": "#8250df"}`. Every shipped skill must resolve a non-empty icon — locked by `server/tests/test_skill_icon_resolution.py`, so a mismatch fails CI with a message pointing back here.
+
 ## Optional Supporting Files
 
 Skills can include additional files that are loaded alongside the main instructions:
