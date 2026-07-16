@@ -23,7 +23,7 @@ const ComponentPalette: React.FC<ComponentPaletteProps> = ({
   onToggleSection,
   onDragStart,
   proMode = false,  // Default to simple mode
-  specsReady = false,
+  specsKey = '',
 }) => {
   const { isBlocked, isAllowed } = useNodeAllowlist();
 
@@ -104,8 +104,8 @@ const ComponentPalette: React.FC<ComponentPaletteProps> = ({
     });
 
     return categories;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- specsReady gates memo recomputation when the spec catalogue hydrates.
-  }, [searchQuery, proMode, groupIndex, isBlocked, isAllowed, specsReady]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- specsKey gates memo recomputation when the spec catalogue hydrates or changes set.
+  }, [searchQuery, proMode, groupIndex, isBlocked, isAllowed, specsKey]);
 
   const totalComponents = Object.values(categorizedComponents).reduce(
     (acc, components) => acc + components.length, 

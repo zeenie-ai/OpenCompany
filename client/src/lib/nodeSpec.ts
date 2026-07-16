@@ -215,6 +215,25 @@ export function listCachedNodeSpecs(): NodeSpec[] {
 }
 
 /**
+ * Identity key for the SET of cached spec types. Changes exactly when a
+ * type is added or removed — i.e. when the boot prefetch lands a new
+ * backend revision (`prefetchAllNodeSpecs` busts + refetches on
+ * mismatch). Dashboard keys its React Flow `nodeTypes` memo (and the
+ * ComponentPalette its category memo) on this string instead of a
+ * latched boolean: a warm start whose persisted cache pre-dates a newly
+ * deployed node type would otherwise never rebuild the dispatch map —
+ * the palette offers the new node but React Flow has no component for
+ * it and falls back to the default node (first-drop render bug).
+ * String value equality keeps the no-change warm start a no-op.
+ */
+export function cachedNodeSpecTypesKey(): string {
+  return listCachedNodeSpecs()
+    .map(s => s.type)
+    .sort()
+    .join('|');
+}
+
+/**
  * Wave 10.E: types whose backend spec lists ``group`` includes the
  * given group key. Returns an empty array until prefetch lands; callers
  * that need a synchronous answer should rely on the spec-driven

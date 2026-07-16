@@ -13,9 +13,11 @@ export interface ComponentPaletteActions {
 
 export interface ComponentPaletteProps extends ComponentPaletteState, ComponentPaletteActions {
   proMode?: boolean;  // false = simple mode (only AI categories), true = pro mode (all categories)
-  // Flips true after Dashboard's prefetchAllNodeSpecs resolves so the
-  // palette's useMemo recomputes against the now-warm spec cache.
-  specsReady?: boolean;
+  // Identity of the cached spec-type set (cachedNodeSpecTypesKey).
+  // Changes when Dashboard's prefetchAllNodeSpecs lands a different
+  // catalogue so the palette's useMemo recomputes against the now-warm
+  // spec cache — including types added by a backend revision bust.
+  specsKey?: string;
 }
 
 export interface WorkflowHandlers {

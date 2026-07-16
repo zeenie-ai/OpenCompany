@@ -14,7 +14,7 @@ import {
   Edge,
 } from 'reactflow';
 import { featureFlags } from './lib/featureFlags';
-import { prefetchAllNodeSpecs, listCachedNodeSpecs } from './lib/nodeSpec';
+import { prefetchAllNodeSpecs, listCachedNodeSpecs, cachedNodeSpecTypesKey } from './lib/nodeSpec';
 import AIAgentNode from './components/AIAgentNode';
 import SquareNode from './components/SquareNode';
 import TriggerNode from './components/TriggerNode';
@@ -115,7 +115,7 @@ const COMPONENT_BY_KIND: Record<string, React.ComponentType<any>> = {
 const createNodeTypes = (): Record<string, React.ComponentType<any>> => {
   const types: Record<string, React.ComponentType<any>> = {};
   // Cache-driven enumeration: empty on cold boot, filled once
-  // prefetchAllNodeSpecs resolves and `specsReady` triggers a rebuild.
+  // prefetchAllNodeSpecs resolves and the `specsKey` change rebuilds.
   listCachedNodeSpecs().forEach(spec => {
     const kind = spec.componentKind;
     if (kind && COMPONENT_BY_KIND[kind]) {
@@ -440,25 +440,33 @@ const DashboardContent: React.FC = () => {
 
   // Wave 6 Phase 2: warm the NodeSpec cache in the background once the
   // WS is up. No-op when VITE_NODESPEC_BACKEND is off. After prefetch
-  // completes, bumping `specsReady` flips the React Flow nodeTypes ref
+  // completes, recomputing `specsKey` flips the React Flow nodeTypes ref
   // so spec.componentKind dispatch becomes effective (Wave 10.D step 2).
   const hasPrefetchedSpecs = React.useRef(false);
   // Seed from the persisted cache. With PersistQueryClientProvider in
   // place the cache is hydrated from localStorage before the first
   // render, so a warm start can skip the cold→warm remount entirely.
-  const [specsReady, setSpecsReady] = React.useState(
-    () => listCachedNodeSpecs().length > 0,
-  );
+  //
+  // `specsKey` is the identity of the cached spec-type SET, not a
+  // latched boolean: when the prefetch burst busts a stale persisted
+  // revision and lands types the hydrated snapshot didn't have (a node
+  // shipped since the last visit), the key change rebuilds nodeTypes.
+  // With the old `specsReady` boolean the set-change was invisible
+  // (true -> true bails out of setState) and a freshly deployed node
+  // type stayed missing from React Flow's map for the whole session —
+  // the palette offered it (its groupIndex dep is reactive) but the
+  // canvas rendered the fallback default node on first drop.
+  const [specsKey, setSpecsKey] = React.useState(() => cachedNodeSpecTypesKey());
   React.useEffect(() => {
     if (!isReady || hasPrefetchedSpecs.current) return;
     if (!featureFlags.nodeSpecBackend) {
       // When the backend is disabled, mark ready so the legacy fallback
       // dispatch runs without waiting on a never-completing prefetch.
-      setSpecsReady(true);
+      setSpecsKey('__legacy__');
       return;
     }
     hasPrefetchedSpecs.current = true;
-    void prefetchAllNodeSpecs(sendRequest).finally(() => setSpecsReady(true));
+    void prefetchAllNodeSpecs(sendRequest).finally(() => setSpecsKey(cachedNodeSpecTypesKey()));
   }, [isReady, sendRequest]);
 
   // Paint executing / completed / error / pending classes on the React
@@ -615,12 +623,13 @@ const DashboardContent: React.FC = () => {
 
   const proOptions = React.useMemo(() => ({ hideAttribution: true }), []);
 
-  // Wave 10.D step 2: nodeTypes dispatch map. Built once per hydration
-  // pass — `specsReady` is seeded from the persisted cache, so warm
+  // Wave 10.D step 2: nodeTypes dispatch map. Keyed on the cached
+  // spec-type SET identity — seeded from the persisted cache, so warm
   // starts get a populated map on the first render and no canvas-wide
-  // remount when prefetch lands. Cold first-ever visit still rebuilds
-  // when prefetch finishes (one-time cost per browser).
-  const nodeTypes = React.useMemo(() => createNodeTypes(), [specsReady]);
+  // remount when an unchanged prefetch lands (same set -> same key).
+  // Rebuilds exactly when the set changes: cold first-ever visit, and
+  // a revision bust that adds/removes node types (one-time cost each).
+  const nodeTypes = React.useMemo(() => createNodeTypes(), [specsKey]);
   const edgeTypes = moduleEdgeTypes;
 
   // Execute entire workflow from start node to end
@@ -1362,7 +1371,7 @@ const DashboardContent: React.FC = () => {
                   onToggleSection={toggleSection}
                   onDragStart={handleComponentDragStart}
                   proMode={proMode}
-                  specsReady={specsReady}
+                  specsKey={specsKey}
                 />
               )}
             </div>
