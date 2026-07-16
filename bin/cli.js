@@ -34,13 +34,10 @@ Commands:
 ${Object.entries(COMMANDS).map(([cmd, desc]) => `  ${cmd.padEnd(14)} ${desc}`).join('\n')}
 
 Flags:
-  --verbose, -v    Show full service logs (start)
-  --skip-whatsapp  Skip WhatsApp service (start, dev)
-  --daemon         Use uvicorn daemon backend
+  --daemon         Bind the backend to 0.0.0.0 instead of 127.0.0.1 (dev)
 
 Examples:
   company start          # Production server (clean output)
-  company start -v       # Production with full logs
   company dev            # Development with hot-reload
   company build          # Build for production
 

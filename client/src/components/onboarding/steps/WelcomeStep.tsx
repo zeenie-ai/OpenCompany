@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 
 const features = [
   { Icon: Plug, label: '108+ Nodes', desc: 'Workflow building blocks' },
-  { Icon: Rocket, label: '6 AI Providers', desc: 'OpenAI, Claude, Gemini & more' },
+  { Icon: Rocket, label: '12 AI Providers', desc: 'OpenAI, Claude, Gemini & more' },
   { Icon: Move, label: 'Drag & Drop', desc: 'Visual workflow builder' },
   { Icon: Zap, label: 'Real-time', desc: 'Live execution & monitoring' },
 ];
