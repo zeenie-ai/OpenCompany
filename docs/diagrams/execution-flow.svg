@@ -1,23 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1460 1300" width="100%" preserveAspectRatio="xMidYMid meet" font-family="ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1460 1300" width="100%" preserveAspectRatio="xMidYMid meet" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace">
+  <!-- Palette: OpenCompany dark-theme tokens (client/src/themes/dark.css surfaces/fg + light.css Dracula accents) -->
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#f8f8f2"/>
+      <path d="M0,0 L10,5 L0,10 z" fill="#e8eaed"/>
     </marker>
     <style>
-      .bg { fill: #282a36; }
-      .panel { fill: #44475a; stroke-width: 2; }
+      .bg { fill: #0d0f13; }
+      .panel { fill: #15171c; stroke-width: 2; }
       .p-cyan { stroke: #8be9fd; } .p-purple { stroke: #bd93f9; } .p-orange { stroke: #ffb86c; } .p-green { stroke: #50fa7b; } .p-pink { stroke: #ff79c6; }
-      .title { fill: #f8f8f2; font-size: 20px; font-weight: 700; }
-      .h1 { fill: #f8f8f2; font-size: 18px; font-weight: 700; }
-      .h2 { fill: #f8f8f2; font-size: 14px; font-weight: 700; }
-      .sub { fill: #f8f8f2; font-size: 12px; }
-      .small { fill: #f8f8f2; font-size: 10px; }
+      .title { fill: #e8eaed; font-size: 20px; font-weight: 700; }
+      .h1 { fill: #e8eaed; font-size: 18px; font-weight: 700; }
+      .h2 { fill: #e8eaed; font-size: 14px; font-weight: 700; }
+      .sub { fill: #e8eaed; font-size: 12px; }
+      .small { fill: #e8eaed; font-size: 10px; }
       .label { fill: #f1fa8c; font-size: 11px; font-style: italic; }
-      .conn { stroke: #f8f8f2; stroke-width: 1.8; fill: none; }
-      .conn-dot { stroke: #6272a4; stroke-width: 1.5; fill: none; stroke-dasharray: 4 4; }
-      .box { fill: #282a36; stroke-width: 1.5; }
-      .tier-label { fill: #6272a4; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+      .conn { stroke: #e8eaed; stroke-width: 1.8; fill: none; }
+      .conn-dot { stroke: #9aa1ac; stroke-width: 1.5; fill: none; stroke-dasharray: 4 4; }
+      .box { fill: #1b1e25; stroke-width: 1.5; }
+      .tier-label { fill: #9aa1ac; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
       .accent-cyan { fill: #8be9fd; } .accent-purple { fill: #bd93f9; } .accent-green { fill: #50fa7b; } .accent-orange { fill: #ffb86c; } .accent-pink { fill: #ff79c6; }
+          .title, .h1, .h2 { font-family: 'Geist Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
     </style>
   </defs>
   <rect class="bg" width="1460" height="1300"/>
@@ -45,8 +47,8 @@
   <!-- Canvas lane: straight down to convergence -->
   <path class="conn" d="M 250 196 L 250 1038" marker-end="url(#arrow)"/>
   <text x="262" y="250" class="label">direct dispatch</text>
-  <text x="270" y="500" class="small" style="fill:#6272a4">canvas trigger waits use in-memory</text>
-  <text x="270" y="518" class="small" style="fill:#6272a4">event_waiter (asyncio.Future)</text>
+  <text x="270" y="500" class="small" style="fill:#9aa1ac">canvas trigger waits use in-memory</text>
+  <text x="270" y="518" class="small" style="fill:#9aa1ac">event_waiter (asyncio.Future)</text>
 
   <!-- Deployed lane -->
   <path class="conn" d="M 990 196 L 990 238" marker-end="url(#arrow)"/>
@@ -107,7 +109,7 @@
   <text x="520" y="900" class="sub" text-anchor="middle">per-type activities node.{type}.v{ver}</text>
   <text x="520" y="920" class="sub" text-anchor="middle">3 retries &#183; 10 min timeout &#183; heartbeats</text>
   <text x="520" y="940" class="sub" text-anchor="middle">per-queue TemporalWorkerPool (default on)</text>
-  <text x="520" y="964" class="small" style="fill:#6272a4" text-anchor="middle">services/temporal/</text>
+  <text x="520" y="964" class="small" style="fill:#9aa1ac" text-anchor="middle">services/temporal/</text>
 
   <!-- Mode box: Parallel Local (Redis) -->
   <rect class="panel p-orange" x="760" y="830" width="350" height="132" rx="8"/>
@@ -115,14 +117,14 @@
   <text x="935" y="880" class="sub" text-anchor="middle">decide loop + Kahn layers</text>
   <text x="935" y="900" class="sub" text-anchor="middle">asyncio.gather() fork/join</text>
   <text x="935" y="920" class="sub" text-anchor="middle">input-hash cache &#183; DLQ + heartbeat recovery</text>
-  <text x="935" y="944" class="small" style="fill:#6272a4" text-anchor="middle">services/execution/</text>
+  <text x="935" y="944" class="small" style="fill:#9aa1ac" text-anchor="middle">services/execution/</text>
 
   <!-- Mode box: Sequential Fallback -->
   <rect class="panel p-orange" x="1160" y="830" width="260" height="112" rx="8"/>
   <text x="1290" y="856" class="h2" text-anchor="middle">Sequential Fallback</text>
   <text x="1290" y="880" class="sub" text-anchor="middle">topological walk</text>
   <text x="1290" y="900" class="sub" text-anchor="middle">no cache, no retry, no DLQ</text>
-  <text x="1290" y="924" class="small" style="fill:#6272a4" text-anchor="middle">_execute_sequential()</text>
+  <text x="1290" y="924" class="small" style="fill:#9aa1ac" text-anchor="middle">_execute_sequential()</text>
 
   <!-- Mode boxes -> convergence -->
   <path class="conn" d="M 520 982 L 520 1038" marker-end="url(#arrow)"/>

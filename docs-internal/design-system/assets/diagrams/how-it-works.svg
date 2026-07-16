@@ -1,23 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1800 540" width="100%" preserveAspectRatio="xMidYMid meet" font-family="ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1800 540" width="100%" preserveAspectRatio="xMidYMid meet" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace">
+  <!-- Palette: OpenCompany dark-theme tokens (client/src/themes/dark.css surfaces/fg + light.css Dracula accents) -->
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#f8f8f2"/>
+      <path d="M0,0 L10,5 L0,10 z" fill="#e8eaed"/>
     </marker>
     <style>
-      .bg { fill: #282a36; }
-      .panel { fill: #44475a; stroke-width: 2; }
+      .bg { fill: #0d0f13; }
+      .panel { fill: #15171c; stroke-width: 2; }
       .p-cyan { stroke: #8be9fd; } .p-purple { stroke: #bd93f9; } .p-orange { stroke: #ffb86c; } .p-green { stroke: #50fa7b; } .p-pink { stroke: #ff79c6; }
-      .title { fill: #f8f8f2; font-size: 20px; font-weight: 700; }
-      .h1 { fill: #f8f8f2; font-size: 18px; font-weight: 700; }
-      .h2 { fill: #f8f8f2; font-size: 14px; font-weight: 700; }
-      .sub { fill: #f8f8f2; font-size: 12px; }
-      .small { fill: #f8f8f2; font-size: 10px; }
+      .title { fill: #e8eaed; font-size: 20px; font-weight: 700; }
+      .h1 { fill: #e8eaed; font-size: 18px; font-weight: 700; }
+      .h2 { fill: #e8eaed; font-size: 14px; font-weight: 700; }
+      .sub { fill: #e8eaed; font-size: 12px; }
+      .small { fill: #e8eaed; font-size: 10px; }
       .label { fill: #f1fa8c; font-size: 11px; font-style: italic; }
-      .conn { stroke: #f8f8f2; stroke-width: 1.8; fill: none; }
-      .conn-dot { stroke: #6272a4; stroke-width: 1.5; fill: none; stroke-dasharray: 4 4; }
-      .box { fill: #282a36; stroke-width: 1.5; }
-      .tier-label { fill: #6272a4; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+      .conn { stroke: #e8eaed; stroke-width: 1.8; fill: none; }
+      .conn-dot { stroke: #9aa1ac; stroke-width: 1.5; fill: none; stroke-dasharray: 4 4; }
+      .box { fill: #1b1e25; stroke-width: 1.5; }
+      .tier-label { fill: #9aa1ac; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
       .accent-cyan { fill: #8be9fd; } .accent-purple { fill: #bd93f9; } .accent-green { fill: #50fa7b; } .accent-orange { fill: #ffb86c; } .accent-pink { fill: #ff79c6; }
+          .title, .h1, .h2 { font-family: 'Geist Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
     </style>
   </defs>
   <rect class="bg" width="1800" height="540"/>
@@ -29,7 +31,7 @@
   <!-- Step 1: Pick your blocks -->
   <rect class="panel p-purple" x="43" y="110" width="266" height="140" rx="10"/>
   <circle class="accent-purple" cx="176" cy="142" r="15"/>
-  <text x="176" y="148" text-anchor="middle" font-size="16" font-weight="700" fill="#282a36">1</text>
+  <text x="176" y="148" text-anchor="middle" font-size="16" font-weight="700" fill="#0d0f13">1</text>
   <text class="h2" x="176" y="172" text-anchor="middle">Pick your blocks</text>
   <text class="sub" x="176" y="196" text-anchor="middle">Drag nodes from the palette -</text>
   <text class="sub" x="176" y="214" text-anchor="middle">100+ blocks: AI Agent, Chat,</text>
@@ -42,7 +44,7 @@
   <!-- Step 2: Connect them -->
   <rect class="panel p-purple" x="405" y="110" width="266" height="140" rx="10"/>
   <circle class="accent-purple" cx="538" cy="142" r="15"/>
-  <text x="538" y="148" text-anchor="middle" font-size="16" font-weight="700" fill="#282a36">2</text>
+  <text x="538" y="148" text-anchor="middle" font-size="16" font-weight="700" fill="#0d0f13">2</text>
   <text class="h2" x="538" y="172" text-anchor="middle">Connect them</text>
   <text class="sub" x="538" y="196" text-anchor="middle">Wire trigger &#8594; AI Agent &#8594; reply.</text>
   <text class="sub" x="538" y="214" text-anchor="middle">Attach Memory, Skills, and</text>
@@ -55,7 +57,7 @@
   <!-- Step 3: Add your keys -->
   <rect class="panel p-purple" x="767" y="110" width="266" height="140" rx="10"/>
   <circle class="accent-purple" cx="900" cy="142" r="15"/>
-  <text x="900" y="148" text-anchor="middle" font-size="16" font-weight="700" fill="#282a36">3</text>
+  <text x="900" y="148" text-anchor="middle" font-size="16" font-weight="700" fill="#0d0f13">3</text>
   <text class="h2" x="900" y="172" text-anchor="middle">Add your keys</text>
   <text class="sub" x="900" y="196" text-anchor="middle">Open API Credentials, paste a</text>
   <text class="sub" x="900" y="214" text-anchor="middle">provider key, pick a model</text>
@@ -68,7 +70,7 @@
   <!-- Step 4: Test it, then start it -->
   <rect class="panel p-purple" x="1129" y="110" width="266" height="140" rx="10"/>
   <circle class="accent-purple" cx="1262" cy="142" r="15"/>
-  <text x="1262" y="148" text-anchor="middle" font-size="16" font-weight="700" fill="#282a36">4</text>
+  <text x="1262" y="148" text-anchor="middle" font-size="16" font-weight="700" fill="#0d0f13">4</text>
   <text class="h2" x="1262" y="172" text-anchor="middle">Test it, then start it</text>
   <text class="sub" x="1262" y="196" text-anchor="middle">Run tests one node in place.</text>
   <text class="sub" x="1262" y="214" text-anchor="middle">Start deploys the whole workflow</text>
@@ -82,7 +84,7 @@
   <!-- Step 5: Watch it work -->
   <rect class="panel p-purple" x="1491" y="110" width="266" height="140" rx="10"/>
   <circle class="accent-purple" cx="1624" cy="142" r="15"/>
-  <text x="1624" y="148" text-anchor="middle" font-size="16" font-weight="700" fill="#282a36">5</text>
+  <text x="1624" y="148" text-anchor="middle" font-size="16" font-weight="700" fill="#0d0f13">5</text>
   <text class="h2" x="1624" y="172" text-anchor="middle">Watch it work</text>
   <text class="sub" x="1624" y="196" text-anchor="middle">Answers appear in the Chat /</text>
   <text class="sub" x="1624" y="214" text-anchor="middle">Console panel at the bottom</text>
