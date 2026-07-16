@@ -120,6 +120,15 @@ class TelegramSendParams(BaseModel):
         description=("Auto converts LLM markdown to Telegram HTML. " "Empty string = no parse mode (raw text)."),
         json_schema_extra={
             "displayOptions": {"show": {"message_type": ["text", "photo", "document"]}},
+            "uiHints": {
+                "options": [
+                    {"name": "Auto", "value": "Auto"},
+                    {"name": "None (raw text)", "value": ""},
+                    {"name": "HTML", "value": "HTML"},
+                    {"name": "Markdown", "value": "Markdown"},
+                    {"name": "Markdown V2", "value": "MarkdownV2"},
+                ],
+            },
         },
     )
     silent: bool = Field(

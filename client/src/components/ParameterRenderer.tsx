@@ -33,6 +33,48 @@ import { shouldShowParameter } from '../utils/parameterVisibility';
 import { AI_MODEL_PROVIDER_MAP } from '../lib/aiModelProviders';
 
 import { resolveNodeDescription } from '../lib/nodeSpec';
+
+/**
+ * Radix reserves the empty string to clear a Select, so raw node option
+ * values cannot be passed to SelectItem directly.  Tokenise every option for
+ * the UI and translate it back at the component boundary.  Index-based tokens
+ * cannot collide with a real node value and also keep legacy empty-string
+ * values (for example Telegram's raw parse mode) on the wire unchanged.
+ */
+interface SelectOptionEntry {
+  option: INodePropertyOption;
+  radixValue: string;
+  outputValue: string;
+}
+
+const createSelectOptionEntries = (options: INodePropertyOption[]): SelectOptionEntry[] =>
+  options.map((option, index) => ({
+    option,
+    radixValue: `opencompany-select-option-${index}`,
+    // Preserve the renderer's existing string-valued onChange contract.
+    outputValue: String(option.value),
+  }));
+
+const selectedRadixValue = (
+  entries: SelectOptionEntry[],
+  value: unknown,
+): string | undefined => {
+  if (value === undefined || value === null) return undefined;
+  return entries.find((entry) => entry.outputValue === String(value))?.radixValue;
+};
+
+const selectOptionLabel = (option: INodePropertyOption): string =>
+  option.label || option.name || String(option.value) || 'None';
+
+const applySelectChange = (
+  entries: SelectOptionEntry[],
+  radixValue: string,
+  onChange: (value: string) => void,
+) => {
+  const selected = entries.find((entry) => entry.radixValue === radixValue);
+  if (selected) onChange(selected.outputValue);
+};
+
 // Map node types to provider keys for AI model nodes
 // Uses the centralized map from aiModelProviders.ts. Local-server
 // providers (ollama, lmstudio) live in that map alongside the cloud
@@ -1305,18 +1347,19 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
         // Check if this parameter has dynamic options (like models after API key validation)
 
         if (dynamicOptions.length > 0 && parameter.type === 'string') {
+          const modelOptions = createSelectOptionEntries(dynamicOptions);
           // Check if OpenRouter (has [FREE] tagged models)
-          const hasFreeModels = dynamicOptions.some(opt => String(opt.label || opt.value).includes('[FREE]'));
+          const hasFreeModels = modelOptions.some(({ option }) => String(option.label || option.value).includes('[FREE]'));
 
           if (hasFreeModels) {
             // Group into Free and Paid for OpenRouter using shadcn Select with groups
-            const freeModels = dynamicOptions.filter(opt => String(opt.label || opt.value).includes('[FREE]'));
-            const paidModels = dynamicOptions.filter(opt => !String(opt.label || opt.value).includes('[FREE]'));
+            const freeModels = modelOptions.filter(({ option }) => String(option.label || option.value).includes('[FREE]'));
+            const paidModels = modelOptions.filter(({ option }) => !String(option.label || option.value).includes('[FREE]'));
 
             return (
               <Select
-                value={currentValue || ''}
-                onValueChange={(v) => onChange(v)}
+                value={selectedRadixValue(modelOptions, currentValue)}
+                onValueChange={(v) => applySelectChange(modelOptions, v, onChange)}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select a model..." />
@@ -1324,17 +1367,17 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
                 <SelectContent>
                   <SelectGroup>
                     <SelectLabel>{`Free Models (${freeModels.length})`}</SelectLabel>
-                    {freeModels.map((option) => (
-                      <SelectItem key={String(option.value)} value={String(option.value)}>
-                        {option.label || option.name || String(option.value)}
+                    {freeModels.map(({ option, radixValue }) => (
+                      <SelectItem key={radixValue} value={radixValue}>
+                        {selectOptionLabel(option)}
                       </SelectItem>
                     ))}
                   </SelectGroup>
                   <SelectGroup>
                     <SelectLabel>{`Paid Models (${paidModels.length})`}</SelectLabel>
-                    {paidModels.map((option) => (
-                      <SelectItem key={String(option.value)} value={String(option.value)}>
-                        {option.label || option.name || String(option.value)}
+                    {paidModels.map(({ option, radixValue }) => (
+                      <SelectItem key={radixValue} value={radixValue}>
+                        {selectOptionLabel(option)}
                       </SelectItem>
                     ))}
                   </SelectGroup>
@@ -1346,16 +1389,16 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
           // Use shadcn Select for non-OpenRouter (original working code)
           return (
             <Select
-              value={currentValue || ''}
-              onValueChange={(v) => onChange(v)}
+              value={selectedRadixValue(modelOptions, currentValue)}
+              onValueChange={(v) => applySelectChange(modelOptions, v, onChange)}
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select a model..." />
               </SelectTrigger>
               <SelectContent>
-                {dynamicOptions.map((option) => (
-                  <SelectItem key={String(option.value)} value={String(option.value)}>
-                    {option.label || option.name || String(option.value)}
+                {modelOptions.map(({ option, radixValue }) => (
+                  <SelectItem key={radixValue} value={radixValue}>
+                    {selectOptionLabel(option)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1513,19 +1556,20 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
         const selectOptions = optionsToRender.filter((option): option is import('../types/INodeProperties').INodePropertyOption =>
           'value' in option
         );
+        const selectOptionEntries = createSelectOptionEntries(selectOptions);
 
         return (
           <Select
-            value={(currentValue ?? parameter.default ?? '') === '' ? undefined : String(currentValue ?? parameter.default)}
-            onValueChange={(v) => onChange(v)}
+            value={selectedRadixValue(selectOptionEntries, currentValue ?? parameter.default)}
+            onValueChange={(v) => applySelectChange(selectOptionEntries, v, onChange)}
           >
             <SelectTrigger className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {selectOptions.map((option) => (
-                <SelectItem key={String(option.value)} value={String(option.value)}>
-                  {option.label || option.name || String(option.value)}
+              {selectOptionEntries.map(({ option, radixValue }) => (
+                <SelectItem key={radixValue} value={radixValue}>
+                  {selectOptionLabel(option)}
                 </SelectItem>
               ))}
             </SelectContent>

@@ -1,4 +1,5 @@
-import { act } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders as render } from '../../test/providers';
@@ -42,6 +43,32 @@ vi.mock('../../lib/nodeSpec', () => ({
 
 vi.mock('../../services/dynamicParameterService', () => ({
   default: dynamicParameterMock,
+}));
+
+// Preserve Radix Select's empty-value invariant while using a native select
+// for deterministic interaction in jsdom. The production crash is reproduced
+// if ParameterRenderer ever hands an empty string to SelectItem again.
+vi.mock('../ui/select', () => ({
+  Select: ({ value, onValueChange, children }: any) => (
+    <select
+      aria-label="parameter select"
+      value={value ?? ''}
+      onChange={(event) => onValueChange?.(event.currentTarget.value)}
+    >
+      {children}
+    </select>
+  ),
+  SelectContent: ({ children }: any) => <>{children}</>,
+  SelectGroup: ({ children }: any) => <>{children}</>,
+  SelectItem: ({ value, children }: any) => {
+    if (value === '') {
+      throw new Error('A <Select.Item /> must have a value prop that is not an empty string.');
+    }
+    return <option value={value}>{children}</option>;
+  },
+  SelectLabel: () => null,
+  SelectTrigger: () => null,
+  SelectValue: () => null,
 }));
 
 import ParameterRenderer from '../ParameterRenderer';
@@ -144,5 +171,48 @@ describe('ParameterRenderer request isolation', () => {
       'choice',
       [expect.objectContaining({ value: 'from-b' })],
     );
+  });
+
+  it('renders and persists Telegram raw parse mode without an empty Radix value', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const parameter: any = {
+      displayName: 'Parse Mode',
+      name: 'parse_mode',
+      type: 'options',
+      default: 'Auto',
+      options: [
+        { name: 'Auto', value: 'Auto' },
+        { name: 'None (raw text)', value: '' },
+        { name: 'HTML', value: 'HTML' },
+      ],
+    };
+
+    const view = render(
+      <ParameterRenderer
+        parameter={parameter}
+        value="Auto"
+        allParameters={{ message_type: 'text' }}
+        onChange={onChange}
+      />,
+    );
+
+    const trigger = screen.getByRole('combobox');
+    expect(trigger).toHaveTextContent('Auto');
+
+    const rawOption = screen.getByRole('option', { name: 'None (raw text)' });
+    expect(rawOption).toHaveValue('opencompany-select-option-1');
+    await user.selectOptions(trigger, rawOption);
+    expect(onChange).toHaveBeenCalledWith('');
+
+    view.rerender(
+      <ParameterRenderer
+        parameter={parameter}
+        value=""
+        allParameters={{ message_type: 'text' }}
+        onChange={onChange}
+      />,
+    );
+    expect((trigger as HTMLSelectElement).selectedOptions[0]).toHaveTextContent('None (raw text)');
   });
 });
