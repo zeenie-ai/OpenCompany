@@ -1,8 +1,70 @@
 {
-  "_generated": "2026-07-11T06:45:11.819419+00:00",
+  "_generated": "2026-07-16T09:36:38.152250+00:00",
   "_source": "openrouter",
-  "_model_count": 345,
+  "_model_count": 342,
   "models": {
+    "kwaipilot/kat-coder-air-v2.5": {
+      "id": "kwaipilot/kat-coder-air-v2.5",
+      "name": "Kwaipilot: KAT-Coder-Air V2.5",
+      "provider": "kwaipilot",
+      "local_id": "kat-coder-air-v2.5",
+      "context_length": 256000,
+      "max_output_tokens": 80000,
+      "input_price_per_mtok": 0.15,
+      "output_price_per_mtok": 0.6,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "logprobs",
+        "max_tokens",
+        "presence_penalty",
+        "response_format",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_logprobs",
+        "top_p"
+      ]
+    },
+    "kwaipilot/kat-coder-pro-v2.5": {
+      "id": "kwaipilot/kat-coder-pro-v2.5",
+      "name": "Kwaipilot: KAT-Coder-Pro V2.5",
+      "provider": "kwaipilot",
+      "local_id": "kat-coder-pro-v2.5",
+      "context_length": 256000,
+      "max_output_tokens": 80000,
+      "input_price_per_mtok": 0.74,
+      "output_price_per_mtok": 2.96,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "logprobs",
+        "max_tokens",
+        "presence_penalty",
+        "response_format",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_logprobs",
+        "top_p"
+      ]
+    },
     "openai/gpt-5.6-luna-pro": {
       "id": "openai/gpt-5.6-luna-pro",
       "name": "OpenAI: GPT-5.6 Luna Pro",
@@ -301,6 +363,43 @@
         "top_p"
       ]
     },
+    "tencent/hy3": {
+      "id": "tencent/hy3",
+      "name": "Tencent: Hy3",
+      "provider": "tencent",
+      "local_id": "hy3",
+      "context_length": 262144,
+      "max_output_tokens": 131072,
+      "input_price_per_mtok": 0.2,
+      "output_price_per_mtok": 0.8,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "logit_bias",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "reasoning",
+        "reasoning_effort",
+        "repetition_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_p"
+      ]
+    },
     "tencent/hy3:free": {
       "id": "tencent/hy3:free",
       "name": "Tencent: Hy3 (free)",
@@ -335,52 +434,15 @@
         "top_p"
       ]
     },
-    "tencent/hy3": {
-      "id": "tencent/hy3",
-      "name": "Tencent: Hy3",
-      "provider": "tencent",
-      "local_id": "hy3",
-      "context_length": 262144,
-      "max_output_tokens": 0,
-      "input_price_per_mtok": 0.14,
-      "output_price_per_mtok": 0.58,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "include_reasoning",
-        "logit_bias",
-        "max_tokens",
-        "min_p",
-        "presence_penalty",
-        "reasoning",
-        "reasoning_effort",
-        "repetition_penalty",
-        "response_format",
-        "seed",
-        "stop",
-        "structured_outputs",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_k",
-        "top_p"
-      ]
-    },
-    "poolside/laguna-xs-2.1:free": {
-      "id": "poolside/laguna-xs-2.1:free",
-      "name": "Poolside: Laguna XS 2.1 (free)",
+    "poolside/laguna-xs-2.1": {
+      "id": "poolside/laguna-xs-2.1",
+      "name": "Poolside: Laguna XS 2.1",
       "provider": "poolside",
-      "local_id": "laguna-xs-2.1:free",
+      "local_id": "laguna-xs-2.1",
       "context_length": 262144,
       "max_output_tokens": 32768,
-      "input_price_per_mtok": 0.0,
-      "output_price_per_mtok": 0.0,
+      "input_price_per_mtok": 0.06,
+      "output_price_per_mtok": 0.12,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -397,15 +459,15 @@
         "tools"
       ]
     },
-    "poolside/laguna-xs-2.1": {
-      "id": "poolside/laguna-xs-2.1",
-      "name": "Poolside: Laguna XS 2.1",
+    "poolside/laguna-xs-2.1:free": {
+      "id": "poolside/laguna-xs-2.1:free",
+      "name": "Poolside: Laguna XS 2.1 (free)",
       "provider": "poolside",
-      "local_id": "laguna-xs-2.1",
+      "local_id": "laguna-xs-2.1:free",
       "context_length": 262144,
       "max_output_tokens": 32768,
-      "input_price_per_mtok": 0.06,
-      "output_price_per_mtok": 0.12,
+      "input_price_per_mtok": 0.0,
+      "output_price_per_mtok": 0.0,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -458,7 +520,7 @@
       "provider": "gemini",
       "local_id": "gemini-3.1-flash-lite-image",
       "context_length": 65536,
-      "max_output_tokens": 66000,
+      "max_output_tokens": 65536,
       "input_price_per_mtok": 0.25,
       "output_price_per_mtok": 1.5,
       "supports_thinking": true,
@@ -632,8 +694,8 @@
       "local_id": "glm-5.2",
       "context_length": 1048576,
       "max_output_tokens": 131072,
-      "input_price_per_mtok": 0.406,
-      "output_price_per_mtok": 1.276,
+      "input_price_per_mtok": 0.959,
+      "output_price_per_mtok": 3.014,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -690,7 +752,7 @@
       "local_id": "kimi-k2.7-code",
       "context_length": 262144,
       "max_output_tokens": 262144,
-      "input_price_per_mtok": 0.72,
+      "input_price_per_mtok": 0.719,
       "output_price_per_mtok": 3.49,
       "supports_thinking": false,
       "thinking_type": "none",
@@ -837,43 +899,15 @@
         "top_p"
       ]
     },
-    "nvidia/nemotron-3-ultra-550b-a55b:free": {
-      "id": "nvidia/nemotron-3-ultra-550b-a55b:free",
-      "name": "NVIDIA: Nemotron 3 Ultra (free)",
-      "provider": "nvidia",
-      "local_id": "nemotron-3-ultra-550b-a55b:free",
-      "context_length": 1000000,
-      "max_output_tokens": 65536,
-      "input_price_per_mtok": 0.0,
-      "output_price_per_mtok": 0.0,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "include_reasoning",
-        "max_tokens",
-        "reasoning",
-        "reasoning_effort",
-        "seed",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_p"
-      ]
-    },
     "nvidia/nemotron-3-ultra-550b-a55b": {
       "id": "nvidia/nemotron-3-ultra-550b-a55b",
       "name": "NVIDIA: Nemotron 3 Ultra",
       "provider": "nvidia",
       "local_id": "nemotron-3-ultra-550b-a55b",
       "context_length": 1000000,
-      "max_output_tokens": 16384,
-      "input_price_per_mtok": 0.5,
-      "output_price_per_mtok": 2.2,
+      "max_output_tokens": 0,
+      "input_price_per_mtok": 0.6,
+      "output_price_per_mtok": 3.6,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -899,6 +933,34 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_p"
+      ]
+    },
+    "nvidia/nemotron-3-ultra-550b-a55b:free": {
+      "id": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "name": "NVIDIA: Nemotron 3 Ultra (free)",
+      "provider": "nvidia",
+      "local_id": "nemotron-3-ultra-550b-a55b:free",
+      "context_length": 1000000,
+      "max_output_tokens": 65536,
+      "input_price_per_mtok": 0.0,
+      "output_price_per_mtok": 0.0,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "include_reasoning",
+        "max_tokens",
+        "reasoning",
+        "reasoning_effort",
+        "seed",
+        "temperature",
+        "tool_choice",
+        "tools",
         "top_p"
       ]
     },
@@ -940,7 +1002,7 @@
       "provider": "minimax",
       "local_id": "minimax-m3",
       "context_length": 1048576,
-      "max_output_tokens": 131072,
+      "max_output_tokens": 512000,
       "input_price_per_mtok": 0.3,
       "output_price_per_mtok": 1.2,
       "supports_thinking": false,
@@ -1078,8 +1140,8 @@
       "local_id": "qwen3.7-max",
       "context_length": 1000000,
       "max_output_tokens": 65536,
-      "input_price_per_mtok": 1.25,
-      "output_price_per_mtok": 3.75,
+      "input_price_per_mtok": 1.475,
+      "output_price_per_mtok": 4.425,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -1444,15 +1506,15 @@
         "top_p"
       ]
     },
-    "poolside/laguna-m.1:free": {
-      "id": "poolside/laguna-m.1:free",
-      "name": "Poolside: Laguna M.1 (free)",
+    "poolside/laguna-m.1": {
+      "id": "poolside/laguna-m.1",
+      "name": "Poolside: Laguna M.1",
       "provider": "poolside",
-      "local_id": "laguna-m.1:free",
+      "local_id": "laguna-m.1",
       "context_length": 262144,
       "max_output_tokens": 32768,
-      "input_price_per_mtok": 0.0,
-      "output_price_per_mtok": 0.0,
+      "input_price_per_mtok": 0.2,
+      "output_price_per_mtok": 0.4,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -1469,15 +1531,15 @@
         "tools"
       ]
     },
-    "poolside/laguna-m.1": {
-      "id": "poolside/laguna-m.1",
-      "name": "Poolside: Laguna M.1",
+    "poolside/laguna-m.1:free": {
+      "id": "poolside/laguna-m.1:free",
+      "name": "Poolside: Laguna M.1 (free)",
       "provider": "poolside",
-      "local_id": "laguna-m.1",
+      "local_id": "laguna-m.1:free",
       "context_length": 262144,
       "max_output_tokens": 32768,
-      "input_price_per_mtok": 0.2,
-      "output_price_per_mtok": 0.4,
+      "input_price_per_mtok": 0.0,
+      "output_price_per_mtok": 0.0,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -1854,9 +1916,9 @@
       "provider": "qwen",
       "local_id": "qwen3.6-27b",
       "context_length": 262144,
-      "max_output_tokens": 262140,
-      "input_price_per_mtok": 0.285,
-      "output_price_per_mtok": 2.4,
+      "max_output_tokens": 65536,
+      "input_price_per_mtok": 0.45,
+      "output_price_per_mtok": 2.7,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -1988,9 +2050,9 @@
       "provider": "deepseek",
       "local_id": "deepseek-v4-flash",
       "context_length": 1048576,
-      "max_output_tokens": 384000,
-      "input_price_per_mtok": 0.077,
-      "output_price_per_mtok": 0.154,
+      "max_output_tokens": 0,
+      "input_price_per_mtok": 0.098,
+      "output_price_per_mtok": 0.196,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -2131,8 +2193,8 @@
       "provider": "xiaomi",
       "local_id": "mimo-v2.5",
       "context_length": 1048576,
-      "max_output_tokens": 0,
-      "input_price_per_mtok": 0.105,
+      "max_output_tokens": 131072,
+      "input_price_per_mtok": 0.14,
       "output_price_per_mtok": 0.28,
       "supports_thinking": false,
       "thinking_type": "none",
@@ -2284,9 +2346,9 @@
       "provider": "moonshotai",
       "local_id": "kimi-k2.6",
       "context_length": 262144,
-      "max_output_tokens": 262144,
-      "input_price_per_mtok": 0.66,
-      "output_price_per_mtok": 3.41,
+      "max_output_tokens": 0,
+      "input_price_per_mtok": 0.95,
+      "output_price_per_mtok": 4.0,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -2385,6 +2447,44 @@
         "top_p"
       ]
     },
+    "gemini/gemma-4-26b-a4b-it": {
+      "id": "google/gemma-4-26b-a4b-it",
+      "name": "Google: Gemma 4 26B A4B ",
+      "provider": "gemini",
+      "local_id": "gemma-4-26b-a4b-it",
+      "context_length": 262144,
+      "max_output_tokens": 256000,
+      "input_price_per_mtok": 0.1,
+      "output_price_per_mtok": 0.3,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "logit_bias",
+        "logprobs",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "reasoning",
+        "repetition_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_logprobs",
+        "top_p"
+      ]
+    },
     "gemini/gemma-4-26b-a4b-it:free": {
       "id": "google/gemma-4-26b-a4b-it:free",
       "name": "Google: Gemma 4 26B A4B  (free)",
@@ -2421,15 +2521,15 @@
         "top_p"
       ]
     },
-    "gemini/gemma-4-26b-a4b-it": {
-      "id": "google/gemma-4-26b-a4b-it",
-      "name": "Google: Gemma 4 26B A4B ",
+    "gemini/gemma-4-31b-it": {
+      "id": "google/gemma-4-31b-it",
+      "name": "Google: Gemma 4 31B",
       "provider": "gemini",
-      "local_id": "gemma-4-26b-a4b-it",
+      "local_id": "gemma-4-31b-it",
       "context_length": 262144,
-      "max_output_tokens": 0,
-      "input_price_per_mtok": 0.06,
-      "output_price_per_mtok": 0.33,
+      "max_output_tokens": 262144,
+      "input_price_per_mtok": 0.22,
+      "output_price_per_mtok": 0.55,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -2465,7 +2565,7 @@
       "provider": "gemini",
       "local_id": "gemma-4-31b-it:free",
       "context_length": 262144,
-      "max_output_tokens": 8192,
+      "max_output_tokens": 32768,
       "input_price_per_mtok": 0.0,
       "output_price_per_mtok": 0.0,
       "supports_thinking": false,
@@ -2478,54 +2578,12 @@
       "supported_parameters": [
         "include_reasoning",
         "max_tokens",
-        "min_p",
         "reasoning",
         "response_format",
         "seed",
-        "stop",
         "temperature",
         "tool_choice",
         "tools",
-        "top_a",
-        "top_k",
-        "top_p"
-      ]
-    },
-    "gemini/gemma-4-31b-it": {
-      "id": "google/gemma-4-31b-it",
-      "name": "Google: Gemma 4 31B",
-      "provider": "gemini",
-      "local_id": "gemma-4-31b-it",
-      "context_length": 262144,
-      "max_output_tokens": 262144,
-      "input_price_per_mtok": 0.12,
-      "output_price_per_mtok": 0.35,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "include_reasoning",
-        "logit_bias",
-        "logprobs",
-        "max_tokens",
-        "min_p",
-        "presence_penalty",
-        "reasoning",
-        "repetition_penalty",
-        "response_format",
-        "seed",
-        "stop",
-        "structured_outputs",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_k",
-        "top_logprobs",
         "top_p"
       ]
     },
@@ -2799,9 +2857,9 @@
       "provider": "minimax",
       "local_id": "minimax-m2.7",
       "context_length": 204800,
-      "max_output_tokens": 196608,
-      "input_price_per_mtok": 0.24,
-      "output_price_per_mtok": 0.96,
+      "max_output_tokens": 131072,
+      "input_price_per_mtok": 0.3,
+      "output_price_per_mtok": 1.2,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -2928,7 +2986,7 @@
       "name": "Z.ai: GLM 5 Turbo",
       "provider": "z-ai",
       "local_id": "glm-5-turbo",
-      "context_length": 262144,
+      "context_length": 202752,
       "max_output_tokens": 131072,
       "input_price_per_mtok": 1.2,
       "output_price_per_mtok": 4.0,
@@ -2940,21 +2998,53 @@
       ],
       "is_reasoning_model": false,
       "supported_parameters": [
-        "frequency_penalty",
         "include_reasoning",
-        "logit_bias",
         "max_tokens",
-        "min_p",
-        "presence_penalty",
         "reasoning",
-        "repetition_penalty",
         "response_format",
-        "seed",
-        "stop",
         "temperature",
         "tool_choice",
         "tools",
         "top_k",
+        "top_p"
+      ]
+    },
+    "nvidia/nemotron-3-super-120b-a12b": {
+      "id": "nvidia/nemotron-3-super-120b-a12b",
+      "name": "NVIDIA: Nemotron 3 Super",
+      "provider": "nvidia",
+      "local_id": "nemotron-3-super-120b-a12b",
+      "context_length": 1000000,
+      "max_output_tokens": 0,
+      "input_price_per_mtok": 0.21,
+      "output_price_per_mtok": 0.455,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "logit_bias",
+        "logprobs",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "reasoning",
+        "reasoning_effort",
+        "repetition_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -2985,45 +3075,6 @@
         "temperature",
         "tool_choice",
         "tools",
-        "top_p"
-      ]
-    },
-    "nvidia/nemotron-3-super-120b-a12b": {
-      "id": "nvidia/nemotron-3-super-120b-a12b",
-      "name": "NVIDIA: Nemotron 3 Super",
-      "provider": "nvidia",
-      "local_id": "nemotron-3-super-120b-a12b",
-      "context_length": 1000000,
-      "max_output_tokens": 0,
-      "input_price_per_mtok": 0.08,
-      "output_price_per_mtok": 0.45,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "include_reasoning",
-        "logit_bias",
-        "logprobs",
-        "max_tokens",
-        "min_p",
-        "presence_penalty",
-        "reasoning",
-        "reasoning_effort",
-        "repetition_penalty",
-        "response_format",
-        "seed",
-        "stop",
-        "structured_outputs",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_k",
-        "top_logprobs",
         "top_p"
       ]
     },
@@ -3232,7 +3283,6 @@
         "reasoning_effort",
         "response_format",
         "seed",
-        "stop",
         "structured_outputs",
         "temperature",
         "tool_choice",
@@ -3305,7 +3355,7 @@
       "provider": "qwen",
       "local_id": "qwen3.5-35b-a3b",
       "context_length": 262144,
-      "max_output_tokens": 81920,
+      "max_output_tokens": 262144,
       "input_price_per_mtok": 0.14,
       "output_price_per_mtok": 1.0,
       "supports_thinking": false,
@@ -3381,7 +3431,7 @@
       "provider": "qwen",
       "local_id": "qwen3.5-122b-a10b",
       "context_length": 262144,
-      "max_output_tokens": 262144,
+      "max_output_tokens": 65536,
       "input_price_per_mtok": 0.26,
       "output_price_per_mtok": 2.08,
       "supports_thinking": false,
@@ -3630,10 +3680,10 @@
       "name": "Qwen: Qwen3.5 397B A17B",
       "provider": "qwen",
       "local_id": "qwen3.5-397b-a17b",
-      "context_length": 256000,
-      "max_output_tokens": 0,
-      "input_price_per_mtok": 0.385,
-      "output_price_per_mtok": 2.45,
+      "context_length": 262144,
+      "max_output_tokens": 65536,
+      "input_price_per_mtok": 0.45,
+      "output_price_per_mtok": 3.0,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -3708,9 +3758,9 @@
       "provider": "z-ai",
       "local_id": "glm-5",
       "context_length": 202752,
-      "max_output_tokens": 0,
-      "input_price_per_mtok": 0.6,
-      "output_price_per_mtok": 1.92,
+      "max_output_tokens": 202752,
+      "input_price_per_mtok": 0.95,
+      "output_price_per_mtok": 3.15,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -3861,7 +3911,6 @@
         "include_reasoning",
         "logprobs",
         "max_tokens",
-        "min_p",
         "presence_penalty",
         "reasoning",
         "reasoning_effort",
@@ -3873,7 +3922,6 @@
         "temperature",
         "tool_choice",
         "tools",
-        "top_a",
         "top_k",
         "top_logprobs",
         "top_p"
@@ -3913,9 +3961,9 @@
       "provider": "moonshotai",
       "local_id": "kimi-k2.5",
       "context_length": 262144,
-      "max_output_tokens": 0,
-      "input_price_per_mtok": 0.375,
-      "output_price_per_mtok": 2.025,
+      "max_output_tokens": 262144,
+      "input_price_per_mtok": 0.57,
+      "output_price_per_mtok": 2.85,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -4013,70 +4061,6 @@
       "supported_parameters": [
         "max_tokens",
         "stop",
-        "temperature",
-        "top_k",
-        "top_p"
-      ]
-    },
-    "liquid/lfm-2.5-1.2b-thinking:free": {
-      "id": "liquid/lfm-2.5-1.2b-thinking:free",
-      "name": "LiquidAI: LFM2.5-1.2B-Thinking (free)",
-      "provider": "liquid",
-      "local_id": "lfm-2.5-1.2b-thinking:free",
-      "context_length": 32768,
-      "max_output_tokens": 0,
-      "input_price_per_mtok": 0.0,
-      "output_price_per_mtok": 0.0,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "include_reasoning",
-        "max_tokens",
-        "min_p",
-        "presence_penalty",
-        "reasoning",
-        "repetition_penalty",
-        "seed",
-        "stop",
-        "structured_outputs",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_k",
-        "top_p"
-      ]
-    },
-    "liquid/lfm-2.5-1.2b-instruct:free": {
-      "id": "liquid/lfm-2.5-1.2b-instruct:free",
-      "name": "LiquidAI: LFM2.5-1.2B-Instruct (free)",
-      "provider": "liquid",
-      "local_id": "lfm-2.5-1.2b-instruct:free",
-      "context_length": 32768,
-      "max_output_tokens": 0,
-      "input_price_per_mtok": 0.0,
-      "output_price_per_mtok": 0.0,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "max_tokens",
-        "min_p",
-        "presence_penalty",
-        "repetition_penalty",
-        "seed",
-        "stop",
-        "structured_outputs",
         "temperature",
         "top_k",
         "top_p"
@@ -4377,33 +4361,6 @@
         "top_p"
       ]
     },
-    "nvidia/nemotron-3-nano-30b-a3b:free": {
-      "id": "nvidia/nemotron-3-nano-30b-a3b:free",
-      "name": "NVIDIA: Nemotron 3 Nano 30B A3B (free)",
-      "provider": "nvidia",
-      "local_id": "nemotron-3-nano-30b-a3b:free",
-      "context_length": 256000,
-      "max_output_tokens": 0,
-      "input_price_per_mtok": 0.0,
-      "output_price_per_mtok": 0.0,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "include_reasoning",
-        "max_tokens",
-        "reasoning",
-        "seed",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_p"
-      ]
-    },
     "nvidia/nemotron-3-nano-30b-a3b": {
       "id": "nvidia/nemotron-3-nano-30b-a3b",
       "name": "NVIDIA: Nemotron 3 Nano 30B A3B",
@@ -4439,6 +4396,33 @@
         "tools",
         "top_k",
         "top_logprobs",
+        "top_p"
+      ]
+    },
+    "nvidia/nemotron-3-nano-30b-a3b:free": {
+      "id": "nvidia/nemotron-3-nano-30b-a3b:free",
+      "name": "NVIDIA: Nemotron 3 Nano 30B A3B (free)",
+      "provider": "nvidia",
+      "local_id": "nemotron-3-nano-30b-a3b:free",
+      "context_length": 256000,
+      "max_output_tokens": 0,
+      "input_price_per_mtok": 0.0,
+      "output_price_per_mtok": 0.0,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "include_reasoning",
+        "max_tokens",
+        "reasoning",
+        "seed",
+        "temperature",
+        "tool_choice",
+        "tools",
         "top_p"
       ]
     },
@@ -4824,10 +4808,10 @@
       "name": "DeepSeek: DeepSeek V3.2",
       "provider": "deepseek",
       "local_id": "deepseek-v3.2",
-      "context_length": 131072,
-      "max_output_tokens": 64000,
-      "input_price_per_mtok": 0.2145,
-      "output_price_per_mtok": 0.3217,
+      "context_length": 163840,
+      "max_output_tokens": 65536,
+      "input_price_per_mtok": 0.269,
+      "output_price_per_mtok": 0.4,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -5017,7 +5001,7 @@
       "provider": "openai",
       "local_id": "gpt-5.1-chat",
       "context_length": 128000,
-      "max_output_tokens": 32000,
+      "max_output_tokens": 16384,
       "input_price_per_mtok": 1.25,
       "output_price_per_mtok": 10.0,
       "supports_thinking": true,
@@ -5101,7 +5085,7 @@
       "provider": "moonshotai",
       "local_id": "kimi-k2-thinking",
       "context_length": 262144,
-      "max_output_tokens": 100352,
+      "max_output_tokens": 262144,
       "input_price_per_mtok": 0.6,
       "output_price_per_mtok": 2.5,
       "supports_thinking": false,
@@ -5646,7 +5630,7 @@
       "provider": "gemini",
       "local_id": "gemini-2.5-flash-image",
       "context_length": 32768,
-      "max_output_tokens": 32768,
+      "max_output_tokens": 8192,
       "input_price_per_mtok": 0.3,
       "output_price_per_mtok": 2.5,
       "supports_thinking": true,
@@ -5771,8 +5755,8 @@
       "local_id": "glm-4.6",
       "context_length": 202752,
       "max_output_tokens": 131072,
-      "input_price_per_mtok": 0.43,
-      "output_price_per_mtok": 1.74,
+      "input_price_per_mtok": 0.5,
+      "output_price_per_mtok": 2.0,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -5965,10 +5949,10 @@
       "name": "Qwen: Qwen3 VL 235B A22B Instruct",
       "provider": "qwen",
       "local_id": "qwen3-vl-235b-a22b-instruct",
-      "context_length": 262144,
-      "max_output_tokens": 16384,
-      "input_price_per_mtok": 0.2,
-      "output_price_per_mtok": 0.88,
+      "context_length": 131072,
+      "max_output_tokens": 32768,
+      "input_price_per_mtok": 0.21,
+      "output_price_per_mtok": 1.9,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -6088,10 +6072,10 @@
       "name": "DeepSeek: DeepSeek V3.1 Terminus",
       "provider": "deepseek",
       "local_id": "deepseek-v3.1-terminus",
-      "context_length": 163840,
+      "context_length": 131072,
       "max_output_tokens": 32768,
       "input_price_per_mtok": 0.27,
-      "output_price_per_mtok": 0.95,
+      "output_price_per_mtok": 1.0,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -6184,6 +6168,42 @@
         "top_p"
       ]
     },
+    "qwen/qwen3-next-80b-a3b-instruct": {
+      "id": "qwen/qwen3-next-80b-a3b-instruct",
+      "name": "Qwen: Qwen3 Next 80B A3B Instruct",
+      "provider": "qwen",
+      "local_id": "qwen3-next-80b-a3b-instruct",
+      "context_length": 262144,
+      "max_output_tokens": 262144,
+      "input_price_per_mtok": 0.1,
+      "output_price_per_mtok": 1.1,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "logit_bias",
+        "logprobs",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "repetition_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_logprobs",
+        "top_p"
+      ]
+    },
     "qwen/qwen3-next-80b-a3b-instruct:free": {
       "id": "qwen/qwen3-next-80b-a3b-instruct:free",
       "name": "Qwen: Qwen3 Next 80B A3B Instruct (free)",
@@ -6214,15 +6234,15 @@
         "top_p"
       ]
     },
-    "qwen/qwen3-next-80b-a3b-instruct": {
-      "id": "qwen/qwen3-next-80b-a3b-instruct",
-      "name": "Qwen: Qwen3 Next 80B A3B Instruct",
+    "qwen/qwen-plus-2025-07-28": {
+      "id": "qwen/qwen-plus-2025-07-28",
+      "name": "Qwen: Qwen Plus 0728",
       "provider": "qwen",
-      "local_id": "qwen3-next-80b-a3b-instruct",
-      "context_length": 262144,
-      "max_output_tokens": 16384,
-      "input_price_per_mtok": 0.09,
-      "output_price_per_mtok": 1.1,
+      "local_id": "qwen-plus-2025-07-28",
+      "context_length": 1000000,
+      "max_output_tokens": 32768,
+      "input_price_per_mtok": 0.26,
+      "output_price_per_mtok": 0.78,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -6231,21 +6251,15 @@
       ],
       "is_reasoning_model": false,
       "supported_parameters": [
-        "frequency_penalty",
-        "logit_bias",
         "logprobs",
         "max_tokens",
-        "min_p",
         "presence_penalty",
-        "repetition_penalty",
         "response_format",
         "seed",
-        "stop",
         "structured_outputs",
         "temperature",
         "tool_choice",
         "tools",
-        "top_k",
         "top_logprobs",
         "top_p"
       ]
@@ -6277,36 +6291,6 @@
         "temperature",
         "tool_choice",
         "tools",
-        "top_p"
-      ]
-    },
-    "qwen/qwen-plus-2025-07-28": {
-      "id": "qwen/qwen-plus-2025-07-28",
-      "name": "Qwen: Qwen Plus 0728",
-      "provider": "qwen",
-      "local_id": "qwen-plus-2025-07-28",
-      "context_length": 1000000,
-      "max_output_tokens": 32768,
-      "input_price_per_mtok": 0.26,
-      "output_price_per_mtok": 0.78,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "logprobs",
-        "max_tokens",
-        "presence_penalty",
-        "response_format",
-        "seed",
-        "structured_outputs",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_logprobs",
         "top_p"
       ]
     },
@@ -6465,8 +6449,8 @@
       "local_id": "deepseek-chat-v3.1",
       "context_length": 163840,
       "max_output_tokens": 32768,
-      "input_price_per_mtok": 0.21,
-      "output_price_per_mtok": 0.79,
+      "input_price_per_mtok": 0.25,
+      "output_price_per_mtok": 0.95,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -6672,7 +6656,7 @@
       "provider": "openai",
       "local_id": "gpt-5-nano",
       "context_length": 400000,
-      "max_output_tokens": 0,
+      "max_output_tokens": 128000,
       "input_price_per_mtok": 0.05,
       "output_price_per_mtok": 0.4,
       "supports_thinking": true,
@@ -6695,47 +6679,15 @@
         "tools"
       ]
     },
-    "openai/gpt-oss-120b:free": {
-      "id": "openai/gpt-oss-120b:free",
-      "name": "OpenAI: gpt-oss-120b (free)",
-      "provider": "openai",
-      "local_id": "gpt-oss-120b:free",
-      "context_length": 131072,
-      "max_output_tokens": 131072,
-      "input_price_per_mtok": 0.0,
-      "output_price_per_mtok": 0.0,
-      "supports_thinking": true,
-      "thinking_type": "effort",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "include_reasoning",
-        "max_tokens",
-        "min_p",
-        "reasoning",
-        "reasoning_effort",
-        "seed",
-        "stop",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_a",
-        "top_k",
-        "top_p"
-      ]
-    },
     "openai/gpt-oss-120b": {
       "id": "openai/gpt-oss-120b",
       "name": "OpenAI: gpt-oss-120b",
       "provider": "openai",
       "local_id": "gpt-oss-120b",
       "context_length": 131072,
-      "max_output_tokens": 0,
-      "input_price_per_mtok": 0.036,
-      "output_price_per_mtok": 0.18,
+      "max_output_tokens": 131072,
+      "input_price_per_mtok": 0.037,
+      "output_price_per_mtok": 0.17,
       "supports_thinking": true,
       "thinking_type": "effort",
       "temperature_range": [
@@ -6747,45 +6699,6 @@
         "frequency_penalty",
         "include_reasoning",
         "logit_bias",
-        "logprobs",
-        "max_tokens",
-        "min_p",
-        "presence_penalty",
-        "reasoning",
-        "reasoning_effort",
-        "repetition_penalty",
-        "response_format",
-        "seed",
-        "stop",
-        "structured_outputs",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_a",
-        "top_k",
-        "top_logprobs",
-        "top_p"
-      ]
-    },
-    "openai/gpt-oss-20b:free": {
-      "id": "openai/gpt-oss-20b:free",
-      "name": "OpenAI: gpt-oss-20b (free)",
-      "provider": "openai",
-      "local_id": "gpt-oss-20b:free",
-      "context_length": 131072,
-      "max_output_tokens": 32768,
-      "input_price_per_mtok": 0.0,
-      "output_price_per_mtok": 0.0,
-      "supports_thinking": true,
-      "thinking_type": "effort",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "include_reasoning",
         "logprobs",
         "max_tokens",
         "min_p",
@@ -6812,9 +6725,9 @@
       "provider": "openai",
       "local_id": "gpt-oss-20b",
       "context_length": 131072,
-      "max_output_tokens": 0,
-      "input_price_per_mtok": 0.029,
-      "output_price_per_mtok": 0.14,
+      "max_output_tokens": 131072,
+      "input_price_per_mtok": 0.03,
+      "output_price_per_mtok": 0.13,
       "supports_thinking": true,
       "thinking_type": "effort",
       "temperature_range": [
@@ -6829,6 +6742,43 @@
         "logprobs",
         "max_tokens",
         "min_p",
+        "presence_penalty",
+        "reasoning",
+        "reasoning_effort",
+        "repetition_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_logprobs",
+        "top_p"
+      ]
+    },
+    "openai/gpt-oss-20b:free": {
+      "id": "openai/gpt-oss-20b:free",
+      "name": "OpenAI: gpt-oss-20b (free)",
+      "provider": "openai",
+      "local_id": "gpt-oss-20b:free",
+      "context_length": 131072,
+      "max_output_tokens": 32768,
+      "input_price_per_mtok": 0.0,
+      "output_price_per_mtok": 0.0,
+      "supports_thinking": true,
+      "thinking_type": "effort",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "logprobs",
+        "max_tokens",
         "presence_penalty",
         "reasoning",
         "reasoning_effort",
@@ -6895,6 +6845,7 @@
       "supported_parameters": [
         "frequency_penalty",
         "max_tokens",
+        "prediction",
         "presence_penalty",
         "response_format",
         "seed",
@@ -6945,10 +6896,10 @@
       "name": "Qwen: Qwen3 30B A3B Instruct 2507",
       "provider": "qwen",
       "local_id": "qwen3-30b-a3b-instruct-2507",
-      "context_length": 131072,
-      "max_output_tokens": 32000,
-      "input_price_per_mtok": 0.0481,
-      "output_price_per_mtok": 0.193,
+      "context_length": 262144,
+      "max_output_tokens": 0,
+      "input_price_per_mtok": 0.1,
+      "output_price_per_mtok": 0.3,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -7073,6 +7024,42 @@
         "top_p"
       ]
     },
+    "qwen/qwen3-coder": {
+      "id": "qwen/qwen3-coder",
+      "name": "Qwen: Qwen3 Coder 480B A35B",
+      "provider": "qwen",
+      "local_id": "qwen3-coder",
+      "context_length": 1048576,
+      "max_output_tokens": 65536,
+      "input_price_per_mtok": 0.3,
+      "output_price_per_mtok": 1.0,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "logit_bias",
+        "logprobs",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "repetition_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_logprobs",
+        "top_p"
+      ]
+    },
     "qwen/qwen3-coder:free": {
       "id": "qwen/qwen3-coder:free",
       "name": "Qwen: Qwen3 Coder 480B A35B (free)",
@@ -7098,42 +7085,6 @@
         "tool_choice",
         "tools",
         "top_k",
-        "top_p"
-      ]
-    },
-    "qwen/qwen3-coder": {
-      "id": "qwen/qwen3-coder",
-      "name": "Qwen: Qwen3 Coder 480B A35B",
-      "provider": "qwen",
-      "local_id": "qwen3-coder",
-      "context_length": 1048576,
-      "max_output_tokens": 65536,
-      "input_price_per_mtok": 0.22,
-      "output_price_per_mtok": 1.8,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "logit_bias",
-        "logprobs",
-        "max_tokens",
-        "min_p",
-        "presence_penalty",
-        "repetition_penalty",
-        "response_format",
-        "seed",
-        "stop",
-        "structured_outputs",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_k",
-        "top_logprobs",
         "top_p"
       ]
     },
@@ -7207,7 +7158,7 @@
       "context_length": 262144,
       "max_output_tokens": 16384,
       "input_price_per_mtok": 0.09,
-      "output_price_per_mtok": 0.1,
+      "output_price_per_mtok": 0.55,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -7265,6 +7216,33 @@
         "top_p"
       ]
     },
+    "cognitivecomputations/dolphin-mistral-24b-venice-edition": {
+      "id": "cognitivecomputations/dolphin-mistral-24b-venice-edition",
+      "name": "Venice: Uncensored",
+      "provider": "cognitivecomputations",
+      "local_id": "dolphin-mistral-24b-venice-edition",
+      "context_length": 128000,
+      "max_output_tokens": 8192,
+      "input_price_per_mtok": 0.2,
+      "output_price_per_mtok": 0.9,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "max_tokens",
+        "presence_penalty",
+        "response_format",
+        "stop",
+        "temperature",
+        "top_k",
+        "top_p"
+      ]
+    },
     "cognitivecomputations/dolphin-mistral-24b-venice-edition:free": {
       "id": "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
       "name": "Venice: Uncensored (free)",
@@ -7288,33 +7266,6 @@
         "response_format",
         "stop",
         "structured_outputs",
-        "temperature",
-        "top_k",
-        "top_p"
-      ]
-    },
-    "cognitivecomputations/dolphin-mistral-24b-venice-edition": {
-      "id": "cognitivecomputations/dolphin-mistral-24b-venice-edition",
-      "name": "Venice: Uncensored",
-      "provider": "cognitivecomputations",
-      "local_id": "dolphin-mistral-24b-venice-edition",
-      "context_length": 128000,
-      "max_output_tokens": 8192,
-      "input_price_per_mtok": 0.2,
-      "output_price_per_mtok": 0.9,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "max_tokens",
-        "presence_penalty",
-        "response_format",
-        "stop",
         "temperature",
         "top_k",
         "top_p"
@@ -7431,10 +7382,10 @@
       "name": "Mistral: Mistral Small 3.2 24B",
       "provider": "mistralai",
       "local_id": "mistral-small-3.2-24b-instruct",
-      "context_length": 128000,
-      "max_output_tokens": 16384,
-      "input_price_per_mtok": 0.075,
-      "output_price_per_mtok": 0.2,
+      "context_length": 131072,
+      "max_output_tokens": 0,
+      "input_price_per_mtok": 0.1,
+      "output_price_per_mtok": 0.3,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -7469,7 +7420,7 @@
       "local_id": "minimax-m1",
       "context_length": 1000000,
       "max_output_tokens": 40000,
-      "input_price_per_mtok": 0.4,
+      "input_price_per_mtok": 0.55,
       "output_price_per_mtok": 2.2,
       "supports_thinking": false,
       "thinking_type": "none",
@@ -7826,35 +7777,6 @@
         "top_p"
       ]
     },
-    "arcee-ai/coder-large": {
-      "id": "arcee-ai/coder-large",
-      "name": "Arcee AI: Coder Large",
-      "provider": "arcee-ai",
-      "local_id": "coder-large",
-      "context_length": 32768,
-      "max_output_tokens": 0,
-      "input_price_per_mtok": 0.5,
-      "output_price_per_mtok": 0.8,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "logit_bias",
-        "max_tokens",
-        "min_p",
-        "presence_penalty",
-        "repetition_penalty",
-        "stop",
-        "temperature",
-        "top_k",
-        "top_p"
-      ]
-    },
     "meta/llama-guard-4-12b": {
       "id": "meta-llama/llama-guard-4-12b",
       "name": "Meta: Llama Guard 4 12B",
@@ -7959,8 +7881,8 @@
       "provider": "qwen",
       "local_id": "qwen3-14b",
       "context_length": 131702,
-      "max_output_tokens": 40960,
-      "input_price_per_mtok": 0.1,
+      "max_output_tokens": 16384,
+      "input_price_per_mtok": 0.12,
       "output_price_per_mtok": 0.24,
       "supports_thinking": false,
       "thinking_type": "none",
@@ -8146,7 +8068,7 @@
       "provider": "openai",
       "local_id": "gpt-4.1",
       "context_length": 1047576,
-      "max_output_tokens": 0,
+      "max_output_tokens": 32768,
       "input_price_per_mtok": 2.0,
       "output_price_per_mtok": 8.0,
       "supports_thinking": false,
@@ -8231,8 +8153,8 @@
       "local_id": "llama-4-maverick",
       "context_length": 1048576,
       "max_output_tokens": 16384,
-      "input_price_per_mtok": 0.15,
-      "output_price_per_mtok": 0.6,
+      "input_price_per_mtok": 0.2,
+      "output_price_per_mtok": 0.8,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -8300,9 +8222,9 @@
       "provider": "deepseek",
       "local_id": "deepseek-chat-v3-0324",
       "context_length": 163840,
-      "max_output_tokens": 16384,
-      "input_price_per_mtok": 0.24,
-      "output_price_per_mtok": 0.9,
+      "max_output_tokens": 65536,
+      "input_price_per_mtok": 0.27,
+      "output_price_per_mtok": 1.12,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -8564,9 +8486,9 @@
       "provider": "gemini",
       "local_id": "gemma-3-27b-it",
       "context_length": 131072,
-      "max_output_tokens": 16384,
+      "max_output_tokens": 131072,
       "input_price_per_mtok": 0.08,
-      "output_price_per_mtok": 0.16,
+      "output_price_per_mtok": 0.45,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -9056,37 +8978,6 @@
         "top_p"
       ]
     },
-    "sao10k/l3.1-70b-hanami-x1": {
-      "id": "sao10k/l3.1-70b-hanami-x1",
-      "name": "Sao10K: Llama 3.1 70B Hanami x1",
-      "provider": "sao10k",
-      "local_id": "l3.1-70b-hanami-x1",
-      "context_length": 16000,
-      "max_output_tokens": 0,
-      "input_price_per_mtok": 3.0,
-      "output_price_per_mtok": 3.0,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "logit_bias",
-        "max_tokens",
-        "min_p",
-        "presence_penalty",
-        "repetition_penalty",
-        "seed",
-        "stop",
-        "structured_outputs",
-        "temperature",
-        "top_k",
-        "top_p"
-      ]
-    },
     "deepseek/deepseek-chat": {
       "id": "deepseek/deepseek-chat",
       "name": "DeepSeek: DeepSeek V3",
@@ -9208,6 +9099,42 @@
         "top_p"
       ]
     },
+    "meta/llama-3.3-70b-instruct": {
+      "id": "meta-llama/llama-3.3-70b-instruct",
+      "name": "Meta: Llama 3.3 70B Instruct",
+      "provider": "meta",
+      "local_id": "llama-3.3-70b-instruct",
+      "context_length": 131072,
+      "max_output_tokens": 128000,
+      "input_price_per_mtok": 0.13,
+      "output_price_per_mtok": 0.4,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "logit_bias",
+        "logprobs",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "repetition_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_logprobs",
+        "top_p"
+      ]
+    },
     "meta/llama-3.3-70b-instruct:free": {
       "id": "meta-llama/llama-3.3-70b-instruct:free",
       "name": "Meta: Llama 3.3 70B Instruct (free)",
@@ -9233,42 +9160,6 @@
         "tool_choice",
         "tools",
         "top_k",
-        "top_p"
-      ]
-    },
-    "meta/llama-3.3-70b-instruct": {
-      "id": "meta-llama/llama-3.3-70b-instruct",
-      "name": "Meta: Llama 3.3 70B Instruct",
-      "provider": "meta",
-      "local_id": "llama-3.3-70b-instruct",
-      "context_length": 131072,
-      "max_output_tokens": 16384,
-      "input_price_per_mtok": 0.1,
-      "output_price_per_mtok": 0.32,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "logit_bias",
-        "logprobs",
-        "max_tokens",
-        "min_p",
-        "presence_penalty",
-        "repetition_penalty",
-        "response_format",
-        "seed",
-        "stop",
-        "structured_outputs",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_k",
-        "top_logprobs",
         "top_p"
       ]
     },
@@ -9368,6 +9259,7 @@
         "logit_bias",
         "logprobs",
         "max_tokens",
+        "prediction",
         "presence_penalty",
         "response_format",
         "seed",
@@ -9545,11 +9437,11 @@
         "top_p"
       ]
     },
-    "inflection/inflection-3-productivity": {
-      "id": "inflection/inflection-3-productivity",
-      "name": "Inflection: Inflection 3 Productivity",
+    "inflection/inflection-3-pi": {
+      "id": "inflection/inflection-3-pi",
+      "name": "Inflection: Inflection 3 Pi",
       "provider": "inflection",
-      "local_id": "inflection-3-productivity",
+      "local_id": "inflection-3-pi",
       "context_length": 8000,
       "max_output_tokens": 1024,
       "input_price_per_mtok": 2.5,
@@ -9568,11 +9460,11 @@
         "top_p"
       ]
     },
-    "inflection/inflection-3-pi": {
-      "id": "inflection/inflection-3-pi",
-      "name": "Inflection: Inflection 3 Pi",
+    "inflection/inflection-3-productivity": {
+      "id": "inflection/inflection-3-productivity",
+      "name": "Inflection: Inflection 3 Productivity",
       "provider": "inflection",
-      "local_id": "inflection-3-pi",
+      "local_id": "inflection-3-productivity",
       "context_length": 8000,
       "max_output_tokens": 1024,
       "input_price_per_mtok": 2.5,
@@ -9612,7 +9504,6 @@
         "logit_bias",
         "logprobs",
         "max_tokens",
-        "min_p",
         "presence_penalty",
         "repetition_penalty",
         "response_format",
@@ -9622,36 +9513,6 @@
         "temperature",
         "top_k",
         "top_logprobs",
-        "top_p"
-      ]
-    },
-    "meta/llama-3.2-1b-instruct": {
-      "id": "meta-llama/llama-3.2-1b-instruct",
-      "name": "Meta: Llama 3.2 1B Instruct",
-      "provider": "meta",
-      "local_id": "llama-3.2-1b-instruct",
-      "context_length": 131072,
-      "max_output_tokens": 60000,
-      "input_price_per_mtok": 0.027,
-      "output_price_per_mtok": 0.201,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "logit_bias",
-        "max_tokens",
-        "min_p",
-        "presence_penalty",
-        "repetition_penalty",
-        "seed",
-        "stop",
-        "temperature",
-        "top_k",
         "top_p"
       ]
     },
@@ -9686,15 +9547,15 @@
         "top_p"
       ]
     },
-    "meta/llama-3.2-3b-instruct:free": {
-      "id": "meta-llama/llama-3.2-3b-instruct:free",
-      "name": "Meta: Llama 3.2 3B Instruct (free)",
+    "meta/llama-3.2-1b-instruct": {
+      "id": "meta-llama/llama-3.2-1b-instruct",
+      "name": "Meta: Llama 3.2 1B Instruct",
       "provider": "meta",
-      "local_id": "llama-3.2-3b-instruct:free",
+      "local_id": "llama-3.2-1b-instruct",
       "context_length": 131072,
-      "max_output_tokens": 0,
-      "input_price_per_mtok": 0.0,
-      "output_price_per_mtok": 0.0,
+      "max_output_tokens": 60000,
+      "input_price_per_mtok": 0.027,
+      "output_price_per_mtok": 0.201,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -9704,8 +9565,12 @@
       "is_reasoning_model": false,
       "supported_parameters": [
         "frequency_penalty",
+        "logit_bias",
         "max_tokens",
+        "min_p",
         "presence_penalty",
+        "repetition_penalty",
+        "seed",
         "stop",
         "temperature",
         "top_k",
@@ -9742,6 +9607,32 @@
         "temperature",
         "top_k",
         "top_logprobs",
+        "top_p"
+      ]
+    },
+    "meta/llama-3.2-3b-instruct:free": {
+      "id": "meta-llama/llama-3.2-3b-instruct:free",
+      "name": "Meta: Llama 3.2 3B Instruct (free)",
+      "provider": "meta",
+      "local_id": "llama-3.2-3b-instruct:free",
+      "context_length": 131072,
+      "max_output_tokens": 0,
+      "input_price_per_mtok": 0.0,
+      "output_price_per_mtok": 0.0,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "max_tokens",
+        "presence_penalty",
+        "stop",
+        "temperature",
+        "top_k",
         "top_p"
       ]
     },
@@ -9907,32 +9798,6 @@
         "top_p"
       ]
     },
-    "nousresearch/hermes-3-llama-3.1-405b:free": {
-      "id": "nousresearch/hermes-3-llama-3.1-405b:free",
-      "name": "Nous: Hermes 3 405B Instruct (free)",
-      "provider": "nousresearch",
-      "local_id": "hermes-3-llama-3.1-405b:free",
-      "context_length": 131072,
-      "max_output_tokens": 0,
-      "input_price_per_mtok": 0.0,
-      "output_price_per_mtok": 0.0,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "max_tokens",
-        "presence_penalty",
-        "stop",
-        "temperature",
-        "top_k",
-        "top_p"
-      ]
-    },
     "nousresearch/hermes-3-llama-3.1-405b": {
       "id": "nousresearch/hermes-3-llama-3.1-405b",
       "name": "Nous: Hermes 3 405B Instruct",
@@ -9960,6 +9825,32 @@
         "seed",
         "stop",
         "structured_outputs",
+        "temperature",
+        "top_k",
+        "top_p"
+      ]
+    },
+    "nousresearch/hermes-3-llama-3.1-405b:free": {
+      "id": "nousresearch/hermes-3-llama-3.1-405b:free",
+      "name": "Nous: Hermes 3 405B Instruct (free)",
+      "provider": "nousresearch",
+      "local_id": "hermes-3-llama-3.1-405b:free",
+      "context_length": 131072,
+      "max_output_tokens": 0,
+      "input_price_per_mtok": 0.0,
+      "output_price_per_mtok": 0.0,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "max_tokens",
+        "presence_penalty",
+        "stop",
         "temperature",
         "top_k",
         "top_p"
@@ -10019,6 +9910,7 @@
         "logprobs",
         "max_completion_tokens",
         "max_tokens",
+        "prediction",
         "presence_penalty",
         "response_format",
         "seed",
@@ -10030,42 +9922,6 @@
         "top_logprobs",
         "top_p",
         "web_search_options"
-      ]
-    },
-    "meta/llama-3.1-8b-instruct": {
-      "id": "meta-llama/llama-3.1-8b-instruct",
-      "name": "Meta: Llama 3.1 8B Instruct",
-      "provider": "meta",
-      "local_id": "llama-3.1-8b-instruct",
-      "context_length": 131072,
-      "max_output_tokens": 16384,
-      "input_price_per_mtok": 0.02,
-      "output_price_per_mtok": 0.03,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "logit_bias",
-        "logprobs",
-        "max_tokens",
-        "min_p",
-        "presence_penalty",
-        "repetition_penalty",
-        "response_format",
-        "seed",
-        "stop",
-        "structured_outputs",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_k",
-        "top_logprobs",
-        "top_p"
       ]
     },
     "meta/llama-3.1-70b-instruct": {
@@ -10104,15 +9960,15 @@
         "top_p"
       ]
     },
-    "mistralai/mistral-nemo": {
-      "id": "mistralai/mistral-nemo",
-      "name": "Mistral: Mistral Nemo",
-      "provider": "mistralai",
-      "local_id": "mistral-nemo",
+    "meta/llama-3.1-8b-instruct": {
+      "id": "meta-llama/llama-3.1-8b-instruct",
+      "name": "Meta: Llama 3.1 8B Instruct",
+      "provider": "meta",
+      "local_id": "llama-3.1-8b-instruct",
       "context_length": 131072,
-      "max_output_tokens": 0,
-      "input_price_per_mtok": 0.02,
-      "output_price_per_mtok": 0.03,
+      "max_output_tokens": 131072,
+      "input_price_per_mtok": 0.05,
+      "output_price_per_mtok": 0.08,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -10140,15 +9996,15 @@
         "top_p"
       ]
     },
-    "openai/gpt-4o-mini-2024-07-18": {
-      "id": "openai/gpt-4o-mini-2024-07-18",
-      "name": "OpenAI: GPT-4o-mini (2024-07-18)",
-      "provider": "openai",
-      "local_id": "gpt-4o-mini-2024-07-18",
-      "context_length": 128000,
+    "mistralai/mistral-nemo": {
+      "id": "mistralai/mistral-nemo",
+      "name": "Mistral: Mistral Nemo",
+      "provider": "mistralai",
+      "local_id": "mistral-nemo",
+      "context_length": 131072,
       "max_output_tokens": 16384,
-      "input_price_per_mtok": 0.15,
-      "output_price_per_mtok": 0.6,
+      "input_price_per_mtok": 0.02,
+      "output_price_per_mtok": 0.04,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -10161,7 +10017,9 @@
         "logit_bias",
         "logprobs",
         "max_tokens",
+        "min_p",
         "presence_penalty",
+        "repetition_penalty",
         "response_format",
         "seed",
         "stop",
@@ -10169,9 +10027,9 @@
         "temperature",
         "tool_choice",
         "tools",
+        "top_k",
         "top_logprobs",
-        "top_p",
-        "web_search_options"
+        "top_p"
       ]
     },
     "openai/gpt-4o-mini": {
@@ -10196,6 +10054,42 @@
         "logprobs",
         "max_completion_tokens",
         "max_tokens",
+        "prediction",
+        "presence_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_logprobs",
+        "top_p",
+        "web_search_options"
+      ]
+    },
+    "openai/gpt-4o-mini-2024-07-18": {
+      "id": "openai/gpt-4o-mini-2024-07-18",
+      "name": "OpenAI: GPT-4o-mini (2024-07-18)",
+      "provider": "openai",
+      "local_id": "gpt-4o-mini-2024-07-18",
+      "context_length": 128000,
+      "max_output_tokens": 16384,
+      "input_price_per_mtok": 0.15,
+      "output_price_per_mtok": 0.6,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "logit_bias",
+        "logprobs",
+        "max_tokens",
+        "prediction",
         "presence_penalty",
         "response_format",
         "seed",
@@ -10238,41 +10132,6 @@
         "top_p"
       ]
     },
-    "openai/gpt-4o-2024-05-13": {
-      "id": "openai/gpt-4o-2024-05-13",
-      "name": "OpenAI: GPT-4o (2024-05-13)",
-      "provider": "openai",
-      "local_id": "gpt-4o-2024-05-13",
-      "context_length": 128000,
-      "max_output_tokens": 4096,
-      "input_price_per_mtok": 5.0,
-      "output_price_per_mtok": 15.0,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "logit_bias",
-        "logprobs",
-        "max_completion_tokens",
-        "max_tokens",
-        "presence_penalty",
-        "response_format",
-        "seed",
-        "stop",
-        "structured_outputs",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_logprobs",
-        "top_p",
-        "web_search_options"
-      ]
-    },
     "openai/gpt-4o": {
       "id": "openai/gpt-4o",
       "name": "OpenAI: GPT-4o",
@@ -10295,6 +10154,43 @@
         "logprobs",
         "max_completion_tokens",
         "max_tokens",
+        "prediction",
+        "presence_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_logprobs",
+        "top_p",
+        "web_search_options"
+      ]
+    },
+    "openai/gpt-4o-2024-05-13": {
+      "id": "openai/gpt-4o-2024-05-13",
+      "name": "OpenAI: GPT-4o (2024-05-13)",
+      "provider": "openai",
+      "local_id": "gpt-4o-2024-05-13",
+      "context_length": 128000,
+      "max_output_tokens": 4096,
+      "input_price_per_mtok": 5.0,
+      "output_price_per_mtok": 15.0,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "logit_bias",
+        "logprobs",
+        "max_completion_tokens",
+        "max_tokens",
+        "prediction",
         "presence_penalty",
         "response_format",
         "seed",
@@ -10546,6 +10442,7 @@
         "max_completion_tokens",
         "max_tokens",
         "min_p",
+        "prediction",
         "presence_penalty",
         "reasoning",
         "reasoning_effort",
@@ -10734,6 +10631,39 @@
         "top_p"
       ]
     },
+    "openai/gpt-3.5-turbo": {
+      "id": "openai/gpt-3.5-turbo",
+      "name": "OpenAI: GPT-3.5 Turbo",
+      "provider": "openai",
+      "local_id": "gpt-3.5-turbo",
+      "context_length": 16385,
+      "max_output_tokens": 4096,
+      "input_price_per_mtok": 0.5,
+      "output_price_per_mtok": 1.5,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "logit_bias",
+        "logprobs",
+        "max_tokens",
+        "presence_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_logprobs",
+        "top_p"
+      ]
+    },
     "openai/gpt-4": {
       "id": "openai/gpt-4",
       "name": "OpenAI: GPT-4",
@@ -10755,39 +10685,6 @@
         "logit_bias",
         "logprobs",
         "max_completion_tokens",
-        "max_tokens",
-        "presence_penalty",
-        "response_format",
-        "seed",
-        "stop",
-        "structured_outputs",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_logprobs",
-        "top_p"
-      ]
-    },
-    "openai/gpt-3.5-turbo": {
-      "id": "openai/gpt-3.5-turbo",
-      "name": "OpenAI: GPT-3.5 Turbo",
-      "provider": "openai",
-      "local_id": "gpt-3.5-turbo",
-      "context_length": 16385,
-      "max_output_tokens": 4096,
-      "input_price_per_mtok": 0.5,
-      "output_price_per_mtok": 1.5,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "logit_bias",
-        "logprobs",
         "max_tokens",
         "presence_penalty",
         "response_format",
