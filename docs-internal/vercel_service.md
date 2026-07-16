@@ -27,7 +27,7 @@ process rather than Stripe's two-step `--non-interactive` /
 | `_service.py` | Config-dir pinning, `is_logged_in()` sniff, `global_argv()` / `vercel_env()` builders, ANSI-strip + login-URL/code parsers |
 | `_install.py` | `ensure_vercel_cli()` — pinned `npm install vercel@<X>` into the shared npm tree (`<DATA_DIR>/packages/`); system PATH preferred; one-shot `telemetry disable` post-install |
 | `_credentials.py` | `VercelCredential(Credential)` thin marker (`auth="custom"`); `resolve()` returns the optional `vercel_token` api-key row |
-| `meta.json` | Node color. **No co-located `icon.svg`** — the icon is the official brand glyph via `visuals.json: {"vercelAction": {"icon": "lobehub:Vercel", "skill": "vercel-skill"}}`; a folder SVG would silently override it (first hit in `get_plugin_icon_path`), and its absence is locked by `test_vercel_plugin.py::test_plugin_folder_assets` |
+| `meta.json` | Node color. **No co-located `icon.svg`** — the icon is the official brand glyph via `visuals.json: {"vercelAction": {"icon": "lobehub:Vercel", "skill": "vercel-skill"}}`; a folder SVG would silently override it (first hit in `get_plugin_icon_path`), and its absence is locked by `test_vercel_plugin.py::test_plugin_folder_assets`. A lowercase `"vercel"` alias entry (icon + color) also exists because the skill's `allowed-tools` token is the tool name `vercel`, not the node type's snake_case — without the alias, `skill_loader._parse_skill_metadata` resolves an empty icon/color and the Master Skill row renders blank (the naming-contract escape hatch documented in plugin_system.md). |
 
 Paired skill: [`server/skills/vercel/vercel-skill/SKILL.md`](../server/skills/vercel/vercel-skill/SKILL.md)
 (auto-attached when the tool connects to an agent, via the

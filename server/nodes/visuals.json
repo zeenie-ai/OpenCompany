@@ -132,6 +132,10 @@
   "geminiChatModel": {
     "icon": "lobehub:gemini"
   },
+  "github": {
+    "icon": "lobehub:Github",
+    "color": "#8250df"
+  },
   "githubAction": {
     "icon": "lobehub:Github",
     "skill": "github-skill"
@@ -311,6 +315,10 @@
   },
   "vectorStore": {
     "icon": "🗄️"
+  },
+  "vercel": {
+    "icon": "lobehub:Vercel",
+    "color": "#666666"
   },
   "vercelAction": {
     "icon": "lobehub:Vercel",
