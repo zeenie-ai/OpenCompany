@@ -275,6 +275,8 @@ class UserSettings(SQLModel, table=True):
     memory_window_size: int = Field(default=100)  # Message pairs in short-term memory (1-100)
     compaction_ratio: float = Field(default=0.8)  # Fraction of context window triggering compaction (0.05-0.99). Mirrors COMPACTION_RATIO env default.
     agent_recursion_limit: int = Field(default=200)  # Hard step cap for the agent loop. Mirrors AGENT_RECURSION_LIMIT env default.
+    max_concurrent_subagents: int = Field(default=3)
+    max_delegation_depth: int = Field(default=2)
     examples_loaded: bool = Field(default=False)  # Track if example workflows were imported
     onboarding_completed: bool = Field(default=False)  # Track if user completed or skipped onboarding
     onboarding_step: int = Field(default=0)  # Last completed onboarding step (for resuming)
@@ -440,6 +442,8 @@ class AgentTeam(SQLModel, table=True):
     id: str = Field(primary_key=True, max_length=255)
     workflow_id: str = Field(index=True, max_length=255)
     team_lead_node_id: str = Field(max_length=255)
+    execution_id: Optional[str] = Field(default=None, index=True, max_length=255)
+    root_execution_id: Optional[str] = Field(default=None, index=True, max_length=255)
     status: str = Field(default="active", max_length=20)  # active, completed, failed, dissolved
     config: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     created_at: datetime = Field(
@@ -508,6 +512,7 @@ class AgentMessage(SQLModel, table=True):
     __tablename__ = "agent_messages"
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    event_id: Optional[str] = Field(default=None, unique=True, index=True, max_length=255)
     team_id: str = Field(index=True, max_length=255)
     from_agent: str = Field(max_length=255)  # node_id
     to_agent: Optional[str] = Field(default=None, max_length=255)  # None = broadcast
@@ -518,6 +523,34 @@ class AgentMessage(SQLModel, table=True):
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
+
+
+class SubagentConcurrencyCounter(SQLModel, table=True):
+    """Durable active-descendant count scoped to one root execution."""
+
+    __tablename__ = "subagent_concurrency_counters"
+
+    root_execution_id: str = Field(primary_key=True, max_length=255)
+    active_count: int = Field(default=0)
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), onupdate=func.now()),
+    )
+
+
+class SubagentConcurrencyPermit(SQLModel, table=True):
+    """Idempotency record for a delegation's global concurrency permit."""
+
+    __tablename__ = "subagent_concurrency_permits"
+
+    permit_id: str = Field(primary_key=True, max_length=255)
+    root_execution_id: str = Field(index=True, max_length=255)
+    status: str = Field(default="active", max_length=20)
+    acquired_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), server_default=func.now()),
+    )
+    released_at: Optional[datetime] = Field(default=None)
 
 
 class ProxyProviderConfig(SQLModel, table=True):

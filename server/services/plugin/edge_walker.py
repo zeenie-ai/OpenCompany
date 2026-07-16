@@ -33,6 +33,9 @@ shims to call here directly.
 
 from __future__ import annotations
 
+import hashlib
+import re
+from collections import Counter
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from constants import AI_AGENT_TYPES, ANDROID_SERVICE_NODE_TYPES
@@ -42,6 +45,61 @@ if TYPE_CHECKING:
     from core.database import Database
 
 logger = get_logger(__name__)
+
+TEAM_LEAD_TYPES = frozenset({"orchestrator_agent", "ai_employee"})
+TEAMMATE_HANDLE = "input-teammates"
+
+
+def edge_target_handle(edge: Dict[str, Any]) -> Optional[str]:
+    """Return the canonical ReactFlow handle, accepting legacy imports."""
+    return edge.get("targetHandle") or edge.get("target_handle")
+
+
+def _delegate_slug(value: Any) -> str:
+    slug = re.sub(r"[^a-zA-Z0-9]+", "_", str(value or "").strip()).strip("_").lower()
+    return slug or "ai_agent"
+
+
+def build_teammate_descriptors(node_id: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Build deterministic, LLM-visible identities for a lead's teammates.
+
+    Specialized agents retain their stable type-derived name. Custom
+    ``aiAgent`` nodes are label-addressable and receive a node-id suffix when
+    their label is empty or collides on the same lead surface.
+    """
+    nodes = context.get("nodes", []) or []
+    edges = context.get("edges", []) or []
+    node_by_id = {n.get("id"): n for n in nodes if n.get("id")}
+    candidates: List[Dict[str, Any]] = []
+    for edge in edges:
+        if edge.get("target") != node_id or edge_target_handle(edge) != TEAMMATE_HANDLE:
+            continue
+        source = node_by_id.get(edge.get("source"))
+        if not source or source.get("type") not in AI_AGENT_TYPES:
+            continue
+        node_type = source.get("type", "")
+        raw_label = (source.get("data") or {}).get("label")
+        label = str(raw_label or node_type)
+        candidates.append({
+            "node_id": source["id"],
+            "node_type": node_type,
+            "label": label,
+            "_raw_label": raw_label,
+            "_slug": _delegate_slug(raw_label),
+        })
+
+    custom_counts = Counter(c["_slug"] for c in candidates if c["node_type"] == "aiAgent" and c["_raw_label"])
+    for item in candidates:
+        if item["node_type"] == "aiAgent":
+            needs_suffix = not item["_raw_label"] or custom_counts[item["_slug"]] > 1
+            stable_id = hashlib.sha1(str(item["node_id"]).encode("utf-8")).hexdigest()[:8]
+            suffix = f"_{stable_id}" if needs_suffix else ""
+            item["delegate_tool_name"] = f"delegate_to_{item['_slug']}{suffix}"
+        else:
+            item["delegate_tool_name"] = f"delegate_to_{item['node_type']}"
+        item.pop("_raw_label", None)
+        item.pop("_slug", None)
+    return candidates
 
 
 # ---- Master-Skill expander callback registry ----------------------------
@@ -414,30 +472,26 @@ async def collect_teammate_connections(
 
     Used by ``orchestrator_agent`` / ``ai_employee``.
     """
-    nodes = context.get("nodes", [])
-    edges = context.get("edges", [])
     teammates: List[Dict[str, Any]] = []
-
-    for edge in edges:
-        if edge.get("target") != node_id or edge.get("targetHandle") != "input-teammates":
-            continue
-        source_id = edge.get("source")
-        source_node = next((n for n in nodes if n.get("id") == source_id), None)
-        if not source_node:
-            continue
-        node_type = source_node.get("type", "")
-        if node_type not in AI_AGENT_TYPES:
-            continue
+    descriptors = build_teammate_descriptors(node_id, context)
+    nodes = context.get("nodes", []) or []
+    edges = context.get("edges", []) or []
+    for descriptor in descriptors:
+        source_id = descriptor["node_id"]
         params = await database.get_node_parameters(source_id) or {}
-        teammates.append(
-            {
-                "node_id": source_id,
-                "node_type": node_type,
-                "label": source_node.get("data", {}).get("label", node_type),
-                "parameters": params,
-            }
-        )
-        logger.debug(f"[Teams] Found teammate: {node_type} ({source_id})")
+        child_tools: List[Dict[str, Any]] = []
+        for edge in edges:
+            if edge.get("target") != source_id or edge_target_handle(edge) != "input-tools":
+                continue
+            child = next((n for n in nodes if n.get("id") == edge.get("source")), None)
+            if child:
+                child_tools.append({
+                    "node_id": child.get("id"),
+                    "node_type": child.get("type"),
+                    "label": (child.get("data") or {}).get("label", child.get("type")),
+                })
+        teammates.append({**descriptor, "parameters": params, "child_tools": child_tools})
+        logger.debug(f"[Teams] Found teammate: {descriptor['node_type']} ({source_id})")
 
     return teammates
 

@@ -30,6 +30,10 @@ async def handle_create_team(data: Dict[str, Any], websocket: WebSocket) -> Dict
         teammate_node_ids=data.get("teammates", []),
         workflow_id=data["workflow_id"],
         config=data.get("config"),
+        execution_id=data.get("execution_id"),
+        root_execution_id=data.get("root_execution_id"),
+        team_lead_type=data.get("team_lead_type", "orchestrator_agent"),
+        team_lead_label=data.get("team_lead_label"),
     )
     return {"team": team} if team else {"success": False, "error": "Failed to create team"}
 
@@ -69,13 +73,15 @@ async def handle_get_team_status(data: Dict[str, Any], websocket: WebSocket) -> 
 
     team_id = data.get("team_id")
 
-    if not team_id and data.get("team_lead_node_id"):
-        return {"status": {**empty_status, "message": "No active team yet"}}
-
-    if not team_id:
+    if not team_id and not (data.get("workflow_id") and data.get("team_lead_node_id")):
         return {"status": {**empty_status, "message": "No team connected"}}
 
-    status = await service.get_team_status(team_id)
+    status = await service.get_team_status(
+        team_id, workflow_id=data.get("workflow_id"),
+        team_lead_node_id=data.get("team_lead_node_id"), execution_id=data.get("execution_id"),
+    )
+    if status.get("error") == "Team not found":
+        status = {**empty_status, "message": "No active team yet"}
     return {"status": status}
 
 

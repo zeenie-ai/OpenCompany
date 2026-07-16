@@ -85,9 +85,15 @@ def remap_node_ids(
     for edge in edges:
         src = id_map.get(edge.get("source"), edge.get("source"))
         tgt = id_map.get(edge.get("target"), edge.get("target"))
+        # Older backend-generated workflow operations used snake_case.
+        # Persist imports in the canonical ReactFlow shape.
+        target_handle = edge.get("targetHandle") or edge.get("target_handle")
+        normalized_edge = {key: value for key, value in edge.items() if key != "target_handle"}
+        if target_handle is not None:
+            normalized_edge["targetHandle"] = target_handle
         new_edges.append(
             {
-                **edge,
+                **normalized_edge,
                 "source": src,
                 "target": tgt,
                 "id": f"e-{src}-{tgt}-{now}-{salt}",

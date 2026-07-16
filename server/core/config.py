@@ -338,6 +338,13 @@ class Settings(BaseSettings):
     # innermost override.
     agent_recursion_limit: int = Field(default=200, env="AGENT_RECURSION_LIMIT", ge=1)
 
+    # Multi-agent delegation guardrails. The concurrency cap applies to all
+    # active descendants of one root execution (the root itself is excluded).
+    # Team leads may delegate one additional level, but deeper trees are
+    # rejected before a child workflow is scheduled.
+    max_concurrent_subagents: int = Field(default=3, env="MAX_CONCURRENT_SUBAGENTS", ge=1, le=50)
+    max_delegation_depth: int = Field(default=2, env="MAX_DELEGATION_DEPTH", ge=1, le=2)
+
     # Gunicorn Configuration (for production deployment)
     gunicorn_timeout: int = Field(default=120, env="GUNICORN_TIMEOUT", ge=30)
     gunicorn_graceful_timeout: int = Field(default=30, env="GUNICORN_GRACEFUL_TIMEOUT", ge=10)

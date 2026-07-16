@@ -59,6 +59,12 @@ _active_delegations: Dict[Tuple[str, str, str], str] = {}
 # instead of a plain set.
 _active_delegated_nodes: Dict[str, int] = {}
 
+# Legacy (non-Temporal) executions are single-process, so an asyncio
+# semaphore provides the same bounded fan-out contract as AgentWorkflow.
+# Temporal owns its own durable scheduling path. Semaphores are scoped by the
+# root execution and intentionally exclude the root agent itself.
+_delegation_semaphores: Dict[str, asyncio.Semaphore] = {}
+
 
 def is_node_in_active_delegation(node_id: str) -> bool:
     """Return True iff ``node_id`` has at least one in-flight
@@ -374,6 +380,80 @@ async def _execute_delegated_agent(args: Dict[str, Any], config: Dict[str, Any])
     # Generate unique task ID
     task_id = f"delegated_{node_id}_{uuid.uuid4().hex[:8]}"
 
+    root_execution_id = str(config.get("root_execution_id") or config.get("execution_id") or workflow_id or parent_node_id)
+    delegation_depth = int(config.get("delegation_depth") or 0)
+    from core.config import Settings as _DelegationSettings
+
+    delegation_settings = _DelegationSettings()
+    maybe_user_settings = database.get_user_settings()
+    user_settings = await maybe_user_settings if hasattr(maybe_user_settings, "__await__") else None
+    max_depth = int(
+        config.get("max_delegation_depth")
+        or (user_settings or {}).get("max_delegation_depth")
+        or delegation_settings.max_delegation_depth
+    )
+    if delegation_depth >= max_depth:
+        return {
+            "success": False,
+            "status": "error",
+            "error": f"Maximum delegation depth {max_depth} exceeded",
+        }
+
+    max_concurrency = max(
+        1,
+        int(
+            config.get("max_concurrent_subagents")
+            or (user_settings or {}).get("max_concurrent_subagents")
+            or delegation_settings.max_concurrent_subagents
+        ),
+    )
+    semaphore = _delegation_semaphores.setdefault(root_execution_id, asyncio.Semaphore(max_concurrency))
+
+    # Team-handle delegation participates in the durable AgentTeam lifecycle.
+    # Ordinary agent-as-tool edges keep their historical standalone behavior.
+    team_id: Optional[str] = config.get("team_id")
+    is_team_delegation = any(
+        edge.get("source") == node_id
+        and edge.get("target") == parent_node_id
+        and (edge.get("targetHandle") or edge.get("target_handle")) == "input-teammates"
+        for edge in edges
+    )
+    team_service = None
+    if is_team_delegation:
+        from services.agent_team import get_agent_team_service
+        from services.plugin.edge_walker import collect_teammate_connections
+
+        team_service = get_agent_team_service()
+        parent_node = next((item for item in nodes if item.get("id") == parent_node_id), {})
+        teammates = await collect_teammate_connections(
+            parent_node_id,
+            {"nodes": nodes, "edges": edges, "workflow_id": workflow_id},
+            database,
+        )
+        execution_key = str(config.get("execution_id") or root_execution_id)
+        team = await team_service.get_or_create_execution_team(
+            team_lead_node_id=parent_node_id,
+            teammates=teammates,
+            workflow_id=str(workflow_id or "default"),
+            execution_id=execution_key,
+            root_execution_id=root_execution_id,
+            team_lead_type=parent_node.get("type", "orchestrator_agent"),
+            team_lead_label=(parent_node.get("data") or {}).get("label"),
+            config={"mode": "parallel", "max_concurrent_subagents": max_concurrency},
+        )
+        team_id = (team or {}).get("team_id") or (team or {}).get("id")
+        if not team_id:
+            return {"success": False, "status": "error", "error": "Failed to persist agent execution team"}
+        persisted = await team_service.add_task(
+            team_id,
+            title=task_description[:500] or f"Delegation to {node_type}",
+            description=task_context or task_description,
+            created_by=parent_node_id,
+            task_id=task_id,
+        )
+        if not persisted:
+            return {"success": False, "status": "error", "error": "Failed to persist delegated team task"}
+
     # Register this delegation to prevent duplicates
     _active_delegations[delegation_key] = task_id
 
@@ -425,6 +505,12 @@ async def _execute_delegated_agent(args: Dict[str, Any], config: Dict[str, Any])
         "outputs": {},
         "parent_task_id": task_id,
         "execution_id": config.get("execution_id"),
+        "root_execution_id": root_execution_id,
+        "parent_node_id": parent_node_id,
+        "delegation_depth": delegation_depth + 1,
+        "team_id": team_id,
+        "team_task_id": task_id if team_id else None,
+        "trace_id": task_id,
     }
 
     broadcaster = get_status_broadcaster()
@@ -435,35 +521,78 @@ async def _execute_delegated_agent(args: Dict[str, Any], config: Dict[str, Any])
         f"[Delegated Agent] Context: {len(nodes)} nodes, {len(edges)} edges, " f"edge_targets={set(e.get('target') for e in edges)}"
     )
 
+    async def finalize_team_task(*, result_data: Optional[Dict[str, Any]] = None, error: Optional[str] = None) -> None:
+        if not team_service or not team_id:
+            return
+        if error is not None:
+            await team_service.fail_task(team_id, task_id, error)
+            event_type, message_type, content = "failed", "task_failed", error
+        else:
+            await team_service.complete_task(team_id, task_id, result_data)
+            event_type, message_type, content = "completed", "task_complete", str((result_data or {}).get("result", ""))
+        await team_service.send_message(
+            team_id,
+            from_agent=node_id,
+            to_agent=parent_node_id,
+            content=content,
+            message_type=message_type,
+            event_id=f"{task_id}:{event_type}",
+            extra_data={"task_id": task_id, "root_execution_id": root_execution_id, **(result_data or {})},
+        )
+        if await team_service.is_team_done(team_id):
+            tasks = await team_service.database.get_team_tasks(team_id)
+            final_status = "failed" if any(item.get("status") == "failed" for item in tasks) else "completed"
+            await team_service.database.update_team_status(team_id, final_status)
+
     # Define the background coroutine
     async def run_child_agent():
+        durable_permit_acquired = False
         try:
+            async with semaphore:
+                if team_service and team_id:
+                    while not await team_service.acquire_subagent_permit(
+                        root_execution_id, task_id, max_concurrency
+                    ):
+                        await asyncio.sleep(0.25)
+                    durable_permit_acquired = True
+                    claimed = await team_service.claim_task(team_id, task_id, node_id)
+                    if not claimed:
+                        raise RuntimeError("Delegated team task could not be claimed")
+                    await team_service.send_message(
+                        team_id,
+                        from_agent=parent_node_id,
+                        to_agent=node_id,
+                        content=task_description,
+                        message_type="task_assignment",
+                        event_id=f"{task_id}:assigned",
+                        extra_data={"task_id": task_id, "root_execution_id": root_execution_id},
+                    )
             # Broadcast that child agent is starting
-            await broadcaster.update_node_status(
-                node_id,
-                "executing",
-                {"phase": "delegated_task", "task_id": task_id, "message": f"Working on: {task_description[:100]}..."},
-                workflow_id=workflow_id,
-            )
+                await broadcaster.update_node_status(
+                    node_id,
+                    "executing",
+                    {"phase": "delegated_task", "task_id": task_id, "message": f"Working on: {task_description[:100]}..."},
+                    workflow_id=workflow_id,
+                )
 
             # Execute the child agent via its own plugin class.
             # Wave 11.E.3: replaces the legacy handle_ai_agent /
             # handle_chat_agent imports — every agent type already owns
             # an @Operation method that wraps prepare_agent_call +
             # AIService dispatch, so we just go through BaseNode.execute.
-            from services.node_registry import get_node_class
-            from services.plugin import NodeContext
+                from services.node_registry import get_node_class
+                from services.plugin import NodeContext
 
-            plugin_cls = get_node_class(node_type)
-            if plugin_cls is None:
-                raise RuntimeError(f"Unknown delegated agent type: {node_type}")
-            instance = plugin_cls()
-            child_ctx = NodeContext.from_legacy(
-                node_id=node_id,
-                node_type=node_type,
-                context=child_context,
-            )
-            result = await instance.execute(node_id, child_params, child_ctx)
+                plugin_cls = get_node_class(node_type)
+                if plugin_cls is None:
+                    raise RuntimeError(f"Unknown delegated agent type: {node_type}")
+                instance = plugin_cls()
+                child_ctx = NodeContext.from_legacy(
+                    node_id=node_id,
+                    node_type=node_type,
+                    context=child_context,
+                )
+                result = await instance.execute(node_id, child_params, child_ctx)
 
             logger.info(f"[Delegated Agent] Task {task_id} completed: success={result.get('success')}")
 
@@ -513,6 +642,8 @@ async def _execute_delegated_agent(args: Dict[str, Any], config: Dict[str, Any])
                     workflow_id=workflow_id,
                     error=error_msg,
                 )
+
+                await finalize_team_task(error=error_msg)
 
                 return result
 
@@ -568,6 +699,8 @@ async def _execute_delegated_agent(args: Dict[str, Any], config: Dict[str, Any])
                 result=response_text,
             )
 
+            await finalize_team_task(result_data={"result": response_text})
+
             return result
 
         except Exception as e:
@@ -613,9 +746,19 @@ async def _execute_delegated_agent(args: Dict[str, Any], config: Dict[str, Any])
                 error=str(e),
             )
 
+            await finalize_team_task(error=str(e))
+
             return {"success": False, "error": str(e)}
 
         finally:
+            if durable_permit_acquired and team_service:
+                released = await team_service.release_subagent_permit(root_execution_id, task_id)
+                if not released:
+                    logger.error(
+                        "[Delegated Agent] Failed to release durable permit %s for root %s",
+                        task_id,
+                        root_execution_id,
+                    )
             # Cleanup task reference
             _delegated_tasks.pop(task_id, None)
             # Cleanup delegation tracking (allows re-delegation after completion)

@@ -39,6 +39,65 @@ class TestAgentWorkflowDefinition:
         assert defn.sandboxed is False, "AgentWorkflow must be sandboxed=False so it can read " "services.node_registry deterministically"
 
 
+class TestDurableTeamDelegationContract:
+    """Regression coverage for team-handle Temporal delegation."""
+
+    def test_prepare_payload_expands_team_handle(self):
+        import inspect
+
+        from services.temporal.agent_activities import prepare_agent_payload
+
+        source = inspect.getsource(prepare_agent_payload)
+        assert "collect_teammate_connections" in source
+        assert '"input-tools"' in source
+        assert "get_or_create_execution_team" in source
+        assert '"team_id": execution_team_id' in source
+
+    def test_same_turn_delegations_start_before_ordered_await(self):
+        import inspect
+
+        from services.temporal.agent_workflow import AgentWorkflow
+
+        source = inspect.getsource(AgentWorkflow.run)
+        assert "workflow.start_child_workflow" in source
+        assert "max_concurrent_subagents" in source
+        assert "delegation_handles[call_index]" in source
+        assert "tool_result = await handle" in source
+
+    def test_child_invocation_has_isolated_trace_envelope(self):
+        import inspect
+
+        from services.temporal.agent_workflow import AgentWorkflow
+
+        source = inspect.getsource(AgentWorkflow.run)
+        for field in (
+            "root_execution_id",
+            "parent_node_id",
+            "delegation_depth",
+            "team_id",
+            "team_task_id",
+            "trace_id",
+            "invocation",
+        ):
+            assert f'"{field}"' in source
+
+    def test_durable_assignment_precedes_child_start(self):
+        import inspect
+
+        from services.temporal.agent_workflow import AgentWorkflow
+
+        source = inspect.getsource(AgentWorkflow.run)
+        queue_at = source.index('"agent.queue_delegation.v1"')
+        acquire_at = source.index('"agent.acquire_subagent_permit.v1"')
+        claim_at = source.index('"agent.begin_delegation.v1"')
+        start_at = source.index("workflow.start_child_workflow")
+        assert queue_at < acquire_at < claim_at < start_at
+        assert '"agent.finish_delegation.v1"' in source
+        assert '"agent.release_subagent_permit.v1"' in source
+        assert "assignment_event_id" in source
+        assert "terminal_event_id" in source
+
+
 class TestAgentActivities:
     """The three agent activities must register under stable names so
     ``AgentWorkflow`` can schedule them by string."""
@@ -62,23 +121,29 @@ class TestAgentActivities:
         defn = getattr(compact_agent_memory, "__temporal_activity_definition")
         assert defn.name == "agent.compact_memory.v1"
 
-    def test_collect_returns_all_seven(self):
+    def test_collect_returns_all_agent_activities(self):
         """Each successive sprint added one F4.B agent activity:
         infra (3) → per-agent-wiring +prepare_payload (4) → CloudEvents
         cleanup +broadcast_progress (5) → +store_output (6) →
-        +refresh_tools (7). All must register so the AgentWorkflow loop
+        +refresh_tools (7) + durable delegation lifecycle/coordinator (13). All must register so the AgentWorkflow loop
         can schedule them by name."""
         from services.temporal.agent_activities import collect_agent_activities
 
         activities = collect_agent_activities()
         names = sorted(getattr(a, "__temporal_activity_definition").name for a in activities)
         assert names == [
+            "agent.acquire_subagent_permit.v1",
+            "agent.begin_delegation.v1",
             "agent.broadcast_progress.v1",
             "agent.compact_memory.v1",
             "agent.execute_llm_step.v1",
+            "agent.finalize_team.v1",
+            "agent.finish_delegation.v1",
             "agent.persist_turn.v1",
             "agent.prepare_payload.v1",
+            "agent.queue_delegation.v1",
             "agent.refresh_tools.v1",
+            "agent.release_subagent_permit.v1",
             "agent.store_output.v1",
         ]
 

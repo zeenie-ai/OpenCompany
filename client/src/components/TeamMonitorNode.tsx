@@ -30,6 +30,7 @@ interface TeamStatus {
     total: number;
     completed: number;
     active: number;
+    queued: number;
     pending: number;
     failed: number;
   };
@@ -39,6 +40,7 @@ interface TeamStatus {
 const TeamMonitorNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectable, selected }) => {
   const theme = useAppTheme();
   const setSelectedNode = useAppStore((s) => s.setSelectedNode);
+  const workflowId = useAppStore((s) => s.currentWorkflow?.id);
   const { sendRequest } = useWebSocket();
   const edges = useEdges();
   const nodes = useNodes();
@@ -74,7 +76,8 @@ const TeamMonitorNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConn
       // Request team status - backend will find the active team for the workflow
       const response = await sendRequest<{ status?: any }>('get_team_status', {
         team_id: teamId,
-        team_lead_node_id: connectedTeamLead?.id
+        workflow_id: workflowId,
+        team_lead_node_id: connectedTeamLead?.id,
       });
       if (response?.status) {
         setTeamStatus({
@@ -84,6 +87,7 @@ const TeamMonitorNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConn
             total: response.status.task_count || 0,
             completed: response.status.completed_count || 0,
             active: response.status.active_count || 0,
+            queued: response.status.queued_count ?? response.status.pending_count ?? 0,
             pending: response.status.pending_count || 0,
             failed: response.status.failed_count || 0,
           },
@@ -95,7 +99,7 @@ const TeamMonitorNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConn
     } finally {
       setIsLoading(false);
     }
-  }, [data?.teamId, connectedTeamLead, sendRequest]);
+  }, [data?.teamId, connectedTeamLead, workflowId, sendRequest]);
 
   // Auto-refresh when connected to a team lead
   useEffect(() => {
@@ -155,7 +159,7 @@ const TeamMonitorNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConn
       {/* Stats Grid */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
+        gridTemplateColumns: 'repeat(5, 1fr)',
         gap: 2,
         padding: '6px 4px',
         borderBottom: `1px solid ${theme.colors.border}`,
@@ -183,6 +187,12 @@ const TeamMonitorNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConn
             {teamStatus?.tasks?.active || 0}
           </div>
           <div style={{ fontSize: 8, color: theme.colors.textSecondary }}>Active</div>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 12, fontWeight: 'bold', color: 'var(--warning)' }}>
+            {teamStatus?.tasks?.queued || 0}
+          </div>
+          <div style={{ fontSize: 8, color: theme.colors.textSecondary }}>Queued</div>
         </div>
       </div>
 

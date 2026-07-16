@@ -1841,6 +1841,11 @@ class AIService:
                     # Stable per-run id so session-keyed tools (browser)
                     # reuse one instance across the agent loop.
                     config["execution_id"] = context.get("execution_id")
+                    config["root_execution_id"] = context.get("root_execution_id")
+                    config["delegation_depth"] = context.get("delegation_depth", 0)
+                    config["team_id"] = context.get("team_id")
+                    config["max_concurrent_subagents"] = context.get("max_concurrent_subagents", 3)
+                    config["max_delegation_depth"] = context.get("max_delegation_depth", 2)
 
                 try:
                     result = await execute_tool(tool_name, tool_args, config)
@@ -2435,6 +2440,11 @@ class AIService:
                         # Stable per-run id so session-keyed tools (browser)
                         # reuse one instance across the agent loop.
                         config["execution_id"] = context.get("execution_id")
+                        config["root_execution_id"] = context.get("root_execution_id")
+                        config["delegation_depth"] = context.get("delegation_depth", 0)
+                        config["team_id"] = context.get("team_id")
+                        config["max_concurrent_subagents"] = context.get("max_concurrent_subagents", 3)
+                        config["max_delegation_depth"] = context.get("max_delegation_depth", 2)
 
                     try:
                         result = await execute_tool(tool_name, tool_args, config)
@@ -2792,6 +2802,10 @@ class AIService:
             connected_services = tool_info.get("connected_services", [])
 
             default_tool_name, default_tool_description = _resolve_default_tool_name_description(node_type)
+            # Team-handle expansion assigns a per-node identity to custom
+            # aiAgent delegates. It intentionally outranks schemas and class
+            # defaults because those are type-wide and would collide.
+            delegated_name = tool_info.get("delegate_tool_name")
 
             # Check database for stored schema (source of truth)
             db_schema = await self.database.get_tool_schema(node_id) if node_id else None
@@ -2799,14 +2813,14 @@ class AIService:
             if db_schema:
                 # Use database schema as source of truth
                 logger.debug(f"[Agent] Using DB schema for tool node {node_id}")
-                tool_name = db_schema.get("tool_name", default_tool_name or f"tool_{node_label}")
+                tool_name = delegated_name or db_schema.get("tool_name", default_tool_name or f"tool_{node_label}")
                 tool_description = db_schema.get("tool_description", default_tool_description or f"Execute {node_label}")
                 # Use stored connected_services if available (for toolkit nodes)
                 if db_schema.get("connected_services"):
                     connected_services = db_schema["connected_services"]
             else:
                 # Fall back to dynamic generation from node params
-                tool_name = (
+                tool_name = delegated_name or (
                     node_params.get("tool_name") or default_tool_name or f"tool_{node_label}".replace(" ", "_").replace("-", "_").lower()
                 )
                 tool_description = node_params.get("tool_description") or default_tool_description or f"Execute {node_label} node"

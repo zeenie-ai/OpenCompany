@@ -99,48 +99,15 @@ async def prepare_agent_call(
         teammates = await collect_teammate_connections(node_id, context, database)
         if teammates:
             tool_data = tool_data or []
-            # Walk each teammate's own ``input-tools`` edges so the
-            # delegation tool description (built later in
-            # ``ai.py:_build_tool_from_node``) lists what each teammate
-            # can actually do. Without ``child_tools`` populated, the
-            # LLM only sees the generic "ONE-SHOT delegation to X"
-            # string and has no signal for which teammate fits a given
-            # task -- the orchestrator answers in one turn instead of
-            # delegating. Scoped to the team-handle path on purpose;
-            # ``input-tools``-connected agents already get this
-            # capability injection inside ``edge_walker``.
-            all_nodes = context.get("nodes", []) or []
-            all_edges = context.get("edges", []) or []
             for tm in teammates:
-                tm_id = tm["node_id"]
-                child_tools = []
-                for child_edge in all_edges:
-                    if child_edge.get("target") != tm_id or child_edge.get("targetHandle") != "input-tools":
-                        continue
-                    child_id = child_edge.get("source")
-                    child_node = next(
-                        (n for n in all_nodes if n.get("id") == child_id),
-                        None,
-                    )
-                    if not child_node:
-                        continue
-                    child_tools.append(
-                        {
-                            "node_id": child_id,
-                            "node_type": child_node.get("type"),
-                            "label": child_node.get("data", {}).get(
-                                "label",
-                                child_node.get("type"),
-                            ),
-                        }
-                    )
                 tool_data.append(
                     {
-                        "node_id": tm_id,
+                        "node_id": tm["node_id"],
                         "node_type": tm["node_type"],
                         "label": tm["label"],
                         "parameters": tm.get("parameters", {}),
-                        "child_tools": child_tools,
+                        "child_tools": tm.get("child_tools", []),
+                        "delegate_tool_name": tm["delegate_tool_name"],
                     }
                 )
             logger.info(f"[Teams] Added {len(teammates)} teammates as delegation tools")

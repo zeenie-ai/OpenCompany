@@ -34,6 +34,8 @@ from models.database import (
     TeamMember,
     TeamTask,
     AgentMessage,
+    SubagentConcurrencyCounter,
+    SubagentConcurrencyPermit,
     GoogleConnection,
     ProxyProviderConfig,
     ProxyRoutingRule,
@@ -103,6 +105,7 @@ class Database:
 
             # Add missing columns to existing tables (simple migration)
             await self._migrate_user_settings()
+            await self._migrate_agent_teams()
 
             logger.info("Database initialized successfully")
 
@@ -164,6 +167,11 @@ class Database:
                     await conn.execute(text("ALTER TABLE user_settings ADD COLUMN agent_recursion_limit INTEGER DEFAULT 200"))
                     logger.info("Added agent_recursion_limit column to user_settings")
 
+                if "max_concurrent_subagents" not in columns:
+                    await conn.execute(text("ALTER TABLE user_settings ADD COLUMN max_concurrent_subagents INTEGER DEFAULT 3"))
+                if "max_delegation_depth" not in columns:
+                    await conn.execute(text("ALTER TABLE user_settings ADD COLUMN max_delegation_depth INTEGER DEFAULT 2"))
+
                 # Migrate token_usage_metrics table - add cost columns
                 result = await conn.execute(text("PRAGMA table_info(token_usage_metrics)"))
                 columns = {row[1] for row in result.fetchall()}
@@ -224,6 +232,28 @@ class Database:
 
         except Exception as e:
             logger.warning(f"Migration check failed (table may not exist yet): {e}")
+
+    async def _migrate_agent_teams(self):
+        """Add execution identity columns used by durable delegation."""
+        try:
+            async with self.engine.begin() as conn:
+                result = await conn.execute(text("PRAGMA table_info(agent_teams)"))
+                columns = {row[1] for row in result.fetchall()}
+                if columns and "execution_id" not in columns:
+                    await conn.execute(text("ALTER TABLE agent_teams ADD COLUMN execution_id VARCHAR(255)"))
+                if columns and "root_execution_id" not in columns:
+                    await conn.execute(text("ALTER TABLE agent_teams ADD COLUMN root_execution_id VARCHAR(255)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_agent_teams_execution_id ON agent_teams(execution_id)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_agent_teams_root_execution_id ON agent_teams(root_execution_id)"))
+                await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_agent_team_execution_lead ON agent_teams(execution_id, team_lead_node_id) WHERE execution_id IS NOT NULL"))
+
+                result = await conn.execute(text("PRAGMA table_info(agent_messages)"))
+                message_columns = {row[1] for row in result.fetchall()}
+                if message_columns and "event_id" not in message_columns:
+                    await conn.execute(text("ALTER TABLE agent_messages ADD COLUMN event_id VARCHAR(255)"))
+                await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_agent_messages_event_id ON agent_messages(event_id) WHERE event_id IS NOT NULL"))
+        except Exception as e:
+            logger.warning(f"Agent-team migration check failed: {e}")
 
     async def shutdown(self):
         """Close database connections."""
@@ -1430,6 +1460,10 @@ class Database:
                 if not schema:
                     return None
 
+                pending_count = sum(1 for t in tasks if t.status == "pending")
+                active_count = sum(1 for t in tasks if t.status == "in_progress")
+                completed_count = sum(1 for t in tasks if t.status == "completed")
+                failed_count = sum(1 for t in tasks if t.status == "failed")
                 return {
                     "node_id": schema.node_id,
                     "tool_name": schema.tool_name,
@@ -1763,6 +1797,8 @@ class Database:
                     "auto_add_skill_for_tools": settings.auto_add_skill_for_tools,
                     "auto_rebind_tools_after_canvas_change": settings.auto_rebind_tools_after_canvas_change,
                     "agent_recursion_limit": settings.agent_recursion_limit,
+                    "max_concurrent_subagents": settings.max_concurrent_subagents,
+                    "max_delegation_depth": settings.max_delegation_depth,
                     "created_at": settings.created_at.isoformat() if settings.created_at else None,
                     "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
                 }
@@ -2302,7 +2338,8 @@ class Database:
     # ============================================================================
 
     async def create_team(
-        self, team_id: str, workflow_id: str, team_lead_node_id: str, config: Optional[Dict[str, Any]] = None
+        self, team_id: str, workflow_id: str, team_lead_node_id: str, config: Optional[Dict[str, Any]] = None,
+        execution_id: Optional[str] = None, root_execution_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Create a new agent team."""
         try:
@@ -2311,13 +2348,16 @@ class Database:
                     id=team_id,
                     workflow_id=workflow_id,
                     team_lead_node_id=team_lead_node_id,
+                    execution_id=execution_id,
+                    root_execution_id=root_execution_id or execution_id,
                     config=config or {},
                     created_at=datetime.now(timezone.utc),
                 )
                 session.add(team)
                 await session.commit()
                 logger.info(f"[Teams] Created team {team_id}")
-                return {"id": team.id, "workflow_id": team.workflow_id, "status": team.status}
+                return {"id": team.id, "workflow_id": team.workflow_id, "execution_id": team.execution_id,
+                        "root_execution_id": team.root_execution_id, "status": team.status}
         except Exception as e:
             logger.error(f"Failed to create team: {e}")
             return None
@@ -2334,12 +2374,38 @@ class Database:
                     "id": team.id,
                     "workflow_id": team.workflow_id,
                     "team_lead_node_id": team.team_lead_node_id,
+                    "execution_id": team.execution_id,
+                    "root_execution_id": team.root_execution_id,
                     "status": team.status,
                     "config": team.config,
                     "created_at": team.created_at.isoformat() if team.created_at else None,
                 }
         except Exception as e:
             logger.error(f"Failed to get team: {e}")
+            return None
+
+    async def find_team(
+        self, workflow_id: str, team_lead_node_id: str,
+        execution_id: Optional[str] = None, active_first: bool = True,
+    ) -> Optional[Dict[str, Any]]:
+        """Resolve an execution team, or the latest team for a workflow lead."""
+        try:
+            async with self.get_session() as session:
+                query = select(AgentTeam).where(
+                    AgentTeam.workflow_id == workflow_id,
+                    AgentTeam.team_lead_node_id == team_lead_node_id,
+                )
+                if execution_id:
+                    query = query.where(AgentTeam.execution_id == execution_id)
+                elif active_first:
+                    query = query.order_by(case((AgentTeam.status == "active", 0), else_=1), AgentTeam.created_at.desc())
+                else:
+                    query = query.order_by(AgentTeam.created_at.desc())
+                result = await session.execute(query.limit(1))
+                team = result.scalar_one_or_none()
+                return await self.get_team(team.id) if team else None
+        except Exception as e:
+            logger.error(f"Failed to find team: {e}")
             return None
 
     async def update_team_status(self, team_id: str, status: str) -> bool:
@@ -2353,6 +2419,8 @@ class Database:
                 team.status = status
                 if status in ("completed", "failed", "dissolved"):
                     team.completed_at = datetime.now(timezone.utc)
+                elif status == "active":
+                    team.completed_at = None
                 await session.commit()
                 return True
         except Exception as e:
@@ -2360,17 +2428,28 @@ class Database:
             return False
 
     async def add_team_member(
-        self, team_id: str, agent_node_id: str, agent_type: str, role: str = "teammate", agent_label: Optional[str] = None
+        self, team_id: str, agent_node_id: str, agent_type: str, role: str = "teammate", agent_label: Optional[str] = None,
+        capabilities: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         """Add member to team."""
         try:
             async with self.get_session() as session:
+                existing = await session.execute(select(TeamMember).where(
+                    TeamMember.team_id == team_id, TeamMember.agent_node_id == agent_node_id
+                ))
+                member = existing.scalar_one_or_none()
+                if member:
+                    member.agent_type, member.agent_label, member.role = agent_type, agent_label, role
+                    member.capabilities = capabilities
+                    await session.commit()
+                    return {"id": member.id, "agent_node_id": agent_node_id, "role": role}
                 member = TeamMember(
                     team_id=team_id,
                     agent_node_id=agent_node_id,
                     agent_type=agent_type,
                     agent_label=agent_label,
                     role=role,
+                    capabilities=capabilities,
                     joined_at=datetime.now(timezone.utc),
                 )
                 session.add(member)
@@ -2430,6 +2509,12 @@ class Database:
         """Add task to team's shared list."""
         try:
             async with self.get_session() as session:
+                existing = await session.execute(select(TeamTask).where(TeamTask.id == task_id))
+                task = existing.scalar_one_or_none()
+                if task:
+                    if task.team_id != team_id:
+                        return None
+                    return {"id": task.id, "title": task.title, "status": task.status}
                 task = TeamTask(
                     id=task_id,
                     team_id=team_id,
@@ -2638,22 +2723,30 @@ class Database:
             return []
 
     async def add_agent_message(
-        self, team_id: str, from_agent: str, content: str, message_type: str = "direct", to_agent: Optional[str] = None
+        self, team_id: str, from_agent: str, content: str, message_type: str = "direct", to_agent: Optional[str] = None,
+        event_id: Optional[str] = None, extra_data: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         """Add message between agents."""
         try:
             async with self.get_session() as session:
+                if event_id:
+                    existing = await session.execute(select(AgentMessage).where(AgentMessage.event_id == event_id))
+                    msg = existing.scalar_one_or_none()
+                    if msg:
+                        return {"id": msg.id, "event_id": msg.event_id, "from_agent": msg.from_agent, "to_agent": msg.to_agent}
                 msg = AgentMessage(
+                    event_id=event_id,
                     team_id=team_id,
                     from_agent=from_agent,
                     to_agent=to_agent,
                     message_type=message_type,
                     content=content,
+                    extra_data=extra_data,
                     created_at=datetime.now(timezone.utc),
                 )
                 session.add(msg)
                 await session.commit()
-                return {"id": msg.id, "from_agent": from_agent, "to_agent": to_agent}
+                return {"id": msg.id, "event_id": msg.event_id, "from_agent": from_agent, "to_agent": to_agent}
         except Exception as e:
             logger.error(f"Failed to add agent message: {e}")
             return None
@@ -2676,12 +2769,14 @@ class Database:
                 return [
                     {
                         "id": m.id,
+                        "event_id": m.event_id,
                         "from_agent": m.from_agent,
                         "to_agent": m.to_agent,
                         "message_type": m.message_type,
                         "content": m.content,
                         "read": m.read,
                         "created_at": m.created_at.isoformat() if m.created_at else None,
+                        "extra_data": m.extra_data,
                     }
                     for m in result.scalars().all()
                 ]
@@ -2730,13 +2825,31 @@ class Database:
                 return {
                     "team_id": team_id,
                     "status": team.status,
+                    "workflow_id": team.workflow_id,
+                    "team_lead_node_id": team.team_lead_node_id,
+                    "execution_id": team.execution_id,
+                    "root_execution_id": team.root_execution_id,
                     "member_count": len(members),
                     "task_total": len(tasks),
-                    "task_pending": sum(1 for t in tasks if t.status == "pending"),
-                    "task_in_progress": sum(1 for t in tasks if t.status == "in_progress"),
-                    "task_completed": sum(1 for t in tasks if t.status == "completed"),
-                    "task_failed": sum(1 for t in tasks if t.status == "failed"),
-                    "members": [{"id": m.agent_node_id, "type": m.agent_type, "status": m.status} for m in members],
+                    "task_pending": pending_count,
+                    "task_in_progress": active_count,
+                    "task_completed": completed_count,
+                    "task_failed": failed_count,
+                    # Stable response aliases consumed by TeamMonitor and
+                    # existing WS clients.
+                    "task_count": len(tasks),
+                    "pending_count": pending_count,
+                    "queued_count": pending_count,
+                    "active_count": active_count,
+                    "completed_count": completed_count,
+                    "failed_count": failed_count,
+                    "members": [{"id": m.agent_node_id, "agent_node_id": m.agent_node_id,
+                                 "type": m.agent_type, "agent_type": m.agent_type, "label": m.agent_label,
+                                 "role": m.role, "status": m.status, "capabilities": m.capabilities} for m in members],
+                    "queued_tasks": [
+                        {"id": t.id, "title": t.title, "assigned_to": t.assigned_to}
+                        for t in tasks if t.status == "pending"
+                    ],
                     "active_tasks": [
                         {"id": t.id, "title": t.title, "assigned_to": t.assigned_to, "progress": t.progress}
                         for t in tasks
@@ -2746,6 +2859,96 @@ class Database:
         except Exception as e:
             logger.error(f"Failed to get team stats: {e}")
             return {"error": str(e)}
+
+    async def acquire_subagent_permit(self, root_execution_id: str, permit_id: str, limit: int = 3) -> bool:
+        """Atomically acquire a root-global permit; retries by the owner succeed."""
+        if limit < 1:
+            return False
+        try:
+            async with self.get_session() as session:
+                existing = await session.execute(
+                    select(SubagentConcurrencyPermit).where(SubagentConcurrencyPermit.permit_id == permit_id)
+                )
+                permit = existing.scalar_one_or_none()
+                if permit:
+                    return permit.root_execution_id == root_execution_id and permit.status == "active"
+
+                await session.execute(text(
+                    "INSERT OR IGNORE INTO subagent_concurrency_counters "
+                    "(root_execution_id, active_count, updated_at) VALUES (:root, 0, CURRENT_TIMESTAMP)"
+                ), {"root": root_execution_id})
+                claimed = await session.execute(
+                    update(SubagentConcurrencyCounter)
+                    .where(
+                        SubagentConcurrencyCounter.root_execution_id == root_execution_id,
+                        SubagentConcurrencyCounter.active_count < limit,
+                    )
+                    .values(
+                        active_count=SubagentConcurrencyCounter.active_count + 1,
+                        updated_at=datetime.now(timezone.utc),
+                    )
+                )
+                if claimed.rowcount != 1:
+                    await session.rollback()
+                    return False
+                session.add(SubagentConcurrencyPermit(
+                    permit_id=permit_id, root_execution_id=root_execution_id, status="active"
+                ))
+                await session.commit()
+                return True
+        except IntegrityError:
+            # A concurrent retry inserted the same permit. Resolve ownership
+            # from durable state rather than incrementing the counter again.
+            async with self.get_session() as session:
+                result = await session.execute(
+                    select(SubagentConcurrencyPermit).where(SubagentConcurrencyPermit.permit_id == permit_id)
+                )
+                permit = result.scalar_one_or_none()
+                return bool(permit and permit.root_execution_id == root_execution_id and permit.status == "active")
+        except Exception as e:
+            logger.error("Failed to acquire subagent permit", root_execution_id=root_execution_id, permit_id=permit_id, error=str(e))
+            return False
+
+    async def release_subagent_permit(self, root_execution_id: str, permit_id: str) -> bool:
+        """Idempotently release a permit and decrement its root counter once."""
+        try:
+            async with self.get_session() as session:
+                released = await session.execute(
+                    update(SubagentConcurrencyPermit)
+                    .where(
+                        SubagentConcurrencyPermit.permit_id == permit_id,
+                        SubagentConcurrencyPermit.root_execution_id == root_execution_id,
+                        SubagentConcurrencyPermit.status == "active",
+                    )
+                    .values(status="released", released_at=datetime.now(timezone.utc))
+                )
+                if released.rowcount == 1:
+                    await session.execute(
+                        update(SubagentConcurrencyCounter)
+                        .where(
+                            SubagentConcurrencyCounter.root_execution_id == root_execution_id,
+                            SubagentConcurrencyCounter.active_count > 0,
+                        )
+                        .values(
+                            active_count=SubagentConcurrencyCounter.active_count - 1,
+                            updated_at=datetime.now(timezone.utc),
+                        )
+                    )
+                    await session.commit()
+                    return True
+                existing = await session.execute(
+                    select(SubagentConcurrencyPermit).where(
+                        SubagentConcurrencyPermit.permit_id == permit_id,
+                        SubagentConcurrencyPermit.root_execution_id == root_execution_id,
+                    )
+                )
+                permit = existing.scalar_one_or_none()
+                already_released = bool(permit and permit.status == "released")
+                await session.rollback()
+                return already_released
+        except Exception as e:
+            logger.error("Failed to release subagent permit", root_execution_id=root_execution_id, permit_id=permit_id, error=str(e))
+            return False
 
     # ============================================================================
     # Google Connections - Customer Mode OAuth Storage

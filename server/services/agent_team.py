@@ -5,6 +5,7 @@ Teams are scoped to specific workflow executions.
 """
 
 import uuid
+import hashlib
 from typing import Dict, Any, List, Optional
 from core.database import Database
 from core.logging import get_logger
@@ -29,7 +30,9 @@ class AgentTeamService:
     # -------------------------------------------------------------------------
 
     async def create_team(
-        self, team_lead_node_id: str, teammate_node_ids: List[Dict[str, Any]], workflow_id: str, config: Optional[Dict[str, Any]] = None
+        self, team_lead_node_id: str, teammate_node_ids: List[Dict[str, Any]], workflow_id: str, config: Optional[Dict[str, Any]] = None,
+        execution_id: Optional[str] = None, root_execution_id: Optional[str] = None,
+        team_lead_type: str = "orchestrator_agent", team_lead_label: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Create a team with lead and teammates.
 
@@ -42,18 +45,28 @@ class AgentTeamService:
         Returns:
             Team dict or None on failure
         """
-        team_id = f"team_{uuid.uuid4().hex[:12]}"
+        if execution_id:
+            digest = hashlib.sha256(f"{execution_id}:{team_lead_node_id}".encode()).hexdigest()[:16]
+            team_id = f"team_{digest}"
+            existing = await self.database.get_team(team_id)
+            if existing:
+                return {"team_id": team_id, **existing}
+        else:
+            team_id = f"team_{uuid.uuid4().hex[:12]}"
 
         # Create team
         team = await self.database.create_team(
-            team_id=team_id, workflow_id=workflow_id, team_lead_node_id=team_lead_node_id, config=config or {"mode": "parallel"}
+            team_id=team_id, workflow_id=workflow_id, team_lead_node_id=team_lead_node_id,
+            config=config or {"mode": "parallel"}, execution_id=execution_id,
+            root_execution_id=root_execution_id or execution_id,
         )
         if not team:
             return None
 
         # Add team lead as member
         await self.database.add_team_member(
-            team_id=team_id, agent_node_id=team_lead_node_id, agent_type="orchestrator_agent", role="team_lead"
+            team_id=team_id, agent_node_id=team_lead_node_id, agent_type=team_lead_type,
+            agent_label=team_lead_label, role="team_lead"
         )
 
         # Add teammates
@@ -64,6 +77,7 @@ class AgentTeamService:
                 agent_type=teammate.get("node_type", "agent"),
                 agent_label=teammate.get("label"),
                 role="teammate",
+                capabilities=teammate.get("capabilities"),
             )
 
         # Broadcast team creation
@@ -77,6 +91,21 @@ class AgentTeamService:
 
         logger.info(f"[Teams] Created team {team_id} with {len(teammate_node_ids)} teammates")
         return {"team_id": team_id, **team}
+
+    async def get_or_create_execution_team(
+        self, *, team_lead_node_id: str, teammates: List[Dict[str, Any]], workflow_id: str,
+        execution_id: str, root_execution_id: Optional[str] = None,
+        team_lead_type: str = "orchestrator_agent", team_lead_label: Optional[str] = None,
+        config: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Idempotently create the durable team for a lead execution."""
+        existing = await self.database.find_team(workflow_id, team_lead_node_id, execution_id)
+        if existing:
+            return {"team_id": existing["id"], **existing}
+        return await self.create_team(
+            team_lead_node_id, teammates, workflow_id, config,
+            execution_id, root_execution_id, team_lead_type, team_lead_label,
+        )
 
     def get_active_team_for_workflow(self, workflow_id: str) -> Optional[str]:
         """Get the active team ID for a workflow."""
@@ -93,8 +122,16 @@ class AgentTeamService:
                 await self.broadcaster.broadcast_team_event(team_id, "team_dissolved", {"team_id": team_id})
         return success
 
-    async def get_team_status(self, team_id: str) -> Dict[str, Any]:
+    async def get_team_status(
+        self, team_id: Optional[str] = None, *, workflow_id: Optional[str] = None,
+        team_lead_node_id: Optional[str] = None, execution_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Get comprehensive team status."""
+        if not team_id and workflow_id and team_lead_node_id:
+            team = await self.database.find_team(workflow_id, team_lead_node_id, execution_id)
+            team_id = team["id"] if team else None
+        if not team_id:
+            return {"error": "Team not found"}
         return await self.database.get_team_stats(team_id)
 
     # -------------------------------------------------------------------------
@@ -109,9 +146,10 @@ class AgentTeamService:
         description: Optional[str] = None,
         priority: int = 3,
         depends_on: Optional[List[str]] = None,
+        task_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Add a task to the shared task list."""
-        task_id = f"task_{uuid.uuid4().hex[:12]}"
+        task_id = task_id or f"task_{uuid.uuid4().hex[:12]}"
 
         task = await self.database.add_team_task(
             task_id=task_id,
@@ -122,6 +160,12 @@ class AgentTeamService:
             priority=priority,
             depends_on=depends_on,
         )
+
+        # A completed execution team may receive another delegation later in
+        # the same lead run (legacy fire-and-forget loop). Re-open it before
+        # broadcasting the newly queued task.
+        if task:
+            await self.database.update_team_status(team_id, "active")
 
         if task and self.broadcaster:
             await self.broadcaster.broadcast_team_event(team_id, "task_added", task)
@@ -188,12 +232,21 @@ class AgentTeamService:
             return True
         return all(t["status"] in ("completed", "failed", "skipped") for t in tasks)
 
+    async def acquire_subagent_permit(self, root_execution_id: str, permit_id: str, limit: int = 3) -> bool:
+        """Acquire one cross-process descendant slot for a delegation."""
+        return await self.database.acquire_subagent_permit(root_execution_id, permit_id, limit)
+
+    async def release_subagent_permit(self, root_execution_id: str, permit_id: str) -> bool:
+        """Release a descendant slot; repeated releases are successful no-ops."""
+        return await self.database.release_subagent_permit(root_execution_id, permit_id)
+
     # -------------------------------------------------------------------------
     # Messaging
     # -------------------------------------------------------------------------
 
     async def send_message(
-        self, team_id: str, from_agent: str, content: str, to_agent: Optional[str] = None, message_type: str = "direct"
+        self, team_id: str, from_agent: str, content: str, to_agent: Optional[str] = None, message_type: str = "direct",
+        event_id: Optional[str] = None, extra_data: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         """Send a message to a specific agent or broadcast."""
         msg = await self.database.add_agent_message(
@@ -202,6 +255,8 @@ class AgentTeamService:
             content=content,
             message_type=message_type if to_agent else "broadcast",
             to_agent=to_agent,
+            event_id=event_id,
+            extra_data=extra_data,
         )
 
         if msg and self.broadcaster:

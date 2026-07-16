@@ -478,6 +478,15 @@ class AgentWorkflow:
             if kind == "final":
                 final_content = step_result.get("content", "")
                 await self._persist_turn(payload, human_text=user_prompt, assistant_text=final_content)
+                team_id = str(payload.get("team_id") or "")
+                if team_id and payload.get("owns_execution_team"):
+                    await workflow.execute_activity(
+                        "agent.finalize_team.v1",
+                        args=[{"team_id": team_id}],
+                        activity_id="finalize-agent-team",
+                        start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                        retry_policy=AGENT_ACTIVITY_RETRY,
+                    )
                 break
 
             if kind != "tool_calls":
@@ -487,6 +496,210 @@ class AgentWorkflow:
             # ---- Schedule tool activities -------------------------------
             calls = step_result.get("calls") or []
             workflow.logger.info(f"AgentWorkflow scheduling {len(calls)} tool call(s)")
+
+            # Start delegation children before awaiting their results.  The
+            # previous per-call execute_child_workflow loop serialized an
+            # entire team.  Keep a bounded sliding window so at most three
+            # descendants from this turn are active, while tool messages are
+            # still appended in the model's original call order.
+            delegation_depth = int(context.get("delegation_depth") or 0)
+            max_delegation_depth = min(
+                2, int(payload.get("max_delegation_depth") or 2)
+            )
+            max_concurrent_subagents = max(
+                1, int(payload.get("max_concurrent_subagents") or 3)
+            )
+            root_execution_id = str(
+                payload.get("root_execution_id")
+                or context.get("root_execution_id")
+                or execution_id
+            )
+            delegation_call_indices = [
+                index
+                for index, candidate in enumerate(calls)
+                if str(candidate.get("name", "")).startswith("delegate_to_")
+                and (tool_index.get(candidate.get("name", "")) or {}).get("node_type")
+                in AGENT_WORKFLOW_TYPES
+                and (
+                    str((candidate.get("args") or {}).get("task", "") or "")
+                    or str((candidate.get("args") or {}).get("context", "") or "")
+                )
+                and delegation_depth < max_delegation_depth
+            ]
+            delegation_handles: Dict[int, Any] = {}
+            delegation_permits: Dict[int, str] = {}
+            yielded_own_permit = False
+
+            # A child that waits for grandchildren must not retain a slot,
+            # otherwise N admitted children can all block forever trying to
+            # acquire the N+1th permit. Yield while orchestrating descendants
+            # and reacquire before resuming this agent's next LLM turn.
+            own_permit_id = str(context.get("team_task_id") or "")
+            if delegation_call_indices and own_permit_id:
+                await workflow.execute_activity(
+                    "agent.release_subagent_permit.v1",
+                    args=[{
+                        "root_execution_id": root_execution_id,
+                        "permit_id": own_permit_id,
+                    }],
+                    activity_id=f"yield-own-permit-{iteration + 1}",
+                    start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                    retry_policy=AGENT_ACTIVITY_RETRY,
+                )
+                yielded_own_permit = True
+
+            async def _start_delegation(call_index: int) -> None:
+                candidate = calls[call_index]
+                candidate_tool = tool_index[candidate.get("name", "")]
+                candidate_args = candidate.get("args") or {}
+                task = str(candidate_args.get("task", "") or "")
+                task_context = str(candidate_args.get("context", "") or "")
+                call_metadata = (
+                    _tool_call_metadata(
+                        agent_node_id=agent_node_id,
+                        iteration=iteration,
+                        call_index=call_index,
+                        call=candidate,
+                    )
+                    if use_tool_call_identity_v2
+                    else {}
+                )
+                child_context = {
+                    "node_id": candidate_tool["tool_node_id"],
+                    "node_type": candidate_tool["node_type"],
+                    "node_data": {
+                        **(candidate_tool.get("parameters") or {}),
+                        "system_message": task,
+                        "prompt": task_context or task,
+                    },
+                    "inputs": {},
+                    "workflow_id": payload.get("workflow_id"),
+                    "session_id": payload.get("session_id", "default"),
+                    "execution_id": execution_id,
+                    "root_execution_id": root_execution_id,
+                    "parent_node_id": agent_node_id,
+                    "delegation_depth": delegation_depth + 1,
+                    "team_id": payload.get("team_id") or context.get("team_id"),
+                    "team_task_id": (
+                        f"task-{root_execution_id}-{agent_node_id}-"
+                        f"{iteration + 1}-{call_index + 1}"
+                    ),
+                    "trace_id": str(candidate.get("id", "") or ""),
+                    "nodes": context.get("nodes") or [],
+                    "edges": context.get("edges") or [],
+                    "invocation": {"task": task, "context": task_context},
+                    **call_metadata,
+                }
+                team_id = str(child_context.get("team_id") or "")
+                if team_id:
+                    permit_id = child_context["team_task_id"]
+                    lifecycle_payload = {
+                        "team_id": team_id,
+                        "team_task_id": child_context["team_task_id"],
+                        "parent_agent_node_id": agent_node_id,
+                        "child_agent_node_id": candidate_tool["tool_node_id"],
+                        "task": task,
+                        "root_execution_id": root_execution_id,
+                        "delegation_depth": delegation_depth + 1,
+                        "trace_id": child_context["trace_id"],
+                        "assignment_event_id": (
+                            f"{child_context['team_task_id']}:assigned"
+                        ),
+                    }
+                    await workflow.execute_activity(
+                        "agent.queue_delegation.v1",
+                        args=[{
+                            **lifecycle_payload,
+                            "queued_event_id": (
+                                f"{child_context['team_task_id']}:queued"
+                            ),
+                        }],
+                        activity_id=(
+                            f"queue-delegation-{iteration + 1}-{call_index + 1}"
+                        ),
+                        start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                        retry_policy=AGENT_ACTIVITY_RETRY,
+                    )
+                    await workflow.execute_activity(
+                        "agent.acquire_subagent_permit.v1",
+                        args=[{
+                            "root_execution_id": root_execution_id,
+                            "permit_id": permit_id,
+                            "limit": max_concurrent_subagents,
+                        }],
+                        activity_id=(
+                            f"acquire-permit-{iteration + 1}-{call_index + 1}"
+                        ),
+                        start_to_close_timeout=timedelta(hours=1),
+                        heartbeat_timeout=timedelta(seconds=10),
+                        retry_policy=AGENT_ACTIVITY_RETRY,
+                    )
+                    delegation_permits[call_index] = permit_id
+                    # Claim only after admission. Persistence failure still
+                    # prevents child startup and the task remains pending
+                    # while the coordinator queues it.
+                    try:
+                        await workflow.execute_activity(
+                            "agent.begin_delegation.v1",
+                            args=[lifecycle_payload],
+                            activity_id=(
+                                f"begin-delegation-{iteration + 1}-{call_index + 1}"
+                            ),
+                            start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                            retry_policy=AGENT_ACTIVITY_RETRY,
+                        )
+                    except BaseException:
+                        await workflow.execute_activity(
+                            "agent.release_subagent_permit.v1",
+                            args=[{
+                                "root_execution_id": root_execution_id,
+                                "permit_id": permit_id,
+                            }],
+                            activity_id=(
+                                f"release-permit-{iteration + 1}-{call_index + 1}"
+                            ),
+                            start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                            retry_policy=AGENT_ACTIVITY_RETRY,
+                        )
+                        raise
+                child_id = (
+                    _delegation_child_id_v2(
+                        workflow.info().workflow_id,
+                        candidate_tool["tool_node_id"],
+                        iteration,
+                        call_index,
+                    )
+                    if use_tool_call_identity_v2
+                    else f"{workflow.info().workflow_id}-delegate-{candidate_tool['tool_node_id']}-{iteration}"
+                )
+                try:
+                    delegation_handles[call_index] = await workflow.start_child_workflow(
+                        "AgentWorkflow",
+                        args=[child_context],
+                        id=child_id,
+                        execution_timeout=timedelta(hours=1),
+                        run_timeout=timedelta(hours=1),
+                    )
+                except BaseException:
+                    if team_id and call_index in delegation_permits:
+                        await workflow.execute_activity(
+                            "agent.release_subagent_permit.v1",
+                            args=[{
+                                "root_execution_id": root_execution_id,
+                                "permit_id": delegation_permits[call_index],
+                            }],
+                            activity_id=(
+                                f"release-permit-{iteration + 1}-{call_index + 1}"
+                            ),
+                            start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                            retry_policy=AGENT_ACTIVITY_RETRY,
+                        )
+                    raise
+
+            next_delegation_to_start = 0
+            for delegation_index in delegation_call_indices[:max_concurrent_subagents]:
+                await _start_delegation(delegation_index)
+                next_delegation_to_start += 1
 
             for call_index, call in enumerate(calls):
                 tool_info = tool_index.get(call.get("name", ""))
@@ -547,6 +760,21 @@ class AgentWorkflow:
                                         '{"error": "delegate_to_* requires a '
                                         "non-empty 'task' argument describing "
                                         'what the agent should do."}'
+                                    ),
+                                    "tool_call_id": call.get("id", ""),
+                                    "name": tool_name,
+                                },
+                            }
+                        )
+                        continue
+                    if delegation_depth >= max_delegation_depth:
+                        messages.append(
+                            {
+                                "type": "tool",
+                                "data": {
+                                    "content": (
+                                        '{"error": "Maximum delegation depth '
+                                        f'{max_delegation_depth} exceeded."}}'
                                     ),
                                     "tool_call_id": call.get("id", ""),
                                     "name": tool_name,
@@ -622,31 +850,57 @@ class AgentWorkflow:
 
                 try:
                     if is_delegation and tool_info["node_type"] in AGENT_WORKFLOW_TYPES:
-                        child_context = {
-                            **tool_payload,
-                            "parent_node_id": agent_node_id,
-                            "invocation": {
-                                "task": task_description,
-                                "context": task_context,
-                            },
-                        }
-                        delegation_child_id = (
-                            _delegation_child_id_v2(
-                                workflow.info().workflow_id,
-                                tool_info["tool_node_id"],
-                                iteration,
-                                call_index,
+                        handle = delegation_handles[call_index]
+                        try:
+                            tool_result = await handle
+                        finally:
+                            permit_id = delegation_permits.get(call_index)
+                            if permit_id:
+                                await workflow.execute_activity(
+                                    "agent.release_subagent_permit.v1",
+                                    args=[{
+                                        "root_execution_id": root_execution_id,
+                                        "permit_id": permit_id,
+                                    }],
+                                    activity_id=(
+                                        f"release-permit-{iteration + 1}-{call_index + 1}"
+                                    ),
+                                    start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                                    retry_policy=AGENT_ACTIVITY_RETRY,
+                                )
+                        team_id = str(payload.get("team_id") or context.get("team_id") or "")
+                        if team_id:
+                            task_id = (
+                                f"task-{root_execution_id}-{agent_node_id}-"
+                                f"{iteration + 1}-{call_index + 1}"
                             )
-                            if use_tool_call_identity_v2
-                            else f"{workflow.info().workflow_id}-delegate-{tool_info['tool_node_id']}-{iteration}"
-                        )
-                        tool_result = await workflow.execute_child_workflow(
-                            "AgentWorkflow",
-                            args=[child_context],
-                            id=delegation_child_id,
-                            execution_timeout=timedelta(hours=1),
-                            run_timeout=timedelta(hours=1),
-                        )
+                            await workflow.execute_activity(
+                                "agent.finish_delegation.v1",
+                                args=[{
+                                    "team_id": team_id,
+                                    "team_task_id": task_id,
+                                    "parent_agent_node_id": agent_node_id,
+                                    "child_agent_node_id": tool_info["tool_node_id"],
+                                    "root_execution_id": root_execution_id,
+                                    "trace_id": str(call.get("id", "") or ""),
+                                    "success": bool(tool_result.get("success", True))
+                                    if isinstance(tool_result, dict) else True,
+                                    "result": tool_result if isinstance(tool_result, dict) else {"result": tool_result},
+                                    "error": tool_result.get("error")
+                                    if isinstance(tool_result, dict) else None,
+                                    "terminal_event_id": f"{task_id}:terminal",
+                                }],
+                                activity_id=(
+                                    f"finish-delegation-{iteration + 1}-{call_index + 1}"
+                                ),
+                                start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                                retry_policy=AGENT_ACTIVITY_RETRY,
+                            )
+                        if next_delegation_to_start < len(delegation_call_indices):
+                            await _start_delegation(
+                                delegation_call_indices[next_delegation_to_start]
+                            )
+                            next_delegation_to_start += 1
                     else:
                         tool_activity_id = (
                             _tool_activity_id_v2(
@@ -761,6 +1015,31 @@ class AgentWorkflow:
                     # the LLM (per user decision: LLM sees error and
                     # continues — matches the in-process agent loop).
                     workflow.logger.warning(f"AgentWorkflow tool {tool_info['node_type']!r} failed: {e}")
+                    team_id = str(payload.get("team_id") or context.get("team_id") or "")
+                    if is_delegation and team_id:
+                        task_id = (
+                            f"task-{root_execution_id}-{agent_node_id}-"
+                            f"{iteration + 1}-{call_index + 1}"
+                        )
+                        await workflow.execute_activity(
+                            "agent.finish_delegation.v1",
+                            args=[{
+                                "team_id": team_id,
+                                "team_task_id": task_id,
+                                "parent_agent_node_id": agent_node_id,
+                                "child_agent_node_id": tool_info["tool_node_id"],
+                                "root_execution_id": root_execution_id,
+                                "trace_id": str(call.get("id", "") or ""),
+                                "success": False,
+                                "error": f"{type(e).__name__}: {e}",
+                                "terminal_event_id": f"{task_id}:terminal",
+                            }],
+                            activity_id=(
+                                f"finish-delegation-{iteration + 1}-{call_index + 1}"
+                            ),
+                            start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                            retry_policy=AGENT_ACTIVITY_RETRY,
+                        )
                     tool_content = f'{{"error": "{type(e).__name__}: {e}"}}'
 
                 messages.append(
@@ -772,6 +1051,20 @@ class AgentWorkflow:
                             "name": call.get("name", ""),
                         },
                     }
+                )
+
+            if yielded_own_permit:
+                await workflow.execute_activity(
+                    "agent.acquire_subagent_permit.v1",
+                    args=[{
+                        "root_execution_id": root_execution_id,
+                        "permit_id": own_permit_id,
+                        "limit": max_concurrent_subagents,
+                    }],
+                    activity_id=f"reacquire-own-permit-{iteration + 1}",
+                    start_to_close_timeout=timedelta(hours=1),
+                    heartbeat_timeout=timedelta(seconds=10),
+                    retry_policy=AGENT_ACTIVITY_RETRY,
                 )
 
             # ---- Persist this turn (append-per-turn) -------------------

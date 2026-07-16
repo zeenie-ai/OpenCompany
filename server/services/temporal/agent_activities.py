@@ -34,6 +34,7 @@ References:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -498,7 +499,10 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     from core.container import container
     from services.ai import _resolve_max_tokens, _resolve_temperature
     from services.ai import ThinkingConfig, get_default_model_async, is_model_valid_for_provider
-    from services.plugin.edge_walker import collect_agent_connections
+    from services.plugin.edge_walker import (
+        collect_agent_connections,
+        collect_teammate_connections,
+    )
 
     node_id = context["node_id"]
     node_type = context["node_type"]
@@ -613,6 +617,70 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         log_prefix=f"[AgentWorkflow:{node_type}]",
     )
 
+    # Team-handle edges are configuration edges and are intentionally not
+    # returned by collect_agent_connections.  Expand them here before tools
+    # are built, mirroring the legacy inline agent path.  Without this step
+    # Temporal removes teammates from graph scheduling but never exposes a
+    # delegate_to_* function to the lead LLM.
+    execution_team_id: Optional[str] = context.get("team_id")
+    owns_execution_team = False
+    if node_type in {"orchestrator_agent", "ai_employee"}:
+        teammates = await collect_teammate_connections(
+            node_id, walk_context, database
+        )
+        all_nodes = walk_context["nodes"]
+        all_edges = walk_context["edges"]
+        for teammate in teammates:
+            teammate_id = teammate["node_id"]
+            child_tools: List[Dict[str, Any]] = []
+            for edge in all_edges:
+                if (
+                    edge.get("target") != teammate_id
+                    or edge.get("targetHandle") != "input-tools"
+                ):
+                    continue
+                child_id = edge.get("source")
+                child = next(
+                    (candidate for candidate in all_nodes if candidate.get("id") == child_id),
+                    None,
+                )
+                if child:
+                    child_tools.append(
+                        {
+                            "node_id": child_id,
+                            "node_type": child.get("type", ""),
+                            "label": child.get("data", {}).get("label")
+                            or child.get("type", ""),
+                        }
+                    )
+            entry = {
+                **teammate,
+                "child_tools": child_tools,
+            }
+            tool_data = [*(tool_data or []), entry]
+        if teammates and workflow_id:
+            from services.agent_team import get_agent_team_service
+
+            execution_id = str(context.get("execution_id") or "")
+            root_execution_id = str(
+                context.get("root_execution_id") or execution_id
+            )
+            if execution_id:
+                team = await get_agent_team_service().get_or_create_execution_team(
+                    team_lead_node_id=node_id,
+                    teammates=teammates,
+                    workflow_id=workflow_id,
+                    execution_id=execution_id,
+                    root_execution_id=root_execution_id,
+                    team_lead_type=node_type,
+                    team_lead_label=parameters.get("label") or node_type,
+                    config={"mode": "parallel"},
+                )
+                if not team:
+                    raise RuntimeError("Failed to persist agent execution team")
+                execution_team_id = team.get("team_id") or team.get("id")
+                owns_execution_team = True
+
     # ---- Skill prompt injection ----------------------------------------
     from services.ai import _build_skill_system_prompt
 
@@ -675,6 +743,21 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
             }
         )
 
+    if any(tool["name"].startswith("delegate_to_") for tool in tools_payload):
+        delegates = "\n".join(
+            f"- {tool['name']}: {(tool.get('tool_info') or {}).get('label', tool['node_type'])}"
+            for tool in tools_payload
+            if tool["name"].startswith("delegate_to_")
+        )
+        system_message = (
+            f"{system_message}\n\n"
+            "You lead a team of independent agents. Delegate a bounded mission "
+            "when a connected agent's capabilities fit the work. Delegations in "
+            "the same response may run in parallel. Do not delegate the same "
+            "mission twice. After results return, synthesize them into one answer.\n"
+            f"Available delegates:\n{delegates}"
+        )
+
     # ---- Compaction threshold ------------------------------------------
     # Model-aware threshold (50% of context window per agent.compaction.ratio
     # in llm_defaults.json). Reuse the existing CompactionService helper.
@@ -712,6 +795,11 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     #     cap. Per-user override beats env Settings.
     auto_rebind_tools = True
     settings_recursion_limit: Optional[int] = None
+    from core.config import Settings as _DelegationSettings
+
+    delegation_settings = _DelegationSettings()
+    max_concurrent_subagents = int(delegation_settings.max_concurrent_subagents)
+    max_delegation_depth = int(delegation_settings.max_delegation_depth)
     try:
         user_settings = await database.get_user_settings()
         if user_settings is not None:
@@ -721,6 +809,12 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
             raw_limit = user_settings.get("agent_recursion_limit")
             if isinstance(raw_limit, int) and raw_limit > 0:
                 settings_recursion_limit = raw_limit
+            raw_concurrency = user_settings.get("max_concurrent_subagents")
+            if isinstance(raw_concurrency, int) and raw_concurrency > 0:
+                max_concurrent_subagents = raw_concurrency
+            raw_depth = user_settings.get("max_delegation_depth")
+            if isinstance(raw_depth, int) and raw_depth > 0:
+                max_delegation_depth = min(2, raw_depth)
     except Exception as exc:  # noqa: BLE001 — defensive read
         activity.logger.debug(f"user_settings read failed: {exc}")
 
@@ -758,6 +852,15 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         "thinking_config": thinking_config_dict,
         "compaction_threshold": compaction_threshold,
         "auto_rebind_tools": auto_rebind_tools,
+        "max_concurrent_subagents": max_concurrent_subagents,
+        "max_delegation_depth": max_delegation_depth,
+        "team_id": execution_team_id,
+        "owns_execution_team": owns_execution_team,
+        "root_execution_id": str(
+            context.get("root_execution_id")
+            or context.get("execution_id")
+            or ""
+        ),
     }
 
 
@@ -812,9 +915,10 @@ async def refresh_agent_tools(payload: Dict[str, Any]) -> Dict[str, Any]:
         # spawnable plugins — twitterSearch / googleGmail / pythonExecutor
         # / fileRead / etc.). Exclude chat-model plugins even when
         # usable_as_tool=True.
+        is_agent_delegate = kind == "agent"
         is_tool = kind == "tool"
         is_dual_purpose = bool(getattr(cls, "usable_as_tool", False)) and kind != "model"
-        if not (is_tool or is_dual_purpose):
+        if not (is_tool or is_dual_purpose or is_agent_delegate):
             continue
         tool_info: Dict[str, Any] = {
             "node_id": op.get("minted_id") or op.get("client_ref") or f"new_{node_type}",
@@ -853,6 +957,190 @@ async def refresh_agent_tools(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {"tools": new_tools_payload}
 
 
+@activity.defn(name="agent.begin_delegation.v1")
+async def begin_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Idempotently persist and claim a delegation before child startup."""
+    from services.agent_team import get_agent_team_service
+
+    team_id = str(payload.get("team_id") or "")
+    task_id = str(payload.get("team_task_id") or "")
+    child_id = str(payload.get("child_agent_node_id") or "")
+    parent_id = str(payload.get("parent_agent_node_id") or "")
+    mission = str(payload.get("task") or "")
+    if not all((team_id, task_id, child_id, parent_id, mission)):
+        raise ValueError("Incomplete durable delegation payload")
+
+    service = get_agent_team_service()
+    tasks = await service.database.get_team_tasks(team_id)
+    task = next((item for item in tasks if item.get("id") == task_id), None)
+    if task is None:
+        task = await service.add_task(
+            team_id, title=mission[:200], description=mission,
+            created_by=parent_id, task_id=task_id,
+        )
+        if not task:
+            raise RuntimeError("Failed to persist delegated team task")
+
+    if str(task.get("status") or "") in {"pending", "queued", ""}:
+        claimed = await service.claim_task(team_id, task_id, child_id)
+        if not claimed:
+            tasks = await service.database.get_team_tasks(team_id)
+            task = next((item for item in tasks if item.get("id") == task_id), None)
+            if not task or task.get("assigned_to") != child_id:
+                raise RuntimeError("Failed to claim delegated team task")
+    elif task.get("assigned_to") and task.get("assigned_to") != child_id:
+        raise RuntimeError("Delegated team task is claimed by another agent")
+
+    message = await service.send_message(
+        team_id, parent_id, f"Assigned task to {child_id}: {mission}",
+        to_agent=child_id, message_type="assignment",
+        event_id=str(payload.get("assignment_event_id") or f"{task_id}:assigned"),
+        extra_data={
+            "status": "started", "task_id": task_id,
+            "root_execution_id": payload.get("root_execution_id"),
+            "delegation_depth": payload.get("delegation_depth"),
+            "trace_id": payload.get("trace_id"),
+        },
+    )
+    if not message:
+        raise RuntimeError("Failed to persist delegation assignment event")
+    return {"team_id": team_id, "team_task_id": task_id, "claimed": True}
+
+
+@activity.defn(name="agent.queue_delegation.v1")
+async def queue_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Create a pending task before it waits for a root-wide permit."""
+    from services.agent_team import get_agent_team_service
+
+    team_id = str(payload.get("team_id") or "")
+    task_id = str(payload.get("team_task_id") or "")
+    parent_id = str(payload.get("parent_agent_node_id") or "")
+    child_id = str(payload.get("child_agent_node_id") or "")
+    mission = str(payload.get("task") or "")
+    if not all((team_id, task_id, parent_id, child_id, mission)):
+        raise ValueError("Incomplete queued delegation payload")
+    service = get_agent_team_service()
+    tasks = await service.database.get_team_tasks(team_id)
+    task = next((item for item in tasks if item.get("id") == task_id), None)
+    if task is None:
+        task = await service.add_task(
+            team_id, title=mission[:200], description=mission,
+            created_by=parent_id, task_id=task_id,
+        )
+        if not task:
+            raise RuntimeError("Failed to persist queued delegation")
+    message = await service.send_message(
+        team_id, parent_id, f"Queued task for {child_id}: {mission}",
+        to_agent=child_id, message_type="assignment",
+        event_id=str(payload.get("queued_event_id") or f"{task_id}:queued"),
+        extra_data={"status": "queued", "task_id": task_id},
+    )
+    if not message:
+        raise RuntimeError("Failed to persist delegation queue event")
+    return {"team_id": team_id, "team_task_id": task_id, "status": "pending"}
+
+
+@activity.defn(name="agent.acquire_subagent_permit.v1")
+async def acquire_subagent_permit(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Poll the durable root coordinator until this delegation is admitted."""
+    from services.agent_team import get_agent_team_service
+
+    root_id = str(payload.get("root_execution_id") or "")
+    permit_id = str(payload.get("permit_id") or "")
+    limit = max(1, int(payload.get("limit") or 3))
+    if not root_id or not permit_id:
+        raise ValueError("root_execution_id and permit_id are required")
+    service = get_agent_team_service()
+    while True:
+        if await service.acquire_subagent_permit(root_id, permit_id, limit):
+            return {"root_execution_id": root_id, "permit_id": permit_id, "acquired": True}
+        activity.heartbeat({"root_execution_id": root_id, "permit_id": permit_id, "status": "queued"})
+        await asyncio.sleep(1)
+
+
+@activity.defn(name="agent.release_subagent_permit.v1")
+async def release_subagent_permit(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Idempotently release a durable root-wide concurrency permit."""
+    from services.agent_team import get_agent_team_service
+
+    root_id = str(payload.get("root_execution_id") or "")
+    permit_id = str(payload.get("permit_id") or "")
+    if not root_id or not permit_id:
+        raise ValueError("root_execution_id and permit_id are required")
+    released = await get_agent_team_service().release_subagent_permit(root_id, permit_id)
+    if not released:
+        raise RuntimeError("Failed to release subagent permit")
+    return {"root_execution_id": root_id, "permit_id": permit_id, "released": True}
+
+
+@activity.defn(name="agent.finish_delegation.v1")
+async def finish_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Idempotently persist a delegated child's terminal result."""
+    from services.agent_team import get_agent_team_service
+
+    team_id = str(payload.get("team_id") or "")
+    task_id = str(payload.get("team_task_id") or "")
+    child_id = str(payload.get("child_agent_node_id") or "")
+    parent_id = str(payload.get("parent_agent_node_id") or "")
+    if not all((team_id, task_id, child_id, parent_id)):
+        raise ValueError("Incomplete delegation completion payload")
+    service = get_agent_team_service()
+    tasks = await service.database.get_team_tasks(team_id)
+    task = next((item for item in tasks if item.get("id") == task_id), None)
+    if task is None:
+        raise RuntimeError("Delegated team task does not exist")
+
+    succeeded = bool(payload.get("success"))
+    target_status = "completed" if succeeded else "failed"
+    if task.get("status") not in {"completed", "failed", "skipped"}:
+        if succeeded:
+            ok = await service.complete_task(team_id, task_id, payload.get("result") or {})
+        else:
+            ok = await service.fail_task(
+                team_id, task_id, str(payload.get("error") or "Delegated agent failed")
+            )
+        if not ok:
+            raise RuntimeError(f"Failed to mark delegated task {target_status}")
+
+    error = str(payload.get("error") or "Delegated agent failed")
+    content = f"Task {task_id} completed" if succeeded else f"Task {task_id} failed: {error}"
+    message = await service.send_message(
+        team_id, child_id, content, to_agent=parent_id,
+        message_type="result" if succeeded else "error",
+        event_id=str(payload.get("terminal_event_id") or f"{task_id}:{target_status}"),
+        extra_data={
+            "status": target_status, "task_id": task_id,
+            "root_execution_id": payload.get("root_execution_id"),
+            "trace_id": payload.get("trace_id"),
+        },
+    )
+    if not message:
+        raise RuntimeError("Failed to persist delegation terminal event")
+    return {"team_id": team_id, "team_task_id": task_id, "status": target_status}
+
+
+@activity.defn(name="agent.finalize_team.v1")
+async def finalize_agent_team(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Finalize a lead's team after all delegated tasks become terminal."""
+    from services.agent_team import get_agent_team_service
+
+    team_id = str(payload.get("team_id") or "")
+    if not team_id:
+        raise ValueError("team_id is required")
+    service = get_agent_team_service()
+    tasks = await service.database.get_team_tasks(team_id)
+    if any(task.get("status") not in {"completed", "failed", "skipped"} for task in tasks):
+        return {"team_id": team_id, "status": "active"}
+    status = "failed" if any(task.get("status") == "failed" for task in tasks) else "completed"
+    if not await service.database.update_team_status(team_id, status):
+        raise RuntimeError(f"Failed to finalize team as {status}")
+    if service.broadcaster:
+        await service.broadcaster.broadcast_team_event(
+            team_id, f"team_{status}", {"team_id": team_id, "status": status}
+        )
+    return {"team_id": team_id, "status": status}
+
+
 def collect_agent_activities() -> List[Any]:
     """Return the F4.B agent activities for worker registration.
 
@@ -870,4 +1158,10 @@ def collect_agent_activities() -> List[Any]:
         broadcast_agent_progress,
         store_agent_output,
         refresh_agent_tools,
+        begin_agent_delegation,
+        queue_agent_delegation,
+        acquire_subagent_permit,
+        release_subagent_permit,
+        finish_agent_delegation,
+        finalize_agent_team,
     ]

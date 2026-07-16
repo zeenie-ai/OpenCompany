@@ -1150,7 +1150,10 @@ class AgentBuilderNode(ToolNode):
 
         # Idempotent duplicate check — see add_tool above for rationale.
         existing_teammates = _find_wired_types(nodes, edges, caller_id, _TEAMMATES_HANDLE)
-        if agent_type in existing_teammates:
+        # Custom aiAgent nodes are intentionally repeatable: their delegation
+        # identity is label/node based. Every other agent type has a stable
+        # type-wide delegate name and is therefore one-per-team.
+        if agent_type != "aiAgent" and agent_type in existing_teammates:
             return AgentBuilderOutput(
                 operation="add_subagent",
                 summary=(
