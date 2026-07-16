@@ -209,17 +209,20 @@ try {
   }
   run('uv sync', serverDir, 600000);  // 10 min timeout
 
-  // Pre-compile our Python sources to optimised bytecode (.opt-1.pyc).
-  // `-O` strips assertions and `__debug__` branches; `-q` silences
-  // per-file output; `-j 0` parallelises across CPU cores. Scoped to
-  // our own source dirs — `uv sync` already compiles `.venv/` and
-  // some site-packages contain non-Python template files that would
-  // log spurious errors. Failure is non-fatal: the runtime regenerates
-  // missing .pyc on first import. Trims a few seconds off cold start.
+  // Pre-compile our Python sources to plain .pyc. No `-O`: every runtime
+  // launches python without -O, and per PEP 488 a non-optimized
+  // interpreter never loads `.opt-1.pyc` — plain .pyc is the file that
+  // actually gets used. `-q` silences per-file output; `-j 0`
+  // parallelises across CPU cores. Scoped to our own source dirs —
+  // `.venv/` is compiled by `uv sync` itself ([tool.uv]
+  // compile-bytecode = true in server/pyproject.toml) and some
+  // site-packages contain non-Python template files that would log
+  // spurious errors. Failure is non-fatal: the runtime regenerates
+  // missing .pyc on first import. Trims tens of seconds off cold start.
   step++;
   console.log(`[${step}/${totalSteps}] Compiling Python bytecode...`);
   try {
-    run('uv run python -O -m compileall -q -j 0 services core nodes routers models middleware main.py constants.py', serverDir, 120000);
+    run('uv run python -m compileall -q -j 0 services core nodes routers models middleware main.py constants.py', serverDir, 120000);
   } catch (err) {
     console.log(`  Warning: bytecode compilation failed (non-fatal): ${err.message}`);
   }

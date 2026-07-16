@@ -62,10 +62,15 @@ def _dev(
         "--daemon",
         help="Bind backend to 0.0.0.0 instead of 127.0.0.1.",
     ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Force Vite to re-bundle dependencies (recovers 'Outdated Optimize Dep' errors).",
+    ),
 ) -> None:
     from cli.commands.dev import dev_command
 
-    dev_command(daemon=daemon)
+    dev_command(daemon=daemon, force=force)
 
 
 @app.command(

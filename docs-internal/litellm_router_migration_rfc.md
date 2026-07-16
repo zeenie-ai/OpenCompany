@@ -332,7 +332,9 @@ credential lookup — plus ~420 LOC of contract tests that pass unchanged if it 
   NodeUserError-on-unknown-provider). Under the flag, registration becomes one
   data-driven loop over `LLM_DEFAULTS["providers"]` registering
   `ProviderSpec(name=n, factory=partial(LiteLLMAdapter, provider=n),
-  sdk_exception_types=(openai.OpenAIError,), client_kwargs={})`.
+  sdk_exception_refs=("openai:OpenAIError",), client_kwargs={})`.
+  (Since 2026-07-14 the spec takes lazy `"module:Class"` refs — the
+  resolved-classes surface remains the `sdk_exception_types` property.)
 - **`unifier.py` changes ~15 lines**: a flag branch in `_build_client`
   (unifier.py:114) plus `fetch_models` delegation to the retained HTTP lister
   (section 6.7). Public signatures unchanged — `test_wiring.py`,
@@ -442,8 +444,10 @@ def _litellm():
 ```
 
 Nothing at `services.llm` import time may touch litellm — `core/container.py` imports
-`services.llm` during container boot. `sdk_exception_types=(openai.OpenAIError,)`
-deliberately avoids importing litellm at registration. New guard test
+`services.llm` during container boot. `sdk_exception_refs=("openai:OpenAIError",)`
+deliberately avoids importing litellm (or any SDK) at registration — the same lazy-ref
+contract `tests/llm/test_lazy_sdk_imports.py` already enforces for openai/anthropic/
+google-genai. New guard test
 `tests/llm/test_lazy_litellm.py`: import `services.llm`, construct `ChatUnifier`, assert
 `"litellm" not in sys.modules`. Phase 0 asserts the three module-setting attribute names
 on the pinned version so a rename fails in CI, not production.

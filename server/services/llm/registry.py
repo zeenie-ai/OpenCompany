@@ -9,6 +9,8 @@ inside ``services/ai.py`` after this layer is wired.
 
 from __future__ import annotations
 
+import functools
+import pkgutil
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Tuple, Type
 
@@ -17,6 +19,22 @@ from services.llm.protocol import LLMProvider
 from services.plugin import NodeUserError
 
 logger = get_logger(__name__)
+
+
+@functools.lru_cache(maxsize=None)
+def _resolve_exc(ref: str) -> Type[BaseException]:
+    """Resolve a ``"module:ClassName"`` ref to the exception class.
+
+    Called lazily from ``ProviderSpec.sdk_exception_types`` — by the time
+    anything needs the resolved classes (an ``except`` clause matching a
+    raised SDK error, or a test reading the tuple), the provider factory
+    has already imported the SDK to build its client, so this is a
+    ``sys.modules`` cache hit, never a cold import on the boot path.
+    """
+    obj = pkgutil.resolve_name(ref)
+    if not (isinstance(obj, type) and issubclass(obj, BaseException)):
+        raise TypeError(f"{ref!r} did not resolve to an exception class: {obj!r}")
+    return obj
 
 
 @dataclass(frozen=True)
@@ -29,11 +47,14 @@ class ProviderSpec:
             ``providers.<name>`` block in ``llm_defaults.json``.
         factory: callable returning an ``LLMProvider`` instance.
             Invoked as ``factory(api_key=..., proxy_url=..., **client_kwargs)``.
-        sdk_exception_types: tuple of typed SDK error classes raised by
-            this provider's underlying SDK. The unifier wraps a single
-            ``except spec.sdk_exception_types`` around every call site so
-            user-correctable errors surface as ``NodeUserError`` without
-            a per-provider branch in ai.py.
+        sdk_exception_refs: tuple of ``"module:ClassName"`` refs (the
+            packaging entry-points format, resolved via
+            ``pkgutil.resolve_name``) naming the typed error classes
+            raised by this provider's SDK. Refs — not classes — so that
+            registering a provider at boot never imports its SDK
+            (docs-internal/performance.md anti-pattern; cost ~7s warm /
+            ~45s cold across openai + anthropic + google.genai). The
+            resolved classes are exposed by ``sdk_exception_types``.
         client_kwargs: static keyword arguments passed to ``factory`` on
             every instantiation. Used by OpenAI-compatible providers
             (xai / deepseek / kimi / mistral / ollama / lmstudio / groq /
@@ -42,8 +63,18 @@ class ProviderSpec:
 
     name: str
     factory: Callable[..., LLMProvider]
-    sdk_exception_types: Tuple[Type[Exception], ...]
+    sdk_exception_refs: Tuple[str, ...]
     client_kwargs: Dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def sdk_exception_types(self) -> Tuple[Type[BaseException], ...]:
+        """Resolved typed SDK error classes.
+
+        The unifier wraps a single ``except spec.sdk_exception_types``
+        around every call site so user-correctable errors surface as
+        ``NodeUserError`` without a per-provider branch in ai.py.
+        """
+        return tuple(_resolve_exc(ref) for ref in self.sdk_exception_refs)
 
 
 _REGISTRY: Dict[str, ProviderSpec] = {}
@@ -60,9 +91,12 @@ def register_provider(spec: ProviderSpec) -> None:
     reload cycles). Re-registration with a different spec raises so
     accidental shadowing is loud.
     """
-    if not spec.sdk_exception_types:
+    # Check the raw refs, NOT the resolving property — reading the
+    # property here would import every SDK at registration time and
+    # defeat the lazy-ref design.
+    if not spec.sdk_exception_refs:
         raise ValueError(
-            f"ProviderSpec({spec.name!r}) declares empty sdk_exception_types. "
+            f"ProviderSpec({spec.name!r}) declares empty sdk_exception_refs. "
             "Every provider must surface its typed SDK error class so the "
             "unifier can translate it into NodeUserError."
         )

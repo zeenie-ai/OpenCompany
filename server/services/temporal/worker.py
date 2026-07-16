@@ -185,6 +185,29 @@ class TemporalWorkerManager:
             # / interceptors into the effective worker configuration —
             # the framework worker stays plugin-agnostic.
             plugin_list = temporal_plugins()
+
+            # The Worker() constructor derives its default build id by
+            # MD5-hashing the bytecode of every module in sys.modules
+            # (disk reads included) — a synchronous ~3s stall at our
+            # module count (152 plugins + LLM SDK stack) that freezes
+            # the event loop and starves concurrent boot work (e.g.
+            # broadcaster refreshes). The result is memoized in an SDK
+            # module global, so one off-loop call here makes this
+            # Worker AND every TemporalWorkerPool worker construct
+            # cheaply. load_default_build_id is not re-exported from
+            # temporalio.worker (private module in 1.30); if an SDK
+            # upgrade moves it, skip the pre-warm and pay the
+            # synchronous cost again rather than fail startup.
+            try:
+                from temporalio.worker._worker import load_default_build_id
+            except ImportError:
+                logger.warning(
+                    "temporalio private API moved: load_default_build_id "
+                    "unavailable, skipping off-loop build-id pre-warm"
+                )
+            else:
+                await asyncio.to_thread(load_default_build_id)
+
             self._worker = Worker(
                 self.client,
                 task_queue=self.task_queue,

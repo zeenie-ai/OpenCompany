@@ -93,6 +93,26 @@ export default defineConfig(({ mode }) => {
       strictPort: false,
       host: true
     },
+    optimizeDeps: {
+      // `company dev --force` sets VITE_FORCE to re-run dependency
+      // pre-bundling — Vite's own recovery for "Outdated Optimize Dep"
+      // (equivalent to `vite --force`, which can't be threaded through
+      // the pnpm run -> npm run indirection as an argv flag).
+      force: !!getEnv('VITE_FORCE', ''),
+      // Pre-bundle the heavy deps reached through lazily-loaded panels
+      // (chat/markdown stack, canvas) so a late discovery can't trigger
+      // a mid-session re-optimization — the root cause of the
+      // "Outdated Optimize Dep" 504 (vitejs/vite#14284).
+      include: [
+        'reactflow',
+        'react-markdown',
+        'remark-gfm',
+        'remark-breaks',
+        'prismjs',
+        'react-simple-code-editor',
+        '@uiw/react-json-view',
+      ],
+    },
     build: {
       // ES2022 unlocks native `findLast`, optional-chaining-assignment,
       // class-fields without polyfills. Browser baseline: Chrome 94+,

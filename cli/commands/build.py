@@ -33,12 +33,13 @@ from cli.platform_ import node_modules_dir, project_root, server_dir
 
 
 # Source dirs / entry-point modules under ``server/`` that ``company build``
-# pre-compiles to optimised bytecode in step [5/6]. Public so tests and
+# pre-compiles to plain .pyc bytecode in step [5/6]. Public so tests and
 # ``scripts/install.js`` (which mirrors this list) stay in sync — both
 # the install pipeline and tests should read this constant rather than
-# duplicate the list. Excludes ``.venv/`` (uv compiles deps at install
-# time and some site-packages contain non-Python templates) and
-# ``tests/`` (ships outside the production tarball).
+# duplicate the list. Excludes ``.venv/`` (compiled by ``uv sync`` via
+# ``[tool.uv] compile-bytecode = true`` in server/pyproject.toml; some
+# site-packages also contain non-Python templates) and ``tests/``
+# (ships outside the production tarball).
 COMPILEALL_SOURCE_DIRS: tuple[str, ...] = (
     "services",
     "core",
@@ -201,20 +202,24 @@ def build_command() -> None:
     # is idempotent and creates the venv on first run.
     run(["uv", "sync"], cwd=server_cwd)
 
-    # Pre-compile our Python sources to optimised bytecode (.opt-1.pyc).
-    # `-O` strips `assert` statements + `__debug__` branches; `-q`
-    # silences per-file output (errors still print); `-j 0` parallelises
-    # across all CPU cores. Cuts a measurable few seconds off cold
-    # start by avoiding source-to-bytecode work on first import.
+    # Pre-compile our Python sources to plain .pyc. No `-O`: every
+    # runtime (uvicorn via `uv run`, `company serve`'s venv python) runs
+    # WITHOUT -O, and per PEP 488 a non-optimized interpreter only loads
+    # plain .pyc — `-O`-produced .opt-1.pyc files are never loaded and
+    # the sources get recompiled on first import anyway. `-q` silences
+    # per-file output (errors still print); `-j 0` parallelises across
+    # all CPU cores.
     #
-    # Scoped to the project's own source dirs — `uv sync` already
-    # compiles `.venv/` packages, and `tests/` ships outside the
-    # tarball. Compiling `.venv/` is wasted work and fails on cookiecutter
-    # template files inside packages like crawlee that aren't real Python.
+    # Scoped to the project's own source dirs — `.venv/` packages are
+    # compiled by `uv sync` itself via `[tool.uv] compile-bytecode = true`
+    # in server/pyproject.toml, and `tests/` ships outside the tarball.
+    # Compiling `.venv/` here would be duplicate work and fails on
+    # cookiecutter template files inside packages like crawlee that
+    # aren't real Python.
     console.log("[5/6] Compiling Python bytecode...")
     run(
         uv_run(
-            "python", "-O", "-m", "compileall", "-q", "-j", "0", *COMPILEALL_SOURCE_DIRS
+            "python", "-m", "compileall", "-q", "-j", "0", *COMPILEALL_SOURCE_DIRS
         ),
         cwd=server_cwd,
         check=False,  # missing pyc is non-fatal — runtime regenerates as needed

@@ -472,21 +472,42 @@ def test_preinstall_never_removes_current_package_directory(preinstall_js_src: s
 
 # Single source of truth for parsing install.js's compileall command line.
 # Must match the shape that build.py emits exactly:
-#     uv run python -O -m compileall -q -j 0 <dirs...>
+#     uv run python -m compileall -q -j 0 <dirs...>
+# No -O: runtimes launch python without -O and per PEP 488 only load
+# plain .pyc — .opt-1.pyc output would never be used.
 _INSTALL_JS_COMPILEALL_RE = re.compile(
-    r"""['"]uv\s+run\s+python\s+-O\s+-m\s+compileall\s+-q\s+-j\s+0\s+([^'"]+)['"]"""
+    r"""['"]uv\s+run\s+python\s+-m\s+compileall\s+-q\s+-j\s+0\s+([^'"]+)['"]"""
 )
 
 
 def test_install_js_compileall_command_shape(install_js_src: str):
     """End-user ``npm install opencompany`` runs install.js. The
     compileall step must use the same shape as ``company build`` —
-    ``uv run python -O -m compileall -q -j 0`` — so cold-start gains
-    apply to the npm-tarball path too.
+    ``uv run python -m compileall -q -j 0`` (plain .pyc, no -O) — so
+    cold-start gains apply to the npm-tarball path too.
     """
     assert (
         _INSTALL_JS_COMPILEALL_RE.search(install_js_src) is not None
-    ), "install.js must run `uv run python -O -m compileall -q -j 0 ...`"
+    ), "install.js must run `uv run python -m compileall -q -j 0 ...`"
+
+
+def test_server_pyproject_enables_uv_compile_bytecode(root: Path):
+    """``[tool.uv] compile-bytecode = true`` must stay set in
+    server/pyproject.toml — uv's default is false, which leaves all
+    site-package ``.py`` files to compile lazily on the FIRST import
+    after a fresh ``uv sync`` (tens of seconds on a post-clean cold
+    boot). The compileall step above only covers project source; this
+    setting covers ``.venv/``.
+    """
+    import tomllib
+
+    pyproject = tomllib.loads(
+        (root / "server" / "pyproject.toml").read_text(encoding="utf-8")
+    )
+    assert pyproject.get("tool", {}).get("uv", {}).get("compile-bytecode") is True, (
+        "server/pyproject.toml must set [tool.uv] compile-bytecode = true "
+        "(cold-boot bytecode precompilation for site-packages)"
+    )
 
 
 def test_install_js_compileall_paths_match_source_dirs_constant(install_js_src: str):
