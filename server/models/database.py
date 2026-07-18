@@ -486,10 +486,26 @@ class TeamTask(SQLModel, table=True):
     team_id: str = Field(index=True, max_length=255)
     title: str = Field(max_length=500)
     description: Optional[str] = Field(default=None, max_length=5000)
-    status: str = Field(default="pending", max_length=20)  # pending, in_progress, completed, failed, skipped
+    status: str = Field(default="queued", index=True, max_length=20)
     priority: int = Field(default=3)  # 1-5, lower = higher priority
     created_by: str = Field(max_length=255)  # agent_node_id
     assigned_to: Optional[str] = Field(default=None, max_length=255)
+    workflow_id: Optional[str] = Field(default=None, index=True, max_length=255)
+    execution_id: Optional[str] = Field(default=None, index=True, max_length=255)
+    root_execution_id: Optional[str] = Field(default=None, index=True, max_length=255)
+    parent_agent_id: Optional[str] = Field(default=None, max_length=255)
+    mission: Optional[str] = Field(default=None, max_length=10000)
+    context: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    acceptance_criteria: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    queue_sequence: int = Field(default=0, index=True)
+    revision: int = Field(default=0)
+    current_attempt: int = Field(default=0)
+    child_workflow_id: Optional[str] = Field(default=None, max_length=500)
+    child_run_id: Optional[str] = Field(default=None, max_length=255)
+    trace_id: Optional[str] = Field(default=None, index=True, max_length=255)
+    cancellation_requested: bool = Field(default=False)
+    cancellation_reason: Optional[str] = Field(default=None, max_length=2000)
+    usage: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     depends_on: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))  # List of task_ids
     result: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     error: Optional[str] = Field(default=None, max_length=2000)
@@ -501,6 +517,27 @@ class TeamTask(SQLModel, table=True):
     )
     started_at: Optional[datetime] = Field(default=None)
     completed_at: Optional[datetime] = Field(default=None)
+
+
+class TeamTaskAttempt(SQLModel, table=True):
+    """Immutable execution history for a durable team task."""
+
+    __tablename__ = "team_task_attempts"
+
+    id: str = Field(primary_key=True, max_length=255)
+    task_id: str = Field(index=True, max_length=255)
+    team_id: str = Field(index=True, max_length=255)
+    attempt_number: int
+    assignee_node_id: Optional[str] = Field(default=None, max_length=255)
+    status: str = Field(default="queued", max_length=20)
+    child_workflow_id: Optional[str] = Field(default=None, max_length=500)
+    child_run_id: Optional[str] = Field(default=None, max_length=255)
+    result: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    error: Optional[str] = Field(default=None, max_length=5000)
+    usage: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
 
 
 class AgentMessage(SQLModel, table=True):

@@ -1109,7 +1109,7 @@ AI Agent (`aiAgent`) and Chat Agent / Zeenie (`chatAgent`) run the same plain-as
 
 **`max_iterations` precedence (highest->lowest): per-node `parameters.max_iterations` > `UserSettings.agent_recursion_limit` > env `AGENT_RECURSION_LIMIT` (default 200) > `llm_defaults.json:agent.recursion_limit`.**
 
-Full reference — agent loop, skill injection, tool building, input/auto-prompt fallback (message>text>content>str), handle topology, spec-driven `AIAgentNode`, async delegation (F4.B child-workflow + legacy fire-and-forget), specialized-agent routing — in [docs-internal/agent_architecture.md](./docs-internal/agent_architecture.md); delegation deep-dive in [agent_delegation.md](./docs-internal/agent_delegation.md), team leads in [agent_teams.md](./docs-internal/agent_teams.md).
+Full reference — agent loop, skill injection, tool building, input/auto-prompt fallback (message>text>content>str), handle topology, spec-driven `AIAgentNode`, durable Task Manager delegation (Temporal child workflows plus the legacy bridge), and specialized-agent routing — in [docs-internal/agent_architecture.md](./docs-internal/agent_architecture.md); low-level compatibility mechanics in [agent_delegation.md](./docs-internal/agent_delegation.md), and the authoritative team-lead contract in [agent_teams.md](./docs-internal/agent_teams.md).
 
 ## Architecture Patterns
 - **Plugin-first (Wave 11).** One folder per plugin under [`server/nodes/<group>/<plugin>/`](./server/nodes/) rooted at `__init__.py`, subclassing `BaseNode` / `ActionNode` / `TriggerNode` / `ToolNode`. Auto-registers via `__init_subclass__`. See [`docs-internal/plugin_system.md`](./docs-internal/plugin_system.md).
@@ -1429,7 +1429,11 @@ class MyTool(ToolNode):              # or SpecializedAgentBase for an agent
 `BaseNode.__init_subclass__` registers the class into `_NODE_CLASS_REGISTRY` (first), then into `NODE_METADATA`, `_DIRECT_MODELS`, `NODE_OUTPUT_SCHEMAS`, and `_HANDLER_REGISTRY` on import. The class-registry-first order matters: `_metadata_dict` calls `get_plugin_icon_path(cls.type)` which goes through `get_node_class()`. NodeSpec emits at `GET /api/schemas/nodes/<type>/spec.json`. The frontend auto-discovers via `useNodeSpec` + `componentKind` dispatch (see "Spec-driven component design" above). Icon goes in `<plugin>/icon.svg` (or `visuals.json` for emoji / library brand); color goes in `<plugin>/meta.json` (or `visuals.json` legacy fallback).
 
 **Cross-cutting edits that are still required (small):**
-- New specialized agent: add the agent's `type` string to the delegation-check tuple in [`server/services/handlers/tools.py:execute_tool()`](./server/services/handlers/tools.py) (~line 224) so the parent agent's `delegate_to_*` tool finds it. Also update `AI_AGENT_TYPES` frozenset in [`server/constants.py`](./server/constants.py) — used for legacy delegation checks. Both are flagged as tech debt; see "remaining tribal arrays" note.
+- New specialized agent: update `AI_AGENT_TYPES` and the canonical teammate
+  discovery/validation surfaces so a team lead can authorize it through
+  `input-teammates`. Team leads delegate with Task Manager; `delegate_to_*`
+  remains an internal/legacy dispatch identity and must not be taught as the
+  model-facing team contract.
 - Brand-new uiHint flag: add to `INodeUIHints` in [`client/src/types/INodeProperties.ts`](./client/src/types/INodeProperties.ts) AND to the `known` set in `test_ui_hints_only_carry_known_flags` (`server/tests/test_node_spec.py`).
 
 **No edits needed:** any TypeScript node definition file, `_get_tool_schema()`, `AGENT_CONFIGS`, `AGENT_WITH_SKILLS_TYPES`, `aiAgentTypes`, `Dashboard.tsx`, `MiddleSection.tsx`, `InputSection.tsx`, or any of the other arrays the pre-Wave-11 docs listed.
@@ -1448,7 +1452,7 @@ Tool nodes display execution status via the standard node status system:
 | calculatorTool | CalculatorSchema | `_execute_calculator()` | Math operations |
 | currentTimeTool | CurrentTimeSchema | `_execute_current_time()` | Date/time with timezone |
 | duckduckgoSearch | DuckDuckGoSearchSchema | `_execute_duckduckgo_search()` | DuckDuckGo web search (free) |
-| taskManager | TaskManagerSchema | `_execute_task_manager()` | Task creation and management |
+| taskManager | `TaskManagerParams` | `_execute_task_manager()` | Intrinsic durable team assignment, review, retry/reassignment, cancellation, and acceptance |
 | writeTodos | WriteTodosSchema | `execute_write_todos()` / `handle_write_todos()` | Structured task list planning with checklist rendering |
 | braveSearch | BraveSearchSchema | `handle_brave_search()` | Brave Search API web results |
 | serperSearch | SerperSearchSchema | `handle_serper_search()` | Google SERP via Serper API |

@@ -1,250 +1,82 @@
 ---
 name: task-manager
-description: Manage delegated tasks. List active tasks, check task status, get results from completed delegations, and mark tasks as done.
+description: Coordinate durable team tasks by assigning connected teammates, reviewing results, and accepting, retrying, reassigning, or cancelling work.
 allowed-tools: task_manager
 metadata:
   author: opencompany
-  version: "1.0"
+  version: "2.1"
   category: automation
-
 ---
 
 # Task Manager
 
-Manage and track delegated agent tasks.
+Use `task_manager` as the team lead's durable control plane. It is scoped to
+the current workflow execution and only permits assignment to agents connected
+to this lead's `input-teammates` handle.
 
-## How It Works
+## Required workflow
 
-This skill teaches the AI Assistant how to use the **Task Manager** tool. Connect the **Task Manager** node to the assistant's `input-tools` handle to enable delegated-task tracking.
+1. Call `list_tasks` before assigning work so you do not duplicate an existing
+   mission.
+2. Split independent work into bounded tasks with explicit acceptance criteria.
+3. Call `assign_task` once per mission. Use the connected teammate node ID or
+   the exact delegate name reported by the lead's available teammate list.
+   Do not call `delegate_to_*` directly; delegate descriptors are internal
+   dispatch identities, not the lead's task-creation interface.
+4. Independent tasks may be assigned together. The durable queue starts at most
+   three descendants across the whole agent tree; excess tasks remain queued.
+5. When a teammate submits work, inspect the complete result, error, attempt
+   history, and acceptance criteria. Copy `task.id` to `task_id` and
+   `task.revision` to `expected_revision` for the review mutation.
+6. Choose exactly one review outcome:
+   - `accept_task` when the result satisfies the task;
+   - `modify_task` for blocked or queued work;
+   - `retry_task` when the mission is still valid;
+   - `reassign_task` to another connected teammate with revision context;
+   - `cancel_task` when the work is no longer needed.
+7. Call `finish_team` only after every required task is accepted or intentionally
+   cancelled. Synthesize accepted results in the final report and disclose any
+   unresolved failure.
 
-## task_manager Tool
+## Operations
 
-List, check, and manage delegated tasks.
+| Operation | Purpose | Important arguments |
+|---|---|---|
+| `assign_task` | Persist and queue a bounded mission | `title`, `mission`, `assignee_node_id` or `delegate_name`, optional `context`, `acceptance_criteria`, `depends_on` |
+| `list_tasks` | Inspect the execution task list | optional `status_filter` |
+| `get_task` | Review one task and all attempts | `task_id` |
+| `modify_task` | Change queued/blocked work | `task_id`, `expected_revision`, changed task fields |
+| `cancel_task` | Cancel queued or running work | `task_id`, `expected_revision`, `reason` |
+| `retry_task` | Queue a new attempt | `task_id`, `expected_revision`, optional revision context |
+| `reassign_task` | Queue a new attempt for another teammate | `task_id`, `expected_revision`, new connected assignee |
+| `accept_task` | Record lead approval of submitted work | `task_id`, `expected_revision` |
+| `finish_team` | Finalize after the review barrier clears | optional summary |
 
-### Schema Fields
+If exactly one task is `submitted` in the current execution, `accept_task` may
+omit `task_id` and `expected_revision`; the runtime safely resolves that single
+task and its current revision. If zero or multiple submissions await review,
+you must call `list_tasks` or `get_task` and pass both fields. Never guess.
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| operation | string | Yes | `"list_tasks"`, `"get_task"`, or `"mark_done"` |
-| task_id | string | For get_task, mark_done | Specific task ID to query |
-| status_filter | string | No | Filter by status: `"running"`, `"completed"`, `"error"` |
+`mark_done` is a deprecated compatibility alias for `accept_task`. Never use it
+to discard history.
 
-### Operations
+## State model
 
-| Operation | Description | Required Fields |
-|-----------|-------------|-----------------|
-| `list_tasks` | List all tracked tasks | status_filter (optional) |
-| `get_task` | Get details for specific task | task_id |
-| `mark_done` | Remove task from tracking | task_id |
+- `blocked`: waiting for dependencies.
+- `queued`: durable and waiting for a concurrency permit.
+- `running`: owned by a teammate.
+- `submitted`: teammate finished; lead review is required.
+- `accepted`: lead approved the work.
+- `failed`: no automatic attempt remains.
+- `cancelled`: intentionally stopped; may be revised and reassigned.
 
-### Task States
+Do not treat `submitted` as finished team work. Do not repeatedly poll a running
+task; completion signals wake the lead. Do not invent teammate IDs, team IDs, or
+execution IDs—the runtime supplies authority and rejects cross-team access.
 
-| Status | Description |
-|--------|-------------|
-| `running` | Task is currently executing |
-| `completed` | Task finished successfully |
-| `error` | Task failed with error |
-| `cancelled` | Task was cancelled |
+## Team Monitor interpretation
 
-### Examples
-
-**List all tasks:**
-```json
-{
-  "operation": "list_tasks"
-}
-```
-
-**List only running tasks:**
-```json
-{
-  "operation": "list_tasks",
-  "status_filter": "running"
-}
-```
-
-**List completed tasks:**
-```json
-{
-  "operation": "list_tasks",
-  "status_filter": "completed"
-}
-```
-
-**Get specific task details:**
-```json
-{
-  "operation": "get_task",
-  "task_id": "delegated_agent_abc12345"
-}
-```
-
-**Mark task as done:**
-```json
-{
-  "operation": "mark_done",
-  "task_id": "delegated_agent_abc12345"
-}
-```
-
-### Response Formats
-
-**list_tasks response:**
-```json
-{
-  "success": true,
-  "operation": "list_tasks",
-  "tasks": [
-    {
-      "task_id": "delegated_coding_agent_abc12345",
-      "status": "completed",
-      "agent_name": "Coding Agent",
-      "result_summary": "Generated Python function for data processing...",
-      "active": false
-    },
-    {
-      "task_id": "delegated_web_agent_def67890",
-      "status": "running",
-      "active": true
-    }
-  ],
-  "count": 2,
-  "running": 1,
-  "completed": 1,
-  "errors": 0
-}
-```
-
-**get_task response (completed):**
-```json
-{
-  "success": true,
-  "operation": "get_task",
-  "task_id": "delegated_coding_agent_abc12345",
-  "status": "completed",
-  "agent_name": "Coding Agent",
-  "result": "Here is the Python function you requested:\n\ndef process_data(items):\n    return [x * 2 for x in items]"
-}
-```
-
-**get_task response (running):**
-```json
-{
-  "success": true,
-  "operation": "get_task",
-  "task_id": "delegated_web_agent_def67890",
-  "status": "running",
-  "agent_name": "Web Agent"
-}
-```
-
-**get_task response (error):**
-```json
-{
-  "success": true,
-  "operation": "get_task",
-  "task_id": "delegated_agent_xyz99999",
-  "status": "error",
-  "agent_name": "Social Agent",
-  "error": "Failed to connect to WhatsApp service"
-}
-```
-
-**mark_done response:**
-```json
-{
-  "success": true,
-  "operation": "mark_done",
-  "task_id": "delegated_coding_agent_abc12345",
-  "removed": true,
-  "message": "Task delegated_coding_agent_abc12345 marked as done and removed from tracking"
-}
-```
-
-### Error Response
-
-```json
-{
-  "success": false,
-  "error": "task_id is required for get_task operation"
-}
-```
-
-```json
-{
-  "success": false,
-  "error": "Task delegated_agent_notfound not found",
-  "task_id": "delegated_agent_notfound"
-}
-```
-
-## Use Cases
-
-| Use Case | Operation | Description |
-|----------|-----------|-------------|
-| Monitor progress | list_tasks | See all active delegations |
-| Check result | get_task | Get completed task output |
-| Verify completion | get_task | Confirm task finished |
-| Clean up | mark_done | Remove processed tasks |
-| Error handling | list_tasks + filter | Find failed tasks |
-
-## Common Workflows
-
-### Check on delegated work
-
-1. Delegate task to sub-agent
-2. Wait or continue with other work
-3. Use `list_tasks` to see status
-4. Use `get_task` to retrieve result
-
-### Process all completed tasks
-
-1. Use `list_tasks` with `status_filter: "completed"`
-2. For each task, use `get_task` to get full result
-3. Process the results
-4. Use `mark_done` to clean up
-
-### Handle errors
-
-1. Use `list_tasks` with `status_filter: "error"`
-2. Review failed tasks
-3. Decide to retry or mark_done
-4. Optionally re-delegate failed work
-
-## Integration with Agent Delegation
-
-When a parent agent delegates work:
-
-1. `delegate_to_<agent>` tool returns `task_id`
-2. Child agent runs in background
-3. Parent can check status with `task_manager`
-4. Results persist until `mark_done`
-
-### Task ID Format
-
-Task IDs follow the pattern:
-```
-delegated_<node_id>_<random_hex>
-```
-
-Example: `delegated_coding_agent_1_abc12345`
-
-## Best Practices
-
-1. **Track task IDs**: Store returned task_ids for later reference
-2. **Poll appropriately**: Don't check too frequently
-3. **Handle all states**: Account for running, completed, and error
-4. **Clean up**: Use mark_done after processing results
-5. **Check errors**: Review failed tasks before marking done
-
-## Limitations
-
-- Tasks not persistent across server restarts (in-memory)
-- Results may be truncated if very large (4000 char limit in responses)
-- Cannot cancel running tasks (only track status)
-
-## Setup Requirements
-
-1. Connect the **Task Manager** node to Zeenie's `input-tools` handle
-2. Works with any agent that uses delegation
-3. Task IDs are returned when delegating to sub-agents
+Team Monitor is read-only. It shows graph-connected teammates immediately and
+merges their persisted `working`/`idle` status during execution. Its Done count
+means `accepted`, not merely `submitted`. Use Task Manager—not Team Monitor—to
+accept, retry, modify, reassign, cancel, or finish work.

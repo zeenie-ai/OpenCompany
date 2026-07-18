@@ -903,6 +903,7 @@ class TestNodeSpecContractInvariants:
             # middle section (in addition to isToolPanel).
             "isTodoEditor",
             "isMonitorPanel",
+            "isTaskManagerPanel",
             "showLocationPanel",
             "isAndroidToolkit",
             "isChatTrigger",

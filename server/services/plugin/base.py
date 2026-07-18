@@ -771,6 +771,9 @@ class BaseNode:
                     "agent_iteration",
                     "tool_call_index",
                     "tool_call_id",
+                    "parent_node_id",
+                    "team_lead_node_id",
+                    "root_execution_id",
                 ):
                     if key in context:
                         extras[key] = context[key]

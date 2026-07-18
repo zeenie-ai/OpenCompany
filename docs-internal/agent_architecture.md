@@ -336,7 +336,8 @@ Patterns covered in the canonical doc:
 - Database tool-schema override via ToolSchema model + Tool Schema Editor UI
 - Direct tool pattern (each Android service connects to the agent independently)
 - Direct Android service tools (16 entries, skip the toolkit)
-- Agent delegation (`delegate_to_*` fire-and-forget background tasks)
+- Durable team delegation through Task Manager; `delegate_to_*` identities are
+  retained internally for compatibility dispatch
 - Per-type Temporal activity dispatch (F4.A, when TEMPORAL_PER_TYPE_DISPATCH=true)
 - Auto-skill edges (writeTodos, WhatsApp tools bundle a default skill)
 
@@ -529,7 +530,7 @@ Handle layouts are declared in `server/nodes/agent/_handles.py` (local to `nodes
 | `output-main` | output | right | 50% | main |
 | `output-top` | output | top | — | main |
 
-**`team_lead_agent_handles()`** — `orchestrator_agent` and `ai_employee` only; adds an `input-teammates` handle (bottom, 80%) and shifts the bottom skill/tool offsets to 20%/50%. Connected agents become `delegate_to_<type>` tools via `collect_teammate_connections()` (in `server/services/plugin/edge_walker.py`). Team leads are also listed in `TEAM_LEAD_TYPES` in [`client/src/components/TeamMonitorNode.tsx`](../client/src/components/TeamMonitorNode.tsx) (frontend tribal array, flagged as tech debt). See [agent_teams.md](agent_teams.md).
+**`team_lead_agent_handles()`** — `orchestrator_agent` and `ai_employee` only; adds an `input-teammates` handle (bottom, 80%) and shifts the bottom skill/tool offsets to 20%/50%. Connected agents become authorized Task Manager assignees via `collect_teammate_connections()` (in `server/services/plugin/edge_walker.py`); their delegate identities are hidden from the model and retained for trusted child dispatch. See [agent_teams.md](agent_teams.md).
 
 `AIAgentNode.tsx` is type-agnostic: it calls `useNodeSpec(type)` and renders whatever handles / icon / color the spec returns — there is no `AGENT_CONFIGS` map (retired Wave 10.D). Specialized-agent visuals all come from the NodeSpec; per-type display name / subtitle / description live on the plugin class, icon from `<plugin>/icon.svg` (visuals.json emoji fallback), color from `<plugin>/meta.json`. Glob `server/nodes/agent/` for the authoritative agent list — do not hand-maintain one.
 

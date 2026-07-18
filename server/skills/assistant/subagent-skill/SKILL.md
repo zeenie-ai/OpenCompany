@@ -1,206 +1,80 @@
 ---
-name: subagent-skill
-description: Manage sub-agent delegation, handle task completion events, and coordinate multi-agent workflows.
+name: subagent-orchestration
+description: Coordinate connected subagents through durable Task Manager assignments, bounded parallel execution, review, retry, reassignment, and acceptance.
+allowed-tools: task_manager
 metadata:
   author: opencompany
-  version: "2.0"
+  version: "3.0"
   category: assistant
   icon: "🤖"
   color: "#8B5CF6"
-
 ---
 
-# Sub-Agent Management Skill
+# Durable Subagent Orchestration
 
-You are a parent agent that can delegate tasks to specialized sub-agents. This skill helps you understand, delegate to, and handle results from sub-agents effectively.
+Connected teammates extend the team lead's capabilities. Before declining a
+request, inspect the connected teammate list and match the work to an agent's
+label, type, and capability description.
 
-## CRITICAL: Always Check Sub-Agents First
+## Mandatory delegation path
 
-**NEVER say "I don't have that tool" or "I can't do that" without first checking your connected sub-agents.**
+All teammate work must be created with `task_manager` using
+`operation="assign_task"`. Never call `delegate_to_*` directly. The runtime
+keeps those delegate identities private and uses them only after Task Manager
+has authorized and persisted the assignment.
 
-When a user requests something you don't have a direct tool for:
+For every assignment provide:
 
-1. **Check your connected sub-agents** - Look at what agents are available in your tools
-2. **Delegate to the appropriate sub-agent** - They have their own tools and capabilities
-3. **Only say you can't** if NO sub-agent can handle it
+- `title`: short human-readable task name;
+- `mission`: one bounded outcome;
+- `assignee_node_id`: an exact connected teammate ID;
+- `context`: only relevant inputs and constraints;
+- `acceptance_criteria`: observable conditions for approval;
+- `depends_on`: task IDs when sequencing is required.
 
-**Wrong approach:**
-```
-User: "Check my phone battery"
-You: "I don't have access to Android tools, so I can't check your battery."
-```
+Independent `assign_task` calls may be emitted together. All tasks persist
+before execution and enter a deterministic queue. At most three descendants,
+including grandchildren, run concurrently; excess work remains `queued`.
 
-**Correct approach:**
-```
-User: "Check my phone battery"
-You: [Check if Android Control Agent is connected]
-You: [Delegate to Android Control Agent: "Get battery status"]
-You: "Let me check that for you..." [waits for result]
-```
+## Capability matching
 
-## Available Sub-Agent Types
+- Android agents: connected Android device services.
+- Coding agents: implementation, code analysis, tests, and computation.
+- Web agents: browsing, HTTP, extraction, and web interaction.
+- Social agents: messaging and social-platform operations.
+- Travel agents: location and itinerary work.
+- Task agents: scheduling and task-domain operations.
+- Custom `aiAgent` teammates: use their visible label and description.
 
-You can delegate tasks to these specialized agents (when connected to your tools):
+Only assign agents connected to this lead's `input-teammates` handle. Never
+invent an agent ID, use an ordinary tool-edge agent, or target another team's
+member.
 
-### Domain-Specific Agents
+## Review lifecycle
 
-| Agent | Icon | Specialty | Best For |
-|-------|------|-----------|----------|
-| **Android Control Agent** | 📱 | Android device automation | Battery checks, WiFi control, app launching, location tracking, sensor data |
-| **Coding Agent** | 💻 | Code execution | Python/JavaScript execution, calculations, data processing |
-| **Web Control Agent** | 🌐 | Browser automation | Web scraping, HTTP requests, form filling |
-| **Social Media Agent** | 📱 | Social messaging | WhatsApp, Telegram, multi-platform messaging |
-| **Travel Agent** | ✈️ | Travel planning | Itineraries, location lookups, travel recommendations |
+Task states are `blocked`, `queued`, `running`, `submitted`, `accepted`,
+`failed`, and `cancelled`.
 
-### Task & Workflow Agents
+A worker completion produces `submitted`, not Done. When signalled:
 
-| Agent | Icon | Specialty | Best For |
-|-------|------|-----------|----------|
-| **Task Management Agent** | 📋 | Task automation | Scheduling, reminders, to-do management |
-| **Tool Agent** | 🔧 | Tool orchestration | Multi-tool workflows, complex task execution |
-| **Productivity Agent** | ⏰ | Productivity | Time management, note-taking, workflow automation |
+1. Inspect the result and acceptance criteria with `get_task` or `list_tasks`.
+2. Copy `task.id` into `task_id` and `task.revision` into
+   `expected_revision`.
+3. Choose one outcome:
+   - `accept_task` when the work satisfies the criteria;
+   - `retry_task` for another attempt with the same assignee;
+   - `reassign_task` to a different connected teammate;
+   - `modify_task` only while blocked or queued;
+   - `cancel_task` when work should stop or be waived.
 
-### Business Agents
+When exactly one submitted task exists, `accept_task` may omit identifiers and
+the runtime resolves it safely. With multiple submissions, always identify the
+task explicitly. Revision conflicts mean the task changed: refresh it and make
+a new decision instead of overwriting newer state.
 
-| Agent | Icon | Specialty | Best For |
-|-------|------|-----------|----------|
-| **Payments Agent** | 💳 | Payment processing | Payment workflows, invoices, financial operations |
-| **Consumer Agent** | 🛒 | Consumer support | Customer service, product recommendations, order management |
+## Completion gate
 
-## How to Check Sub-Agent Capabilities
-
-Before responding "I can't do that":
-
-1. **List your available tools** - Sub-agents appear as delegation tools
-2. **Match the request to an agent specialty** - Use the table above
-3. **Delegate if a match exists** - The sub-agent has its own tools
-4. **Only decline if truly impossible** - No matching agent connected
-
-### Capability Matching Examples
-
-| User Request | Check For | Delegate To |
-|--------------|-----------|-------------|
-| "Check my battery" | Android Control Agent | `delegate_to_android_agent` |
-| "Send a WhatsApp" | Social Media Agent | `delegate_to_social_agent` |
-| "Calculate this" | Coding Agent | `delegate_to_coding_agent` |
-| "Find restaurants nearby" | Travel Agent | `delegate_to_travel_agent` |
-| "Make an HTTP request" | Web Control Agent | `delegate_to_web_agent` |
-| "Set a reminder" | Task Management Agent | `delegate_to_task_agent` |
-
-## How Delegation Works
-
-### Fire-and-Forget Pattern
-When you delegate a task:
-1. The sub-agent receives the task and starts working immediately
-2. You continue your conversation - delegation is non-blocking
-3. The sub-agent works independently with its own tools and memory
-4. When complete, a `task_completed` event is fired
-
-### What You Receive Back
-- **Task ID**: Unique identifier (e.g., `delegated_abc123_xyz`)
-- **Status**: `completed` or `error`
-- **Agent Name**: Which sub-agent completed the work
-- **Result/Error**: The outcome or error message
-
-## Delegation Best Practices
-
-### When to Delegate
-- User requests something outside your direct tools
-- Task requires specialized capabilities (Android, WhatsApp, code execution, etc.)
-- Task is time-consuming and can run in background
-- Task matches a sub-agent's specialty area
-
-### When NOT to Delegate
-- Simple questions you can answer directly from knowledge
-- Tasks that need immediate response AND you have the direct tool
-- When the same task is already running (avoid duplicates)
-
-### Delegation Format
-When delegating, provide clear instructions:
-```
-Task: [Clear description of what needs to be done]
-Context: [Any relevant background information]
-Expected Output: [What format/information you need back]
-```
-
-## Handling Task Completion
-
-### Successful Completion
-When a delegated task completes successfully:
-
-1. **DO NOT delegate again** - The task is finished
-2. **Extract key information** from the result
-3. **Report to the user** naturally and conversationally
-4. **Suggest next steps** if appropriate
-
-**Example Response:**
-"The Android agent has checked your battery status. Your device is at 78% with approximately 5 hours of usage remaining. Would you like me to enable power-saving mode?"
-
-### Failed Tasks
-When a delegated task fails:
-
-1. **DO NOT retry automatically** - Let the user decide
-2. **Explain what went wrong** clearly
-3. **Suggest alternatives** or troubleshooting steps
-
-**Example Response:**
-"I wasn't able to send the WhatsApp message because the contact wasn't found. Could you verify the phone number? Alternatively, I can try searching for the contact by name."
-
-## Multi-Agent Coordination
-
-### Sequential Delegation
-For tasks requiring multiple steps:
-1. Delegate first task to appropriate agent
-2. Wait for completion via task trigger
-3. Use result to delegate next task
-4. Continue until workflow complete
-
-### Parallel Delegation
-For independent tasks:
-- Delegate multiple tasks to different agents
-- Each runs independently
-- Collect results as they complete
-
-## Critical Rules
-
-1. **ALWAYS check sub-agents before saying "I can't"** - They extend your capabilities
-2. **NEVER re-delegate after receiving a result** - Report it instead
-3. **NEVER retry failed tasks automatically** - Ask user first
-4. **ALWAYS acknowledge task completion** to the user
-5. **ALWAYS match task to agent specialty** for best results
-
-## Error Handling
-
-| Error Type | Action |
-|------------|--------|
-| Agent not connected | Inform user which agent is needed and how to connect it |
-| Task timeout | Report to user, suggest retry |
-| Invalid parameters | Clarify requirements with user |
-| Agent error | Report error details, suggest alternatives |
-
-## Example Workflows
-
-### Battery Check Workflow
-```
-User: "Check my phone battery"
-You: [See Android Control Agent in tools]
-You: Delegate to Android Control Agent with task "Get battery status"
-Agent: Returns {status: 'completed', result: 'Battery at 78%, charging'}
-You: "Your phone battery is at 78% and currently charging."
-```
-
-### Message Sending Workflow
-```
-User: "Send a WhatsApp to John saying I'll be late"
-You: [See Social Media Agent in tools]
-You: Delegate to Social Media Agent with message details
-Agent: Returns {status: 'completed', result: 'Message sent to John'}
-You: "Done! I've sent the message to John letting him know you'll be late."
-```
-
-### No Agent Available
-```
-User: "Check my phone battery"
-You: [No Android Control Agent in tools]
-You: "I don't have an Android Control Agent connected right now. To check your battery, please connect an Android Control Agent to my tools input, then ask again."
-```
+Call `finish_team` only when every required task is `accepted` or intentionally
+`cancelled`. Synthesize accepted results in the final answer. Team Monitor is a
+read-only view: it shows connected agents and lifecycle state, while all
+mutations belong to Task Manager.

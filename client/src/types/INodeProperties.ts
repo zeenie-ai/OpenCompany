@@ -204,6 +204,8 @@ export interface INodeUIHints {
   isTodoEditor?: boolean;
   /** MiddleSection: render the team-monitor panel. */
   isMonitorPanel?: boolean;
+  /** MiddleSection: render the execution-scoped team task control panel. */
+  isTaskManagerPanel?: boolean;
   /** Special-case panel for gmaps_create with map preview. */
   showLocationPanel?: boolean;
   /** ConsolePanel: this node is a chat-message target. */

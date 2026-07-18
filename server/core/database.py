@@ -9,7 +9,7 @@ from pydantic_core import to_jsonable_python
 from sqlmodel import SQLModel, select
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import case, text, func, update
+from sqlalchemy import case, text, func, update, or_
 from contextlib import asynccontextmanager
 
 from core.config import Settings
@@ -33,6 +33,7 @@ from models.database import (
     AgentTeam,
     TeamMember,
     TeamTask,
+    TeamTaskAttempt,
     AgentMessage,
     SubagentConcurrencyCounter,
     SubagentConcurrencyPermit,
@@ -252,6 +253,29 @@ class Database:
                 if message_columns and "event_id" not in message_columns:
                     await conn.execute(text("ALTER TABLE agent_messages ADD COLUMN event_id VARCHAR(255)"))
                 await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_agent_messages_event_id ON agent_messages(event_id) WHERE event_id IS NOT NULL"))
+
+                result = await conn.execute(text("PRAGMA table_info(team_tasks)"))
+                task_columns = {row[1] for row in result.fetchall()}
+                additions = {
+                    "workflow_id": "VARCHAR(255)", "execution_id": "VARCHAR(255)",
+                    "root_execution_id": "VARCHAR(255)", "parent_agent_id": "VARCHAR(255)",
+                    "mission": "VARCHAR(10000)", "context": "JSON",
+                    "acceptance_criteria": "JSON", "queue_sequence": "INTEGER DEFAULT 0",
+                    "revision": "INTEGER DEFAULT 0", "current_attempt": "INTEGER DEFAULT 0",
+                    "child_workflow_id": "VARCHAR(500)", "child_run_id": "VARCHAR(255)",
+                    "trace_id": "VARCHAR(255)", "cancellation_requested": "BOOLEAN DEFAULT 0",
+                    "cancellation_reason": "VARCHAR(2000)", "usage": "JSON",
+                }
+                for column, definition in additions.items():
+                    if task_columns and column not in task_columns:
+                        await conn.execute(text(f"ALTER TABLE team_tasks ADD COLUMN {column} {definition}"))
+                if task_columns:
+                    await conn.execute(text("UPDATE team_tasks SET status='queued' WHERE status='pending'"))
+                    await conn.execute(text("UPDATE team_tasks SET status='running' WHERE status='in_progress'"))
+                    await conn.execute(text("UPDATE team_tasks SET status='submitted' WHERE status='completed'"))
+                    await conn.execute(text("UPDATE team_tasks SET status='cancelled' WHERE status='skipped'"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_team_tasks_execution_id ON team_tasks(execution_id)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_team_tasks_root_execution_id ON team_tasks(root_execution_id)"))
         except Exception as e:
             logger.warning(f"Agent-team migration check failed: {e}")
 
@@ -2523,14 +2547,116 @@ class Database:
                     priority=priority,
                     created_by=created_by,
                     depends_on={"task_ids": depends_on} if depends_on else None,
+                    status="queued",
                     created_at=datetime.now(timezone.utc),
                 )
                 session.add(task)
                 await session.commit()
-                return {"id": task.id, "title": title, "status": "pending"}
+                return {"id": task.id, "title": title, "status": "queued"}
         except Exception as e:
             logger.error(f"Failed to add team task: {e}")
             return None
+
+    @staticmethod
+    def _team_task_dict(task: TeamTask, attempts: Optional[List[TeamTaskAttempt]] = None) -> Dict[str, Any]:
+        allowed_actions = {
+            "blocked": ["modify", "cancel"], "queued": ["modify", "cancel"],
+            "running": ["cancel"], "submitted": ["accept", "retry", "reassign"],
+            "failed": ["retry", "reassign"], "cancelled": ["retry", "reassign"],
+            "accepted": [],
+        }.get(task.status, [])
+        return {
+            "id": task.id, "team_id": task.team_id, "workflow_id": task.workflow_id,
+            "execution_id": task.execution_id, "root_execution_id": task.root_execution_id,
+            "parent_agent_id": task.parent_agent_id, "title": task.title,
+            "description": task.description, "mission": task.mission,
+            "context": task.context, "acceptance_criteria": task.acceptance_criteria,
+            "status": task.status, "priority": task.priority, "queue_sequence": task.queue_sequence,
+            "created_by": task.created_by, "assigned_to": task.assigned_to,
+            "depends_on": task.depends_on.get("task_ids", []) if task.depends_on else [],
+            "result": task.result, "error": task.error, "progress": task.progress,
+            "revision": task.revision, "current_attempt": task.current_attempt,
+            "retry_count": task.retry_count, "max_retries": task.max_retries,
+            "child_workflow_id": task.child_workflow_id, "child_run_id": task.child_run_id,
+            "trace_id": task.trace_id, "cancellation_requested": task.cancellation_requested,
+            "cancellation_reason": task.cancellation_reason, "usage": task.usage,
+            "created_at": task.created_at.isoformat() if task.created_at else None,
+            "started_at": task.started_at.isoformat() if task.started_at else None,
+            "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+            "attempts": [
+                {"id": a.id, "attempt_number": a.attempt_number, "assignee_node_id": a.assignee_node_id,
+                 "status": a.status, "child_workflow_id": a.child_workflow_id,
+                 "child_run_id": a.child_run_id, "result": a.result, "error": a.error,
+                 "usage": a.usage, "created_at": a.created_at.isoformat() if a.created_at else None,
+                 "started_at": a.started_at.isoformat() if a.started_at else None,
+                 "completed_at": a.completed_at.isoformat() if a.completed_at else None}
+                for a in (attempts or [])
+            ],
+            "allowed_actions": allowed_actions,
+        }
+
+    async def create_durable_team_task(self, **values: Any) -> Optional[Dict[str, Any]]:
+        """Persist one scoped queue item, idempotently by task id."""
+        try:
+            async with self.get_session() as session:
+                existing = (await session.execute(select(TeamTask).where(TeamTask.id == values["id"]))).scalar_one_or_none()
+                if existing:
+                    return self._team_task_dict(existing) if existing.team_id == values["team_id"] else None
+                maximum = (await session.execute(
+                    select(func.max(TeamTask.queue_sequence)).where(TeamTask.team_id == values["team_id"])
+                )).scalar_one_or_none() or 0
+                values.setdefault("queue_sequence", maximum + 1)
+                values.setdefault("status", "blocked" if values.get("depends_on") else "queued")
+                if isinstance(values.get("depends_on"), list):
+                    values["depends_on"] = {"task_ids": values["depends_on"]}
+                task = TeamTask(**values)
+                session.add(task)
+                await session.commit()
+                await session.refresh(task)
+                return self._team_task_dict(task)
+        except Exception as e:
+            logger.error(f"Failed to create durable team task: {e}")
+            return None
+
+    async def get_durable_team_task(self, team_id: str, task_id: str) -> Optional[Dict[str, Any]]:
+        async with self.get_session() as session:
+            task = (await session.execute(select(TeamTask).where(TeamTask.id == task_id, TeamTask.team_id == team_id))).scalar_one_or_none()
+            if not task:
+                return None
+            attempts = (await session.execute(
+                select(TeamTaskAttempt).where(TeamTaskAttempt.task_id == task_id).order_by(TeamTaskAttempt.attempt_number)
+            )).scalars().all()
+            return self._team_task_dict(task, list(attempts))
+
+    async def transition_team_task(
+        self, team_id: str, task_id: str, expected_revision: int,
+        allowed_statuses: List[str], values: Dict[str, Any], *, create_attempt: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        """Revision-and-state guarded task transition (compare-and-swap)."""
+        async with self.get_session() as session:
+            values = dict(values)
+            values["revision"] = expected_revision + 1
+            changed = await session.execute(
+                update(TeamTask).where(
+                    TeamTask.id == task_id, TeamTask.team_id == team_id,
+                    TeamTask.revision == expected_revision, TeamTask.status.in_(allowed_statuses),
+                ).values(**values)
+            )
+            if changed.rowcount != 1:
+                await session.rollback()
+                return None
+            task = (await session.execute(select(TeamTask).where(TeamTask.id == task_id))).scalar_one()
+            if create_attempt:
+                attempt_number = task.current_attempt
+                session.add(TeamTaskAttempt(
+                    id=f"{task.id}:attempt:{attempt_number}", task_id=task.id, team_id=team_id,
+                    attempt_number=attempt_number, assignee_node_id=task.assigned_to,
+                    status=task.status, child_workflow_id=task.child_workflow_id,
+                    child_run_id=task.child_run_id, created_at=datetime.now(timezone.utc),
+                ))
+            await session.commit()
+            await session.refresh(task)
+            return self._team_task_dict(task)
 
     async def get_team_tasks(self, team_id: str, status: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get team tasks, optionally filtered by status."""
@@ -2539,21 +2665,17 @@ class Database:
                 query = select(TeamTask).where(TeamTask.team_id == team_id)
                 if status:
                     query = query.where(TeamTask.status == status)
-                query = query.order_by(TeamTask.priority.asc(), TeamTask.created_at.asc())
+                query = query.order_by(TeamTask.queue_sequence.asc(), TeamTask.created_at.asc(), TeamTask.id.asc())
                 result = await session.execute(query)
-                return [
-                    {
-                        "id": t.id,
-                        "title": t.title,
-                        "description": t.description,
-                        "status": t.status,
-                        "priority": t.priority,
-                        "assigned_to": t.assigned_to,
-                        "progress": t.progress,
-                        "depends_on": t.depends_on.get("task_ids", []) if t.depends_on else [],
-                    }
-                    for t in result.scalars().all()
-                ]
+                tasks = [self._team_task_dict(t) for t in result.scalars().all()]
+                queue_position = 0
+                for task in tasks:
+                    if task["status"] in {"blocked", "queued", "pending"}:
+                        queue_position += 1
+                        task["queue_position"] = queue_position
+                    else:
+                        task["queue_position"] = None
+                return tasks
         except Exception as e:
             logger.error(f"Failed to get team tasks: {e}")
             return []
@@ -2566,12 +2688,12 @@ class Database:
                     update(TeamTask)
                     .where(
                         TeamTask.id == task_id,
-                        TeamTask.status == "pending",
-                        TeamTask.assigned_to.is_(None),
+                        TeamTask.status == "queued",
+                        or_(TeamTask.assigned_to.is_(None), TeamTask.assigned_to == agent_node_id),
                     )
                     .values(
                         assigned_to=agent_node_id,
-                        status="in_progress",
+                        status="running",
                         started_at=datetime.now(timezone.utc),
                     )
                 )
@@ -2588,7 +2710,7 @@ class Database:
 
                 won = bool(claimed.rowcount == 1)
                 same_agent_retry = (
-                    task.status == "in_progress"
+                    task.status == "running"
                     and task.assigned_to == agent_node_id
                 )
                 if not won and not same_agent_retry:
@@ -2606,17 +2728,17 @@ class Database:
             return None
 
     async def complete_task(self, task_id: str, result_data: Optional[Dict[str, Any]] = None) -> bool:
-        """Atomically transition an in-progress task to completed."""
+        """Atomically submit a running task for lead review."""
         try:
             async def _complete(session: AsyncSession) -> Dict[str, Any]:
                 completed = await session.execute(
                     update(TeamTask)
                     .where(
                         TeamTask.id == task_id,
-                        TeamTask.status == "in_progress",
+                        TeamTask.status == "running",
                     )
                     .values(
-                        status="completed",
+                        status="submitted",
                         result=result_data,
                         progress=100,
                         completed_at=datetime.now(timezone.utc),
@@ -2631,7 +2753,7 @@ class Database:
                 task = selected.scalar_one_or_none()
                 return {
                     "success": bool(
-                        task is not None and task.status == "completed"
+                        task is not None and task.status == "submitted"
                     )
                 }
 
@@ -2656,13 +2778,13 @@ class Database:
                     update(TeamTask)
                     .where(
                         TeamTask.id == task_id,
-                        TeamTask.status == "in_progress",
+                        TeamTask.status == "running",
                     )
                     .values(
                         error=error,
                         retry_count=next_retry,
                         status=case(
-                            (retryable, "pending"),
+                            (retryable, "queued"),
                             else_="failed",
                         ),
                         assigned_to=case(
@@ -2687,7 +2809,7 @@ class Database:
                 return {
                     "success": bool(
                         task is not None
-                        and task.status in {"pending", "failed"}
+                        and task.status in {"queued", "failed"}
                         and task.error == error
                     )
                 }
@@ -2709,10 +2831,10 @@ class Database:
             async with self.get_session() as session:
                 result = await session.execute(select(TeamTask).where(TeamTask.team_id == team_id))
                 tasks = result.scalars().all()
-                completed_ids = {t.id for t in tasks if t.status == "completed"}
+                completed_ids = {t.id for t in tasks if t.status == "accepted"}
                 claimable = []
                 for t in tasks:
-                    if t.status != "pending" or t.assigned_to:
+                    if t.status != "queued":
                         continue
                     deps = t.depends_on.get("task_ids", []) if t.depends_on else []
                     if all(d in completed_ids for d in deps):
@@ -2822,6 +2944,19 @@ class Database:
                 tasks_result = await session.execute(select(TeamTask).where(TeamTask.team_id == team_id))
                 tasks = tasks_result.scalars().all()
 
+                counts = {
+                    state: sum(t.status == state for t in tasks)
+                    for state in ("blocked", "queued", "running", "submitted", "accepted", "failed", "cancelled")
+                }
+                # Compatibility with rows created by older runtimes during a rolling upgrade.
+                pending_count = counts["blocked"] + counts["queued"] + sum(t.status == "pending" for t in tasks)
+                active_count = counts["running"] + sum(t.status == "in_progress" for t in tasks)
+                # A worker result is only submitted for review. "Done" means
+                # the lead explicitly accepted it (plus historical completed
+                # rows retained for compatibility).
+                completed_count = counts["accepted"] + sum(t.status == "completed" for t in tasks)
+                failed_count = counts["failed"]
+
                 return {
                     "team_id": team_id,
                     "status": team.status,
@@ -2843,18 +2978,24 @@ class Database:
                     "active_count": active_count,
                     "completed_count": completed_count,
                     "failed_count": failed_count,
+                    "blocked_count": counts["blocked"],
+                    "submitted_count": counts["submitted"],
+                    "accepted_count": counts["accepted"],
+                    "cancelled_count": counts["cancelled"],
+                    "status_counts": counts,
                     "members": [{"id": m.agent_node_id, "agent_node_id": m.agent_node_id,
                                  "type": m.agent_type, "agent_type": m.agent_type, "label": m.agent_label,
                                  "role": m.role, "status": m.status, "capabilities": m.capabilities} for m in members],
                     "queued_tasks": [
                         {"id": t.id, "title": t.title, "assigned_to": t.assigned_to}
-                        for t in tasks if t.status == "pending"
+                        for t in tasks if t.status in {"pending", "blocked", "queued"}
                     ],
                     "active_tasks": [
                         {"id": t.id, "title": t.title, "assigned_to": t.assigned_to, "progress": t.progress}
                         for t in tasks
-                        if t.status == "in_progress"
+                        if t.status in {"in_progress", "running"}
                     ],
+                    "tasks": [self._team_task_dict(t) for t in sorted(tasks, key=lambda item: (item.queue_sequence, item.created_at))],
                 }
         except Exception as e:
             logger.error(f"Failed to get team stats: {e}")

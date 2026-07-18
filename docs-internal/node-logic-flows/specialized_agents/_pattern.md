@@ -55,7 +55,7 @@ All 13 agents share these input handles.
 | `input-memory` | input/memory | no | `simpleMemory` node for conversation history |
 | `input-tools` | input/tools | no | Tool nodes exposed to the LLM via `chat_model.bind_tools` |
 | `input-task` | input/task | no | `taskTrigger` events from delegated child agents |
-| `input-teammates` | input/teammates | no | **Only on `orchestrator_agent` and `ai_employee`** (via `team_lead_agent_handles()`) -- connected agents become `delegate_to_*` tools |
+| `input-teammates` | input/teammates | no | **Only on `orchestrator_agent` and `ai_employee`** (via `team_lead_agent_handles()`) -- connected agents become Task Manager-authorized assignees |
 
 Handle topology comes from `std_agent_handles()` (or `team_lead_agent_handles()`
 for the two team leads) in
@@ -122,7 +122,7 @@ flowchart TD
   E -- yes --> F[prompt = input_data.message/text/content/str]
   E -- no --> G{team lead?<br/>orchestrator / ai_employee}
   F --> G
-  G -- yes --> H[collect_teammate_connections<br/>append as delegate_to_* tools]
+  G -- yes --> H[collect_teammate_connections<br/>bind Task Manager assignees]
   G -- no --> I[ai_service.execute_chat_agent]
   H --> I
   I --> J[Return result payload<br/>or raise RuntimeError]

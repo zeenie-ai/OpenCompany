@@ -33,7 +33,7 @@ own plugin folder; there is no `functools.partial` wiring anymore.
 | `input-memory` | main | no | `simpleMemory` node for conversation history. |
 | `input-tools` | main | no | Tool nodes bound to the LLM via `chat_model.bind_tools`. |
 | `input-task` | main | no | `taskTrigger` output - formatted and prepended to the prompt. |
-| `input-teammates` | main | no | **Team-lead only** (`orchestrator_agent`, `ai_employee`). Agents on this handle become `delegate_to_<name>` tools. |
+| `input-teammates` | main | no | **Team-lead only** (`orchestrator_agent`, `ai_employee`). Agents on this handle become authorized Task Manager assignees. |
 
 ## Parameters
 
@@ -91,7 +91,7 @@ flowchart TD
   database)` to find nodes wired to `input-teammates`. Each teammate is
   appended to `tool_data` as a synthetic entry (with `child_tools` describing
   its own `input-tools` neighbours). The AIService then exposes them to the LLM
-  as `delegate_to_<type>` tools (see [Agent Teams](../../agent_teams.md)).
+  as durable Task Manager assignees (see [Agent Teams](../../agent_teams.md)).
 
 ## Side Effects
 

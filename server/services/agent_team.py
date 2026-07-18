@@ -6,6 +6,7 @@ Teams are scoped to specific workflow executions.
 
 import uuid
 import hashlib
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from core.database import Database
 from core.logging import get_logger
@@ -134,6 +135,112 @@ class AgentTeamService:
             return {"error": "Team not found"}
         return await self.database.get_team_stats(team_id)
 
+    async def resolve_lead_scope(
+        self, *, workflow_id: str, team_lead_node_id: str,
+        execution_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Resolve authority from the owning lead; callers cannot choose a team."""
+        team = await self.database.find_team(workflow_id, team_lead_node_id, execution_id)
+        if not team:
+            raise ValueError("No team exists for this lead execution")
+        return team
+
+    async def _authorized_assignee(self, team_id: str, agent_node_id: str) -> Dict[str, Any]:
+        stats = await self.database.get_team_stats(team_id)
+        member = next((m for m in stats.get("members", []) if m["agent_node_id"] == agent_node_id), None)
+        if not member or member.get("role") != "teammate":
+            raise ValueError("Assignee is not a teammate of this lead")
+        if member.get("status") == "offline":
+            raise ValueError("Assignee is no longer available")
+        return member
+
+    async def assign_durable_task(
+        self, *, workflow_id: str, team_lead_node_id: str, execution_id: Optional[str],
+        assignee_node_id: str, title: str, mission: str,
+        context: Optional[Dict[str, Any]] = None,
+        acceptance_criteria: Optional[Dict[str, Any]] = None,
+        depends_on: Optional[List[str]] = None, task_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        team = await self.resolve_lead_scope(workflow_id=workflow_id, team_lead_node_id=team_lead_node_id, execution_id=execution_id)
+        team_id = team["id"]
+        await self._authorized_assignee(team_id, assignee_node_id)
+        dependencies_resolved = True
+        for dependency in depends_on or []:
+            dependency_task = await self.database.get_durable_team_task(team_id, dependency)
+            if not dependency_task:
+                raise ValueError(f"Dependency is outside this team: {dependency}")
+            dependencies_resolved = dependencies_resolved and dependency_task.get("status") == "accepted"
+        task = await self.database.create_durable_team_task(
+            id=task_id or f"task_{uuid.uuid4().hex[:12]}", team_id=team_id,
+            workflow_id=team["workflow_id"], execution_id=team.get("execution_id"),
+            root_execution_id=team.get("root_execution_id"), parent_agent_id=team_lead_node_id,
+            title=title, mission=mission, description=mission, context=context,
+            acceptance_criteria=acceptance_criteria, created_by=team_lead_node_id,
+            assigned_to=assignee_node_id, depends_on=depends_on, trace_id=trace_id,
+            status="queued" if dependencies_resolved else "blocked",
+        )
+        if not task:
+            raise RuntimeError("Failed to persist task")
+        await self.database.update_team_status(team_id, "active")
+        if self.broadcaster:
+            await self.broadcaster.broadcast_team_event(team_id, "team.task.queued", task)
+        return task
+
+    async def list_durable_tasks(self, *, workflow_id: str, team_lead_node_id: str, execution_id: Optional[str], status: Optional[str] = None) -> List[Dict[str, Any]]:
+        team = await self.resolve_lead_scope(workflow_id=workflow_id, team_lead_node_id=team_lead_node_id, execution_id=execution_id)
+        return await self.database.get_team_tasks(team["id"], status)
+
+    async def get_durable_task(self, *, workflow_id: str, team_lead_node_id: str, execution_id: Optional[str], task_id: str) -> Dict[str, Any]:
+        team = await self.resolve_lead_scope(workflow_id=workflow_id, team_lead_node_id=team_lead_node_id, execution_id=execution_id)
+        task = await self.database.get_durable_team_task(team["id"], task_id)
+        if not task:
+            raise ValueError("Task not found in this lead execution")
+        return task
+
+    async def mutate_durable_task(
+        self, *, workflow_id: str, team_lead_node_id: str, execution_id: Optional[str],
+        task_id: str, revision: int, operation: str, **payload: Any,
+    ) -> Dict[str, Any]:
+        team = await self.resolve_lead_scope(workflow_id=workflow_id, team_lead_node_id=team_lead_node_id, execution_id=execution_id)
+        team_id = team["id"]
+        task = await self.database.get_durable_team_task(team_id, task_id)
+        if not task:
+            raise ValueError("Task not found in this lead execution")
+        now = datetime.now(timezone.utc)
+        transitions: Dict[str, tuple[List[str], Dict[str, Any], bool]] = {
+            "modify": (["blocked", "queued"], {k: payload[k] for k in ("title", "mission", "context", "acceptance_criteria") if payload.get(k) is not None}, False),
+            "cancel": (["blocked", "queued", "running"], {"status": "cancelled", "cancellation_requested": True, "cancellation_reason": payload.get("reason"), "completed_at": now}, False),
+            "accept": (["submitted"], {"status": "accepted", "completed_at": now, "progress": 100}, False),
+            "retry": (["failed", "submitted", "cancelled"], {"status": "queued", "current_attempt": task["current_attempt"] + 1, "retry_count": task["retry_count"] + 1, "result": None, "error": None, "completed_at": None, "cancellation_requested": False, "cancellation_reason": None}, True),
+        }
+        if operation == "reassign":
+            assignee = payload.get("assignee_node_id")
+            await self._authorized_assignee(team_id, assignee)
+            allowed, values, create_attempt = transitions["retry"]
+            values = {**values, "assigned_to": assignee}
+        elif operation in transitions:
+            allowed, values, create_attempt = transitions[operation]
+        else:
+            raise ValueError(f"Unsupported task operation: {operation}")
+        if operation == "modify" and not values:
+            raise ValueError("No mutable task fields supplied")
+        changed = await self.database.transition_team_task(team_id, task_id, revision, allowed, values, create_attempt=create_attempt)
+        if not changed:
+            raise ValueError("Task changed or is not in a valid state; refresh and retry")
+        if self.broadcaster:
+            await self.broadcaster.broadcast_team_event(team_id, f"team.task.{changed['status']}", changed)
+        return changed
+
+    async def finish_durable_team(self, *, workflow_id: str, team_lead_node_id: str, execution_id: Optional[str]) -> Dict[str, Any]:
+        team = await self.resolve_lead_scope(workflow_id=workflow_id, team_lead_node_id=team_lead_node_id, execution_id=execution_id)
+        tasks = await self.database.get_team_tasks(team["id"])
+        unresolved = [t for t in tasks if t["status"] not in {"accepted", "cancelled"}]
+        if unresolved:
+            raise ValueError("Team has unresolved tasks")
+        await self.database.update_team_status(team["id"], "completed")
+        return await self.database.get_team_stats(team["id"])
+
     # -------------------------------------------------------------------------
     # Task Management
     # -------------------------------------------------------------------------
@@ -188,7 +295,7 @@ class AgentTeamService:
         return task
 
     async def complete_task(self, team_id: str, task_id: str, result: Optional[Dict[str, Any]] = None) -> bool:
-        """Mark a task as completed."""
+        """Submit a worker result for lead review."""
         # Get task to find assigned agent
         tasks = await self.database.get_team_tasks(team_id)
         task = next((t for t in tasks if t["id"] == task_id), None)
@@ -201,7 +308,7 @@ class AgentTeamService:
                 await self.database.update_member_status(team_id, task["assigned_to"], "idle")
 
             if self.broadcaster:
-                await self.broadcaster.broadcast_team_event(team_id, "task_completed", {"task_id": task_id, "result": result})
+                await self.broadcaster.broadcast_team_event(team_id, "team.task.submitted", {"task_id": task_id, "result": result})
 
         return success
 
@@ -226,11 +333,11 @@ class AgentTeamService:
         return await self.database.get_claimable_tasks(team_id)
 
     async def is_team_done(self, team_id: str) -> bool:
-        """Check if all tasks are completed/failed."""
+        """Check whether all tasks have been explicitly resolved."""
         tasks = await self.database.get_team_tasks(team_id)
         if not tasks:
             return True
-        return all(t["status"] in ("completed", "failed", "skipped") for t in tasks)
+        return all(t["status"] in ("accepted", "failed", "cancelled", "skipped") for t in tasks)
 
     async def acquire_subagent_permit(self, root_execution_id: str, permit_id: str, limit: int = 3) -> bool:
         """Acquire one cross-process descendant slot for a delegation."""

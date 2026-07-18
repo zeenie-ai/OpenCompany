@@ -46,6 +46,7 @@ References:
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
@@ -104,6 +105,7 @@ AGENT_ACTIVITY_RETRY: RetryPolicy = DEFAULT_ACTIVITY_RETRY
 # validation. Existing histories must retain their recorded activity/child
 # ids and last-wins tool index; new histories take the isolated path.
 TOOL_CALL_IDENTITY_V2_PATCH = "agent-tool-call-identity-v2"
+TASK_MANAGER_DELEGATION_PATCH = "agent-task-manager-delegation-v1"
 DUPLICATE_TOOL_NAME_ERROR_TYPE = "DuplicateToolNameError"
 
 
@@ -275,6 +277,7 @@ class AgentWorkflow:
         # runs record this marker and receive per-call command identity plus
         # deterministic duplicate-name validation.
         use_tool_call_identity_v2 = workflow.patched(TOOL_CALL_IDENTITY_V2_PATCH)
+        use_task_manager_delegation = workflow.patched(TASK_MANAGER_DELEGATION_PATCH)
 
         # ---- Step 0: Resolve payload via the prep activity --------------
         # DB lookups + edge walking + tool schema build happen here, NOT
@@ -419,7 +422,7 @@ class AgentWorkflow:
                 "model": payload["model"],
                 "api_key": payload["api_key"],
                 "messages": messages,
-                "tool_data": [t["tool_info"] for t in tools],
+                "tool_data": [t["tool_info"] for t in tools if not t.get("llm_hidden")],
                 "system_message": system,
                 "temperature": payload.get("temperature", 0.7),
                 "max_tokens": payload.get("max_tokens", 4096),
@@ -477,16 +480,26 @@ class AgentWorkflow:
 
             if kind == "final":
                 final_content = step_result.get("content", "")
-                await self._persist_turn(payload, human_text=user_prompt, assistant_text=final_content)
                 team_id = str(payload.get("team_id") or "")
                 if team_id and payload.get("owns_execution_team"):
-                    await workflow.execute_activity(
+                    finalization = await workflow.execute_activity(
                         "agent.finalize_team.v1",
                         args=[{"team_id": team_id}],
                         activity_id="finalize-agent-team",
                         start_to_close_timeout=PERSIST_TURN_TIMEOUT,
                         retry_policy=AGENT_ACTIVITY_RETRY,
                     )
+                    if finalization.get("status") == "active":
+                        messages.append({
+                            "type": "human",
+                            "data": {"content": (
+                                "Team finalization is blocked: delegated work is still queued, running, "
+                                "failed, or awaiting review. Use Task Manager to inspect every task and "
+                                "accept, retry, reassign, or cancel it before producing the final report."
+                            )},
+                        })
+                        continue
+                await self._persist_turn(payload, human_text=user_prompt, assistant_text=final_content)
                 break
 
             if kind != "tool_calls":
@@ -598,6 +611,13 @@ class AgentWorkflow:
                         "team_task_id": child_context["team_task_id"],
                         "parent_agent_node_id": agent_node_id,
                         "child_agent_node_id": candidate_tool["tool_node_id"],
+                        "child_agent_name": str(
+                            (candidate_tool.get("tool_info") or {}).get("label")
+                            or candidate_tool.get("node_type")
+                            or "agent"
+                        ),
+                        "workflow_id": payload.get("workflow_id"),
+                        "parent_agent_workflow_id": workflow.info().workflow_id,
                         "task": task,
                         "root_execution_id": root_execution_id,
                         "delegation_depth": delegation_depth + 1,
@@ -695,6 +715,286 @@ class AgentWorkflow:
                             retry_policy=AGENT_ACTIVITY_RETRY,
                         )
                     raise
+
+            async def _run_task_manager_delegation(
+                request: Dict[str, Any], call_index: int, call: Dict[str, Any]
+            ) -> Any:
+                """Execute a trusted Task Manager scheduling envelope.
+
+                ``assign_task`` has already authorized the teammate and
+                persisted the TeamTask. This bridge resolves that teammate
+                against the workflow's bound delegate surface and reuses the
+                exact durable permit/claim/child/finalize lifecycle used by a
+                direct ``delegate_to_*`` call.
+                """
+                nonlocal yielded_own_permit
+
+                delegate_name = str(request.get("delegate_name") or "")
+                assignee_id = str(request.get("assignee_node_id") or "")
+                task_id = str(request.get("team_task_id") or "")
+                mission = str(request.get("task") or "")
+                request_context = request.get("context") or ""
+                if not all((delegate_name, assignee_id, task_id, mission)):
+                    raise ValueError("Task Manager returned an incomplete delegation_request")
+
+                delegate = tool_index.get(delegate_name)
+                if (
+                    delegate is None
+                    or str(delegate.get("tool_node_id") or "") != assignee_id
+                    or delegate.get("node_type") not in AGENT_WORKFLOW_TYPES
+                ):
+                    raise ValueError(
+                        "Task Manager assignee is not a connected Temporal delegate"
+                    )
+                if delegation_depth >= max_delegation_depth:
+                    raise ValueError(
+                        f"Maximum delegation depth {max_delegation_depth} exceeded"
+                    )
+
+                # A lead child cannot retain its own descendant permit while
+                # waiting for another one; doing so can deadlock when every
+                # root-wide slot is occupied by leads assigning descendants.
+                if own_permit_id and not yielded_own_permit:
+                    await workflow.execute_activity(
+                        "agent.release_subagent_permit.v1",
+                        args=[{"root_execution_id": root_execution_id, "permit_id": own_permit_id}],
+                        activity_id=f"yield-own-permit-task-manager-{iteration + 1}",
+                        start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                        retry_policy=AGENT_ACTIVITY_RETRY,
+                    )
+                    yielded_own_permit = True
+
+                team_id = str(payload.get("team_id") or context.get("team_id") or "")
+                if not team_id:
+                    raise ValueError("Task Manager delegation requires an execution team")
+                trace_id = str(call.get("id", "") or "")
+                lifecycle = {
+                    "team_id": team_id,
+                    "team_task_id": task_id,
+                    "parent_agent_node_id": agent_node_id,
+                    "child_agent_node_id": assignee_id,
+                    "child_agent_name": str(
+                        (delegate.get("tool_info") or {}).get("label")
+                        or delegate.get("node_type")
+                        or "agent"
+                    ),
+                    "workflow_id": payload.get("workflow_id"),
+                    "parent_agent_workflow_id": workflow.info().workflow_id,
+                    "task": mission,
+                    "root_execution_id": root_execution_id,
+                    "delegation_depth": delegation_depth + 1,
+                    "trace_id": trace_id,
+                    "assignment_event_id": f"{task_id}:assigned",
+                }
+                # queue_delegation is intentionally retained: it is
+                # idempotent for the pre-created task and records the same
+                # lifecycle event as direct delegation without duplicating it.
+                await workflow.execute_activity(
+                    "agent.queue_delegation.v1",
+                    args=[{**lifecycle, "queued_event_id": f"{task_id}:queued"}],
+                    activity_id=f"queue-task-manager-{iteration + 1}-{call_index + 1}",
+                    start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                    retry_policy=AGENT_ACTIVITY_RETRY,
+                )
+                await workflow.execute_activity(
+                    "agent.acquire_subagent_permit.v1",
+                    args=[{
+                        "root_execution_id": root_execution_id,
+                        "permit_id": task_id,
+                        "limit": max_concurrent_subagents,
+                    }],
+                    activity_id=f"acquire-task-manager-{iteration + 1}-{call_index + 1}",
+                    start_to_close_timeout=timedelta(hours=1),
+                    heartbeat_timeout=timedelta(seconds=10),
+                    retry_policy=AGENT_ACTIVITY_RETRY,
+                )
+                claimed = False
+                finalization_started = False
+                try:
+                    await workflow.execute_activity(
+                        "agent.begin_delegation.v1",
+                        args=[lifecycle],
+                        activity_id=f"begin-task-manager-{iteration + 1}-{call_index + 1}",
+                        start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                        retry_policy=AGENT_ACTIVITY_RETRY,
+                    )
+                    claimed = True
+                    context_text = (
+                        request_context
+                        if isinstance(request_context, str)
+                        else _serialise_tool_result(request_context)
+                    )
+                    child_context = {
+                        "node_id": assignee_id,
+                        "node_type": delegate["node_type"],
+                        "node_data": {
+                            **(delegate.get("parameters") or {}),
+                            "system_message": mission,
+                            "prompt": context_text or mission,
+                        },
+                        "inputs": {},
+                        "workflow_id": payload.get("workflow_id"),
+                        "session_id": payload.get("session_id", "default"),
+                        "execution_id": execution_id,
+                        "root_execution_id": root_execution_id,
+                        "parent_node_id": agent_node_id,
+                        "delegation_depth": delegation_depth + 1,
+                        "team_id": team_id,
+                        "team_task_id": task_id,
+                        "trace_id": trace_id,
+                        "nodes": context.get("nodes") or [],
+                        "edges": context.get("edges") or [],
+                        "invocation": {"task": mission, "context": context_text},
+                    }
+                    child_id = _delegation_child_id_v2(
+                        workflow.info().workflow_id, assignee_id, iteration, call_index
+                    ) + f"-{task_id}"
+                    result = await workflow.execute_child_workflow(
+                        "AgentWorkflow",
+                        args=[child_context],
+                        id=child_id,
+                        execution_timeout=timedelta(hours=1),
+                        run_timeout=timedelta(hours=1),
+                    )
+                    succeeded = bool(result.get("success", True)) if isinstance(result, dict) else True
+                    finalization_started = True
+                    finalization = await workflow.execute_activity(
+                        "agent.finish_delegation.v1",
+                        args=[{
+                            **lifecycle,
+                            "success": succeeded,
+                            "result": result if isinstance(result, dict) else {"result": result},
+                            "error": result.get("error") if isinstance(result, dict) else None,
+                            "terminal_event_id": f"{task_id}:terminal",
+                        }],
+                        activity_id=f"finish-task-manager-{iteration + 1}-{call_index + 1}",
+                        start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                        retry_policy=AGENT_ACTIVITY_RETRY,
+                    )
+                    return {
+                        "result": result,
+                        "status": finalization.get("status", "submitted"),
+                    }
+                except Exception as exc:
+                    if claimed and not finalization_started:
+                        await workflow.execute_activity(
+                            "agent.finish_delegation.v1",
+                            args=[{
+                                **lifecycle,
+                                "success": False,
+                                "error": f"{type(exc).__name__}: {exc}",
+                                "terminal_event_id": f"{task_id}:terminal",
+                            }],
+                            activity_id=f"finish-task-manager-{iteration + 1}-{call_index + 1}",
+                            start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                            retry_policy=AGENT_ACTIVITY_RETRY,
+                        )
+                    raise
+                finally:
+                    await workflow.execute_activity(
+                        "agent.release_subagent_permit.v1",
+                        args=[{"root_execution_id": root_execution_id, "permit_id": task_id}],
+                        activity_id=f"release-task-manager-{iteration + 1}-{call_index + 1}",
+                        start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                        retry_policy=AGENT_ACTIVITY_RETRY,
+                    )
+
+            # Preflight every Task Manager assignment activity in this LLM
+            # turn concurrently. Each activity performs authorization and
+            # creates its durable queue row; only trusted scheduling envelopes
+            # are allowed to reach the child-workflow bridge below.
+            task_manager_preflight_indices: List[int] = []
+            task_manager_preflight_handles: List[Any] = []
+            if use_task_manager_delegation:
+                for preflight_index, preflight_call in enumerate(calls):
+                    preflight_tool = tool_index.get(preflight_call.get("name", ""))
+                    preflight_args = preflight_call.get("args") or {}
+                    if (
+                        preflight_tool
+                        and preflight_tool.get("node_type") == "taskManager"
+                        and preflight_args.get("operation") == "assign_task"
+                    ):
+                        preflight_metadata = (
+                            _tool_call_metadata(
+                                agent_node_id=agent_node_id,
+                                iteration=iteration,
+                                call_index=preflight_index,
+                                call=preflight_call,
+                            )
+                            if use_tool_call_identity_v2
+                            else {}
+                        )
+                        preflight_payload = {
+                            "node_id": preflight_tool["tool_node_id"],
+                            "node_type": "taskManager",
+                            "node_data": {
+                                **(preflight_tool.get("parameters") or {}),
+                                **preflight_args,
+                            },
+                            "inputs": {},
+                            "workflow_id": payload.get("workflow_id"),
+                            "session_id": payload.get("session_id", "default"),
+                            "execution_id": execution_id,
+                            "root_execution_id": root_execution_id,
+                            "parent_node_id": agent_node_id,
+                            "team_lead_node_id": agent_node_id,
+                            "nodes": context.get("nodes") or [],
+                            "edges": context.get("edges") or [],
+                            **preflight_metadata,
+                        }
+                        task_manager_preflight_indices.append(preflight_index)
+                        task_manager_preflight_handles.append(
+                            workflow.start_activity(
+                                f"node.taskManager.v{preflight_tool['version']}",
+                                args=[preflight_payload],
+                                activity_id=(
+                                    f"task-manager-preflight-{iteration + 1}-"
+                                    f"{preflight_index + 1}"
+                                ),
+                                start_to_close_timeout=TOOL_STEP_TIMEOUT,
+                                heartbeat_timeout=TOOL_HEARTBEAT_TIMEOUT,
+                            )
+                        )
+
+            task_manager_preflight_results: Dict[int, Any] = {}
+            task_manager_delegation_tasks: Dict[int, asyncio.Task[Any]] = {}
+            if task_manager_preflight_handles:
+                preflight_results = await asyncio.gather(
+                    *task_manager_preflight_handles, return_exceptions=True
+                )
+                for preflight_index, preflight_result in zip(
+                    task_manager_preflight_indices, preflight_results
+                ):
+                    task_manager_preflight_results[preflight_index] = preflight_result
+
+                # Yield a child lead's slot exactly once before descendant
+                # assignment coroutines contend for root-wide permits.
+                if own_permit_id and not yielded_own_permit:
+                    await workflow.execute_activity(
+                        "agent.release_subagent_permit.v1",
+                        args=[{
+                            "root_execution_id": root_execution_id,
+                            "permit_id": own_permit_id,
+                        }],
+                        activity_id=f"yield-own-permit-task-manager-{iteration + 1}",
+                        start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                        retry_policy=AGENT_ACTIVITY_RETRY,
+                    )
+                    yielded_own_permit = True
+
+                for preflight_index in task_manager_preflight_indices:
+                    preflight_result = task_manager_preflight_results[preflight_index]
+                    if isinstance(preflight_result, BaseException):
+                        continue
+                    delegation_request = preflight_result.get("delegation_request")
+                    if isinstance(delegation_request, dict):
+                        task_manager_delegation_tasks[preflight_index] = asyncio.create_task(
+                            _run_task_manager_delegation(
+                                delegation_request,
+                                preflight_index,
+                                calls[preflight_index],
+                            )
+                        )
 
             next_delegation_to_start = 0
             for delegation_index in delegation_call_indices[:max_concurrent_subagents]:
@@ -828,6 +1128,11 @@ class AgentWorkflow:
                     "workflow_id": payload.get("workflow_id"),
                     "session_id": payload.get("session_id", "default"),
                     "execution_id": execution_id,
+                    "parent_node_id": agent_node_id,
+                    "team_lead_node_id": agent_node_id,
+                    "team_id": payload.get("team_id") or context.get("team_id"),
+                    "root_execution_id": root_execution_id,
+                    "delegation_depth": delegation_depth,
                     "nodes": child_nodes,
                     "edges": child_edges,
                     # Surface the auto-rebind toggle into the tool's ctx
@@ -881,6 +1186,13 @@ class AgentWorkflow:
                                     "team_task_id": task_id,
                                     "parent_agent_node_id": agent_node_id,
                                     "child_agent_node_id": tool_info["tool_node_id"],
+                                    "child_agent_name": str(
+                                        (tool_info.get("tool_info") or {}).get("label")
+                                        or tool_info.get("node_type")
+                                        or "agent"
+                                    ),
+                                    "workflow_id": payload.get("workflow_id"),
+                                    "parent_agent_workflow_id": workflow.info().workflow_id,
                                     "root_execution_id": root_execution_id,
                                     "trace_id": str(call.get("id", "") or ""),
                                     "success": bool(tool_result.get("success", True))
@@ -911,13 +1223,38 @@ class AgentWorkflow:
                             if use_tool_call_identity_v2
                             else f"tool-{tool_info['tool_node_id']}-{iteration + 1}"
                         )
-                        tool_result = await workflow.execute_activity(
-                            tool_activity_name,
-                            args=[tool_payload],
-                            activity_id=tool_activity_id,
-                            start_to_close_timeout=TOOL_STEP_TIMEOUT,
-                            heartbeat_timeout=TOOL_HEARTBEAT_TIMEOUT,
-                        )
+                        if call_index in task_manager_preflight_results:
+                            tool_result = task_manager_preflight_results[call_index]
+                            if isinstance(tool_result, BaseException):
+                                raise tool_result
+                        else:
+                            tool_result = await workflow.execute_activity(
+                                tool_activity_name,
+                                args=[tool_payload],
+                                activity_id=tool_activity_id,
+                                start_to_close_timeout=TOOL_STEP_TIMEOUT,
+                                heartbeat_timeout=TOOL_HEARTBEAT_TIMEOUT,
+                            )
+                        if (
+                            use_task_manager_delegation
+                            and tool_info["node_type"] == "taskManager"
+                            and isinstance(tool_result, dict)
+                            and isinstance(tool_result.get("delegation_request"), dict)
+                        ):
+                            if call_index in task_manager_delegation_tasks:
+                                # Await in original tool-call order; every
+                                # child was already started above, so slow
+                                # earlier siblings do not prevent later work.
+                                delegated = await task_manager_delegation_tasks[call_index]
+                            else:
+                                delegated = await _run_task_manager_delegation(
+                                    tool_result["delegation_request"], call_index, call
+                                )
+                            tool_result = {
+                                **tool_result,
+                                "delegation_status": delegated["status"],
+                                "delegation_result": delegated["result"],
+                            }
                     tool_content = _serialise_tool_result(tool_result)
                     await self._emit_phase(
                         agent_node_id,
@@ -955,6 +1292,7 @@ class AgentWorkflow:
                             )
                             refresh_payload = {
                                 "operations": ops_from_tool,
+                                "agent_node_type": payload.get("node_type") or context.get("node_type"),
                                 **call_metadata,
                             }
                             refresh_result = await workflow.execute_activity(
@@ -1028,6 +1366,13 @@ class AgentWorkflow:
                                 "team_task_id": task_id,
                                 "parent_agent_node_id": agent_node_id,
                                 "child_agent_node_id": tool_info["tool_node_id"],
+                                "child_agent_name": str(
+                                    (tool_info.get("tool_info") or {}).get("label")
+                                    or tool_info.get("node_type")
+                                    or "agent"
+                                ),
+                                "workflow_id": payload.get("workflow_id"),
+                                "parent_agent_workflow_id": workflow.info().workflow_id,
                                 "root_execution_id": root_execution_id,
                                 "trace_id": str(call.get("id", "") or ""),
                                 "success": False,

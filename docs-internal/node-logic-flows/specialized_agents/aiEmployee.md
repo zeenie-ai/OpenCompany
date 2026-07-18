@@ -13,8 +13,8 @@ Team-lead agent identical in behaviour to `orchestrator_agent`. Distinct
 only in frontend presentation (display name "AI Employee", subtitle
 "Team Orchestration"). Backend routing is the same:
 `SpecializedAgentBase.execute_op` -> `prepare_agent_call`
-(`collect_teammate_connections`) -> teammates appended to `tool_data` as
-`delegate_to_*` tools -> `execute_chat_agent`.
+(`collect_teammate_connections`) -> internal teammate descriptors plus the
+intrinsic Task Manager -> `execute_chat_agent`.
 
 ## What is unique to this node
 
@@ -33,9 +33,8 @@ for the shared contract.
 
 ## Edge cases
 
-- Same as `orchestrator_agent`: non-agent teammates are silently skipped;
-  concurrency of `delegate_to_*` calls is owned by the downstream tool /
-  Temporal child-workflow dispatch, not by any node parameter.
+- Same as `orchestrator_agent`: non-agent teammates are rejected by topology
+  validation; durable assignments use the root-wide concurrency coordinator.
 
 ## Related
 

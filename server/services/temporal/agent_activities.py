@@ -740,22 +740,38 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
                 # through the workflow verbatim so ``execute_llm_step`` can
                 # rebuild the real StructuredTool inside the activity.
                 "tool_info": tool_info,
+                # Team leads create and dispatch durable work through Task
+                # Manager. Delegate descriptors stay in workflow state for
+                # trusted assignee resolution, but are not callable directly
+                # by the model.
+                "llm_hidden": (
+                    node_type in {"orchestrator_agent", "ai_employee"}
+                    and tool.name.startswith("delegate_to_")
+                ),
             }
         )
 
     if any(tool["name"].startswith("delegate_to_") for tool in tools_payload):
         delegates = "\n".join(
-            f"- {tool['name']}: {(tool.get('tool_info') or {}).get('label', tool['node_type'])}"
+            f"- {(tool.get('tool_info') or {}).get('node_id')}: "
+            f"{(tool.get('tool_info') or {}).get('label', tool['node_type'])} "
+            f"({tool['node_type']})"
             for tool in tools_payload
             if tool["name"].startswith("delegate_to_")
         )
         system_message = (
             f"{system_message}\n\n"
-            "You lead a team of independent agents. Delegate a bounded mission "
-            "when a connected agent's capabilities fit the work. Delegations in "
-            "the same response may run in parallel. Do not delegate the same "
-            "mission twice. After results return, synthesize them into one answer.\n"
-            f"Available delegates:\n{delegates}"
+            "You lead a team of independent agents. All delegation MUST use the "
+            "task_manager tool with operation='assign_task'. Provide title, a bounded "
+            "mission, relevant context, acceptance criteria, and exactly one connected "
+            "assignee_node_id. Never call delegate_to_* directly. You may issue multiple "
+            "assign_task tool calls in one response; they are durably queued and run in "
+            "parallel subject to the team limit. Review submitted tasks with list_tasks "
+            "and get_task, then accept, retry, modify, reassign, or cancel before finishing.\n"
+            "For mutations, copy task.id into task_id and task.revision into expected_revision. "
+            "After a single child submits work, accept_task may omit them only when that submitted "
+            "task is unambiguous.\n"
+            f"Connected teammates (assignee_node_id: label/type):\n{delegates}"
         )
 
     # ---- Compaction threshold ------------------------------------------
@@ -898,6 +914,7 @@ async def refresh_agent_tools(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     ai_service = container.ai_service()
     operations: List[Dict[str, Any]] = payload.get("operations") or []
+    team_lead_refresh = payload.get("agent_node_type") in {"orchestrator_agent", "ai_employee"}
     new_tools_payload: List[Dict[str, Any]] = []
 
     for op in operations:
@@ -946,6 +963,7 @@ async def refresh_agent_tools(payload: Dict[str, Any]) -> Dict[str, Any]:
                 "tool_node_id": tool_info["node_id"],
                 "parameters": tool_info["parameters"],
                 "tool_info": tool_info,
+                "llm_hidden": bool(team_lead_refresh and is_agent_delegate),
             }
         )
 
@@ -1037,7 +1055,7 @@ async def queue_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
     )
     if not message:
         raise RuntimeError("Failed to persist delegation queue event")
-    return {"team_id": team_id, "team_task_id": task_id, "status": "pending"}
+    return {"team_id": team_id, "team_task_id": task_id, "status": "queued"}
 
 
 @activity.defn(name="agent.acquire_subagent_permit.v1")
@@ -1091,8 +1109,8 @@ async def finish_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise RuntimeError("Delegated team task does not exist")
 
     succeeded = bool(payload.get("success"))
-    target_status = "completed" if succeeded else "failed"
-    if task.get("status") not in {"completed", "failed", "skipped"}:
+    target_status = "submitted" if succeeded else "failed"
+    if task.get("status") not in {"submitted", "accepted", "failed", "cancelled", "skipped"}:
         if succeeded:
             ok = await service.complete_task(team_id, task_id, payload.get("result") or {})
         else:
@@ -1101,6 +1119,14 @@ async def finish_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
             )
         if not ok:
             raise RuntimeError(f"Failed to mark delegated task {target_status}")
+
+    # Re-read the authoritative state. ``fail_task`` may queue another
+    # attempt, so the requested failure is not necessarily terminal.
+    tasks = await service.database.get_team_tasks(team_id)
+    task = next((item for item in tasks if item.get("id") == task_id), task)
+    persisted_status = str(task.get("status") or target_status)
+    is_requeued = (not succeeded) and persisted_status in {"pending", "queued", "blocked"}
+    target_status = "requeued" if is_requeued else persisted_status
 
     error = str(payload.get("error") or "Delegated agent failed")
     content = f"Task {task_id} completed" if succeeded else f"Task {task_id} failed: {error}"
@@ -1116,6 +1142,47 @@ async def finish_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
     )
     if not message:
         raise RuntimeError("Failed to persist delegation terminal event")
+
+    # taskTrigger is an external automation consumer. Publish only after the
+    # durable transition/message succeed, and never publish a terminal failure
+    # for an attempt that the database actually requeued.
+    if succeeded or not is_requeued:
+        from nodes.agent._events import (
+            broadcast_agent_task_completed,
+            broadcast_agent_task_failed,
+        )
+
+        lifecycle_data = {
+            "team_id": team_id,
+            "root_execution_id": payload.get("root_execution_id"),
+            "trace_id": payload.get("trace_id"),
+            "parent_agent_workflow_id": payload.get("parent_agent_workflow_id"),
+        }
+        event_id = str(payload.get("terminal_event_id") or f"{task_id}:{target_status}")
+        if succeeded:
+            result = payload.get("result") or {}
+            result_text = str(result.get("result", result) if isinstance(result, dict) else result)
+            await broadcast_agent_task_completed(
+                task_id=task_id,
+                agent_name=str(payload.get("child_agent_name") or child_id),
+                agent_node_id=child_id,
+                parent_node_id=parent_id,
+                workflow_id=payload.get("workflow_id"),
+                result=result_text,
+                event_id=event_id,
+                lifecycle_data=lifecycle_data,
+            )
+        else:
+            await broadcast_agent_task_failed(
+                task_id=task_id,
+                agent_name=str(payload.get("child_agent_name") or child_id),
+                agent_node_id=child_id,
+                parent_node_id=parent_id,
+                workflow_id=payload.get("workflow_id"),
+                error=error,
+                event_id=event_id,
+                lifecycle_data=lifecycle_data,
+            )
     return {"team_id": team_id, "team_task_id": task_id, "status": target_status}
 
 
@@ -1129,7 +1196,10 @@ async def finalize_agent_team(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("team_id is required")
     service = get_agent_team_service()
     tasks = await service.database.get_team_tasks(team_id)
-    if any(task.get("status") not in {"completed", "failed", "skipped"} for task in tasks):
+    # Child completion is only a submission.  The lead (or a human operator)
+    # must explicitly accept every required task before the execution team can
+    # be finalized.
+    if any(task.get("status") not in {"accepted", "failed", "cancelled", "skipped"} for task in tasks):
         return {"team_id": team_id, "status": "active"}
     status = "failed" if any(task.get("status") == "failed" for task in tasks) else "completed"
     if not await service.database.update_team_status(team_id, status):

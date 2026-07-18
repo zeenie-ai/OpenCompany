@@ -42,7 +42,10 @@ Canonical home for how AI Agents discover connected tool nodes, build LangChain 
 
 - **`tool_data`** is a list of dicts. Each entry: `{node_id, node_type, parameters, label, connected_services?}`. The `connected_services` field is only populated for `androidTool` (the gateway-tool pattern — see §6).
 - **MasterSkill expansion** runs at discovery time: a single `masterSkill` connection with `skillsConfig` expands into N individual skill entries, one per enabled skill key.
-- **Team-lead expansion** (`orchestrator_agent` / `ai_employee`): agents connected to `input-teammates` become `delegate_to_*` entries automatically.
+- **Team-lead expansion** (`orchestrator_agent` / `ai_employee`): agents connected
+  to `input-teammates` become authorized descriptors. Internal `delegate_to_*`
+  identities remain available to the coordinator, while the LLM delegates via
+  Task Manager.
 
 ## 3. Stage 2 — Build (services/ai.py:_build_tool_from_node)
 
@@ -167,7 +170,12 @@ The LLM sees one tool with `{service_id, action, parameters}` arguments. `_execu
 
 Direct Android service tools (16 individual entries in `DEFAULT_TOOL_NAMES`) are an alternative path — connect a service node directly to `input-tools` without using the toolkit aggregator. Both paths exist; the toolkit is preferred when you want one cohesive `android_device` tool.
 
-## 8. Delegation tools (`delegate_to_*`)
+## 8. Internal delegation identities (`delegate_to_*`)
+
+For team leads these identities are hidden from the model. Task Manager first
+persists and authorizes an assignment, then the Temporal or legacy coordinator
+uses the matching identity to dispatch the child. Direct calls described below
+apply only to compatibility/non-team-lead paths.
 
 Specialized agents connected to an agent's `input-tools` handle become delegation tools. Schema is fixed:
 

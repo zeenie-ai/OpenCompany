@@ -132,14 +132,70 @@ async def handle_complete_team_task(data: Dict[str, Any], websocket: WebSocket) 
     return {"success": success}
 
 
-@ws_handler("team_id")
+@ws_handler()
 async def handle_get_team_tasks(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Get team tasks."""
-    from core.container import container
-
-    database = container.database()
-    tasks = await database.get_team_tasks(data["team_id"], data.get("status"))
+    from services.agent_team import get_agent_team_service
+    if data.get("workflow_id") and data.get("team_lead_node_id"):
+        tasks = await get_agent_team_service().list_durable_tasks(
+            workflow_id=data["workflow_id"], team_lead_node_id=data["team_lead_node_id"],
+            execution_id=data.get("execution_id"), status=data.get("status"),
+        )
+    elif data.get("team_id"):
+        # Compatibility read only; mutations never accept caller-selected team IDs.
+        tasks = await get_agent_team_service().database.get_team_tasks(data["team_id"], data.get("status"))
+    else:
+        return {"success": False, "error": "workflow_id and team_lead_node_id required"}
     return {"tasks": tasks}
+
+
+@ws_handler("workflow_id", "team_lead_node_id", "assignee_node_id", "title", "mission")
+async def handle_assign_team_task(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    from services.agent_team import get_agent_team_service
+    task = await get_agent_team_service().assign_durable_task(
+        workflow_id=data["workflow_id"], team_lead_node_id=data["team_lead_node_id"],
+        execution_id=data.get("execution_id"), assignee_node_id=data["assignee_node_id"],
+        title=data["title"], mission=data["mission"], context=data.get("context"),
+        acceptance_criteria=data.get("acceptance_criteria"), depends_on=data.get("depends_on"),
+        task_id=data.get("task_id"), trace_id=data.get("trace_id"),
+    )
+    return {"task": task}
+
+
+@ws_handler("workflow_id", "team_lead_node_id", "task_id")
+async def handle_get_team_task(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    from services.agent_team import get_agent_team_service
+    task = await get_agent_team_service().get_durable_task(
+        workflow_id=data["workflow_id"], team_lead_node_id=data["team_lead_node_id"],
+        execution_id=data.get("execution_id"), task_id=data["task_id"],
+    )
+    return {"task": task}
+
+
+@ws_handler("workflow_id", "team_lead_node_id", "task_id", "operation")
+async def handle_manage_team_task(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    from services.agent_team import get_agent_team_service
+    if "revision" not in data:
+        return {"success": False, "error": "revision required"}
+    task = await get_agent_team_service().mutate_durable_task(
+        workflow_id=data["workflow_id"], team_lead_node_id=data["team_lead_node_id"],
+        execution_id=data.get("execution_id"), task_id=data["task_id"],
+        revision=int(data["revision"]), operation=data["operation"],
+        title=data.get("title"), mission=data.get("mission"), context=data.get("context"),
+        acceptance_criteria=data.get("acceptance_criteria"), reason=data.get("reason"),
+        assignee_node_id=data.get("assignee_node_id"),
+    )
+    return {"task": task}
+
+
+@ws_handler("workflow_id", "team_lead_node_id")
+async def handle_finish_team(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    from services.agent_team import get_agent_team_service
+    status = await get_agent_team_service().finish_durable_team(
+        workflow_id=data["workflow_id"], team_lead_node_id=data["team_lead_node_id"],
+        execution_id=data.get("execution_id"),
+    )
+    return {"status": status}
 
 
 @ws_handler("team_id", "from_agent", "content")
@@ -181,6 +237,10 @@ WS_HANDLERS: Dict[str, Any] = {
     "claim_team_task": handle_claim_team_task,
     "complete_team_task": handle_complete_team_task,
     "get_team_tasks": handle_get_team_tasks,
+    "assign_team_task": handle_assign_team_task,
+    "get_team_task": handle_get_team_task,
+    "manage_team_task": handle_manage_team_task,
+    "finish_team": handle_finish_team,
     "send_team_message": handle_send_team_message,
     "get_team_messages": handle_get_team_messages,
 }

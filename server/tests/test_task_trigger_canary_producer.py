@@ -129,3 +129,58 @@ class TestTaskTriggerProducerCanaryEmit:
         assert envelope.subject == "task-2"
         assert envelope.data["status"] == "error"
         assert envelope.data["error"] == "timeout"
+
+    @pytest.mark.asyncio
+    async def test_lifecycle_identity_and_trace_fields_are_preserved(self, monkeypatch):
+        """Activity retries reuse one event id and retain delegation tracing."""
+        from nodes.agent import _events
+        from services.events import dispatch as dispatch_mod
+
+        emitted: List[Any] = []
+
+        async def fake_emit(event, **kwargs):
+            emitted.append(event)
+            return event
+
+        monkeypatch.setattr(dispatch_mod, "emit", fake_emit)
+        await _events.broadcast_agent_task_completed(
+            task_id="task-3",
+            agent_name="coding agent",
+            agent_node_id="agent-3",
+            parent_node_id="lead-1",
+            workflow_id="canvas-1",
+            result="review me",
+            event_id="task-3:submitted",
+            lifecycle_data={
+                "team_id": "team-1",
+                "root_execution_id": "root-1",
+                "trace_id": "call-1",
+            },
+        )
+
+        envelope = emitted[0]
+        assert envelope.id == "task-3:submitted"
+        assert envelope.data["team_id"] == "team-1"
+        assert envelope.data["root_execution_id"] == "root-1"
+        assert envelope.data["trace_id"] == "call-1"
+
+    def test_temporal_completion_emits_after_authoritative_state_read(self):
+        """Temporal parity: retries/requeues are decided before taskTrigger."""
+        from services.temporal import agent_activities
+
+        source = inspect.getsource(agent_activities.finish_agent_delegation)
+        reread = source.index("# Re-read the authoritative state")
+        broadcast = source.index("broadcast_agent_task_completed")
+        assert reread < broadcast
+        assert 'target_status = "requeued" if is_requeued' in source
+        assert "if succeeded or not is_requeued" in source
+
+    def test_task_trigger_context_requires_lead_review(self):
+        from services.plugin.edge_walker import format_task_context
+
+        completed = format_task_context({"status": "completed", "result": "ok"})
+        failed = format_task_context({"status": "error", "error": "boom"})
+        assert "REVIEW REQUIRED" in completed
+        assert "acceptance criteria" in completed
+        assert "retry" in failed
+        assert "connected teammate" in failed

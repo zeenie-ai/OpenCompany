@@ -69,7 +69,9 @@ Android service nodes are enabled and connect directly to an agent's
 bundled Android skills are also visible. The former `androidTool` aggregator
 is obsolete; legacy workflows are normalized to direct service-to-agent edges.
 
-Task Manager is enabled for inspecting and cleaning up delegated agent tasks.
+Task Manager is an intrinsic, non-removable capability of Orchestrator and AI
+Employee nodes. It is intentionally absent from the normal palette and Agent
+Builder catalogue; historical explicit nodes remain compatible.
 
 ## agentBuilder integration
 

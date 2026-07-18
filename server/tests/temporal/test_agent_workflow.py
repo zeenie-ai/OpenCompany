@@ -97,6 +97,64 @@ class TestDurableTeamDelegationContract:
         assert "assignment_event_id" in source
         assert "terminal_event_id" in source
 
+    def test_task_manager_assignment_uses_existing_delegation_lifecycle(self):
+        """A persisted assign_task envelope must start real child work."""
+        import inspect
+
+        from services.temporal.agent_workflow import AgentWorkflow
+
+        source = inspect.getsource(AgentWorkflow.run)
+        assert 'tool_info["node_type"] == "taskManager"' in source
+        assert 'tool_result.get("delegation_request")' in source
+        assert "_run_task_manager_delegation" in source
+        assert 'task_id = str(request.get("team_task_id")' in source
+        assert 'delegate_name = str(request.get("delegate_name")' in source
+        assert 'str(delegate.get("tool_node_id") or "") != assignee_id' in source
+
+    def test_task_manager_bridge_is_bounded_and_retry_safe(self):
+        import inspect
+
+        from services.temporal.agent_workflow import AgentWorkflow
+
+        source = inspect.getsource(AgentWorkflow.run)
+        queue = source.index('activity_id=f"queue-task-manager-')
+        permit = source.index('activity_id=f"acquire-task-manager-')
+        claim = source.index('activity_id=f"begin-task-manager-')
+        child = source.index("workflow.execute_child_workflow", claim)
+        finish = source.index('activity_id=f"finish-task-manager-', child)
+        release = source.index('activity_id=f"release-task-manager-', finish)
+        assert queue < permit < claim < child < finish < release
+        assert '"permit_id": task_id' in source
+        assert '"team_task_id": task_id' in source
+        assert "TASK_MANAGER_DELEGATION_PATCH" in source
+
+    def test_task_manager_child_lead_yields_own_permit(self):
+        import inspect
+
+        from services.temporal.agent_workflow import AgentWorkflow
+
+        source = inspect.getsource(AgentWorkflow.run)
+        assert "yield-own-permit-task-manager" in source
+        assert "if own_permit_id and not yielded_own_permit" in source
+
+    def test_same_turn_task_manager_assignments_preflight_and_run_concurrently(self):
+        import inspect
+
+        from services.temporal.agent_workflow import AgentWorkflow
+
+        source = inspect.getsource(AgentWorkflow.run)
+        start_activity = source.index("workflow.start_activity(")
+        gather = source.index("await asyncio.gather(")
+        create_children = source.index("asyncio.create_task(", gather)
+        ordered_loop = source.index("for call_index, call in enumerate(calls):", create_children)
+        ordered_await = source.index(
+            "await task_manager_delegation_tasks[call_index]", ordered_loop
+        )
+        assert start_activity < gather < create_children < ordered_loop < ordered_await
+        assert "task_manager_preflight_results[call_index]" in source
+        assert "task-manager-preflight-" in source
+        assert "return_exceptions=True" in source
+
 
 class TestAgentActivities:
     """The three agent activities must register under stable names so

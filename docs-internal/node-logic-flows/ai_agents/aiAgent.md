@@ -115,8 +115,8 @@ flowchart TD
   or `input_data.content` (first truthy wins) and assigns it to `prompt`. If the
   input is not a dict the whole value is stringified.
 - **Team-lead delegation**: for `orchestrator_agent` / `ai_employee`,
-  teammates connected via `input-teammates` are appended to `tool_data` as
-  `delegate_to_*` tools (not applicable to `aiAgent` itself).
+  teammates connected via `input-teammates` become Task Manager assignees
+  (not applicable to `aiAgent` itself unless it is used as a teammate).
 - **Delegation to AIService**: `execute_op` returns `response.get("result")`
   on success; a `success=False` envelope raises `RuntimeError`. Typed openai
   SDK failures surface as `NodeUserError` from inside `execute_agent`.

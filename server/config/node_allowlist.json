@@ -3,6 +3,7 @@
   "enabled_nodes": [
     "start",
     "chatTrigger",
+    "taskTrigger",
     "console",
 
     "aiAgent",
@@ -22,7 +23,6 @@
     "calculatorTool",
     "currentTimeTool",
     "writeTodos",
-    "taskManager",
 
     "httpRequest",
     "timer",

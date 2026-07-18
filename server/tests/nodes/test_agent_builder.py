@@ -745,14 +745,14 @@ class TestCatalogueVisibility:
         )
         _ = original_get_config  # silence unused-var lint
 
-    def test_task_manager_enabled_in_allowlist_json(self):
-        """The Task Manager is visible to both the palette and Agent Builder."""
+    def test_task_manager_is_intrinsic_not_palette_addable(self):
+        """Task Manager is bound to team leads, not offered as a deletable node."""
         from services.node_allowlist import get_node_allowlist_service
 
         config = get_node_allowlist_service().get_config()
-        assert "taskManager" in config["enabled_nodes"]
+        assert "taskManager" not in config["enabled_nodes"]
         assert "taskManager" not in config["disabled_nodes"]
-        assert "taskManager" in ab._allowed_tool_types()
+        assert "taskManager" not in ab._allowed_tool_types()
 
     def test_android_nodes_enabled_in_allowlist_json(self):
         """Android services bind directly to agents as ordinary tools."""

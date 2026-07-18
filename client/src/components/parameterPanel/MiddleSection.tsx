@@ -29,6 +29,8 @@ import { ActionButton } from '@/components/ui/action-button';
 import ParameterRenderer from '../ParameterRenderer';
 import MasterSkillEditor from './MasterSkillEditor';
 import TodoEditor from './TodoEditor';
+import TaskManagerPanel from './TaskManagerPanel';
+import TeamMonitorPanel from './TeamMonitorPanel';
 import { useAppStore } from '../../store/useAppStore';
 import { useWebSocket, CompactionStats } from '../../contexts/WebSocketContext';
 import { useUserSettingsQuery } from '../../hooks/useUserSettingsQuery';
@@ -183,6 +185,8 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
   // it's now permanently dead.
   const isSkillNode = false;
   const isTodoEditorNode = hints.isTodoEditor === true;
+  const isTaskManagerNode = hints.isTaskManagerPanel === true;
+  const isMonitorNode = hints.isMonitorPanel === true;
   const isAgentWithSkills = hints.hasSkills === true;
 
   const { data: userSettings } = useUserSettingsQuery();
@@ -518,7 +522,7 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
     <div className="relative flex h-full flex-1 flex-col overflow-hidden">
       {/* Description - hide for code editor nodes (Python, Skill), masterSkill,
           and the todo editor (each renders its own full-panel header). */}
-      {!needsCodeEditorLayout && !isMasterSkillNode && !isTodoEditorNode && (
+      {!needsCodeEditorLayout && !isMasterSkillNode && !isTodoEditorNode && !isTaskManagerNode && !isMonitorNode && (
         <div className="shrink-0 border-b border-border-default bg-bg-panel px-6 pt-4 pb-2">
           <p className="m-0 text-base leading-[1.5] text-fg-muted">
             {nodeDefinition.description}
@@ -541,6 +545,20 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
           </div>
         ) : isTodoEditorNode ? (
           <TodoEditor nodeId={nodeId} />
+        ) : isTaskManagerNode ? (
+          <TaskManagerPanel
+            nodeId={nodeId}
+            workflowId={currentWorkflow?.id}
+            nodes={currentWorkflow?.nodes || []}
+            edges={currentWorkflow?.edges || []}
+          />
+        ) : isMonitorNode ? (
+          <TeamMonitorPanel
+            nodeId={nodeId}
+            workflowId={currentWorkflow?.id}
+            nodes={currentWorkflow?.nodes || []}
+            edges={currentWorkflow?.edges || []}
+          />
         ) : (
         <>
         {/* Parameters */}

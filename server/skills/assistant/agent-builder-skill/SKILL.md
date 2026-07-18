@@ -113,8 +113,10 @@ Required field: `agent_type` (string).
 **Team-leads only** (`orchestrator_agent`, `ai_employee`). Pick
 `agent_type` from `inspect_canvas.available_agents`. Spawns a
 specialized agent (`coding_agent`, `web_agent`, `task_agent`, etc.)
-and wires it to your `input-teammates` handle. The new agent appears
-as a `delegate_to_<name>` tool on your next turn.
+and wires it to your `input-teammates` handle. The new agent appears in the
+Task Manager connected-teammate list on your next turn. Assign work with
+`task_manager(operation="assign_task", assignee_node_id=...)`; do not call a
+`delegate_to_*` tool directly.
 
 **Idempotency**: if a teammate of this exact type is already wired
 to you, `add_subagent` returns *"Teammate 'X' is already wired

@@ -300,7 +300,9 @@ async def _execute_generic(args: Dict[str, Any], config: Dict[str, Any]) -> Dict
     }
 
 
-async def _execute_delegated_agent(args: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
+async def _execute_delegated_agent(
+    args: Dict[str, Any], config: Dict[str, Any], *, precreated_task_id: Optional[str] = None,
+) -> Dict[str, Any]:
     """Delegate a task to a child AI Agent (fire-and-forget pattern).
 
     This spawns the child agent as an asyncio background task and returns
@@ -346,7 +348,7 @@ async def _execute_delegated_agent(args: Dict[str, Any], config: Dict[str, Any])
     wait_seconds = float(config.get("delegation_wait_seconds") or 0)
 
     # Generate hash of task to detect duplicate delegation attempts
-    task_hash = hashlib.md5(f"{task_description}:{task_context}".encode()).hexdigest()[:16]
+    task_hash = precreated_task_id or hashlib.md5(f"{task_description}:{task_context}".encode()).hexdigest()[:16]
     delegation_key = (parent_node_id, node_id, task_hash)
 
     # Check for duplicate delegation (prevents LLM from calling same delegation twice)
@@ -371,7 +373,7 @@ async def _execute_delegated_agent(args: Dict[str, Any], config: Dict[str, Any])
         }
 
     # Generate unique task ID
-    task_id = f"delegated_{node_id}_{uuid.uuid4().hex[:8]}"
+    task_id = precreated_task_id or f"delegated_{node_id}_{uuid.uuid4().hex[:8]}"
 
     root_execution_id = str(config.get("root_execution_id") or config.get("execution_id") or workflow_id or parent_node_id)
     delegation_depth = int(config.get("delegation_depth") or 0)
@@ -437,15 +439,20 @@ async def _execute_delegated_agent(args: Dict[str, Any], config: Dict[str, Any])
         team_id = (team or {}).get("team_id") or (team or {}).get("id")
         if not team_id:
             return {"success": False, "status": "error", "error": "Failed to persist agent execution team"}
-        persisted = await team_service.add_task(
-            team_id,
-            title=task_description[:500] or f"Delegation to {node_type}",
-            description=task_context or task_description,
-            created_by=parent_node_id,
-            task_id=task_id,
-        )
-        if not persisted:
-            return {"success": False, "status": "error", "error": "Failed to persist delegated team task"}
+        if precreated_task_id:
+            persisted = await team_service.database.get_durable_team_task(team_id, task_id)
+            if not persisted or persisted.get("assigned_to") != node_id:
+                return {"success": False, "status": "error", "error": "Precreated task is not assigned to this teammate"}
+        else:
+            persisted = await team_service.add_task(
+                team_id,
+                title=task_description[:500] or f"Delegation to {node_type}",
+                description=task_context or task_description,
+                created_by=parent_node_id,
+                task_id=task_id,
+            )
+            if not persisted:
+                return {"success": False, "status": "error", "error": "Failed to persist delegated team task"}
 
     # Register this delegation to prevent duplicates
     _active_delegations[delegation_key] = task_id
@@ -498,6 +505,13 @@ async def _execute_delegated_agent(args: Dict[str, Any], config: Dict[str, Any])
         "outputs": {},
         "parent_task_id": task_id,
         "execution_id": config.get("execution_id"),
+        "root_execution_id": config.get("root_execution_id"),
+        "delegation_depth": config.get("delegation_depth", 0),
+        "team_id": config.get("team_id"),
+        "max_concurrent_subagents": config.get("max_concurrent_subagents", 3),
+        "max_delegation_depth": config.get("max_delegation_depth", 2),
+        "ai_service": config.get("ai_service"),
+        "database": config.get("database"),
         "root_execution_id": root_execution_id,
         "parent_node_id": parent_node_id,
         "delegation_depth": delegation_depth + 1,
@@ -514,15 +528,15 @@ async def _execute_delegated_agent(args: Dict[str, Any], config: Dict[str, Any])
         f"[Delegated Agent] Context: {len(nodes)} nodes, {len(edges)} edges, " f"edge_targets={set(e.get('target') for e in edges)}"
     )
 
-    async def finalize_team_task(*, result_data: Optional[Dict[str, Any]] = None, error: Optional[str] = None) -> None:
+    async def finalize_team_task(*, result_data: Optional[Dict[str, Any]] = None, error: Optional[str] = None) -> str:
         if not team_service or not team_id:
-            return
+            return "completed" if error is None else "failed"
         if error is not None:
             await team_service.fail_task(team_id, task_id, error)
             event_type, message_type, content = "failed", "task_failed", error
         else:
             await team_service.complete_task(team_id, task_id, result_data)
-            event_type, message_type, content = "completed", "task_complete", str((result_data or {}).get("result", ""))
+            event_type, message_type, content = "submitted", "task_submitted", str((result_data or {}).get("result", ""))
         await team_service.send_message(
             team_id,
             from_agent=node_id,
@@ -532,10 +546,9 @@ async def _execute_delegated_agent(args: Dict[str, Any], config: Dict[str, Any])
             event_id=f"{task_id}:{event_type}",
             extra_data={"task_id": task_id, "root_execution_id": root_execution_id, **(result_data or {})},
         )
-        if await team_service.is_team_done(team_id):
-            tasks = await team_service.database.get_team_tasks(team_id)
-            final_status = "failed" if any(item.get("status") == "failed" for item in tasks) else "completed"
-            await team_service.database.update_team_status(team_id, final_status)
+        tasks = await team_service.database.get_team_tasks(team_id)
+        persisted = next((item for item in tasks if item.get("id") == task_id), None)
+        return str((persisted or {}).get("status") or event_type)
 
     # Define the background coroutine
     async def run_child_agent():
@@ -624,19 +637,22 @@ async def _execute_delegated_agent(args: Dict[str, Any], config: Dict[str, Any])
                         },
                     )
 
-                # Dispatch error event for trigger nodes — Wave 12 B8.
-                from nodes.agent._events import broadcast_agent_task_failed
+                persisted_status = await finalize_team_task(error=error_msg)
+                # A retryable failure is queued again and must not wake a
+                # taskTrigger as though it were terminal.
+                if persisted_status not in {"pending", "queued", "blocked", "requeued"}:
+                    from nodes.agent._events import broadcast_agent_task_failed
 
-                await broadcast_agent_task_failed(
-                    task_id=task_id,
-                    agent_name=agent_label,
-                    agent_node_id=node_id,
-                    parent_node_id=config.get("parent_node_id", ""),
-                    workflow_id=workflow_id,
-                    error=error_msg,
-                )
-
-                await finalize_team_task(error=error_msg)
+                    await broadcast_agent_task_failed(
+                        task_id=task_id,
+                        agent_name=agent_label,
+                        agent_node_id=node_id,
+                        parent_node_id=config.get("parent_node_id", ""),
+                        workflow_id=workflow_id,
+                        error=error_msg,
+                        event_id=f"{task_id}:{persisted_status}",
+                        lifecycle_data={"team_id": team_id, "root_execution_id": root_execution_id},
+                    )
 
                 return result
 
@@ -680,7 +696,10 @@ async def _execute_delegated_agent(args: Dict[str, Any], config: Dict[str, Any])
                     },
                 )
 
-            # Dispatch task_completed event for trigger nodes — Wave 12 B8.
+            # Persist first, then dispatch taskTrigger. This ordering makes a
+            # completion observable only after the authoritative task state is
+            # available to the lead and human monitor.
+            persisted_status = await finalize_team_task(result_data={"result": response_text})
             from nodes.agent._events import broadcast_agent_task_completed
 
             await broadcast_agent_task_completed(
@@ -690,9 +709,9 @@ async def _execute_delegated_agent(args: Dict[str, Any], config: Dict[str, Any])
                 parent_node_id=config.get("parent_node_id", ""),
                 workflow_id=workflow_id,
                 result=response_text,
+                event_id=f"{task_id}:{persisted_status}",
+                lifecycle_data={"team_id": team_id, "root_execution_id": root_execution_id},
             )
-
-            await finalize_team_task(result_data={"result": response_text})
 
             return result
 
@@ -727,19 +746,20 @@ async def _execute_delegated_agent(args: Dict[str, Any], config: Dict[str, Any])
                     },
                 )
 
-            # Dispatch task_completed event for trigger nodes (error case) — Wave 12 B8.
-            from nodes.agent._events import broadcast_agent_task_failed
+            persisted_status = await finalize_team_task(error=str(e))
+            if persisted_status not in {"pending", "queued", "blocked", "requeued"}:
+                from nodes.agent._events import broadcast_agent_task_failed
 
-            await broadcast_agent_task_failed(
-                task_id=task_id,
-                agent_name=agent_label,
-                agent_node_id=node_id,
-                parent_node_id=config.get("parent_node_id", ""),
-                workflow_id=workflow_id,
-                error=str(e),
-            )
-
-            await finalize_team_task(error=str(e))
+                await broadcast_agent_task_failed(
+                    task_id=task_id,
+                    agent_name=agent_label,
+                    agent_node_id=node_id,
+                    parent_node_id=config.get("parent_node_id", ""),
+                    workflow_id=workflow_id,
+                    error=str(e),
+                    event_id=f"{task_id}:{persisted_status}",
+                    lifecycle_data={"team_id": team_id, "root_execution_id": root_execution_id},
+                )
 
             return {"success": False, "error": str(e)}
 

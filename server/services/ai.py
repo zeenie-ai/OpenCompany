@@ -2236,7 +2236,28 @@ class AIService:
             if tool_data:
                 await broadcast_status("building_tools", {"message": f"Building {len(tool_data)} tool(s)...", "tool_count": len(tool_data)})
 
+                task_manager_bound = any(info.get("node_type") == "taskManager" for info in tool_data)
+                durable_delegates = [info for info in tool_data if info.get("delegate_tool_name")]
+                if task_manager_bound and durable_delegates:
+                    teammate_lines = "\n".join(
+                        f"- {info.get('node_id')}: {info.get('label') or info.get('node_type')} ({info.get('node_type')})"
+                        for info in durable_delegates
+                    )
+                    system_message += (
+                        "\n\n## Durable Team Delegation\n"
+                        "All teammate assignments MUST use task_manager with operation='assign_task'. "
+                        "Supply title, bounded mission, relevant context, acceptance criteria, and one "
+                        "assignee_node_id from the connected list below. Multiple assign_task calls may "
+                        "be issued together for parallel queued execution. Never call delegate_to_* "
+                        "directly. Review submitted tasks using list_tasks/get_task and accept, retry, "
+                        "modify, reassign, or cancel them before the final report. For mutations, copy "
+                        "task.id to task_id and task.revision to expected_revision.\n"
+                        f"Connected teammates:\n{teammate_lines}"
+                    )
+
                 for tool_info in tool_data:
+                    if task_manager_bound and tool_info.get("delegate_tool_name"):
+                        continue
                     # Use AI Agent's _build_tool_from_node for all tool types
                     tool, config = await self._build_tool_from_node(tool_info)
                     if tool:

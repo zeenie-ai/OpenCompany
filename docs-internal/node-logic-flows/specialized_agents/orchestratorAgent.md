@@ -9,9 +9,10 @@
 
 ## Purpose
 
-Team-lead agent that coordinates multiple specialized agents. Teammates
-are wired via the extra `input-teammates` handle and become
-`delegate_to_<agent_type>` tools the orchestrator can call.
+Team-lead agent that coordinates agents wired through `input-teammates`.
+Task Manager is intrinsically bound and is the only model-facing delegation
+interface. Internal delegate descriptors resolve authorized assignees after a
+durable `assign_task` record exists.
 
 ## What is unique to this node
 
@@ -24,7 +25,9 @@ are wired via the extra `input-teammates` handle and become
   node gets a meaningful tool string ("ONE-SHOT delegation ...").
 - **Team lead detection**: `prepare_agent_call` (in `_inline.py`) checks
   `node_type in TEAM_LEAD_TYPES = {'orchestrator_agent', 'ai_employee'}` and
-  calls `collect_teammate_connections` to expand teammates into tools.
+  calls `collect_teammate_connections` to build internal teammate descriptors.
+- **Task control panel**: selecting the node opens its non-removable Task
+  Manager middle panel.
 
 ## Teammate collection
 
@@ -38,11 +41,9 @@ are wired via the extra `input-teammates` handle and become
 4. Loads `database.get_node_parameters(source_id)` for each teammate.
 5. Returns a list of `{node_id, node_type, label, parameters}` dicts.
 
-`prepare_agent_call` then walks each teammate's own `input-tools` edges to
-populate `child_tools` (so the delegation tool description lists what each
-teammate can do) and appends the teammates to `tool_data` before
-`execute_chat_agent` is called, so the LLM sees them as ordinary
-`delegate_to_*` tools.
+`prepare_agent_call` walks each teammate's own `input-tools` edges to populate
+capability descriptions. The LLM receives connected node IDs and calls
+`task_manager(operation="assign_task", ...)`; direct delegate tools are hidden.
 
 ## Behaviour
 
@@ -54,10 +55,8 @@ expansion above.
 
 - Non-`AI_AGENT_TYPES` nodes wired to `input-teammates` are silently
   skipped.
-- Concurrency of `delegate_to_*` calls is not controlled by any node
-  parameter (no `teamMode`); it depends on how the downstream
-  `delegate_to_*` tool implementation / Temporal child-workflow dispatch
-  handles concurrent invocations.
+- Concurrency is root-scoped and defaults to three active descendants.
+  Additional durable assignments remain queued.
 - When zero teammates are connected, the node behaves identically to any
   other specialized agent.
 

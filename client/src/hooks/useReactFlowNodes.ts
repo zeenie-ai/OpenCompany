@@ -166,10 +166,11 @@ export const useReactFlowNodes = ({ setNodes, setEdges }: UseReactFlowNodesProps
 
   const onNodesDelete = useCallback(
     (deleted: Node[]) => {
-      setNodes((nds) => nds.filter((node) => !deleted.find((d) => d.id === node.id)));
+      const removable = deleted.filter((node) => node.type !== 'taskManager');
+      setNodes((nds) => nds.filter((node) => !removable.find((d) => d.id === node.id)));
       
       // Clear selected node if it was deleted
-      if (selectedNode && deleted.find((d) => d.id === selectedNode.id)) {
+      if (selectedNode && removable.find((d) => d.id === selectedNode.id)) {
         setSelectedNode(null);
       }
     },

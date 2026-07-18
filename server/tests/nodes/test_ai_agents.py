@@ -377,11 +377,12 @@ class TestChatAgent:
 
         _, kwargs = harness.ai_service.execute_chat_agent.call_args
         tool_data = kwargs["tool_data"]
-        assert tool_data is not None and len(tool_data) == 1
-        assert tool_data[0]["node_type"] == "coding_agent"
-        assert tool_data[0]["label"] == "CoderBot"
+        assert tool_data is not None and len(tool_data) == 2
+        teammate_tool = next(tool for tool in tool_data if tool["node_type"] == "coding_agent")
+        assert teammate_tool["label"] == "CoderBot"
+        assert any(tool["node_type"] == "taskManager" and tool.get("builtin") for tool in tool_data)
         # Teammate params come along so delegation knows provider/model
-        assert tool_data[0]["parameters"]["model"] == "gpt"
+        assert teammate_tool["parameters"]["model"] == "gpt"
 
     async def test_chat_agent_task_error_strips_tools(self, harness):
         """Same tool-strip behaviour as aiAgent on task failure."""

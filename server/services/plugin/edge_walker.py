@@ -242,6 +242,28 @@ async def collect_agent_connections(
                 log_prefix,
             )
 
+    # A team lead must always be able to manage the durable work it delegates.
+    # This is an intrinsic, non-removable team-lead capability.  It is present
+    # before the first teammate is connected so the lead and its human panel
+    # have one stable control surface for the whole execution lifecycle.
+    current_node = next(
+        (node for node in (context.get("nodes") or []) if node.get("id") == node_id),
+        None,
+    )
+    if (current_node or {}).get("type") in TEAM_LEAD_TYPES and not any(
+        entry.get("node_type") == "taskManager" for entry in tool_data
+    ):
+        tool_data.append(
+            {
+                "node_id": f"builtin_task_manager_{node_id}",
+                "node_type": "taskManager",
+                "parameters": {},
+                "label": "Task Manager",
+                "builtin": True,
+            }
+        )
+        logger.info("%s Auto-bound durable Task Manager for team lead %s", log_prefix, node_id)
+
     logger.info(
         f"{log_prefix} Collected: {len(skill_data)} skills, {len(tool_data)} tools, "
         f"memory={'yes' if memory_data else 'no'}, "
@@ -472,8 +494,8 @@ async def collect_teammate_connections(
 def format_task_context(task_data: Dict[str, Any]) -> str:
     """Render a ``taskTrigger`` payload as a prompt-prepend block.
 
-    Tells the agent the delegated task is already done so it doesn't
-    re-delegate. Three branches: completed / error / other.
+    Tells the lead to review the delegated result and choose the next
+    lifecycle action. Three branches: completed / error / other.
     """
     status = task_data.get("status", "unknown")
     agent_name = task_data.get("agent_name", "Unknown Agent")
@@ -487,8 +509,9 @@ def format_task_context(task_data: Dict[str, Any]) -> str:
             f"- Task ID: {task_id}\n"
             "- Status: Completed Successfully\n"
             f"- Result: {result}\n\n"
-            "IMPORTANT: This task is COMPLETE. Do NOT delegate or call any agent tools.\n"
-            "Simply report this result to the user in a natural, conversational way."
+            "REVIEW REQUIRED: Inspect this result against the original mission and "
+            "acceptance criteria. Accept it if sufficient; otherwise revise, retry, "
+            "or reassign it to a connected teammate before reporting completion."
         )
 
     if status == "error":
@@ -499,8 +522,9 @@ def format_task_context(task_data: Dict[str, Any]) -> str:
             f"- Task ID: {task_id}\n"
             "- Status: Error\n"
             f"- Error: {error}\n\n"
-            "IMPORTANT: This task has FAILED. Do NOT retry or delegate again.\n"
-            "Report this error to the user and suggest next steps if appropriate."
+            "REVIEW REQUIRED: Inspect the failure and either retry, revise, reassign "
+            "to a connected teammate, cancel/waive with a reason, or report an "
+            "unrecoverable failure."
         )
 
     return f"Task update received:\n" f"- Agent: {agent_name}\n" f"- Task ID: {task_id}\n" f"- Status: {status}\n" f"- Data: {task_data}"

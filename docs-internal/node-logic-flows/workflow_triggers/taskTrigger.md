@@ -10,7 +10,7 @@
 
 ## Purpose
 
-Fires when a child agent delegated via `delegate_to_*` tools completes or
+Fires when a child agent dispatched from a durable Task Manager assignment completes or
 errors. The delegation code path in
 `server/services/handlers/tools.py::_execute_delegated_agent` calls
 `nodes.agent._events.broadcast_agent_task_completed` for both the success and
@@ -20,7 +20,8 @@ discriminator carried in `data.status`) via `dispatch.emit`. `taskTrigger` is
 canary-registered, so `DeploymentManager` starts a `TriggerListenerWorkflow`
 that receives the event via Temporal Signal and spawns a child workflow per
 match. Used to let a parent workflow react to child completion without blocking
-the parent on the child's result (fire-and-forget delegation).
+external downstream automation. Temporal separately returns/signals the owning
+lead for review; `taskTrigger` is not the lead-resume mechanism.
 
 ## Inputs (handles)
 

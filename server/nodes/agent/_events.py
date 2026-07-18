@@ -38,6 +38,8 @@ async def broadcast_agent_task_completed(
     parent_node_id: str,
     workflow_id: Optional[str] = None,
     result: Optional[str] = None,
+    event_id: Optional[str] = None,
+    lifecycle_data: Optional[dict[str, Any]] = None,
 ) -> None:
     """Broadcast a delegated agent task completing successfully."""
     await _broadcast_task_event(
@@ -48,6 +50,8 @@ async def broadcast_agent_task_completed(
         parent_node_id=parent_node_id,
         workflow_id=workflow_id,
         result=result,
+        event_id=event_id,
+        lifecycle_data=lifecycle_data,
     )
 
 
@@ -59,6 +63,8 @@ async def broadcast_agent_task_failed(
     parent_node_id: str,
     workflow_id: Optional[str] = None,
     error: str,
+    event_id: Optional[str] = None,
+    lifecycle_data: Optional[dict[str, Any]] = None,
 ) -> None:
     """Broadcast a delegated agent task failing."""
     await _broadcast_task_event(
@@ -69,6 +75,8 @@ async def broadcast_agent_task_failed(
         parent_node_id=parent_node_id,
         workflow_id=workflow_id,
         error=error,
+        event_id=event_id,
+        lifecycle_data=lifecycle_data,
     )
 
 
@@ -82,6 +90,8 @@ async def _broadcast_task_event(
     workflow_id: Optional[str] = None,
     result: Optional[str] = None,
     error: Optional[str] = None,
+    event_id: Optional[str] = None,
+    lifecycle_data: Optional[dict[str, Any]] = None,
 ) -> None:
     """Single delivery path: build the envelope, route through
     :func:`services.events.dispatch.emit`.
@@ -103,6 +113,7 @@ async def _broadcast_task_event(
         "agent_node_id": agent_node_id,
         "parent_node_id": parent_node_id,
         "workflow_id": workflow_id,
+        **(lifecycle_data or {}),
     }
     if status == "completed" and result is not None:
         payload["result"] = result
@@ -115,6 +126,11 @@ async def _broadcast_task_event(
         agent=agent_name,
         data=payload,
     )
+    # Temporal activity retries must reproduce the same event identity. The
+    # listener workflow can therefore deduplicate a completion that was
+    # delivered immediately before a worker failure/retry.
+    if event_id:
+        envelope.id = event_id
     await emit(envelope, wire_routing_key=_WIRE_ROUTING_KEY)
 
 

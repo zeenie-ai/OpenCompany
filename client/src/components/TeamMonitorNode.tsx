@@ -13,7 +13,7 @@ const TEAM_LEAD_TYPES = ['ai_employee', 'orchestrator_agent'];
 interface TeamTask {
   id: string;
   title: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped';
+  status: 'blocked' | 'queued' | 'running' | 'submitted' | 'accepted' | 'failed' | 'cancelled' | 'pending' | 'in_progress' | 'completed' | 'skipped';
   assigned_to?: string;
 }
 
@@ -21,6 +21,7 @@ interface TeamMember {
   agent_node_id: string;
   agent_type: string;
   status: string;
+  label?: string;
 }
 
 interface TeamStatus {
@@ -64,6 +65,29 @@ const TeamMonitorNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConn
     }
     return null;
   }, [edges, nodes, id]);
+
+  const connectedTeammates = useMemo<TeamMember[]>(() => {
+    if (!connectedTeamLead) return [];
+    return edges
+      .filter((edge) => edge.target === connectedTeamLead.id && edge.targetHandle === 'input-teammates')
+      .map((edge) => nodes.find((node) => node.id === edge.source))
+      .filter((node): node is NonNullable<typeof node> => !!node)
+      .map((node) => ({
+        agent_node_id: node.id,
+        agent_type: node.type || 'aiAgent',
+        label: String((node.data as NodeData | undefined)?.label || node.type || 'Agent'),
+        status: 'connected',
+      }));
+  }, [connectedTeamLead, edges, nodes]);
+
+  const visibleMembers = useMemo(() => {
+    const persisted = teamStatus?.members || [];
+    const byId = new Map(persisted.map((member) => [member.agent_node_id, member]));
+    for (const member of connectedTeammates) {
+      byId.set(member.agent_node_id, { ...member, ...(byId.get(member.agent_node_id) || {}) });
+    }
+    return [...byId.values()].filter((member) => member.agent_node_id !== connectedTeamLead?.id);
+  }, [connectedTeamLead?.id, connectedTeammates, teamStatus?.members]);
 
   // Fetch team status
   const fetchTeamStatus = useCallback(async () => {
@@ -118,9 +142,14 @@ const TeamMonitorNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConn
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      case 'accepted':
       case 'completed': return 'var(--success)';
+      case 'submitted': return 'var(--node-agent)';
+      case 'running':
       case 'in_progress': return 'var(--info)';
       case 'failed': return 'var(--destructive)';
+      case 'blocked':
+      case 'queued':
       case 'pending': return 'var(--warning)';
       default: return theme.colors.textSecondary;
     }
@@ -166,7 +195,7 @@ const TeamMonitorNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConn
       }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 12, fontWeight: 'bold', color: 'var(--node-agent)' }}>
-            {teamStatus?.members?.length || 0}
+            {visibleMembers.length}
           </div>
           <div style={{ fontSize: 8, color: theme.colors.textSecondary }}>Team</div>
         </div>
@@ -195,6 +224,20 @@ const TeamMonitorNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConn
           <div style={{ fontSize: 8, color: theme.colors.textSecondary }}>Queued</div>
         </div>
       </div>
+
+      {/* Connected teammates */}
+      {visibleMembers.length > 0 && (
+        <div style={{ padding: '4px 6px', borderBottom: `1px solid ${theme.colors.border}` }}>
+          {visibleMembers.slice(0, 4).map((member) => (
+            <div key={member.agent_node_id} title={member.agent_type} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 0', fontSize: 9 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: member.status === 'working' ? 'var(--info)' : 'var(--success)', flexShrink: 0 }} />
+              <span style={{ color: theme.colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member.label || member.agent_type}</span>
+              <span style={{ marginLeft: 'auto', color: theme.colors.textSecondary }}>{member.status}</span>
+            </div>
+          ))}
+          {visibleMembers.length > 4 && <div style={{ color: theme.colors.textSecondary, fontSize: 8 }}>+{visibleMembers.length - 4} more</div>}
+        </div>
+      )}
 
       {/* Active Tasks */}
       <div style={{ padding: '4px 6px', maxHeight: 80, overflow: 'auto' }}>

@@ -1,203 +1,184 @@
-"""Task Manager Tool — Wave 11.C migration; body inlined Wave 11.I (M.O).
-
-Inspects the in-memory delegation registry that lives on
-``services.handlers.tools`` (``_delegated_tasks`` for in-flight asyncio
-tasks, ``_delegation_results`` for completed-but-still-cached results,
-plus ``get_delegated_task_status`` which adds a DB-fallback layer for
-older runs). The plugin doesn't own that state — the delegation
-lifecycle in ``tools.py`` does — so we read through to it rather than
-duplicating registry plumbing here.
-"""
+"""Durable, execution-scoped task control for agent team leads."""
 
 from __future__ import annotations
 
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from core.logging import get_logger
 from services.plugin import NodeContext, Operation, TaskQueue, ToolNode
 
-logger = get_logger(__name__)
+TaskOperation = Literal[
+    "assign_task", "list_tasks", "get_task", "modify_task", "cancel_task",
+    "retry_task", "reassign_task", "accept_task", "finish_team", "mark_done",
+]
 
 
 class TaskManagerParams(BaseModel):
-    operation: Literal["list_tasks", "get_task", "mark_done"] = Field(
-        default="list_tasks",
-        description="List delegated tasks, retrieve one task, or remove a completed task from tracking.",
-    )
-    task_id: Optional[str] = Field(
-        default=None,
-        description="Delegated task ID. Required for get_task and mark_done.",
-    )
-    status_filter: Optional[Literal["running", "completed", "error", "cancelled"]] = Field(
-        default=None,
-        description="Optional status filter for list_tasks.",
-    )
-
+    operation: TaskOperation = "list_tasks"
+    task_id: Optional[str] = None
+    title: Optional[str] = Field(default=None, max_length=500)
+    mission: Optional[str] = Field(default=None, max_length=10000)
+    context: Optional[Dict[str, Any]] = None
+    acceptance_criteria: Optional[Dict[str, Any]] = None
+    depends_on: Optional[List[str]] = None
+    assignee_node_id: Optional[str] = None
+    delegate_name: Optional[str] = None
+    expected_revision: Optional[int] = Field(default=None, ge=0)
+    reason: Optional[str] = Field(default=None, max_length=2000)
+    status_filter: Optional[str] = None
     model_config = ConfigDict(extra="allow")
 
 
 class TaskManagerOutput(BaseModel):
-    task_id: Optional[str] = None
+    success: bool = True
+    operation: Optional[str] = None
+    task: Optional[dict] = None
     tasks: Optional[list] = None
-    success: Optional[bool] = None
-
+    team: Optional[dict] = None
     model_config = ConfigDict(extra="allow")
 
 
 class TaskManagerNode(ToolNode):
     type = "taskManager"
     display_name = "Task Manager"
-    subtitle = "AI Task Tracking"
+    subtitle = "Durable Team Tasks"
     group = ("tool", "ai")
-    description = "Task management tool for AI agents to create, track, and manage tasks"
+    description = "Assign, review, retry, reassign, cancel, and accept durable teammate tasks"
     component_kind = "tool"
     tool_name = "task_manager"
-    tool_description = "Track delegated sub-agent tasks. Operations: list_tasks (see all tasks), get_task (check specific task status/result), mark_done (cleanup completed tasks)."
+    tool_description = (
+        "Manage the current lead execution's durable team tasks. Assign only connected "
+        "teammates, inspect submitted work, then accept, retry, reassign, or cancel it."
+    )
     handles = (
         {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
         {"name": "output-tool", "kind": "output", "position": "top", "label": "Tool", "role": "tools"},
     )
-    ui_hints = {"isToolPanel": True, "hideRunButton": True}
+    ui_hints = {"isToolPanel": True, "isTaskManagerPanel": True, "hideRunButton": True}
     annotations = {"destructive": True, "readonly": False, "open_world": False}
     task_queue = TaskQueue.DEFAULT
-
+    needs_canvas = True
     Params = TaskManagerParams
     Output = TaskManagerOutput
 
     @Operation("manage")
     async def manage(self, ctx: NodeContext, params: TaskManagerParams) -> Any:
-        return await _execute_task_manager(
-            params.model_dump(),
-            {"node_id": ctx.node_id, "workspace_dir": ctx.workspace_dir or ""},
-        )
+        config = {
+            **ctx.raw,
+            "node_id": ctx.node_id,
+            "workflow_id": ctx.workflow_id or ctx.raw.get("workflow_id"),
+            "execution_id": ctx.execution_id or ctx.raw.get("execution_id"),
+            "nodes": ctx.nodes,
+            "edges": ctx.edges,
+        }
+        return await _execute_task_manager(params.model_dump(exclude_none=True), config)
 
 
-async def _execute_task_manager(
-    tool_args: Dict[str, Any],
-    config: Dict[str, Any],
-) -> Dict[str, Any]:
-    """Execute task manager operations.
+def _scope(config: Dict[str, Any]) -> Dict[str, Any]:
+    workflow_id = str(config.get("workflow_id") or "")
+    lead_id = str(config.get("parent_node_id") or config.get("team_lead_node_id") or "")
+    if not workflow_id or not lead_id:
+        raise ValueError("Task Manager requires trusted workflow and team-lead execution context")
+    return {"workflow_id": workflow_id, "team_lead_node_id": lead_id, "execution_id": config.get("execution_id")}
 
-    Dual-purpose: works as AI tool (LLM fills args) or workflow node
-    (uses params).
 
-    Operations:
-    - ``list_tasks``: list all active and completed delegated tasks
-    - ``get_task``: detailed status for one task
-    - ``mark_done``: drop a task from active tracking
-    """
-    # Read-through to the delegation registry owned by tools.py. Keeping
-    # the singletons there is intentional -- the entire delegation
-    # lifecycle (spawn / cleanup / refcount / DB persistence) lives in
-    # tools.py and is genuine cross-cutting framework state.
-    from services.handlers.tools import (
-        _delegated_tasks,
-        _delegation_results,
-        get_delegated_task_status,
-    )
+def _resolve_teammate(config: Dict[str, Any], args: Dict[str, Any]) -> Dict[str, Any]:
+    from services.plugin.edge_walker import build_teammate_descriptors
 
-    params = config.get("parameters", {})
-    operation = tool_args.get("operation") or params.get("operation", "list_tasks")
-    task_id = tool_args.get("task_id") or params.get("task_id")
-    status_filter = tool_args.get("status_filter") or params.get("status_filter")
-    database = config.get("database")
+    lead_id = str(config.get("parent_node_id") or config.get("team_lead_node_id") or "")
+    descriptors = build_teammate_descriptors(lead_id, config)
+    node_id, delegate_name = args.get("assignee_node_id"), args.get("delegate_name")
+    matches = [d for d in descriptors if (node_id and d["node_id"] == node_id) or (delegate_name and d["delegate_tool_name"] == delegate_name)]
+    if len(matches) != 1:
+        available = [{"node_id": d["node_id"], "delegate_name": d["delegate_tool_name"], "label": d["label"]} for d in descriptors]
+        raise ValueError(f"Assignee must resolve to exactly one connected teammate; available={available}")
+    return matches[0]
 
-    logger.debug(f"[TaskManager] Operation: {operation}, task_id: {task_id}, filter: {status_filter}")
+
+async def _execute_task_manager(args: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
+    from services.agent_team import get_agent_team_service
+
+    service = get_agent_team_service()
+    operation = str(args.get("operation") or "list_tasks")
+    scope = _scope(config)
 
     if operation == "list_tasks":
-        tasks = []
-
-        # Active tasks from asyncio.Task tracking.
-        for tid, task in _delegated_tasks.items():
-            if task.done():
-                try:
-                    if task.cancelled():
-                        status = "cancelled"
-                    elif task.exception():
-                        status = "error"
-                    else:
-                        status = "completed"
-                except Exception:
-                    status = "completed"
-            else:
-                status = "running"
-
-            tasks.append({"task_id": tid, "status": status, "active": True})
-
-        # Completed tasks from in-memory cache.
-        for tid, result in _delegation_results.items():
-            if tid not in [t["task_id"] for t in tasks]:
-                tasks.append(
-                    {
-                        "task_id": tid,
-                        "status": result.get("status", "completed"),
-                        "agent_name": result.get("agent_name"),
-                        "result_summary": str(result.get("result", ""))[:200],
-                        "active": False,
-                    }
-                )
-
-        if status_filter:
-            tasks = [t for t in tasks if t.get("status") == status_filter]
-
-        return {
-            "success": True,
-            "operation": "list_tasks",
-            "tasks": tasks,
-            "count": len(tasks),
-            "running": sum(1 for t in tasks if t.get("status") == "running"),
-            "completed": sum(1 for t in tasks if t.get("status") == "completed"),
-            "errors": sum(1 for t in tasks if t.get("status") == "error"),
-        }
-
+        tasks = await service.list_durable_tasks(**scope, status=args.get("status_filter"))
+        return {"success": True, "operation": operation, "tasks": tasks, "count": len(tasks)}
     if operation == "get_task":
-        if not task_id:
-            return {"success": False, "error": "task_id is required for get_task operation"}
+        task = await service.get_durable_task(**scope, task_id=str(args.get("task_id") or ""))
+        return {"success": True, "operation": operation, "task": task}
+    if operation == "assign_task":
+        if not args.get("title") or not args.get("mission"):
+            raise ValueError("assign_task requires title and mission")
+        teammate = _resolve_teammate(config, args)
+        task = await service.assign_durable_task(
+            **scope, assignee_node_id=teammate["node_id"], title=args["title"],
+            mission=args["mission"], context=args.get("context"),
+            acceptance_criteria=args.get("acceptance_criteria"), depends_on=args.get("depends_on"),
+            trace_id=config.get("tool_call_id"),
+        )
+        delegation = None
+        if config.get("ai_service") and config.get("database"):
+            from services.handlers.tools import _execute_delegated_agent
 
-        # 3-layer lookup (live tasks -> memory cache -> DB).
-        result = await get_delegated_task_status(task_ids=[task_id], database=database)
-        tasks = result.get("tasks", [])
-
-        if not tasks:
-            return {
-                "success": False,
-                "error": f"Task {task_id} not found",
-                "task_id": task_id,
+            child_config = {
+                **config,
+                "node_id": teammate["node_id"],
+                "node_type": teammate["node_type"],
+                "team_id": task["team_id"],
             }
-
-        task_info = tasks[0]
+            delegation = await _execute_delegated_agent(
+                {"task": args["mission"], "context": args.get("context") or {}},
+                child_config,
+                precreated_task_id=task["id"],
+            )
+        # Temporal AgentWorkflow consumes this trusted scheduling envelope and
+        # starts the matching child through its existing bounded child-workflow
+        # machinery. Legacy execution may consume it through the shared
+        # delegation coordinator without creating a second TeamTask.
         return {
-            "success": True,
-            "operation": "get_task",
-            "task_id": task_id,
-            "status": task_info.get("status"),
-            "agent_name": task_info.get("agent_name"),
-            "result": task_info.get("result"),
-            "error": task_info.get("error"),
+            "success": True, "operation": operation, "task": task,
+            "delegation": delegation,
+            "delegation_request": {
+                "team_task_id": task["id"], "assignee_node_id": teammate["node_id"],
+                "delegate_name": teammate["delegate_tool_name"], "task": args["mission"],
+                "context": args.get("context") or {},
+            },
         }
+    if operation == "finish_team":
+        team = await service.finish_durable_team(**scope)
+        return {"success": True, "operation": operation, "team": team}
 
-    if operation == "mark_done":
-        if not task_id:
-            return {"success": False, "error": "task_id is required for mark_done operation"}
-
-        removed = False
-        if task_id in _delegated_tasks:
-            del _delegated_tasks[task_id]
-            removed = True
-        if task_id in _delegation_results:
-            del _delegation_results[task_id]
-            removed = True
-
-        return {
-            "success": True,
-            "operation": "mark_done",
-            "task_id": task_id,
-            "removed": removed,
-            "message": (
-                f"Task {task_id} marked as done and removed from tracking" if removed else f"Task {task_id} was not in active tracking"
-            ),
-        }
-
-    return {"success": False, "error": f"Unknown operation: {operation}"}
+    task_id = str(args.get("task_id") or "")
+    revision = args.get("expected_revision", args.get("revision"))
+    # Completion review commonly follows immediately after one child result.
+    # Resolve that unambiguous submitted task inside the trusted execution
+    # scope instead of leaving it permanently submitted because the model
+    # omitted identifiers. Never guess when multiple reviews are pending.
+    if not task_id and operation in {"accept_task", "mark_done"}:
+        submitted = await service.list_durable_tasks(**scope, status="submitted")
+        if len(submitted) == 1:
+            task_id = submitted[0]["id"]
+            revision = submitted[0]["revision"]
+        else:
+            raise ValueError(
+                "accept_task requires task_id when there is not exactly one submitted task; "
+                "call list_tasks or get_task first"
+            )
+    if not task_id:
+        raise ValueError(f"{operation} requires task_id")
+    if revision is None:
+        current = await service.get_durable_task(**scope, task_id=task_id)
+        revision = current.get("revision")
+    if revision is None:
+        raise ValueError(f"{operation} requires expected_revision")
+    mapped = "accept" if operation in {"accept_task", "mark_done"} else operation.removesuffix("_task")
+    payload = {k: args[k] for k in ("title", "mission", "context", "acceptance_criteria", "reason") if k in args}
+    if operation == "reassign_task":
+        payload["assignee_node_id"] = _resolve_teammate(config, args)["node_id"]
+    task = await service.mutate_durable_task(
+        **scope, task_id=task_id, revision=int(revision), operation=mapped, **payload,
+    )
+    return {"success": True, "operation": operation, "task": task}

@@ -1,5 +1,11 @@
 # Agent-to-Agent Delegation (Nested Agents)
 
+> **Team-lead contract:** Orchestrator and AI Employee models do not call
+> `delegate_to_*` directly. They create durable work through the intrinsic
+> `task_manager(assign_task)` interface described in
+> [agent_teams.md](agent_teams.md). Delegate names below are internal dispatch
+> identities or legacy/non-team-lead compatibility mechanics.
+
 How memory, parameters, and execution context flow when one AI agent delegates work to another agent connected as a tool.
 
 > **Related docs:** [tool_building_pipeline.md](./tool_building_pipeline.md) for the underlying `_build_tool_from_node` + `execute_tool` pipeline that backs `delegate_to_*` (delegation tools share the same StructuredTool construction path as other AI tools — what makes them special is the fire-and-forget background task and the `{"status": "delegated"}` lifecycle opt-out documented there).

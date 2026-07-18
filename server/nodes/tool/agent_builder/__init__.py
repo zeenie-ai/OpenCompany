@@ -62,8 +62,9 @@ _TOOL_OUTPUT_HANDLE = "output-main"
 _MASTER_SKILL_TYPE = "masterSkill"
 _MASTER_SKILL_LABEL = "Master Skill"
 _AGENT_BUILDER_TYPE = "agentBuilder"
+_TASK_MANAGER_TYPE = "taskManager"
 _TEAM_LEAD_TYPES = frozenset({"orchestrator_agent", "ai_employee"})
-_DENIED_TOOL_TYPES = frozenset({_AGENT_BUILDER_TYPE, _MASTER_SKILL_TYPE})
+_DENIED_TOOL_TYPES = frozenset({_AGENT_BUILDER_TYPE, _MASTER_SKILL_TYPE, _TASK_MANAGER_TYPE})
 _KEY_PARAM_FIELDS = ("provider", "model", "operation", "url", "query")
 _SKILLS_DIR = Path(__file__).resolve().parents[2] / "skills"
 

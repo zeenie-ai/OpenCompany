@@ -48,6 +48,32 @@ class TeamMonitorNode(ActionNode):
     @Operation("monitor")
     async def monitor(self, ctx: NodeContext, params: TeamMonitorParams) -> Any:
         from services.agent_team import get_agent_team_service
+        from services.plugin.edge_walker import build_teammate_descriptors
+
+        lead_id = next(
+            (
+                edge.get("source")
+                for edge in (ctx.edges or [])
+                if edge.get("target") == ctx.node_id
+                and any(
+                    node.get("id") == edge.get("source")
+                    and node.get("type") in {"orchestrator_agent", "ai_employee"}
+                    for node in (ctx.nodes or [])
+                )
+            ),
+            None,
+        )
+        connected_members = [
+            {
+                "agent_node_id": teammate["node_id"],
+                "agent_type": teammate["node_type"],
+                "label": teammate["label"],
+                "status": "connected",
+            }
+            for teammate in build_teammate_descriptors(
+                lead_id, {**ctx.raw, "nodes": ctx.nodes, "edges": ctx.edges}
+            )
+        ] if lead_id else []
 
         team_id = ctx.raw.get("team_id")
         if not team_id:
@@ -60,7 +86,7 @@ class TeamMonitorNode(ActionNode):
             return {
                 "message": "No team connected",
                 "team_id": None,
-                "members": [],
+                "members": connected_members,
                 "tasks": {"total": 0, "completed": 0, "active": 0, "pending": 0, "failed": 0},
                 "active_tasks": [],
                 "recent_events": [],
@@ -68,9 +94,17 @@ class TeamMonitorNode(ActionNode):
 
         status = await get_agent_team_service().get_team_status(team_id)
         max_history = params.max_history_items
+        persisted_members = status.get("members", [])
+        merged_members = {member.get("agent_node_id"): member for member in connected_members}
+        for index, member in enumerate(persisted_members):
+            member_id = member.get("agent_node_id") or member.get("id") or f"member-{index}"
+            merged_members[member_id] = {
+                **merged_members.get(member_id, {}),
+                **member,
+            }
         return {
             "team_id": team_id,
-            "members": status.get("members", []),
+            "members": list(merged_members.values()),
             "tasks": {
                 "total": status.get("task_count", 0),
                 "completed": status.get("completed_count", 0),
