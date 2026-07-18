@@ -1,13 +1,10 @@
 /**
- * ToolkitNode - A node component for skill nodes and toolkit nodes with vertical handle layout.
+ * ToolkitNode - A node component for skill nodes with vertical handle layout.
  *
  * Skill nodes (whatsappSkill, memorySkill, etc.): Square (60x60px)
  *   - Output handle at TOP (connects to agent's skill input)
  *   - No input handle (passive nodes)
  *
- * Toolkit nodes (androidTool): Rectangular (100x60px)
- *   - Output handle at TOP (connects to AI Agent's tool input)
- *   - Input handle at BOTTOM (receives Android service nodes)
  */
 
 import React, { memo, useCallback } from 'react';
@@ -22,9 +19,6 @@ import { useAppTheme } from '../hooks/useAppTheme';
 import { useWebSocket } from '../contexts/WebSocketContext';
 import EditableNodeLabel from './ui/EditableNodeLabel';
 
-// Toolkit node types that render rectangular (wider than tall)
-const TOOLKIT_NODE_TYPES = ['androidTool'];
-
 const ToolkitNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectable, selected }) => {
   const theme = useAppTheme();
   const setSelectedNode = useAppStore((s) => s.setSelectedNode);
@@ -38,9 +32,6 @@ const ToolkitNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
 
   // Wave 6 Phase 3e: backend NodeSpec -> legacy fallback
   const definition = resolveNodeDescription(type || '');
-
-  // Check if this is a toolkit node (rectangular) vs skill node (square)
-  const isToolkitNode = type ? TOOLKIT_NODE_TYPES.includes(type) : false;
 
   // Execution state
   const isExecuting = executionStatus === 'executing' || executionStatus === 'waiting';
@@ -99,14 +90,13 @@ const ToolkitNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
         cursor: 'pointer',
       } as NodeStyle}
     >
-      {/* Main Node - rectangular for toolkit, square for skills.
-          Layout only; visuals live in CSS. */}
+      {/* Main Node. Layout only; visuals live in CSS. */}
       <div
         className="sq-node-box"
         style={{
           position: 'relative',
-          width: isToolkitNode ? theme.nodeSize.toolkitWidth : theme.nodeSize.square,
-          height: isToolkitNode ? theme.nodeSize.toolkitHeight : theme.nodeSize.square,
+          width: theme.nodeSize.square,
+          height: theme.nodeSize.square,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -137,7 +127,7 @@ const ToolkitNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
             transition: theme.transitions.fast,
             zIndex: 30,
           }}
-          title="Edit Toolkit Parameters"
+          title="Edit Skill Parameters"
         >
           ⚙️
         </button>
@@ -154,10 +144,10 @@ const ToolkitNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
             height: theme.nodeSize.statusIndicator,
             zIndex: 30,
           }}
-          title={isExecuting ? 'Executing...' : 'Toolkit ready'}
+          title={isExecuting ? 'Executing...' : 'Skill ready'}
         />
 
-        {/* TOP Output Handle - connects to AI Agent's tool/skill input */}
+        {/* TOP Output Handle - connects to an agent's skill input */}
         <Handle
           id="output-main"
           type="source"
@@ -173,29 +163,8 @@ const ToolkitNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
             height: theme.nodeSize.handle,
             zIndex: 20,
           }}
-          title={isToolkitNode ? "Connect to AI Agent's tool input" : "Connect to agent's skill input"}
+          title="Connect to agent's skill input"
         />
-
-        {/* BOTTOM Input Handle - only for toolkit nodes (receives Android service nodes) */}
-        {isToolkitNode && (
-          <Handle
-            id="input-services"
-            type="target"
-            position={Position.Bottom}
-            isConnectable={isConnectable}
-            className="sq-node-handle in"
-            style={{
-              position: 'absolute',
-              bottom: '-6px',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              width: theme.nodeSize.handle,
-              height: theme.nodeSize.handle,
-              zIndex: 20,
-            }}
-            title="Connect Android service nodes"
-          />
-        )}
 
         {/* Output Data Indicator (bespoke; keeps inline style) */}
         {executionStatus === 'success' && nodeStatus?.data && (

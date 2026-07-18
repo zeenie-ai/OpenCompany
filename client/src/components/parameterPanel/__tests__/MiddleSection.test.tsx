@@ -4,7 +4,7 @@
  * The original inline `shouldShowParameter` function lived inside MiddleSection.tsx
  * and could not be tested directly without mounting the entire panel (which OOMs
  * jsdom because of the deep transitive dependency tree -- antd, prismjs,
- * MasterSkillEditor, ToolSchemaEditor, reactflow types, etc.).
+ * MasterSkillEditor, reactflow types, etc.).
  *
  * The function is pure -- given a parameter definition and the current values of
  * all parameters, it returns whether the parameter should render.  Locks in

@@ -166,12 +166,8 @@ class AndroidServiceBase(ActionNode, abstract=True):
 # ============================================================================
 # AI-tool-time dispatchers (Wave 11.E.3)
 # ----------------------------------------------------------------------------
-# When an Android service or the androidTool aggregator is connected to an
-# AI agent's input-tools handle, the LLM emits ``{action, parameters}`` —
-# different shape from the workflow-node Params schema. These two helpers
-# do the LLM-arg-to-service-call translation + status broadcast and are
-# called from ``services/handlers/tools.py:execute_tool`` for the
-# ``androidTool`` and ``ANDROID_SERVICE_NODE_TYPES`` branches.
+# When an Android service is connected to an AI agent's input-tools handle,
+# the LLM emits a different shape from the workflow-node Params schema.
 # ============================================================================
 
 
@@ -247,68 +243,6 @@ async def _execute_with_broadcast(
                 workflow_id=workflow_id,
             )
         return {"error": str(e)}
-
-
-async def execute_android_toolkit(
-    args: Dict[str, Any],
-    config: Dict[str, Any],
-) -> Dict[str, Any]:
-    """Route an LLM tool call through the Android toolkit aggregator.
-
-    Looks up the connected service in ``config['connected_services']``
-    by ``service_id``, then executes through the broadcast helper.
-    """
-    service_id = args.get("service_id", "")
-    action = args.get("action", "")
-    parameters = args.get("parameters") or {}
-
-    connected_services = config.get("connected_services", [])
-    if not service_id:
-        available = [s.get("service_id") or s.get("node_type") for s in connected_services]
-        return {
-            "error": "No service_id provided",
-            "hint": (f"Available services: {', '.join(available)}" if available else "No services connected"),
-        }
-
-    target_service = next(
-        (s for s in connected_services if (s.get("service_id") or s.get("node_type")) == service_id),
-        None,
-    )
-    if not target_service:
-        available = [s.get("service_id") or s.get("node_type") for s in connected_services]
-        return {
-            "error": f"Service '{service_id}' not connected to toolkit",
-            "available_services": available,
-        }
-
-    svc_params = target_service.get("parameters", {})
-    host = svc_params.get("android_host", "localhost")
-    port = int(svc_params.get("android_port", 8888))
-    if not action:
-        action = svc_params.get("action") or target_service.get("action", "status")
-
-    target_node_id = target_service.get("node_id")
-    workflow_id = config.get("workflow_id")
-
-    logger.info(
-        "[Android Toolkit] Executing %s.%s via '%s' (node: %s, workflow: %s)",
-        service_id,
-        action,
-        target_service.get("label"),
-        target_node_id,
-        workflow_id,
-    )
-
-    return await _execute_with_broadcast(
-        target_node_id=target_node_id,
-        workflow_id=workflow_id,
-        service_id=service_id,
-        action=action,
-        parameters=parameters,
-        host=host,
-        port=port,
-        log_label="Android Toolkit",
-    )
 
 
 async def execute_android_service_tool(

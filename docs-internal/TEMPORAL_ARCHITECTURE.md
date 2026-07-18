@@ -442,7 +442,7 @@ TRIGGER_NODE_TYPES = frozenset([
     "emailReceive",
 ])
 
-# Android service types (connect to androidTool) -- authoritative list
+# Android service types (connect directly to agent input-tools) -- authoritative list
 # in server/constants.py ANDROID_SERVICE_NODE_TYPES (16 entries since
 # Wave 11.I).
 ```

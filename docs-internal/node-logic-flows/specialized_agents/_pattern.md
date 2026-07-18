@@ -108,7 +108,7 @@ flowchart TD
   P --> B[collect_agent_connections]
   B --> B1[memory_data from input-memory]
   B --> B2[skill_data from input-skill<br/>masterSkill expanded to N skills]
-  B --> B3[tool_data from input-tools<br/>androidTool sub-nodes discovered]
+  B --> B3[tool_data from directly connected input-tools]
   B --> B4[input_data from input-main]
   B --> B5[task_data from input-task]
   B1 --> C{task_data present?}

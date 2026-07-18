@@ -40,8 +40,8 @@ async def handle_get_android_devices(data: Dict[str, Any], websocket: WebSocket)
     from services.plugin.deps import get_android_service
 
     android_service = get_android_service()
-    devices = await android_service.list_devices()
-    return {"devices": devices, "timestamp": time.time()}
+    result = await android_service.list_devices()
+    return {**result, "timestamp": time.time()}
 
 
 async def handle_execute_android_action(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
@@ -89,13 +89,10 @@ async def handle_android_relay_connect(data: Dict[str, Any], websocket: WebSocke
 
     client, error = await get_relay_client(url, api_key)
     if client:
-        logger.info(
-            f"[WebSocket] Android relay connect success, qr_data present: " f"{bool(client.qr_data)}, session_token: {client.session_token}"
-        )
+        logger.info("[WebSocket] Android relay connect success", qr_data_present=bool(client.qr_data))
         return {
             "success": True,
             "connected": True,
-            "session_token": client.session_token,
             "qr_data": client.qr_data,
             "message": "Connected to relay server",
         }
@@ -139,7 +136,6 @@ async def handle_android_relay_reconnect(data: Dict[str, Any], websocket: WebSoc
         return {
             "success": True,
             "connected": True,
-            "session_token": client.session_token,
             "qr_data": client.qr_data,
             "message": "Reconnected with new session token",
         }

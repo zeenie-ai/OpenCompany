@@ -44,7 +44,7 @@ describe('nodeSpecToDescription contract', () => {
       subtitle: 'A node with everything',
       description: 'Covers every adapter codepath.',
       credentials: ['openai', 'anthropic'],
-      uiHints: { hasSkills: true, isToolPanel: false },
+      uiHints: { hasSkills: true },
       color: '#bd93f9',
       componentKind: 'tool',
       hideOutputHandle: false,

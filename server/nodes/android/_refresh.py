@@ -55,7 +55,6 @@ async def _auto_reconnect_body(broadcaster: "StatusBroadcaster", span) -> None:
                 connected_devices=list(existing.get_connected_devices()),
                 connection_type="relay",
                 qr_data=existing.qr_data,
-                session_token=existing.session_token,
             )
             logger.debug("[StatusBroadcaster] Android relay already connected")
             span.set_attribute("path", "already_connected")
@@ -104,7 +103,6 @@ async def _auto_reconnect_body(broadcaster: "StatusBroadcaster", span) -> None:
                 connected_devices=list(client.get_connected_devices()),
                 connection_type="relay",
                 qr_data=client.qr_data,
-                session_token=client.session_token,
             )
             span.set_attribute("reconnect_ok", True)
         else:

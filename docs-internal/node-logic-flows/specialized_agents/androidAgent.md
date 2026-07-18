@@ -11,13 +11,13 @@
 
 AI agent pre-configured for Android device control. Users typically connect
 Android service nodes (`batteryMonitor`, `wifiAutomation`, `appLauncher`,
-etc.) directly to `input-tools`, or wire an `androidTool` toolkit, or attach
+etc.) directly to `input-tools`, or attach
 the `android_agent` folder via a Master Skill.
 
 ## What is unique to this node
 
 - **Intended tool set**: Android service nodes (16 total) and the
-  `androidTool` aggregator.
+  independent tool capabilities.
 - **Intended skills**: `server/skills/android_agent/` (12 skills:
   personality, battery, wifi, bluetooth, location, etc.).
 - **Frontend theming**: green dracula accent, phone emoji in component

@@ -37,7 +37,7 @@ const QrPairingPanel: React.FC<{ config: ProviderConfig; visible: boolean }> = (
       const key = panel.form.getFieldValue('android_remote')?.trim();
       if (!key) { panel.setError('No API key configured'); return; }
       const res = await sendRequest('android_relay_connect', { url: (import.meta as any).env?.VITE_ANDROID_RELAY_URL || '', api_key: key });
-      if (res.qr_data) setAndroidStatus((prev: any) => ({ ...prev, connected: true, paired: false, qr_data: res.qr_data, session_token: res.session_token || prev.session_token }));
+      if (res.qr_data) setAndroidStatus((prev: any) => ({ ...prev, connected: true, paired: false, qr_data: res.qr_data }));
       return res;
     }),
     disconnect: () => panel.execute('disconnect', () => sendRequest('android_relay_disconnect', {})),

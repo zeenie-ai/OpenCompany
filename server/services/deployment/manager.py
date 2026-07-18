@@ -1126,7 +1126,7 @@ class DeploymentManager:
         # Service nodes connect to a toolkit's input-main (not a config
         # handle) and need to be included so the toolkit can discover
         # them. ``TOOLKIT_NODE_TYPES`` is the canonical set; today only
-        # ``androidTool`` is in it.
+        # toolkit node types are in it.
         toolkit_node_ids = {n["id"] for n in nodes if n.get("type") in TOOLKIT_NODE_TYPES and n["id"] in downstream_ids}
         for edge in edges:
             target = edge.get("target")

@@ -74,18 +74,31 @@ async def handle_save_workflow(data: Dict[str, Any], websocket: WebSocket) -> Di
     else:
         slug = await next_available_slug(name, database, exclude_id=workflow_id)
 
+    workflow_data = data.get("data", {})
+    from services.workflow_migrations import normalize_legacy_android_toolkit
+
+    nodes, edges, _, migration_warnings = normalize_legacy_android_toolkit(
+        workflow_data.get("nodes") or [], workflow_data.get("edges") or []
+    )
+    normalized_data = {**workflow_data, "nodes": nodes, "edges": edges}
     success = await database.save_workflow(
         workflow_id=workflow_id,
         name=name,
         slug=slug,
-        data=data.get("data", {}),
+        data=normalized_data,
     )
 
     if existing and existing.slug and existing.slug != slug:
         _move_workspace(existing.slug, slug)
         await _broadcast_renamed(workflow_id, name, slug, existing.slug)
 
-    return {"success": success, "workflow_id": workflow_id, "name": name, "slug": slug}
+    return {
+        "success": success,
+        "workflow_id": workflow_id,
+        "name": name,
+        "slug": slug,
+        "migration_warnings": migration_warnings,
+    }
 
 
 @ws_handler()
@@ -127,16 +140,39 @@ async def handle_get_workflow(data: Dict[str, Any], websocket: WebSocket) -> Dic
     database = container.database()
     workflow = await database.get_workflow(data["workflow_id"])
     if workflow:
+        from services.workflow_migrations import normalize_legacy_android_toolkit
+
+        workflow_data = workflow.data or {}
+        nodes, edges, _, migration_warnings = normalize_legacy_android_toolkit(
+            workflow_data.get("nodes") or [], workflow_data.get("edges") or []
+        )
+        if nodes != (workflow_data.get("nodes") or []) or edges != (workflow_data.get("edges") or []):
+            normalized_data = {**workflow_data, "nodes": nodes, "edges": edges}
+            await database.save_workflow(
+                workflow_id=workflow.id,
+                name=workflow.name,
+                slug=workflow.slug,
+                description=getattr(workflow, "description", None),
+                data=normalized_data,
+            )
+            legacy_ids = {
+                node.get("id")
+                for node in workflow_data.get("nodes", [])
+                if node.get("type") == "androidTool" and node.get("id")
+            }
+            for legacy_id in legacy_ids:
+                await database.delete_node_parameters(legacy_id)
         return {
             "success": True,
             "workflow": {
                 "id": workflow.id,
                 "name": workflow.name,
                 "slug": workflow.slug,
-                "data": workflow.data,
+                "data": {**workflow_data, "nodes": nodes, "edges": edges},
                 "created_at": workflow.created_at.isoformat() if workflow.created_at else None,
                 "updated_at": workflow.updated_at.isoformat() if workflow.updated_at else None,
             },
+            "migration_warnings": migration_warnings,
         }
     return {"success": False, "error": "Workflow not found"}
 

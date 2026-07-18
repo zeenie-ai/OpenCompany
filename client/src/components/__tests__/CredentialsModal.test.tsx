@@ -103,7 +103,6 @@ vi.mock('../../contexts/WebSocketContext', () => ({
     device_name: null,
     connected_devices: [],
     qr_data: null,
-    session_token: null,
   }),
   useTwitterStatus: () => ({
     connected: false,

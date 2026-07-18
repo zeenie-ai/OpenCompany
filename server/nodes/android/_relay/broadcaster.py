@@ -22,7 +22,6 @@ async def _emit_relay_status(
     device_name: Optional[str] = None,
     devices: Optional[Set[str]] = None,
     qr_data: Optional[str] = None,
-    session_token: Optional[str] = None,
 ):
     """Translate relay-shaped args and route to the canonical
     plugin-owned broadcaster (``nodes.android._events``)."""
@@ -39,7 +38,6 @@ async def _emit_relay_status(
             connected_devices=list(devices) if devices else [],
             connection_type="relay" if connected else None,
             qr_data=qr_data,
-            session_token=session_token,
         )
     except Exception as e:
         logger.warning("[Android] Failed to broadcast status", error=str(e))
@@ -52,7 +50,7 @@ async def broadcast_connected(device_id: str, device_name: Optional[str] = None)
     )
 
 
-async def broadcast_device_disconnected(relay_connected: bool = True, qr_data: Optional[str] = None, session_token: Optional[str] = None):
+async def broadcast_device_disconnected(relay_connected: bool = True, qr_data: Optional[str] = None):
     """Broadcast that Android device is disconnected (but relay may still be connected).
 
     This is called when the Android device unpairs. The relay connection may still be active.
@@ -61,7 +59,6 @@ async def broadcast_device_disconnected(relay_connected: bool = True, qr_data: O
     Args:
         relay_connected: Whether the relay WebSocket is still connected
         qr_data: QR code data for re-pairing
-        session_token: Current session token
     """
     await _emit_relay_status(
         connected=relay_connected,  # Relay may still be connected
@@ -70,7 +67,6 @@ async def broadcast_device_disconnected(relay_connected: bool = True, qr_data: O
         device_name=None,
         devices=set(),
         qr_data=qr_data,  # Keep QR data for re-pairing
-        session_token=session_token,
     )
 
 
@@ -85,7 +81,7 @@ async def broadcast_disconnected():
     await broadcast_relay_disconnected()
 
 
-async def broadcast_qr_code(qr_data: str, session_token: Optional[str] = None):
+async def broadcast_qr_code(qr_data: str):
     """Broadcast QR code for pairing"""
     await _emit_relay_status(
         connected=True,  # Connected to relay but not paired
@@ -94,5 +90,4 @@ async def broadcast_qr_code(qr_data: str, session_token: Optional[str] = None):
         device_name=None,
         devices=set(),
         qr_data=qr_data,
-        session_token=session_token,
     )

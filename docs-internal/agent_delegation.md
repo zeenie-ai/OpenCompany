@@ -300,7 +300,7 @@ For each matching edge, it checks the target handle:
 |--------|--------|
 | `input-memory` | Loads markdown memory content from child's connected `simpleMemory` node |
 | `input-skill` | Loads skill instructions; expands masterSkill into individual enabled skills |
-| `input-tools` | Discovers tool nodes; for androidTool, finds connected Android services |
+| `input-tools` | Discovers directly connected tool nodes, including Android services |
 | `input-main` / `input-chat` | Reads upstream node output for auto-prompt fallback |
 | `input-task` | Collects `taskTrigger` output for the conversational task-report pattern |
 

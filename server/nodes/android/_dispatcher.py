@@ -2,6 +2,8 @@
 
 import time
 import httpx
+import asyncio
+import subprocess
 from datetime import datetime
 from typing import Dict, Any, List
 
@@ -155,6 +157,65 @@ class AndroidService:
 
     def __init__(self):
         self.default_timeout = 30.0
+
+    async def list_devices(self) -> Dict[str, Any]:
+        """Return devices reported by ADB without blocking the event loop."""
+        try:
+            result = await asyncio.to_thread(
+                subprocess.run,
+                ["adb", "devices", "-l"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=5,
+            )
+        except FileNotFoundError:
+            logger.error("[Android] ADB not found in PATH")
+            return {
+                "success": False,
+                "error_code": "ADB_NOT_FOUND",
+                "error": "ADB not found. Please install Android SDK Platform Tools",
+                "devices": [],
+                "count": 0,
+            }
+        except subprocess.TimeoutExpired:
+            logger.error("[Android] ADB device discovery timed out")
+            return {
+                "success": False,
+                "error_code": "ADB_TIMEOUT",
+                "error": "ADB device discovery timed out",
+                "devices": [],
+                "count": 0,
+            }
+        except Exception as exc:
+            logger.error("[Android] Failed to list devices", error=str(exc), exc_info=True)
+            return {
+                "success": False,
+                "error_code": "ADB_COMMAND_FAILED",
+                "error": "Failed to list Android devices",
+                "devices": [],
+                "count": 0,
+            }
+
+        if result.returncode != 0:
+            logger.error("[Android] ADB device discovery failed", returncode=result.returncode)
+            return {
+                "success": False,
+                "error_code": "ADB_COMMAND_FAILED",
+                "error": (result.stderr or result.stdout or "ADB device discovery failed").strip(),
+                "devices": [],
+                "count": 0,
+            }
+
+        devices = []
+        for line in result.stdout.splitlines()[1:]:
+            parts = line.split()
+            if len(parts) < 2:
+                continue
+            model = next((part.removeprefix("model:") for part in parts[2:] if part.startswith("model:")), "Unknown")
+            devices.append({"id": parts[0], "state": parts[1], "model": model, "android_version": None})
+        return {"success": True, "devices": devices, "count": len(devices)}
 
     def get_service_actions(self, service_id: str) -> List[Dict[str, str]]:
         """Get available actions for a specific Android service.

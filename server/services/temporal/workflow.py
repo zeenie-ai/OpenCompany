@@ -590,7 +590,7 @@ class MachinaWorkflow:
             if handle in CONFIG_HANDLES:
                 config_ids.add(source_id)
 
-            # Android services connecting to androidTool
+            # Android services connected as direct tools
             source_node = node_map.get(source_id, {})
             if source_node.get("type") in ANDROID_SERVICE_TYPES:
                 config_ids.add(source_id)

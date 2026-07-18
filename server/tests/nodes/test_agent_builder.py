@@ -745,17 +745,31 @@ class TestCatalogueVisibility:
         )
         _ = original_get_config  # silence unused-var lint
 
-    def test_task_manager_disabled_in_allowlist_json(self):
-        """End-to-end: the on-disk ``server/config/node_allowlist.json``
-        marks ``taskManager`` as disabled, so the live
-        ``_allowed_tool_types()`` excludes it. Locks the operator
-        decision against accidental revert."""
+    def test_task_manager_enabled_in_allowlist_json(self):
+        """The Task Manager is visible to both the palette and Agent Builder."""
         from services.node_allowlist import get_node_allowlist_service
 
         config = get_node_allowlist_service().get_config()
-        assert "taskManager" in config["disabled_nodes"]
-        # And the agentBuilder catalogue honors it.
-        assert "taskManager" not in ab._allowed_tool_types()
+        assert "taskManager" in config["enabled_nodes"]
+        assert "taskManager" not in config["disabled_nodes"]
+        assert "taskManager" in ab._allowed_tool_types()
+
+    def test_android_nodes_enabled_in_allowlist_json(self):
+        """Android services bind directly to agents as ordinary tools."""
+        from constants import ANDROID_SERVICE_NODE_TYPES
+        from services.node_allowlist import get_node_allowlist_service
+
+        config = get_node_allowlist_service().get_config()
+        android_types = set(ANDROID_SERVICE_NODE_TYPES)
+        assert android_types <= set(config["enabled_nodes"])
+        assert "android_agent" in config["enabled_nodes"]
+        assert "androidTool" not in config["enabled_nodes"]
+        assert "android" not in config["disabled_groups"]
+        assert "android_agent" not in config["disabled_nodes"]
+        assert "android" not in config["disabled_credential_categories"]
+        assert "android_agent" not in config["disabled_skill_folders"]
+        assert android_types <= ab._allowed_tool_types()
+        assert "android_agent" in ab._allowed_subagent_types()
 
     async def test_inspect_canvas_includes_available_skills(self):
         """available_skills must use the live SkillLoader registry. We

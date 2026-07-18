@@ -79,7 +79,6 @@ export interface AndroidStatus {
   connected_devices: string[];
   connection_type: string | null;
   qr_data: string | null;
-  session_token: string | null;
 }
 
 export interface NodeStatus {
@@ -398,8 +397,7 @@ const defaultAndroidStatus: AndroidStatus = {
   device_name: null,
   connected_devices: [],
   connection_type: null,
-  qr_data: null,
-  session_token: null
+  qr_data: null
 };
 
 const defaultWorkflowStatus: WorkflowStatus = {

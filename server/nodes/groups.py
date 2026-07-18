@@ -26,6 +26,7 @@ register_group(key="agent", metadata={"label": "AI Agents", "icon": "🤖", "col
 register_group(key="model", metadata={"label": "AI Models", "icon": "🧬", "color": "#8be9fd", "visibility": "normal"})
 register_group(key="skill", metadata={"label": "AI Skills", "icon": "🎯", "color": "#50fa7b", "visibility": "normal"})
 register_group(key="tool", metadata={"label": "AI Tools", "icon": "🛠️", "color": "#50fa7b", "visibility": "normal"})
+register_group(key="android", metadata={"label": "Android", "icon": "📱", "color": "#8be9fd", "visibility": "normal"})
 
 
 # ---------------------------------------------------------------------------
@@ -37,7 +38,6 @@ register_group(key="trigger", metadata={"label": "Triggers", "icon": "🕐", "co
 register_group(key="ai", metadata={"label": "AI", "icon": "🤖", "color": "#bd93f9", "visibility": "dev"})
 register_group(key="location", metadata={"label": "Location", "icon": "📍", "color": "#ff5555", "visibility": "dev"})
 register_group(key="social", metadata={"label": "Social", "icon": "📱", "color": "#50fa7b", "visibility": "dev"})
-register_group(key="android", metadata={"label": "Android", "icon": "📱", "color": "#8be9fd", "visibility": "dev"})
 register_group(key="chat", metadata={"label": "Chat", "icon": "💭", "color": "#f1fa8c", "visibility": "dev"})
 register_group(key="code", metadata={"label": "Code", "icon": "💻", "color": "#ffb86c", "visibility": "dev"})
 register_group(key="document", metadata={"label": "Documents", "icon": "🗄️", "color": "#ff79c6", "visibility": "dev"})

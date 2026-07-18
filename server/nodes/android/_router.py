@@ -103,45 +103,9 @@ async def get_action_parameters(service_id: str, action: str, android_service: A
 
 
 @router.get("/devices")
-async def list_android_devices():
+async def list_android_devices(android_service: AndroidService = Depends(get_android_service)):
     """List all connected Android devices via ADB."""
-    import subprocess
-
-    try:
-        # Run adb devices command
-        result = subprocess.run(["adb", "devices", "-l"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
-
-        devices = []
-        lines = result.stdout.strip().split("\n")[1:]  # Skip header "List of devices attached"
-
-        for line in lines:
-            if not line.strip():
-                continue
-
-            parts = line.split()
-            if len(parts) >= 2:
-                device_id = parts[0]
-                state = parts[1]
-
-                # Extract model and other info
-                model = "Unknown"
-                android_version = None
-
-                for part in parts[2:]:
-                    if part.startswith("model:"):
-                        model = part.split(":")[1]
-                    elif part.startswith("device:"):
-                        pass  # Can use this for device codename
-
-                devices.append({"id": device_id, "state": state, "model": model, "android_version": android_version})
-
-        return {"success": True, "devices": devices, "count": len(devices)}
-    except FileNotFoundError:
-        logger.error("[Android] ADB not found in PATH")
-        return {"success": False, "error": "ADB not found. Please install Android SDK Platform Tools", "devices": []}
-    except Exception as e:
-        logger.error("[Android] Failed to list devices", error=str(e), exc_info=True)
-        return {"success": False, "error": "Failed to list devices", "devices": []}
+    return await android_service.list_devices()
 
 
 @router.post("/port-forward")
@@ -209,7 +173,6 @@ async def get_relay_connection_status():
                 "connection_type": "relay",
                 "device_id": relay_client.paired_device_id,
                 "device_name": relay_client.paired_device_name,
-                "session_token": relay_client.session_token,
                 "qr_data": relay_client.qr_data if not relay_client.is_paired() else None,
                 "status": "paired" if relay_client.is_paired() else "waiting_for_pairing",
             }

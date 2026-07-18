@@ -334,7 +334,7 @@ Patterns covered in the canonical doc:
 
 - DEFAULT_TOOL_NAMES map (node_type → LLM-visible tool name)
 - Database tool-schema override via ToolSchema model + Tool Schema Editor UI
-- Gateway-tool pattern (androidTool aggregates connected service nodes)
+- Direct tool pattern (each Android service connects to the agent independently)
 - Direct Android service tools (16 entries, skip the toolkit)
 - Agent delegation (`delegate_to_*` fire-and-forget background tasks)
 - Per-type Temporal activity dispatch (F4.A, when TEMPORAL_PER_TYPE_DISPATCH=true)

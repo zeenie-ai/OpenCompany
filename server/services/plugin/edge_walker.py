@@ -11,7 +11,7 @@ Three helpers:
 - :func:`collect_agent_connections` — walks ``input-memory``,
   ``input-skill``, ``input-tools``, ``input-main`` / ``input-chat``,
   ``input-task`` edges into a single tuple. Knows about the
-  ``masterSkill`` expansion + the ``androidTool`` Sub-Node pattern +
+  ``masterSkill`` expansion + direct Android service tools +
   child-agent tool discovery.
 - :func:`collect_teammate_connections` — walks ``input-teammates``
   edges (orchestrator / ai_employee team-lead pattern).
@@ -38,7 +38,7 @@ import re
 from collections import Counter
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
-from constants import AI_AGENT_TYPES, ANDROID_SERVICE_NODE_TYPES
+from constants import AI_AGENT_TYPES
 from core.logging import get_logger
 
 if TYPE_CHECKING:
@@ -358,33 +358,6 @@ async def _append_tool_entry(
         "parameters": tool_params,
         "label": source_node.get("data", {}).get("label", tool_type),
     }
-
-    if tool_type == "androidTool":
-        connected_services: List[Dict[str, Any]] = []
-        for service_edge in edges:
-            if service_edge.get("target") != source_node_id:
-                continue
-            service_target_handle = service_edge.get("targetHandle")
-            if service_target_handle is not None and service_target_handle != "input-main":
-                logger.debug(f"{log_prefix} Android Toolkit: Skipping edge with " f"targetHandle: {service_target_handle}")
-                continue
-            android_node_id = service_edge.get("source")
-            android_node = next((n for n in nodes if n.get("id") == android_node_id), None)
-            if android_node and android_node.get("type") in ANDROID_SERVICE_NODE_TYPES:
-                android_params = await database.get_node_parameters(android_node_id) or {}
-                connected_services.append(
-                    {
-                        "node_id": android_node_id,
-                        "node_type": android_node.get("type"),
-                        "service_id": android_params.get("service_id"),
-                        "action": android_params.get("action"),
-                        "parameters": android_params,
-                        "label": android_node.get("data", {}).get("label", android_node.get("type")),
-                    }
-                )
-                logger.debug(f"{log_prefix} Android toolkit connected service: " f"{android_params.get('service_id')}")
-        tool_entry["connected_services"] = connected_services
-        logger.debug(f"{log_prefix} Android toolkit has {len(connected_services)} connected services")
 
     if tool_type in AI_AGENT_TYPES:
         child_tools: List[Dict[str, Any]] = []

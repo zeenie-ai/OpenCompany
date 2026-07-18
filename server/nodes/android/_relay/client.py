@@ -67,6 +67,14 @@ class RelayWebSocketClient:
         self.on_pairing_disconnected: Optional[Callable] = None
         self.on_relay_message: Optional[Callable] = None
 
+    def _safe_error(self, value: object) -> str:
+        """Redact relay credentials from errors before logging or returning them."""
+        message = str(value)
+        for secret in (self.api_key, self.session_token):
+            if secret:
+                message = message.replace(secret, "[REDACTED]")
+        return message
+
     # =========================================================================
     # Connection Management
     # =========================================================================
@@ -78,7 +86,7 @@ class RelayWebSocketClient:
             Tuple of (success: bool, error_message: str)
         """
         try:
-            logger.debug("[Relay] Connecting...", url=self.url)
+            logger.debug("[Relay] Connecting...", url=self.base_url)
             timeout = aiohttp.ClientTimeout(total=None, connect=10, sock_read=300)
             self.session = aiohttp.ClientSession(timeout=timeout)
 
@@ -107,11 +115,11 @@ class RelayWebSocketClient:
                     self.session_token = params.get("session_token")
                     self.qr_data = params.get("qr_data")
 
-                    logger.info("[Relay] Connection established", session_token=self.session_token, has_qr=bool(self.qr_data))
+                    logger.info("[Relay] Connection established", has_qr=bool(self.qr_data))
 
                     # Broadcast QR data to frontend
                     if self.qr_data:
-                        await broadcast_qr_code(self.qr_data, self.session_token)
+                        await broadcast_qr_code(self.qr_data)
 
                     # Start background tasks
                     self._receive_task = asyncio.create_task(self._receive_loop())
@@ -119,37 +127,59 @@ class RelayWebSocketClient:
 
                     return True, ""
                 elif data.get("error"):
-                    error_msg = data.get("error", {}).get("message", "Unknown server error")
+                    error_msg = self._safe_error(data.get("error", {}).get("message", "Unknown server error"))
                     logger.error("[Relay] Server error", error=error_msg)
+                    await self._close_failed_connection()
                     return False, f"Server error: {error_msg}"
                 else:
-                    logger.error("[Relay] Unexpected initial message", data=data)
+                    logger.error("[Relay] Unexpected initial message", method=method)
+                    await self._close_failed_connection()
                     return False, f"Unexpected response: {method or 'unknown'}"
 
             elif msg.type == aiohttp.WSMsgType.CLOSE:
                 close_code = msg.data
                 close_reason = msg.extra or "Unknown"
                 logger.error("[Relay] Connection closed by server", code=close_code, reason=close_reason)
+                await self._close_failed_connection()
                 return False, f"Connection closed: {close_reason} (code {close_code})"
 
             elif msg.type == aiohttp.WSMsgType.ERROR:
                 logger.error("[Relay] WebSocket error on receive")
+                await self._close_failed_connection()
                 return False, "WebSocket error during handshake"
 
+            await self._close_failed_connection()
             return False, "No response from server"
 
         except asyncio.TimeoutError:
             logger.error("[Relay] Connection timeout")
+            await self._close_failed_connection()
             return False, "Connection timeout - server not responding"
         except aiohttp.ClientConnectorError as e:
-            logger.error("[Relay] Connection failed", error=str(e))
-            return False, f"Cannot connect to server: {str(e)}"
+            logger.error("[Relay] Connection failed", error=self._safe_error(e))
+            await self._close_failed_connection()
+            return False, f"Cannot connect to server: {self._safe_error(e)}"
         except aiohttp.WSServerHandshakeError as e:
-            logger.error("[Relay] WebSocket handshake failed", error=str(e))
-            return False, f"WebSocket handshake failed: {str(e)}"
+            logger.error("[Relay] WebSocket handshake failed", error=self._safe_error(e))
+            await self._close_failed_connection()
+            return False, f"WebSocket handshake failed: {self._safe_error(e)}"
         except Exception as e:
-            logger.error("[Relay] Connection error", error=str(e), exc_info=True)
-            return False, f"Connection error: {str(e)}"
+            # Do not attach the raw traceback: aiohttp exceptions can embed the
+            # authenticated WebSocket URL (and therefore the API key).
+            logger.error("[Relay] Connection error", error=self._safe_error(e))
+            await self._close_failed_connection()
+            return False, f"Connection error: {self._safe_error(e)}"
+
+    async def _close_failed_connection(self) -> None:
+        """Close transport resources after a handshake failure without clearing persisted pairing."""
+        self._running = False
+        self.connected = False
+        if self.ws and not self.ws.closed:
+            await self.ws.close()
+        if self.session and not self.session.closed:
+            await self.session.close()
+        self.ws = None
+        self.session = None
 
     async def disconnect(self, clear_stored_session: bool = True):
         """Close connection and cleanup.
@@ -318,7 +348,7 @@ class RelayWebSocketClient:
             self.session_token = params.get("session_token")
             self.qr_data = params.get("qr_data")
             if self.qr_data:
-                await broadcast_qr_code(self.qr_data, self.session_token)
+                await broadcast_qr_code(self.qr_data)
 
     async def _handle_pairing_connected(self, params: dict):
         """Handle pairing.connected event."""
@@ -386,7 +416,7 @@ class RelayWebSocketClient:
         self.paired_device_name = None
 
         # Broadcast device disconnection - relay is still connected, pass QR data for re-pairing
-        await broadcast_device_disconnected(relay_connected=self.is_connected(), qr_data=self.qr_data, session_token=self.session_token)
+        await broadcast_device_disconnected(relay_connected=self.is_connected(), qr_data=self.qr_data)
 
         if self.on_pairing_disconnected:
             await self.on_pairing_disconnected(params)

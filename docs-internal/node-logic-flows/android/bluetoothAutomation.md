@@ -6,7 +6,7 @@
 | **Backend handler** | plugin [`server/nodes/android/bluetooth_automation/__init__.py`](../../../server/nodes/android/bluetooth_automation/__init__.py); dispatch via `BaseNode.execute()` -> shared [`AndroidServiceBase.invoke`](../../../server/nodes/android/_base.py) (`@Operation("invoke")`) |
 | **Tests** | [`server/tests/nodes/test_android.py`](../../../server/tests/nodes/test_android.py) |
 | **Skill (if any)** | [`server/skills/android_agent/bluetooth-skill/SKILL.md`](../../../server/skills/android_agent/bluetooth-skill/SKILL.md) |
-| **Dual-purpose tool** | sub-node of `androidTool`; connectable directly to any agent's `input-tools` |
+| **Direct agent tool** | connectable to any agent's `input-tools` |
 
 ## Purpose
 

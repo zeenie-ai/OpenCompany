@@ -68,6 +68,13 @@ async def handle_deploy_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
     workflow_id = data.get("workflow_id")
     nodes = data.get("nodes", [])
     edges = data.get("edges", [])
+    from services.workflow_migrations import normalize_legacy_android_toolkit
+
+    nodes, edges, normalized_parameters, migration_warnings = normalize_legacy_android_toolkit(
+        nodes, edges, data.get("parameters_by_id")
+    )
+    if migration_warnings:
+        logger.warning("[Deploy] %s", "; ".join(migration_warnings))
     session_id = data.get("session_id", "default")
 
     logger.debug(f"[Deploy] Received {len(edges)} edges for workflow {workflow_id}")
@@ -98,7 +105,7 @@ async def handle_deploy_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
     deploy_report = await validate_workflow(
         nodes=nodes,
         edges=edges,
-        parameters_by_id=data.get("parameters_by_id"),
+        parameters_by_id=normalized_parameters,
     )
     if deploy_report["errors"]:
         return {

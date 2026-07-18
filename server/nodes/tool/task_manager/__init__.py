@@ -22,11 +22,18 @@ logger = get_logger(__name__)
 
 
 class TaskManagerParams(BaseModel):
-    action: Literal["create", "list", "complete", "delete", "update"] = "create"
-    task_id: Optional[str] = Field(default=None)
-    title: Optional[str] = None
-    description: Optional[str] = None
-    status: Optional[str] = None
+    operation: Literal["list_tasks", "get_task", "mark_done"] = Field(
+        default="list_tasks",
+        description="List delegated tasks, retrieve one task, or remove a completed task from tracking.",
+    )
+    task_id: Optional[str] = Field(
+        default=None,
+        description="Delegated task ID. Required for get_task and mark_done.",
+    )
+    status_filter: Optional[Literal["running", "completed", "error", "cancelled"]] = Field(
+        default=None,
+        description="Optional status filter for list_tasks.",
+    )
 
     model_config = ConfigDict(extra="allow")
 

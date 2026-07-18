@@ -47,7 +47,6 @@ _DEFAULT_STATUS: Dict[str, Any] = {
     "connected_devices": [],
     "connection_type": None,
     "qr_data": None,
-    "session_token": None,
 }
 
 
@@ -63,7 +62,6 @@ def android_connection_status(
     connected_devices: Optional[List[str]] = None,
     connection_type: Optional[str] = None,
     qr_data: Optional[str] = None,
-    session_token: Optional[str] = None,
 ) -> WorkflowEvent:
     """Build a typed CloudEvents envelope describing the android relay
     connection state.
@@ -84,7 +82,6 @@ def android_connection_status(
             "connected_devices": list(connected_devices or []),
             "connection_type": connection_type,
             "qr_data": qr_data,
-            "session_token": session_token,
         },
     )
 
@@ -101,7 +98,6 @@ async def broadcast_android_status(
     connected_devices: Optional[List[str]] = None,
     connection_type: Optional[str] = None,
     qr_data: Optional[str] = None,
-    session_token: Optional[str] = None,
 ) -> None:
     """Update the android status cache + emit the typed
     ``plugin_connection_status`` CloudEvents envelope.
@@ -126,7 +122,6 @@ async def broadcast_android_status(
         "connected_devices": list(connected_devices or []),
         "connection_type": connection_type,
         "qr_data": qr_data,
-        "session_token": session_token,
     }
     broadcaster._status["android"] = payload
 
@@ -138,7 +133,6 @@ async def broadcast_android_status(
         connected_devices=connected_devices,
         connection_type=connection_type,
         qr_data=qr_data,
-        session_token=session_token,
     )
     await broadcaster.broadcast(
         {

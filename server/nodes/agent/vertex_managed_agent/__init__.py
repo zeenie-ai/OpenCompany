@@ -530,7 +530,7 @@ class VertexManagedAgentNode(ActionNode):
         ``iter_tool_node_classes``: ToolNodes, agents (delegation), and
         dual-purpose ``usable_as_tool`` plugins declare; display-only
         plugins (vertexCloudTool — minted by ``_ops`` with a persisted
-        ``input-tools`` edge) don't. Unknown types (androidTool
+        ``input-tools`` edge) don't. Unknown legacy types
         aggregator, pseudo-types) default-allow to preserve behavior.
         """
         from services.node_registry import get_node_class

@@ -1,5 +1,5 @@
 {
-  "_comment": "Node visibility config. `enabled_nodes`: positive list shown in normal mode (empty = show all). `disabled_groups` / `disabled_nodes`: ABSOLUTE blocklist enforced in BOTH normal and dev mode — wins over enabled_nodes and over the show_all default. Use disabled_groups to hide every plugin in a backend group (e.g. 'android' hides all 16 Android service nodes + androidTool); use disabled_nodes for one-off type names like 'android_agent' that don't share the group label. Node type identifiers must match the 'type' class attribute on the plugin in server/nodes/<category>/<file>.py verbatim.",
+  "_comment": "Node visibility config. `enabled_nodes`: positive list shown in normal mode (empty = show all). `disabled_groups` / `disabled_nodes`: ABSOLUTE blocklist enforced in BOTH normal and dev mode — wins over enabled_nodes and over the show_all default. Node type identifiers must match the 'type' class attribute on the plugin in server/nodes/<category>/<file>.py verbatim.",
   "enabled_nodes": [
     "start",
     "chatTrigger",
@@ -7,6 +7,7 @@
 
     "aiAgent",
     "chatAgent",
+    "android_agent",
     "vertex_managed_agent",
     "vertex_agent_admin",
     "vertexCloudTool",
@@ -21,28 +22,38 @@
     "calculatorTool",
     "currentTimeTool",
     "writeTodos",
+    "taskManager",
 
     "httpRequest",
     "timer",
     "cronScheduler",
 
     "telegramSend",
-    "telegramReceive"
+    "telegramReceive",
+
+    "airplaneModeControl",
+    "appLauncher",
+    "appList",
+    "audioAutomation",
+    "batteryMonitor",
+    "bluetoothAutomation",
+    "cameraControl",
+    "deviceStateAutomation",
+    "environmentalSensors",
+    "location",
+    "mediaControl",
+    "motionDetection",
+    "networkMonitor",
+    "screenControlAutomation",
+    "systemInfo",
+    "wifiAutomation"
   ],
   "disabled_groups": [
-    "android",
     "email"
   ],
-  "disabled_nodes": [
-    "android_agent",
-    "androidTool",
-    "taskManager"
-  ],
+  "disabled_nodes": [],
   "disabled_credential_categories": [
-    "android",
     "email"
   ],
-  "disabled_skill_folders": [
-    "android_agent"
-  ]
+  "disabled_skill_folders": []
 }

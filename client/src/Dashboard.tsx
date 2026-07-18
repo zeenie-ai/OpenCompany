@@ -768,10 +768,6 @@ const DashboardContent: React.FC = () => {
           sourceHandle: e.sourceHandle,
           targetHandle: e.targetHandle
         })),
-        // Check for toolkit connections specifically
-        toolkitEdges: edges.filter(e =>
-          e.target?.includes('androidTool') || e.source?.includes('androidTool')
-        )
       });
 
       const result = await deployWorkflow(currentWorkflow.id, nodes, edges, 'default');

@@ -27,7 +27,6 @@ import { Zap, Pencil, Sparkles, TerminalSquare, Trash2, RotateCcw } from 'lucide
 import { Badge } from '@/components/ui/badge';
 import { ActionButton } from '@/components/ui/action-button';
 import ParameterRenderer from '../ParameterRenderer';
-import ToolSchemaEditor from './ToolSchemaEditor';
 import MasterSkillEditor from './MasterSkillEditor';
 import TodoEditor from './TodoEditor';
 import { useAppStore } from '../../store/useAppStore';
@@ -51,7 +50,7 @@ const isMasterSkillNodeType = (nodeType: string | undefined): boolean => {
 };
 // Wave 10.G.3: retired the three tribal arrays `SKILL_NODE_TYPES`,
 // `TOOL_NODE_TYPES`, and `AGENT_WITH_SKILLS_TYPES`. The parameter panel
-// now reads `uiHints.hasSkills` / `uiHints.isToolPanel` /
+// now reads `uiHints.hasSkills` /
 // `uiHints.isMasterSkillEditor` / `uiHints.isMemoryPanel` directly from
 // the NodeSpec each plugin module declares.
 
@@ -183,7 +182,6 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
   // members other than masterSkill; that set was empty after Wave 10, so
   // it's now permanently dead.
   const isSkillNode = false;
-  const isToolNode = hints.isToolPanel === true;
   const isTodoEditorNode = hints.isTodoEditor === true;
   const isAgentWithSkills = hints.hasSkills === true;
 
@@ -594,15 +592,6 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
               </div>
               );
             })}
-
-            {/* Tool Schema Editor - Only for tool nodes */}
-            {isToolNode && (
-              <ToolSchemaEditor
-                nodeId={nodeId}
-                toolName={parameters.tool_name || nodeDefinition.name}
-                toolDescription={parameters.tool_description || nodeDefinition.description || ''}
-              />
-            )}
 
             {/* Clear Memory Button - Only for memory nodes */}
             {isMemoryNode && (

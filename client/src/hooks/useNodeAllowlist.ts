@@ -5,7 +5,7 @@ interface NodeAllowlistResponse {
   show_all: boolean;
   enabled_nodes: string[];
   /** Mode-independent blocklist by backend group (e.g. 'android' hides
-   *  every plugin in the android group + androidTool). Empty array if
+   *  every plugin in the android group). Empty array if
    *  the backend doesn't ship the field (older deployments). */
   disabled_groups: string[];
   /** Mode-independent blocklist by exact node type. Use for one-off

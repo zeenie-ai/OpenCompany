@@ -210,15 +210,8 @@ async def _dispatch_tool(tool_name: str, tool_args: Dict[str, Any], config: Dict
     # Branches below are only for built-ins without a plugin
     # representation or cases needing special argument translation.
 
-    # androidTool (toolkit aggregator): dynamic schema derived from
-    # connected services; no plugin class. Direct Android service nodes
-    # also need LLM-arg translation that doesn't fit the plugin Params
-    # shape. Both dispatchers live with their domain on
-    # nodes/android/_base.py (Wave 11.E.3 move).
-    if node_type == "androidTool":
-        from nodes.android._base import execute_android_toolkit
-
-        return await execute_android_toolkit(tool_args, config)
+    # Direct Android service nodes need LLM-arg translation that doesn't
+    # fit the plugin Params shape.
     if node_type in ANDROID_SERVICE_NODE_TYPES:
         from nodes.android._base import execute_android_service_tool
 

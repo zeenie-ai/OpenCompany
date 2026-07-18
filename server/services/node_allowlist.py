@@ -39,7 +39,7 @@ class NodeAllowlistService:
                 entry here is hidden in BOTH normal and dev mode, even
                 if listed in enabled_nodes. Use to disable an entire
                 backend group (e.g. 'android' hides all 16 Android
-                service nodes + androidTool).
+                service nodes).
             disabled_nodes: list[str]
                 Absolute blocklist by exact node-type identifier. Same
                 mode-independent enforcement as disabled_groups; use

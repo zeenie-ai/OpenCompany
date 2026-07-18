@@ -50,9 +50,9 @@ Edit `server/config/node_allowlist.json` only. No code change. Example — disab
 
 ```json
 {
-  "disabled_groups": ["android", "email", "whatsapp"],
-  "disabled_credential_categories": ["android", "email", "whatsapp"],
-  "disabled_skill_folders": ["android_agent", "social_agent"]
+  "disabled_groups": ["email", "whatsapp"],
+  "disabled_credential_categories": ["email", "whatsapp"],
+  "disabled_skill_folders": ["social_agent"]
 }
 ```
 
@@ -62,9 +62,14 @@ Re-enable: drop the entries. The hook + filters are forward-compatible with empt
 
 | Domain | Why | Hidden from |
 |---|---|---|
-| `android` group + `android_agent` / `androidTool` + `android` credential category + `android_agent` skill folder | Hardware-tied (ADB / Android relay) — high friction to set up, low value for most users | Palette + credentials + skill folders |
 | `email` group + `email` credential category | Himalaya CLI dependency — complex install path, IMAP/SMTP config burden | Palette + credentials |
-| `taskManager` (single node) | Functionality folded into `writeTodos`; redundant duplicate | Palette + LLM-spawnable set via agentBuilder |
+
+Android service nodes are enabled and connect directly to an agent's
+`input-tools` handle. The Android Agent, Android credential category, and
+bundled Android skills are also visible. The former `androidTool` aggregator
+is obsolete; legacy workflows are normalized to direct service-to-agent edges.
+
+Task Manager is enabled for inspecting and cleaning up delegated agent tasks.
 
 ## agentBuilder integration
 

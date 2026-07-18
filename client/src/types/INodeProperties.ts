@@ -199,8 +199,6 @@ export interface INodeUIHints {
   isMasterSkillEditor?: boolean;
   /** MiddleSection: render the memory markdown panel + token usage stats. */
   isMemoryPanel?: boolean;
-  /** MiddleSection: surface the ToolSchemaEditor for connected services. */
-  isToolPanel?: boolean;
   /** MiddleSection: render the editable Current Todos manager (writeTodos)
    * instead of the plain params list. */
   isTodoEditor?: boolean;
@@ -208,8 +206,6 @@ export interface INodeUIHints {
   isMonitorPanel?: boolean;
   /** Special-case panel for gmaps_create with map preview. */
   showLocationPanel?: boolean;
-  /** ToolSchemaEditor visibility (Android toolkit aggregator). */
-  isAndroidToolkit?: boolean;
   /** ConsolePanel: this node is a chat-message target. */
   isChatTrigger?: boolean;
   /** ConsolePanel: this node consumes console output (filter source). */

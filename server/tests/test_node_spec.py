@@ -531,6 +531,11 @@ class TestPhase5NodeGroups:
         for expected in ["agent", "trigger", "tool", "model", "android", "social"]:
             assert expected in groups, f"Missing group {expected!r}"
 
+    def test_android_group_is_visible_in_normal_mode(self):
+        from services.node_spec import list_node_groups
+
+        assert list_node_groups()["android"]["visibility"] == "normal"
+
     def test_tool_group_includes_known_tools(self):
         from services.node_spec import list_node_groups
 

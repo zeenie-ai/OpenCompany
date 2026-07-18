@@ -35,6 +35,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from core.logging import get_logger
 from services.node_registry import get_node_class
+from services.workflow_migrations import normalize_legacy_android_toolkit
 from services.workflow_naming import new_workflow_id, next_available_slug
 from services.workflow_validator import validate_workflow
 
@@ -256,11 +257,21 @@ async def import_workflow(
     node_parameters = workflow.get("nodeParameters") or {}
     proposed_name = name or workflow.get("name") or "Imported Workflow"
 
+    # Compatibility must run before validation: androidTool is no longer a
+    # supported node, but historical exports remain importable.
+    nodes, edges, node_parameters, migration_warnings = normalize_legacy_android_toolkit(
+        nodes, edges, node_parameters
+    )
+
     # 1. Validate. Errors block the import; warnings flow through.
     report = await validate_workflow(
         nodes=nodes,
         edges=edges,
         parameters_by_id=node_parameters,
+    )
+    report.setdefault("warnings", []).extend(
+        {"code": "LEGACY_ANDROID_TOOLKIT_REMOVED", "message": warning}
+        for warning in migration_warnings
     )
     if report["errors"]:
         return {

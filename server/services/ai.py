@@ -2228,7 +2228,7 @@ class AIService:
                     system_message = f"{system_message}\n\n{skill_prompt}"
 
             # Build tools from tool_data using same method as AI Agent
-            # This supports ALL tool types: calculatorTool, currentTimeTool, duckduckgoSearch, androidTool, httpRequest
+            # This supports all directly connected tool types.
             all_tools = []
             tool_node_configs = {}  # Map tool name to node config (same as AI Agent's tool_configs)
             tool_identities: List[Dict[str, str]] = []
@@ -2736,16 +2736,15 @@ class AIService:
           2. ``cls.tool_name`` / ``cls.tool_description`` ClassVars on the
              plugin class. ``tool_description`` falls back to
              ``cls.description`` when empty.
-          3. ``_PSEUDO_TOOL_FALLBACK`` for built-in / aggregator pseudo-types
-             that have no plugin class (``_builtin_check_delegated_tasks``,
-             ``androidTool``)
+          3. ``_PSEUDO_TOOL_FALLBACK`` for built-in pseudo-types that have
+             no plugin class (``_builtin_check_delegated_tasks``)
           4. ``node_params.get('tool_name')`` / ``...tool_description``
              (per-node override declared as a Pydantic field on the plugin's
              Params model — e.g. brave_search / serper_search / perplexity).
           5. Last-resort default: ``f"tool_{label}"`` / ``f"Execute {label}"``
 
         Args:
-            tool_info: Dict containing node_id, node_type, parameters, label, connected_services (for androidTool)
+            tool_info: Dict containing node_id, node_type, parameters, and label
 
         Returns:
             Tuple of (StructuredTool, config_dict) or (None, None) on failure
@@ -2758,10 +2757,6 @@ class AIService:
             "_builtin_check_delegated_tasks": (
                 "check_delegated_tasks",
                 "Check status and retrieve results of previously delegated tasks.",
-            ),
-            "androidTool": (
-                "android_device",
-                "Control Android device. Available services are determined by connected nodes.",
             ),
         }
 
@@ -2825,11 +2820,6 @@ class AIService:
                 )
                 tool_description = node_params.get("tool_description") or default_tool_description or f"Execute {node_label} node"
 
-            # For androidTool, enhance description with connected services
-            if node_type == "androidTool" and connected_services:
-                service_names = [s.get("label") or s.get("service_id", "unknown") for s in connected_services]
-                tool_description = f"{tool_description} Connected: {', '.join(service_names)}"
-
             # For AI Agent nodes, enhance description with child agent's tool capabilities
             # This allows parent agent to know what the child agent can do
             from constants import AI_AGENT_TYPES
@@ -2861,7 +2851,7 @@ class AIService:
 
             tool_name = re.sub(r"[^a-zA-Z0-9_]", "_", tool_name)
 
-            # Build schema based on node type - pass connected_services for androidTool
+            # Build schema based on node type.
             # If DB has schema_config, use it to build custom schema, otherwise use dynamic
             schema_params = dict(node_params)
             if connected_services:
@@ -2985,44 +2975,6 @@ class AIService:
         plugin_cls = get_node_class(node_type)
         if plugin_cls is not None and hasattr(plugin_cls, "Params"):
             return plugin_cls.Params
-
-        # androidTool aggregator — dynamic schema derived from the set of
-        # Android service nodes connected to its toolkit handle. No plugin
-        # class, so it stays here.
-        if node_type == "androidTool":
-            connected_services = params.get("connected_services", [])
-
-            if not connected_services:
-
-                class EmptyAndroidSchema(BaseModel):
-                    """Android toolkit with no connected services."""
-
-                    query: str = Field(default="status", description="No Android services connected. Connect Android nodes to the toolkit.")
-
-                return EmptyAndroidSchema
-
-            from nodes.android._dispatcher import SERVICE_ACTIONS
-
-            service_info = []
-            for svc in connected_services:
-                svc_id = svc.get("service_id") or svc.get("node_type", "unknown")
-                actions = SERVICE_ACTIONS.get(svc_id, [])
-                action_list = [a["value"] for a in actions] if actions else ["status"]
-                service_info.append(f"{svc_id}: {'/'.join(action_list)}")
-
-            services_description = "; ".join(service_info)
-
-            class AndroidToolSchema(BaseModel):
-                """Schema for Android device control via connected services."""
-
-                service_id: str = Field(description=f"Service to use. Connected: {services_description}")
-                action: str = Field(description="Action to perform (see service list for available actions)")
-                parameters: Optional[Dict[str, Any]] = Field(
-                    default=None,
-                    description="Action parameters. Examples: {package_name: 'com.app'} for app_launcher, {volume: 50} for audio",
-                )
-
-            return AndroidToolSchema
 
         # Generic schema for other nodes
         class GenericToolSchema(BaseModel):

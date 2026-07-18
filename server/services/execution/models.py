@@ -315,7 +315,7 @@ class ExecutionContext:
         Config nodes (memory, tools, model configs) are excluded from execution
         as they provide configuration to other nodes via special handles.
 
-        Toolkit sub-nodes (nodes connected TO a toolkit like androidTool) are also
+        Toolkit sub-nodes (nodes connected to an aggregator) are also
         excluded - they execute only when called via the toolkit's tool interface.
         """
         from constants import CONFIG_NODE_TYPES, TOOLKIT_NODE_TYPES, AI_AGENT_TYPES

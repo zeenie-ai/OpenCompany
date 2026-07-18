@@ -96,7 +96,7 @@ flowchart TD
     one entry per **enabled** skill in `skillsConfig`; instructions come from
     the DB-stored `instructions` first, with a skill-folder fallback.
   - `input-tools` -> append to `tool_data`. Two special expansions:
-    - `androidTool` -> scans its own incoming edges for Android service nodes
+    - Android service nodes are exposed directly as individual tools
       and attaches them under `connected_services`.
     - Any `AI_AGENT_TYPES` source (child agents) -> attaches `child_tools`
       describing the child's own `input-tools` neighbours.

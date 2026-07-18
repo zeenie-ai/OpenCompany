@@ -2,7 +2,7 @@
 `DEFAULT_TOOL_DESCRIPTIONS` out of `services/ai.py` into per-plugin
 `tool_name` / `tool_description` ClassVars + a small `_PSEUDO_TOOL_FALLBACK`
 for the two non-class pseudo-types (`_builtin_check_delegated_tasks`,
-`androidTool`).
+the built-in delegated-task status helper).
 
 Three contracts locked:
 
@@ -58,15 +58,13 @@ def test_legacy_tool_dicts_removed():
     assert "DEFAULT_TOOL_DESCRIPTIONS = {" not in source, "Pre-D5 DEFAULT_TOOL_DESCRIPTIONS dict reintroduced into services/ai.py."
 
 
-def test_pseudo_tool_fallback_has_two_entries():
-    """``_PSEUDO_TOOL_FALLBACK`` covers exactly the two pseudo-types.
+def test_pseudo_tool_fallback_has_delegation_status_entry_only():
+    """``_PSEUDO_TOOL_FALLBACK`` covers the remaining pseudo-type.
 
     Pseudo-types are dispatched by name but have no plugin class to
     declare ClassVars on:
       - ``_builtin_check_delegated_tasks`` — internal helper for the
         delegation-tracking surface in ``services/handlers/tools.py``.
-      - ``androidTool`` — toolkit aggregator that fans out to connected
-        android service plugins at LLM-tool call time.
 
     Quote-agnostic so ruff format's choice of single vs. double quotes
     doesn't trip the substring check.
@@ -75,7 +73,7 @@ def test_pseudo_tool_fallback_has_two_entries():
     assert (
         "'_builtin_check_delegated_tasks'" in source or '"_builtin_check_delegated_tasks"' in source
     ), "_builtin_check_delegated_tasks missing from _PSEUDO_TOOL_FALLBACK"
-    assert "'androidTool'" in source or '"androidTool"' in source, "androidTool missing from _PSEUDO_TOOL_FALLBACK"
+    assert "'androidTool'" not in source and '"androidTool"' not in source
 
 
 @pytest.mark.parametrize("node_type,expected_tool_name", list(_load_snapshot().items()))
