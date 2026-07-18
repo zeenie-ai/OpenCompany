@@ -1,5 +1,14 @@
 # New Service Integration Guide
 
+> **⚠️ HISTORICAL — do not follow these steps.** This guide predates
+> Wave 11 and is preserved only as background for reading old code.
+>
+> **Current path for a new service integration:**
+> - Node authoring recipe + decision tree → [node_creation.md](./node_creation.md)
+> - Full plugin reference (credentials, `Connection` facade, six `register_*` hooks, Wave 12 event framework) → [plugin_system.md](./plugin_system.md)
+> - Live OAuth reference implementation → [server/nodes/google/](../server/nodes/google/) (`_oauth.py`, `_router.py`, `_option_loaders.py`, `_auth_helper.py`)
+> - CLI-managed-auth variant (Stripe / Vercel / GitHub shape) → [node_creation.md → CLI-managed auth](./node_creation.md) + [stripe_service.md](./stripe_service.md)
+
 > **⚠️ Pre-Wave-11 — historical reference only.**
 > Node authoring now happens on the backend: each node is a Python plugin in a self-contained folder under `server/nodes/<category>/<plugin>/__init__.py` that emits a `NodeSpec`. The frontend reads specs via [client/src/lib/nodeSpec.ts](../client/src/lib/nodeSpec.ts) + [adapters/nodeSpecToDescription.ts](../client/src/adapters/nodeSpecToDescription.ts). See [plugin_system.md](./plugin_system.md) and [server/nodes/README.md](../server/nodes/README.md) for the current model. The snippets below that reference `client/src/nodeDefinitions/*` are kept for historical context.
 >
@@ -32,6 +41,8 @@ A complete service integration includes:
 The sections below detail each step using Google Workspace as the reference integration. Sections 1-3 + 7-9 are unchanged in Wave 6; section 4-6 are where the backend-first recipe materially cuts the work.
 
 ## Architecture Pattern
+
+> **Historical diagram.** The "Node Definitions (calendarNodes)" frontend box below no longer exists — node schemas are backend NodeSpec (rendered via `useNodeSpec`), and the credentials modal renders from `server/config/credential_providers.json`.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -524,6 +535,8 @@ async def handle_{operation1}(
 
 ## Step 7: AI Tool Schemas
 
+> **Historical — superseded.** Dual-purpose nodes no longer add schemas to `_get_tool_schema()`: the plugin's Pydantic `Params` class IS the LLM-visible tool schema (`usable_as_tool = True`), and `services/handlers/{service}.py` dispatcher modules no longer exist (logic lives in the plugin's `@Operation` methods). `_get_tool_schema` survives only for delegation schemas. Do not follow this step.
+
 Add Pydantic schemas in `server/services/ai.py`:
 
 ```python
@@ -768,10 +781,7 @@ Use this checklist when adding a new service:
 
 - [ ] **Frontend Nodes** — none. The `NodeSpec` emitted by the plugin drives the palette, canvas component, and parameter panel automatically (see [node_creation.md](./node_creation.md)).
 
-- [ ] **AI Tool Integration** (`server/services/ai.py`, `server/services/handlers/tools.py`)
-  - [ ] Add Pydantic schemas in `_get_tool_schema()`
-  - [ ] Add dispatchers in `execute_tool()`
-  - [ ] Add handler functions
+- [ ] **AI Tool Integration** — *(historical; superseded)* set `usable_as_tool = True` on the plugin class; its Pydantic `Params` IS the LLM tool schema. No `_get_tool_schema()` entry, no `execute_tool()` dispatcher, no handler functions.
 
 - [ ] **Output Schemas** (`server/services/node_output_schemas.py`)
   - [ ] Add a Pydantic model per node type, register in `NODE_OUTPUT_SCHEMAS`

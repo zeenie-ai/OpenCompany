@@ -21,15 +21,26 @@ server/services/llm/
 |-- __init__.py           Public API exports
 |-- protocol.py           Message, ToolDef, ToolCall, Usage, LLMResponse, LLMProvider (Protocol)
 |-- config.py             ProviderConfig, PROVIDER_CONFIGS (built from llm_defaults.json)
-|-- factory.py            create_provider() lazy-import factory, NATIVE_PROVIDERS set
+|-- registry.py           ProviderSpec + register_provider() — the live provider entry point;
+|                         sdk_exception_refs are lazy "module:Class" strings resolved at except time
+|-- unifier.py            ChatUnifier — the dispatch facade execute_chat delegates every provider to;
+|                         translates typed SDK errors -> NodeUserError
+|-- vertex.py             Vertex / Agent-Platform key handling
+|-- factory.py            LEGACY — create_provider()/NATIVE_PROVIDERS no longer consulted by ai.py
 |-- messages.py           filter_empty_messages, is_valid_message_content
 `-- providers/
     |-- __init__.py
     |-- anthropic.py      AnthropicProvider (anthropic SDK)
     |-- openai.py         OpenAIProvider (openai SDK)
     |-- gemini.py         GeminiProvider (google-genai SDK)
-    `-- openrouter.py     OpenRouterProvider (extends OpenAIProvider with headers)
+    |-- openrouter.py     OpenRouterProvider (extends OpenAIProvider with headers)
+    `-- _compat.py        Registers the 8 OpenAI-compatible providers (xai, deepseek, kimi,
+                          mistral, groq, cerebras, ollama, lmstudio) via base_url specs
 ```
+
+Each provider module calls `register_provider(ProviderSpec(...))` at module
+bottom — that side-effect IS the registration contract; there is no central
+provider list to edit.
 
 ## Supported Providers
 
@@ -100,7 +111,7 @@ Ollama and LM Studio expose an OpenAI-compatible `/v1` HTTP API, so they ride th
 
 **Both servers must have a model loaded** for the probe to return entries. The validator's "no models loaded" message is symmetric across providers.
 
-**Runtime path** — `execute_chat()` and `execute_agent()` read `{provider}_proxy` via `auth.get_api_key()` and pass it as `proxy_url` to `create_provider()`. `OpenAIProvider.__init__` overrides `kwargs["base_url"]` with the user's URL and forces `api_key="ollama"` (the documented placeholder for unauthenticated local servers). The openai SDK then sends `POST {user_url}/chat/completions` — **traffic stays on the user's machine, never reaches api.openai.com**.
+**Runtime path** — `execute_chat()` and `execute_agent()` read `{provider}_proxy` via `auth.get_api_key()` and pass it as `proxy_url` into the provider build (`ChatUnifier` -> `spec.factory(...)`). `OpenAIProvider.__init__` overrides `kwargs["base_url"]` with the user's URL and forces `api_key="ollama"` (the documented placeholder for unauthenticated local servers). The openai SDK then sends `POST {user_url}/chat/completions` — **traffic stays on the user's machine, never reaches api.openai.com**.
 
 **Provider detection** ([`server/constants.py:detect_ai_provider`](../server/constants.py)) MUST list `ollama` / `lmstudio` substrings, and the agent dropdown's `provider` Literal in [`ai_agent.py`](../server/nodes/agent/ai_agent/__init__.py) / [`chat_agent.py`](../server/nodes/agent/chat_agent/__init__.py) / [`_specialized.py`](../server/nodes/agent/_specialized.py) MUST include `"ollama"` / `"lmstudio"` — otherwise the chat-model node silently falls through to `'openai'` and the runtime calls the OpenAI cloud with the local-server placeholder key.
 
@@ -145,40 +156,32 @@ class LLMResponse:
 
 Downstream code never special-cases a provider SDK shape.
 
-## Factory and Lazy Imports
+## Registry, Unifier, and Lazy Imports
 
-Each provider is imported only when first used to avoid loading large SDKs at startup:
+Providers self-register and are imported only when first used, so no SDK
+loads at startup (locked by `tests/llm/test_lazy_sdk_imports.py`):
 
 ```python
-# server/services/llm/factory.py
-def create_provider(provider: str, api_key: str, *, proxy_url: Optional[str] = None) -> LLMProvider:
-    if provider == "anthropic":
-        from services.llm.providers.anthropic import AnthropicProvider
-        return AnthropicProvider(api_key, proxy_url=proxy_url)
-
-    if provider == "openai":
-        from services.llm.providers.openai import OpenAIProvider
-        return OpenAIProvider(api_key, proxy_url=proxy_url)
-
-    if provider == "gemini":
-        from services.llm.providers.gemini import GeminiProvider
-        return GeminiProvider(api_key, proxy_url=proxy_url)
-
-    if provider == "openrouter":
-        from services.llm.providers.openrouter import OpenRouterProvider
-        return OpenRouterProvider(api_key, proxy_url=proxy_url)
-
-    # OpenAI-compatible providers: reuse OpenAIProvider with base_url from config
-    from services.llm.config import get_provider_config
-    config = get_provider_config(provider)
-    if config and config.base_url:
-        from services.llm.providers.openai import OpenAIProvider
-        return OpenAIProvider(api_key, base_url=config.base_url, proxy_url=proxy_url)
-
-    raise ValueError(f"Unknown provider: {provider}")
+# server/services/llm/providers/anthropic.py — bottom of the module
+register_provider(
+    ProviderSpec(
+        name="anthropic",
+        factory=lambda api_key, **kw: AnthropicProvider(api_key, **kw),   # lazy: class imported here only
+        sdk_exception_refs=("anthropic:APIError",),                        # "module:Class" string, resolved at except time
+    )
+)
 ```
 
-`is_native_provider(name)` is the gate used by `AIService.execute_chat()` to choose the native path vs LangChain fallback.
+At call time `ChatUnifier.chat(provider=...)` looks the spec up via
+`registry.get_provider(name)` and invokes `spec.factory(...)`. The unifier
+also owns error translation: typed SDK exceptions (resolved lazily from
+`sdk_exception_refs` via `pkgutil.resolve_name`) become `NodeUserError`
+with a user-correctable message. There is no per-provider branch anywhere
+in `ai.py`.
+
+`factory.py` (`create_provider` / `is_native_provider` / `NATIVE_PROVIDERS`)
+is **legacy** — it still exists on disk but is no longer consulted by
+`ai.py`; do not extend it.
 
 ## Config-Driven Base URLs
 
@@ -211,7 +214,7 @@ Adding a new OpenAI-compatible provider is a pure config change:
 }
 ```
 
-No new provider class, no new import. The factory's fallback branch picks up `base_url` and reuses `OpenAIProvider`.
+No new provider class, no new import. `providers/_compat.py` registers a spec whose factory reuses `OpenAIProvider` with the config's `base_url`.
 
 ## Native Path vs LangChain Path
 
@@ -223,17 +226,15 @@ execute_agent(parameters, node_id)                    -> LangChain chat model + 
 execute_chat_agent(parameters, node_id)               -> LangChain chat model + _run_agent_loop
 ```
 
-**`execute_chat()` routing:**
+**`execute_chat()` routing (no per-provider branch, no LangChain fallback):**
 
 ```
 node_type / model selects provider
         |
         v
-is_native_provider(provider)?
+ChatUnifier.chat(provider=...)
         |
-        +-- yes --> create_provider(...) -> provider.chat(...) -> LLMResponse
-        |
-        +-- no  --> self.create_model(...) -> chat_model.invoke(...) -> extract to LLMResponse shape
+        +--> registry.get_provider(name) -> spec.factory(...) -> provider.chat(...) -> LLMResponse
 ```
 
 **`execute_agent()` and `execute_chat_agent()` routing:**
@@ -349,7 +350,7 @@ AI providers support optional proxy-based authentication — requests route thro
 
 **Configuration:** proxy URLs are stored in the credentials DB under the `{provider}_proxy` pattern (e.g., `anthropic_proxy`, `openai_proxy`). Falls back to direct API key if no proxy configured. This is the SAME mechanism the native Ollama / LM Studio path uses (see "Local LLM Providers" above) — the validator persists the user's server URL under `{provider}_proxy`, and at runtime it carries into `OpenAIProvider`'s `base_url`.
 
-**Native path:** `create_provider(name, api_key, proxy_url=url)`. **LangChain path:** `create_model()` sets `base_url`:
+**Native chat path:** `proxy_url` flows through `ChatUnifier` into `spec.factory(...)`. **LangChain agent path:** `create_model()` sets `base_url`:
 
 ```python
 def create_model(self, provider: str, api_key: str, model: str,
@@ -404,30 +405,31 @@ class ProviderDefaults(SQLModel, table=True):
 # server/nodes/model/openrouter_chat_model/__init__.py
 class OpenRouterChatModel(ChatModelBase):
     type = "openrouterChatModel"
-    metadata = NodeMetadata(
-        display_name="OpenRouter",
-        icon="lobehub:openrouter",   # asset:<key>, lobehub:<brand>, or emoji
-        color="#6366F1",
-        component_kind="model",       # routes to SquareNode in Dashboard.tsx
-    )
+    display_name = "OpenRouter"
+    component_kind = "model"          # routes to SquareNode via COMPONENT_BY_KIND
 
     class Params(ChatModelBase.Params):
         # provider-specific overrides; everything else inherits from ChatModelBase
         ...
 ```
 
+Icon and color are NOT class attributes (removed in F1): drop `icon.svg` in
+the plugin folder or add a `visuals.json` entry (`"openrouterChatModel":
+{"icon": "lobehub:openrouter"}`), and put the color in the folder's
+`meta.json`.
+
 **Backend steps:**
 
 1. **OpenAI-compatible provider** (DeepSeek, Kimi, Mistral pattern):
    - Add an entry to `llm_defaults.json` with `base_url`, `default_model`, `detection_patterns`, `max_output_tokens._default`, `context_length._default`, `temperature_range`.
-   - Add the provider name to `NATIVE_PROVIDERS` in `factory.py` if you want `execute_chat()` to route natively.
+   - Add the provider name to the compat list in `services/llm/providers/_compat.py` — its import loop calls `register_provider(ProviderSpec(...))` for every listed name.
    - The LangChain agent path needs no Python branching — `create_model()` reuses `ChatOpenAI` with `base_url` from `llm_defaults.json`.
 
 2. **Custom-SDK provider** (Anthropic, Gemini pattern):
    - Create `services/llm/providers/<name>.py` implementing the `LLMProvider` protocol.
-   - Add a branch in `create_provider()` in `factory.py`.
-   - Add the provider name to the dedicated-provider set and `NATIVE_PROVIDERS`.
+   - At module bottom call `register_provider(ProviderSpec(name=..., factory=..., sdk_exception_refs=("sdk_module:ErrorClass",)))` — the lazy factory + string exception refs keep the SDK unimported until first use (never import the SDK at registration; locked by `tests/llm/test_lazy_sdk_imports.py`).
    - Add a config entry in `llm_defaults.json` (no `base_url` needed if the SDK handles URLs itself).
+   - Do NOT touch `factory.py` — it is legacy and no longer consulted.
 
 3. **Credentials + agent exposure:**
    - Add a `Credential` subclass in `server/nodes/model/_credentials.py` — surfaces in the Credentials Modal automatically.
@@ -440,8 +442,10 @@ class OpenRouterChatModel(ChatModelBase):
 | `server/nodes/model/<provider>_chat_model/__init__.py` | Plugin entry — metadata + Params + auto-registers |
 | `server/nodes/model/_credentials.py` | `Credential` subclass per provider |
 | `server/config/llm_defaults.json` | base_url + supported_params + temperature constraints (no hardcoded URLs in Python) |
-| `server/services/llm/providers/<provider>.py` | Native SDK provider (Protocol-based) |
-| `server/services/ai.py` | Routing: native chat path + LangChain agent path |
+| `server/services/llm/providers/<provider>.py` | Native SDK provider (Protocol-based) + `register_provider(ProviderSpec)` at module bottom |
+| `server/services/llm/registry.py` | `ProviderSpec` / `register_provider` — the provider registration contract |
+| `server/services/llm/unifier.py` | `ChatUnifier` — chat dispatch facade + typed-error translation |
+| `server/services/ai.py` | Routing: native chat path (via ChatUnifier) + LangChain agent path |
 | `client/src/Dashboard.tsx` | Generic `COMPONENT_BY_KIND` dispatch — no per-provider entry needed |
 
 ## Related Docs

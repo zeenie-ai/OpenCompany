@@ -10,59 +10,43 @@ Skills are organized in subfolders under `server/skills/`:
 server/skills/
 ├── GUIDE.md                  # This file
 ├── assistant/                # General-purpose assistant skills
-│   ├── assistant-personality/SKILL.md
-│   ├── compaction-skill/SKILL.md
-│   ├── humanify-skill/SKILL.md
-│   ├── memory-skill/SKILL.md
-│   ├── subagent-skill/SKILL.md
-│   └── task-manager/SKILL.md
+│     advisor, agent-builder-skill, assistant-personality, compaction-skill,
+│     humanify-skill, memory-skill, subagent-skill, task-manager, write-todos-skill
 ├── android_agent/            # Android device control skills
-│   ├── personality/SKILL.md
-│   ├── battery-skill/SKILL.md
-│   ├── wifi-skill/SKILL.md
-│   ├── bluetooth-skill/SKILL.md
-│   ├── location-skill/SKILL.md
-│   ├── app-launcher-skill/SKILL.md
-│   ├── app-list-skill/SKILL.md
-│   ├── audio-skill/SKILL.md
-│   ├── screen-control-skill/SKILL.md
-│   ├── camera-skill/SKILL.md
-│   ├── motion-skill/SKILL.md
-│   └── environmental-skill/SKILL.md
+│     personality + one skill per Android service node (battery, wifi,
+│     bluetooth, location, app-launcher, app-list, audio, screen-control,
+│     camera, motion, environmental)
 ├── autonomous/               # Autonomous agent patterns
-│   ├── code-mode-skill/SKILL.md
-│   ├── agentic-loop-skill/SKILL.md
-│   ├── progressive-discovery-skill/SKILL.md
-│   ├── error-recovery-skill/SKILL.md
-│   └── multi-tool-orchestration-skill/SKILL.md
+│     code-mode-skill, agentic-loop-skill, progressive-discovery-skill,
+│     error-recovery-skill, multi-tool-orchestration-skill
+├── cloudflare/               # cloudflare-skill (cf CLI)
 ├── coding_agent/             # Code execution skills
-│   ├── python-skill/SKILL.md
-│   └── javascript-skill/SKILL.md
+│     python-skill, javascript-skill, monty-skill, file-read-skill,
+│     file-modify-skill, fs-search-skill
+├── github/                   # github-skill (gh CLI)
+├── payments_agent/           # stripe-skill
 ├── productivity_agent/       # Google Workspace skills
-│   ├── gmail-skill/SKILL.md
-│   ├── calendar-skill/SKILL.md
-│   ├── drive-skill/SKILL.md
-│   ├── sheets-skill/SKILL.md
-│   ├── tasks-skill/SKILL.md
-│   └── contacts-skill/SKILL.md
+│     google-gmail-skill, google-calendar-skill, google-drive-skill,
+│     google-sheets-skill, google-tasks-skill, google-contacts-skill
+├── rlm_agent/                # rlm-reasoning-skill
 ├── social_agent/             # Social messaging skills
-│   ├── whatsapp-send-skill/SKILL.md
-│   ├── whatsapp-db-skill/SKILL.md
-│   ├── twitter-send-skill/SKILL.md
-│   ├── twitter-search-skill/SKILL.md
-│   └── twitter-user-skill/SKILL.md
-├── task_agent/               # Task management skills
-│   ├── timer-skill/SKILL.md
-│   └── cron-scheduler-skill/SKILL.md
-├── travel_agent/             # Location and maps skills
-│   ├── geocoding-skill/SKILL.md
-│   └── nearby-places-skill/SKILL.md
+│     whatsapp-send-skill, whatsapp-db-skill, twitter-send-skill,
+│     twitter-search-skill, twitter-user-skill
+├── task_agent/               # Scheduling skills (timer-skill, cron-scheduler-skill)
+├── terminal/                 # Shell skills (shell, bash, powershell, wsl, process-manager)
+├── travel_agent/             # geocoding-skill, nearby-places-skill
+├── vercel/                   # vercel-skill (Vercel CLI)
+├── vertex_agent/             # vertex-agent-skill, vertex-agent-admin-skill
 └── web_agent/                # Web automation skills
-    ├── web-search-skill/SKILL.md
-    └── http-request-skill/SKILL.md
+      browser-skill, browser-harness-skill, http-request-skill, apify-skill,
+      crawlee-scraper-skill, proxy-config-skill, duckduckgo-search-skill,
+      brave-search-skill, serper-search-skill, perplexity-search-skill
 ```
 
-Each top-level folder (e.g. `assistant`, `android`) appears as an option in the Master Skill node's folder dropdown. Skills inside are discovered recursively via `SKILL.md` files.
+The tree above is a snapshot — the source of truth is the live glob
+`server/skills/*/*/SKILL.md`.
+
+Each top-level folder (e.g. `assistant`, `android_agent`) appears as an option in the Master Skill node's folder dropdown. Skills inside are discovered recursively via `SKILL.md` files.
 
 ## Creating a New Skill
 
@@ -118,7 +102,7 @@ Provide usage guidelines, examples, and constraints.
 - Lowercase letters and numbers only
 - Words separated by single hyphens
 - No consecutive hyphens
-- Examples: `my-skill`, `web-search-skill`, `code-skill`
+- Examples: `my-skill`, `brave-search-skill`, `python-skill`
 - Invalid: `My_Skill`, `my--skill`, `MySkill`
 
 ### Tool naming — snake_case ↔ camelCase contract

@@ -100,7 +100,9 @@ Match the palette group. Current folders (see
 [`groups.py`](./groups.py) for the canonical list):
 
 ```
-agent/       — AI agents (ai_agent, chat_agent + 16 specialized/variant incl. 2 team leads)
+agent/       — AI agents (ai_agent, chat_agent + specialized/variant folders incl. 2 team leads,
+               CLI agents (claude_code, codex, rlm) and Vertex agents; SSOT: AI_AGENT_TYPES
+               in server/constants.py + the folder glob)
 model/       — LLM chat models (openai, anthropic, gemini, …)
 android/     — Android device services
 google/      — Google Workspace (gmail / calendar / drive / sheets / …)
@@ -373,6 +375,13 @@ Full reference: [docs-internal/plugin_system.md → "Self-contained plugin folde
   `_serialise_tool_result`) expects JSON-compatible data. Likewise
   return real lists/dicts, not pre-stringified JSON — LLM-facing
   serialization is the dispatcher's job.
+- **Raise `NodeUserError` for user-correctable failures.** Missing
+  required field, unknown enum value, bad path, sidecar not running —
+  `raise NodeUserError("...")` (exported from `services.plugin`) gives
+  the user/LLM a clean one-line WARN + structured envelope with no
+  traceback, and the shared Temporal retry policy skips retries for it
+  (`services/plugin/scaling.py`). Bare `Exception` is for genuine
+  server bugs only — it keeps the full `logger.exception` traceback.
 - **Coerce LLM-stringified JSON args at the Params boundary.** Gemini
   (and others) sometimes pass array/object tool args as JSON-encoded
   strings. Fields that can receive them declare a
@@ -432,11 +441,12 @@ Added in Wave 11 (Mar 2026):
   concurrency.
 - **11.G** (this doc): Cookbook.
 
-End state: `services/handlers/` is **4 files / 1.1K LOC** (down from
+End state: `services/handlers/` is **4 files / ~1K LOC** (down from
 16 / 12.8K). Only cross-cutting orchestration remains there:
 `tools.py` (AI-tool dispatch + agent delegation), `triggers.py`
-(generic event-trigger handler), `google_auth.py` (shared OAuth
-helper), and a 23-line package docstring.
+(generic event-trigger handler), `todo.py` (writeTodos shim), and the
+package docstring (`__init__.py`). The former `google_auth.py` shared
+OAuth helper was retired into `nodes/google/_auth_helper.py`.
 
 Plan + full migration history:
 [plugin_system.md](../../docs-internal/plugin_system.md).

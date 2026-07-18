@@ -66,8 +66,7 @@ class SpecializedAgentBase(ActionNode, abstract=True):
 | `type` | Node type string. Matches workflow JSON + registry key. |
 | `version` | Int, bumped on breaking changes. Activity name includes it. |
 | `display_name` / `subtitle` / `description` | Palette + panel header. |
-| `icon` | `asset:<key>` / `<lib>:<brand>` / URL / emoji. |
-| `color` | Hex or Dracula token. |
+| *(icon / color)* | **Not class attributes** (removed in F1 — declaring them has no effect). Icon: co-located `icon.svg` (or a `visuals.json` entry for emoji / `lobehub:<brand>`); color: co-located `meta.json` `{"color": "#..."}`. Wire format on the NodeSpec stays `asset:<key>` / `<lib>:<brand>` / URL / emoji. |
 | `group` | Tuple of palette groupings (first is primary). |
 | `component_kind` | Frontend dispatch: `square` / `trigger` / `agent` / `tool` / `model` / `start` / `generic`. |
 | `handles` | React Flow handle topology (`input-main`, `output-main`, …). |
@@ -111,6 +110,8 @@ Practical rules for plugin authors:
 5. Params fields that may receive LLM-stringified JSON (Gemini sometimes stringifies array/object args in tool calls) coerce at the boundary with `field_validator(..., mode="before")` — see `AndroidServiceParams._coerce_parameters` and `WriteTodosParams._coerce_todos` for the canonical shape.
 
 Defense in depth below the plugin layer: the SQLAlchemy engine in `core/database.py` sets `json_serializer=lambda obj: json.dumps(to_jsonable_python(obj, fallback=str))` (`pydantic_core.to_jsonable_python` — official arbitrary-object → JSON coercion), so every JSON column on the engine tolerates dataclasses / datetimes / enums / sets even if a payload bypasses Output validation. Locked by `tests/test_output_contract.py`.
+
+**Error convention — `NodeUserError` vs bare `Exception`.** For any failure the user (or the calling LLM) can correct — missing required field, unknown enum value, bad path, service not running — raise `NodeUserError("...")` (exported from `services.plugin`). `BaseNode.execute()` catches it specially: one WARN line in the operator log (no traceback) plus a structured `{success: False, error_type: "NodeUserError", error: ...}` envelope, and the shared Temporal retry policy treats it as **non-retryable** (`services/plugin/scaling.py`) so a bad input doesn't burn three activity attempts. Reserve bare `Exception` / `RuntimeError` for genuine server bugs — those keep the full `logger.exception` traceback.
 
 ### Auto-derived uiHints
 
@@ -1209,7 +1210,7 @@ without any node-specific code in the frontend or in core services:
    API.** Plugin writes synthetic strings (e.g. `"cli-managed"`) on
    login completion. The catalogue's existing per-provider `stored`
    check at
-   [`routers/webhook.py:handle_get_credential_catalogue`](../server/routers/websocket.py)
+   [`routers/websocket.py:handle_get_credential_catalogue`](../server/routers/websocket.py)
    uses
    `auth_service.get_oauth_tokens(status_hook) is not None` —
    identical to Google's OAuth-callback path. The synthetic tokens

@@ -184,9 +184,10 @@ Each Phase-A milestone has a verification command:
 | A3 | `python -c "from core.config import Settings; print(Settings().temporal_graceful_shutdown_seconds)"` |
 | A4 | After Temporal connect: `temporal operator search-attribute list \| grep -E 'EventType\|EventSource\|EventWorkflowId\|TriggerNodeId\|EventTriggerKind\|EventReceivedAt'` — all 6 lines |
 
-Full test surface lands in Phase A9. Phase B (plugin `_events.py`
-modules) + Phase C (Temporal trigger-waiter migration) + Phase D
-(admin handlers + DLQ) build on this foundation.
+Full test surface landed in Phase A9. Phase B (plugin `_events.py`
+modules), Phase C (Temporal trigger-waiter migration), and Phase D
+(admin handlers; the custom DLQ table was dropped — see the status
+table and the section below) built on this foundation.
 
 ## Failure inspection — no separate DLQ table
 
@@ -200,7 +201,7 @@ inspection surface:
 
 This is why Wave 12 explicitly does NOT add a custom `event_dlq` SQLModel table. Doing so would reinvent the Temporal primitives the rest of the framework was built AROUND, not against. The pre-Temporal `services/execution/models.py::DLQEntry` for the legacy `WorkflowExecutor` is a separate concern and stays where it is.
 
-Wave 12 D3 (pending) adds thin WS handlers that wrap these Visibility queries for the FE admin surface, so operators can inspect failed runs without leaving the OpenCompany UI.
+Wave 12 D3 (shipped — see the status table) added thin WS handlers (`list_canary_listeners` / `list_canary_schedules` / `get_workflow_failure_history`) that wrap these Visibility queries for the FE admin surface, so operators can inspect failed runs without leaving the OpenCompany UI.
 
 ## Wave 13 fixes
 

@@ -40,7 +40,7 @@ WorkflowService.execute_node()            server/services/workflow.py
         |
         v
 NodeExecutor._dispatch()                  server/services/node_executor.py
-  Handler registry lookup via functools.partial
+  Plugin handler registry lookup (plain dict: self._handlers.get(node_type))
   Dispatches via BaseNode.execute() to the agent plugin's execute_op()
   (server/nodes/agent/<plugin>/__init__.py — Wave 11 deleted handle_ai_agent /
    handle_chat_agent; agent logic moved into the plugin folder)
@@ -80,7 +80,7 @@ Result broadcast via WebSocket
 | `client/src/hooks/useExecution.ts` | Frontend execution trigger, sends nodes + edges |
 | `server/routers/websocket.py` | WebSocket handler `handle_execute_node()` |
 | `server/services/workflow.py` | Facade, builds context, delegates to NodeExecutor |
-| `server/services/node_executor.py` | Handler registry, dispatches via `functools.partial` |
+| `server/services/node_executor.py` | Plugin handler registry, plain dict dispatch (`self._handlers.get(node_type)`) |
 | `server/services/plugin/edge_walker.py` | `collect_agent_connections()` (the renamed `_collect_agent_connections`), `format_task_context()` |
 | `server/nodes/agent/_inline.py` | `prepare_agent_call()` — task-context injection + auto-prompt fallback + teammate collection; calls `collect_agent_connections` then `ai_service.execute_[chat_]agent` |
 | `server/nodes/agent/<plugin>/__init__.py` | Per-plugin `execute_op()` (Wave 11 replaced `handle_ai_agent` / `handle_chat_agent`) |
@@ -394,14 +394,16 @@ shared keyword bundle; `_specialized.py` is the single body shared by all
 chat-agent-path specialized agents. Glob `server/nodes/agent/` for the
 authoritative agent list, or read `AI_AGENT_TYPES` in
 [`server/constants.py`](../server/constants.py) — do not hand-maintain a
-count here. As of this writing `AI_AGENT_TYPES` lists 17 entries: the two
-base agents (`aiAgent`, `chatAgent`), 11 specialized agents
+count here. The frozenset currently spans: the two
+base agents (`aiAgent`, `chatAgent`), the specialized agents
 (`android_agent`, `coding_agent`, `web_agent`, `task_agent`, `social_agent`,
 `travel_agent`, `tool_agent`, `productivity_agent`, `payments_agent`,
-`consumer_agent`, `autonomous_agent`) plus the 2 team leads
-(`orchestrator_agent`, `ai_employee`), and the 2 CLI/REPL agents that bypass
-the standard loop (`rlm_agent`, `claude_code_agent`). `codex_agent` is a
-sibling plugin folder on the same CLI-agent path.
+`consumer_agent`, `autonomous_agent`), the 2 team leads
+(`orchestrator_agent`, `ai_employee`), the 2 CLI/REPL agents that bypass
+the standard loop (`rlm_agent`, `claude_code_agent`), and
+`vertex_managed_agent` (Vertex-hosted, own dispatch path). `codex_agent` is
+a sibling plugin folder on the same CLI-agent path but is not in the
+frozenset.
 
 ### Temporal dispatch routing
 

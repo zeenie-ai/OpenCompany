@@ -17,11 +17,11 @@ See [SETUP.md](docs-internal/SETUP.md) for environment setup and [SCRIPTS.md](do
 
 At a glance:
 
-- **~118 workflow nodes** across 26 categories (AI, agents, social, Android, Google Workspace, email, browser, documents, code, proxies, utilities; one self-contained plugin folder per node under `server/nodes/<group>/`)
+- **115+ workflow nodes** across ~30 palette groups (live count: glob `server/nodes/**/__init__.py`; group list: `server/nodes/groups.py`; one self-contained plugin folder per node under `server/nodes/<group>/`)
 - **12 LLM providers** via a hybrid native SDK + LangChain architecture (11 chat-model nodes; xAI native-chat-only)
-- **16 specialized AI agents** with the Agent Teams delegation pattern
+- **Specialized AI agents** with the Agent Teams delegation pattern — SSOT is the `AI_AGENT_TYPES` frozenset in `server/constants.py`, which spans the base/specialized/team-lead agents plus the CLI-backed (`claude_code_agent`, `rlm_agent`) and Vertex-hosted (`vertex_managed_agent`) variants; `codex_agent` is a sibling CLI-agent plugin
 - **WebSocket-first API** replacing most REST endpoints (live handler count = `MESSAGE_HANDLERS` + plugin registries)
-- **63 built-in skills** across 12 categories, editable in-UI with SKILL.md defaults on disk
+- **65+ built-in skills**, editable in-UI with SKILL.md defaults on disk (live count: glob `server/skills/**/SKILL.md`)
 - **Three execution modes** with automatic fallback: Temporal distributed, Redis parallel, sequential
 
 ## How Workflows Execute
@@ -30,7 +30,7 @@ At a glance:
 
 [WorkflowService](server/services/workflow.py) is a thin facade that routes each run through one of three execution modes. Every run has an isolated `ExecutionContext` with no shared global state, orchestrated by Conductor's decide pattern (`_workflow_decide` under a Redis `SETNX` lock). Layers are computed via Kahn's algorithm and each layer runs via `asyncio.gather()`. Results are cached by input hash (Prefect pattern), failed nodes go to a Dead Letter Queue, and a `RecoverySweeper` handles crashes via heartbeats.
 
-Deep dives: [DESIGN.md](docs-internal/DESIGN.md) - [TEMPORAL_ARCHITECTURE.md](docs-internal/TEMPORAL_ARCHITECTURE.md) - [event_waiter_system.md](docs-internal/event_waiter_system.md)
+Deep dives: [DESIGN.md](docs-internal/DESIGN.md) - [TEMPORAL_ARCHITECTURE.md](docs-internal/TEMPORAL_ARCHITECTURE.md) - [event_framework.md](docs-internal/event_framework.md)
 
 ## AI Agent System
 
@@ -38,7 +38,7 @@ Deep dives: [DESIGN.md](docs-internal/DESIGN.md) - [TEMPORAL_ARCHITECTURE.md](do
 
 AI execution splits into two paths. `execute_chat()` for direct chat completions delegates every provider to the native SDK layer in [services/llm/](server/services/llm/) via `ChatUnifier` (12 providers, lazy imports, normalized `LLMResponse`; Groq, Cerebras, and the local servers ride the OpenAI-compatible client with a custom `base_url` — the old chat-path LangChain fallback is retired). `execute_agent()` and `execute_chat_agent()` build a LangChain chat model (`ChatOpenAI` / `ChatAnthropic` / etc.) and drive it through `_run_agent_loop` — a plain async `for iteration in range(max):` that calls `chat_model.ainvoke`, dispatches any `tool_calls`, appends `ToolMessage` results, and loops. Team leads (`orchestrator_agent`, `ai_employee`) auto-inject `delegate_to_<type>` tools for every agent connected to their `input-teammates` handle. The RLM Agent uses a REPL-based recursive language model pattern. Long-running activities (browser automation, claude_code_agent) stay alive across Temporal's 2-minute heartbeat window via per-message `activity.heartbeat()` calls in the WebSocket read loop.
 
-Deep dives: [agent_architecture.md](docs-internal/agent_architecture.md) - [native_llm_sdk.md](docs-internal/native_llm_sdk.md) - [agent_teams.md](docs-internal/agent_teams.md) - [memory_compaction.md](docs-internal/memory_compaction.md)
+Deep dives: [agent_architecture.md](docs-internal/agent_architecture.md) - [native_llm_sdk.md](docs-internal/native_llm_sdk.md) - [agent_teams.md](docs-internal/agent_teams.md) - [memory_compaction.md](docs-internal/memory_compaction.md) - [cli_agent_framework.md](docs-internal/cli_agent_framework.md)
 
 ## Repository Map
 
@@ -53,8 +53,10 @@ Deep dives: [agent_architecture.md](docs-internal/agent_architecture.md) - [nati
 | `server/services/temporal/` | Distributed execution via Temporal | [TEMPORAL_ARCHITECTURE.md](docs-internal/TEMPORAL_ARCHITECTURE.md) |
 | `server/routers/websocket.py` | WebSocket endpoint + core `MESSAGE_HANDLERS` (plugins register more via `ws_handler_registry`) | [status_broadcaster.md](docs-internal/status_broadcaster.md) |
 | `server/core/` | Cache, encryption, DI container, config | [credentials_encryption.md](docs-internal/credentials_encryption.md) |
-| `server/skills/` | 63 skill SKILL.md files across 12 folders | [GUIDE.md](server/skills/GUIDE.md) |
-| `server/config/` | llm_defaults.json, pricing.json, model_registry.json, email_providers.json, google_apis.json | [pricing_service.md](docs-internal/pricing_service.md) |
+| `server/skills/` | Skill SKILL.md files, one folder per agent domain (live count: glob `server/skills/**/SKILL.md`) | [GUIDE.md](server/skills/GUIDE.md) |
+| `server/config/` | llm_defaults.json, pricing.json, model_registry.json, email_providers.json, google_apis.json, credential_providers.json, ai_cli_providers.json, node_allowlist.json | [pricing_service.md](docs-internal/pricing_service.md), [node_allowlist.md](docs-internal/node_allowlist.md) |
+| `server/tests/` | Contract-test invariants + per-category node tests + `NodeTestHarness` | [tests/nodes/_harness.py](server/tests/nodes/_harness.py), [tests/credentials/README.md](server/tests/credentials/README.md) |
+| `client/src/` (styling + themes) | Tailwind tokens, shadcn primitives, the 12-theme contract | [frontend_architecture.md](docs-internal/frontend_architecture.md), [theme_system.md](docs-internal/theme_system.md) |
 | `docs-internal/` | In-repo architecture deep dives (50+ files) | Index below |
 
 ## How to Contribute Features
@@ -64,40 +66,62 @@ Deep dives: [agent_architecture.md](docs-internal/agent_architecture.md) - [nati
 The diagram above shows the full lifecycle of a workflow node: one self-contained Python plugin folder that auto-registers on import and renders itself on the frontend with zero TypeScript edits. Use these recipes as a starting point:
 
 **Add a workflow node**
-- Author a plugin folder: `server/nodes/<category>/<node>/__init__.py` — subclasses `BaseNode` (or `ActionNode` / `TriggerNode` / `ToolNode`), declares Pydantic `Params`/`Output` + `@Operation` methods; auto-registers on import
-- Add a contract test: `server/tests/nodes/test_<category>.py`
-- Guide: [plugin_system.md](docs-internal/plugin_system.md) + [server/nodes/README.md](server/nodes/README.md)
+- Start at [node_creation.md](docs-internal/node_creation.md) (the decision tree routes action / trigger / tool / dual-purpose / agent work), copy the recipe from [server/nodes/README.md](server/nodes/README.md), and reach for [plugin_system.md](docs-internal/plugin_system.md) as the deep reference
+- One plugin folder: `server/nodes/<category>/<node>/__init__.py` — subclasses `ActionNode` / `TriggerNode` / `ToolNode`, declares Pydantic `Params`/`Output` + `@Operation` methods; auto-registers on import, zero frontend edits
+- Icon = `icon.svg` in the folder, color = `meta.json` (never class attributes); raise `NodeUserError` for user-correctable failures
+- Add a behavioral test in `server/tests/nodes/test_<category>.py` (the invariant suites cover the contract automatically — see Testing below)
 
 **Add an LLM provider**
-- OpenAI-compatible (DeepSeek, Kimi, Mistral pattern): config-only in `server/config/llm_defaults.json`
-- Custom-SDK provider: new file in `server/services/llm/providers/` that calls `register_provider(ProviderSpec(...))` at module bottom (lazy factory + `sdk_exception_refs`)
-- Backend plugin: `server/nodes/model/<provider>_chat_model/__init__.py`
-- Guide: [native_llm_sdk.md](docs-internal/native_llm_sdk.md)
+- Guide: [native_llm_sdk.md](docs-internal/native_llm_sdk.md) → "Adding a New Provider"
+- OpenAI-compatible (DeepSeek, Kimi, Mistral pattern): config-only in `server/config/llm_defaults.json` + the compat list in `services/llm/providers/_compat.py`
+- Custom-SDK provider: new file in `server/services/llm/providers/` that calls `register_provider(ProviderSpec(...))` at module bottom (lazy factory + `sdk_exception_refs`; never touch the legacy `factory.py`)
+- Chat-model node plugin: `server/nodes/model/<provider>_chat_model/__init__.py`; for agent-dropdown exposure also extend the `provider` Literal in `nodes/agent/{ai_agent,chat_agent,_specialized}` and `detect_ai_provider` in `server/constants.py`
 
 **Add a dual-purpose tool (workflow node + AI tool)**
-- Plugin folder under `server/nodes/<category>/<name>/` with `group: ['category', 'tool']` and `usable_as_tool = True`
-- Pydantic `Params` doubles as the LLM-visible tool schema (no separate `_get_tool_schema` entry)
-- Guide: [node_creation.md](docs-internal/node_creation.md)
+- Guide: [node_creation.md](docs-internal/node_creation.md); live references: the whatsapp / twitter / stripe folders
+- Plugin folder with `group: ['category', 'tool']` and `usable_as_tool = True`; the Pydantic `Params` doubles as the LLM-visible tool schema (keep it flat — no nested models / `$defs`)
+- If you give the tool a short `tool_name` that isn't `<snake_case_of_node_type>` AND ship a paired skill, add a `visuals.json` alias entry keyed by the tool name carrying **icon and color** — otherwise the Master Skill row renders blank (locked by `server/tests/test_skill_icon_resolution.py`)
 
 **Add a specialized AI agent**
+- Guide: [node_creation.md](docs-internal/node_creation.md) + [agent_architecture.md](docs-internal/agent_architecture.md)
 - Add the plugin under `server/nodes/agent/<name>/` (extends `SpecializedAgentBase` from `server/nodes/agent/_specialized.py`)
-- Add the agent's `type` string to `AI_AGENT_TYPES` in `server/constants.py` and to the delegation-check tuple in `server/services/handlers/tools.py::execute_tool()` so parent agents' `delegate_to_*` tools find it (both flagged as tech debt)
-- Guide: [node_creation.md](docs-internal/node_creation.md)
+- Single cross-cutting edit: add the agent's `type` string to the `AI_AGENT_TYPES` frozenset in `server/constants.py` — delegation dispatch imports that frozenset, nothing else to update
+- CLI-backed agents (Claude Code / Codex shape) follow [cli_agent_framework.md](docs-internal/cli_agent_framework.md); Vertex-hosted agents follow the `vertex_managed_agent` plugin
 
 **Add a skill**
-- New folder under `server/skills/<category>/`
-- Create `SKILL.md` with YAML frontmatter + markdown body
-- Guide: [GUIDE.md](server/skills/GUIDE.md)
+- Guide: [GUIDE.md](server/skills/GUIDE.md) (folder structure, SKILL.md frontmatter, and the tool-naming contract that drives the skill's icon)
+- New folder under `server/skills/<domain>/<skill-name>/SKILL.md` with YAML frontmatter + markdown body
 
-**Add an event-based trigger**
-- Author a `TriggerNode` plugin under `server/nodes/<category>/<name>/`
-- Canary path (Wave 12, preferred): `register_canary_trigger_type(node_type, cloudevent_type)` + emit `WorkflowEvent`s via `dispatch.emit` from the plugin's `_events.py`
-- Legacy path (non-canary types only): register in `TRIGGER_REGISTRY` + add a filter builder in `server/services/event_waiter.py`
-- Guides: [event_framework.md](docs-internal/event_framework.md), [node_creation.md](docs-internal/node_creation.md), [event_waiter_system.md](docs-internal/event_waiter_system.md) (legacy)
+**Add an event source / trigger (Wave 12)**
+- Guides: [node_creation.md](docs-internal/node_creation.md) → Wave 12 recipe (authoring) → [event_framework.md](docs-internal/event_framework.md) (Temporal routing + ops) → [stripe_service.md](docs-internal/stripe_service.md) (the reference implementation)
+- Pick the source shape: `DaemonEventSource` (CLI daemon), `WebhookSource` + `WebhookTriggerNode` (signed webhooks, with a verifier from `services.events.verifiers`), or `PollingEventSource` (API polling)
+- Register via `register_canary_trigger_type(node_type, cloudevent_type)` + emit `WorkflowEvent`s via `dispatch.emit` from the plugin's `_events.py`; plugin-owned filters go through `register_filter_builder` — never hand-edit `event_waiter.py` ([event_waiter_system.md](docs-internal/event_waiter_system.md) is historical, pre-Wave-11)
 
-**Integrate a new external service with OAuth**
-- Reference implementation: Google Workspace (7 nodes sharing one OAuth connection)
-- Guide: [new_service_integration.md](docs-internal/new_service_integration.md)
+**Integrate a CLI-managed-auth service (Stripe / Vercel / GitHub shape)**
+- Guide: [node_creation.md](docs-internal/node_creation.md) → "CLI-managed auth" recipe; references: [stripe_service.md](docs-internal/stripe_service.md) (two-step browser OAuth), [vercel_service.md](docs-internal/vercel_service.md) (device-flow variant), [github_service.md](docs-internal/github_service.md) (gh owns auth entirely)
+- The external CLI owns the real tokens; the plugin writes marker tokens via `auth_service.store_oauth_tokens(provider, "cli-managed", "cli-managed")` and broadcasts the generic `credential_catalogue_updated` event — zero per-provider frontend code
+- `_install.py` auto-downloads the pinned CLI binary into the shared packages tree
+
+**Integrate an OAuth service**
+- Guides: [plugin_system.md](docs-internal/plugin_system.md) (Connection facade, credentials, `register_router` / `register_option_loader`); live reference: [server/nodes/google/](server/nodes/google/) — 7 nodes sharing one OAuth connection via `_oauth.py` / `_router.py` / `_auth_helper.py`
+- ([new_service_integration.md](docs-internal/new_service_integration.md) is historical — do not follow its steps)
+
+**Add a credential provider**
+- Declare a `Credential` subclass in the plugin folder's `_credentials.py` and add the provider entry to `server/config/credential_providers.json` — the Credentials Modal renders it with no React edits
+- Guides: [credentials_encryption.md](docs-internal/credentials_encryption.md) (storage pipeline) + [credentials_panel.md](docs-internal/credentials_panel.md) (modal state machine); test conventions in [server/tests/credentials/README.md](server/tests/credentials/README.md)
+
+**Contribute frontend / a new theme**
+- Read [frontend_architecture.md](docs-internal/frontend_architecture.md) first (stack, token tiers, state-ownership boundary, the strict styling rules), then [theme_system.md](docs-internal/theme_system.md) for the theme contract
+- New themes follow theme_system.md → "Adding a new theme" (per-theme CSS file + tokens; no component code changes — that is the contract)
+- New backend uiHint flags need two frontend-side edits: `INodeProperties.ts` + the `known` set in `server/tests/test_node_spec.py`
+
+## Testing Your Contribution
+
+- **Contract invariants run automatically.** `server/tests/test_plugin_contract.py` and `test_node_spec.py` iterate every registered plugin and assert the declared shape — a new node is covered the moment it imports. `test_plugin_self_containment.py` enforces the no-cross-plugin-imports rule; `test_skill_icon_resolution.py` asserts every skill resolves an icon.
+- **Behavioral tests** live per category in `server/tests/nodes/test_<category>.py`, driven through `NodeTestHarness` ([server/tests/nodes/_harness.py](server/tests/nodes/_harness.py)) — it executes any node via `NodeExecutor` with mocked services and asserts the result envelope.
+- **Import sanity:** `uv run pytest --collect-only` (from `server/`) is the live plugin-count invariant — it fails if any plugin errors at import.
+- **Credential tests** follow the numbered-invariant style documented in [server/tests/credentials/README.md](server/tests/credentials/README.md).
+- Run everything: `uv run pytest` from `server/`, `npm test` from `client/`, `uv run pytest cli/tests` from the repo root.
 
 ## Local Dev Quick Reference
 
@@ -130,9 +154,15 @@ Full setup and scripts reference: [SETUP.md](docs-internal/SETUP.md) - [SCRIPTS.
 | [agent_teams.md](docs-internal/agent_teams.md) | Agent Teams pattern with `input-teammates` handle |
 | [native_llm_sdk.md](docs-internal/native_llm_sdk.md) | Native LLM SDK layer and provider protocol |
 | [rlm_service.md](docs-internal/rlm_service.md) | Recursive Language Model agent via REPL |
+| [claude_code_agent.md](docs-internal/claude_code_agent.md) | Claude Code agent hub (routes to architecture, interactive mode, and the vendored `claude_code_*_reference.md` snapshots) |
 | [claude_code_agent_architecture.md](docs-internal/claude_code_agent_architecture.md) | Claude Code SDK integration as a specialized agent |
+| [cli_agent_framework.md](docs-internal/cli_agent_framework.md) | Multi-provider CLI agent runtime (Claude Code / Codex / Gemini) — worktree isolation, MCP bridge, memory bridge |
 | [autonomous_agent_creation.md](docs-internal/autonomous_agent_creation.md) | Autonomous agents with Code Mode patterns |
-| [event_waiter_system.md](docs-internal/event_waiter_system.md) | Push-based trigger waiters |
+| [event_framework.md](docs-internal/event_framework.md) | Wave 12 event framework — Temporal Signals + Visibility routing, Search Attributes, plugin `_events.py` contract |
+| [stripe_service.md](docs-internal/stripe_service.md) | Reference Wave 12 plugin — signed webhooks + CLI-managed auth, file-by-file |
+| [vercel_service.md](docs-internal/vercel_service.md) | CLI-managed auth, device-flow variant |
+| [github_service.md](docs-internal/github_service.md) | gh CLI integration — CLI owns auth entirely |
+| [event_waiter_system.md](docs-internal/event_waiter_system.md) | Push-based trigger waiters *(historical, pre-Wave-11 — canvas-Run path only)* |
 | [status_broadcaster.md](docs-internal/status_broadcaster.md) | WebSocket broadcaster (live handler count via `len(MESSAGE_HANDLERS) + len(get_ws_handlers())`) |
 | [credentials_encryption.md](docs-internal/credentials_encryption.md) | Fernet + PBKDF2 credentials system |
 | [memory_compaction.md](docs-internal/memory_compaction.md) | Token tracking and model-aware compaction |
@@ -142,9 +172,18 @@ Full setup and scripts reference: [SETUP.md](docs-internal/SETUP.md) - [SCRIPTS.
 | [node_creation.md](docs-internal/node_creation.md) | How to create new nodes |
 | [memory_lifecycle.md](docs-internal/memory_lifecycle.md) | Canonical home for markdown memory format, vector store, claude_code_agent session resume |
 | [tool_building_pipeline.md](docs-internal/tool_building_pipeline.md) | Canonical home for `_build_tool_from_node`, tool discovery, per-type Temporal dispatch |
-| [new_service_integration.md](docs-internal/new_service_integration.md) | External service integration guide |
+| [new_service_integration.md](docs-internal/new_service_integration.md) | External service integration *(historical, pre-Wave-11 — do not follow; see the OAuth recipe above)* |
 | [cli_services_integration.md](docs-internal/cli_services_integration.md) | CLI service lifecycle management |
 | [onboarding.md](docs-internal/onboarding.md) | Welcome wizard and replay |
+| [frontend_architecture.md](docs-internal/frontend_architecture.md) | Current frontend stack, token tiers, state-ownership boundary, strict styling rules |
+| [theme_system.md](docs-internal/theme_system.md) | The 12-theme token contract + "Adding a new theme" checklist |
+| [workflow_ops_protocol.md](docs-internal/workflow_ops_protocol.md) | Backend → canvas mutation wire format (`{operations: [...]}`) |
+| [schema_source_of_truth_rfc.md](docs-internal/schema_source_of_truth_rfc.md) | Backend-as-SSOT for node schemas, icons, output schemas |
+| [node_allowlist.md](docs-internal/node_allowlist.md) | Single-config UI visibility gating (`node_allowlist.json`) |
+| [authentication.md](docs-internal/authentication.md) | JWT/cookie auth — modes, middleware, frontend bootstrap |
+| [errors.md](docs-internal/errors.md) | Known errors and troubleshooting |
+| [performance.md](docs-internal/performance.md) | Cold-start measurements, optimisation history, anti-patterns |
+| [release_build_pipeline.md](docs-internal/release_build_pipeline.md) | npm-distribution build pipeline (tsgo, esbuild sidecar, bytecode) |
 | [Skill Creation Guide](server/skills/GUIDE.md) | How to create new skills |
 
 ## Community
