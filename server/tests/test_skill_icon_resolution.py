@@ -45,6 +45,16 @@ def test_skill_corpus_discovered() -> None:
     )
 
 
+def test_task_manager_is_an_ai_assistant_skill() -> None:
+    skill_md = SKILLS_DIR / "assistant" / "task-manager" / "SKILL.md"
+    assert skill_md.is_file()
+    assert not (SKILLS_DIR / "task_agent" / "task-manager-skill" / "SKILL.md").exists()
+    metadata = _loader._parse_skill_metadata(skill_md)
+    assert metadata is not None
+    assert metadata.name == "task-manager"
+    assert metadata.allowed_tools == ["task_manager"]
+
+
 @pytest.mark.parametrize(
     "skill_md",
     SKILL_MDS,

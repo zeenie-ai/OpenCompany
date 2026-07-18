@@ -14,7 +14,8 @@ server/skills/
 │   ├── compaction-skill/SKILL.md
 │   ├── humanify-skill/SKILL.md
 │   ├── memory-skill/SKILL.md
-│   └── subagent-skill/SKILL.md
+│   ├── subagent-skill/SKILL.md
+│   └── task-manager/SKILL.md
 ├── android_agent/            # Android device control skills
 │   ├── personality/SKILL.md
 │   ├── battery-skill/SKILL.md
@@ -52,8 +53,7 @@ server/skills/
 │   └── twitter-user-skill/SKILL.md
 ├── task_agent/               # Task management skills
 │   ├── timer-skill/SKILL.md
-│   ├── cron-scheduler-skill/SKILL.md
-│   └── task-manager-skill/SKILL.md
+│   └── cron-scheduler-skill/SKILL.md
 ├── travel_agent/             # Location and maps skills
 │   ├── geocoding-skill/SKILL.md
 │   └── nearby-places-skill/SKILL.md

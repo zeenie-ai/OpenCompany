@@ -5,7 +5,7 @@
 | **Category** | ai_tools (dedicated AI tool, group `("tool", "ai")`) |
 | **Backend handler** | [`server/nodes/tool/task_manager/__init__.py`](../../../server/nodes/tool/task_manager/__init__.py) — `TaskManagerNode`, dispatched via `BaseNode.execute()` + the `@Operation("manage")` method, which calls the inlined `_execute_task_manager` in the same file |
 | **Tests** | [`server/tests/nodes/test_ai_tools.py`](../../../server/tests/nodes/test_ai_tools.py) |
-| **Skill (if any)** | [`server/skills/task_agent/task-manager-skill/SKILL.md`](../../../server/skills/task_agent/task-manager-skill/SKILL.md) |
+| **Skill (if any)** | [`server/skills/assistant/task-manager/SKILL.md`](../../../server/skills/assistant/task-manager/SKILL.md) |
 | **Dual-purpose tool** | tool-only — `ToolNode` exposed to the LLM as `task_manager` (`tool_name` class attr) |
 
 ## Purpose
@@ -189,5 +189,5 @@ flowchart TD
 ## Related
 
 - **Sibling tools**: [`calculatorTool`](./calculatorTool.md), [`currentTimeTool`](./currentTimeTool.md), [`duckduckgoSearch`](./duckduckgoSearch.md), [`writeTodos`](./writeTodos.md), [`agentBuilder`](./agentBuilder.md)
-- **Skill using this tool**: [`task-manager-skill/SKILL.md`](../../../server/skills/task_agent/task-manager-skill/SKILL.md)
+- **Skill using this tool**: [`task-manager/SKILL.md`](../../../server/skills/assistant/task-manager/SKILL.md)
 - **Architecture docs**: [Agent Delegation](../../agent_delegation.md)

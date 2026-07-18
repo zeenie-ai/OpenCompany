@@ -285,7 +285,7 @@
   },
   "taskManager": {
     "icon": "📋",
-    "skill": "task-manager-skill"
+    "skill": "task-manager"
   },
   "taskTrigger": {
     "icon": "📨"

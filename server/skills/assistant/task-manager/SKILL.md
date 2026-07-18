@@ -1,5 +1,5 @@
 ---
-name: task-manager-skill
+name: task-manager
 description: Manage delegated tasks. List active tasks, check task status, get results from completed delegations, and mark tasks as done.
 allowed-tools: task_manager
 metadata:
@@ -9,13 +9,13 @@ metadata:
 
 ---
 
-# Task Manager Tool
+# Task Manager
 
 Manage and track delegated agent tasks.
 
 ## How It Works
 
-This skill provides instructions for the **Task Manager** tool node. Connect the **Task Manager** node to Zeenie's `input-tools` handle to enable task management operations.
+This skill teaches the AI Assistant how to use the **Task Manager** tool. Connect the **Task Manager** node to the assistant's `input-tools` handle to enable delegated-task tracking.
 
 ## task_manager Tool
 
