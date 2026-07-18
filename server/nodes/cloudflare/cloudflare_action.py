@@ -20,9 +20,11 @@ positional.
 from __future__ import annotations
 
 import json
+import os
 import shlex
 from typing import Any, Dict, List, Literal, Optional
 
+import httpx
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from services.events import run_cli_command
@@ -34,16 +36,27 @@ _ZONES_LIST = {"displayOptions": {"show": {"operation": ["zones_list"]}}}
 _DNS_ANY = {"displayOptions": {"show": {"operation": ["dns_records_list", "dns_record_create", "dns_record_delete"]}}}
 _CREATE = {"displayOptions": {"show": {"operation": ["dns_record_create"]}}}
 _DELETE = {"displayOptions": {"show": {"operation": ["dns_record_delete"]}}}
+_GRAPHQL = {"displayOptions": {"show": {"operation": ["graphql_query"]}}}
 _CUSTOM = {"displayOptions": {"show": {"operation": ["custom"]}}}
 
 _ONESHOT_TIMEOUT = 120.0
 _CUSTOM_TIMEOUT = 300.0
+_GRAPHQL_TIMEOUT = 60.0
 _STDERR_TAIL_CHARS = 2000
+
+# The GraphQL Analytics API is the official replacement for the
+# sunsetted Zone Analytics REST API. It is a standalone endpoint
+# OUTSIDE the REST/OpenAPI schema the cf CLI is generated from, so the
+# node calls it directly. Cloudflare documents API tokens as the
+# authentication method for it (the cf OAuth grant has no analytics
+# scopes beyond dns_analytics:read anyway).
+# https://developers.cloudflare.com/analytics/graphql-api/
+_GRAPHQL_ENDPOINT = "https://api.cloudflare.com/client/v4/graphql"
 
 
 class CloudflareActionParams(BaseModel):
     operation: Literal[
-        "whoami", "zones_list", "dns_records_list", "dns_record_create", "dns_record_delete", "custom"
+        "whoami", "zones_list", "dns_records_list", "dns_record_create", "dns_record_delete", "graphql_query", "custom"
     ] = "whoami"
 
     # Shared zone target for the DNS operations (global -z/--zone flag).
@@ -83,6 +96,26 @@ class CloudflareActionParams(BaseModel):
         json_schema_extra={"placeholder": "023e105f4ecef8ad9ca31a8372d0c353", **_DELETE},
     )
 
+    # graphql_query
+    graphql_query: str = Field(
+        default="",
+        description="GraphQL Analytics API query (the replacement for the sunsetted Zone Analytics REST API)",
+        json_schema_extra={
+            "rows": 6,
+            "placeholder": 'query { viewer { zones(filter: {zoneTag: "..."}) { httpRequestsAdaptiveGroups(limit: 10, filter: {...}) { count } } } }',
+            **_GRAPHQL,
+        },
+    )
+    graphql_variables: str = Field(
+        default="",
+        description="Optional JSON object of GraphQL variables",
+        json_schema_extra={
+            "rows": 3,
+            "placeholder": '{"zoneTag": "023e105f4ecef8ad9ca31a8372d0c353"}',
+            **_GRAPHQL,
+        },
+    )
+
     # custom
     command: str = Field(
         default="",
@@ -95,11 +128,11 @@ class CloudflareActionParams(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    @field_validator("record_body", mode="before")
+    @field_validator("record_body", "graphql_variables", mode="before")
     @classmethod
-    def _coerce_record_body(cls, v: Any) -> Any:
-        """LLM tool calls may pass the record as a real JSON object —
-        coerce to the string the CLI flag expects (canonical
+    def _coerce_json_field(cls, v: Any) -> Any:
+        """LLM tool calls may pass these as real JSON objects — coerce
+        to the string the CLI flag / HTTP body expects (canonical
         field_validator(mode="before") rule)."""
         if isinstance(v, (dict, list)):
             return json.dumps(v)
@@ -122,7 +155,7 @@ class CloudflareActionNode(ActionNode):
     display_name = "Cloudflare"
     subtitle = "cf CLI"
     group = ("deployment", "tool")
-    description = "Cloudflare via the official cf CLI — check auth, list zones, manage DNS records, or run any cf command"
+    description = "Cloudflare via the official cf CLI — auth, zones, DNS records, GraphQL analytics, or any cf command"
     component_kind = "square"
     tool_name = "cloudflare"
     tool_description = (
@@ -130,12 +163,16 @@ class CloudflareActionNode(ActionNode):
         "identity), zones_list (list/filter zones), dns_records_list (records for a zone), "
         "dns_record_create (pass 'record_body' as the raw JSON record, e.g. "
         '{"type":"A","name":"www","content":"192.0.2.1","ttl":1}), dns_record_delete (by record '
-        "id), custom (any other cf command — pass 'command' exactly as typed after 'cf ', e.g. "
-        "'accounts list', 'dns records get <id> --zone example.com', 'registrar domains list', "
-        "'agent-context dns' for deep per-product docs, 'schema <cmd>' for request shapes). "
-        "DNS operations take 'zone' as a zone ID or domain name. Output is JSON. "
-        "Auth is managed by the cf CLI itself — connect via Credentials -> Cloudflare (Login "
-        "button) or run 'cf auth login' in a terminal; a CLOUDFLARE_API_TOKEN env var also works. "
+        "id), graphql_query (the GraphQL Analytics API — the replacement for the sunsetted Zone "
+        "Analytics REST API; zone traffic via httpRequestsAdaptiveGroups, Web Analytics/RUM via "
+        "rumPageloadEventsAdaptiveGroups under viewer.accounts), custom (any other cf command — "
+        "pass 'command' exactly as typed after 'cf ', e.g. 'accounts list', 'dns records get <id> "
+        "--zone example.com', 'registrar domains list', 'agent-context dns' for deep per-product "
+        "docs). DNS operations take 'zone' as a zone ID or domain name. Output is JSON. "
+        "Auth: the cf CLI's own OAuth login (Credentials -> Cloudflare) covers zones/DNS/accounts/"
+        "registrar but its fixed scope set has NO analytics access beyond DNS — graphql_query and "
+        "Web Analytics/RUM need the optional API token from the credentials panel (permission "
+        "'Account > Account Analytics > Read'), which then takes precedence for every operation. "
         "Reference: https://developers.cloudflare.com"
     )
     handles = (
@@ -162,11 +199,12 @@ class CloudflareActionNode(ActionNode):
         timeout: float = _ONESHOT_TIMEOUT,
     ) -> Dict[str, Any]:
         """No auth pre-flight (Stripe pattern) — cf authenticates from
-        its own config (or an ambient env token), and its error
-        (including "Not logged in") surfaces via the NodeUserError wrap
-        below."""
+        the stored API token (injected as CLOUDFLARE_API_TOKEN, cf's
+        first-priority credential source), its own OAuth config, or an
+        ambient env token; its error (including "Not logged in")
+        surfaces via the NodeUserError wrap below."""
         from ._install import ensure_cf_cli
-        from ._service import cf_env
+        from ._service import cf_env, stored_token
 
         try:
             binary = str(await ensure_cf_cli())
@@ -177,7 +215,7 @@ class CloudflareActionNode(ActionNode):
             binary=binary,
             argv=argv,
             timeout=timeout,
-            env=cf_env(),
+            env=cf_env(await stored_token()),
         )
         if not result.get("success"):
             stderr = (result.get("stderr") or "").strip()
@@ -276,6 +314,67 @@ class CloudflareActionNode(ActionNode):
         argv = ["dns", "records", "delete", record_id, *self._zone_flag(params)]
         result = await self._run(argv)
         return self._shape("dns_record_delete", result)
+
+    @Operation("graphql_query", cost={"service": "cloudflare", "action": "graphql_query", "count": 1})
+    async def graphql_query(self, ctx: NodeContext, params: CloudflareActionParams) -> Any:
+        """The GraphQL Analytics API — a standalone endpoint outside the
+        cf CLI's generated REST surface, called directly. Requires an
+        API token (the cf OAuth grant carries no analytics scopes and
+        Cloudflare documents tokens as the auth method for GraphQL)."""
+        query = params.graphql_query.strip()
+        if not query:
+            raise NodeUserError(
+                "graphql_query is required (e.g. query { viewer { zones(filter: {zoneTag: $zoneTag}) "
+                "{ httpRequestsAdaptiveGroups(limit: 10) { count } } } })"
+            )
+        variables: Dict[str, Any] = {}
+        if params.graphql_variables.strip():
+            try:
+                variables = json.loads(params.graphql_variables)
+            except ValueError as e:
+                raise NodeUserError(f"graphql_variables is not valid JSON: {e}") from e
+
+        from ._service import stored_token
+
+        token = await stored_token() or os.environ.get("CLOUDFLARE_API_TOKEN")
+        if not token:
+            raise NodeUserError(
+                "The GraphQL Analytics API needs an API token — the cf OAuth login carries no "
+                "analytics scopes. Create one at dash.cloudflare.com/profile/api-tokens with "
+                "'Account > Account Analytics > Read' and paste it in Credentials -> Cloudflare."
+            )
+
+        body = await self._graphql_post(token, {"query": query, "variables": variables})
+        return self._shape("graphql_query", {"result": body, "stdout": "", "stderr": ""})
+
+    @staticmethod
+    async def _graphql_post(token: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """One POST to the official endpoint, exactly as documented
+        (Bearer token + {query, variables} body). 401/403 map to the
+        permission-group fix; hard GraphQL errors (no data) surface as
+        NodeUserError; partial data rides back in the body."""
+        async with httpx.AsyncClient(timeout=_GRAPHQL_TIMEOUT) as client:
+            resp = await client.post(
+                _GRAPHQL_ENDPOINT,
+                json=payload,
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        if resp.status_code in (401, 403):
+            raise NodeUserError(
+                f"GraphQL Analytics API rejected the token (HTTP {resp.status_code}). "
+                "The API token needs 'Account > Account Analytics > Read' (and 'Zone > Analytics > Read' "
+                "for zone-scoped queries) — edit it at dash.cloudflare.com/profile/api-tokens."
+            )
+        try:
+            body = resp.json()
+        except ValueError as e:
+            raise NodeUserError(f"GraphQL Analytics API returned non-JSON (HTTP {resp.status_code}): {resp.text[:300]}") from e
+        if resp.status_code >= 400 or (body.get("data") is None and body.get("errors")):
+            errors = body.get("errors") or [{"message": f"HTTP {resp.status_code}"}]
+            first = errors[0]
+            message = first.get("message") if isinstance(first, dict) else str(first)
+            raise NodeUserError(f"GraphQL query failed: {message}")
+        return body
 
     @Operation("custom", cost={"service": "cloudflare", "action": "custom", "count": 1})
     async def custom(self, ctx: NodeContext, params: CloudflareActionParams) -> Any:

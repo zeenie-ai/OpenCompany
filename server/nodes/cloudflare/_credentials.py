@@ -1,12 +1,20 @@
-"""Cloudflare credential — thin marker (Stripe idiom, github shape).
+"""Cloudflare credential — thin marker (stripe idiom, vercel shape).
 
-The cf CLI manages its own auth state: ``cf auth login`` (driven by the
-modal's Login button or run by the user in a terminal) stores the OAuth
-token in cf's user-level config (``auth.jsonc``, or the OS keyring when
-``CLOUDFLARE_AUTH_USE_KEYRING`` is set) and ``cf auth logout`` revokes
-it. OpenCompany stores no token — the credentials modal's connected
-badge is driven by the synthetic ``cli-managed`` marker OAuth row
-written by ``_handlers.py`` after a successful login.
+Two independent auth paths, either is sufficient:
+
+* **CLI login** — ``cf auth login`` (browser OAuth, loopback callback)
+  driven by the ``cloudflare_login`` WS handler; cf stores its own auth
+  state in its user-level config, and a synthetic marker OAuth token
+  flips the catalogue's ``stored`` flag. The OAuth grant carries a
+  FIXED 86-scope set (only ``dns_analytics:read`` for analytics — no
+  Web Analytics/RUM or zone-analytics scopes, and no way to request
+  more).
+* **API token** — the optional ``cloudflare_api_token`` api-key row,
+  pasted in the credentials modal and injected as the
+  ``CLOUDFLARE_API_TOKEN`` env var on every CLI invocation (token takes
+  precedence over CLI login, per cf's documented resolution order).
+  This is the only path to endpoints outside the OAuth scope set
+  (Web Analytics/RUM, GraphQL Analytics, zone analytics).
 """
 
 from __future__ import annotations
@@ -25,7 +33,9 @@ class CloudflareCredential(Credential):
 
     @classmethod
     async def resolve(cls, *, user_id: str = "owner") -> Dict[str, Any]:
-        """Nothing to resolve — auth lives in the cf CLI's own config
-        (or an ambient ``CLOUDFLARE_API_TOKEN`` env var, per cf's own
-        documented precedence)."""
-        return {}
+        """Return the optional API token. There is no api_key for the
+        CLI-login path — that state lives in cf's own config."""
+        from services.plugin.deps import get_auth_service
+
+        token = await get_auth_service().get_api_key("cloudflare_api_token")
+        return {"cloudflare_api_token": token} if token else {}

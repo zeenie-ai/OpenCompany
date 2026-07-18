@@ -1,14 +1,15 @@
-"""Shared Cloudflare plugin helpers — subprocess env builders, cf
-session probe, login-output parsing.
+"""Shared Cloudflare plugin helpers — subprocess env builders and the
+cf session probe.
 
-Auth model — **the cf CLI owns its own auth** (gh/Stripe pattern):
-``cf auth login`` (driven by the modal's Login button or run by the
-user in a terminal) is a PKCE OAuth flow against
+Auth model — **the cf CLI owns its own auth end-to-end** (gh/Stripe
+pattern): ``cf auth login`` (driven by the modal's Login button or run
+by the user in a terminal) is a PKCE OAuth flow against
 ``dash.cloudflare.com/oauth2/*`` with a loopback callback server on
-``localhost:8877``; the token lands in cf's user-level config
-(``auth.jsonc``) or the OS keyring. OpenCompany never stores or injects
-a token — a synthetic ``cli-managed`` marker OAuth row flips the
-catalogue's ``stored`` badge, exactly like gh. Ambient
+``localhost:8877``, and cf opens the default browser itself — the
+handlers never parse or proxy its output. The token lands in cf's
+user-level config (``auth.jsonc``) or the OS keyring. OpenCompany never
+stores or injects a token — a synthetic ``cli-managed`` marker OAuth
+row flips the catalogue's ``stored`` badge, exactly like gh. Ambient
 ``CLOUDFLARE_API_TOKEN`` in the server's own environment is left
 untouched for ops (cf documents env tokens as taking precedence over
 the stored OAuth session — this is also the headless path on remote
@@ -20,8 +21,16 @@ be stripped for ``cf auth login`` / ``whoami`` / ``logout`` (see
 from __future__ import annotations
 
 import os
-import re
 from typing import Any, Dict, Optional
+
+# api-key row holding the user's optional Cloudflare API token
+# (dash.cloudflare.com/profile/api-tokens). Injected as the
+# CLOUDFLARE_API_TOKEN env var — never argv, so it stays out of process
+# lists. The OAuth login's scope set is FIXED (86 scopes baked into cf's
+# PKCE client, no --scopes flag) and omits Web Analytics/RUM and zone
+# analytics entirely — an API token with the right permission groups is
+# the only way past that ceiling.
+TOKEN_KEY = "cloudflare_api_token"
 
 # cf resolves credentials env-first (source-verified against cf 0.2.0's
 # auth chunk): CLOUDFLARE_API_TOKEN/CF_API_TOKEN, then the legacy
@@ -36,14 +45,26 @@ _AMBIENT_CREDENTIAL_VARS = (
 )
 
 
-def cf_env() -> Dict[str, str]:
-    """Child env for cf op invocations. No token handling: cf reads its
-    own config (or an ambient env token, per its own documented
-    precedence). ``NO_COLOR`` keeps the chalk-based status output free
-    of ANSI codes."""
+def cf_env(token: Optional[str] = None) -> Dict[str, str]:
+    """Child env for cf op invocations. ``token`` (the stored optional
+    API token) is injected as ``CLOUDFLARE_API_TOKEN`` and takes
+    precedence over both the OAuth session (cf's own documented
+    resolution order) and any ambient server env token (explicit user
+    config beats environment). Without a token, cf reads its own config
+    or an ambient env token. ``NO_COLOR`` keeps the chalk-based status
+    output free of ANSI codes."""
     env = os.environ.copy()
     env["NO_COLOR"] = "1"
+    if token:
+        env["CLOUDFLARE_API_TOKEN"] = token
     return env
+
+
+async def stored_token() -> Optional[str]:
+    """The user's optional API token from the credentials DB."""
+    from services.plugin.deps import get_auth_service
+
+    return await get_auth_service().get_api_key(TOKEN_KEY)
 
 
 def login_env() -> Dict[str, str]:
@@ -93,24 +114,3 @@ async def whoami_snapshot() -> Optional[Dict[str, Any]]:
     if info.get("tokenValid") is False:
         return None
     return info
-
-
-# --- Login-output parsing ----------------------------------------------------
-
-_ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
-# cf 0.2.0 prints the authorize URL on stderr (source-verified, both
-# variants carry the same URL):
-#   Opening a link in your default browser: https://dash.cloudflare.com/oauth2/auth?...
-#   Visit this link to authenticate: https://dash.cloudflare.com/oauth2/auth?...
-_URL_RE = re.compile(r"https://dash\.(?:staging\.)?cloudflare\.com/oauth2/auth\S+")
-
-
-def strip_ansi(text: str) -> str:
-    return _ANSI_RE.sub("", text)
-
-
-def extract_login_url(text: str) -> Optional[str]:
-    """The OAuth authorize URL from cf's login banner, or ``None``
-    while still waiting for it."""
-    m = _URL_RE.search(strip_ansi(text))
-    return m.group(0).rstrip(".,;)'\"") if m else None

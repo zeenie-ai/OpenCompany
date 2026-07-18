@@ -47,6 +47,14 @@ def test_cf_env_keeps_ambient_token_for_ops(monkeypatch):
     assert env["CLOUDFLARE_API_TOKEN"] == "cf_ambient"
 
 
+def test_cf_env_stored_token_overrides_ambient(monkeypatch):
+    # Explicit user config (the credentials-modal token) beats the
+    # server environment.
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "cf_ambient")
+    env = cf_service.cf_env("cf_stored")
+    assert env["CLOUDFLARE_API_TOKEN"] == "cf_stored"
+
+
 def test_login_env_strips_ambient_credential_vars(monkeypatch):
     """With CLOUDFLARE_API_TOKEN set, `cf auth whoami` reports the env
     token (authSource: env) instead of the stored OAuth session — the
@@ -57,40 +65,6 @@ def test_login_env_strips_ambient_credential_vars(monkeypatch):
     for var in cf_service._AMBIENT_CREDENTIAL_VARS:
         assert var not in env
     assert env["NO_COLOR"] == "1"
-
-
-# --- login banner parsing (source-verified cf 0.2.0 output) ---------------------
-
-
-def test_extract_login_url_from_browser_banner():
-    # Live-captured cf 0.2.0 stderr shape.
-    banner = (
-        "Attempting to login via OAuth...\n"
-        "Opening a link in your default browser: "
-        "https://dash.cloudflare.com/oauth2/auth?response_type=code&client_id=abc&redirect_uri=http%3A%2F%2Flocalhost%3A8877%2Foauth%2Fcallback&scope=openid\n"
-    )
-    url = cf_service.extract_login_url(banner)
-    assert url is not None
-    assert url.startswith("https://dash.cloudflare.com/oauth2/auth?response_type=code")
-    assert "8877" in url
-
-
-def test_extract_login_url_from_headless_banner():
-    # The no-browser variant carries the same URL.
-    banner = "Visit this link to authenticate: https://dash.cloudflare.com/oauth2/auth?response_type=code&client_id=abc\n"
-    assert cf_service.extract_login_url(banner) == (
-        "https://dash.cloudflare.com/oauth2/auth?response_type=code&client_id=abc"
-    )
-
-
-def test_extract_login_url_waits_until_url_present():
-    assert cf_service.extract_login_url("Attempting to login via OAuth...\n") is None
-    assert cf_service.extract_login_url("") is None
-
-
-def test_extract_login_url_strips_ansi():
-    banner = "\x1b[36mOpening a link in your default browser:\x1b[0m https://dash.cloudflare.com/oauth2/auth?x=1\x1b[0m\n"
-    assert cf_service.extract_login_url(banner) == "https://dash.cloudflare.com/oauth2/auth?x=1"
 
 
 # --- _install resolution --------------------------------------------------------
@@ -147,8 +121,14 @@ def _wire(monkeypatch, tmp_path, run_impl):
     async def fake_ensure():
         return tmp_path / "cf"
 
+    async def no_stored_token():
+        return None
+
     monkeypatch.setattr(cf_install, "ensure_cf_cli", fake_ensure)
     monkeypatch.setattr(cf_action_mod, "run_cli_command", run_impl)
+    # ops resolve the optional modal token from the credentials DB —
+    # absent in unit tests, so stub the lookup to "no token stored".
+    monkeypatch.setattr(cf_service, "stored_token", no_stored_token)
 
 
 def _ctx(tmp_path) -> NodeContext:
@@ -163,13 +143,36 @@ async def test_whoami_argv_and_env(monkeypatch, tmp_path):
         return {"success": True, "result": {"authenticated": True, "email": "o@x.dev"}, "stdout": "{}", "stderr": "", "error": None}
 
     _wire(monkeypatch, tmp_path, fake_run)
+    monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
     node = CloudflareActionNode()
     out = await node.whoami(_ctx(tmp_path), CloudflareActionParams(operation="whoami"))
 
     assert captured["argv"] == ["auth", "whoami"]
-    # env comes from cf_env() — no token was resolved or injected anywhere
+    # env comes from cf_env() — no stored token, so nothing injected
     assert captured["env"]["NO_COLOR"] == "1"
+    assert "CLOUDFLARE_API_TOKEN" not in captured["env"]
     assert out["result"] == {"authenticated": True, "email": "o@x.dev"}
+
+
+async def test_ops_inject_stored_api_token(monkeypatch, tmp_path):
+    """The optional credentials-modal token rides every op as
+    CLOUDFLARE_API_TOKEN (cf's first-priority credential source) — the
+    only path past the OAuth grant's fixed scope set."""
+    captured = {}
+
+    async def fake_run(**kwargs):
+        captured.update(kwargs)
+        return {"success": True, "result": [], "stdout": "[]", "stderr": "", "error": None}
+
+    _wire(monkeypatch, tmp_path, fake_run)
+
+    async def fake_token():
+        return "cf_tok_123"
+
+    monkeypatch.setattr(cf_service, "stored_token", fake_token)
+    node = CloudflareActionNode()
+    await node.zones_list(_ctx(tmp_path), CloudflareActionParams(operation="zones_list"))
+    assert captured["env"]["CLOUDFLARE_API_TOKEN"] == "cf_tok_123"
 
 
 async def test_zones_list_builds_filter_argv(monkeypatch, tmp_path):
@@ -310,6 +313,95 @@ async def test_custom_requires_command_and_shlex_splits(monkeypatch, tmp_path):
     assert captured["timeout"] == cf_action_mod._CUSTOM_TIMEOUT
 
 
+async def test_graphql_requires_api_token(monkeypatch, tmp_path):
+    """The cf OAuth grant has no analytics scopes — graphql_query must
+    fail with the permission-group guidance, not a bare 403."""
+    _wire(monkeypatch, tmp_path, None)
+    monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
+    node = CloudflareActionNode()
+    with pytest.raises(NodeUserError, match="Account Analytics"):
+        await node.graphql_query(
+            _ctx(tmp_path),
+            CloudflareActionParams(operation="graphql_query", graphql_query="query { viewer { zones { __typename } } }"),
+        )
+
+
+async def test_graphql_posts_official_body_shape(monkeypatch, tmp_path):
+    _wire(monkeypatch, tmp_path, None)
+
+    async def fake_token():
+        return "cf_tok"
+
+    captured = {}
+
+    async def fake_post(token, payload):
+        captured["token"] = token
+        captured["payload"] = payload
+        return {"data": {"viewer": {"zones": []}}}
+
+    monkeypatch.setattr(cf_service, "stored_token", fake_token)
+    monkeypatch.setattr(CloudflareActionNode, "_graphql_post", staticmethod(fake_post))
+    node = CloudflareActionNode()
+
+    with pytest.raises(NodeUserError, match="graphql_query is required"):
+        await node.graphql_query(_ctx(tmp_path), CloudflareActionParams(operation="graphql_query"))
+
+    with pytest.raises(NodeUserError, match="not valid JSON"):
+        await node.graphql_query(
+            _ctx(tmp_path),
+            CloudflareActionParams(operation="graphql_query", graphql_query="query { viewer }", graphql_variables="{oops"),
+        )
+
+    out = await node.graphql_query(
+        _ctx(tmp_path),
+        CloudflareActionParams(
+            operation="graphql_query",
+            graphql_query="query Q($zoneTag: string) { viewer }",
+            graphql_variables='{"zoneTag": "z1"}',
+        ),
+    )
+    # The official request body shape: {query, variables}, Bearer token.
+    assert captured["token"] == "cf_tok"
+    assert captured["payload"] == {
+        "query": "query Q($zoneTag: string) { viewer }",
+        "variables": {"zoneTag": "z1"},
+    }
+    assert out["result"] == {"data": {"viewer": {"zones": []}}}
+
+
+async def test_graphql_post_maps_403_to_permission_guidance(monkeypatch):
+    class _Resp:
+        status_code = 403
+        text = "forbidden"
+
+        @staticmethod
+        def json():
+            return {"data": None, "errors": [{"message": "not authorized for that account"}]}
+
+    class _Client:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, **kwargs):
+            assert url == cf_action_mod._GRAPHQL_ENDPOINT
+            assert kwargs["headers"]["Authorization"] == "Bearer tok"
+            return _Resp()
+
+    monkeypatch.setattr(cf_action_mod.httpx, "AsyncClient", _Client)
+    with pytest.raises(NodeUserError, match="Account Analytics"):
+        await CloudflareActionNode._graphql_post("tok", {"query": "q", "variables": {}})
+
+
+def test_graphql_endpoint_is_the_official_one():
+    assert cf_action_mod._GRAPHQL_ENDPOINT == "https://api.cloudflare.com/client/v4/graphql"
+
+
 def test_parse_ndjson_recovers_multi_object_stdout():
     ndjson = '{"id": 1}\n{"id": 2}\n'
     assert CloudflareActionNode._parse_ndjson(ndjson) == [{"id": 1}, {"id": 2}]
@@ -343,10 +435,16 @@ def test_node_has_no_auth_preflight():
 # --- login handler --------------------------------------------------------------
 
 
+def _reset_login_state(monkeypatch):
+    monkeypatch.setattr(cf_handlers, "_active_login", {"task": None, "proc": None})
+
+
 async def test_login_answers_within_budget_when_flow_stalls(monkeypatch):
+    _reset_login_state(monkeypatch)
+
     async def stalled_flow():
         await asyncio.sleep(30)
-        return {"success": True, "url": "https://dash.cloudflare.com/oauth2/auth?x=1"}
+        return {"success": True, "message": "done"}
 
     monkeypatch.setattr(cf_handlers, "_start_login_flow", stalled_flow)
     monkeypatch.setattr(cf_handlers, "_RESPONSE_BUDGET_SECONDS", 0.05)
@@ -355,25 +453,75 @@ async def test_login_answers_within_budget_when_flow_stalls(monkeypatch):
     assert res.get("pending") is True
 
 
-async def test_login_fast_path_returns_authorize_url(monkeypatch):
+async def test_login_response_never_proxies_a_url(monkeypatch):
+    # The CLI owns the whole interaction — it opens the browser itself.
+    # The handler must not return url/verification_code for the modal
+    # to act on (no custom login UI).
+    _reset_login_state(monkeypatch)
+
     async def instant_flow():
-        return {"success": True, "url": "https://dash.cloudflare.com/oauth2/auth?x=1"}
+        return {"success": True, "message": "cf is opening your default browser."}
 
     monkeypatch.setattr(cf_handlers, "_start_login_flow", instant_flow)
     res = await cf_handlers.handle_cloudflare_login({}, websocket=None)
     assert res["success"] is True
-    assert res["url"] == "https://dash.cloudflare.com/oauth2/auth?x=1"
-    # cf's loopback flow has no device code — nothing to render in the modal.
+    assert "url" not in res
     assert "verification_code" not in res
+    src = inspect.getsource(cf_handlers._start_login_flow)
+    assert '"url"' not in src
 
 
-def test_login_flow_handles_already_logged_in_exit():
-    # cf delta vs gh: with a live session, `cf auth login` exits without
-    # printing an authorize URL — the flow must confirm via whoami and
-    # succeed instead of reporting a failure.
+async def test_login_is_single_flight(monkeypatch):
+    # cf's callback server binds the FIXED port 8877 — a second
+    # concurrent `cf auth login` exits instantly with a port conflict.
+    # A repeat click while a flow is live must not spawn again.
+    _reset_login_state(monkeypatch)
+
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def slow_flow():
+        started.set()
+        await release.wait()
+        return {"success": True, "message": "done"}
+
+    monkeypatch.setattr(cf_handlers, "_start_login_flow", slow_flow)
+    monkeypatch.setattr(cf_handlers, "_RESPONSE_BUDGET_SECONDS", 0.05)
+
+    first = await cf_handlers.handle_cloudflare_login({}, websocket=None)
+    assert first.get("pending") is True
+    await started.wait()
+
+    def boom():
+        raise AssertionError("second click must not spawn a second flow")
+
+    monkeypatch.setattr(cf_handlers, "_start_login_flow", boom)
+    second = await cf_handlers.handle_cloudflare_login({}, websocket=None)
+    assert second["success"] is True
+    assert second.get("pending") is True
+    assert "already in progress" in second["message"].lower()
+
+    release.set()
+
+
+def test_login_flow_short_circuits_when_already_logged_in():
+    # A live session (terminal login, or a flow that completed after the
+    # modal closed) marks + returns immediately instead of spawning.
     src = inspect.getsource(cf_handlers._start_login_flow)
     assert "whoami_snapshot" in src
     assert "Already logged in" in src
+    # ...and the spawn (only reached without a session) forces past a
+    # stale/invalid stored token instead of short-circuiting on it.
+    assert "--force" in cf_handlers._LOGIN_ARGS
+
+
+def test_completion_never_kills_the_login_process():
+    # The installed binary is an npm .cmd shim on Windows: killing it
+    # orphans the node child, which keeps holding callback port 8877
+    # and breaks every later login. cf enforces its own login timeout.
+    src = inspect.getsource(cf_handlers._complete_login)
+    assert ".kill(" not in src
+    assert ".terminate(" not in src
 
 
 # --- marker-token + broadcast contract (source introspection) -------------------
@@ -386,8 +534,10 @@ def test_login_success_gates_on_whoami_then_marks_and_broadcasts():
     # exit code alone is never trusted — cf exits 0 logged-in AND logged-out;
     # `cf auth whoami` JSON is the gate (and the account-label email source).
     assert "whoami_snapshot" in complete
-    assert 'mark_logged_in("cloudflare"' in complete
-    assert "credential.oauth.connected" in complete
+    assert "_mark_connected" in complete
+    marked = inspect.getsource(cf_handlers._mark_connected)
+    assert 'mark_logged_in("cloudflare"' in marked
+    assert "credential.oauth.connected" in marked
     snapshot = inspect.getsource(cf_service.whoami_snapshot)
     assert '"auth", "whoami"' in snapshot
     assert "authenticated" in snapshot
@@ -401,9 +551,12 @@ def test_logout_removes_marker_and_broadcasts():
 
 
 def test_login_uses_stripped_env():
-    # login/status/logout must consult cf's OWN store, never env tokens.
+    # login/status/logout must consult cf's OWN store, never env tokens
+    # — and the stored API token must never be injected there either.
     for fn in (cf_handlers._start_login_flow, cf_handlers.handle_cloudflare_logout):
-        assert "login_env" in inspect.getsource(fn)
+        src = inspect.getsource(fn)
+        assert "login_env" in src
+        assert "stored_token" not in src
     assert "login_env" in inspect.getsource(cf_service.whoami_snapshot)
 
 
@@ -414,7 +567,7 @@ def test_ws_handlers_registered():
 # --- catalogue + assets ----------------------------------------------------------
 
 
-def test_catalogue_entry_is_fieldless_stripe_shape():
+def test_catalogue_entry_is_vercel_dual_path_shape():
     config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     assert "deployment" in config["categories"]
     cloudflare = config["providers"]["cloudflare"]
@@ -426,13 +579,39 @@ def test_catalogue_entry_is_fieldless_stripe_shape():
         "logout": "cloudflare_logout",
         "status": "cloudflare_status",
     }
-    # cf owns the token — the modal stores nothing (Stripe shape).
-    assert "fields" not in cloudflare
+    # Dual-path (vercel shape): one OPTIONAL token field — required
+    # would gate the Login button (OAuthConnect counts required fields
+    # only), and the OAuth login must keep working without a token.
+    fields = cloudflare["fields"]
+    assert len(fields) == 1
+    token_field = fields[0]
+    assert token_field["key"] == "cloudflare_api_token"
+    assert token_field["required"] is False
+    assert token_field["secret"] is True
+    assert token_field["type"] == "password"
 
 
 def test_credential_class_shape():
     assert CloudflareCredential.id == "cloudflare"
     assert CloudflareCredential.auth == "custom"
+
+
+async def test_credential_resolve_returns_optional_token_row(monkeypatch):
+    from services.plugin import deps as plugin_deps
+
+    class _Auth:
+        def __init__(self, token):
+            self._token = token
+
+        async def get_api_key(self, key):
+            assert key == "cloudflare_api_token"
+            return self._token
+
+    monkeypatch.setattr(plugin_deps, "get_auth_service", lambda: _Auth("tok"))
+    assert await CloudflareCredential.resolve() == {"cloudflare_api_token": "tok"}
+
+    monkeypatch.setattr(plugin_deps, "get_auth_service", lambda: _Auth(None))
+    assert await CloudflareCredential.resolve() == {}
 
 
 def test_plugin_folder_assets():
