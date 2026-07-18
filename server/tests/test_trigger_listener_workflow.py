@@ -52,6 +52,7 @@ def _patch_workflow_logger(monkeypatch):
     from temporalio import workflow as temporal_workflow
 
     monkeypatch.setattr(temporal_workflow, "logger", MagicMock())
+    monkeypatch.setattr(temporal_workflow, "patched", lambda _patch_id: True)
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +228,26 @@ class TestBuildRunGraph:
 
         assert {n["id"] for n in filtered_nodes} == {"wh-1", "agent-1", "mem-1"}
 
+    def test_legacy_tool_handle_is_included_for_triggered_lead(self):
+        from services.temporal.trigger_listener_workflow import _build_run_graph
+
+        nodes = [
+            _node("task-trigger", "taskTrigger"),
+            _node("lead", "orchestrator_agent"),
+            _node("todos", "writeTodos"),
+        ]
+        edges = [
+            _edge("task-trigger", "lead", target_handle="input-task"),
+            {"source": "todos", "target": "lead", "target_handle": "input-tools"},
+        ]
+
+        filtered_nodes, filtered_edges = _build_run_graph(
+            trigger_node_id="task-trigger", trigger_output={}, nodes=nodes, edges=edges,
+        )
+
+        assert {node["id"] for node in filtered_nodes} == {"task-trigger", "lead", "todos"}
+        assert any(edge["source"] == "todos" for edge in filtered_edges)
+
     def test_stops_at_downstream_trigger_nodes(self):
         """Downstream collection stops at trigger nodes (n8n pattern):
         each trigger is an independent event listener. taskTrigger fires
@@ -329,6 +350,48 @@ class TestSpawnChildRun:
         assert wh["_pre_executed"] is True
         assert wh["_trigger_output"]["path"] == "/hook"
         assert wh["_trigger_output"]["_event_envelope"]["id"] == "evt-42"
+
+    @pytest.mark.asyncio
+    async def test_spawn_uses_latest_saved_graph_tools(self, monkeypatch):
+        from services.temporal import trigger_listener_workflow as tlw
+        from temporalio import workflow as temporal_workflow
+
+        recorded: List[Dict[str, Any]] = []
+        latest_nodes = [
+            _node("task-trigger", "taskTrigger"),
+            _node("lead", "orchestrator_agent"),
+            _node("todos", "writeTodos"),
+        ]
+        latest_edges = [
+            _edge("task-trigger", "lead", "input-task"),
+            _edge("todos", "lead", "input-tools"),
+        ]
+
+        async def fake_execute_activity(name, *args, **kwargs):
+            if name == "load_persisted_workflow_graph_activity":
+                return {"found": True, "nodes": latest_nodes, "edges": latest_edges}
+            return None
+
+        async def fake_start_child_workflow(name, **kwargs):
+            recorded.append({"name": name, **kwargs})
+            return MagicMock()
+
+        monkeypatch.setattr(temporal_workflow, "execute_activity", fake_execute_activity)
+        monkeypatch.setattr(temporal_workflow, "start_child_workflow", fake_start_child_workflow)
+
+        snapshot_nodes = [_node("task-trigger", "taskTrigger"), _node("lead", "orchestrator_agent")]
+        snapshot_edges = [_edge("task-trigger", "lead", "input-task")]
+        await tlw.TriggerListenerWorkflow()._spawn_child_run(
+            {"id": "evt-new-tool", "type": "task", "data": {"task_id": "task-1", "status": "completed"}},
+            {
+                "workflow_id": "workflow-1", "trigger_node_id": "task-trigger",
+                "nodes": snapshot_nodes, "edges": snapshot_edges,
+            },
+        )
+
+        child_graph = recorded[0]["args"][0]
+        assert {node["id"] for node in child_graph["nodes"]} == {"task-trigger", "lead", "todos"}
+        assert any(edge["source"] == "todos" for edge in child_graph["edges"])
 
     @pytest.mark.asyncio
     async def test_spawn_failure_does_not_kill_listener(self, monkeypatch):

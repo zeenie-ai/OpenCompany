@@ -207,6 +207,24 @@ class PollingTriggerWorkflow:
         edges = listener_data["edges"]
         session_id = listener_data.get("session_id", "default")
         workflow_id = listener_data.get("workflow_id")
+        try:
+            use_latest_graph = bool(workflow_id) and workflow.patched("trigger-latest-graph-v1")
+        except RuntimeError:  # direct unit invocation outside Temporal runtime
+            use_latest_graph = False
+        if use_latest_graph:
+            try:
+                latest = await workflow.execute_activity(
+                    "load_persisted_workflow_graph_activity",
+                    {"workflow_id": workflow_id},
+                    start_to_close_timeout=timedelta(seconds=10),
+                )
+                if latest.get("found"):
+                    nodes = latest.get("nodes") or []
+                    edges = latest.get("edges") or []
+            except Exception as exc:  # snapshot remains a safe fallback
+                workflow.logger.warning(
+                    f"Current graph lookup failed for {workflow_id}; using deployment snapshot: {exc}"
+                )
         # Human-readable slug prefix for the Temporal Web UI listing.
         # Set at deploy time from the workflow's display name.
         workflow_slug = listener_data.get("workflow_slug") or workflow_id

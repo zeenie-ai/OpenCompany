@@ -1111,7 +1111,7 @@ class DeploymentManager:
         for edge in edges:
             target = edge.get("target")
             source = edge.get("source")
-            handle = edge.get("targetHandle", "")
+            handle = edge.get("targetHandle") or edge.get("target_handle") or ""
 
             is_config = handle and handle.startswith("input-") and handle != "input-main"
             if is_config and target in downstream_ids and source not in downstream_ids:
@@ -1145,7 +1145,7 @@ class DeploymentManager:
         for edge in edges:
             target = edge.get("target")
             source = edge.get("source")
-            target_handle = edge.get("targetHandle", "")
+            target_handle = edge.get("targetHandle") or edge.get("target_handle") or ""
             # Include tool nodes connected to agent's input-tools handle
             if target in agent_node_ids and target_handle == "input-tools" and source not in downstream_ids:
                 downstream_ids.add(source)

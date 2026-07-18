@@ -372,6 +372,8 @@ class TestPollingTriggerWorkflowBody:
             # but don't consume the scripted poll-cycle responses.
             if name == "broadcast_trigger_status_activity":
                 return None
+            if name == "load_persisted_workflow_graph_activity":
+                return {"found": False, "nodes": [], "edges": []}
             return next(responses)
 
         sleep_calls: List[Any] = []
@@ -401,6 +403,7 @@ class TestPollingTriggerWorkflowBody:
             raise _StopLoop()
 
         monkeypatch.setattr(temporal_workflow, "execute_activity", fake_execute_activity)
+        monkeypatch.setattr(temporal_workflow, "patched", lambda _patch_id: False)
         monkeypatch.setattr(temporal_workflow, "sleep", fake_sleep)
         monkeypatch.setattr(temporal_workflow, "start_child_workflow", fake_start_child)
         monkeypatch.setattr(temporal_workflow, "continue_as_new", fake_continue_as_new)

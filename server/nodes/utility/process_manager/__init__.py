@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -20,6 +20,10 @@ class ProcessManagerParams(BaseModel):
     command: str = Field(default="", json_schema_extra=_START)
     cwd: str = Field(default="", json_schema_extra=_START)
     env: Dict[str, str] = Field(default_factory=dict, json_schema_extra=_START)
+    ports: List[int] = Field(
+        default_factory=list,
+        json_schema_extra={**_START, "description": "Listener ports to reserve before spawning"},
+    )
     input_text: str = Field(default="", json_schema_extra=_SEND_INPUT)
     stream: Literal["stdout", "stderr"] = Field(default="stdout", json_schema_extra=_GET_OUTPUT)
     tail: int = Field(default=100, ge=1, le=10000, json_schema_extra=_GET_OUTPUT)
@@ -45,7 +49,7 @@ class ProcessManagerNode(ActionNode):
     description = "Start, stop, restart, and manage long-running processes"
     component_kind = "square"
     tool_name = "process_manager"
-    tool_description = "Start, stop, and manage long-running processes (dev servers, watchers, build tools). Operations: start (spawn a process), stop (kill process tree), restart, list (show all running), send_input (write to stdin), get_output (read recent output lines). Output streams to Terminal tab. Use get_output to check what a process printed."
+    tool_description = "Start, stop, and manage long-running processes (dev servers, watchers, build tools). For servers, always declare listener ports in ports; startup fails safely with PORT_IN_USE instead of launching on an occupied port. Operations: start, stop, restart, list, send_input, get_output. Output streams to Terminal tab."
     handles = (
         {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
         {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
@@ -53,6 +57,11 @@ class ProcessManagerNode(ActionNode):
     annotations = {"destructive": True, "readonly": False, "open_world": True}
     task_queue = TaskQueue.DEFAULT
     usable_as_tool = True
+    ui_hints = {
+        "isProcessManagerPanel": True,
+        "hideInputSection": True,
+        "hideOutputSection": True,
+    }
 
     Params = ProcessManagerParams
     Output = ProcessManagerOutput
@@ -93,6 +102,8 @@ class ProcessManagerNode(ActionNode):
                     command=_clean(params.command),
                     workflow_id=workflow_id,
                     working_directory=_clean(params.cwd) or agent_dir,
+                    ports=params.ports,
+                    extra_env=params.env,
                 )
             )
         if op == "stop":

@@ -13,6 +13,7 @@ import asyncio
 import os
 import shlex
 import shutil
+import socket
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -48,6 +49,9 @@ class ManagedProcess:
     exit_code: Optional[int] = None
     stdout_lines: int = 0
     stderr_lines: int = 0
+    ports: tuple[int, ...] = ()
+    extra_env: Optional[Dict[str, str]] = None
+    stopped_at: Optional[str] = None
     # Optional per-line callback: framework-level subscribers (e.g. the
     # generalised event source `DaemonEventSource`) install this to ingest
     # the daemon's stdout/stderr without re-tailing the log files we already
@@ -68,6 +72,9 @@ class ProcessService:
         self._processes: Dict[tuple, ManagedProcess] = {}
         self._broadcaster = None
         self.max_processes: int = MAX_PROCESSES
+        # Port preflight and subprocess creation must be one critical section.
+        # Without this, two concurrent tool calls can both observe a free port.
+        self._start_lock = asyncio.Lock()
 
     def set_broadcaster(self, broadcaster) -> None:
         self._broadcaster = broadcaster
@@ -83,6 +90,8 @@ class ProcessService:
         working_directory: str = "",
         *,
         line_handler: Optional[LineHandler] = None,
+        ports: Optional[List[int]] = None,
+        extra_env: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """Start a long-running process.
 
@@ -121,15 +130,6 @@ class ProcessService:
         name = name or f"proc_{id(command) % 100000}"
         key = self._key(workflow_id, name)
 
-        # Check process limit (exclude stopped/error -- only count running)
-        running = sum(1 for m in self._processes.values() if m.status == "running")
-        if key not in self._processes and running >= self.max_processes:
-            return {"success": False, "error": f"Process limit reached ({self.max_processes}). Stop a process first."}
-
-        # Stop existing process with same name
-        if key in self._processes and self._processes[key].status == "running":
-            await self.stop(name, workflow_id)
-
         argv = shlex.split(command)
         # Resolve argv[0] to an absolute path. Canonical idiom in this
         # codebase (browser_service, claude_code_service, claude_oauth,
@@ -146,7 +146,8 @@ class ProcessService:
                 "error": (f"Command not found: '{argv[0] if argv else ''}'. " "Check spelling or ensure the binary is on PATH."),
             }
         argv[0] = resolved
-        env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+        env = {**os.environ, **(extra_env or {}), "PYTHONUNBUFFERED": "1"}
+        requested_ports = self._requested_ports(argv, ports or [], extra_env or {})
         from core.config import Settings
         from core.paths import daemons_dir
 
@@ -180,53 +181,140 @@ class ProcessService:
         # lands at ``{daemons_dir}/.processes/{name}/``. Either way it
         # holds stdout.log + stderr.log.
         log_dir = Path(cwd) / ".processes" / name
-        log_dir.mkdir(parents=True, exist_ok=True)
-        # Clear old logs if restarting
-        for f in ("stdout.log", "stderr.log"):
-            (log_dir / f).write_text("")
 
-        logger.info("[Process] Starting: %s (name=%s, cwd=%s, logs=%s)", command[:200], name, cwd, log_dir)
+        async with self._start_lock:
+            running = sum(1 for m in self._processes.values() if m.status == "running")
+            if key not in self._processes and running >= self.max_processes:
+                return {"success": False, "error": f"Process limit reached ({self.max_processes}). Stop a process first."}
 
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *argv,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=cwd,
-                env=env,
+            # Same-name replacement is allowed, but it must fully stop before
+            # the port preflight. Differently named/external owners are never killed.
+            if key in self._processes and self._processes[key].status == "running":
+                await self.stop(name, workflow_id)
+
+            collisions: Dict[int, List[int]] = {}
+            for managed_process in self._processes.values():
+                if managed_process.status != "running":
+                    continue
+                for port in set(requested_ports).intersection(managed_process.ports):
+                    collisions.setdefault(port, []).append(managed_process.pid)
+            for port, pids in self._occupied_ports(requested_ports).items():
+                collisions.setdefault(port, []).extend(pid for pid in pids if pid not in collisions.get(port, []))
+            if collisions:
+                detail = ", ".join(
+                    f"{port} (PID{'s' if len(pids) != 1 else ''} {', '.join(map(str, pids)) or 'unknown'})"
+                    for port, pids in collisions.items()
+                )
+                return {
+                    "success": False,
+                    "code": "PORT_IN_USE",
+                    "error": f"Cannot start '{name}': requested port(s) already in use: {detail}.",
+                    "ports": list(collisions),
+                    "owners": collisions,
+                }
+
+            # Do not create or truncate logs until all admission checks pass.
+            log_dir.mkdir(parents=True, exist_ok=True)
+            for f in ("stdout.log", "stderr.log"):
+                (log_dir / f).write_text("")
+
+            logger.info("[Process] Starting: %s (name=%s, cwd=%s, ports=%s, logs=%s)", command[:200], name, cwd, requested_ports, log_dir)
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *argv,
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=cwd,
+                    env=env,
+                )
+            except Exception as e:
+                logger.error("[Process] Failed to start: %s -> %s", command[:100], e)
+                return {"success": False, "error": str(e)}
+
+            # Publish ownership before releasing the admission lock. A second
+            # concurrent start must see this process even if it has not bound
+            # its listener socket yet.
+            managed = ManagedProcess(
+                name=name,
+                command=command,
+                argv=argv,
+                pid=proc.pid,
+                status="running",
+                started_at=datetime.now().isoformat(),
+                workflow_id=workflow_id,
+                working_directory=cwd,
+                process=proc,
+                log_dir=log_dir,
+                line_handler=line_handler,
+                ports=tuple(requested_ports),
+                extra_env=dict(extra_env or {}),
             )
-        except Exception as e:
-            logger.error("[Process] Failed to start: %s -> %s", command[:100], e)
-            return {"success": False, "error": str(e)}
-
-        managed = ManagedProcess(
-            name=name,
-            command=command,
-            argv=argv,
-            pid=proc.pid,
-            status="running",
-            started_at=datetime.now().isoformat(),
-            workflow_id=workflow_id,
-            working_directory=cwd,
-            process=proc,
-            log_dir=log_dir,
-            line_handler=line_handler,
-        )
-
-        managed.stdout_task = asyncio.create_task(
-            self._read_stream(managed, proc.stdout, "stdout"),
-            name=f"proc-stdout-{name}",
-        )
-        managed.stderr_task = asyncio.create_task(
-            self._read_stream(managed, proc.stderr, "stderr"),
-            name=f"proc-stderr-{name}",
-        )
-
-        self._processes[key] = managed
+            managed.stdout_task = asyncio.create_task(
+                self._read_stream(managed, proc.stdout, "stdout"), name=f"proc-stdout-{name}",
+            )
+            managed.stderr_task = asyncio.create_task(
+                self._read_stream(managed, proc.stderr, "stderr"), name=f"proc-stderr-{name}",
+            )
+            self._processes[key] = managed
 
         logger.info("[Process] Started: %s (pid=%d)", name, proc.pid)
         return {"success": True, "result": self._info(managed)}
+
+    @staticmethod
+    def _requested_ports(argv: List[str], declared: List[int], env: Dict[str, str]) -> List[int]:
+        """Return explicit and conventionally-declared listener ports.
+
+        Explicit ``ports`` are authoritative. Common ``--port``/``-p`` CLI
+        forms and PORT-like environment variables are included for existing
+        workflows. Positional ports remain opt-in because guessing arbitrary
+        numeric arguments would create false positives.
+        """
+        found = {int(port) for port in declared if 1 <= int(port) <= 65535}
+        for index, token in enumerate(argv):
+            value: Optional[str] = None
+            if token in {"--port", "-p"} and index + 1 < len(argv):
+                value = argv[index + 1]
+            elif token.startswith("--port="):
+                value = token.split("=", 1)[1]
+            if value and value.isdigit() and 1 <= int(value) <= 65535:
+                found.add(int(value))
+        for key, value in env.items():
+            if (key.upper() == "PORT" or key.upper().endswith("_PORT")) and str(value).isdigit():
+                port = int(value)
+                if 1 <= port <= 65535:
+                    found.add(port)
+        return sorted(found)
+
+    @staticmethod
+    def _occupied_ports(ports: List[int]) -> Dict[int, List[int]]:
+        """Resolve listening owners without mutating unrelated processes."""
+        if not ports:
+            return {}
+        wanted = set(ports)
+        owners: Dict[int, set[int]] = {port: set() for port in ports}
+        try:
+            import psutil
+
+            for conn in psutil.net_connections(kind="inet"):
+                if conn.laddr and conn.laddr.port in wanted and conn.status == psutil.CONN_LISTEN:
+                    if conn.pid:
+                        owners[conn.laddr.port].add(conn.pid)
+                    else:
+                        owners[conn.laddr.port].add(0)
+        except Exception as exc:
+            # A bind probe still reliably detects occupancy when process-owner
+            # enumeration is restricted by the OS.
+            logger.debug("[Process] Port owner enumeration unavailable: %s", exc)
+            for port in ports:
+                probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                try:
+                    probe.bind(("0.0.0.0", port))
+                except OSError:
+                    owners[port].add(0)
+                finally:
+                    probe.close()
+        return {port: sorted(pid for pid in pids if pid) for port, pids in owners.items() if pids}
 
     async def stop(self, name: str, workflow_id: str = "default") -> Dict[str, Any]:
         """Stop a running process by killing its process tree."""
@@ -241,6 +329,7 @@ class ProcessService:
         logger.info("[Process] Stopping: %s (pid=%d)", name, managed.pid)
         kill_tree(managed.pid)
         managed.status = "stopped"
+        managed.stopped_at = datetime.now().isoformat()
 
         for task in (managed.stdout_task, managed.stderr_task):
             if task and not task.done():
@@ -268,8 +357,10 @@ class ProcessService:
 
         command = managed.command
         cwd = managed.working_directory
+        ports = list(managed.ports)
+        extra_env = dict(managed.extra_env or {})
         await self.stop(name, workflow_id)
-        return await self.start(name, command, workflow_id, cwd)
+        return await self.start(name, command, workflow_id, cwd, ports=ports, extra_env=extra_env)
 
     async def send_input(self, name: str, workflow_id: str, text: str) -> Dict[str, Any]:
         """Write text to a process's stdin."""
@@ -455,6 +546,7 @@ class ProcessService:
             except (asyncio.TimeoutError, Exception):
                 managed.exit_code = managed.process.returncode
             managed.status = "stopped" if managed.exit_code == 0 else "error"
+            managed.stopped_at = datetime.now().isoformat()
             logger.info("[Process] Exited: %s (exit=%s)", managed.name, managed.exit_code)
 
             # Schedule auto-cleanup of log files and process entry after delay
@@ -468,10 +560,12 @@ class ProcessService:
             "pid": m.pid,
             "status": m.status,
             "started_at": m.started_at,
+            "stopped_at": m.stopped_at,
             "exit_code": m.exit_code,
             "working_directory": m.working_directory,
             "stdout_lines": m.stdout_lines,
             "stderr_lines": m.stderr_lines,
+            "ports": list(m.ports),
             "log_dir": str(m.log_dir),
         }
 

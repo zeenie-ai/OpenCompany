@@ -33,7 +33,7 @@ def _is_config_edge(edge: Dict[str, Any], node_map: Dict[str, Dict[str, Any]]) -
     removes both the pre-executed trigger and its payload before dependency
     resolution, leaving the downstream agent with an empty prompt.
     """
-    handle = edge.get("targetHandle", "")
+    handle = edge.get("targetHandle") or edge.get("target_handle") or ""
     if handle not in CONFIG_HANDLES:
         return False
     source = node_map.get(edge.get("source"), {})

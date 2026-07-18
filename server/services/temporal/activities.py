@@ -416,6 +416,37 @@ async def emit_event_activity(event_payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @activity.defn
+async def load_persisted_workflow_graph_activity(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Resolve the current saved graph for a durable trigger firing.
+
+    Listener workflow inputs are immutable deployment snapshots. Dynamic
+    canvas operations can add tools after deployment, so every event resolves
+    the authoritative graph before selecting downstream/config nodes.
+    """
+    from core.container import container
+    from services.workflow_migrations import (
+        normalize_edge_handles,
+        normalize_legacy_android_toolkit,
+    )
+
+    workflow_id = str(payload.get("workflow_id") or "")
+    if not workflow_id:
+        return {"found": False, "nodes": [], "edges": []}
+    saved = await container.database().get_workflow(workflow_id)
+    if saved is None:
+        return {"found": False, "nodes": [], "edges": []}
+    data = saved.data or {}
+    nodes, edges, _params, _warnings = normalize_legacy_android_toolkit(
+        data.get("nodes") or [], data.get("edges") or []
+    )
+    return {
+        "found": True,
+        "nodes": nodes,
+        "edges": normalize_edge_handles(edges),
+    }
+
+
+@activity.defn
 async def store_node_output_activity(payload: Dict[str, Any]) -> None:
     """Persist a node's output to the workflow output store so
     :class:`services.parameter_resolver.ParameterResolver` can resolve

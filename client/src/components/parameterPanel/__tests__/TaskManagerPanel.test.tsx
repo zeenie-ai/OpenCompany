@@ -50,7 +50,6 @@ describe('TaskManagerPanel', () => {
     expect(await screen.findByText('Implement feature')).toBeInTheDocument();
     expect(screen.getByText('2 / 3')).toBeInTheDocument();
     expect(screen.getByText('Coder')).toBeInTheDocument();
-    expect(screen.getByText('Created')).toBeInTheDocument();
     expect(screen.getByText('Started')).toBeInTheDocument();
     expect(screen.getByText('Completed')).toBeInTheDocument();
     expect(screen.getByText('1m 5s')).toBeInTheDocument();

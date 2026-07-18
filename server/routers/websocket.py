@@ -1235,6 +1235,22 @@ async def handle_process_send_input(data: Dict[str, Any], websocket: WebSocket) 
     return await get_process_service().send_input(name, workflow_id, text)
 
 
+@ws_handler("name")
+async def handle_process_stop(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    """Stop one workflow-scoped managed process."""
+    from services.process_service import get_process_service
+
+    return await get_process_service().stop(data["name"], data.get("workflow_id", "default"))
+
+
+@ws_handler("name")
+async def handle_process_restart(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    """Restart one workflow-scoped managed process after port preflight."""
+    from services.process_service import get_process_service
+
+    return await get_process_service().restart(data["name"], data.get("workflow_id", "default"))
+
+
 # ============================================================================
 # User Skills Handlers — extracted to services/skills/handlers.py (Wave 13.1)
 # ============================================================================
@@ -1436,6 +1452,8 @@ MESSAGE_HANDLERS: Dict[str, MessageHandler] = {
     "process_list": handle_process_list,
     "process_get_output": handle_process_get_output,
     "process_send_input": handle_process_send_input,
+    "process_stop": handle_process_stop,
+    "process_restart": handle_process_restart,
     # User Skills + Built-in Skill Content + Memory/Reset — extracted to
     # services/skills/handlers.py (Wave 13.1); register via the shared
     # ws_handler_registry on package import. No entries below.

@@ -183,14 +183,14 @@ async def collect_agent_connections(
     for e in incoming_edges:
         logger.debug(f"{log_prefix} Edge: source={e.get('source')}, " f"targetHandle={e.get('targetHandle')}")
 
-    tool_incoming = [e for e in incoming_edges if e.get("targetHandle") == "input-tools"]
+    tool_incoming = [e for e in incoming_edges if edge_target_handle(e) == "input-tools"]
     logger.info(f"{log_prefix} Tool edges (input-tools handle): {len(tool_incoming)}")
 
     for edge in edges:
         if edge.get("target") != node_id:
             continue
 
-        target_handle = edge.get("targetHandle")
+        target_handle = edge_target_handle(edge)
         source_node_id = edge.get("source")
         source_node = next((n for n in nodes if n.get("id") == source_node_id), None)
         if not source_node:
@@ -384,7 +384,7 @@ async def _append_tool_entry(
     if tool_type in AI_AGENT_TYPES:
         child_tools: List[Dict[str, Any]] = []
         child_incoming_edges = [e for e in edges if e.get("target") == source_node_id]
-        child_tool_edges = [e for e in child_incoming_edges if e.get("targetHandle") == "input-tools"]
+        child_tool_edges = [e for e in child_incoming_edges if edge_target_handle(e) == "input-tools"]
         logger.debug(
             f"{log_prefix} Child agent {source_node_id}: "
             f"{len(child_incoming_edges)} incoming edges, "
@@ -396,7 +396,7 @@ async def _append_tool_entry(
         for child_edge in edges:
             if child_edge.get("target") != source_node_id:
                 continue
-            if child_edge.get("targetHandle") != "input-tools":
+            if edge_target_handle(child_edge) != "input-tools":
                 continue
             child_tool_id = child_edge.get("source")
             child_tool_node = next((n for n in nodes if n.get("id") == child_tool_id), None)

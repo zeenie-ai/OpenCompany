@@ -7,6 +7,21 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 from constants import AI_AGENT_TYPES, ANDROID_SERVICE_NODE_TYPES
 
 
+def normalize_edge_handles(edges: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Canonicalize legacy ReactFlow handle keys without changing topology."""
+    normalized: List[Dict[str, Any]] = []
+    for edge in edges:
+        item = dict(edge)
+        target_handle = item.pop("target_handle", None)
+        source_handle = item.pop("source_handle", None)
+        if not item.get("targetHandle") and target_handle:
+            item["targetHandle"] = target_handle
+        if not item.get("sourceHandle") and source_handle:
+            item["sourceHandle"] = source_handle
+        normalized.append(item)
+    return normalized
+
+
 def normalize_legacy_android_toolkit(
     nodes: List[Dict[str, Any]],
     edges: List[Dict[str, Any]],

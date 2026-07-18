@@ -779,6 +779,12 @@ class TestUIHintsInNodeSpec:
             assert lead_hints.get("hideInputSection") is not True
             assert lead_hints.get("hideOutputSection") is not True
 
+    def test_process_manager_surfaces_span_the_full_parameter_panel(self):
+        hints = get_node_spec("processManager").get("uiHints", {})
+        assert hints.get("isProcessManagerPanel") is True
+        assert hints.get("hideInputSection") is True
+        assert hints.get("hideOutputSection") is True
+
     def test_master_skill_seeded(self):
         spec = get_node_spec("masterSkill")
         assert spec is not None
@@ -916,6 +922,7 @@ class TestNodeSpecContractInvariants:
             "isTodoEditor",
             "isMonitorPanel",
             "isTaskManagerPanel",
+            "isProcessManagerPanel",
             "showLocationPanel",
             "isAndroidToolkit",
             "isChatTrigger",

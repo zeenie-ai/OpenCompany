@@ -171,6 +171,7 @@ class TemporalWorkerManager:
             from services.temporal.agent_workflow import AgentWorkflow, DelegatedTaskWorkflow
             from services.temporal.activities import (
                 broadcast_trigger_status_activity,
+                load_persisted_workflow_graph_activity,
                 store_node_output_activity,
             )
 
@@ -222,6 +223,7 @@ class TemporalWorkerManager:
                 activities=[
                     self._activities.execute_node_activity,
                     broadcast_trigger_status_activity,
+                    load_persisted_workflow_graph_activity,
                     store_node_output_activity,
                     *per_type,
                     *agent_activities,
@@ -600,6 +602,7 @@ async def run_standalone_worker(
 
     from services.temporal.activities import (
         broadcast_trigger_status_activity,
+        load_persisted_workflow_graph_activity,
         store_node_output_activity,
     )
 
@@ -615,6 +618,7 @@ async def run_standalone_worker(
             activities=[
                 activities.execute_node_activity,
                 broadcast_trigger_status_activity,
+                load_persisted_workflow_graph_activity,
                 store_node_output_activity,
             ],
             max_concurrent_activities=pool_size,
@@ -652,6 +656,7 @@ async def create_worker(
     activities = NodeExecutionActivities(session)
     from services.temporal.activities import (
         broadcast_trigger_status_activity,
+        load_persisted_workflow_graph_activity,
         store_node_output_activity,
     )
 
@@ -666,6 +671,7 @@ async def create_worker(
         activities=[
             activities.execute_node_activity,
             broadcast_trigger_status_activity,
+            load_persisted_workflow_graph_activity,
             store_node_output_activity,
         ],
         max_concurrent_activities=100,

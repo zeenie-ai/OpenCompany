@@ -206,6 +206,8 @@ export interface INodeUIHints {
   isMonitorPanel?: boolean;
   /** MiddleSection: render the execution-scoped team task control panel. */
   isTaskManagerPanel?: boolean;
+  /** MiddleSection: render live managed-process inspection and controls. */
+  isProcessManagerPanel?: boolean;
   /** Special-case panel for gmaps_create with map preview. */
   showLocationPanel?: boolean;
   /** ConsolePanel: this node is a chat-message target. */

@@ -153,6 +153,24 @@ class TriggerListenerWorkflow:
         edges = listener_data["edges"]
         session_id = listener_data.get("session_id", "default")
         workflow_id = listener_data.get("workflow_id")
+        try:
+            use_latest_graph = bool(workflow_id) and workflow.patched("trigger-latest-graph-v1")
+        except RuntimeError:  # direct unit invocation outside Temporal runtime
+            use_latest_graph = False
+        if use_latest_graph:
+            try:
+                latest = await workflow.execute_activity(
+                    "load_persisted_workflow_graph_activity",
+                    {"workflow_id": workflow_id},
+                    start_to_close_timeout=timedelta(seconds=10),
+                )
+                if latest.get("found"):
+                    nodes = latest.get("nodes") or []
+                    edges = latest.get("edges") or []
+            except Exception as exc:  # snapshot remains a safe fallback
+                workflow.logger.warning(
+                    f"Current graph lookup failed for {workflow_id}; using deployment snapshot: {exc}"
+                )
         # Human-readable slug prefix for the Temporal Web UI listing.
         # Set at deploy time from the workflow's display name; falls back
         # to workflow_id for one-off deploys without a saved DB row.
@@ -343,7 +361,7 @@ def _build_run_graph(
     for edge in edges:
         target = edge.get("target")
         source = edge.get("source")
-        handle = edge.get("targetHandle", "")
+        handle = edge.get("targetHandle") or edge.get("target_handle") or ""
         is_config = handle and handle.startswith("input-") and handle != "input-main"
         if is_config and target in downstream_ids and source not in downstream_ids:
             if node_types.get(source, "") in WORKFLOW_TRIGGER_TYPES:
@@ -363,7 +381,8 @@ def _build_run_graph(
     for edge in edges:
         target = edge.get("target")
         source = edge.get("source")
-        if target in agent_ids and edge.get("targetHandle", "") == "input-tools" and source not in downstream_ids:
+        handle = edge.get("targetHandle") or edge.get("target_handle") or ""
+        if target in agent_ids and handle == "input-tools" and source not in downstream_ids:
             downstream_ids.add(source)
 
     run_filter = {trigger_node_id} | downstream_ids
