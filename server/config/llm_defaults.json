@@ -1,7 +1,7 @@
 {
-  "version": "2026.07",
-  "last_updated": "2026-07-11",
-  "_description": "LLM provider defaults. Connection config (base_url, models_endpoint) drives both native SDK and LangChain paths. Model specs auto-enriched by model_registry.json (OpenRouter cache).",
+  "version": "2026.07.18",
+  "last_updated": "2026-07-18",
+  "_description": "LLM provider defaults. popular_models drives the ordered global selector and offline fallback independently of token constraints. Connection config drives native SDK and LangChain paths; model specs are enriched by model_registry.json (OpenRouter cache).",
 
   "agent": {
     "_description": "Agent execution defaults. recursion_limit and compaction.ratio are sourced from the environment (AGENT_RECURSION_LIMIT, COMPACTION_RATIO via core.config.Settings) — these JSON values are last-resort fallbacks when the env vars aren't loaded (e.g. one-off CLI scripts that bypass Settings). default_temperature stays JSON-resident since it has no env override yet.",
@@ -15,6 +15,7 @@
   "providers": {
     "openai": {
       "default_model": "gpt-5.6-sol",
+      "popular_models": ["gpt-5.6-sol", "gpt-5.6-sol-pro", "gpt-5.6-terra", "gpt-5.6-terra-pro", "gpt-5.6-luna", "gpt-5.6-luna-pro", "gpt-5.5", "gpt-5.4", "gpt-4.1"],
       "detection_patterns": ["gpt", "openai", "o1", "o3", "o4"],
       "base_url": "https://api.openai.com/v1",
       "models_endpoint": "https://api.openai.com/v1/models",
@@ -23,8 +24,11 @@
       "_models_note": "GPT-5.6 family (sol/terra/luna) GA 2026-07-09. gpt-5.5 / gpt-5.4 remain GA as legacy tiers. Dropped: gpt-5.2 (new requests blocked 2026-06-30), o3 (API shutdown 2026-12-11), o4-mini (API shutdown 2026-10-23) — they fall back to _default constraints if still selected before shutdown.",
       "max_output_tokens": {
         "gpt-5.6-sol": 128000,
+        "gpt-5.6-sol-pro": 128000,
         "gpt-5.6-terra": 128000,
+        "gpt-5.6-terra-pro": 128000,
         "gpt-5.6-luna": 128000,
+        "gpt-5.6-luna-pro": 128000,
         "gpt-5.5": 128000,
         "gpt-5.4": 128000,
         "gpt-4.1": 32768,
@@ -32,8 +36,11 @@
       },
       "context_length": {
         "gpt-5.6-sol": 1050000,
+        "gpt-5.6-sol-pro": 1050000,
         "gpt-5.6-terra": 1050000,
+        "gpt-5.6-terra-pro": 1050000,
         "gpt-5.6-luna": 1050000,
+        "gpt-5.6-luna-pro": 1050000,
         "gpt-5.5": 1050000,
         "gpt-5.4": 1050000,
         "gpt-4.1": 1047576,
@@ -46,6 +53,7 @@
     },
     "anthropic": {
       "default_model": "claude-opus-4-8",
+      "popular_models": ["claude-fable-5", "claude-sonnet-5", "claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"],
       "detection_patterns": ["claude", "anthropic"],
       "base_url": "https://api.anthropic.com/v1",
       "models_endpoint": "https://api.anthropic.com/v1/models",
@@ -74,6 +82,7 @@
     },
     "gemini": {
       "default_model": "gemini-3.5-flash",
+      "popular_models": ["gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite", "gemini-3-flash-preview", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemma-4-31b-it", "gemma-4-26b-a4b-it"],
       "detection_patterns": ["gemini", "google", "gemma"],
       "_detection_patterns_note": "'gemma' makes is_model_valid_for_provider accept the API-served Gemma models (gemma-4-*-it) on gemini nodes — without it the four agent-path call sites silently swap gemma to default_model. Cerebras keeps its own 'gemma-4' pattern for its gemma-4-31b (no -it suffix); is_model_valid_for_provider is per-provider so both coexist. Only the runtime-unused detect_provider_from_model classifier prefers gemini for gemma-* names (dict order).",
       "base_url": "https://generativelanguage.googleapis.com/v1beta",
@@ -114,7 +123,8 @@
       "incompatible_models": ["antigravity-preview-05-2026"]
     },
     "openrouter": {
-      "default_model": "anthropic/claude-sonnet-4.6",
+      "default_model": "anthropic/claude-sonnet-5",
+      "popular_models": ["anthropic/claude-sonnet-5", "openai/gpt-5.6-terra", "openai/gpt-5.6-sol", "google/gemini-3.5-flash", "moonshotai/kimi-k3", "x-ai/grok-4.20", "openrouter/auto-beta"],
       "detection_patterns": ["openrouter"],
       "base_url": "https://openrouter.ai/api/v1",
       "models_endpoint": "https://openrouter.ai/api/v1/models",
@@ -131,6 +141,7 @@
     },
     "groq": {
       "default_model": "llama-3.3-70b-versatile",
+      "popular_models": ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.3-70b-versatile", "llama-3.1-8b-instant", "qwen/qwen3-32b"],
       "detection_patterns": ["groq"],
       "base_url": "https://api.groq.com/openai/v1",
       "models_endpoint": "https://api.groq.com/openai/v1/models",
@@ -158,6 +169,7 @@
     },
     "cerebras": {
       "default_model": "gpt-oss-120b",
+      "popular_models": ["gpt-oss-120b", "zai-glm-4.7", "gemma-4-31b"],
       "detection_patterns": ["cerebras", "gpt-oss", "zai-glm", "gemma-4"],
       "base_url": "https://api.cerebras.ai/v1",
       "models_endpoint": "https://api.cerebras.ai/v1/models",
@@ -182,6 +194,7 @@
     },
     "xai": {
       "default_model": "grok-4.20",
+      "popular_models": ["grok-4.20", "grok-4.20-multi-agent", "grok-4.5", "grok-4.3", "grok-3"],
       "detection_patterns": ["grok", "xai"],
       "base_url": "https://api.x.ai/v1",
       "models_endpoint": "https://api.x.ai/v1/models",
@@ -195,6 +208,8 @@
       },
       "context_length": {
         "grok-4.20": 2000000,
+        "grok-4.20-multi-agent": 2000000,
+        "grok-4.5": 500000,
         "grok-4.3": 1000000,
         "grok-3": 131072,
         "_default": 131072
@@ -203,6 +218,7 @@
     },
     "deepseek": {
       "default_model": "deepseek-v4-flash",
+      "popular_models": ["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner"],
       "detection_patterns": ["deepseek"],
       "base_url": "https://api.deepseek.com",
       "models_endpoint": "https://api.deepseek.com/models",
@@ -228,6 +244,7 @@
     },
     "kimi": {
       "default_model": "kimi-k2.6",
+      "popular_models": ["kimi-k3", "kimi-k2.7-code", "kimi-k2.6", "kimi-k2.5"],
       "detection_patterns": ["kimi", "moonshot"],
       "base_url": "https://api.moonshot.ai/v1",
       "models_endpoint": "https://api.moonshot.ai/v1/models",
@@ -243,6 +260,7 @@
         "_default": 8192
       },
       "context_length": {
+        "kimi-k3": 1048576,
         "kimi-k2.6": 262144,
         "kimi-k2.5": 262144,
         "kimi-k2.7-code": 262144,
@@ -252,6 +270,7 @@
     },
     "mistral": {
       "default_model": "mistral-large-latest",
+      "popular_models": ["mistral-large-latest", "mistral-medium-latest", "mistral-small-latest", "codestral-latest"],
       "detection_patterns": ["mistral", "codestral"],
       "base_url": "https://api.mistral.ai/v1",
       "models_endpoint": "https://api.mistral.ai/v1/models",

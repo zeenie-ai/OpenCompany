@@ -155,7 +155,9 @@ async def handle_get_validated_ai_providers(
 
         provider_config = llm_defaults.get("providers", {}).get(provider, {})
         default_model = provider_config.get("default_model", "")
-        popular_models = [m for m in provider_config.get("max_output_tokens", {}).keys() if m != "_default"]
+        popular_models = provider_config.get("popular_models") or [
+            m for m in provider_config.get("max_output_tokens", {}).keys() if m != "_default"
+        ]
 
         provider_defaults = await database.get_provider_defaults(provider)
         if provider_defaults and provider_defaults.get("default_model"):

@@ -1363,10 +1363,14 @@ class AIService:
     def _get_curated_models(self, provider: str) -> List[str]:
         """Get curated model list from llm_defaults.json for a provider.
 
-        Returns model IDs from max_output_tokens keys (excluding _default),
-        preserving config order. Returns empty list if provider has no curated list.
+        Prefer the explicit ``popular_models`` list, preserving its order.
+        Older provider blocks fall back to max_output_tokens keys (excluding
+        _default). Returns empty when neither source has a curated list.
         """
         provider_cfg = _LLM_DEFAULTS.get("providers", {}).get(provider, {})
+        explicit = provider_cfg.get("popular_models") or []
+        if explicit:
+            return list(explicit)
         max_tokens_map = provider_cfg.get("max_output_tokens", {})
         return [m for m in max_tokens_map if m != "_default"]
 
