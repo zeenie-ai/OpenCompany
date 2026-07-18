@@ -174,13 +174,22 @@ class TestTaskTriggerProducerCanaryEmit:
         assert reread < broadcast
         assert 'target_status = "requeued" if is_requeued' in source
         assert "if succeeded or not is_requeued" in source
+        assert 'result.get("response", result.get("result", result))' in source
+        assert '"execution_id": task.get("execution_id")' in source
 
-    def test_task_trigger_context_requires_lead_review(self):
-        from services.plugin.edge_walker import format_task_context
+    def test_task_trigger_context_requires_durable_lead_review(self):
+        from services.plugin.edge_walker import extract_task_event_payload, format_task_context
 
         completed = format_task_context({"status": "completed", "result": "ok"})
         failed = format_task_context({"status": "error", "error": "boom"})
-        assert "REVIEW REQUIRED" in completed
-        assert "acceptance criteria" in completed
-        assert "retry" in failed
-        assert "connected teammate" in failed
+        assert "lead's completion review" in completed
+        assert "list_tasks and get_task" in completed
+        assert "Do not create a duplicate assignment" in completed
+        assert "lead's failure review" in failed
+        assert "retrying, or reassigning" in failed
+        nested = {"specversion": "1.0", "data": {"result": {
+            "task_id": "task-1", "status": "completed", "result": "saved",
+        }}}
+        assert extract_task_event_payload(nested) == {
+            "task_id": "task-1", "status": "completed", "result": "saved",
+        }

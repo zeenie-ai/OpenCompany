@@ -137,10 +137,17 @@ async def handle_get_team_tasks(data: Dict[str, Any], websocket: WebSocket) -> D
     """Get team tasks."""
     from services.agent_team import get_agent_team_service
     if data.get("workflow_id") and data.get("team_lead_node_id"):
-        tasks = await get_agent_team_service().list_durable_tasks(
-            workflow_id=data["workflow_id"], team_lead_node_id=data["team_lead_node_id"],
-            execution_id=data.get("execution_id"), status=data.get("status"),
-        )
+        service = get_agent_team_service()
+        if data.get("include_history"):
+            tasks = await service.list_durable_task_history(
+                workflow_id=data["workflow_id"],
+                team_lead_node_id=data["team_lead_node_id"], status=data.get("status"),
+            )
+        else:
+            tasks = await service.list_durable_tasks(
+                workflow_id=data["workflow_id"], team_lead_node_id=data["team_lead_node_id"],
+                execution_id=data.get("execution_id"), status=data.get("status"),
+            )
     elif data.get("team_id"):
         # Compatibility read only; mutations never accept caller-selected team IDs.
         tasks = await get_agent_team_service().database.get_team_tasks(data["team_id"], data.get("status"))

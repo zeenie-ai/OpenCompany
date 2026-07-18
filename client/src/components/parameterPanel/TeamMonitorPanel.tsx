@@ -5,6 +5,7 @@ import type { Edge, Node } from 'reactflow';
 import { useWebSocket } from '@/contexts/WebSocketContext';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 
 const LEAD_TYPES = new Set(['orchestrator_agent', 'ai_employee']);
@@ -23,6 +24,7 @@ const TeamMonitorPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
   const [status, setStatus] = useState<Record<string, any> | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(false);
+  const [executionId, setExecutionId] = useState('active');
 
   const lead = useMemo(() => {
     const incoming = edges.filter((edge) => edge.target === nodeId);
@@ -54,15 +56,21 @@ const TeamMonitorPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
     if (!workflowId || !lead) return;
     if (!quiet) setLoading(true);
     try {
-      const scope = { workflow_id: workflowId, team_lead_node_id: lead.id };
-      const [teamResponse, taskResponse] = await Promise.all([
-        sendRequest<{ status?: Record<string, any> }>('get_team_status', scope),
-        sendRequest<{ tasks?: Task[] }>('get_team_tasks', scope),
-      ]);
+      const scope = {
+        workflow_id: workflowId,
+        team_lead_node_id: lead.id,
+        ...(executionId !== 'active' ? { execution_id: executionId } : {}),
+      };
+      const teamResponse = await sendRequest<{ status?: Record<string, any> }>('get_team_status', scope);
+      const resolvedExecutionId = teamResponse?.status?.execution_id;
+      const taskResponse = await sendRequest<{ tasks?: Task[] }>('get_team_tasks', {
+        ...scope,
+        ...(resolvedExecutionId ? { execution_id: resolvedExecutionId } : {}),
+      });
       setStatus(teamResponse.status || null);
       setTasks(taskResponse.tasks || []);
     } finally { if (!quiet) setLoading(false); }
-  }, [lead, sendRequest, workflowId]);
+  }, [executionId, lead, sendRequest, workflowId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
@@ -81,7 +89,10 @@ const TeamMonitorPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
     <div className="shrink-0 border-b border-border-default px-6 py-4">
       <div className="flex items-center justify-between gap-3">
         <div><h2 className="text-lg font-semibold text-fg-default">Team Monitor</h2><p className="text-sm text-fg-muted">{String((lead.data as any)?.label || lead.type)} · {status?.status || 'Not running'}</p></div>
-        <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}><RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} /> Refresh</Button>
+        <div className="flex items-center gap-2">
+          {(status?.archived_executions?.length || 0) > 0 && <Select value={executionId} onValueChange={setExecutionId}><SelectTrigger className="w-48" aria-label="Execution history"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Latest execution</SelectItem>{status!.archived_executions.map((run: any) => <SelectItem key={run.execution_id || run.team_id} value={run.execution_id}>{run.label || String(run.execution_id).slice(0, 12)}</SelectItem>)}</SelectContent></Select>}
+          <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}><RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} /> Refresh</Button>
+        </div>
       </div>
       <div className="mt-4 grid grid-cols-4 gap-2 lg:grid-cols-7">
         {counts.map(({ name, value }) => <div key={name} className="rounded-md border border-border-default bg-bg-elevated p-2"><div className="text-xs capitalize text-fg-muted">{name}</div><div className={cn('text-lg font-semibold tabular-nums', STATUS_STYLE[name])}>{value}</div></div>)}

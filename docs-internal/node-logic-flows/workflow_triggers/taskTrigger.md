@@ -19,9 +19,10 @@ error paths, which emits a CloudEvents `WorkflowEvent`
 discriminator carried in `data.status`) via `dispatch.emit`. `taskTrigger` is
 canary-registered, so `DeploymentManager` starts a `TriggerListenerWorkflow`
 that receives the event via Temporal Signal and spawns a child workflow per
-match. Used to let a parent workflow react to child completion without blocking
-external downstream automation. Temporal separately returns/signals the owning
-lead for review; `taskTrigger` is not the lead-resume mechanism.
+match. The assigning lead has already returned after receiving `queued`. When
+the detached runner submits or fails the task, this trigger starts the connected
+lead's separate review invocation. The event preserves the owning execution,
+so Task Manager reads the original durable task rather than the trigger run.
 
 ## Inputs (handles)
 
@@ -56,6 +57,10 @@ Declared `TaskTriggerOutput` fields:
   result?: string;     // Present when status='completed'
   error?: string;      // Present when status='error'
   workflow_id?: string;
+  team_id?: string;
+  execution_id?: string;
+  root_execution_id?: string;
+  trace_id?: string;
 }
 ```
 
@@ -121,8 +126,8 @@ If any filter rejects, the event is skipped and the waiter stays blocked.
 - Waiter has no timeout; if the child agent never dispatches a
   `task_completed` event (e.g. it is still running or died silently) the
   trigger blocks until cancelled.
-- Fire-and-forget delegation means the parent workflow does not know the
-  child failed unless this trigger is present and matches.
+- Lead review requires a connected matching trigger path. External consumers
+  may use the event without receiving authority to mutate another team.
 
 ## Related
 

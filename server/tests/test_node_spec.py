@@ -767,6 +767,18 @@ class TestUIHintsInNodeSpec:
         assert hints.get("hideInputSection") is True
         assert hints.get("hideOutputSection") is True
 
+    def test_task_manager_surfaces_span_the_full_parameter_panel(self):
+        hints = get_node_spec("taskManager").get("uiHints", {})
+        assert hints.get("isTaskManagerPanel") is True
+        assert hints.get("hideInputSection") is True
+        assert hints.get("hideOutputSection") is True
+
+        for node_type in ("orchestrator_agent", "ai_employee"):
+            lead_hints = get_node_spec(node_type).get("uiHints", {})
+            assert lead_hints.get("isTaskManagerPanel") is True
+            assert lead_hints.get("hideInputSection") is not True
+            assert lead_hints.get("hideOutputSection") is not True
+
     def test_master_skill_seeded(self):
         spec = get_node_spec("masterSkill")
         assert spec is not None

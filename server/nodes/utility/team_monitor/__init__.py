@@ -78,8 +78,17 @@ class TeamMonitorNode(ActionNode):
         team_id = ctx.raw.get("team_id")
         if not team_id:
             for output in (ctx.raw.get("outputs", {}) or {}).values():
-                if isinstance(output, dict) and output.get("team_id"):
-                    team_id = output["team_id"]
+                current = output
+                # AgentWorkflow output is commonly wrapped as
+                # {success, result: {team_id, execution_id, ...}}.
+                for _ in range(3):
+                    if not isinstance(current, dict):
+                        break
+                    if current.get("team_id"):
+                        team_id = current["team_id"]
+                        break
+                    current = current.get("result")
+                if team_id:
                     break
 
         if not team_id:
@@ -113,5 +122,8 @@ class TeamMonitorNode(ActionNode):
                 "failed": status.get("failed_count", 0),
             },
             "active_tasks": status.get("active_tasks", []),
+            "all_tasks": status.get("tasks", []),
+            "execution_id": status.get("execution_id"),
+            "root_execution_id": status.get("root_execution_id"),
             "recent_events": status.get("recent_events", [])[-max_history:],
         }

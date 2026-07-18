@@ -18,7 +18,9 @@ The panel:
 - merges persisted member status (`working`, `idle`) during execution;
 - displays blocked, queued, running, submitted, accepted, failed, and cancelled
   counts;
-- lists every current-execution task with assignee and queue position;
+- resolves the newest lead execution instead of trusting stale `active` flags;
+- lists all tasks from that execution, including submitted and accepted work;
+- exposes an execution selector for historical runs;
 - refreshes on team lifecycle broadcasts and supports manual refresh.
 
 Team Monitor never mutates tasks. Use the Task Manager panel bound to the lead
@@ -35,8 +37,9 @@ the monitor from reporting unreviewed work as finished.
 
 `server/nodes/utility/team_monitor/__init__.py` provides a read-only snapshot
 for workflow execution and templating. It resolves connected teammates from the
-canvas even without a `team_id`, then merges durable members, counts, active
-tasks, and recent lifecycle events when a persisted team exists.
+canvas even without a `team_id`, then follows the connected lead output's
+`team_id`, `execution_id`, and `root_execution_id`. It merges durable members,
+all tasks, active tasks, counts, and recent lifecycle events.
 
 The operation performs no writes, external calls, or subprocess work.
 

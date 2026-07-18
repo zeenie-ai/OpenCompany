@@ -1452,7 +1452,7 @@ Tool nodes display execution status via the standard node status system:
 | calculatorTool | CalculatorSchema | `_execute_calculator()` | Math operations |
 | currentTimeTool | CurrentTimeSchema | `_execute_current_time()` | Date/time with timezone |
 | duckduckgoSearch | DuckDuckGoSearchSchema | `_execute_duckduckgo_search()` | DuckDuckGo web search (free) |
-| taskManager | `TaskManagerParams` | `_execute_task_manager()` | Intrinsic durable team assignment, review, retry/reassignment, cancellation, and acceptance |
+| taskManager | `TaskManagerParams` | `_execute_task_manager()` | Intrinsic durable team assignment; returns queued through detached Temporal runner, preserves cross-run history, review, retry/reassignment, cancellation, acceptance, timestamps, elapsed time, and token usage |
 | writeTodos | WriteTodosSchema | `execute_write_todos()` / `handle_write_todos()` | Structured task list planning with checklist rendering |
 | braveSearch | BraveSearchSchema | `handle_brave_search()` | Brave Search API web results |
 | serperSearch | SerperSearchSchema | `handle_serper_search()` | Google SERP via Serper API |

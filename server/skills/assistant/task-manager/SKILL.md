@@ -4,7 +4,7 @@ description: Coordinate durable team tasks by assigning connected teammates, rev
 allowed-tools: task_manager
 metadata:
   author: opencompany
-  version: "2.1"
+  version: "2.2"
   category: automation
 ---
 
@@ -16,8 +16,8 @@ to this lead's `input-teammates` handle.
 
 ## Required workflow
 
-1. Call `list_tasks` before assigning work so you do not duplicate an existing
-   mission.
+1. Call `list_tasks` with `include_history=true` before assigning work so you
+   do not duplicate a mission from an earlier workflow execution.
 2. Split independent work into bounded tasks with explicit acceptance criteria.
 3. Call `assign_task` once per mission. Use the connected teammate node ID or
    the exact delegate name reported by the lead's available teammate list.
@@ -25,6 +25,8 @@ to this lead's `input-teammates` handle.
    dispatch identities, not the lead's task-creation interface.
 4. Independent tasks may be assigned together. The durable queue starts at most
    three descendants across the whole agent tree; excess tasks remain queued.
+   After `assign_task` returns `queued`, report that delegation started and
+   return immediately. Do not poll or wait in the assigning invocation.
 5. When a teammate submits work, inspect the complete result, error, attempt
    history, and acceptance criteria. Copy `task.id` to `task_id` and
    `task.revision` to `expected_revision` for the review mutation.
@@ -43,7 +45,7 @@ to this lead's `input-teammates` handle.
 | Operation | Purpose | Important arguments |
 |---|---|---|
 | `assign_task` | Persist and queue a bounded mission | `title`, `mission`, `assignee_node_id` or `delegate_name`, optional `context`, `acceptance_criteria`, `depends_on` |
-| `list_tasks` | Inspect the execution task list | optional `status_filter` |
+| `list_tasks` | Inspect current or historical tasks | optional `status_filter`, `include_history` |
 | `get_task` | Review one task and all attempts | `task_id` |
 | `modify_task` | Change queued/blocked work | `task_id`, `expected_revision`, changed task fields |
 | `cancel_task` | Cancel queued or running work | `task_id`, `expected_revision`, `reason` |
@@ -70,8 +72,9 @@ to discard history.
 - `failed`: no automatic attempt remains.
 - `cancelled`: intentionally stopped; may be revised and reassigned.
 
-Do not treat `submitted` as finished team work. Do not repeatedly poll a running
-task; completion signals wake the lead. Do not invent teammate IDs, team IDs, or
+Do not treat `submitted` as finished team work. Do not poll a running task;
+`taskTrigger` starts a separate review invocation carrying the owning execution.
+Do not invent teammate IDs, team IDs, or
 execution IDs—the runtime supplies authority and rejects cross-team access.
 
 ## Team Monitor interpretation

@@ -84,3 +84,19 @@ async def test_accept_never_guesses_when_multiple_tasks_are_submitted():
     with patch("services.agent_team.get_agent_team_service", return_value=service):
         with pytest.raises(ValueError, match="call list_tasks or get_task first"):
             await _execute_task_manager({"operation": "accept_task"}, _config())
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_can_include_prior_executions():
+    service = SimpleNamespace(list_durable_task_history=AsyncMock(return_value=[
+        {"id": "old-task", "status": "accepted", "team_execution_id": "exec-old"},
+    ]))
+    with patch("services.agent_team.get_agent_team_service", return_value=service):
+        result = await _execute_task_manager(
+            {"operation": "list_tasks", "include_history": True}, _config()
+        )
+
+    assert result["tasks"][0]["team_execution_id"] == "exec-old"
+    service.list_durable_task_history.assert_awaited_once_with(
+        workflow_id="wf-1", team_lead_node_id="lead-1", status=None
+    )

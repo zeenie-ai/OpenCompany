@@ -168,7 +168,7 @@ class TemporalWorkerManager:
                 collect_polling_activities,
             )
             from services.temporal.agent_activities import collect_agent_activities
-            from services.temporal.agent_workflow import AgentWorkflow
+            from services.temporal.agent_workflow import AgentWorkflow, DelegatedTaskWorkflow
             from services.temporal.activities import (
                 broadcast_trigger_status_activity,
                 store_node_output_activity,
@@ -215,6 +215,7 @@ class TemporalWorkerManager:
                 workflows=[
                     MachinaWorkflow,
                     AgentWorkflow,
+                    DelegatedTaskWorkflow,
                     TriggerListenerWorkflow,
                     PollingTriggerWorkflow,
                 ],

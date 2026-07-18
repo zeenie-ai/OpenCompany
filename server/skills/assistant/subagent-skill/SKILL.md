@@ -4,7 +4,7 @@ description: Coordinate connected subagents through durable Task Manager assignm
 allowed-tools: task_manager
 metadata:
   author: opencompany
-  version: "3.0"
+  version: "3.1"
   category: assistant
   icon: "🤖"
   color: "#8B5CF6"
@@ -35,6 +35,9 @@ For every assignment provide:
 Independent `assign_task` calls may be emitted together. All tasks persist
 before execution and enter a deterministic queue. At most three descendants,
 including grandchildren, run concurrently; excess work remains `queued`.
+Once assignments return `queued`, tell the user work was delegated and return.
+Never wait or poll for completion in the assigning invocation. A detached
+durable runner continues the work and `taskTrigger` starts the later review.
 
 ## Capability matching
 
@@ -55,7 +58,8 @@ member.
 Task states are `blocked`, `queued`, `running`, `submitted`, `accepted`,
 `failed`, and `cancelled`.
 
-A worker completion produces `submitted`, not Done. When signalled:
+A worker completion produces `submitted`, not Done. In the task-trigger review
+invocation, which is scoped to the original team execution:
 
 1. Inspect the result and acceptance criteria with `get_task` or `list_tasks`.
 2. Copy `task.id` into `task_id` and `task.revision` into

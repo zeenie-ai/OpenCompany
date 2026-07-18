@@ -17,7 +17,7 @@ the persisted execution membership snapshot.
 | Operation | Required fields | Valid source state |
 |---|---|---|
 | `assign_task` | `title`, `mission`, connected `assignee_node_id` or exact delegate name | new |
-| `list_tasks` | optional `status_filter` | any |
+| `list_tasks` | optional `status_filter`, `include_history` | any |
 | `get_task` | `task_id` | any |
 | `modify_task` | `task_id`, `expected_revision`, changed fields | blocked/queued |
 | `cancel_task` | `task_id`, `expected_revision`, optional `reason` | blocked/queued/running |
@@ -36,10 +36,18 @@ produce an error instructing the lead to list/review tasks first.
 ## Assignment result
 
 `assign_task` persists the task before returning a trusted
-`delegation_request`. Temporal preflights same-turn assignments, starts children
-under the root-wide permit coordinator, and returns the child result alongside
-the task identity. Legacy execution passes the same precreated task ID into its
-child bridge. Retries therefore cannot duplicate tasks.
+`delegation_request`. Temporal starts a detached `DelegatedTaskWorkflow` and
+returns `queued` immediately. The runner owns admission, child execution,
+compact result/usage persistence, `taskTrigger`, and permit release. Legacy
+execution passes the same precreated task ID into its background child bridge.
+Retries therefore cannot duplicate tasks.
+
+The human panel includes durable history by default, so workflow restarts do
+not clear the visible list. Specific execution selections remain scoped for
+safe mutations. Created/started/completed timestamps are normalized as UTC and
+shown locally. Elapsed time starts at `started_at`, ticks while running, and
+freezes at `completed_at`. Usage shows input, output, and total tokens, with a
+fallback to usage embedded in historical result envelopes.
 
 ## Status semantics
 

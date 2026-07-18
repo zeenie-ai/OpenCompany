@@ -70,8 +70,8 @@ def _ensure_llm_contents(messages: List[Any]) -> None:
 
     raise ApplicationError(
         "Agent has no invokable content: message list contains no user, "
-        "assistant, or tool messages. Provide a non-empty 'task' in the "
-        "delegate_to_* call, set the agent's 'prompt' parameter, or "
+        "assistant, or tool messages. Provide a non-empty Task Manager mission, "
+        "set the agent's 'prompt' parameter, or "
         "connect an input trigger.",
         type="EmptyAgentPrompt",
         non_retryable=True,
@@ -502,6 +502,8 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     from services.plugin.edge_walker import (
         collect_agent_connections,
         collect_teammate_connections,
+        extract_task_event_payload,
+        format_task_context,
     )
 
     node_id = context["node_id"]
@@ -609,13 +611,28 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         "nodes": context.get("nodes") or [],
         "edges": context.get("edges") or [],
         "workflow_id": workflow_id,
+        # MachinaWorkflow passes upstream results as ``inputs``. Edge walking
+        # uses the legacy node-id keyed ``outputs`` name, so bridge the two
+        # shapes for chat triggers and taskTrigger alike.
+        "outputs": context.get("outputs") or context.get("inputs") or {},
     }
-    memory_data, skill_data, tool_data, input_data, _task_data = await collect_agent_connections(
+    memory_data, skill_data, tool_data, input_data, task_data = await collect_agent_connections(
         node_id,
         walk_context,
         database,
         log_prefix=f"[AgentWorkflow:{node_type}]",
     )
+
+    # taskTrigger may be wired to input-task (task_data) or input-main
+    # (input_data). In both cases preserve the CloudEvent payload as invokable
+    # content. This is an external automation run, separate from the owning
+    # AgentWorkflow which already receives the child result for durable review.
+    trigger_task_data = task_data
+    if not trigger_task_data and isinstance(input_data, dict):
+        trigger_task_data = extract_task_event_payload(input_data)
+    if trigger_task_data:
+        task_prompt = format_task_context(trigger_task_data)
+        prompt = f"{task_prompt}\n\n{prompt}" if prompt else task_prompt
 
     # Team-handle edges are configuration edges and are intentionally not
     # returned by collect_agent_connections.  Expand them here before tools
@@ -623,6 +640,14 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     # Temporal removes teammates from graph scheduling but never exposes a
     # delegate_to_* function to the lead LLM.
     execution_team_id: Optional[str] = context.get("team_id")
+    team_execution_id: Optional[str] = None
+    if trigger_task_data:
+        # Completion automation runs in a new Temporal execution but reviews
+        # the durable task in the execution that originally assigned it.
+        execution_team_id = str(trigger_task_data.get("team_id") or "") or None
+        team_execution_id = (
+            str(trigger_task_data.get("execution_id") or "") or None
+        )
     owns_execution_team = False
     if node_type in {"orchestrator_agent", "ai_employee"}:
         teammates = await collect_teammate_connections(
@@ -658,7 +683,11 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
                 "child_tools": child_tools,
             }
             tool_data = [*(tool_data or []), entry]
-        if teammates and workflow_id:
+        # A taskTrigger completion is a separate downstream automation run.
+        # It must not mint a second empty "active" team for the same lead;
+        # doing so makes the owning execution's submitted/accepted tasks seem
+        # to disappear from Task Manager and Team Monitor.
+        if teammates and workflow_id and not trigger_task_data:
             from services.agent_team import get_agent_team_service
 
             execution_id = str(context.get("execution_id") or "")
@@ -768,6 +797,9 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
             "assign_task tool calls in one response; they are durably queued and run in "
             "parallel subject to the team limit. Review submitted tasks with list_tasks "
             "and get_task, then accept, retry, modify, reassign, or cancel before finishing.\n"
+            "When assign_task returns status='queued', do not poll or wait in this run. "
+            "Tell the user the task was delegated and return immediately. Completion starts "
+            "a separate taskTrigger review with the owning task context.\n"
             "For mutations, copy task.id into task_id and task.revision into expected_revision. "
             "After a single child submits work, accept_task may omit them only when that submitted "
             "task is unambiguous.\n"
@@ -802,6 +834,10 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
             if field in out and out[field]:
                 prompt = str(out[field])
                 break
+        if not prompt and isinstance(out, dict) and out:
+            import json
+
+            prompt = json.dumps(out, ensure_ascii=False, default=str)
 
     # Read user-overridable globals once at prep time.
     #   - auto_rebind_tools: forwarded into every per-tool activity so
@@ -871,6 +907,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         "max_concurrent_subagents": max_concurrent_subagents,
         "max_delegation_depth": max_delegation_depth,
         "team_id": execution_team_id,
+        "team_execution_id": team_execution_id,
         "owns_execution_team": owns_execution_team,
         "root_execution_id": str(
             context.get("root_execution_id")
@@ -1154,6 +1191,7 @@ async def finish_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
 
         lifecycle_data = {
             "team_id": team_id,
+            "execution_id": task.get("execution_id"),
             "root_execution_id": payload.get("root_execution_id"),
             "trace_id": payload.get("trace_id"),
             "parent_agent_workflow_id": payload.get("parent_agent_workflow_id"),
@@ -1161,7 +1199,11 @@ async def finish_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
         event_id = str(payload.get("terminal_event_id") or f"{task_id}:{target_status}")
         if succeeded:
             result = payload.get("result") or {}
-            result_text = str(result.get("result", result) if isinstance(result, dict) else result)
+            if isinstance(result, dict):
+                result_value = result.get("response", result.get("result", result))
+            else:
+                result_value = result
+            result_text = str(result_value)
             await broadcast_agent_task_completed(
                 task_id=task_id,
                 agent_name=str(payload.get("child_agent_name") or child_id),

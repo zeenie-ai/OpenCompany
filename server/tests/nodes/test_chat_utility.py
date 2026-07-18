@@ -308,6 +308,30 @@ class TestTeamMonitor:
         harness.assert_envelope(result, success=False)
         assert "boom" in result["error"]
 
+    async def test_nested_agent_output_pins_monitor_to_execution_team(self, harness):
+        fake_service = MagicMock()
+        fake_service.get_team_status = AsyncMock(return_value={
+            "execution_id": "exec-live",
+            "root_execution_id": "root-live",
+            "tasks": [{"id": "accepted-1", "status": "accepted"}],
+            "active_tasks": [],
+        })
+        ctx = harness.build_context(extra={
+            "outputs": {
+                "lead-1": {
+                    "success": True,
+                    "result": {"team_id": "team-live", "execution_id": "exec-live"},
+                }
+            }
+        })
+        with patch("services.agent_team.get_agent_team_service", return_value=fake_service):
+            result = await harness.execute("teamMonitor", {}, context=ctx)
+
+        payload = result["result"]
+        fake_service.get_team_status.assert_awaited_once_with("team-live")
+        assert payload["execution_id"] == "exec-live"
+        assert payload["all_tasks"] == [{"id": "accepted-1", "status": "accepted"}]
+
 
 # ============================================================================
 # textGenerator

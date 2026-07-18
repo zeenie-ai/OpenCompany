@@ -133,7 +133,38 @@ class AgentTeamService:
             team_id = team["id"] if team else None
         if not team_id:
             return {"error": "Team not found"}
-        return await self.database.get_team_stats(team_id)
+        status = await self.database.get_team_stats(team_id)
+        if workflow_id and team_lead_node_id and not status.get("error"):
+            executions = await self.database.list_team_executions(
+                workflow_id, team_lead_node_id
+            )
+            status["archived_executions"] = [
+                {
+                    **item,
+                    "label": f"{item.get('status', 'unknown').title()} · "
+                    f"{(item.get('execution_id') or item['team_id'])[:12]}",
+                }
+                for item in executions
+                if item.get("execution_id")
+                and item.get("execution_id") != status.get("execution_id")
+            ]
+        return status
+
+    async def list_durable_task_history(
+        self, *, workflow_id: str, team_lead_node_id: str,
+        status: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Return tasks across this lead's executions without crossing authority scope."""
+        history: List[Dict[str, Any]] = []
+        for execution in await self.database.list_team_executions(
+            workflow_id, team_lead_node_id
+        ):
+            tasks = await self.database.get_team_tasks(execution["team_id"], status)
+            history.extend(
+                {**task, "team_execution_id": execution.get("execution_id")}
+                for task in tasks
+            )
+        return history
 
     async def resolve_lead_scope(
         self, *, workflow_id: str, team_lead_node_id: str,

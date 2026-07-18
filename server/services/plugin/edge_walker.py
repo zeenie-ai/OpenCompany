@@ -445,17 +445,30 @@ async def _resolve_task_payload(
     if not source_output:
         return None
 
-    if isinstance(source_output, dict) and "result" in source_output and isinstance(source_output.get("result"), dict):
-        task_data = source_output.get("result")
-        logger.info(f"{log_prefix} Extracted nested task_data from result key")
-    else:
-        task_data = source_output
+    task_data = extract_task_event_payload(source_output) or source_output
     if isinstance(task_data, dict):
         logger.info(
             f"{log_prefix} Task completion data: task_id={task_data.get('task_id')}, "
             f"status={task_data.get('status')}, agent_name={task_data.get('agent_name')}"
         )
     return task_data
+
+
+def extract_task_event_payload(value: Any) -> Optional[Dict[str, Any]]:
+    """Unwrap task data from executor and CloudEvent envelopes."""
+    current = value
+    seen: set[int] = set()
+    while isinstance(current, dict) and id(current) not in seen:
+        seen.add(id(current))
+        if current.get("task_id") and current.get("status"):
+            return current
+        nested = current.get("data")
+        if not isinstance(nested, dict):
+            nested = current.get("result")
+        if not isinstance(nested, dict):
+            return None
+        current = nested
+    return None
 
 
 async def collect_teammate_connections(
@@ -509,9 +522,10 @@ def format_task_context(task_data: Dict[str, Any]) -> str:
             f"- Task ID: {task_id}\n"
             "- Status: Completed Successfully\n"
             f"- Result: {result}\n\n"
-            "REVIEW REQUIRED: Inspect this result against the original mission and "
-            "acceptance criteria. Accept it if sufficient; otherwise revise, retry, "
-            "or reassign it to a connected teammate before reporting completion."
+            "This taskTrigger run is the lead's completion review. Use Task Manager "
+            "list_tasks and get_task to read the durable task, verify the submitted "
+            "result against its mission and acceptance criteria, then produce the "
+            "requested user-facing output. Do not create a duplicate assignment."
         )
 
     if status == "error":
@@ -522,9 +536,9 @@ def format_task_context(task_data: Dict[str, Any]) -> str:
             f"- Task ID: {task_id}\n"
             "- Status: Error\n"
             f"- Error: {error}\n\n"
-            "REVIEW REQUIRED: Inspect the failure and either retry, revise, reassign "
-            "to a connected teammate, cancel/waive with a reason, or report an "
-            "unrecoverable failure."
+            "This taskTrigger run is the lead's failure review. Use Task Manager "
+            "list_tasks and get_task to inspect the durable attempt before reporting, "
+            "retrying, or reassigning it. Do not create a duplicate assignment."
         )
 
     return f"Task update received:\n" f"- Agent: {agent_name}\n" f"- Task ID: {task_id}\n" f"- Status: {status}\n" f"- Data: {task_data}"

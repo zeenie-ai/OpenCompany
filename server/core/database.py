@@ -2421,9 +2421,13 @@ class Database:
                 )
                 if execution_id:
                     query = query.where(AgentTeam.execution_id == execution_id)
-                elif active_first:
-                    query = query.order_by(case((AgentTeam.status == "active", 0), else_=1), AgentTeam.created_at.desc())
                 else:
+                    # Execution identity, not a mutable lifecycle flag, defines
+                    # the current run. A crashed/legacy team can remain marked
+                    # active forever; active-first ordering then hides every
+                    # newer submitted or accepted task. The newest execution is
+                    # the default, and callers select older runs explicitly by
+                    # execution_id.
                     query = query.order_by(AgentTeam.created_at.desc())
                 result = await session.execute(query.limit(1))
                 team = result.scalar_one_or_none()
@@ -2431,6 +2435,35 @@ class Database:
         except Exception as e:
             logger.error(f"Failed to find team: {e}")
             return None
+
+    async def list_team_executions(
+        self, workflow_id: str, team_lead_node_id: str
+    ) -> List[Dict[str, Any]]:
+        """List every durable execution owned by a workflow lead, newest first."""
+        try:
+            async with self.get_session() as session:
+                result = await session.execute(
+                    select(AgentTeam)
+                    .where(
+                        AgentTeam.workflow_id == workflow_id,
+                        AgentTeam.team_lead_node_id == team_lead_node_id,
+                    )
+                    .order_by(AgentTeam.created_at.desc(), AgentTeam.id.desc())
+                )
+                return [
+                    {
+                        "team_id": team.id,
+                        "execution_id": team.execution_id,
+                        "root_execution_id": team.root_execution_id,
+                        "status": team.status,
+                        "created_at": team.created_at.isoformat() if team.created_at else None,
+                        "completed_at": team.completed_at.isoformat() if team.completed_at else None,
+                    }
+                    for team in result.scalars().all()
+                ]
+        except Exception as e:
+            logger.error(f"Failed to list team executions: {e}")
+            return []
 
     async def update_team_status(self, team_id: str, status: str) -> bool:
         """Update team status."""
@@ -2730,6 +2763,11 @@ class Database:
     async def complete_task(self, task_id: str, result_data: Optional[Dict[str, Any]] = None) -> bool:
         """Atomically submit a running task for lead review."""
         try:
+            usage = (
+                result_data.get("usage")
+                if isinstance(result_data, dict) and isinstance(result_data.get("usage"), dict)
+                else None
+            )
             async def _complete(session: AsyncSession) -> Dict[str, Any]:
                 completed = await session.execute(
                     update(TeamTask)
@@ -2740,6 +2778,7 @@ class Database:
                     .values(
                         status="submitted",
                         result=result_data,
+                        usage=usage,
                         progress=100,
                         completed_at=datetime.now(timezone.utc),
                     )

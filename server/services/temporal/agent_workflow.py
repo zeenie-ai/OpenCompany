@@ -52,6 +52,7 @@ from typing import Any, Dict, List, Optional
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy  # kept for type hints
+from temporalio.workflow import ParentClosePolicy
 
 from services.node_registry import get_node_class
 
@@ -193,6 +194,69 @@ def _duplicate_visible_tool_name_error(tools: List[Dict[str, Any]]) -> Optional[
     )
 
 
+@workflow.defn(sandboxed=False, name="DelegatedTaskWorkflow")
+class DelegatedTaskWorkflow:
+    """Own one queued delegation after the lead returns to its caller."""
+
+    @workflow.run
+    async def run(self, request: Dict[str, Any]) -> Dict[str, Any]:
+        lifecycle = request["lifecycle"]
+        task_id = lifecycle["team_task_id"]
+        root_id = lifecycle["root_execution_id"]
+        acquired = False
+        began = False
+        try:
+            await workflow.execute_activity(
+                "agent.acquire_subagent_permit.v1",
+                args=[{"root_execution_id": root_id, "permit_id": task_id,
+                       "limit": request.get("limit", 3)}],
+                start_to_close_timeout=timedelta(hours=1),
+                heartbeat_timeout=timedelta(seconds=10),
+                retry_policy=AGENT_ACTIVITY_RETRY,
+            )
+            acquired = True
+            await workflow.execute_activity(
+                "agent.begin_delegation.v1", args=[lifecycle],
+                start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                retry_policy=AGENT_ACTIVITY_RETRY,
+            )
+            began = True
+            result = await workflow.execute_child_workflow(
+                "AgentWorkflow", args=[request["child_context"]],
+                id=request["child_workflow_id"],
+                execution_timeout=timedelta(hours=1), run_timeout=timedelta(hours=1),
+            )
+            succeeded = bool(result.get("success", True)) if isinstance(result, dict) else True
+            _response, summary = _normalise_delegated_result(result)
+            return await workflow.execute_activity(
+                "agent.finish_delegation.v1",
+                args=[{**lifecycle, "success": succeeded, "result": summary,
+                       "error": result.get("error") if isinstance(result, dict) else None,
+                       "terminal_event_id": f"{task_id}:terminal"}],
+                start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                retry_policy=AGENT_ACTIVITY_RETRY,
+            )
+        except Exception as exc:
+            if began:
+                await workflow.execute_activity(
+                    "agent.finish_delegation.v1",
+                    args=[{**lifecycle, "success": False,
+                           "error": f"{type(exc).__name__}: {exc}",
+                           "terminal_event_id": f"{task_id}:terminal"}],
+                    start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                    retry_policy=AGENT_ACTIVITY_RETRY,
+                )
+            raise
+        finally:
+            if acquired:
+                await workflow.execute_activity(
+                    "agent.release_subagent_permit.v1",
+                    args=[{"root_execution_id": root_id, "permit_id": task_id}],
+                    start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                    retry_policy=AGENT_ACTIVITY_RETRY,
+                )
+
+
 @workflow.defn(sandboxed=False, name="AgentWorkflow")
 class AgentWorkflow:
     """Run an AI agent as a Temporal child workflow.
@@ -296,6 +360,17 @@ class AgentWorkflow:
         # the ``child_context`` spread below. ``workflow.info().run_id``
         # is deterministic — safe inside workflow code.
         execution_id = str(context.get("execution_id") or "") or workflow.info().run_id[:8]
+        task_scope_execution_id = str(
+            payload.get("team_execution_id") or execution_id
+        )
+        # Needed by every terminal result, including agents that never make a
+        # tool call (for example downstream taskTrigger automation).  It was
+        # previously initialized only inside the tool-call branch.
+        root_execution_id = str(
+            payload.get("root_execution_id")
+            or context.get("root_execution_id")
+            or execution_id
+        )
         max_iterations = int(payload.get("max_iterations") or _default_max_iterations())
         agent_node_id = payload["node_id"]
         agent_workflow_id = payload.get("workflow_id")
@@ -482,23 +557,17 @@ class AgentWorkflow:
                 final_content = step_result.get("content", "")
                 team_id = str(payload.get("team_id") or "")
                 if team_id and payload.get("owns_execution_team"):
-                    finalization = await workflow.execute_activity(
+                    # Finalization is opportunistic. Queued/running work keeps
+                    # the durable team active, but must not force this lead
+                    # invocation to wait. Completion will emit taskTrigger and
+                    # start the separately scoped review invocation.
+                    await workflow.execute_activity(
                         "agent.finalize_team.v1",
                         args=[{"team_id": team_id}],
                         activity_id="finalize-agent-team",
                         start_to_close_timeout=PERSIST_TURN_TIMEOUT,
                         retry_policy=AGENT_ACTIVITY_RETRY,
                     )
-                    if finalization.get("status") == "active":
-                        messages.append({
-                            "type": "human",
-                            "data": {"content": (
-                                "Team finalization is blocked: delegated work is still queued, running, "
-                                "failed, or awaiting review. Use Task Manager to inspect every task and "
-                                "accept, retry, reassign, or cancel it before producing the final report."
-                            )},
-                        })
-                        continue
                 await self._persist_turn(payload, human_text=user_prompt, assistant_text=final_content)
                 break
 
@@ -521,11 +590,6 @@ class AgentWorkflow:
             )
             max_concurrent_subagents = max(
                 1, int(payload.get("max_concurrent_subagents") or 3)
-            )
-            root_execution_id = str(
-                payload.get("root_execution_id")
-                or context.get("root_execution_id")
-                or execution_id
             )
             delegation_call_indices = [
                 index
@@ -588,7 +652,7 @@ class AgentWorkflow:
                     "inputs": {},
                     "workflow_id": payload.get("workflow_id"),
                     "session_id": payload.get("session_id", "default"),
-                    "execution_id": execution_id,
+                    "execution_id": task_scope_execution_id,
                     "root_execution_id": root_execution_id,
                     "parent_node_id": agent_node_id,
                     "delegation_depth": delegation_depth + 1,
@@ -796,108 +860,32 @@ class AgentWorkflow:
                     start_to_close_timeout=PERSIST_TURN_TIMEOUT,
                     retry_policy=AGENT_ACTIVITY_RETRY,
                 )
-                await workflow.execute_activity(
-                    "agent.acquire_subagent_permit.v1",
-                    args=[{
-                        "root_execution_id": root_execution_id,
-                        "permit_id": task_id,
-                        "limit": max_concurrent_subagents,
-                    }],
-                    activity_id=f"acquire-task-manager-{iteration + 1}-{call_index + 1}",
-                    start_to_close_timeout=timedelta(hours=1),
-                    heartbeat_timeout=timedelta(seconds=10),
-                    retry_policy=AGENT_ACTIVITY_RETRY,
+                context_text = request_context if isinstance(request_context, str) else _serialise_tool_result(request_context)
+                child_context = {
+                    "node_id": assignee_id, "node_type": delegate["node_type"],
+                    "node_data": {**(delegate.get("parameters") or {}),
+                                  "system_message": mission, "prompt": context_text or mission},
+                    "inputs": {}, "workflow_id": payload.get("workflow_id"),
+                    "session_id": payload.get("session_id", "default"),
+                    "execution_id": execution_id, "root_execution_id": root_execution_id,
+                    "parent_node_id": agent_node_id, "delegation_depth": delegation_depth + 1,
+                    "team_id": team_id, "team_task_id": task_id, "trace_id": trace_id,
+                    "nodes": context.get("nodes") or [], "edges": context.get("edges") or [],
+                    "invocation": {"task": mission, "context": context_text},
+                }
+                child_id = _delegation_child_id_v2(
+                    workflow.info().workflow_id, assignee_id, iteration, call_index
+                ) + f"-{task_id}"
+                runner_id = f"{child_id}-runner"
+                await workflow.start_child_workflow(
+                    "DelegatedTaskWorkflow",
+                    args=[{"lifecycle": lifecycle, "child_context": child_context,
+                           "child_workflow_id": child_id, "limit": max_concurrent_subagents}],
+                    id=runner_id,
+                    parent_close_policy=ParentClosePolicy.ABANDON,
+                    execution_timeout=timedelta(hours=2), run_timeout=timedelta(hours=2),
                 )
-                claimed = False
-                finalization_started = False
-                try:
-                    await workflow.execute_activity(
-                        "agent.begin_delegation.v1",
-                        args=[lifecycle],
-                        activity_id=f"begin-task-manager-{iteration + 1}-{call_index + 1}",
-                        start_to_close_timeout=PERSIST_TURN_TIMEOUT,
-                        retry_policy=AGENT_ACTIVITY_RETRY,
-                    )
-                    claimed = True
-                    context_text = (
-                        request_context
-                        if isinstance(request_context, str)
-                        else _serialise_tool_result(request_context)
-                    )
-                    child_context = {
-                        "node_id": assignee_id,
-                        "node_type": delegate["node_type"],
-                        "node_data": {
-                            **(delegate.get("parameters") or {}),
-                            "system_message": mission,
-                            "prompt": context_text or mission,
-                        },
-                        "inputs": {},
-                        "workflow_id": payload.get("workflow_id"),
-                        "session_id": payload.get("session_id", "default"),
-                        "execution_id": execution_id,
-                        "root_execution_id": root_execution_id,
-                        "parent_node_id": agent_node_id,
-                        "delegation_depth": delegation_depth + 1,
-                        "team_id": team_id,
-                        "team_task_id": task_id,
-                        "trace_id": trace_id,
-                        "nodes": context.get("nodes") or [],
-                        "edges": context.get("edges") or [],
-                        "invocation": {"task": mission, "context": context_text},
-                    }
-                    child_id = _delegation_child_id_v2(
-                        workflow.info().workflow_id, assignee_id, iteration, call_index
-                    ) + f"-{task_id}"
-                    result = await workflow.execute_child_workflow(
-                        "AgentWorkflow",
-                        args=[child_context],
-                        id=child_id,
-                        execution_timeout=timedelta(hours=1),
-                        run_timeout=timedelta(hours=1),
-                    )
-                    succeeded = bool(result.get("success", True)) if isinstance(result, dict) else True
-                    finalization_started = True
-                    finalization = await workflow.execute_activity(
-                        "agent.finish_delegation.v1",
-                        args=[{
-                            **lifecycle,
-                            "success": succeeded,
-                            "result": result if isinstance(result, dict) else {"result": result},
-                            "error": result.get("error") if isinstance(result, dict) else None,
-                            "terminal_event_id": f"{task_id}:terminal",
-                        }],
-                        activity_id=f"finish-task-manager-{iteration + 1}-{call_index + 1}",
-                        start_to_close_timeout=PERSIST_TURN_TIMEOUT,
-                        retry_policy=AGENT_ACTIVITY_RETRY,
-                    )
-                    return {
-                        "result": result,
-                        "status": finalization.get("status", "submitted"),
-                    }
-                except Exception as exc:
-                    if claimed and not finalization_started:
-                        await workflow.execute_activity(
-                            "agent.finish_delegation.v1",
-                            args=[{
-                                **lifecycle,
-                                "success": False,
-                                "error": f"{type(exc).__name__}: {exc}",
-                                "terminal_event_id": f"{task_id}:terminal",
-                            }],
-                            activity_id=f"finish-task-manager-{iteration + 1}-{call_index + 1}",
-                            start_to_close_timeout=PERSIST_TURN_TIMEOUT,
-                            retry_policy=AGENT_ACTIVITY_RETRY,
-                        )
-                    raise
-                finally:
-                    await workflow.execute_activity(
-                        "agent.release_subagent_permit.v1",
-                        args=[{"root_execution_id": root_execution_id, "permit_id": task_id}],
-                        activity_id=f"release-task-manager-{iteration + 1}-{call_index + 1}",
-                        start_to_close_timeout=PERSIST_TURN_TIMEOUT,
-                        retry_policy=AGENT_ACTIVITY_RETRY,
-                    )
+                return {"status": "queued", "result": None, "runner_workflow_id": runner_id}
 
             # Preflight every Task Manager assignment activity in this LLM
             # turn concurrently. Each activity performs authorization and
@@ -934,7 +922,7 @@ class AgentWorkflow:
                             "inputs": {},
                             "workflow_id": payload.get("workflow_id"),
                             "session_id": payload.get("session_id", "default"),
-                            "execution_id": execution_id,
+                            "execution_id": task_scope_execution_id,
                             "root_execution_id": root_execution_id,
                             "parent_node_id": agent_node_id,
                             "team_lead_node_id": agent_node_id,
@@ -1127,7 +1115,7 @@ class AgentWorkflow:
                     "inputs": {},
                     "workflow_id": payload.get("workflow_id"),
                     "session_id": payload.get("session_id", "default"),
-                    "execution_id": execution_id,
+                    "execution_id": task_scope_execution_id,
                     "parent_node_id": agent_node_id,
                     "team_lead_node_id": agent_node_id,
                     "team_id": payload.get("team_id") or context.get("team_id"),
@@ -1173,6 +1161,17 @@ class AgentWorkflow:
                                     start_to_close_timeout=PERSIST_TURN_TIMEOUT,
                                     retry_policy=AGENT_ACTIVITY_RETRY,
                                 )
+                        child_succeeded = (
+                            bool(tool_result.get("success", True))
+                            if isinstance(tool_result, dict) else True
+                        )
+                        child_error = (
+                            tool_result.get("error")
+                            if isinstance(tool_result, dict) else None
+                        )
+                        child_response, child_summary = _normalise_delegated_result(
+                            tool_result
+                        )
                         team_id = str(payload.get("team_id") or context.get("team_id") or "")
                         if team_id:
                             task_id = (
@@ -1195,11 +1194,9 @@ class AgentWorkflow:
                                     "parent_agent_workflow_id": workflow.info().workflow_id,
                                     "root_execution_id": root_execution_id,
                                     "trace_id": str(call.get("id", "") or ""),
-                                    "success": bool(tool_result.get("success", True))
-                                    if isinstance(tool_result, dict) else True,
-                                    "result": tool_result if isinstance(tool_result, dict) else {"result": tool_result},
-                                    "error": tool_result.get("error")
-                                    if isinstance(tool_result, dict) else None,
+                                    "success": child_succeeded,
+                                    "result": child_summary,
+                                    "error": child_error,
                                     "terminal_event_id": f"{task_id}:terminal",
                                 }],
                                 activity_id=(
@@ -1208,6 +1205,13 @@ class AgentWorkflow:
                                 start_to_close_timeout=PERSIST_TURN_TIMEOUT,
                                 retry_policy=AGENT_ACTIVITY_RETRY,
                             )
+                        tool_result = {
+                            "success": child_succeeded,
+                            "status": "submitted" if child_succeeded else "failed",
+                            "result": child_response,
+                            "usage": child_summary.get("usage"),
+                            **({"error": child_error} if child_error else {}),
+                        }
                         if next_delegation_to_start < len(delegation_call_indices):
                             await _start_delegation(
                                 delegation_call_indices[next_delegation_to_start]
@@ -1254,6 +1258,7 @@ class AgentWorkflow:
                                 **tool_result,
                                 "delegation_status": delegated["status"],
                                 "delegation_result": delegated["result"],
+                                "delegation_usage": delegated.get("usage"),
                             }
                     tool_content = _serialise_tool_result(tool_result)
                     await self._emit_phase(
@@ -1478,6 +1483,9 @@ class AgentWorkflow:
             "model": payload.get("model"),
             "provider": payload.get("provider"),
             "usage": usage_total,
+            "team_id": payload.get("team_id") or context.get("team_id"),
+            "execution_id": context.get("execution_id"),
+            "root_execution_id": root_execution_id,
         }
 
         # Persist the result to the OutputStore via the workflow_service
@@ -1600,6 +1608,27 @@ class AgentWorkflow:
             start_to_close_timeout=PERSIST_TURN_TIMEOUT,
             retry_policy=AGENT_ACTIVITY_RETRY,
         )
+
+
+def _normalise_delegated_result(result: Any) -> tuple[str, Dict[str, Any]]:
+    """Expose the child's answer, not its internal AgentWorkflow envelope."""
+    if isinstance(result, dict):
+        payload = result.get("result") if isinstance(result.get("result"), dict) else result
+        response = result.get("response")
+        if response is None:
+            response = payload.get("response")
+        if response is None:
+            response = result.get("result", result.get("error", ""))
+        text = response if isinstance(response, str) else _serialise_tool_result(response)
+        summary = {
+            "response": text,
+            "usage": payload.get("usage") or result.get("usage") or {},
+            "model": payload.get("model") or result.get("model"),
+            "provider": payload.get("provider") or result.get("provider"),
+        }
+        return text, {key: value for key, value in summary.items() if value not in (None, {})}
+    text = str(result) if result is not None else ""
+    return text, {"response": text}
 
 
 def _serialise_tool_result(result: Any) -> str:

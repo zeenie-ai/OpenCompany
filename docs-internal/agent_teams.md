@@ -60,8 +60,10 @@ The default root-wide limit is three active descendants, including
 grandchildren and excluding the root lead. Assignments persist before children
 start. Eligible tasks enter a deterministic FIFO queue, dependencies remain
 blocked, and one sibling failure does not cancel successful siblings. Multiple
-`assign_task` calls in one Temporal turn are preflighted and started
-concurrently while their results are appended in original tool-call order.
+`assign_task` calls in one Temporal turn are preflighted together. Each returns
+`queued` after starting a detached `DelegatedTaskWorkflow`; the lead reports
+the assignment and returns without polling. The runner owns admission, claim,
+child execution, terminal persistence, event emission, and permit release.
 
 Each child receives an isolated AgentWorkflow context containing only its
 bounded mission, relevant context, and its own connected tools, skills, and
@@ -72,18 +74,20 @@ inspectable through task attempts and execution traces.
 
 After durable persistence, lifecycle transitions emit deterministic events such
 as `team.task.submitted`, `team.task.accepted`, `team.task.failed`, and
-`team.task.cancelled`. A canonical task completion CloudEvent also feeds
-`taskTrigger` for downstream automation. Temporal child completion returns to
-the owning lead for review; `taskTrigger` is not the lead-resume mechanism.
+`team.task.cancelled`. A canonical task completion CloudEvent feeds
+`taskTrigger` with owning team/execution/root, task, trace, result/error, and
+usage context. A connected lead starts a separate review invocation scoped to
+the original execution, reads Task Manager, and reports without duplicating work.
 
 ## Human interfaces
 
 ### Task Manager
 
 Selecting a team lead opens its full-height operational middle panel. It shows
-all current-execution tasks, queue positions, attempts, results, errors, usage,
-and authorized accept/retry/reassign/modify/cancel/finish controls. Archived
-executions are selectable without aggregating unrelated runs.
+durable tasks across workflow restarts by default. Archived executions remain
+individually selectable. Rows show local created/started/completed timestamps,
+live or frozen elapsed duration, input/output/total tokens, attempts, results,
+errors, and authorized accept/retry/reassign/modify/cancel/finish controls.
 
 ### Team Monitor
 

@@ -30,7 +30,9 @@ const edges: any[] = [
 const task = {
   id: 'task-1', title: 'Implement feature', mission: 'Build it', status: 'submitted',
   assigned_to: 'worker', assignee_label: 'Coder', revision: 4, current_attempt: 1,
-  result: { summary: 'done' }, usage: { total_tokens: 120 },
+  result: { summary: 'done' }, usage: { input_tokens: 70, output_tokens: 50, total_tokens: 120 },
+  created_at: '2026-07-18 10:00:00', started_at: '2026-07-18 10:00:05',
+  completed_at: '2026-07-18 10:01:10',
 };
 
 describe('TaskManagerPanel', () => {
@@ -48,8 +50,13 @@ describe('TaskManagerPanel', () => {
     expect(await screen.findByText('Implement feature')).toBeInTheDocument();
     expect(screen.getByText('2 / 3')).toBeInTheDocument();
     expect(screen.getByText('Coder')).toBeInTheDocument();
+    expect(screen.getByText('Created')).toBeInTheDocument();
+    expect(screen.getByText('Started')).toBeInTheDocument();
+    expect(screen.getByText('Completed')).toBeInTheDocument();
+    expect(screen.getByText('1m 5s')).toBeInTheDocument();
+    expect(screen.getByText('70 in · 50 out')).toBeInTheDocument();
     expect(wsMock.sendRequest).toHaveBeenCalledWith('get_team_tasks', {
-      workflow_id: 'workflow-1', team_lead_node_id: 'lead',
+      workflow_id: 'workflow-1', team_lead_node_id: 'lead', include_history: true,
     });
   });
 
@@ -57,7 +64,7 @@ describe('TaskManagerPanel', () => {
     render(<TaskManagerPanel nodeId="lead" workflowId="workflow-1" nodes={nodes} edges={edges} />);
     expect(await screen.findByText('Implement feature')).toBeInTheDocument();
     expect(wsMock.sendRequest).toHaveBeenCalledWith('get_team_tasks', {
-      workflow_id: 'workflow-1', team_lead_node_id: 'lead',
+      workflow_id: 'workflow-1', team_lead_node_id: 'lead', include_history: true,
     });
   });
 

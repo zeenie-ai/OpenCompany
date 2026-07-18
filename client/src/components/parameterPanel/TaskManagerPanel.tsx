@@ -98,18 +98,42 @@ const jsonText = (value: unknown): string => {
   try { return JSON.stringify(value, null, 2); } catch { return String(value); }
 };
 
-const elapsed = (task: TeamTaskView): string => {
-  const start = task.started_at || task.created_at;
-  if (!start) return '—';
-  const end = task.completed_at ? new Date(task.completed_at).getTime() : Date.now();
-  const seconds = Math.max(0, Math.round((end - new Date(start).getTime()) / 1000));
+const timestampMs = (value?: string): number | null => {
+  if (!value) return null;
+  // SQLite commonly returns UTC timestamps without a trailing zone. Browsers
+  // otherwise interpret those as local time and skew elapsed durations.
+  const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value) ? value : `${value.replace(' ', 'T')}Z`;
+  const parsed = new Date(normalized).getTime();
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const formatTimestamp = (value?: string): string => {
+  const parsed = timestampMs(value);
+  return parsed == null ? '—' : new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium', timeStyle: 'medium',
+  }).format(new Date(parsed));
+};
+
+const elapsed = (task: TeamTaskView, nowMs: number): string => {
+  const startMs = timestampMs(task.started_at);
+  if (startMs == null) return '—';
+  const completedMs = timestampMs(task.completed_at);
+  const end = completedMs ?? nowMs;
+  const seconds = Math.max(0, Math.floor((end - startMs) / 1000));
   if (seconds < 60) return `${seconds}s`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
   return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
 };
 
-const taskTokens = (task: TeamTaskView): number => task.usage?.total_tokens
-  ?? ((task.usage?.input_tokens || 0) + (task.usage?.output_tokens || 0));
+const taskUsage = (task: TeamTaskView) => {
+  const nested = task.result && typeof task.result === 'object'
+    ? (task.result as { usage?: TeamTaskView['usage'] }).usage : undefined;
+  const usage = task.usage || nested || {};
+  const input = Number(usage.input_tokens || 0);
+  const output = Number(usage.output_tokens || 0);
+  const total = Number(usage.total_tokens ?? (input + output));
+  return { input, output, total, cost: Number(usage.cost || 0) };
+};
 
 interface Props { nodeId: string; workflowId?: string; nodes: Node[]; edges: Edge[] }
 
@@ -126,6 +150,7 @@ const TaskManagerPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
   const [assignee, setAssignee] = useState('');
   const [busy, setBusy] = useState(false);
   const [page, setPage] = useState(0);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const pageSize = 25;
 
   const connectedLead = useMemo(() => {
@@ -152,10 +177,14 @@ const TaskManagerPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
         team_lead_node_id: connectedLead.id,
         ...(executionId !== 'active' ? { execution_id: executionId } : {}),
       };
-      const [response, taskResponse] = await Promise.all([
-        sendRequest<{ status?: TeamStatusView }>('get_team_status', scope),
-        sendRequest<{ tasks?: TeamTaskView[] }>('get_team_tasks', scope),
-      ]);
+      const response = await sendRequest<{ status?: TeamStatusView }>('get_team_status', scope);
+      const resolvedExecutionId = response?.status?.execution_id;
+      const taskResponse = await sendRequest<{ tasks?: TeamTaskView[] }>('get_team_tasks', {
+        ...scope,
+        ...(executionId === 'active'
+          ? { include_history: true }
+          : resolvedExecutionId ? { execution_id: resolvedExecutionId } : {}),
+      });
       setStatus(response?.status ? { ...response.status, tasks: taskResponse?.tasks || response.status.tasks || [] } : null);
     } catch (error) {
       if (!quiet) toast.error(error instanceof Error ? error.message : 'Unable to load team tasks');
@@ -197,6 +226,10 @@ const TaskManagerPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
   const visible = tasks.slice(page * pageSize, (page + 1) * pageSize);
 
   useEffect(() => setPage(0), [filter, search, executionId]);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const runAction = async () => {
     if (!pending || !workflowId || !connectedLead) return;
@@ -242,7 +275,7 @@ const TaskManagerPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div><h2 className="text-lg font-semibold text-fg-default">Team tasks</h2><p className="text-sm text-fg-muted">{connectedLead.data?.label || 'Team lead'} · {status?.status || 'No active team'}</p></div>
         <div className="flex items-center gap-2">
-          {(status?.archived_executions?.length || 0) > 0 && <Select value={executionId} onValueChange={setExecutionId}><SelectTrigger className="w-48" aria-label="Execution"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Current execution</SelectItem>{status!.archived_executions!.map((run) => <SelectItem key={run.execution_id} value={run.execution_id}>{run.label || run.execution_id.slice(0, 12)}</SelectItem>)}</SelectContent></Select>}
+          {(status?.archived_executions?.length || 0) > 0 && <Select value={executionId} onValueChange={setExecutionId}><SelectTrigger className="w-48" aria-label="Execution"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Latest execution</SelectItem>{status!.archived_executions!.map((run) => <SelectItem key={run.execution_id} value={run.execution_id}>{run.label || run.execution_id.slice(0, 12)}</SelectItem>)}</SelectContent></Select>}
           <Button variant="outline" size="sm" onClick={() => void fetchStatus()} disabled={loading}><RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} /> Refresh</Button>
           <Button size="sm" disabled={!status?.team_id} onClick={() => openAction('finish', 'Finish team')}>Finish team</Button>
         </div>
@@ -255,16 +288,18 @@ const TaskManagerPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
     <div className="flex min-h-0 flex-1 flex-col p-4">
       <div className="mb-3 flex gap-2"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-muted" /><Input className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tasks, missions, or assignees" /></div><Select value={filter} onValueChange={setFilter}><SelectTrigger className="w-40"><Filter className="h-4 w-4" /><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All statuses</SelectItem>{STATUSES.map((name) => <SelectItem key={name} value={name} className="capitalize">{name}</SelectItem>)}</SelectContent></Select></div>
       <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border-default bg-bg-elevated">
-        <table className="w-full min-w-[900px] border-collapse text-sm"><thead className="sticky top-0 z-10 bg-bg-panel text-left text-xs text-fg-muted"><tr>{['Task','Assignee','Status','Queue','Attempt','Elapsed','Tokens',''].map((h) => <th key={h} className="border-b border-border-default px-3 py-2 font-medium">{h}</th>)}</tr></thead><tbody>
-          {visible.map((task) => <tr key={task.id} className="border-b border-border-default/70 hover:bg-bg-panel"><td className="max-w-[320px] px-3 py-3"><button className="block w-full text-left" onClick={() => setSelected(task)}><span className="block truncate font-medium text-fg-default">{task.title}</span><span className="block truncate text-xs text-fg-muted">{task.mission || task.description || 'No mission provided'}</span></button></td><td className="px-3 py-3"><span className="block">{task.assignee_label || task.assigned_to || 'Unassigned'}</span><span className="text-xs text-fg-muted">{task.assignee_type || ''}</span></td><td className="px-3 py-3"><Badge variant="outline" className={cn('capitalize', STATUS_STYLES[task.status])}>{task.status}</Badge></td><td className="px-3 py-3 tabular-nums">{task.queue_position ?? task.queue_sequence ?? '—'}</td><td className="px-3 py-3 tabular-nums">{task.current_attempt ?? 0}{task.retry_count ? ` (+${task.retry_count})` : ''}</td><td className="px-3 py-3 tabular-nums">{elapsed(task)}</td><td className="px-3 py-3 tabular-nums">{taskTokens(task).toLocaleString()}</td><td className="px-3 py-3"><Button variant="ghost" size="sm" onClick={() => setSelected(task)} aria-label={`Inspect ${task.title}`}><Eye className="h-4 w-4" /></Button></td></tr>)}
-          {!loading && visible.length === 0 && <tr><td colSpan={8} className="p-12 text-center text-fg-muted">No tasks match this view.</td></tr>}
+        <table className="w-full min-w-[1200px] border-collapse text-sm"><thead className="sticky top-0 z-10 bg-bg-panel text-left text-xs text-fg-muted"><tr>{['Task','Assignee','Status','Created','Started','Completed','Elapsed','Attempt','Tokens',''].map((h) => <th key={h} className="border-b border-border-default px-3 py-2 font-medium">{h}</th>)}</tr></thead><tbody>
+          {visible.map((task) => { const usage = taskUsage(task); return <tr key={task.id} className="border-b border-border-default/70 hover:bg-bg-panel"><td className="max-w-[320px] px-3 py-3"><button className="block w-full text-left" onClick={() => setSelected(task)}><span className="block truncate font-medium text-fg-default">{task.title}</span><span className="block truncate text-xs text-fg-muted">{task.mission || task.description || 'No mission provided'}</span></button></td><td className="px-3 py-3"><span className="block">{task.assignee_label || task.assigned_to || 'Unassigned'}</span><span className="text-xs text-fg-muted">{task.assignee_type || ''}</span></td><td className="px-3 py-3"><Badge variant="outline" className={cn('capitalize', STATUS_STYLES[task.status])}>{task.status}</Badge></td><td className="whitespace-nowrap px-3 py-3 text-xs">{formatTimestamp(task.created_at)}</td><td className="whitespace-nowrap px-3 py-3 text-xs">{formatTimestamp(task.started_at)}</td><td className="whitespace-nowrap px-3 py-3 text-xs">{formatTimestamp(task.completed_at)}</td><td className="px-3 py-3 tabular-nums">{elapsed(task, nowMs)}</td><td className="px-3 py-3 tabular-nums">{task.current_attempt ?? 0}{task.retry_count ? ` (+${task.retry_count})` : ''}</td><td className="px-3 py-3 tabular-nums"><span className="block font-medium">{usage.total.toLocaleString()}</span><span className="whitespace-nowrap text-[11px] text-fg-muted">{usage.input.toLocaleString()} in · {usage.output.toLocaleString()} out</span></td><td className="px-3 py-3"><Button variant="ghost" size="sm" onClick={() => setSelected(task)} aria-label={`Inspect ${task.title}`}><Eye className="h-4 w-4" /></Button></td></tr>; })}
+          {!loading && visible.length === 0 && <tr><td colSpan={10} className="p-12 text-center text-fg-muted">No tasks match this view.</td></tr>}
         </tbody></table>
       </div>
       {pages > 1 && <div className="mt-3 flex items-center justify-end gap-2 text-sm text-fg-muted"><Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</Button><span>{page + 1} / {pages}</span><Button variant="outline" size="sm" disabled={page + 1 >= pages} onClick={() => setPage(page + 1)}>Next</Button></div>}
     </div>
 
     <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}><DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto"><DialogHeader><DialogTitle>{selected?.title}</DialogTitle></DialogHeader>{selected && <div className="space-y-5 text-sm">
-      <div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className={cn('capitalize', STATUS_STYLES[selected.status])}>{selected.status}</Badge><span className="text-fg-muted">Revision {selected.revision ?? 0} · Attempt {selected.current_attempt ?? 0} · {elapsed(selected)}</span></div>
+      <div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className={cn('capitalize', STATUS_STYLES[selected.status])}>{selected.status}</Badge><span className="text-fg-muted">Revision {selected.revision ?? 0} · Attempt {selected.current_attempt ?? 0} · {elapsed(selected, nowMs)}</span></div>
+      <section className="grid gap-2 rounded border border-border-default p-3 text-xs text-fg-muted sm:grid-cols-3"><span>Created<br/><strong className="font-medium text-fg-default">{formatTimestamp(selected.created_at)}</strong></span><span>Started<br/><strong className="font-medium text-fg-default">{formatTimestamp(selected.started_at)}</strong></span><span>Completed<br/><strong className="font-medium text-fg-default">{formatTimestamp(selected.completed_at)}</strong></span></section>
+      <section><h3 className="mb-2 font-medium">Token usage</h3><div className="grid grid-cols-3 gap-2 rounded border border-border-default p-3 text-center"><div><div className="text-xs text-fg-muted">Input</div><div className="font-semibold tabular-nums">{taskUsage(selected).input.toLocaleString()}</div></div><div><div className="text-xs text-fg-muted">Output</div><div className="font-semibold tabular-nums">{taskUsage(selected).output.toLocaleString()}</div></div><div><div className="text-xs text-fg-muted">Total</div><div className="font-semibold tabular-nums">{taskUsage(selected).total.toLocaleString()}</div></div></div></section>
       <section><h3 className="mb-1 font-medium">Mission</h3><p className="whitespace-pre-wrap text-fg-muted">{selected.mission || selected.description || '—'}</p></section>
       <section><h3 className="mb-1 font-medium">Acceptance criteria</h3><pre className="whitespace-pre-wrap rounded bg-bg-panel p-3 text-fg-muted">{jsonText(selected.acceptance_criteria) || '—'}</pre></section>
       <section><h3 className="mb-1 font-medium">Context</h3><pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-bg-panel p-3 text-xs text-fg-muted">{jsonText(selected.context) || '—'}</pre></section>

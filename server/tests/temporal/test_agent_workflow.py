@@ -29,6 +29,13 @@ class TestAgentWorkflowDefinition:
         assert defn is not None, "AgentWorkflow missing @workflow.defn"
         assert defn.name == "AgentWorkflow"
 
+    def test_detached_delegation_runner_is_workflow_defn(self):
+        from services.temporal.agent_workflow import DelegatedTaskWorkflow
+
+        defn = getattr(DelegatedTaskWorkflow, "__temporal_workflow_definition", None)
+        assert defn is not None
+        assert defn.name == "DelegatedTaskWorkflow"
+
     def test_class_is_sandboxed_false(self):
         """Workflow needs to import frozen registry dicts deterministically
         (for tool type → activity name resolution). Sandboxing must be off
@@ -37,6 +44,23 @@ class TestAgentWorkflowDefinition:
 
         defn = getattr(AgentWorkflow, "__temporal_workflow_definition")
         assert defn.sandboxed is False, "AgentWorkflow must be sandboxed=False so it can read " "services.node_registry deterministically"
+
+    def test_delegated_result_exposes_response_not_workflow_envelope(self):
+        from services.temporal.agent_workflow import _normalise_delegated_result
+
+        response, summary = _normalise_delegated_result({
+            "success": True,
+            "result": {"response": "child answer", "thinking": "private"},
+            "usage": {"total_tokens": 12},
+            "provider": "test",
+        })
+
+        assert response == "child answer"
+        assert summary == {
+            "response": "child answer",
+            "usage": {"total_tokens": 12},
+            "provider": "test",
+        }
 
 
 class TestDurableTeamDelegationContract:
@@ -52,6 +76,30 @@ class TestDurableTeamDelegationContract:
         assert '"input-tools"' in source
         assert "get_or_create_execution_team" in source
         assert '"team_id": execution_team_id' in source
+        assert '"outputs": context.get("outputs") or context.get("inputs")' in source
+        assert "format_task_context(trigger_task_data)" in source
+        assert "and not trigger_task_data" in source
+        assert 'team_execution_id = (' in source
+
+    def test_agent_result_carries_owning_team_identity(self):
+        import inspect
+
+        from services.temporal.agent_workflow import AgentWorkflow
+
+        source = inspect.getsource(AgentWorkflow.run)
+        assert '"team_id": payload.get("team_id") or context.get("team_id")' in source
+        assert '"execution_id": context.get("execution_id")' in source
+
+    def test_root_execution_identity_is_initialized_before_agent_loop(self):
+        import inspect
+
+        from services.temporal.agent_workflow import AgentWorkflow
+
+        source = inspect.getsource(AgentWorkflow.run)
+        initialization = source.index("root_execution_id = str(")
+        tool_loop = source.index("for iteration in range(max_iterations)")
+        result_payload = source.index('"root_execution_id": root_execution_id')
+        assert initialization < tool_loop < result_payload
 
     def test_same_turn_delegations_start_before_ordered_await(self):
         import inspect
@@ -63,6 +111,31 @@ class TestDurableTeamDelegationContract:
         assert "max_concurrent_subagents" in source
         assert "delegation_handles[call_index]" in source
         assert "tool_result = await handle" in source
+
+    def test_task_manager_assignment_returns_after_detached_start(self):
+        import inspect
+
+        from services.temporal.agent_workflow import AgentWorkflow, DelegatedTaskWorkflow
+
+        lead_source = inspect.getsource(AgentWorkflow.run)
+        runner_source = inspect.getsource(DelegatedTaskWorkflow.run)
+        assert '"DelegatedTaskWorkflow"' in lead_source
+        assert "ParentClosePolicy.ABANDON" in lead_source
+        assert 'return {"status": "queued"' in lead_source
+        assert '"agent.finish_delegation.v1"' in runner_source
+        assert '"agent.release_subagent_permit.v1"' in runner_source
+
+    def test_queued_work_does_not_block_lead_final_response(self):
+        import inspect
+
+        from services.temporal.agent_activities import prepare_agent_payload
+        from services.temporal.agent_workflow import AgentWorkflow
+
+        workflow_source = inspect.getsource(AgentWorkflow.run)
+        prepare_source = inspect.getsource(prepare_agent_payload)
+        assert "Team finalization is blocked" not in workflow_source
+        assert "must not force this lead" in workflow_source
+        assert "do not poll or wait in this run" in prepare_source
 
     def test_child_invocation_has_isolated_trace_envelope(self):
         import inspect
@@ -114,17 +187,20 @@ class TestDurableTeamDelegationContract:
     def test_task_manager_bridge_is_bounded_and_retry_safe(self):
         import inspect
 
-        from services.temporal.agent_workflow import AgentWorkflow
+        from services.temporal.agent_workflow import AgentWorkflow, DelegatedTaskWorkflow
 
         source = inspect.getsource(AgentWorkflow.run)
         queue = source.index('activity_id=f"queue-task-manager-')
-        permit = source.index('activity_id=f"acquire-task-manager-')
-        claim = source.index('activity_id=f"begin-task-manager-')
-        child = source.index("workflow.execute_child_workflow", claim)
-        finish = source.index('activity_id=f"finish-task-manager-', child)
-        release = source.index('activity_id=f"release-task-manager-', finish)
-        assert queue < permit < claim < child < finish < release
-        assert '"permit_id": task_id' in source
+        detached = source.index('"DelegatedTaskWorkflow"', queue)
+        assert queue < detached
+        runner = inspect.getsource(DelegatedTaskWorkflow.run)
+        permit = runner.index('"agent.acquire_subagent_permit.v1"')
+        claim = runner.index('"agent.begin_delegation.v1"')
+        child = runner.index('"AgentWorkflow"', claim)
+        finish = runner.index('"agent.finish_delegation.v1"', child)
+        release = runner.index('"agent.release_subagent_permit.v1"', finish)
+        assert permit < claim < child < finish < release
+        assert '"permit_id": task_id' in runner
         assert '"team_task_id": task_id' in source
         assert "TASK_MANAGER_DELEGATION_PATCH" in source
 

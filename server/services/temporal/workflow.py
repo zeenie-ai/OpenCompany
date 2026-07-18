@@ -24,6 +24,21 @@ from services.workflow_naming import node_label_slug
 # Zeenie handles: input-skill, input-tools
 CONFIG_HANDLES = {"input-tools", "input-memory", "input-model", "input-skill", "input-task", "input-teammates"}
 
+
+def _is_config_edge(edge: Dict[str, Any], node_map: Dict[str, Dict[str, Any]]) -> bool:
+    """Return whether an edge attaches configuration rather than runtime data.
+
+    ``input-task`` is normally a configuration handle, but a taskTrigger emits
+    runtime completion data through that handle.  Treating that edge as config
+    removes both the pre-executed trigger and its payload before dependency
+    resolution, leaving the downstream agent with an empty prompt.
+    """
+    handle = edge.get("targetHandle", "")
+    if handle not in CONFIG_HANDLES:
+        return False
+    source = node_map.get(edge.get("source"), {})
+    return not (handle == "input-task" and source.get("type") == "taskTrigger")
+
 # Trigger node types — event listeners that should never be scheduled
 # as blocking activities. Imported from constants to avoid drift (was
 # previously redefined here with a "keep in sync" comment — Wave 11.E.2).
@@ -587,7 +602,7 @@ class MachinaWorkflow:
             source_id = edge.get("source")
 
             # Edges to config handles mean source is a config node
-            if handle in CONFIG_HANDLES:
+            if _is_config_edge(edge, node_map):
                 config_ids.add(source_id)
 
             # Android services connected as direct tools
@@ -604,7 +619,9 @@ class MachinaWorkflow:
         exec_edges = [
             e
             for e in edges
-            if e.get("source") not in config_ids and e.get("target") not in config_ids and e.get("targetHandle", "") not in CONFIG_HANDLES
+            if e.get("source") not in config_ids
+            and e.get("target") not in config_ids
+            and not _is_config_edge(e, node_map)
         ]
 
         return exec_nodes, exec_edges

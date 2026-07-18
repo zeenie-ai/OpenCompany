@@ -27,6 +27,7 @@ class TaskManagerParams(BaseModel):
     expected_revision: Optional[int] = Field(default=None, ge=0)
     reason: Optional[str] = Field(default=None, max_length=2000)
     status_filter: Optional[str] = None
+    include_history: bool = False
     model_config = ConfigDict(extra="allow")
 
 
@@ -49,13 +50,20 @@ class TaskManagerNode(ToolNode):
     tool_name = "task_manager"
     tool_description = (
         "Manage the current lead execution's durable team tasks. Assign only connected "
-        "teammates, inspect submitted work, then accept, retry, reassign, or cancel it."
+        "teammates, inspect submitted work, then accept, retry, reassign, or cancel it. "
+        "Use list_tasks with include_history=true to consult prior executions."
     )
     handles = (
         {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
         {"name": "output-tool", "kind": "output", "position": "top", "label": "Tool", "role": "tools"},
     )
-    ui_hints = {"isToolPanel": True, "isTaskManagerPanel": True, "hideRunButton": True}
+    ui_hints = {
+        "isToolPanel": True,
+        "isTaskManagerPanel": True,
+        "hideInputSection": True,
+        "hideOutputSection": True,
+        "hideRunButton": True,
+    }
     annotations = {"destructive": True, "readonly": False, "open_world": False}
     task_queue = TaskQueue.DEFAULT
     needs_canvas = True
@@ -104,7 +112,14 @@ async def _execute_task_manager(args: Dict[str, Any], config: Dict[str, Any]) ->
     scope = _scope(config)
 
     if operation == "list_tasks":
-        tasks = await service.list_durable_tasks(**scope, status=args.get("status_filter"))
+        if args.get("include_history"):
+            tasks = await service.list_durable_task_history(
+                workflow_id=scope["workflow_id"],
+                team_lead_node_id=scope["team_lead_node_id"],
+                status=args.get("status_filter"),
+            )
+        else:
+            tasks = await service.list_durable_tasks(**scope, status=args.get("status_filter"))
         return {"success": True, "operation": operation, "tasks": tasks, "count": len(tasks)}
     if operation == "get_task":
         task = await service.get_durable_task(**scope, task_id=str(args.get("task_id") or ""))
