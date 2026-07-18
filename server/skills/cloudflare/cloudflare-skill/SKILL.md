@@ -153,11 +153,13 @@ resolution order):
    grant is a FIXED scope set: zones, DNS (incl. `dns_analytics:read`),
    accounts, registrar, Workers — but NO Web Analytics/RUM or zone
    analytics scopes, and no way to request more.
-2. **API token** — pasted in the credentials panel (or
-   `CLOUDFLARE_API_TOKEN` in the server env; the panel token takes
-   precedence). Create at dash.cloudflare.com/profile/api-tokens with
-   the permission groups the task needs — required for `graphql_query`
-   and anything else outside the OAuth scopes.
+2. **API token or Global API Key** — pasted in the credentials panel
+   (or `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_API_KEY`+`CLOUDFLARE_EMAIL`
+   in the server env; panel values take precedence). Required for
+   `graphql_query` and anything else outside the OAuth scopes. Scoped
+   token: dash.cloudflare.com/profile/api-tokens with the permission
+   groups the task needs. Global API Key (cfk_ prefix): full access,
+   needs the Account Email field filled alongside it.
 
 If a command fails with an authentication or 403 error, tell the user
 which permission group the token needs; don't ask them to paste a

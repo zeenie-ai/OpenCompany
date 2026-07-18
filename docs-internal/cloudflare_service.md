@@ -109,22 +109,44 @@ documented `--scopes` list has none either), so `/accounts/{id}/rum/*`
 and the analytics datasets return **403 under any OAuth login** — this
 is structural, not a configuration error.
 
-Cloudflare's sanctioned path is an **API token** with the matching
-permission groups, and cf documents the env token as its
-**first-priority credential source** ("1. `CLOUDFLARE_API_TOKEN`
-environment variable, 2. cf OAuth token"). Hence the dual-path:
+Cloudflare's sanctioned paths are an **API token** with the matching
+permission groups (cf documents the env token as its first-priority
+credential source: "1. `CLOUDFLARE_API_TOKEN` environment variable,
+2. cf OAuth token") or the legacy **Global API Key** + account email
+pair (full access — also covers endpoints the account-token
+compatibility matrix excludes). Hence the dual-path fields:
 
-- Optional `cloudflare_api_token` field in the credentials modal
+- Optional canonical `apiKey` field in the credentials modal
   (`required: false` — Login gates on required fields only, the
-  OAuthConnect invariant). Injected by `cf_env(token)` as
-  `CLOUDFLARE_API_TOKEN` on **every op**; the stored token beats an
-  ambient server-env token (explicit user config wins).
-- `CloudflareCredential.resolve()` returns the token row so other
-  surfaces can consume it.
-- Permissions for analytics: **Account > Account Analytics > Read**
-  (covers RUM datasets + `rum/site_info` reads) plus
-  **Zone > Analytics > Read** for zone-scoped queries. Account-owned
-  tokens are Cloudflare's recommendation for automation.
+  OAuthConnect invariant; stored under the provider id so the base
+  `Credential.validate` scaffold needs no storage override). Accepts
+  EITHER a scoped API token (`cfut_`/`cfat_`) OR a Global API Key
+  (`cfk_`); the optional `cloudflare_email` companion field carries
+  the account email Global keys authenticate with.
+- Credential prefixes are Cloudflare's documented scannable formats
+  (`cfk_` = Global API Key, `cfut_` = user token, `cfat_` = account
+  token) — `_service.py` routes on them everywhere:
+  - `cf_env(token, email)`: tokens ride `CLOUDFLARE_API_TOKEN`; a
+    cfk_ key + email ride the documented `CLOUDFLARE_API_KEY` +
+    `CLOUDFLARE_EMAIL` pair (ambient token vars dropped — cf ranks
+    tokens above the key pair and would silently override).
+  - `api_auth_headers(key, email)`: `Bearer` for tokens,
+    `X-Auth-Email`/`X-Auth-Key` for Global keys (direct API calls:
+    GraphQL, probes).
+  - The Validate probe: cfk_ → `GET /user` with the X-Auth pair (or
+    an "add the Account Email" guidance when the companion is
+    missing); cfat_ → authenticated `GET /accounts` read (the
+    `/user/tokens/verify` endpoint is user-token-only and falsely
+    rejects account tokens); cfut_/legacy → the official
+    `/user/tokens/verify` endpoint.
+- `CloudflareCredential.resolve()` returns the credential rows so
+  other surfaces can consume them.
+- Token permissions for analytics: **Account > Account Analytics >
+  Read** (covers RUM datasets + `rum/site_info` reads) plus
+  **Zone > Analytics > Read** for zone-scoped queries. The Global API
+  Key needs no permission setup (it has everything) but is
+  Cloudflare-discouraged legacy — prefer scoped tokens when they
+  suffice.
 
 ## `graphql_query` — the GraphQL Analytics API
 
@@ -139,10 +161,11 @@ directly: one POST with `{query, variables}` + `Bearer` token
 (`_graphql_post`, ~30 lines of repo-standard httpx; there is no more
 official channel to rely on).
 
-- Requires the API token; without one the op raises `NodeUserError`
-  with the permission-group guidance. 401/403 map to the same fix
-  message. Hard GraphQL errors (no `data`) surface as `NodeUserError`;
-  partial data rides back in `result`.
+- Requires the API token OR the Global API Key + email (both
+  documented GraphQL auth schemes); without either the op raises
+  `NodeUserError` with the credential guidance. 401/403 map to the
+  same fix message. Hard GraphQL errors (no `data`) surface as
+  `NodeUserError`; partial data rides back in `result`.
 - Key datasets: zone traffic `httpRequestsAdaptiveGroups` (under
   `viewer.zones`), Web Analytics/RUM `rumPageloadEventsAdaptiveGroups`
   / `rumPerformanceEventsAdaptiveGroups` /
@@ -172,14 +195,15 @@ multi-object stdout that defeats `run_cli_command`'s single
 `json.loads`. No auth pre-flight (Stripe-strict): cf's own "Not logged
 in" error surfaces via the `NodeUserError` wrap.
 
-## What the OAuth login CAN do vs what needs the token
+## What the OAuth login CAN do vs what needs a stored credential
 
-| Surface | OAuth login | API token |
-|---|---|---|
-| zones / DNS records / accounts / registrar | yes | yes |
-| `cf dns analytics` (REST, dies 2026-12-01) | yes (`dns_analytics:read`) | yes |
-| `graphql_query` (zone traffic, RUM, DNS analytics) | **no — no scope exists** | yes (`Account Analytics: Read` / `Zone Analytics: Read`) |
-| `rum/site_info` config endpoints (no cf command yet; `custom`/httpRequest) | **no** | yes |
+| Surface | OAuth login | API token | Global API Key + email |
+|---|---|---|---|
+| zones / DNS records / accounts / registrar | yes | yes | yes |
+| `cf dns analytics` (REST, dies 2026-12-01) | yes (`dns_analytics:read`) | yes | yes |
+| `graphql_query` (zone traffic, RUM, DNS analytics) | **no — no scope exists** | yes (`Account Analytics: Read` / `Zone Analytics: Read`) | yes (full access) |
+| `rum/site_info` config endpoints (no cf command yet; `custom`/httpRequest) | **no** | yes | yes |
+| Endpoints the account-token compatibility matrix excludes | no | varies | yes |
 
 ## Invariants locked by `test_cloudflare_plugin.py`
 
@@ -189,6 +213,11 @@ six ambient vars; stored token injected on ops, never on login;
 single-flight login; **no `.kill(`/`.terminate(` in `_complete_login`**;
 no URL/`verification_code` in the login response; whoami-gated
 completion via the shared `_cli_auth` marker + broadcasts; catalogue =
-vercel dual-path shape; GraphQL endpoint constant + official body
-shape + 403 permission guidance; folder assets (no `icon.svg`,
-`#F38020`, both visuals entries, paired skill).
+vercel dual-path shape (`apiKey` + `cloudflare_email`, both optional);
+prefix-routed probe (cfk_ no-email guidance without a network call,
+cfk_+email via X-Auth `GET /user`, cfat_ via `GET /accounts`,
+cfut_/legacy via the verify endpoint); `cf_env` global-key pair
+injection with ambient-token drop; `api_auth_headers` Bearer-vs-X-Auth
+routing; GraphQL endpoint constant + official body shape + 403
+credential guidance; folder assets (no `icon.svg`, `#F38020`, both
+visuals entries, paired skill).

@@ -30,7 +30,25 @@ from typing import Any, Dict, Optional
 # PKCE client, no --scopes flag) and omits Web Analytics/RUM and zone
 # analytics entirely — an API token with the right permission groups is
 # the only way past that ceiling.
-TOKEN_KEY = "cloudflare_api_token"
+#
+# Storage key is the PROVIDER ID, not a bespoke name: the catalogue
+# field key is the canonical ``apiKey``, which the credentials panel
+# maps to the provider id ("cloudflare") for storage, and the base
+# ``Credential.validate`` scaffold stores under ``cls.id`` — one
+# convention, zero storage-key overrides.
+TOKEN_KEY = "cloudflare"
+# Companion field for Global API Key auth (X-Auth-Email). Only needed
+# when the stored credential is a cfk_ key; scoped tokens ignore it.
+EMAIL_KEY = "cloudflare_email"
+
+# Cloudflare's documented scannable credential prefixes
+# (developers.cloudflare.com/fundamentals/api/get-started/token-formats/):
+# cfk_ = Global API Key (legacy X-Auth-Email/X-Auth-Key pair — full
+# account access, works on every endpoint including those the
+# account-token compatibility matrix excludes), cfut_ = User API Token,
+# cfat_ = Account API Token (both Bearer).
+GLOBAL_KEY_PREFIX = "cfk_"
+ACCOUNT_TOKEN_PREFIX = "cfat_"
 
 # cf resolves credentials env-first (source-verified against cf 0.2.0's
 # auth chunk): CLOUDFLARE_API_TOKEN/CF_API_TOKEN, then the legacy
@@ -45,26 +63,63 @@ _AMBIENT_CREDENTIAL_VARS = (
 )
 
 
-def cf_env(token: Optional[str] = None) -> Dict[str, str]:
-    """Child env for cf op invocations. ``token`` (the stored optional
-    API token) is injected as ``CLOUDFLARE_API_TOKEN`` and takes
-    precedence over both the OAuth session (cf's own documented
-    resolution order) and any ambient server env token (explicit user
-    config beats environment). Without a token, cf reads its own config
-    or an ambient env token. ``NO_COLOR`` keeps the chalk-based status
-    output free of ANSI codes."""
+def cf_env(token: Optional[str] = None, email: Optional[str] = None) -> Dict[str, str]:
+    """Child env for cf op invocations, routed by the stored
+    credential's documented prefix:
+
+    - API token (``cfut_``/``cfat_``/legacy) → ``CLOUDFLARE_API_TOKEN``
+      (cf's first-priority credential source).
+    - Global API Key (``cfk_``) + email → the legacy
+      ``CLOUDFLARE_API_KEY`` + ``CLOUDFLARE_EMAIL`` pair cf documents;
+      ambient API-token vars are dropped because cf ranks tokens above
+      the key pair and would silently override the user's explicit
+      choice.
+
+    Explicit user config always beats ambient server env. Without a
+    stored credential, cf reads its own config or ambient env vars.
+    ``NO_COLOR`` keeps the chalk-based status output free of ANSI
+    codes."""
     env = os.environ.copy()
     env["NO_COLOR"] = "1"
-    if token:
+    if token and token.startswith(GLOBAL_KEY_PREFIX):
+        if email:
+            env.pop("CLOUDFLARE_API_TOKEN", None)
+            env.pop("CF_API_TOKEN", None)
+            env["CLOUDFLARE_API_KEY"] = token
+            env["CLOUDFLARE_EMAIL"] = email
+        # cfk_ without an email is unusable — inject nothing and let cf
+        # fall back to its OAuth session.
+    elif token:
         env["CLOUDFLARE_API_TOKEN"] = token
     return env
 
 
+def api_auth_headers(key: Optional[str], email: Optional[str]) -> Optional[Dict[str, str]]:
+    """Auth headers for direct api.cloudflare.com calls (GraphQL,
+    verify probes) — the two officially documented schemes: ``Bearer``
+    for API tokens, the legacy ``X-Auth-Email``/``X-Auth-Key`` pair for
+    Global API Keys. ``None`` when no usable credential (cfk_ without
+    an email included)."""
+    if key and key.startswith(GLOBAL_KEY_PREFIX):
+        return {"X-Auth-Email": email, "X-Auth-Key": key} if email else None
+    if key:
+        return {"Authorization": f"Bearer {key}"}
+    return None
+
+
 async def stored_token() -> Optional[str]:
-    """The user's optional API token from the credentials DB."""
+    """The user's optional API token or Global API Key from the
+    credentials DB (the panel's ``apiKey`` field accepts either)."""
     from services.plugin.deps import get_auth_service
 
     return await get_auth_service().get_api_key(TOKEN_KEY)
+
+
+async def stored_email() -> Optional[str]:
+    """The optional account email companion for Global API Key auth."""
+    from services.plugin.deps import get_auth_service
+
+    return await get_auth_service().get_api_key(EMAIL_KEY)
 
 
 def login_env() -> Dict[str, str]:

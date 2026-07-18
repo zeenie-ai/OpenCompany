@@ -38,6 +38,9 @@ const OAuthPanel: React.FC<{ config: ProviderConfig; visible: boolean }> = ({ co
           const snapshot = panel.form.getFieldsValue();
           panel.execute('save', async () => {
             for (const f of config.fields!) {
+              // The canonical `apiKey` field is validate-managed (its
+              // own ApiKeyInput; backend stores under the provider id).
+              if (f.key === 'apiKey') continue;
               const v = snapshot[f.key]?.trim();
               if (v) await panel.actions.save(f.key, v);
             }
@@ -45,6 +48,8 @@ const OAuthPanel: React.FC<{ config: ProviderConfig; visible: boolean }> = ({ co
             return { success: true };
           });
         }}
+        onValidateApiKey={() => panel.actions.validate(config.id, (panel.form.getFieldValue('apiKey') ?? '').trim())}
+        onDeleteApiKey={() => panel.actions.remove(config.id)}
         onLogin={() => panel.actions.oauthLogin()}
         onLogout={() => panel.actions.oauthLogout()}
         onRefresh={() => panel.actions.oauthRefresh()}

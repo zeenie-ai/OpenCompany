@@ -55,6 +55,36 @@ def test_cf_env_stored_token_overrides_ambient(monkeypatch):
     assert env["CLOUDFLARE_API_TOKEN"] == "cf_stored"
 
 
+def test_cf_env_global_key_injects_documented_pair(monkeypatch):
+    """A stored cfk_ Global API Key rides cf's documented legacy pair
+    (CLOUDFLARE_API_KEY + CLOUDFLARE_EMAIL). Ambient token vars are
+    dropped — cf ranks tokens above the key pair and would silently
+    override the user's explicit choice."""
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "cf_ambient")
+    monkeypatch.setenv("CF_API_TOKEN", "cf_ambient2")
+    key = "cfk_" + "y" * 48
+    env = cf_service.cf_env(key, "o@x.dev")
+    assert env["CLOUDFLARE_API_KEY"] == key
+    assert env["CLOUDFLARE_EMAIL"] == "o@x.dev"
+    assert "CLOUDFLARE_API_TOKEN" not in env
+    assert "CF_API_TOKEN" not in env
+
+    # cfk_ without an email is unusable — nothing injected, cf falls
+    # back to its OAuth session.
+    monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
+    env = cf_service.cf_env(key, None)
+    assert "CLOUDFLARE_API_KEY" not in env
+    assert "CLOUDFLARE_API_TOKEN" not in env
+
+
+def test_api_auth_headers_route_by_prefix():
+    key = "cfk_" + "y" * 48
+    assert cf_service.api_auth_headers(key, "o@x.dev") == {"X-Auth-Email": "o@x.dev", "X-Auth-Key": key}
+    assert cf_service.api_auth_headers(key, None) is None
+    assert cf_service.api_auth_headers("cfut_tok", None) == {"Authorization": "Bearer cfut_tok"}
+    assert cf_service.api_auth_headers(None, "o@x.dev") is None
+
+
 def test_login_env_strips_ambient_credential_vars(monkeypatch):
     """With CLOUDFLARE_API_TOKEN set, `cf auth whoami` reports the env
     token (authSource: env) instead of the stored OAuth session — the
@@ -121,14 +151,15 @@ def _wire(monkeypatch, tmp_path, run_impl):
     async def fake_ensure():
         return tmp_path / "cf"
 
-    async def no_stored_token():
+    async def nothing_stored():
         return None
 
     monkeypatch.setattr(cf_install, "ensure_cf_cli", fake_ensure)
     monkeypatch.setattr(cf_action_mod, "run_cli_command", run_impl)
-    # ops resolve the optional modal token from the credentials DB —
-    # absent in unit tests, so stub the lookup to "no token stored".
-    monkeypatch.setattr(cf_service, "stored_token", no_stored_token)
+    # ops resolve the optional modal credential from the credentials DB
+    # — absent in unit tests, so stub the lookups to "nothing stored".
+    monkeypatch.setattr(cf_service, "stored_token", nothing_stored)
+    monkeypatch.setattr(cf_service, "stored_email", nothing_stored)
 
 
 def _ctx(tmp_path) -> NodeContext:
@@ -173,6 +204,33 @@ async def test_ops_inject_stored_api_token(monkeypatch, tmp_path):
     node = CloudflareActionNode()
     await node.zones_list(_ctx(tmp_path), CloudflareActionParams(operation="zones_list"))
     assert captured["env"]["CLOUDFLARE_API_TOKEN"] == "cf_tok_123"
+
+
+async def test_ops_inject_stored_global_key_pair(monkeypatch, tmp_path):
+    """A stored cfk_ Global API Key + email ride every op as cf's
+    documented CLOUDFLARE_API_KEY + CLOUDFLARE_EMAIL pair."""
+    captured = {}
+
+    async def fake_run(**kwargs):
+        captured.update(kwargs)
+        return {"success": True, "result": [], "stdout": "[]", "stderr": "", "error": None}
+
+    _wire(monkeypatch, tmp_path, fake_run)
+    key = "cfk_" + "y" * 48
+
+    async def fake_token():
+        return key
+
+    async def fake_email():
+        return "o@x.dev"
+
+    monkeypatch.setattr(cf_service, "stored_token", fake_token)
+    monkeypatch.setattr(cf_service, "stored_email", fake_email)
+    node = CloudflareActionNode()
+    await node.zones_list(_ctx(tmp_path), CloudflareActionParams(operation="zones_list"))
+    assert captured["env"]["CLOUDFLARE_API_KEY"] == key
+    assert captured["env"]["CLOUDFLARE_EMAIL"] == "o@x.dev"
+    assert "CLOUDFLARE_API_TOKEN" not in captured["env"]
 
 
 async def test_zones_list_builds_filter_argv(monkeypatch, tmp_path):
@@ -313,11 +371,13 @@ async def test_custom_requires_command_and_shlex_splits(monkeypatch, tmp_path):
     assert captured["timeout"] == cf_action_mod._CUSTOM_TIMEOUT
 
 
-async def test_graphql_requires_api_token(monkeypatch, tmp_path):
+async def test_graphql_requires_a_credential(monkeypatch, tmp_path):
     """The cf OAuth grant has no analytics scopes — graphql_query must
-    fail with the permission-group guidance, not a bare 403."""
+    fail with the credential guidance (token OR global key + email),
+    not a bare 403."""
     _wire(monkeypatch, tmp_path, None)
-    monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
+    for var in ("CLOUDFLARE_API_TOKEN", "CLOUDFLARE_API_KEY", "CLOUDFLARE_EMAIL"):
+        monkeypatch.delenv(var, raising=False)
     node = CloudflareActionNode()
     with pytest.raises(NodeUserError, match="Account Analytics"):
         await node.graphql_query(
@@ -334,8 +394,8 @@ async def test_graphql_posts_official_body_shape(monkeypatch, tmp_path):
 
     captured = {}
 
-    async def fake_post(token, payload):
-        captured["token"] = token
+    async def fake_post(headers, payload):
+        captured["headers"] = headers
         captured["payload"] = payload
         return {"data": {"viewer": {"zones": []}}}
 
@@ -361,7 +421,7 @@ async def test_graphql_posts_official_body_shape(monkeypatch, tmp_path):
         ),
     )
     # The official request body shape: {query, variables}, Bearer token.
-    assert captured["token"] == "cf_tok"
+    assert captured["headers"] == {"Authorization": "Bearer cf_tok"}
     assert captured["payload"] == {
         "query": "query Q($zoneTag: string) { viewer }",
         "variables": {"zoneTag": "z1"},
@@ -395,7 +455,7 @@ async def test_graphql_post_maps_403_to_permission_guidance(monkeypatch):
 
     monkeypatch.setattr(cf_action_mod.httpx, "AsyncClient", _Client)
     with pytest.raises(NodeUserError, match="Account Analytics"):
-        await CloudflareActionNode._graphql_post("tok", {"query": "q", "variables": {}})
+        await CloudflareActionNode._graphql_post({"Authorization": "Bearer tok"}, {"query": "q", "variables": {}})
 
 
 def test_graphql_endpoint_is_the_official_one():
@@ -579,16 +639,23 @@ def test_catalogue_entry_is_vercel_dual_path_shape():
         "logout": "cloudflare_logout",
         "status": "cloudflare_status",
     }
-    # Dual-path (vercel shape): one OPTIONAL token field — required
-    # would gate the Login button (OAuthConnect counts required fields
-    # only), and the OAuth login must keep working without a token.
+    # Dual-path (vercel shape): OPTIONAL fields only — required would
+    # gate the Login button (OAuthConnect counts required fields only),
+    # and the OAuth login must keep working without a credential.
+    # The primary key is the canonical `apiKey` (accepts an API token
+    # OR a cfk_ Global API Key): the panel maps it to the provider id
+    # for storage, so the base Credential.validate scaffold (which
+    # stores under cls.id) needs no override, and the shared
+    # ApiKeyInput validate flow lights up automatically. The secondary
+    # field carries the account email Global API Keys authenticate with.
     fields = cloudflare["fields"]
-    assert len(fields) == 1
+    assert [f["key"] for f in fields] == ["apiKey", "cloudflare_email"]
     token_field = fields[0]
-    assert token_field["key"] == "cloudflare_api_token"
     assert token_field["required"] is False
     assert token_field["secret"] is True
     assert token_field["type"] == "password"
+    email_field = fields[1]
+    assert email_field["required"] is False
 
 
 def test_credential_class_shape():
@@ -596,22 +663,193 @@ def test_credential_class_shape():
     assert CloudflareCredential.auth == "custom"
 
 
-async def test_credential_resolve_returns_optional_token_row(monkeypatch):
+async def test_credential_resolve_returns_optional_credential_rows(monkeypatch):
     from services.plugin import deps as plugin_deps
 
     class _Auth:
-        def __init__(self, token):
-            self._token = token
+        def __init__(self, rows):
+            self._rows = rows
 
         async def get_api_key(self, key):
-            assert key == "cloudflare_api_token"
-            return self._token
+            # Token stored under the provider id (canonical `apiKey`
+            # field, mapped to config.id by the panel); the email
+            # companion under its own field key.
+            assert key in ("cloudflare", "cloudflare_email")
+            return self._rows.get(key)
 
-    monkeypatch.setattr(plugin_deps, "get_auth_service", lambda: _Auth("tok"))
+    monkeypatch.setattr(plugin_deps, "get_auth_service", lambda: _Auth({"cloudflare": "tok"}))
     assert await CloudflareCredential.resolve() == {"cloudflare_api_token": "tok"}
 
-    monkeypatch.setattr(plugin_deps, "get_auth_service", lambda: _Auth(None))
+    monkeypatch.setattr(
+        plugin_deps,
+        "get_auth_service",
+        lambda: _Auth({"cloudflare": "cfk_" + "y" * 48, "cloudflare_email": "o@x.dev"}),
+    )
+    assert await CloudflareCredential.resolve() == {
+        "cloudflare_api_token": "cfk_" + "y" * 48,
+        "cloudflare_email": "o@x.dev",
+    }
+
+    monkeypatch.setattr(plugin_deps, "get_auth_service", lambda: _Auth({}))
     assert await CloudflareCredential.resolve() == {}
+
+
+async def test_probe_hits_official_verify_endpoint(monkeypatch):
+    """The Validate button flows through the base Credential.validate
+    scaffold to this probe — one GET to Cloudflare's documented
+    token-verify endpoint, nothing else."""
+    import nodes.cloudflare._credentials as cf_credentials
+
+    captured = {}
+
+    class _Resp:
+        status_code = 200
+
+        @staticmethod
+        def raise_for_status():
+            return None
+
+        @staticmethod
+        def json():
+            return {"success": True, "result": {"id": "t1", "status": captured["status"]}}
+
+    class _Client:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, url, **kwargs):
+            captured["url"] = url
+            captured["auth"] = kwargs["headers"]["Authorization"]
+            return _Resp()
+
+    monkeypatch.setattr(cf_credentials.httpx, "AsyncClient", _Client)
+
+    captured["status"] = "active"
+    result = await CloudflareCredential._probe("tok123")
+    assert result.valid is True
+    assert captured["url"] == "https://api.cloudflare.com/client/v4/user/tokens/verify"
+    assert captured["auth"] == "Bearer tok123"
+
+    captured["status"] = "disabled"
+    result = await CloudflareCredential._probe("tok123")
+    assert result.valid is False
+    assert "disabled" in result.message
+
+
+async def test_probe_global_key_without_email_gives_guidance(monkeypatch):
+    """cfk_ is Cloudflare's documented Global API Key prefix — legacy
+    X-Auth-Email/X-Auth-Key auth that is NEVER valid as a Bearer token.
+    Without the stored email companion the probe must explain the fix
+    up front (no network call) instead of relaying the API's generic
+    1000/9109 rejection."""
+    import nodes.cloudflare._credentials as cf_credentials
+
+    async def no_email():
+        return None
+
+    class _Boom:
+        def __init__(self, **kwargs):
+            raise AssertionError("cfk_ without email must not hit the network")
+
+    monkeypatch.setattr(cf_credentials, "stored_email", no_email)
+    monkeypatch.setattr(cf_credentials.httpx, "AsyncClient", _Boom)
+    result = await CloudflareCredential._probe("cfk_" + "y" * 48)
+    assert result.valid is False
+    assert "Account Email" in result.message
+
+
+async def test_probe_validates_global_key_with_email(monkeypatch):
+    """cfk_ + stored email validate via the documented legacy header
+    pair against GET /user."""
+    import nodes.cloudflare._credentials as cf_credentials
+
+    async def has_email():
+        return "o@x.dev"
+
+    captured = {}
+
+    class _Resp:
+        status_code = 200
+
+        @staticmethod
+        def raise_for_status():
+            return None
+
+        @staticmethod
+        def json():
+            return {"success": True, "result": {"id": "u1", "email": "o@x.dev"}}
+
+    class _Client:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, url, **kwargs):
+            captured["url"] = url
+            captured["headers"] = kwargs["headers"]
+            return _Resp()
+
+    monkeypatch.setattr(cf_credentials, "stored_email", has_email)
+    monkeypatch.setattr(cf_credentials.httpx, "AsyncClient", _Client)
+    key = "cfk_" + "y" * 48
+    result = await CloudflareCredential._probe(key)
+    assert result.valid is True
+    assert "o@x.dev" in result.message
+    assert captured["url"] == "https://api.cloudflare.com/client/v4/user"
+    assert captured["headers"] == {"X-Auth-Email": "o@x.dev", "X-Auth-Key": key}
+
+
+async def test_probe_verifies_account_tokens_via_accounts_read(monkeypatch):
+    """cfat_ account-owned tokens cannot verify at /user/tokens/verify
+    (that endpoint is user-token-only) — validity is proven with a
+    lightweight authenticated read instead."""
+    import nodes.cloudflare._credentials as cf_credentials
+
+    captured = {}
+
+    class _Resp:
+        status_code = 200
+
+        @staticmethod
+        def raise_for_status():
+            return None
+
+        @staticmethod
+        def json():
+            return {"success": True, "result": [{"id": "acct1"}]}
+
+    class _Client:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, url, **kwargs):
+            captured["url"] = url
+            captured["auth"] = kwargs["headers"]["Authorization"]
+            return _Resp()
+
+    monkeypatch.setattr(cf_credentials.httpx, "AsyncClient", _Client)
+    token = "cfat_" + "y" * 48
+    result = await CloudflareCredential._probe(token)
+    assert result.valid is True
+    assert captured["url"] == "https://api.cloudflare.com/client/v4/accounts"
+    assert captured["auth"] == f"Bearer {token}"
 
 
 def test_plugin_folder_assets():

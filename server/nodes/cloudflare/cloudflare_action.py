@@ -199,12 +199,13 @@ class CloudflareActionNode(ActionNode):
         timeout: float = _ONESHOT_TIMEOUT,
     ) -> Dict[str, Any]:
         """No auth pre-flight (Stripe pattern) — cf authenticates from
-        the stored API token (injected as CLOUDFLARE_API_TOKEN, cf's
-        first-priority credential source), its own OAuth config, or an
-        ambient env token; its error (including "Not logged in")
-        surfaces via the NodeUserError wrap below."""
+        the stored credential (API token as CLOUDFLARE_API_TOKEN, or a
+        cfk_ Global API Key as the documented CLOUDFLARE_API_KEY +
+        CLOUDFLARE_EMAIL pair), its own OAuth config, or ambient env
+        vars; its error (including "Not logged in") surfaces via the
+        NodeUserError wrap below."""
         from ._install import ensure_cf_cli
-        from ._service import cf_env, stored_token
+        from ._service import cf_env, stored_email, stored_token
 
         try:
             binary = str(await ensure_cf_cli())
@@ -215,7 +216,7 @@ class CloudflareActionNode(ActionNode):
             binary=binary,
             argv=argv,
             timeout=timeout,
-            env=cf_env(await stored_token()),
+            env=cf_env(await stored_token(), await stored_email()),
         )
         if not result.get("success"):
             stderr = (result.get("stderr") or "").strip()
@@ -334,36 +335,42 @@ class CloudflareActionNode(ActionNode):
             except ValueError as e:
                 raise NodeUserError(f"graphql_variables is not valid JSON: {e}") from e
 
-        from ._service import stored_token
+        from ._service import api_auth_headers, stored_email, stored_token
 
-        token = await stored_token() or os.environ.get("CLOUDFLARE_API_TOKEN")
-        if not token:
+        key = await stored_token() or os.environ.get("CLOUDFLARE_API_TOKEN") or os.environ.get("CLOUDFLARE_API_KEY")
+        email = await stored_email() or os.environ.get("CLOUDFLARE_EMAIL")
+        headers = api_auth_headers(key, email)
+        if headers is None:
             raise NodeUserError(
-                "The GraphQL Analytics API needs an API token — the cf OAuth login carries no "
-                "analytics scopes. Create one at dash.cloudflare.com/profile/api-tokens with "
-                "'Account > Account Analytics > Read' and paste it in Credentials -> Cloudflare."
+                "The GraphQL Analytics API needs a credential — the cf OAuth login carries no "
+                "analytics scopes. In Credentials -> Cloudflare paste either an API token "
+                "(dash.cloudflare.com/profile/api-tokens, permission 'Account > Account Analytics "
+                "> Read') or a Global API Key (cfk_...) together with the Account Email field."
             )
 
-        body = await self._graphql_post(token, {"query": query, "variables": variables})
+        body = await self._graphql_post(headers, {"query": query, "variables": variables})
         return self._shape("graphql_query", {"result": body, "stdout": "", "stderr": ""})
 
     @staticmethod
-    async def _graphql_post(token: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async def _graphql_post(headers: Dict[str, str], payload: Dict[str, Any]) -> Dict[str, Any]:
         """One POST to the official endpoint, exactly as documented
-        (Bearer token + {query, variables} body). 401/403 map to the
-        permission-group fix; hard GraphQL errors (no data) surface as
-        NodeUserError; partial data rides back in the body."""
+        ({query, variables} body; auth headers from api_auth_headers —
+        Bearer for tokens, X-Auth-Email/X-Auth-Key for Global API
+        Keys). 401/403 map to the credential fix; hard GraphQL errors
+        (no data) surface as NodeUserError; partial data rides back in
+        the body."""
         async with httpx.AsyncClient(timeout=_GRAPHQL_TIMEOUT) as client:
             resp = await client.post(
                 _GRAPHQL_ENDPOINT,
                 json=payload,
-                headers={"Authorization": f"Bearer {token}"},
+                headers=headers,
             )
         if resp.status_code in (401, 403):
             raise NodeUserError(
-                f"GraphQL Analytics API rejected the token (HTTP {resp.status_code}). "
-                "The API token needs 'Account > Account Analytics > Read' (and 'Zone > Analytics > Read' "
-                "for zone-scoped queries) — edit it at dash.cloudflare.com/profile/api-tokens."
+                f"GraphQL Analytics API rejected the credential (HTTP {resp.status_code}). "
+                "API tokens need 'Account > Account Analytics > Read' (and 'Zone > Analytics > Read' "
+                "for zone-scoped queries) — edit at dash.cloudflare.com/profile/api-tokens. "
+                "Global API Keys need the matching Account Email."
             )
         try:
             body = resp.json()

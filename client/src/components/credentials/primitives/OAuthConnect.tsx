@@ -8,6 +8,7 @@ import React from 'react';
 import { Loader2, RotateCcw } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ActionButton } from '@/components/ui/action-button';
+import ApiKeyInput from '../../ui/ApiKeyInput';
 import FieldRenderer from './FieldRenderer';
 import ActionBar, { type ActionDef } from './ActionBar';
 import StatusCard from './StatusCard';
@@ -30,6 +31,15 @@ interface Props {
   verificationCode?: string | null;
   icon: React.ReactNode;
   onSaveCredentials: () => void;
+  /** Validate-and-store for the canonical `apiKey` field (dual-path
+   * providers like Cloudflare: OAuth login OR a validated API token).
+   * Same wiring as ApiKeyPanel's primary field — the backend
+   * Credential's `_probe` owns all validation logic; the panel just
+   * calls `panel.actions.validate(config.id, value)`. Rendered via the
+   * shared ApiKeyInput component when the catalogue declares an
+   * `apiKey` field. */
+  onValidateApiKey?: () => void;
+  onDeleteApiKey?: () => void;
   onLogin: () => void;
   onLogout: () => void;
   onRefresh: () => void;
@@ -39,7 +49,7 @@ interface Props {
 
 const OAuthConnect: React.FC<Props> = ({
   config, form, connected, stored, loading, error, verificationCode, icon,
-  onSaveCredentials, onLogin, onLogout, onRefresh, extraSection,
+  onSaveCredentials, onValidateApiKey, onDeleteApiKey, onLogin, onLogout, onRefresh, extraSection,
 }) => {
   // Some providers (e.g. Stripe) delegate auth entirely to an external
   // CLI tool — they have no OpenCompany-side credentials to paste, so
@@ -64,17 +74,49 @@ const OAuthConnect: React.FC<Props> = ({
 
   const isSaving = loading === 'save';
 
+  // The canonical `apiKey` field renders via the shared ApiKeyInput
+  // (Validate button + Valid state + delete — same component every
+  // api_key provider uses); remaining fields keep the generic
+  // FieldRenderer + Save Credentials path.
+  const apiKeyField = config.fields?.find((f) => f.key === 'apiKey');
+  const otherFields = (config.fields ?? []).filter((f) => f.key !== 'apiKey');
+
+  // Dual-path providers keep the token field reachable while
+  // OAuth-connected (e.g. adding a Cloudflare analytics token after
+  // logging in) — plain OAuth providers hide fields once connected.
+  const showFields = !!config.fields && (!connected || !!apiKeyField);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <StatusCard icon={icon} title={config.name} rows={statusRows} status={null} />
 
-      {!connected && config.fields && (
+      {showFields && config.fields && (
         <div className="flex w-full flex-col gap-3">
-          <FieldRenderer fields={config.fields} form={form} />
-          <ActionButton intent="secret" onClick={onSaveCredentials} disabled={isSaving}>
-            {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-            Save Credentials
-          </ActionButton>
+          {apiKeyField && onValidateApiKey && (
+            <div className="flex flex-col gap-2">
+              <ApiKeyInput
+                value={form.getFieldValue('apiKey') ?? ''}
+                onChange={(v) => form.setFieldValue('apiKey', v)}
+                onSave={onValidateApiKey}
+                onDelete={stored ? onDeleteApiKey : undefined}
+                placeholder={apiKeyField.placeholder}
+                loading={loading === 'validate'}
+                isStored={stored}
+              />
+              {apiKeyField.help && (
+                <p className="text-xs text-muted-foreground">{apiKeyField.help}</p>
+              )}
+            </div>
+          )}
+          {otherFields.length > 0 && (
+            <>
+              <FieldRenderer fields={otherFields} form={form} />
+              <ActionButton intent="secret" onClick={onSaveCredentials} disabled={isSaving}>
+                {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Save Credentials
+              </ActionButton>
+            </>
+          )}
           {config.instructions && (
             <div className="text-xs leading-relaxed text-muted-foreground">
               {config.instructions}
