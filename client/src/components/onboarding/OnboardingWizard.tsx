@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, MessageCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { ActionButton } from '@/components/ui/action-button';
@@ -7,28 +7,30 @@ import { cn } from '@/lib/utils';
 import Modal from '../ui/Modal';
 import { useOnboarding } from '../../hooks/useOnboarding';
 import WelcomeStep from './steps/WelcomeStep';
-import ConceptsStep from './steps/ConceptsStep';
-import ApiKeyStep from './steps/ApiKeyStep';
-import CanvasStep from './steps/CanvasStep';
-import GetStartedStep from './steps/GetStartedStep';
+import HowItWorksStep from './steps/HowItWorksStep';
+import ConnectAIStep from './steps/ConnectAIStep';
+import TryItStep from './steps/TryItStep';
 
 interface OnboardingWizardProps {
   onOpenCredentials: () => void;
   reopenTrigger?: number;
+  /** Called after the final step's button completes the wizard — the
+   *  Dashboard uses it to open the AI Assistant example and focus chat.
+   *  Never called on skip or modal close. */
+  onFinish?: () => void;
 }
 
 // Single source of truth for the wizard's step list. Length feeds the
 // hook's totalSteps and the progress indicator; renderer is dispatched
 // by index. Adding a step is a one-line edit here.
 const STEPS: { title: string; render: (props: { onOpenCredentials: () => void }) => React.ReactNode }[] = [
-  { title: 'Welcome',     render: () => <WelcomeStep /> },
-  { title: 'Concepts',    render: () => <ConceptsStep /> },
-  { title: 'API Keys',    render: ({ onOpenCredentials }) => <ApiKeyStep onOpenCredentials={onOpenCredentials} /> },
-  { title: 'Canvas',      render: () => <CanvasStep /> },
-  { title: 'Get Started', render: () => <GetStartedStep /> },
+  { title: 'Welcome',         render: () => <WelcomeStep /> },
+  { title: 'How it works',    render: () => <HowItWorksStep /> },
+  { title: 'Connect your AI', render: ({ onOpenCredentials }) => <ConnectAIStep onOpenCredentials={onOpenCredentials} /> },
+  { title: 'Try it',          render: () => <TryItStep /> },
 ];
 
-const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onOpenCredentials, reopenTrigger }) => {
+const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onOpenCredentials, reopenTrigger, onFinish }) => {
   const {
     isVisible,
     currentStep,
@@ -42,8 +44,13 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onOpenCredentials, 
 
   if (!isVisible || !hasChecked || isLoading) return null;
 
-  const isLastStep = currentStep >= STEPS.length - 1;
   const safeIndex = Math.min(Math.max(currentStep, 0), STEPS.length - 1);
+  const isLastStep = safeIndex === STEPS.length - 1;
+
+  const handleFinish = () => {
+    complete();
+    onFinish?.();
+  };
 
   return (
     <Modal
@@ -58,7 +65,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onOpenCredentials, 
         <ol className="mb-4 flex w-full items-center">
           {STEPS.map((item, idx) => {
             const status: 'completed' | 'active' | 'upcoming' =
-              idx < currentStep ? 'completed' : idx === currentStep ? 'active' : 'upcoming';
+              idx < safeIndex ? 'completed' : idx === safeIndex ? 'active' : 'upcoming';
             const isLast = idx === STEPS.length - 1;
             return (
               <li key={item.title} className="flex flex-1 items-center gap-2">
@@ -84,7 +91,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onOpenCredentials, 
                   <div
                     className={cn(
                       'h-px flex-1',
-                      idx < currentStep ? 'bg-primary' : 'bg-border',
+                      idx < safeIndex ? 'bg-primary' : 'bg-border',
                     )}
                   />
                 )}
@@ -105,16 +112,16 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onOpenCredentials, 
           </Button>
 
           <div className="flex items-center gap-2">
-            {currentStep > 0 && (
+            {safeIndex > 0 && (
               <Button variant="outline" onClick={prevStep}>
                 <ArrowLeft className="h-4 w-4" />
                 Back
               </Button>
             )}
             {isLastStep ? (
-              <ActionButton intent="run" onClick={complete}>
-                <Check className="h-4 w-4" />
-                Start Building
+              <ActionButton intent="run" onClick={handleFinish}>
+                <MessageCircle className="h-4 w-4" />
+                Open AI Assistant
               </ActionButton>
             ) : (
               <ActionButton intent="tools" onClick={nextStep}>

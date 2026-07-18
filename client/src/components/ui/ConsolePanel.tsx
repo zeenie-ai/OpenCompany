@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { resolveNodeDescription } from '../../lib/nodeSpec';
+import { useAppStore } from '../../store/useAppStore';
 
 // ---------------------------------------------------------------------------
 // Persisted prefs (localStorage)
@@ -173,6 +174,18 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
   const logsEndRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLInputElement>(null);
+
+  // Focus the chat input when requested (onboarding handoff, checklist).
+  // Each request is consumed once so later manual panel toggles don't
+  // re-steal focus.
+  const chatFocusRequest = useAppStore((s) => s.chatFocusRequest);
+  const handledFocusRequestRef = useRef(0);
+  useEffect(() => {
+    if (chatFocusRequest === handledFocusRequestRef.current || !isOpen) return;
+    handledFocusRequestRef.current = chatFocusRequest;
+    const frame = requestAnimationFrame(() => chatInputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [chatFocusRequest, isOpen]);
 
   const [chatInput, setChatInput] = useState('');
   const [isSending, setIsSending] = useState(false);

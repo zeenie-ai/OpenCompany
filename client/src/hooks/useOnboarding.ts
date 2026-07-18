@@ -42,7 +42,8 @@ export const useOnboarding = (
     if (!settingsQuery.isSuccess) return;
     const settings = settingsQuery.data;
     const completed = settings?.onboarding_completed ?? false;
-    const step = settings?.onboarding_step ?? 0;
+    const storedStep = settings?.onboarding_step ?? 0;
+    const step = storedStep >= 0 && storedStep < totalSteps ? storedStep : 0;
     setState((prev) => ({
       ...prev,
       // Only flip visibility on first hydration; later renders shouldn't
@@ -53,7 +54,7 @@ export const useOnboarding = (
       isLoading: false,
       hasChecked: true,
     }));
-  }, [settingsQuery.isSuccess, settingsQuery.data]);
+  }, [settingsQuery.isSuccess, settingsQuery.data, totalSteps]);
 
   // Surface query errors as a non-blocking "checked" state so the app
   // continues even if the WS round-trip failed.

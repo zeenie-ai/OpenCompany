@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps -- curated dep arrays; reactive-graph derivations + workflow debouncers intentionally omit deps to avoid infinite loops. */
 import React, { useEffect } from 'react';
+import { toast } from 'sonner';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -34,6 +35,8 @@ import SettingsPanel, { WorkflowSettings, defaultSettings } from './components/u
 import AIResultModal from './components/ui/AIResultModal';
 import CredentialsModal from './components/CredentialsModal';
 import OnboardingWizard from './components/onboarding/OnboardingWizard';
+import GetStartedChecklist from './components/onboarding/GetStartedChecklist';
+import { useSaveUserSettingsMutation } from './hooks/useUserSettingsQuery';
 import ErrorBoundary from './components/ui/ErrorBoundary';
 import ConsolePanel from './components/ui/ConsolePanel';
 import StatusBar from './components/ui/StatusBar';
@@ -170,6 +173,8 @@ const DashboardContent: React.FC = () => {
   const setSelectedNode = useAppStore((s) => s.setSelectedNode);
   const renamingNodeId = useAppStore((s) => s.renamingNodeId);
   const setRenamingNodeId = useAppStore((s) => s.setRenamingNodeId);
+  const openExampleAndChat = useAppStore((s) => s.openExampleAndChat);
+  const saveUserSettings = useSaveUserSettingsMutation();
   // Per-workflow UI state (n8n pattern)
   const setWorkflowExecuting = useAppStore((s) => s.setWorkflowExecuting);
   const setWorkflowExecutionOrder = useAppStore((s) => s.setWorkflowExecutionOrder);
@@ -781,6 +786,26 @@ const DashboardContent: React.FC = () => {
       alert(`Deployment error: ${error.message}`);
     }
   };
+
+  // Onboarding handoff: open the AI Assistant example, focus chat, and
+  // deploy it so the chat trigger is live. Shared by the wizard's finish
+  // button and the Get Started checklist.
+  const handleRunExample = React.useCallback(async () => {
+    const workflow = await openExampleAndChat('AI Assistant');
+    if (!workflow) return;
+
+    const alreadyDeployed = deploymentStatus.isRunning && deploymentStatus.workflow_id === workflow.id;
+    if (alreadyDeployed) return;
+
+    try {
+      const result = await deployWorkflow(workflow.id, workflow.nodes, workflow.edges, 'default');
+      if (!result.success) {
+        toast.error('Could not start the example — press Start on the toolbar.');
+      }
+    } catch {
+      toast.error('Could not start the example — press Start on the toolbar.');
+    }
+  }, [openExampleAndChat, deployWorkflow, deploymentStatus.isRunning, deploymentStatus.workflow_id]);
 
   // Stop click handler — routes to the right cancel based on what's actually
   // running.  If the workflow is deployed, cancel the deployment (existing
@@ -1433,6 +1458,10 @@ const DashboardContent: React.FC = () => {
             setSettingsOpen(false);
             setOnboardingReopenTrigger(prev => prev + 1);
           }}
+          onShowGetStarted={() => {
+            saveUserSettings.mutate({ getting_started_dismissed: false });
+            setSettingsOpen(false);
+          }}
         />
 
         {/* Credentials Modal */}
@@ -1445,6 +1474,16 @@ const DashboardContent: React.FC = () => {
         <OnboardingWizard
           onOpenCredentials={() => setCredentialsOpen(true)}
           reopenTrigger={onboardingReopenTrigger}
+          onFinish={() => void handleRunExample()}
+        />
+
+        {/* Get Started checklist (appears after onboarding completes) */}
+        <GetStartedChecklist
+          actions={{
+            'add-key': () => setCredentialsOpen(true),
+            'chat-example': () => void handleRunExample(),
+            'build-workflow': handleNew,
+          }}
         />
 
         {/* Node Context Menu (right-click) */}

@@ -1,8 +1,8 @@
 /**
  * Shared role-to-Tailwind-classes map for the onboarding step cards.
  * Each role keys into the existing `--node-X` triplet (soft bg + border
- * + accent text). Co-located with the onboarding folder because both
- * consumers (ConceptsStep, GetStartedStep) live here.
+ * + accent text). Co-located with the onboarding folder because all
+ * consumers (the wizard steps) live here.
  */
 
 export type NodeRole = 'model' | 'skill' | 'agent' | 'workflow' | 'trigger';

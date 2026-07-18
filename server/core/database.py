@@ -173,6 +173,22 @@ class Database:
                 if "max_delegation_depth" not in columns:
                     await conn.execute(text("ALTER TABLE user_settings ADD COLUMN max_delegation_depth INTEGER DEFAULT 2"))
 
+                if "getting_started_dismissed" not in columns:
+                    await conn.execute(text("ALTER TABLE user_settings ADD COLUMN getting_started_dismissed BOOLEAN DEFAULT 0"))
+                    # Existing users who already finished/skipped onboarding never see the checklist
+                    await conn.execute(text("UPDATE user_settings SET getting_started_dismissed = 1 WHERE onboarding_completed = 1"))
+                    logger.info("Added getting_started_dismissed column to user_settings")
+
+                for col in [
+                    "getting_started_added_key",
+                    "getting_started_ran_example",
+                    "getting_started_built_workflow",
+                    "getting_started_tried_theme",
+                ]:
+                    if col not in columns:
+                        await conn.execute(text(f"ALTER TABLE user_settings ADD COLUMN {col} BOOLEAN DEFAULT 0"))
+                        logger.info(f"Added {col} column to user_settings")
+
                 # Migrate token_usage_metrics table - add cost columns
                 result = await conn.execute(text("PRAGMA table_info(token_usage_metrics)"))
                 columns = {row[1] for row in result.fetchall()}
@@ -1816,6 +1832,11 @@ class Database:
                     "examples_loaded": settings.examples_loaded,
                     "onboarding_completed": settings.onboarding_completed,
                     "onboarding_step": settings.onboarding_step,
+                    "getting_started_dismissed": settings.getting_started_dismissed,
+                    "getting_started_added_key": settings.getting_started_added_key,
+                    "getting_started_ran_example": settings.getting_started_ran_example,
+                    "getting_started_built_workflow": settings.getting_started_built_workflow,
+                    "getting_started_tried_theme": settings.getting_started_tried_theme,
                     "default_llm_provider": settings.default_llm_provider,
                     "default_llm_model": settings.default_llm_model,
                     "auto_add_skill_for_tools": settings.auto_add_skill_for_tools,

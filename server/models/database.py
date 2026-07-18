@@ -280,6 +280,11 @@ class UserSettings(SQLModel, table=True):
     examples_loaded: bool = Field(default=False)  # Track if example workflows were imported
     onboarding_completed: bool = Field(default=False)  # Track if user completed or skipped onboarding
     onboarding_step: int = Field(default=0)  # Last completed onboarding step (for resuming)
+    getting_started_dismissed: bool = Field(default=False)  # User closed the Get Started checklist card
+    getting_started_added_key: bool = Field(default=False)  # Latched: a credential was stored at least once
+    getting_started_ran_example: bool = Field(default=False)  # Latched: chatted while a workflow was deployed
+    getting_started_built_workflow: bool = Field(default=False)  # Latched: saved a self-built workflow with nodes
+    getting_started_tried_theme: bool = Field(default=False)  # Latched: switched visual theme at least once
     default_llm_provider: Optional[str] = Field(default=None, max_length=50)  # Global default AI provider
     default_llm_model: Optional[str] = Field(default=None, max_length=200)  # Global default AI model
     auto_add_skill_for_tools: bool = Field(

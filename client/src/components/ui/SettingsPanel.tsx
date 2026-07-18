@@ -11,6 +11,7 @@ import {
   RotateCcw,
   X,
   Volume2,
+  ListChecks,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 
@@ -41,6 +42,7 @@ interface SettingsPanelProps {
   settings: WorkflowSettings;
   onSettingsChange: (settings: WorkflowSettings) => void;
   onReplayOnboarding?: () => void;
+  onShowGetStarted?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -106,6 +108,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   settings,
   onSettingsChange,
   onReplayOnboarding,
+  onShowGetStarted,
 }) => {
   const settingsQuery = useUserSettingsQuery();
   const saveMutation = useSaveUserSettingsMutation();
@@ -417,6 +420,20 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
               >
                 <HelpCircle className="h-3.5 w-3.5" />
                 Replay
+              </Button>
+            </Row>
+            <Row
+              label="Get Started Checklist"
+              description="Show the getting-started checklist on the canvas"
+            >
+              <Button
+                size="sm"
+                variant="default"
+                onClick={onShowGetStarted}
+                disabled={!onShowGetStarted}
+              >
+                <ListChecks className="h-3.5 w-3.5" />
+                Show
               </Button>
             </Row>
           </Section>

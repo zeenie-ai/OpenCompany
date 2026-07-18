@@ -90,7 +90,7 @@ export const AI_PROVIDER_ICONS: Record<string, React.FC<{ size?: number }>> = {
 // `iconRef` uses the prefix-dispatch contract resolved by `<NodeIcon>` —
 // `lobehub:<brand>` picks the package's `.Color` (or `.Avatar`)
 // component. `Icon` stays as a pre-built FC for the remaining direct
-// consumers (e.g. ApiKeyStep onboarding cards).
+// consumers.
 export const AI_PROVIDER_META: Record<string, { iconRef: string; Icon: React.FC<{ size?: number }>; color: string; label: string }> = {
   openai:     { iconRef: 'lobehub:OpenAI',     Icon: OpenAIIcon,     color: dracula.green,    label: 'OpenAI' },
   anthropic:  { iconRef: 'lobehub:Claude',     Icon: ClaudeIcon,     color: dracula.orange,   label: 'Anthropic' },
