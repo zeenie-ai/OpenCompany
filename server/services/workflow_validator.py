@@ -53,6 +53,7 @@ async def validate_workflow(
     edges: List[Dict[str, Any]],
     *,
     parameters_by_id: Optional[Dict[str, Dict[str, Any]]] = None,
+    auth_service: Any = None,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """Validate a workflow graph + per-node params + credential presence.
 
@@ -63,6 +64,8 @@ async def validate_workflow(
             When omitted, the validator reads ``node["data"]["parameters"]``
             (which is usually empty since parameters live in the DB — callers
             who want INVALID_PARAM warnings must hydrate from DB and pass them).
+        auth_service: Optional caller-scoped credential service. Supplying it
+            avoids resolving the process-wide dependency container.
 
     Returns:
         ``{"errors": [...], "warnings": [...]}``. ``errors`` block execution
@@ -199,7 +202,6 @@ async def validate_workflow(
     # 4. Missing credentials. Warnings (a workflow can be saved with missing
     #    credentials and configured later — only at force=True execute does
     #    it become a runtime error).
-    auth_service = None
     for n in nodes:
         node_id = n.get("id")
         node_type = n.get("type", "")

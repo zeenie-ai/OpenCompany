@@ -268,6 +268,7 @@ async def import_workflow(
         nodes=nodes,
         edges=edges,
         parameters_by_id=node_parameters,
+        auth_service=auth_service,
     )
     report.setdefault("warnings", []).extend(
         {"code": "LEGACY_ANDROID_TOOLKIT_REMOVED", "message": warning}

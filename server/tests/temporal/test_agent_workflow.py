@@ -16,6 +16,8 @@ canary agent migration lands. This file locks the static contracts:
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 
 class TestAgentWorkflowDefinition:
     """``AgentWorkflow`` must be a valid Temporal workflow definition
@@ -442,12 +444,15 @@ class TestAutoRebindTools:
         assert "agent.refresh_tools.v1" in names
         assert refresh_agent_tools in collect_agent_activities()
 
-    async def test_refresh_tools_runs_without_nameerror(self):
+    async def test_refresh_tools_runs_without_nameerror(self, monkeypatch):
         """Smoke test: the activity body must import ``container`` and
         ``get_node_class`` so it doesn't NameError on first invocation.
         Mirrors the rest of the agent_activities.py pattern (lazy import
         inside each activity body)."""
         from services.temporal.agent_activities import refresh_agent_tools
+        from core.container import container
+
+        monkeypatch.setattr(container, "ai_service", MagicMock(return_value=MagicMock()))
 
         # Pass empty operations so the activity short-circuits before
         # any plugin lookup — we just want to confirm the imports + the

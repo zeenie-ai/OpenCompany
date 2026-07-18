@@ -151,7 +151,7 @@ async def test_save_existing_workflow_same_name_keeps_slug(patched_handler_deps)
     )
     # Second save with same name — slug stays as _1.
     result = await handle_save_workflow(
-        {"workflow_id": "uuid-1", "name": "AI Assistant", "data": {"nodes": ["a"]}},
+        {"workflow_id": "uuid-1", "name": "AI Assistant", "data": {"nodes": [], "marker": "a"}},
         websocket=None,
     )
 

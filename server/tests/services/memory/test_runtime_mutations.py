@@ -224,7 +224,7 @@ async def test_parallel_team_task_claim_has_one_winner(runtime_database):
     assert retry["assigned_to"] == winner
 
     tasks = await db.get_team_tasks("team-1")
-    assert tasks[0]["status"] == "in_progress"
+    assert tasks[0]["status"] == "running"
     assert tasks[0]["assigned_to"] == winner
 
 
@@ -251,4 +251,4 @@ async def test_team_task_transitions_are_atomic_and_retry_safe(runtime_database)
         )
         task = selected.scalar_one()
         assert task.retry_count == 1
-        assert task.status == "pending"
+        assert task.status == "queued"

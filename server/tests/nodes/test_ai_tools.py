@@ -243,120 +243,84 @@ class TestDuckDuckGoSearch:
 
 
 class TestTaskManager:
-    """In-memory delegation-registry inspector. State lives in module globals
-    `_delegated_tasks` and `_delegation_results` in services.handlers.tools."""
+    """Durable execution-scoped team task control."""
 
     @pytest.fixture(autouse=True)
-    def _reset_registry(self):
-        """Snapshot + restore the module-level dicts around each test."""
-        from services.handlers import tools as tools_mod
+    def durable_service(self):
+        service = MagicMock()
+        service.list_durable_tasks = AsyncMock(return_value=[])
+        service.list_durable_task_history = AsyncMock(return_value=[])
+        service.get_durable_task = AsyncMock(return_value={})
+        service.mutate_durable_task = AsyncMock(return_value={})
+        with patch("services.agent_team.get_agent_team_service", return_value=service):
+            yield service
 
-        tasks_backup = dict(tools_mod._delegated_tasks)
-        results_backup = dict(tools_mod._delegation_results)
-        tools_mod._delegated_tasks.clear()
-        tools_mod._delegation_results.clear()
-        try:
-            yield tools_mod
-        finally:
-            tools_mod._delegated_tasks.clear()
-            tools_mod._delegated_tasks.update(tasks_backup)
-            tools_mod._delegation_results.clear()
-            tools_mod._delegation_results.update(results_backup)
+    @staticmethod
+    def _config():
+        return {"workflow_id": "workflow-1", "parent_node_id": "lead-1", "execution_id": "run-1"}
 
-    async def test_list_tasks_reports_running_and_completed_entries(self, _reset_registry):
-        tools_mod = _reset_registry
-
-        running_task = MagicMock()
-        running_task.done.return_value = False
-        tools_mod._delegated_tasks["t1"] = running_task
-
-        tools_mod._delegation_results["t2"] = {
-            "status": "completed",
-            "agent_name": "coding_agent",
-            "result": "x" * 500,  # will be truncated to 200 chars
-        }
+    async def test_list_tasks_reads_durable_execution_scope(self, durable_service):
+        durable_service.list_durable_tasks.return_value = [
+            {"id": "t1", "status": "running"},
+            {"id": "t2", "status": "submitted"},
+        ]
 
         from nodes.tool.task_manager import _execute_task_manager
 
-        result = await _execute_task_manager({"operation": "list_tasks"}, {"parameters": {}})
+        result = await _execute_task_manager({"operation": "list_tasks"}, self._config())
 
         assert result["success"] is True
         assert result["operation"] == "list_tasks"
         assert result["count"] == 2
-        assert result["running"] == 1
-        assert result["completed"] == 1
-        assert result["errors"] == 0
+        durable_service.list_durable_tasks.assert_awaited_once_with(
+            workflow_id="workflow-1", team_lead_node_id="lead-1",
+            execution_id="run-1", status=None,
+        )
 
-        ids = {t["task_id"] for t in result["tasks"]}
-        assert ids == {"t1", "t2"}
-        t2 = next(t for t in result["tasks"] if t["task_id"] == "t2")
-        assert t2["agent_name"] == "coding_agent"
-        assert len(t2["result_summary"]) == 200
-
-    async def test_list_tasks_applies_status_filter(self, _reset_registry):
-        tools_mod = _reset_registry
-
-        running = MagicMock()
-        running.done.return_value = False
-        tools_mod._delegated_tasks["r1"] = running
-        tools_mod._delegation_results["c1"] = {"status": "completed"}
+    async def test_list_tasks_applies_status_filter(self, durable_service):
+        durable_service.list_durable_tasks.return_value = [{"id": "r1", "status": "running"}]
 
         from nodes.tool.task_manager import _execute_task_manager
 
         result = await _execute_task_manager(
             {"operation": "list_tasks", "status_filter": "running"},
-            {"parameters": {}},
+            self._config(),
         )
 
         assert result["count"] == 1
-        assert result["tasks"][0]["task_id"] == "r1"
+        assert result["tasks"][0]["id"] == "r1"
+        assert durable_service.list_durable_tasks.await_args.kwargs["status"] == "running"
 
-    async def test_get_task_without_id_errors(self, _reset_registry):
-        tools_mod = _reset_registry
-
-        from nodes.tool.task_manager import _execute_task_manager
-
-        result = await _execute_task_manager({"operation": "get_task"}, {"parameters": {}})
-        assert result["success"] is False
-        assert "task_id is required" in result["error"]
-
-    async def test_mark_done_removes_tracked_task(self, _reset_registry):
-        tools_mod = _reset_registry
-        tools_mod._delegation_results["gone"] = {"status": "completed"}
+    async def test_get_task_without_id_errors(self, durable_service):
 
         from nodes.tool.task_manager import _execute_task_manager
 
-        result = await _execute_task_manager(
-            {"operation": "mark_done", "task_id": "gone"},
-            {"parameters": {}},
-        )
+        with pytest.raises(ValueError, match="get_task requires task_id"):
+            await _execute_task_manager({"operation": "get_task"}, self._config())
 
-        assert result["success"] is True
-        assert result["removed"] is True
-        assert "gone" not in tools_mod._delegation_results
-
-    async def test_mark_done_untracked_id_returns_removed_false(self, _reset_registry):
-        tools_mod = _reset_registry
+    async def test_mark_done_is_non_destructive_accept_alias(self, durable_service):
+        durable_service.get_durable_task.return_value = {"id": "done", "revision": 4}
+        durable_service.mutate_durable_task.return_value = {"id": "done", "status": "accepted", "revision": 5}
 
         from nodes.tool.task_manager import _execute_task_manager
 
         result = await _execute_task_manager(
-            {"operation": "mark_done", "task_id": "never-seen"},
-            {"parameters": {}},
+            {"operation": "mark_done", "task_id": "done"}, self._config(),
         )
 
         assert result["success"] is True
-        assert result["removed"] is False
-        assert "was not in active tracking" in result["message"]
+        assert result["task"]["status"] == "accepted"
+        durable_service.mutate_durable_task.assert_awaited_once_with(
+            workflow_id="workflow-1", team_lead_node_id="lead-1", execution_id="run-1",
+            task_id="done", revision=4, operation="accept",
+        )
 
-    async def test_unknown_operation_returns_failure_envelope(self, _reset_registry):
-        tools_mod = _reset_registry
+    async def test_unknown_operation_is_rejected(self, durable_service):
 
         from nodes.tool.task_manager import _execute_task_manager
 
-        result = await _execute_task_manager({"operation": "self_destruct"}, {"parameters": {}})
-        assert result["success"] is False
-        assert "Unknown operation" in result["error"]
+        with pytest.raises(ValueError, match="Unknown Task Manager operation"):
+            await _execute_task_manager({"operation": "self_destruct"}, self._config())
 
 
 # ============================================================================

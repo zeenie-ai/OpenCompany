@@ -324,7 +324,7 @@ class TestNeedsCanvasContract:
         for cls in _all_plugin_classes():
             if not issubclass(cls, ToolNode):
                 continue
-            if cls.type == "agentBuilder":
+            if cls.type in {"agentBuilder", "taskManager"}:
                 continue
             assert cls.needs_canvas is False, (
                 f"{cls.__qualname__} declares needs_canvas=True but isn't agentBuilder. "

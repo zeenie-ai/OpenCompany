@@ -367,6 +367,7 @@ class TestAgentCallIdentity:
                 "refresh-tools-todo-1-1-1",
                 {
                     "operations": [{"op": "add_node"}],
+                    "agent_node_type": "aiAgent",
                     "invoking_agent_node_id": "agent-1",
                     "agent_iteration": 1,
                     "tool_call_index": 1,

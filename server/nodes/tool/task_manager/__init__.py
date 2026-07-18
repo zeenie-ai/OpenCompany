@@ -109,6 +109,12 @@ async def _execute_task_manager(args: Dict[str, Any], config: Dict[str, Any]) ->
 
     service = get_agent_team_service()
     operation = str(args.get("operation") or "list_tasks")
+    allowed_operations = {
+        "assign_task", "list_tasks", "get_task", "modify_task", "cancel_task",
+        "retry_task", "reassign_task", "accept_task", "finish_team", "mark_done",
+    }
+    if operation not in allowed_operations:
+        raise ValueError(f"Unknown Task Manager operation: {operation}")
     scope = _scope(config)
 
     if operation == "list_tasks":
@@ -122,7 +128,10 @@ async def _execute_task_manager(args: Dict[str, Any], config: Dict[str, Any]) ->
             tasks = await service.list_durable_tasks(**scope, status=args.get("status_filter"))
         return {"success": True, "operation": operation, "tasks": tasks, "count": len(tasks)}
     if operation == "get_task":
-        task = await service.get_durable_task(**scope, task_id=str(args.get("task_id") or ""))
+        task_id = str(args.get("task_id") or "")
+        if not task_id:
+            raise ValueError("get_task requires task_id")
+        task = await service.get_durable_task(**scope, task_id=task_id)
         return {"success": True, "operation": operation, "task": task}
     if operation == "assign_task":
         if not args.get("title") or not args.get("mission"):
