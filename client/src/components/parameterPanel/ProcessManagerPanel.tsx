@@ -47,7 +47,8 @@ const ProcessManagerPanel: React.FC<Props> = ({ workflowId }) => {
   const [selected, setSelected] = useState<ManagedProcess | null>(null);
   const [output, setOutput] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
-  const [now, setNow] = useState(Date.now());
+  // Populate wall-clock time from an effect so rendering stays pure.
+  const [now, setNow] = useState(0);
 
   const refresh = useCallback(async (quiet = false) => {
     if (!workflowId) return;
@@ -96,6 +97,7 @@ const ProcessManagerPanel: React.FC<Props> = ({ workflowId }) => {
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
+    setNow(Date.now());
     const poll = window.setInterval(() => void refresh(true), 2500);
     const clock = window.setInterval(() => setNow(Date.now()), 1000);
     return () => { window.clearInterval(poll); window.clearInterval(clock); };

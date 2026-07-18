@@ -309,7 +309,10 @@ class ProcessService:
             for port in ports:
                 probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 try:
-                    probe.bind(("0.0.0.0", port))
+                    # This is an occupancy probe, not a network service. Keep
+                    # it local so the fallback never exposes a listener on
+                    # every interface (and still detects wildcard listeners).
+                    probe.bind(("127.0.0.1", port))
                 except OSError:
                     owners[port].add(0)
                 finally:
