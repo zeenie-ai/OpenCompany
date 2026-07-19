@@ -3,7 +3,7 @@
 > **⚠️ Pre-Wave-11 — historical reference only.**
 > Node authoring now happens on the backend: each node is a Python plugin under `server/nodes/<category>/<node>.py` that emits a `NodeSpec`. The frontend reads specs via [client/src/lib/nodeSpec.ts](../client/src/lib/nodeSpec.ts) + [adapters/nodeSpecToDescription.ts](../client/src/adapters/nodeSpecToDescription.ts). See [plugin_system.md](./plugin_system.md) and [server/nodes/README.md](../server/nodes/README.md) for the current model. The snippets below that reference `client/src/nodeDefinitions/*` are kept for historical context.
 
-Trigger nodes in OpenCompany suspend workflow execution until an external event arrives (WhatsApp message, webhook request, Telegram message, chat input, delegated task completion, etc.). The Event Waiter system is the in-memory (`asyncio.Future`) primitive that backs push-based triggers on the canvas-Run path. Deployed triggers ride the Temporal-durable canary path (`services/events/dispatch.py` → `TriggerListenerWorkflow` / `PollingTriggerWorkflow`) instead; the Redis-Streams backend that previously offered cross-restart waiter persistence was retired in Wave 15.3 because Temporal owns durability now.
+Trigger nodes in OpenCompany suspend workflow execution until an external event arrives (WhatsApp message, webhook request, Telegram message, chat input, delegated task completion, etc.). The Event Waiter system is the in-memory (`asyncio.Future`) primitive that backs push-based triggers on the canvas-Run path. In a controlled deployment, trigger definitions, push Signals, polling activities, pause state, and queued events live in `WorkflowControlWorkflow`; only a real graph invocation starts `MachinaWorkflow`. `TriggerListenerWorkflow` / `PollingTriggerWorkflow` are legacy replay/compatibility paths. The Redis-Streams backend that previously offered cross-restart waiter persistence was retired because Temporal owns deployed-trigger durability.
 
 Source file: `server/services/event_waiter.py`
 
@@ -113,7 +113,7 @@ Single in-memory backend using `asyncio.Future` with a module-level `_waiters` d
 
 `capture_main_loop()` (called during app startup in `main.py`) stores the main event loop so future thread-context callers can hop onto it via `asyncio.run_coroutine_threadsafe`.
 
-Durability note: waiter state does NOT survive a process restart — that is by design. Deployed triggers get restart durability from the Temporal canary path (`TriggerListenerWorkflow` / `PollingTriggerWorkflow` / Temporal Schedules); the event waiter only backs interactive canvas-Run waits, where a dead process means the user's canvas session is gone anyway. (The Redis-Streams backend that previously covered this was retired in Wave 15.3.)
+Durability note: waiter state does NOT survive a process restart — that is by design. Controlled deployed triggers get restart durability from `WorkflowControlWorkflow`; cron uses Temporal Schedules. The event waiter only backs interactive canvas-Run waits and legacy uncontrolled deployments, where a dead process means the canvas session is gone. (The Redis-Streams backend that previously covered this was retired in Wave 15.3.)
 
 ## Polling Triggers vs Event Triggers
 
@@ -127,10 +127,10 @@ Some triggers do not fit the push model because the upstream service has no webh
 | `taskTrigger` | Event (push via delegation) | `event_waiter.py` |
 | `telegramReceive` | Event (push via long-polling) | `event_waiter.py` + `TelegramService` |
 | `twitterReceive` | **Polling** | `deployment/triggers.py` + `asyncio.Queue` |
-| `googleGmailReceive` | **Polling** | `PollingTriggerWorkflow` (Temporal canary) |
+| `googleGmailReceive` | **Polling** | `WorkflowControlWorkflow` polling activity (controlled); `PollingTriggerWorkflow` legacy compatibility |
 | `cronScheduler` | Temporal Schedule | `services/temporal/schedules.py` |
 
-Polling triggers are routed in `DeploymentManager._create_poll_coroutine()` and use `TriggerManager.setup_polling_trigger()` with a custom poll function and an `asyncio.Queue`. See [workflow-schema.md](workflow-schema.md) for the full trigger list.
+Controlled polling triggers are registered with `WorkflowControlWorkflow`, which invokes the plugin-generated `poll.{node_type}.v{version}` activity and starts a graph only for deduplicated new events. Legacy uncontrolled polling still uses the deployment compatibility layer. See [temporal-execution-engine-rfc.md](temporal-execution-engine-rfc.md) for the current deployment architecture.
 
 ## Cancellation
 

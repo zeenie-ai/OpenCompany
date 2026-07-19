@@ -47,6 +47,7 @@ _DEFAULT_WIRE_ROUTING_KEY = "cloudevent"
 # encoding; see https://docs.temporal.io/list-filter.
 _RUNNING_CONSUMERS_QUERY = "EventType='{event_type}' AND ExecutionStatus='Running'"
 _RUNNING_COMPAT_CONSUMERS_QUERY = "({event_type_clauses}) AND ExecutionStatus='Running'"
+_RUNNING_CONTROLLERS_QUERY = "WorkflowType='WorkflowControlWorkflow' AND ExecutionStatus='Running'"
 
 # Signal handler name on consumer workflows. Plain identifier rather
 # than CloudEvents type because Temporal Signal names are Python
@@ -126,6 +127,10 @@ async def _signal_running_consumers(event: WorkflowEvent) -> None:
         query = _RUNNING_COMPAT_CONSUMERS_QUERY.format(event_type_clauses=clauses)
 
     try:
+        # Controlled deployments keep trigger definitions in their controller
+        # history. Controllers filter the event against those definitions, so
+        # no TriggerListenerWorkflow/ PollingTriggerWorkflow execution exists.
+        query = f"({query}) OR ({_RUNNING_CONTROLLERS_QUERY})"
         consumers = []
         async for wf in client.list_workflows(query=query):
             consumers.append(wf)

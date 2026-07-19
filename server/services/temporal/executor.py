@@ -10,6 +10,11 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Callable
 
 from temporalio.client import Client
+from temporalio.common import (
+    SearchAttributeKey,
+    SearchAttributePair,
+    TypedSearchAttributes,
+)
 
 from core.logging import get_logger
 from .workflow import MachinaWorkflow
@@ -97,6 +102,14 @@ class TemporalExecutor:
                 },
                 id=execution_id,
                 task_queue=self.task_queue,
+                search_attributes=TypedSearchAttributes(
+                    [
+                        SearchAttributePair(
+                            SearchAttributeKey.for_keyword("EventWorkflowId"),
+                            workflow_id,
+                        )
+                    ]
+                ),
             )
 
             execution_time = time.time() - start_time

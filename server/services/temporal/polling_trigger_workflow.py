@@ -74,6 +74,15 @@ class PollingTriggerWorkflow:
     def __init__(self) -> None:
         self._seen_event_ids: Set[str] = set()
         self._processed_count: int = 0
+        self._control_paused = False
+
+    @workflow.signal
+    async def pause(self) -> None:
+        self._control_paused = True
+
+    @workflow.signal
+    async def resume(self) -> None:
+        self._control_paused = False
 
     @workflow.run
     async def run(self, listener_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -118,6 +127,8 @@ class PollingTriggerWorkflow:
         )
 
         while True:
+            if self._control_paused:
+                await workflow.wait_condition(lambda: not self._control_paused)
             if is_baseline:
                 # Establish seen baseline immediately on first run so we
                 # don't re-emit items the user has had since before deploy.

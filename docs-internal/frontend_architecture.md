@@ -388,7 +388,14 @@ See [ui_migration_plan.md](./ui_migration_plan.md) Phase 6.
 - All modifying operations go through WebSocket — REST is reserved for auth + webhooks.
 - No polling. If a component wants fresh data, call `sendRequest` once (or use TanStack Query with `staleTime: Infinity` + manual `invalidate`).
 - **`sendRequest` queues during disconnect with backpressure.** When the socket is not open, the request enqueues with an `AbortController`-backed per-request timeout (default 30s) and replays on reconnect inside `ws.onopen` before `setIsReady(true)`. Queue caps at 200 with FIFO eviction (rejects oldest with `backpressure: too many queued requests`). Intentional close (`event.code === 1000`) drops the queue; transient closes preserve it. Eliminates indefinite spinners during the 3-second reconnect window. Implementation: `pendingSendQueueRef` + `drainPendingSends` in `WebSocketContext.tsx`.
-- **Deployment state reconciles on every WS connect.** When a backend restarts (or the socket transiently drops) the in-memory `DeploymentManager._deployments` dict is wiped and NEVER re-fires a `deployment_status: 'stopped'` broadcast because it has nothing to broadcast about. Before the fix (de8df87), the FE `deploymentStatus.isRunning=true` carried forward and the toolbar Start button stayed on "Stop" forever. Now `broadcaster.connect()` calls `_send_deployment_snapshot(websocket)` right after `initial_status` — a single-target push (NOT fan-out) carrying a CloudEvents envelope (`type = workflow.deployment.snapshot`) with the current `running_workflow_ids`. FE `case 'deployment_snapshot'` in `WebSocketContext.tsx` iterates `useAppStore.workflowUIStates` and clears `isExecuting=true` on any workflow NOT in that list (empty list is meaningful — this is the load-bearing reset). Distinct from `workflow_lifecycle("deployment.started")` (state-transition edge event) — the snapshot is an idempotent state dump tied to client connect.
+- **Workflow-control state reconciles on every WS connect.** The toolbar derives
+  Start/Pause/Resume/Reset availability from `get_workflow_control_status`, whose
+  persisted generation record is reconciled with the Temporal controller rather
+  than inferred from process-local tasks. `workflow_control_status` broadcasts
+  update transitions in real time; reconnect performs an authoritative read.
+  The older `deployment_snapshot` and binary deployment status remain migration
+  adapters for legacy deployments and must not override a resolved controller
+  generation. See [Temporal Execution Engine RFC](temporal-execution-engine-rfc.md).
 - **`currentWorkflowId` lives in `useAppStore` only.** Non-React listeners (WS handlers) read it via `useAppStore.getState().currentWorkflow?.id` -- the documented Zustand escape hatch (https://github.com/pmndrs/zustand#read-state-without-subscription). The previous `currentWorkflowIdRef` mirror inside WebSocketContext was a one-render-late copy that misrouted broadcasts during workflow switches. The push to `nodeStatusStore.setCurrentWorkflowId` is driven from a single `useEffect` in `Dashboard.tsx`.
 
 ## Ownership boundary: TanStack Query vs Zustand vs WebSocketContext

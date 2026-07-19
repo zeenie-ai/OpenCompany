@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Eye, Filter, RefreshCw, Search } from 'lucide-react';
+import { Activity, AlertTriangle, Eye, Filter, RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Edge, Node } from 'reactflow';
 
-import { useWebSocket } from '@/contexts/WebSocketContext';
+import { useWebSocket, type TeamTaskTraceResponse } from '@/contexts/WebSocketContext';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,6 +27,9 @@ export interface TeamTaskAttempt {
   error?: string;
   started_at?: string;
   completed_at?: string;
+  workflow_id?: string;
+  run_id?: string;
+  trace_id?: string;
 }
 
 export interface TeamTaskView {
@@ -138,7 +141,7 @@ const taskUsage = (task: TeamTaskView) => {
 interface Props { nodeId: string; workflowId?: string; nodes: Node[]; edges: Edge[] }
 
 const TaskManagerPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges }) => {
-  const { sendRequest, addEventListener } = useWebSocket();
+  const { sendRequest, addEventListener, getTeamTaskTrace } = useWebSocket();
   const [status, setStatus] = useState<TeamStatusView | null>(null);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -150,7 +153,12 @@ const TaskManagerPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
   const [assignee, setAssignee] = useState('');
   const [busy, setBusy] = useState(false);
   const [page, setPage] = useState(0);
-  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [nowMs, setNowMs] = useState(0);
+  const [detailTab, setDetailTab] = useState<'details' | 'trace'>('details');
+  const [trace, setTrace] = useState<TeamTaskTraceResponse | null>(null);
+  const [traceLoading, setTraceLoading] = useState(false);
+  const [traceAttempt, setTraceAttempt] = useState('current');
+  const [traceSearch, setTraceSearch] = useState('');
   const pageSize = 25;
 
   const connectedLead = useMemo(() => {
@@ -227,9 +235,43 @@ const TaskManagerPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
 
   useEffect(() => setPage(0), [filter, search, executionId]);
   useEffect(() => {
+    setNowMs(Date.now());
     const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  const fetchTrace = useCallback(async (cursor?: string) => {
+    if (!selected || !workflowId || !connectedLead || !status?.execution_id) return;
+    setTraceLoading(true);
+    try {
+      const response = await getTeamTaskTrace({
+        workflow_id: workflowId,
+        team_lead_node_id: connectedLead.id,
+        execution_id: status.execution_id,
+        task_id: selected.id,
+        ...(traceAttempt !== 'current' ? { attempt: Number(traceAttempt) } : {}),
+        ...(cursor ? { cursor } : {}),
+        limit: 50,
+        detail: 'timeline',
+      });
+      setTrace((previous) => cursor && previous
+        ? { ...response, events: [...previous.events, ...response.events] }
+        : response);
+    } catch (error) {
+      setTrace({ state: 'temporal_unavailable', events: [], error: error instanceof Error ? error.message : 'Unable to load trace' });
+    } finally { setTraceLoading(false); }
+  }, [connectedLead, getTeamTaskTrace, selected, status?.execution_id, traceAttempt, workflowId]);
+
+  useEffect(() => {
+    if (detailTab !== 'trace' || !selected) return;
+    setTrace(null);
+    void fetchTrace();
+  }, [detailTab, fetchTrace, selected, traceAttempt]);
+
+  const traceEvents = useMemo(() => (trace?.events || []).filter((event) => {
+    const value = `${event.event_type} ${event.name || ''} ${event.summary || ''} ${event.failure || ''}`.toLowerCase();
+    return value.includes(traceSearch.toLowerCase());
+  }), [trace, traceSearch]);
 
   const runAction = async () => {
     if (!pending || !workflowId || !connectedLead) return;
@@ -296,7 +338,9 @@ const TaskManagerPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
       {pages > 1 && <div className="mt-3 flex items-center justify-end gap-2 text-sm text-fg-muted"><Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</Button><span>{page + 1} / {pages}</span><Button variant="outline" size="sm" disabled={page + 1 >= pages} onClick={() => setPage(page + 1)}>Next</Button></div>}
     </div>
 
-    <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}><DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto"><DialogHeader><DialogTitle>{selected?.title}</DialogTitle></DialogHeader>{selected && <div className="space-y-5 text-sm">
+    <Dialog open={!!selected} onOpenChange={(open) => { if (!open) { setSelected(null); setDetailTab('details'); setTrace(null); } }}><DialogContent className="max-h-[85vh] max-w-4xl overflow-y-auto"><DialogHeader><DialogTitle>{selected?.title}</DialogTitle></DialogHeader>{selected && <div className="space-y-5 text-sm">
+      <div className="flex gap-1 border-b border-border-default"><Button variant={detailTab === 'details' ? 'secondary' : 'ghost'} size="sm" onClick={() => setDetailTab('details')}>Details</Button><Button variant={detailTab === 'trace' ? 'secondary' : 'ghost'} size="sm" onClick={() => setDetailTab('trace')}><Activity className="h-4 w-4" /> Temporal trace</Button></div>
+      {detailTab === 'details' && <>
       <div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className={cn('capitalize', STATUS_STYLES[selected.status])}>{selected.status}</Badge><span className="text-fg-muted">Revision {selected.revision ?? 0} · Attempt {selected.current_attempt ?? 0} · {elapsed(selected, nowMs)}</span></div>
       <section className="grid gap-2 rounded border border-border-default p-3 text-xs text-fg-muted sm:grid-cols-3"><span>Created<br/><strong className="font-medium text-fg-default">{formatTimestamp(selected.created_at)}</strong></span><span>Started<br/><strong className="font-medium text-fg-default">{formatTimestamp(selected.started_at)}</strong></span><span>Completed<br/><strong className="font-medium text-fg-default">{formatTimestamp(selected.completed_at)}</strong></span></section>
       <section><h3 className="mb-2 font-medium">Token usage</h3><div className="grid grid-cols-3 gap-2 rounded border border-border-default p-3 text-center"><div><div className="text-xs text-fg-muted">Input</div><div className="font-semibold tabular-nums">{taskUsage(selected).input.toLocaleString()}</div></div><div><div className="text-xs text-fg-muted">Output</div><div className="font-semibold tabular-nums">{taskUsage(selected).output.toLocaleString()}</div></div><div><div className="text-xs text-fg-muted">Total</div><div className="font-semibold tabular-nums">{taskUsage(selected).total.toLocaleString()}</div></div></div></section>
@@ -307,6 +351,13 @@ const TaskManagerPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
       <section><h3 className="mb-2 font-medium">Attempt history</h3><div className="space-y-2">{(selected.attempts || []).map((attempt) => <div key={attempt.id} className="rounded border border-border-default p-3"><div className="flex justify-between"><span>Attempt {attempt.attempt_number} · {attempt.assignee_node_id || 'Unassigned'}</span><Badge variant="outline">{attempt.status}</Badge></div>{attempt.error && <p className="mt-2 text-destructive">{attempt.error}</p>}</div>)}{!selected.attempts?.length && <p className="text-fg-muted">No previous attempts.</p>}</div></section>
       <section className="grid grid-cols-2 gap-2 rounded border border-border-default p-3 text-xs text-fg-muted"><span>Trace: {selected.trace_id || '—'}</span><span>Child workflow: {selected.child_workflow_id || '—'}</span><span>Child run: {selected.child_run_id || '—'}</span><span>Dependencies: {selected.depends_on?.join(', ') || 'None'}</span></section>
       <div className="flex flex-wrap justify-end gap-2">{actionsFor(selected).map((action) => <Button key={action} variant={action === 'cancel' ? 'destructive' : action === 'accept' ? 'default' : 'outline'} onClick={() => { setSelected(null); openAction(action.replace('_task', ''), action.replace('_task','').replace('_',' '), selected); }}>{action.replace('_task','').replace('_',' ')}</Button>)}</div>
+      </>}
+      {detailTab === 'trace' && <section className="space-y-3">
+        <div className="flex flex-wrap gap-2"><Select value={traceAttempt} onValueChange={setTraceAttempt}><SelectTrigger className="w-44" aria-label="Trace attempt"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="current">Current attempt</SelectItem>{(selected.attempts || []).map((attempt) => <SelectItem key={attempt.id} value={String(attempt.attempt_number)}>Attempt {attempt.attempt_number}</SelectItem>)}</SelectContent></Select><div className="relative min-w-52 flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-muted"/><Input className="pl-9" value={traceSearch} onChange={(event) => setTraceSearch(event.target.value)} placeholder="Search events, activities, failures"/></div><Button variant="outline" onClick={() => void fetchTrace()} disabled={traceLoading}><RefreshCw className={cn('h-4 w-4', traceLoading && 'animate-spin')}/> Refresh</Button></div>
+        {trace?.state === 'available' && <><div className="grid gap-2 rounded border border-border-default p-3 text-xs text-fg-muted sm:grid-cols-3"><span>Workflow<br/><strong className="break-all font-medium text-fg-default">{trace.workflow_id || selected.child_workflow_id || '—'}</strong></span><span>Run<br/><strong className="break-all font-medium text-fg-default">{trace.run_id || selected.child_run_id || '—'}</strong></span><span>Trace<br/><strong className="break-all font-medium text-fg-default">{trace.trace_id || selected.trace_id || '—'}</strong></span></div><ol className="divide-y divide-border-default overflow-hidden rounded border border-border-default">{traceEvents.map((event) => <li key={event.event_id} className="grid grid-cols-[9rem_minmax(0,1fr)] gap-3 p-3"><time className="text-xs text-fg-muted">{formatTimestamp(event.timestamp)}</time><div className="min-w-0"><div className="flex items-center gap-2"><Badge variant="outline">{event.category || event.event_type}</Badge><span className="truncate font-medium">{event.name || event.event_type}</span></div>{event.summary && <p className="mt-1 whitespace-pre-wrap text-xs text-fg-muted">{event.summary}</p>}{event.failure && <p className="mt-2 whitespace-pre-wrap rounded bg-destructive/10 p-2 text-xs text-destructive"><AlertTriangle className="mr-1 inline h-3 w-3"/>{event.failure}</p>}</div></li>)}{!traceEvents.length && <li className="p-8 text-center text-fg-muted">No trace events match this view.</li>}</ol>{trace.next_cursor && <Button variant="outline" className="w-full" disabled={traceLoading} onClick={() => void fetchTrace(trace.next_cursor || undefined)}>Load older events</Button>}</>}
+        {trace && trace.state !== 'available' && <div className="rounded border border-warning/30 bg-warning/10 p-6 text-center"><AlertTriangle className="mx-auto mb-2 h-5 w-5 text-warning"/><p className="font-medium capitalize">{trace.state.replace(/_/g, ' ')}</p><p className="mt-1 text-sm text-fg-muted">{trace.error || (trace.state === 'retention_expired' ? 'Temporal history has expired; the durable task result remains available in Details.' : 'No Temporal execution history is currently available for this attempt.')}</p></div>}
+        {!trace && traceLoading && <div className="p-10 text-center text-fg-muted">Loading Temporal history…</div>}
+      </section>}
     </div>}</DialogContent></Dialog>
 
     <AlertDialog open={!!pending} onOpenChange={(open) => !open && setPending(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle className="capitalize">{pending?.label}</AlertDialogTitle><AlertDialogDescription>{pending?.task ? `Apply this action to “${pending.task.title}”? The latest task revision will be checked.` : 'Finish this team only if every required task is resolved.'}</AlertDialogDescription></AlertDialogHeader>

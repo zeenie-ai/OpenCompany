@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from sqlmodel import SQLModel, Field, Column, DateTime, JSON
-from sqlalchemy import func
+from sqlalchemy import UniqueConstraint, func
 
 
 class NodeParameter(SQLModel, table=True):
@@ -457,6 +457,35 @@ class AgentTeam(SQLModel, table=True):
     completed_at: Optional[datetime] = Field(default=None)
 
 
+class WorkflowControlExecution(SQLModel, table=True):
+    """Durable control generation for one saved workflow deployment."""
+
+    __tablename__ = "workflow_control_executions"
+    __table_args__ = (
+        UniqueConstraint("workflow_id", "generation", name="uq_workflow_control_generation"),
+        UniqueConstraint("workflow_id", "idempotency_key", name="uq_workflow_control_idempotency"),
+    )
+
+    id: str = Field(primary_key=True, max_length=255)
+    workflow_id: str = Field(index=True, max_length=255)
+    generation: int = Field(index=True)
+    execution_id: str = Field(index=True, max_length=255)
+    root_execution_id: str = Field(index=True, max_length=255)
+    controller_workflow_id: Optional[str] = Field(default=None, max_length=500)
+    controller_run_id: Optional[str] = Field(default=None, max_length=255)
+    session_id: str = Field(default="default", max_length=255)
+    graph_hash: str = Field(max_length=64)
+    graph_snapshot: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    resource_manifest: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    status: str = Field(default="starting", index=True, max_length=20)
+    revision: int = Field(default=0)
+    idempotency_key: str = Field(index=True, max_length=255)
+    terminal_reason: Optional[str] = Field(default=None, max_length=2000)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    completed_at: Optional[datetime] = Field(default=None)
+
+
 class TeamMember(SQLModel, table=True):
     """Agent team membership.
 
@@ -507,6 +536,10 @@ class TeamTask(SQLModel, table=True):
     current_attempt: int = Field(default=0)
     child_workflow_id: Optional[str] = Field(default=None, max_length=500)
     child_run_id: Optional[str] = Field(default=None, max_length=255)
+    runner_workflow_id: Optional[str] = Field(default=None, max_length=500)
+    runner_run_id: Optional[str] = Field(default=None, max_length=255)
+    parent_workflow_id: Optional[str] = Field(default=None, max_length=500)
+    parent_run_id: Optional[str] = Field(default=None, max_length=255)
     trace_id: Optional[str] = Field(default=None, index=True, max_length=255)
     cancellation_requested: bool = Field(default=False)
     cancellation_reason: Optional[str] = Field(default=None, max_length=2000)
@@ -537,6 +570,10 @@ class TeamTaskAttempt(SQLModel, table=True):
     status: str = Field(default="queued", max_length=20)
     child_workflow_id: Optional[str] = Field(default=None, max_length=500)
     child_run_id: Optional[str] = Field(default=None, max_length=255)
+    runner_workflow_id: Optional[str] = Field(default=None, max_length=500)
+    runner_run_id: Optional[str] = Field(default=None, max_length=255)
+    parent_workflow_id: Optional[str] = Field(default=None, max_length=500)
+    parent_run_id: Optional[str] = Field(default=None, max_length=255)
     result: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     error: Optional[str] = Field(default=None, max_length=5000)
     usage: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))

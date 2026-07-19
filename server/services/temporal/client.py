@@ -8,6 +8,7 @@ from datetime import timedelta
 from typing import Optional
 from temporalio.api.workflowservice.v1 import DescribeNamespaceRequest
 from temporalio.client import Client
+from temporalio.contrib.opentelemetry import TracingInterceptor
 from temporalio.runtime import LoggingConfig, Runtime, TelemetryConfig
 
 from core.config import Settings
@@ -91,6 +92,7 @@ class TemporalClientWrapper:
                     self.server_address,
                     namespace=self.namespace,
                     runtime=self._runtime,
+                    interceptors=[TracingInterceptor()],
                 )
                 # Verify namespace is ready (gRPC port may accept connections
                 # before the server finishes registering namespaces)
@@ -183,7 +185,7 @@ class TemporalClientWrapper:
             try:
                 count = 0
                 async for wf in self._client.list_workflows(
-                    "ExecutionStatus = 'Running'",
+                    "ExecutionStatus = 'Running' AND WorkflowType != 'WorkflowControlWorkflow'",
                 ):
                     try:
                         handle = self._client.get_workflow_handle(

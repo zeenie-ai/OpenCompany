@@ -561,6 +561,15 @@ class WorkflowService:
         """Get list of deployed workflow IDs."""
         return self._get_deployment_manager().get_deployed_workflows()
 
+    def pause_deployment(self, workflow_id: str) -> bool:
+        return self._get_deployment_manager().pause(workflow_id)
+
+    async def resume_deployment(self, workflow_id: str) -> int:
+        return await self._get_deployment_manager().resume(workflow_id)
+
+    async def update_trigger_pause_status(self, workflow_id: str, *, paused: bool) -> int:
+        return await self._get_deployment_manager().update_trigger_pause_status(workflow_id, paused=paused)
+
     # =========================================================================
     # OUTPUT STORAGE
     # =========================================================================

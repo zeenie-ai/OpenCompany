@@ -130,6 +130,16 @@ class MachinaWorkflow:
         # flag is on AND a producer signals this workflow.
         self._seen_event_ids: Set[str] = set()
         self._matched_events: List[Dict[str, Any]] = []
+        self._control_paused = False
+
+    @workflow.signal
+    async def pause(self) -> None:
+        """Cooperatively gate new node/activity scheduling."""
+        self._control_paused = True
+
+    @workflow.signal
+    async def resume(self) -> None:
+        self._control_paused = False
 
     @workflow.signal
     async def on_event(self, event_payload: Dict[str, Any]) -> None:
@@ -317,6 +327,11 @@ class MachinaWorkflow:
         loop_count = 0
         while True:
             loop_count += 1
+            # Avoid emitting a redundant wait command on the normal running
+            # path.  Once paused, the condition is durable and replay-safe;
+            # the resume signal flips the flag and releases scheduling.
+            if self._control_paused:
+                await workflow.wait_condition(lambda: not self._control_paused)
             # Find ready nodes (all deps completed, not running/completed)
             ready = self._find_ready_nodes(deps, completed, running, node_map)
             workflow.logger.debug(f"Loop {loop_count}: ready={len(ready)}, running={len(running)}, completed={len(completed)}")
@@ -598,7 +613,6 @@ class MachinaWorkflow:
         config_ids = set()
 
         for edge in edges:
-            handle = edge.get("targetHandle", "")
             source_id = edge.get("source")
 
             # Edges to config handles mean source is a config node

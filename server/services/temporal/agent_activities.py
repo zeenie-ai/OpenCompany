@@ -1228,6 +1228,33 @@ async def finish_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {"team_id": team_id, "team_task_id": task_id, "status": target_status}
 
 
+@activity.defn(name="agent.register_task_execution.v1")
+async def register_task_execution(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Persist actual runner/child Temporal identities for trace inspection."""
+    from services.agent_team import get_agent_team_service
+
+    team_id = str(payload.get("team_id") or "")
+    task_id = str(payload.get("team_task_id") or "")
+    if not team_id or not task_id:
+        raise ValueError("team_id and team_task_id are required")
+    task = await get_agent_team_service().database.get_durable_team_task(team_id, task_id)
+    if not task:
+        raise ValueError("Delegated team task does not exist")
+    registered = await get_agent_team_service().database.register_team_task_execution(
+        team_id=team_id, task_id=task_id,
+        attempt_number=int(payload.get("attempt_number", task.get("current_attempt", 0))),
+        runner_workflow_id=payload.get("runner_workflow_id"),
+        runner_run_id=payload.get("runner_run_id"),
+        child_workflow_id=payload.get("child_workflow_id"),
+        child_run_id=payload.get("child_run_id"),
+        parent_workflow_id=payload.get("parent_workflow_id"),
+        parent_run_id=payload.get("parent_run_id"),
+    )
+    if not registered:
+        raise RuntimeError("Failed to register delegated Temporal execution")
+    return {"team_id": team_id, "team_task_id": task_id, "registered": True}
+
+
 @activity.defn(name="agent.finalize_team.v1")
 async def finalize_agent_team(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Finalize a lead's team after all delegated tasks become terminal."""
@@ -1274,6 +1301,7 @@ def collect_agent_activities() -> List[Any]:
         queue_agent_delegation,
         acquire_subagent_permit,
         release_subagent_permit,
+        register_task_execution,
         finish_agent_delegation,
         finalize_agent_team,
     ]

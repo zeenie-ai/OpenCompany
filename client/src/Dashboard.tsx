@@ -221,7 +221,7 @@ const DashboardContent: React.FC = () => {
   } = useWorkflowManagement();
 
   const { collapsedSections, searchQuery, setSearchQuery, toggleSection } = useComponentPalette();
-  const { saveNodeParameters, getAllNodeParameters, executeWorkflow, deployWorkflow, cancelDeployment, cancelExecution, getWorkflowStatus, nodeStatuses, deploymentStatus, workflowLock, isConnected, isReady, sendRequest } = useWebSocket();
+  const { saveNodeParameters, getAllNodeParameters, executeWorkflow, deployWorkflow, getWorkflowStatus, nodeStatuses, deploymentStatus, workflowControlStatuses, startWorkflow, pauseWorkflow, resumeWorkflow, resetWorkflow, getWorkflowControlStatus, workflowLock, isConnected, isReady, sendRequest } = useWebSocket();
   const applyUIDefaults = useAppStore((state) => state.applyUIDefaults);
 
   // Workflows list: server-owned data, cached by TanStack Query.
@@ -237,7 +237,13 @@ const DashboardContent: React.FC = () => {
   // current workflow (ad-hoc node, whole-workflow run, deployed trigger
   // run, or deployment registration).  The toolbar Start/Stop button
   // tracks this unified signal so it stays Stop while nodes glow.
-  const isCurrentWorkflowActive = isExecuting || isCurrentWorkflowDeployed;
+  const workflowControl = currentWorkflow?.id
+    ? workflowControlStatuses[currentWorkflow.id] || {
+        workflow_id: currentWorkflow.id, state: 'never_started' as const, revision: 0,
+        active_count: 0, in_flight_count: 0, queued_count: 0,
+        can_start: true, can_pause: false, can_resume: false, can_reset: false,
+      }
+    : { state: 'never_started' as const, revision: 0, active_count: 0, in_flight_count: 0, queued_count: 0, can_start: false, can_pause: false, can_resume: false, can_reset: false };
   const isCurrentWorkflowLocked = workflowLock.locked &&
     workflowLock.workflow_id === currentWorkflow?.id;
   const [globalModelDefaults, setGlobalModelDefaults] = React.useState<{ provider: string; model: string } | null>(null);
@@ -399,7 +405,10 @@ const DashboardContent: React.FC = () => {
     let cancelled = false;
     (async () => {
       try {
-        const { executing } = await getWorkflowStatus(wfId);
+        const [{ executing }] = await Promise.all([
+          getWorkflowStatus(wfId),
+          getWorkflowControlStatus(wfId),
+        ]);
         if (cancelled) return;
         useAppStore.getState().setWorkflowExecuting(wfId, executing);
       } catch {
@@ -407,7 +416,7 @@ const DashboardContent: React.FC = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [isReady, currentWorkflow?.id, getWorkflowStatus]);
+  }, [isReady, currentWorkflow?.id, getWorkflowStatus, getWorkflowControlStatus]);
 
   // Load UI defaults from database on initial WebSocket connection
   const hasLoadedUIDefaults = React.useRef(false);
@@ -775,12 +784,7 @@ const DashboardContent: React.FC = () => {
         })),
       });
 
-      const result = await deployWorkflow(currentWorkflow.id, nodes, edges, 'default');
-
-      if (!result.success) {
-        console.error('[Dashboard] Deployment failed:', result.error);
-        alert(`Failed to start deployment: ${result.error}`);
-      }
+      await startWorkflow(currentWorkflow.id, nodes, edges, 'default', workflowControl.revision);
     } catch (error: any) {
       console.error('[Dashboard] Deployment error:', error);
       alert(`Deployment error: ${error.message}`);
@@ -807,29 +811,26 @@ const DashboardContent: React.FC = () => {
     }
   }, [openExampleAndChat, deployWorkflow, deploymentStatus.isRunning, deploymentStatus.workflow_id]);
 
-  // Stop click handler — routes to the right cancel based on what's actually
-  // running.  If the workflow is deployed, cancel the deployment (existing
-  // path).  Otherwise cancel any in-flight ad-hoc execution(s).  Falls
-  // through silently if neither is true.
-  const handleCancelDeployment = async () => {
+  const handlePauseWorkflow = async () => {
     const workflowId = currentWorkflow?.id;
     if (!workflowId) return;
     try {
-      if (isCurrentWorkflowDeployed) {
-        console.log('[Dashboard] Cancelling deployment for workflow:', workflowId);
-        const result = await cancelDeployment(workflowId);
-        if (!result?.success) {
-          console.error('[Dashboard] Failed to cancel deployment:', result?.message);
-        }
-        return;
-      }
-      if (isExecuting) {
-        console.log('[Dashboard] Cancelling ad-hoc execution for workflow:', workflowId);
-        await cancelExecution(workflowId);
-      }
+      await pauseWorkflow(workflowId, workflowControl.revision);
     } catch (error: any) {
-      console.error('[Dashboard] Cancel error:', error);
+      toast.error(error?.message || 'Unable to pause workflow');
     }
+  };
+
+  const handleResumeWorkflow = async () => {
+    if (!currentWorkflow?.id) return;
+    try { await resumeWorkflow(currentWorkflow.id, workflowControl.revision); }
+    catch (error: any) { toast.error(error?.message || 'Unable to resume workflow'); }
+  };
+
+  const handleResetWorkflow = async () => {
+    if (!currentWorkflow?.id) return;
+    try { await resetWorkflow(currentWorkflow.id, workflowControl.revision); }
+    catch (error: any) { toast.error(error?.message || 'Unable to reset workflow'); }
   };
 
   // Helper: fetch all node parameters from DB for export
@@ -1259,9 +1260,11 @@ const DashboardContent: React.FC = () => {
           onOpen={handleOpen}
           onRun={withSound('run', handleRun)}
           isRunning={isExecuting}
-          onDeploy={withSound('run', handleDeploy)}
-          onCancelDeployment={handleCancelDeployment}
-          isDeploying={isCurrentWorkflowActive}
+          workflowControl={workflowControl}
+          onStartWorkflow={withSound('run', handleDeploy)}
+          onPauseWorkflow={handlePauseWorkflow}
+          onResumeWorkflow={withSound('run', handleResumeWorkflow)}
+          onResetWorkflow={handleResetWorkflow}
           hasUnsavedChanges={hasUnsavedChanges}
           sidebarVisible={sidebarVisible}
           onToggleSidebar={toggleSidebar}
@@ -1421,9 +1424,11 @@ const DashboardContent: React.FC = () => {
             save: withSound('save', handleSave),
             newWorkflow: handleNew,
             open: handleOpen,
-            run: withSound('run', handleDeploy),
-            stop: handleCancelDeployment,
-            isDeploying: isCurrentWorkflowActive,
+            start: withSound('run', handleDeploy),
+            pause: handlePauseWorkflow,
+            resume: withSound('run', handleResumeWorkflow),
+            reset: handleResetWorkflow,
+            workflowControl,
             exportFile: handleExportFile,
             importJSON: handleImportJSON,
             openSettings: () => setSettingsOpen(true),

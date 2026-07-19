@@ -20,10 +20,12 @@ matching event.
 
 **Canary status**: `twitterReceive` is the lone **deferred** trigger plugin —
 it is NOT in the canary registry (`register_canary_trigger_type` is not
-called). The Temporal-durable `TriggerListenerWorkflow` / `PollingTriggerWorkflow`
-path requires the node to subclass `PollingTriggerNode` and declare the four
-hooks (same shape as `GmailReceiveNode`); until that refactor lands it runs on
-the legacy `event_waiter` collector/processor path. `_events.py` carries the
+called). Adoption of the controlled Temporal path requires the node to subclass
+`PollingTriggerNode` and declare the four hooks (the `GmailReceiveNode` shape),
+so `WorkflowControlWorkflow` can own its polling activity. Until that refactor
+lands it runs on the legacy `event_waiter` collector/processor path.
+`TriggerListenerWorkflow` / `PollingTriggerWorkflow` are compatibility
+implementations, not the target architecture. `_events.py` carries the
 typed `WorkflowEvent` factory + dual-path dispatcher (`dispatch_twitter_event_received`)
 ready for canary opt-in.
 

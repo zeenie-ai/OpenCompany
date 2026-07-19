@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | google_workspace / trigger (polling) |
-| **Backend handler** | [`server/nodes/google/gmail_receive/__init__.py`](../../../server/nodes/google/gmail_receive/__init__.py) (`GmailReceiveNode`, a `PollingTriggerNode`; inline-Run path uses the `execute()` override, deployment path uses the `setup_service` / `fetch_ids` / `fetch_detail` / `post_emit` hooks driven by `PollingTriggerWorkflow`) |
+| **Backend handler** | [`server/nodes/google/gmail_receive/__init__.py`](../../../server/nodes/google/gmail_receive/__init__.py) (`GmailReceiveNode`, a `PollingTriggerNode`; inline-Run uses `execute()`, controlled deployment invokes its generated poll activity from `WorkflowControlWorkflow`) |
 | **Tests** | [`server/tests/nodes/test_google_workspace.py`](../../../server/tests/nodes/test_google_workspace.py) |
 | **Skill (if any)** | none |
 | **Dual-purpose tool** | no |
@@ -17,13 +17,13 @@ has no official push without extra Pub/Sub setup, so this node polls
 baseline, fetches full details for new messages, and optionally marks them
 as read.
 
-`event_type = "gmail_email_received"`. In deployment (canary) mode the
-`PollingTriggerWorkflow` owns event fan-out directly: it calls the per-cycle
-activity built from `PollingTriggerNode.as_poll_activity()` and spawns the
-child `MachinaWorkflow` per new email — there is no `event_waiter.dispatch`
-step. The `_events.py` `gmail_message_received` CloudEvents factory is kept for
-parity / future ad-hoc emits; the legacy `dispatch_gmail_received` shim was
-removed in Wave 13.
+`event_type = "gmail_email_received"`. In a controlled deployment,
+`WorkflowControlWorkflow` invokes the per-cycle activity built by
+`PollingTriggerNode.as_poll_activity()`, persists the seen-ID baseline in
+workflow state, and starts a child `MachinaWorkflow` per deduplicated new
+email. Pause prevents new polls/runs and Resume continues the same controller.
+There is no `event_waiter.dispatch` step. `PollingTriggerWorkflow` stays
+registered only for legacy histories and uncontrolled deployments.
 
 ## Inputs (handles)
 

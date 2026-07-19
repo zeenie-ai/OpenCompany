@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | email / trigger |
-| **Backend handler** | [`server/nodes/email/email_receive/__init__.py`](../../../server/nodes/email/email_receive/__init__.py) — Run-button path is the `execute()` override; deployment-mode polling uses the `PollingTriggerNode` hooks (`setup_service` / `fetch_ids` / `fetch_detail` / `post_emit`) draining via the canary `TriggerListenerWorkflow` path |
+| **Backend handler** | [`server/nodes/email/email_receive/__init__.py`](../../../server/nodes/email/email_receive/__init__.py) — Run-button path is `execute()`; controlled deployment invokes the activity generated from its `PollingTriggerNode` hooks inside `WorkflowControlWorkflow` |
 | **Tests** | [`server/tests/nodes/test_email.py`](../../../server/tests/nodes/test_email.py) |
 | **Skill (if any)** | none shipped |
 | **Dual-purpose tool** | no (trigger only) |
@@ -15,6 +15,11 @@ folder. The first poll establishes a baseline (so existing mail is not
 replayed), then subsequent polls diff message IDs to detect arrivals.
 Mirrors the `googleGmailReceive` pattern but works against any IMAP provider via
 Himalaya.
+
+In a controlled deployment the generation controller owns the poll baseline,
+pause gate, and child graph starts. It does not create a separate trigger
+listener workflow. Legacy listener/polling workflows remain registered for
+compatibility with older deployments and histories.
 
 ## Inputs (handles)
 
@@ -103,15 +108,15 @@ flowchart TD
 - **Database writes**: none directly.
 - **Broadcasts**: one `update_node_status(..., "waiting", ...)` when polling
   starts, with `workflow_id` from context.
-- **Event bus (canary path)**: `dispatch_email_received(email_data)` ->
+- **Event bus (standalone/compatibility path)**: `dispatch_email_received(email_data)` ->
   `services.events.dispatch.emit` with a CloudEvents `WorkflowEvent`
   (`type = "com.opencompany.email.message.received"`, `subject = message_id`,
   outer wire-routing key `email_received`). `emailReceive` is canary-registered
   via `register_canary_trigger_type("emailReceive", "com.opencompany.email.message.received")`
   in [`nodes/email/__init__.py`](../../../server/nodes/email/__init__.py), so the
-  deployment manager skips the legacy `setup_event_trigger` and a Temporal-durable
-  `TriggerListenerWorkflow` consumes the event; the same call also broadcasts the
-  envelope to the FE on the `email_received` wire key. The legacy
+  same call also broadcasts the envelope to the FE on the `email_received` wire
+  key. Controlled deployment polling is performed directly by
+  `WorkflowControlWorkflow`, so it does not require a listener workflow. The legacy
   `event_waiter.dispatch` path has zero consumers in canary mode and is no longer
   called (`_events.py`).
 - **External API calls**: none direct - IMAP traffic flows through Himalaya.

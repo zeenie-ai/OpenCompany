@@ -29,6 +29,7 @@ const TriggerNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
   // not re-render this trigger.
   const nodeStatus = useNodeStatus(id);
   const executionStatus = nodeStatus?.status || 'idle';
+  const isPaused = nodeStatus?.data?.paused === true;
 
   // Check if this is a WhatsApp trigger
   const isWhatsAppTrigger = type === 'whatsappReceive';
@@ -87,6 +88,7 @@ const TriggerNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
   })();
 
   const getStatusTitle = () => {
+    if (isPaused) return nodeStatus?.data?.message || 'Trigger paused';
     switch (executionStatus) {
       case 'executing':
         return 'Executing...';
@@ -233,7 +235,7 @@ const TriggerNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
             width: theme.nodeSize.outputBadge,
             height: theme.nodeSize.outputBadge,
             borderRadius: theme.borderRadius.sm,
-            backgroundColor: 'var(--warning)',
+            backgroundColor: isPaused ? 'var(--fg-faint)' : 'var(--warning)',
             border: `1px solid ${theme.isDarkMode ? theme.colors.background : '#ffffff'}`,
             display: 'flex',
             alignItems: 'center',
@@ -244,9 +246,9 @@ const TriggerNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
               ? `0 1px 3px ${theme.colors.shadow}`
               : '0 1px 3px rgba(0,0,0,0.15)',
           }}
-          title="Trigger Node - Starts workflow execution"
+          title={isPaused ? 'Trigger paused — events will run after resume' : 'Trigger Node - Starts workflow execution'}
         >
-          <span style={{ lineHeight: 1, color: theme.isDarkMode ? theme.colors.background : '#1a1d21' }}>⚡</span>
+          <span style={{ lineHeight: 1, color: theme.isDarkMode ? theme.colors.background : '#1a1d21' }}>{isPaused ? 'Ⅱ' : '⚡'}</span>
         </div>
 
         {/* Output Handle (right side) — CSS owns bg/border via .sq-node-handle.out */}

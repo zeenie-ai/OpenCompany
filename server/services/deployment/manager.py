@@ -7,6 +7,7 @@ Implements n8n/Conductor pattern where:
 """
 
 import asyncio
+import inspect
 import json
 import time
 from datetime import datetime
@@ -15,6 +16,7 @@ from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING
 from core.logging import get_logger
 from constants import POLLING_TRIGGER_TYPES, TOOLKIT_NODE_TYPES, WORKFLOW_TRIGGER_TYPES
 from services import event_waiter
+from services.events.envelope import equivalent_event_types
 from .state import DeploymentState, TriggerInfo
 from .triggers import TriggerManager
 
@@ -77,6 +79,8 @@ class DeploymentManager:
         self._trigger_managers: Dict[str, TriggerManager] = {}
         self._active_runs: Dict[str, Dict[str, asyncio.Task]] = {}  # workflow_id -> {run_id: task}
         self._run_counters: Dict[str, int] = {}
+        self._paused_workflows: set[str] = set()
+        self._paused_events: Dict[str, List[tuple[str, Dict[str, Any]]]] = {}
         self._status_callbacks: Dict[str, Callable] = {}
         self._main_loop: Optional[asyncio.AbstractEventLoop] = None
 
@@ -95,6 +99,47 @@ class DeploymentManager:
     def get_deployed_workflows(self) -> List[str]:
         """Get list of deployed workflow IDs."""
         return [wid for wid, state in self._deployments.items() if state.is_running]
+
+    def pause(self, workflow_id: str) -> bool:
+        """Cooperatively stop admitting new runs for a deployment."""
+        if not self.is_workflow_deployed(workflow_id):
+            return False
+        self._paused_workflows.add(workflow_id)
+        return True
+
+    async def resume(self, workflow_id: str) -> int:
+        """Resume admission and drain paused trigger events in FIFO order."""
+        if workflow_id not in self._paused_workflows:
+            return 0
+        self._paused_workflows.discard(workflow_id)
+        queued = self._paused_events.pop(workflow_id, [])
+        for trigger_node_id, trigger_data in queued:
+            await self._spawn_run(trigger_node_id, trigger_data, workflow_id=workflow_id)
+        return len(queued)
+
+    async def update_trigger_pause_status(self, workflow_id: str, *, paused: bool) -> int:
+        """Reflect deployment admission state on every armed trigger node."""
+        state = self._deployments.get(workflow_id)
+        if state is None:
+            return 0
+        trigger_ids: list[str] = []
+        for node in state.nodes:
+            node_type = node.get("type", "")
+            if node_type == "start":
+                continue
+            if (
+                node_type in WORKFLOW_TRIGGER_TYPES
+                or event_waiter.get_trigger_config(node_type) is not None
+                or self._is_polling_trigger_class(node_type)
+            ):
+                trigger_ids.append(node["id"])
+        for node_id in trigger_ids:
+            await self._broadcaster.update_node_status(
+                node_id, "idle" if paused else "waiting",
+                {"paused": paused, "message": "Paused" if paused else "Waiting for events"},
+                workflow_id=workflow_id,
+            )
+        return len(trigger_ids)
 
     # =========================================================================
     # DEPLOYMENT LIFECYCLE
@@ -740,24 +785,44 @@ class DeploymentManager:
         event_workflow_id_key = SearchAttributeKey.for_keyword("EventWorkflowId")
         event_trigger_kind_key = SearchAttributeKey.for_keyword("EventTriggerKind")
 
-        await wrapper.client.start_workflow(
-            workflow_type_name,
-            args=[listener_args],
-            id=listener_id,
-            task_queue="machina-tasks",
-            id_conflict_policy=WorkflowIDConflictPolicy.USE_EXISTING,
-            search_attributes=TypedSearchAttributes(
-                [
-                    # MUST be the CloudEvents type the producer emits on
-                    # outgoing envelopes — dispatch.emit's Visibility query
-                    # substitutes ``event.type`` into the EventType filter.
-                    SearchAttributePair(event_type_key, cloudevent_type),
-                    SearchAttributePair(trigger_node_id_key, node_id),
-                    SearchAttributePair(event_workflow_id_key, workflow_id),
-                    SearchAttributePair(event_trigger_kind_key, trigger_kind),
-                ]
-            ),
-        )
+        control_lookup = container.database().get_latest_workflow_control(workflow_id)
+        control = await control_lookup if inspect.isawaitable(control_lookup) else None
+        if control is not None and control.controller_workflow_id and control.status in {
+            "starting", "running", "pausing", "paused", "resuming",
+        }:
+            # The controller owns listeners as child workflows. This keeps
+            # trigger activity in the deployment's Temporal execution tree
+            # instead of presenting each listener as an unrelated root trace.
+            await wrapper.client.get_workflow_handle(
+                control.controller_workflow_id, run_id=control.controller_run_id,
+            ).signal("register_trigger", {
+                "listener_id": listener_id,
+                "workflow_type": workflow_type_name,
+                "listener_args": listener_args,
+                "event_type": cloudevent_type,
+                "event_types": list(equivalent_event_types(cloudevent_type)),
+                "trigger_node_id": node_id,
+                "workflow_id": workflow_id,
+                "trigger_kind": trigger_kind,
+            })
+        else:
+            # Compatibility path for legacy deployments without a durable
+            # workflow controller.
+            await wrapper.client.start_workflow(
+                workflow_type_name,
+                args=[listener_args],
+                id=listener_id,
+                task_queue="machina-tasks",
+                id_conflict_policy=WorkflowIDConflictPolicy.USE_EXISTING,
+                search_attributes=TypedSearchAttributes(
+                    [
+                        SearchAttributePair(event_type_key, cloudevent_type),
+                        SearchAttributePair(trigger_node_id_key, node_id),
+                        SearchAttributePair(event_workflow_id_key, workflow_id),
+                        SearchAttributePair(event_trigger_kind_key, trigger_kind),
+                    ]
+                ),
+            )
 
         # Broadcast waiting status (parity with legacy path).
         await self._broadcaster.update_node_status(
@@ -954,6 +1019,11 @@ class DeploymentManager:
         if not workflow_id or not self.is_workflow_deployed(workflow_id):
             return None
 
+        if workflow_id in self._paused_workflows:
+            self._paused_events.setdefault(workflow_id, []).append((trigger_node_id, trigger_data))
+            logger.info("Deployment event queued while paused", workflow_id=workflow_id, trigger_node_id=trigger_node_id)
+            return None
+
         state = self._deployments[workflow_id]
 
         # Check concurrent limit for this workflow
@@ -1083,8 +1153,6 @@ class DeploymentManager:
         """Get all downstream nodes from a trigger."""
         downstream_ids = set()
         node_types = {n["id"]: n.get("type", "") for n in nodes}
-        nodes_with_inputs = {e.get("target") for e in edges if e.get("target")}
-
         def collect(current_id: str):
             for edge in edges:
                 if edge.get("source") != current_id:

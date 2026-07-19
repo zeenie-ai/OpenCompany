@@ -40,6 +40,7 @@ from models.database import (
     GoogleConnection,
     ProxyProviderConfig,
     ProxyRoutingRule,
+    WorkflowControlExecution,
 )
 from models.cache import CacheEntry  # SQLite-backed cache for Redis alternative
 from core.logging import get_logger
@@ -107,6 +108,7 @@ class Database:
             # Add missing columns to existing tables (simple migration)
             await self._migrate_user_settings()
             await self._migrate_agent_teams()
+            await self._migrate_workflow_controls()
 
             logger.info("Database initialized successfully")
 
@@ -279,6 +281,8 @@ class Database:
                     "acceptance_criteria": "JSON", "queue_sequence": "INTEGER DEFAULT 0",
                     "revision": "INTEGER DEFAULT 0", "current_attempt": "INTEGER DEFAULT 0",
                     "child_workflow_id": "VARCHAR(500)", "child_run_id": "VARCHAR(255)",
+                    "runner_workflow_id": "VARCHAR(500)", "runner_run_id": "VARCHAR(255)",
+                    "parent_workflow_id": "VARCHAR(500)", "parent_run_id": "VARCHAR(255)",
                     "trace_id": "VARCHAR(255)", "cancellation_requested": "BOOLEAN DEFAULT 0",
                     "cancellation_reason": "VARCHAR(2000)", "usage": "JSON",
                 }
@@ -292,6 +296,16 @@ class Database:
                     await conn.execute(text("UPDATE team_tasks SET status='cancelled' WHERE status='skipped'"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_team_tasks_execution_id ON team_tasks(execution_id)"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_team_tasks_root_execution_id ON team_tasks(root_execution_id)"))
+
+                result = await conn.execute(text("PRAGMA table_info(team_task_attempts)"))
+                attempt_columns = {row[1] for row in result.fetchall()}
+                attempt_additions = {
+                    "runner_workflow_id": "VARCHAR(500)", "runner_run_id": "VARCHAR(255)",
+                    "parent_workflow_id": "VARCHAR(500)", "parent_run_id": "VARCHAR(255)",
+                }
+                for column, definition in attempt_additions.items():
+                    if attempt_columns and column not in attempt_columns:
+                        await conn.execute(text(f"ALTER TABLE team_task_attempts ADD COLUMN {column} {definition}"))
         except Exception as e:
             logger.warning(f"Agent-team migration check failed: {e}")
 
@@ -315,6 +329,27 @@ class Database:
                 raise
             finally:
                 await session.close()
+
+    async def _migrate_workflow_controls(self):
+        """Backfill control-plane columns when upgrading an early preview DB."""
+        try:
+            async with self.engine.begin() as conn:
+                result = await conn.execute(text("PRAGMA table_info(workflow_control_executions)"))
+                columns = {row[1] for row in result.fetchall()}
+                additions = {
+                    "controller_workflow_id": "VARCHAR(500)",
+                    "controller_run_id": "VARCHAR(255)",
+                    "resource_manifest": "JSON DEFAULT '{}'",
+                    "terminal_reason": "VARCHAR(2000)",
+                    "completed_at": "DATETIME",
+                }
+                for column, definition in additions.items():
+                    if column not in columns:
+                        await conn.execute(text(f"ALTER TABLE workflow_control_executions ADD COLUMN {column} {definition}"))
+                await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_workflow_control_generation ON workflow_control_executions(workflow_id, generation)"))
+                await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_workflow_control_idempotency ON workflow_control_executions(workflow_id, idempotency_key)"))
+        except Exception as exc:
+            logger.warning(f"Workflow-control migration check failed: {exc}")
 
     async def run_runtime_mutation(
         self,
@@ -1500,10 +1535,6 @@ class Database:
                 if not schema:
                     return None
 
-                pending_count = sum(1 for t in tasks if t.status == "pending")
-                active_count = sum(1 for t in tasks if t.status == "in_progress")
-                completed_count = sum(1 for t in tasks if t.status == "completed")
-                failed_count = sum(1 for t in tasks if t.status == "failed")
                 return {
                     "node_id": schema.node_id,
                     "tool_name": schema.tool_name,
@@ -2379,6 +2410,73 @@ class Database:
             return []
 
     # ============================================================================
+    # Durable workflow control
+    # ============================================================================
+
+    async def get_latest_workflow_control(self, workflow_id: str) -> Optional[WorkflowControlExecution]:
+        async with self.get_session() as session:
+            result = await session.execute(
+                select(WorkflowControlExecution)
+                .where(WorkflowControlExecution.workflow_id == workflow_id)
+                .order_by(WorkflowControlExecution.generation.desc())
+                .limit(1)
+            )
+            return result.scalar_one_or_none()
+
+    async def has_active_workflow_controls(self) -> bool:
+        async with self.get_session() as session:
+            result = await session.execute(
+                select(func.count()).select_from(WorkflowControlExecution).where(
+                    WorkflowControlExecution.status.in_({"starting", "running", "pausing", "paused", "resuming"})
+                )
+            )
+            return bool(result.scalar_one())
+
+    async def get_workflow_control_by_idempotency_key(
+        self, workflow_id: str, idempotency_key: str
+    ) -> Optional[WorkflowControlExecution]:
+        async with self.get_session() as session:
+            result = await session.execute(
+                select(WorkflowControlExecution).where(
+                    WorkflowControlExecution.workflow_id == workflow_id,
+                    WorkflowControlExecution.idempotency_key == idempotency_key,
+                )
+            )
+            return result.scalar_one_or_none()
+
+    async def create_workflow_control(self, control: WorkflowControlExecution) -> WorkflowControlExecution:
+        async with self.get_session() as session:
+            session.add(control)
+            await session.commit()
+            await session.refresh(control)
+            return control
+
+    async def transition_workflow_control(
+        self, control_id: str, *, expected_revision: int, from_statuses: set[str], status: str,
+        values: Optional[Dict[str, Any]] = None,
+    ) -> Optional[WorkflowControlExecution]:
+        """Optimistically transition one generation; return None on conflict."""
+        now = datetime.now(timezone.utc)
+        update_values: Dict[str, Any] = {"status": status, "revision": expected_revision + 1, "updated_at": now}
+        update_values.update(values or {})
+        async with self.get_session() as session:
+            result = await session.execute(
+                update(WorkflowControlExecution)
+                .where(
+                    WorkflowControlExecution.id == control_id,
+                    WorkflowControlExecution.revision == expected_revision,
+                    WorkflowControlExecution.status.in_(from_statuses),
+                )
+                .values(**update_values)
+            )
+            if result.rowcount != 1:
+                await session.rollback()
+                return None
+            await session.commit()
+            refreshed = await session.execute(select(WorkflowControlExecution).where(WorkflowControlExecution.id == control_id))
+            return refreshed.scalar_one()
+
+    # ============================================================================
     # Agent Teams - CRUD Operations
     # ============================================================================
 
@@ -2632,6 +2730,12 @@ class Database:
             "revision": task.revision, "current_attempt": task.current_attempt,
             "retry_count": task.retry_count, "max_retries": task.max_retries,
             "child_workflow_id": task.child_workflow_id, "child_run_id": task.child_run_id,
+            "runner_workflow_id": task.runner_workflow_id, "runner_run_id": task.runner_run_id,
+            "parent_workflow_id": task.parent_workflow_id, "parent_run_id": task.parent_run_id,
+            "trace_availability": (
+                "available" if task.child_workflow_id or task.runner_workflow_id
+                else "execution_not_registered"
+            ),
             "trace_id": task.trace_id, "cancellation_requested": task.cancellation_requested,
             "cancellation_reason": task.cancellation_reason, "usage": task.usage,
             "created_at": task.created_at.isoformat() if task.created_at else None,
@@ -2641,6 +2745,8 @@ class Database:
                 {"id": a.id, "attempt_number": a.attempt_number, "assignee_node_id": a.assignee_node_id,
                  "status": a.status, "child_workflow_id": a.child_workflow_id,
                  "child_run_id": a.child_run_id, "result": a.result, "error": a.error,
+                 "runner_workflow_id": a.runner_workflow_id, "runner_run_id": a.runner_run_id,
+                 "parent_workflow_id": a.parent_workflow_id, "parent_run_id": a.parent_run_id,
                  "usage": a.usage, "created_at": a.created_at.isoformat() if a.created_at else None,
                  "started_at": a.started_at.isoformat() if a.started_at else None,
                  "completed_at": a.completed_at.isoformat() if a.completed_at else None}
@@ -2711,6 +2817,45 @@ class Database:
             await session.commit()
             await session.refresh(task)
             return self._team_task_dict(task)
+
+    async def register_team_task_execution(
+        self, *, team_id: str, task_id: str, attempt_number: int,
+        runner_workflow_id: Optional[str] = None, runner_run_id: Optional[str] = None,
+        child_workflow_id: Optional[str] = None, child_run_id: Optional[str] = None,
+        parent_workflow_id: Optional[str] = None, parent_run_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Idempotently attach actual Temporal identities to one task attempt."""
+        async with self.get_session() as session:
+            task = (await session.execute(select(TeamTask).where(
+                TeamTask.id == task_id, TeamTask.team_id == team_id,
+            ))).scalar_one_or_none()
+            if task is None or task.current_attempt != attempt_number:
+                return None
+            values = {
+                key: value for key, value in {
+                    "runner_workflow_id": runner_workflow_id, "runner_run_id": runner_run_id,
+                    "child_workflow_id": child_workflow_id, "child_run_id": child_run_id,
+                    "parent_workflow_id": parent_workflow_id, "parent_run_id": parent_run_id,
+                }.items() if value
+            }
+            for key, value in values.items():
+                setattr(task, key, value)
+            attempt_id = f"{task_id}:attempt:{attempt_number}"
+            attempt = (await session.execute(select(TeamTaskAttempt).where(
+                TeamTaskAttempt.id == attempt_id,
+            ))).scalar_one_or_none()
+            if attempt is None:
+                attempt = TeamTaskAttempt(
+                    id=attempt_id, task_id=task_id, team_id=team_id,
+                    attempt_number=attempt_number, assignee_node_id=task.assigned_to,
+                    status=task.status, started_at=task.started_at or datetime.now(timezone.utc),
+                )
+                session.add(attempt)
+            for key, value in values.items():
+                setattr(attempt, key, value)
+            await session.commit()
+            await session.refresh(task)
+            return self._team_task_dict(task, [attempt])
 
     async def get_team_tasks(self, team_id: str, status: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get team tasks, optionally filtered by status."""
@@ -2805,6 +2950,11 @@ class Database:
                     )
                 )
                 if completed.rowcount == 1:
+                    task = (await session.execute(select(TeamTask).where(TeamTask.id == task_id))).scalar_one()
+                    await session.execute(update(TeamTaskAttempt).where(
+                        TeamTaskAttempt.id == f"{task_id}:attempt:{task.current_attempt}"
+                    ).values(status="submitted", result=result_data, usage=usage,
+                             completed_at=datetime.now(timezone.utc)))
                     return {"success": True}
 
                 selected = await session.execute(
@@ -2858,6 +3008,10 @@ class Database:
                     )
                 )
                 if failed.rowcount == 1:
+                    task = (await session.execute(select(TeamTask).where(TeamTask.id == task_id))).scalar_one()
+                    await session.execute(update(TeamTaskAttempt).where(
+                        TeamTaskAttempt.id == f"{task_id}:attempt:{task.current_attempt}"
+                    ).values(status="failed", error=error, completed_at=datetime.now(timezone.utc)))
                     return {"success": True}
 
                 selected = await session.execute(

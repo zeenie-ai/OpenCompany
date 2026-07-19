@@ -74,6 +74,9 @@ async def test_connect_returns_client_when_serving_first(monkeypatch):
 
     assert result is fc
     assert fc.service_client.check_health.await_count == 1
+    connect_kwargs = client_mod.Client.connect.await_args.kwargs
+    assert len(connect_kwargs["interceptors"]) == 1
+    assert connect_kwargs["interceptors"][0].__class__.__name__ == "TracingInterceptor"
 
 
 async def test_connect_polls_until_serving(monkeypatch):

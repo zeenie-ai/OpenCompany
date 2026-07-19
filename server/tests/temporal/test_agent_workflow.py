@@ -279,6 +279,7 @@ class TestAgentActivities:
             "agent.prepare_payload.v1",
             "agent.queue_delegation.v1",
             "agent.refresh_tools.v1",
+            "agent.register_task_execution.v1",
             "agent.release_subagent_permit.v1",
             "agent.store_output.v1",
         ]

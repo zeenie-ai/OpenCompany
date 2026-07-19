@@ -1,5 +1,10 @@
 # RFC: Temporal Cleanup, Queue Routing, Resilience & Performance (Waves 15-18)
 
+> **Historical implementation plan.** This document records the Waves 15-18
+> migration and retains names that must remain replay-compatible. The current
+> execution and control architecture is specified in
+> [Temporal Execution Engine RFC](temporal-execution-engine-rfc.md).
+
 - **Status**: Approved, in implementation
 - **Drafted**: 2026-07-03 (all code facts verified against the working tree at that date via a 5-agent parallel sweep)
 - **Baseline**: `5b384b7` (v0.0.92)

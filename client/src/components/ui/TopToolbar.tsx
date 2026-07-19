@@ -17,7 +17,9 @@ import {
   LogOut,
   Save,
   Play,
-  Square,
+  Pause,
+  RotateCcw,
+  LoaderCircle,
   Repeat,
   Clock,
   Zap,
@@ -41,6 +43,11 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { ActionButton } from '@/components/ui/action-button';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import type { WorkflowControlStatus } from '../../contexts/WebSocketContext';
 import { ThemeSwitcher } from '@/components/ui/ThemeSwitcher';
 import { cn } from '@/lib/utils';
 import { useAuth } from '../../contexts/AuthContext';
@@ -61,9 +68,11 @@ interface TopToolbarProps {
   onOpen: () => void;
   onRun: () => void;
   isRunning?: boolean;
-  onDeploy: () => void;
-  onCancelDeployment: () => void;
-  isDeploying?: boolean;
+  workflowControl: WorkflowControlStatus;
+  onStartWorkflow: () => void;
+  onPauseWorkflow: () => void;
+  onResumeWorkflow: () => void;
+  onResetWorkflow: () => void;
   hasUnsavedChanges: boolean;
   sidebarVisible: boolean;
   onToggleSidebar: () => void;
@@ -88,9 +97,11 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
   onOpen,
   onRun: _onRun,
   isRunning = false,
-  onDeploy,
-  onCancelDeployment,
-  isDeploying = false,
+  workflowControl,
+  onStartWorkflow,
+  onPauseWorkflow,
+  onResumeWorkflow,
+  onResetWorkflow,
   hasUnsavedChanges,
   sidebarVisible,
   onToggleSidebar,
@@ -107,6 +118,7 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
   onOverrideAllAgents,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
   const [tempName, setTempName] = useState(workflowName);
   const { user, logout } = useAuth();
 
@@ -391,27 +403,38 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
 
         <Divider />
 
-        {/* Start / Stop */}
-        {!isDeploying ? (
+        {/* Durable workflow lifecycle */}
+        {workflowControl.can_start ? (
           <ActionButton
             intent="run"
-            onClick={onDeploy}
+            onClick={onStartWorkflow}
             disabled={isRunning}
             title="Start workflow"
           >
             <Play className="h-3 w-3 fill-current" />
             Start
           </ActionButton>
-        ) : (
+        ) : workflowControl.state === 'paused' ? (
+          <ActionButton intent="run" onClick={onResumeWorkflow} title="Resume this workflow execution">
+            <Play className="h-3 w-3 fill-current" /> Resume
+          </ActionButton>
+        ) : workflowControl.state === 'running' ? (
           <ActionButton
             intent="stop"
-            onClick={onCancelDeployment}
-            title="Stop workflow"
+            onClick={onPauseWorkflow}
+            title="Pause new workflow scheduling after in-flight work finishes"
           >
-            <Square className="h-3 w-3 fill-current" />
-            Stop
+            <Pause className="h-3 w-3 fill-current" /> Pause
+          </ActionButton>
+        ) : (
+          <ActionButton intent="run" disabled title={`Workflow is ${workflowControl.state}`}>
+            <LoaderCircle className="h-3 w-3 animate-spin" /> {workflowControl.state.replace('_', ' ')}
           </ActionButton>
         )}
+
+        {workflowControl.can_reset && <ActionButton intent="stop" onClick={() => setResetOpen(true)} title="Terminate and archive this execution"><RotateCcw className="h-3 w-3" /> Reset</ActionButton>}
+
+        <AlertDialog open={resetOpen} onOpenChange={setResetOpen}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Reset workflow execution?</AlertDialogTitle><AlertDialogDescription>This immediately terminates active work and archives the current generation. Task history remains available. The workflow will remain stopped until you press Start.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Keep current execution</AlertDialogCancel><AlertDialogAction onClick={onResetWorkflow}>Reset workflow</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
 
         <ActionButton
           intent="save"

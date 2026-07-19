@@ -22,12 +22,15 @@ from __future__ import annotations
 
 import asyncio
 import time
+import uuid
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from fastapi import WebSocket
 
 from core.logging import get_logger
 from services.ws_handler_registry import ws_handler
+from services.deployment.control import WorkflowControlService, serialize_control
 
 # ``core.container`` and ``services.status_broadcaster`` are lazy-imported
 # inside each handler body. This module is imported transitively via
@@ -370,12 +373,271 @@ async def handle_update_deployment_settings(
     }
 
 
+def _control_service():
+    from core.container import container
+
+    return WorkflowControlService(container.database())
+
+
+async def _start_controller(control) -> Optional[str]:
+    """Start the durable Temporal controller when Temporal is available."""
+    from core.container import container
+    from temporalio.common import SearchAttributeKey, SearchAttributePair, TypedSearchAttributes
+
+    wrapper = container.temporal_client()
+    if wrapper is None or wrapper.client is None:
+        return None
+    handle = await wrapper.client.start_workflow(
+        "WorkflowControlWorkflow",
+        args=[{"generation": control.generation, "state": "running"}],
+        id=control.controller_workflow_id,
+        task_queue="machina-tasks",
+        search_attributes=TypedSearchAttributes([
+            SearchAttributePair(
+                SearchAttributeKey.for_keyword("EventWorkflowId"), control.workflow_id,
+            )
+        ]),
+    )
+    return getattr(handle, "result_run_id", None) or getattr(handle, "first_execution_run_id", None)
+
+
+async def _signal_controller(control, signal_name: str) -> None:
+    from core.container import container
+
+    wrapper = container.temporal_client()
+    if wrapper is not None and wrapper.client is not None and control.controller_workflow_id:
+        await wrapper.client.get_workflow_handle(
+            control.controller_workflow_id, run_id=control.controller_run_id
+        ).signal(signal_name)
+
+
+async def _signal_generation_workflows(workflow_id: str, signal_name: str) -> int:
+    """Best-effort cooperative fan-out to this deployment's live executions.
+
+    Visibility is discovery only; durable control state remains authoritative.
+    Every matching workflow receives an idempotent pause/resume flag mutation.
+    """
+    from core.container import container
+
+    wrapper = container.temporal_client()
+    if wrapper is None or wrapper.client is None:
+        return 0
+    query = (
+        f"EventWorkflowId='{workflow_id}' "
+        "AND ExecutionStatus='Running'"
+    )
+    signalled = 0
+    try:
+        async for execution in wrapper.client.list_workflows(query=query):
+            try:
+                await wrapper.client.get_workflow_handle(
+                    execution.id, run_id=execution.run_id
+                ).signal(signal_name)
+                signalled += 1
+            except Exception as exc:
+                logger.warning(
+                    "Workflow control signal failed",
+                    workflow_id=workflow_id,
+                    temporal_workflow_id=execution.id,
+                    signal=signal_name,
+                    error=str(exc),
+                )
+    except Exception as exc:
+        logger.warning(
+            "Workflow control visibility fan-out failed",
+            workflow_id=workflow_id,
+            signal=signal_name,
+            error=str(exc),
+        )
+    return signalled
+
+
+async def _terminate_generation_workflows(workflow_id: str) -> int:
+    """Immediately terminate every visible execution in one application tree."""
+    from core.container import container
+
+    wrapper = container.temporal_client()
+    if wrapper is None or wrapper.client is None:
+        return 0
+    terminated = 0
+    try:
+        async for execution in wrapper.client.list_workflows(
+            query=f"EventWorkflowId='{workflow_id}' AND ExecutionStatus='Running'"
+        ):
+            try:
+                await wrapper.client.get_workflow_handle(
+                    execution.id, run_id=execution.run_id
+                ).terminate(reason="workflow_reset")
+                terminated += 1
+            except Exception as exc:
+                logger.warning(
+                    "Workflow reset termination failed",
+                    workflow_id=workflow_id,
+                    temporal_workflow_id=execution.id,
+                    error=str(exc),
+                )
+    except Exception as exc:
+        logger.warning(
+            "Workflow reset visibility scan failed",
+            workflow_id=workflow_id,
+            error=str(exc),
+        )
+    return terminated
+
+
+def _expected_revision(data: Dict[str, Any], control) -> int:
+    supplied = data.get("expected_revision")
+    return control.revision if supplied is None else int(supplied)
+
+
+async def _set_cron_pause(workflow_id: str, *, paused: bool) -> int:
+    from core.container import container
+    from services.temporal.schedules import set_cron_schedules_paused
+
+    wrapper = container.temporal_client()
+    if wrapper is None or wrapper.client is None:
+        return 0
+    return await set_cron_schedules_paused(wrapper.client, workflow_id, paused=paused)
+
+
+async def _with_runtime_counts(payload: Dict[str, Any], workflow_id: str) -> Dict[str, Any]:
+    from core.container import container
+
+    status = container.workflow_service().get_deployment_status(workflow_id)
+    return {
+        **payload,
+        "active_count": status.get("active_runs", 0),
+        "in_flight_count": status.get("active_runs", 0),
+        "queued_count": 0,
+    }
+
+
+@ws_handler("workflow_id")
+async def handle_get_workflow_control_status(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    return await _with_runtime_counts(await _control_service().get_status(data["workflow_id"]), data["workflow_id"])
+
+
+@ws_handler("workflow_id")
+async def handle_start_workflow(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    """Create generation one and retain deploy_workflow wire compatibility."""
+    workflow_id = data["workflow_id"]
+    key = data.get("idempotency_key") or f"start:{workflow_id}:{uuid.uuid4().hex}"
+    service = _control_service()
+    control, created = await service.begin_generation(
+        workflow_id=workflow_id, nodes=data.get("nodes", []), edges=data.get("edges", []),
+        session_id=data.get("session_id", "default"), idempotency_key=key,
+    )
+    if not created:
+        return await _with_runtime_counts({"success": True, "idempotent": True, **serialize_control(control)}, workflow_id)
+    try:
+        run_id = await _start_controller(control)
+        if run_id:
+            control = await service.transition(
+                control, expected_revision=control.revision, from_statuses={"starting"}, status="starting",
+                values={"controller_run_id": run_id},
+            )
+        deployed = await handle_deploy_workflow(data, websocket)
+        if not deployed.get("success"):
+            await service.fail(control, str(deployed.get("error", "deployment_failed")))
+            return deployed
+        control = await service.transition(control, expected_revision=control.revision, from_statuses={"starting"}, status="running")
+        return await _with_runtime_counts({"success": True, **serialize_control(control)}, workflow_id)
+    except Exception as exc:
+        await service.fail(control, str(exc))
+        raise
+
+
+@ws_handler("workflow_id")
+async def handle_pause_workflow(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    from core.container import container
+
+    workflow_id = data["workflow_id"]
+    service = _control_service()
+    control = await service.database.get_latest_workflow_control(workflow_id)
+    if control is None:
+        return {"success": False, "error": "workflow_never_started"}
+    control = await service.transition(
+        control, expected_revision=_expected_revision(data, control), from_statuses={"running"}, status="pausing"
+    )
+    container.workflow_service().pause_deployment(workflow_id)
+    await _signal_controller(control, "pause")
+    paused_schedules = await _set_cron_pause(workflow_id, paused=True)
+    paused_triggers = await container.workflow_service().update_trigger_pause_status(workflow_id, paused=True)
+    signalled = await _signal_generation_workflows(workflow_id, "pause")
+    control = await service.transition(control, expected_revision=control.revision, from_statuses={"pausing"}, status="paused")
+    return await _with_runtime_counts({
+        "success": True, "signalled_executions": signalled,
+        "paused_schedules": paused_schedules, "paused_triggers": paused_triggers,
+        **serialize_control(control),
+    }, workflow_id)
+
+
+@ws_handler("workflow_id")
+async def handle_resume_workflow(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    from core.container import container
+
+    workflow_id = data["workflow_id"]
+    service = _control_service()
+    control = await service.database.get_latest_workflow_control(workflow_id)
+    if control is None:
+        return {"success": False, "error": "workflow_never_started"}
+    control = await service.transition(
+        control, expected_revision=_expected_revision(data, control), from_statuses={"paused"}, status="resuming"
+    )
+    await _signal_controller(control, "resume")
+    resumed_schedules = await _set_cron_pause(workflow_id, paused=False)
+    signalled = await _signal_generation_workflows(workflow_id, "resume")
+    queued = await container.workflow_service().resume_deployment(workflow_id)
+    resumed_triggers = await container.workflow_service().update_trigger_pause_status(workflow_id, paused=False)
+    control = await service.transition(control, expected_revision=control.revision, from_statuses={"resuming"}, status="running")
+    return await _with_runtime_counts({
+        "success": True, "resumed_queued_events": queued, "signalled_executions": signalled,
+        "resumed_schedules": resumed_schedules, "resumed_triggers": resumed_triggers,
+        **serialize_control(control),
+    }, workflow_id)
+
+
+@ws_handler("workflow_id")
+async def handle_reset_workflow(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    workflow_id = data["workflow_id"]
+    service = _control_service()
+    current = await service.database.get_latest_workflow_control(workflow_id)
+    if current is not None:
+        current = await service.transition(
+            current, expected_revision=_expected_revision(data, current),
+            from_statuses={"starting", "running", "pausing", "paused", "resuming", "failed"}, status="resetting",
+            values={"terminal_reason": "workflow_reset", "completed_at": datetime.now(timezone.utc)},
+        )
+        try:
+            await _signal_controller(current, "reset")
+        finally:
+            terminated = await _terminate_generation_workflows(workflow_id)
+            await handle_cancel_deployment({"workflow_id": workflow_id}, websocket)
+    else:
+        terminated = 0
+    if current is None:
+        return await _with_runtime_counts(await service.get_status(workflow_id), workflow_id)
+    current = await service.transition(
+        current, expected_revision=current.revision, from_statuses={"resetting"}, status="reset",
+        values={"terminal_reason": "workflow_reset", "completed_at": datetime.now(timezone.utc)},
+    )
+    return await _with_runtime_counts(
+        {"success": True, "terminated_executions": terminated, **serialize_control(current)},
+        workflow_id,
+    )
+
+
 WS_HANDLERS: Dict[str, Any] = {
     "deploy_workflow": handle_deploy_workflow,
     "cancel_deployment": handle_cancel_deployment,
     "get_deployment_status": handle_get_deployment_status,
     "get_workflow_lock": handle_get_workflow_lock,
     "update_deployment_settings": handle_update_deployment_settings,
+    "start_workflow": handle_start_workflow,
+    "pause_workflow": handle_pause_workflow,
+    "resume_workflow": handle_resume_workflow,
+    "reset_workflow": handle_reset_workflow,
+    "get_workflow_control_status": handle_get_workflow_control_status,
 }
 
 

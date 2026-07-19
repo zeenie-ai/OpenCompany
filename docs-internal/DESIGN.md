@@ -5,6 +5,7 @@
 The OpenCompany execution engine implements a robust workflow orchestration system combining industry-standard patterns from **Netflix Conductor**, **Prefect 3.0**, **Temporal**, and **Redis Streams**. This document details the architectural decisions, design patterns, and standards used.
 
 Related docs:
+- [temporal-execution-engine-rfc.md](temporal-execution-engine-rfc.md) - canonical current Temporal control, trigger, graph, agent-team, and trace architecture
 - [TEMPORAL_ARCHITECTURE.md](TEMPORAL_ARCHITECTURE.md) - distributed execution via Temporal activities
 - [event_waiter_system.md](event_waiter_system.md) - push-based trigger waiters
 - [native_llm_sdk.md](native_llm_sdk.md) - LLM provider layer

@@ -11,6 +11,7 @@ from services.plugin import NodeContext, Operation, TaskQueue, ToolNode
 TaskOperation = Literal[
     "assign_task", "list_tasks", "get_task", "modify_task", "cancel_task",
     "retry_task", "reassign_task", "accept_task", "finish_team", "mark_done",
+    "inspect_task_trace",
 ]
 
 
@@ -28,6 +29,16 @@ class TaskManagerParams(BaseModel):
     reason: Optional[str] = Field(default=None, max_length=2000)
     status_filter: Optional[str] = None
     include_history: bool = False
+    attempt: Optional[int] = Field(default=None, ge=0)
+    cursor: Optional[str] = None
+    limit: int = Field(default=50, ge=1, le=100)
+    detail: Literal["summary", "failures", "timeline", "search"] = "summary"
+    query: Optional[str] = Field(default=None, max_length=200)
+    search_mode: Literal["literal", "all_terms", "any_terms"] = "literal"
+    case_sensitive: bool = False
+    context_lines: int = Field(default=2, ge=0, le=5)
+    scan_limit: int = Field(default=250, ge=1, le=500)
+    categories: Optional[List[Literal["failure", "activity", "child", "signal", "timer", "workflow"]]] = None
     model_config = ConfigDict(extra="allow")
 
 
@@ -112,6 +123,7 @@ async def _execute_task_manager(args: Dict[str, Any], config: Dict[str, Any]) ->
     allowed_operations = {
         "assign_task", "list_tasks", "get_task", "modify_task", "cancel_task",
         "retry_task", "reassign_task", "accept_task", "finish_team", "mark_done",
+        "inspect_task_trace",
     }
     if operation not in allowed_operations:
         raise ValueError(f"Unknown Task Manager operation: {operation}")
@@ -133,6 +145,22 @@ async def _execute_task_manager(args: Dict[str, Any], config: Dict[str, Any]) ->
             raise ValueError("get_task requires task_id")
         task = await service.get_durable_task(**scope, task_id=task_id)
         return {"success": True, "operation": operation, "task": task}
+    if operation == "inspect_task_trace":
+        task_id = str(args.get("task_id") or "")
+        if not task_id:
+            raise ValueError("inspect_task_trace requires task_id")
+        from services.team_task_trace import get_team_task_trace_service
+
+        trace = await get_team_task_trace_service().get_trace(
+            **scope, task_id=task_id, attempt=args.get("attempt"),
+            cursor=args.get("cursor"), limit=int(args.get("limit") or 50),
+            detail=str(args.get("detail") or "summary"),
+            query=args.get("query"), search_mode=str(args.get("search_mode") or "literal"),
+            case_sensitive=bool(args.get("case_sensitive", False)),
+            context_lines=int(args.get("context_lines", 2)),
+            scan_limit=int(args.get("scan_limit", 250)), categories=args.get("categories"),
+        )
+        return {"success": True, "operation": operation, "trace": trace}
     if operation == "assign_task":
         if not args.get("title") or not args.get("mission"):
             raise ValueError("assign_task requires title and mission")

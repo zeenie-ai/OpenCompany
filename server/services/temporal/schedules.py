@@ -232,8 +232,38 @@ async def delete_cron_schedules_for_deployment(
     return deleted
 
 
+async def set_cron_schedules_paused(
+    client: Client, deployment_workflow_id: str, *, paused: bool,
+) -> int:
+    """Pause or unpause every cron Schedule owned by one deployment."""
+    query = f"EventWorkflowId='{deployment_workflow_id}' AND EventTriggerKind='cron'"
+    changed = 0
+    try:
+        iterator = await client.list_schedules(query=query)
+        async for desc in iterator:
+            try:
+                handle = client.get_schedule_handle(desc.id)
+                if paused:
+                    await handle.pause(note="OpenCompany workflow paused")
+                else:
+                    await handle.unpause(note="OpenCompany workflow resumed")
+                changed += 1
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    f"Failed to {'pause' if paused else 'resume'} cron Schedule {desc.id!r}: {exc}",
+                    deployment_workflow_id=deployment_workflow_id,
+                )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            f"Cron Schedule pause sweep failed: {exc}",
+            deployment_workflow_id=deployment_workflow_id,
+        )
+    return changed
+
+
 __all__ = [
     "cron_schedule_id",
     "create_cron_schedule",
     "delete_cron_schedules_for_deployment",
+    "set_cron_schedules_paused",
 ]

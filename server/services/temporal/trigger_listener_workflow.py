@@ -61,6 +61,15 @@ class TriggerListenerWorkflow:
         self._seen_event_ids: Set[str] = set()
         self._matched_events: List[Dict[str, Any]] = []
         self._processed_count: int = 0
+        self._control_paused = False
+
+    @workflow.signal
+    async def pause(self) -> None:
+        self._control_paused = True
+
+    @workflow.signal
+    async def resume(self) -> None:
+        self._control_paused = False
 
     @workflow.signal
     async def on_event(self, event_payload: Dict[str, Any]) -> None:
@@ -109,7 +118,9 @@ class TriggerListenerWorkflow:
         )
 
         while True:
-            await workflow.wait_condition(lambda: bool(self._matched_events))
+            await workflow.wait_condition(
+                lambda: bool(self._matched_events) and not self._control_paused
+            )
             event = self._matched_events.pop(0) if self._matched_events else None
             if event is None:
                 continue
@@ -133,6 +144,7 @@ class TriggerListenerWorkflow:
         self,
         event: Dict[str, Any],
         listener_data: Dict[str, Any],
+        admission_check=None,
     ) -> None:
         """Build the filtered downstream graph + start a child MachinaWorkflow.
 
@@ -212,6 +224,9 @@ class TriggerListenerWorkflow:
             event_id=event_id,
             event_type=event.get("type", ""),
         )
+
+        if admission_check is not None:
+            await admission_check()
 
         await workflow.start_child_workflow(
             "MachinaWorkflow",

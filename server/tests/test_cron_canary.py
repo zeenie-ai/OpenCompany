@@ -522,3 +522,32 @@ class TestCronPluginSelfRegisters:
         assert canary_registry.is_canary_trigger_type("cronScheduler"), (
             "Importing nodes.scheduler.cron_scheduler should call " "register_canary_trigger_type('cronScheduler')."
         )
+@pytest.mark.asyncio
+@pytest.mark.parametrize("paused", [True, False])
+async def test_schedule_pause_state_follows_workflow_control(paused):
+    from services.temporal.schedules import set_cron_schedules_paused
+
+    handles = {}
+
+    async def fake_list(query, **kwargs):
+        assert "EventWorkflowId='wf-1'" in query
+        return _FakeScheduleIterator(["schedule-a", "schedule-b"])
+
+    def fake_get_handle(schedule_id):
+        handle = MagicMock()
+        handle.pause = AsyncMock()
+        handle.unpause = AsyncMock()
+        handles[schedule_id] = handle
+        return handle
+
+    client = MagicMock(list_schedules=fake_list, get_schedule_handle=fake_get_handle)
+    changed = await set_cron_schedules_paused(client, "wf-1", paused=paused)
+
+    assert changed == 2
+    for handle in handles.values():
+        if paused:
+            handle.pause.assert_awaited_once()
+            handle.unpause.assert_not_awaited()
+        else:
+            handle.unpause.assert_awaited_once()
+            handle.pause.assert_not_awaited()

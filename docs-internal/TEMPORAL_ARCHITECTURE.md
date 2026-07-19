@@ -1,5 +1,11 @@
 # Temporal Distributed Node Execution Architecture
 
+> **Canonical system design:** See
+> [Temporal Execution Engine RFC](temporal-execution-engine-rfc.md) for the
+> current control-generation, trigger-hub, agent-team, pause/reset, trace, and
+> security architecture. This document remains the detailed node dispatch and
+> activity/worker inventory.
+
 ## Overview
 
 Each workflow node executes as a **Temporal activity** with its own isolated context, enabling horizontal scaling across distributed workers. The orchestrator dispatches in one of three ways depending on settings flags:

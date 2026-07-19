@@ -322,6 +322,30 @@ class TestTaskManager:
         with pytest.raises(ValueError, match="Unknown Task Manager operation"):
             await _execute_task_manager({"operation": "self_destruct"}, self._config())
 
+    async def test_inspect_trace_uses_trusted_lead_scope(self, durable_service):
+        from nodes.tool.task_manager import _execute_task_manager
+
+        trace_service = MagicMock()
+        trace_service.get_trace = AsyncMock(return_value={
+            "status": "available", "events": [], "next_cursor": None,
+        })
+        with patch(
+            "services.team_task_trace.get_team_task_trace_service",
+            return_value=trace_service,
+        ):
+            result = await _execute_task_manager(
+                {"operation": "inspect_task_trace", "task_id": "task-1", "detail": "failures"},
+                self._config(),
+            )
+
+        assert result["trace"]["status"] == "available"
+        trace_service.get_trace.assert_awaited_once_with(
+            workflow_id="workflow-1", team_lead_node_id="lead-1", execution_id="run-1",
+            task_id="task-1", attempt=None, cursor=None, limit=50, detail="failures",
+            query=None, search_mode="literal", case_sensitive=False,
+            context_lines=2, scan_limit=250, categories=None,
+        )
+
 
 # ============================================================================
 # writeTodos

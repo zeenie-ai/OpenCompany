@@ -18,7 +18,8 @@ import {
   KeyRound,
   Save,
   Play,
-  Square,
+  Pause,
+  RotateCcw,
   FilePlus,
   FolderOpen,
   PanelLeftClose,
@@ -30,14 +31,17 @@ import {
 } from 'lucide-react';
 import { CommandPalette, type CommandItem } from './CommandPalette';
 import { AVAILABLE_THEMES, useTheme, type ThemeName } from '../../contexts/ThemeContext';
+import type { WorkflowControlStatus } from '../../contexts/WebSocketContext';
 
 interface Handlers {
   save: () => void;
   newWorkflow: () => void;
   open: () => void;
-  run: () => void;
-  stop: () => void;
-  isDeploying: boolean;
+  start: () => void;
+  pause: () => void;
+  resume: () => void;
+  reset: () => void;
+  workflowControl: WorkflowControlStatus;
   exportFile: () => void;
   importJSON: () => void;
   openSettings: () => void;
@@ -112,21 +116,27 @@ export const CommandPaletteHost: React.FC<Props> = ({ open, onOpenChange, handle
       },
 
       // ── Run ────────────────────────────────────────────────────────
-      handlers.isDeploying
+      handlers.workflowControl.state === 'running'
         ? {
-            id: 'run.stop',
-            label: 'Stop Workflow',
+            id: 'run.pause',
+            label: 'Pause Workflow',
             group: 'Run',
-            icon: Square,
-            onRun: handlers.stop,
+            icon: Pause,
+            onRun: handlers.pause,
           }
+        : handlers.workflowControl.state === 'paused'
+          ? { id: 'run.resume', label: 'Resume Workflow', group: 'Run', icon: Play, onRun: handlers.resume }
         : {
             id: 'run.start',
             label: 'Start Workflow',
             group: 'Run',
             icon: Play,
-            onRun: handlers.run,
+            onRun: handlers.start,
           },
+      ...(handlers.workflowControl.can_reset ? [{
+        id: 'run.reset', label: 'Reset Workflow Execution', group: 'Run', icon: RotateCcw,
+        hint: 'terminates active work', onRun: handlers.reset,
+      } satisfies CommandItem] : []),
 
       // ── Open panels ────────────────────────────────────────────────
       {

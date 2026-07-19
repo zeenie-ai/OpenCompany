@@ -21,6 +21,7 @@ from typing import Optional
 
 import aiohttp
 from opentelemetry import trace
+from temporalio.contrib.opentelemetry import TracingInterceptor
 from temporalio.client import Client
 from temporalio.runtime import LoggingConfig, Runtime, TelemetryConfig
 from temporalio.worker import PollerBehaviorAutoscaling, Worker
@@ -30,6 +31,7 @@ from ._interceptors import ObservabilityWorkerInterceptor
 from .workflow import MachinaWorkflow
 from .trigger_listener_workflow import TriggerListenerWorkflow
 from .polling_trigger_workflow import PollingTriggerWorkflow
+from .workflow_control_workflow import WorkflowControlWorkflow
 from .plugin_registry import temporal_plugins
 from .activities import (
     NodeExecutionActivities,
@@ -219,6 +221,7 @@ class TemporalWorkerManager:
                     DelegatedTaskWorkflow,
                     TriggerListenerWorkflow,
                     PollingTriggerWorkflow,
+                    WorkflowControlWorkflow,
                 ],
                 activities=[
                     self._activities.execute_node_activity,
@@ -234,7 +237,7 @@ class TemporalWorkerManager:
                 max_concurrent_workflow_tasks=10,
                 graceful_shutdown_timeout=_graceful_shutdown_timeout(),
                 identity=_worker_identity(self.task_queue),
-                interceptors=[ObservabilityWorkerInterceptor()],
+                interceptors=[TracingInterceptor(), ObservabilityWorkerInterceptor()],
                 # Wave 18.2: sticky cache sized by deployment mode so
                 # cached workflows skip Event-History replay without
                 # blowing laptop RAM.
@@ -494,7 +497,7 @@ class TemporalWorkerPool:
                 activities=activities,
                 graceful_shutdown_timeout=_graceful_shutdown_timeout(),
                 identity=_worker_identity(queue),
-                interceptors=[ObservabilityWorkerInterceptor()],
+                interceptors=[TracingInterceptor(), ObservabilityWorkerInterceptor()],
                 # Wave 18.1: per-queue activities/second ceiling.
                 max_activities_per_second=rate_limit,
                 # Wave 18.3: activity-only workers need a small
@@ -584,7 +587,12 @@ async def run_standalone_worker(
     for attempt in range(1, 6):
         try:
             logger.info(f"Connecting to Temporal server (attempt {attempt}/5)")
-            client = await Client.connect(server_address, namespace=namespace, runtime=runtime)
+            client = await Client.connect(
+                server_address,
+                namespace=namespace,
+                runtime=runtime,
+                interceptors=[TracingInterceptor()],
+            )
             logger.info("Connected to Temporal server")
             break
         except Exception as e:
@@ -614,6 +622,7 @@ async def run_standalone_worker(
                 MachinaWorkflow,
                 TriggerListenerWorkflow,
                 PollingTriggerWorkflow,
+                WorkflowControlWorkflow,
             ],
             activities=[
                 activities.execute_node_activity,
@@ -624,6 +633,7 @@ async def run_standalone_worker(
             max_concurrent_activities=pool_size,
             max_concurrent_workflow_tasks=10,
             graceful_shutdown_timeout=_graceful_shutdown_timeout(),
+            interceptors=[TracingInterceptor(), ObservabilityWorkerInterceptor()],
         )
 
         logger.info("Worker running. Press Ctrl+C to stop.")
@@ -667,6 +677,7 @@ async def create_worker(
             MachinaWorkflow,
             TriggerListenerWorkflow,
             PollingTriggerWorkflow,
+            WorkflowControlWorkflow,
         ],
         activities=[
             activities.execute_node_activity,
@@ -677,6 +688,7 @@ async def create_worker(
         max_concurrent_activities=100,
         max_concurrent_workflow_tasks=10,
         graceful_shutdown_timeout=_graceful_shutdown_timeout(),
+        interceptors=[TracingInterceptor(), ObservabilityWorkerInterceptor()],
     )
 
 

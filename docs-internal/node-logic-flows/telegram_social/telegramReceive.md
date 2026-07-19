@@ -16,9 +16,10 @@ first refuses to register if the bot is not connected, then defers to
 `TriggerNode.execute`. The Telegram-specific `build_filter` pre-compiles a
 `matches()` closure (via the legacy `build_telegram_filter`) from the node
 parameters. Events are produced by the `TelegramService` long-polling loop
-inside `_on_message_received`. In deployment mode this trigger runs on the
-canary path (`TriggerListenerWorkflow` per deployment/trigger, fed via the
-event framework); the registered filter narrows the stream.
+inside `_on_message_received`. In controlled deployment mode, the trigger
+definition and queued CloudEvents live in `WorkflowControlWorkflow`; the
+controller filters/deduplicates the stream and starts only actual graph runs.
+`TriggerListenerWorkflow` remains a legacy compatibility path.
 
 ## Inputs (handles)
 

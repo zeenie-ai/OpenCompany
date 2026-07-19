@@ -198,6 +198,21 @@ def _duplicate_visible_tool_name_error(tools: List[Dict[str, Any]]) -> Optional[
 class DelegatedTaskWorkflow:
     """Own one queued delegation after the lead returns to its caller."""
 
+    def __init__(self) -> None:
+        self._control_paused = False
+
+    @workflow.signal
+    async def pause(self) -> None:
+        self._control_paused = True
+
+    @workflow.signal
+    async def resume(self) -> None:
+        self._control_paused = False
+
+    async def _wait_until_resumed(self) -> None:
+        if self._control_paused:
+            await workflow.wait_condition(lambda: not self._control_paused)
+
     @workflow.run
     async def run(self, request: Dict[str, Any]) -> Dict[str, Any]:
         lifecycle = request["lifecycle"]
@@ -206,6 +221,16 @@ class DelegatedTaskWorkflow:
         acquired = False
         began = False
         try:
+            await self._wait_until_resumed()
+            info = workflow.info()
+            await workflow.execute_activity(
+                "agent.register_task_execution.v1",
+                args=[{**lifecycle, "runner_workflow_id": info.workflow_id,
+                       "runner_run_id": info.run_id,
+                       "child_workflow_id": request["child_workflow_id"]}],
+                start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                retry_policy=AGENT_ACTIVITY_RETRY,
+            )
             await workflow.execute_activity(
                 "agent.acquire_subagent_permit.v1",
                 args=[{"root_execution_id": root_id, "permit_id": task_id,
@@ -221,11 +246,22 @@ class DelegatedTaskWorkflow:
                 retry_policy=AGENT_ACTIVITY_RETRY,
             )
             began = True
-            result = await workflow.execute_child_workflow(
+            await self._wait_until_resumed()
+            child_handle = await workflow.start_child_workflow(
                 "AgentWorkflow", args=[request["child_context"]],
                 id=request["child_workflow_id"],
                 execution_timeout=timedelta(hours=1), run_timeout=timedelta(hours=1),
             )
+            await workflow.execute_activity(
+                "agent.register_task_execution.v1",
+                args=[{**lifecycle, "runner_workflow_id": info.workflow_id,
+                       "runner_run_id": info.run_id,
+                       "child_workflow_id": child_handle.id,
+                       "child_run_id": child_handle.first_execution_run_id}],
+                start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                retry_policy=AGENT_ACTIVITY_RETRY,
+            )
+            result = await child_handle
             succeeded = bool(result.get("success", True)) if isinstance(result, dict) else True
             _response, summary = _normalise_delegated_result(result)
             return await workflow.execute_activity(
@@ -269,6 +305,21 @@ class AgentWorkflow:
     ``rlm_agent`` / ``claude_code_agent`` skip this workflow and stay
     as F4.A per-type activities.
     """
+
+    def __init__(self) -> None:
+        self._control_paused = False
+
+    @workflow.signal
+    async def pause(self) -> None:
+        self._control_paused = True
+
+    @workflow.signal
+    async def resume(self) -> None:
+        self._control_paused = False
+
+    async def _wait_until_resumed(self) -> None:
+        if self._control_paused:
+            await workflow.wait_condition(lambda: not self._control_paused)
 
     @workflow.run
     async def run(self, context: Dict[str, Any]) -> Dict[str, Any]:
@@ -471,6 +522,7 @@ class AgentWorkflow:
 
         # ---- Main loop --------------------------------------------------
         for iteration in range(max_iterations):
+            await self._wait_until_resumed()
             workflow.logger.info(f"AgentWorkflow iteration {iteration} " f"(messages={len(messages)} tools={len(tools)})")
 
             # CloudEvents-shaped agent_progress per LLM turn. Mirrors the
@@ -682,6 +734,8 @@ class AgentWorkflow:
                         ),
                         "workflow_id": payload.get("workflow_id"),
                         "parent_agent_workflow_id": workflow.info().workflow_id,
+                        "parent_workflow_id": workflow.info().workflow_id,
+                        "parent_run_id": workflow.info().run_id,
                         "task": task,
                         "root_execution_id": root_execution_id,
                         "delegation_depth": delegation_depth + 1,
@@ -764,6 +818,17 @@ class AgentWorkflow:
                         execution_timeout=timedelta(hours=1),
                         run_timeout=timedelta(hours=1),
                     )
+                    if team_id:
+                        child_handle = delegation_handles[call_index]
+                        await workflow.execute_activity(
+                            "agent.register_task_execution.v1",
+                            args=[{**lifecycle_payload,
+                                   "child_workflow_id": child_handle.id,
+                                   "child_run_id": child_handle.first_execution_run_id}],
+                            activity_id=f"register-delegation-{iteration + 1}-{call_index + 1}",
+                            start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                            retry_policy=AGENT_ACTIVITY_RETRY,
+                        )
                 except BaseException:
                     if team_id and call_index in delegation_permits:
                         await workflow.execute_activity(
@@ -844,6 +909,8 @@ class AgentWorkflow:
                     ),
                     "workflow_id": payload.get("workflow_id"),
                     "parent_agent_workflow_id": workflow.info().workflow_id,
+                    "parent_workflow_id": workflow.info().workflow_id,
+                    "parent_run_id": workflow.info().run_id,
                     "task": mission,
                     "root_execution_id": root_execution_id,
                     "delegation_depth": delegation_depth + 1,

@@ -109,6 +109,55 @@ export interface DeploymentStatus {
   error?: string;
 }
 
+export type WorkflowControlState =
+  | 'never_started' | 'ready' | 'starting' | 'running' | 'pausing' | 'paused'
+  | 'resuming' | 'resetting' | 'failed';
+
+export interface WorkflowControlStatus {
+  workflow_id?: string | null;
+  generation?: number;
+  execution_id?: string | null;
+  root_execution_id?: string | null;
+  controller_workflow_id?: string | null;
+  controller_run_id?: string | null;
+  state: WorkflowControlState;
+  revision: number;
+  active_count: number;
+  in_flight_count: number;
+  queued_count: number;
+  can_start: boolean;
+  can_pause: boolean;
+  can_resume: boolean;
+  can_reset: boolean;
+  started_at?: string | null;
+  updated_at?: string | null;
+  error?: string | null;
+}
+
+export interface TeamTaskTraceEvent {
+  event_id: string | number;
+  event_type: string;
+  timestamp?: string;
+  category?: string;
+  status?: string;
+  name?: string;
+  summary?: string;
+  failure?: string;
+  retry_state?: string;
+}
+
+export interface TeamTaskTraceResponse {
+  state: 'available' | 'retention_expired' | 'temporal_unavailable' | 'execution_not_registered';
+  task_id?: string;
+  attempt?: number;
+  workflow_id?: string;
+  run_id?: string;
+  trace_id?: string;
+  events: TeamTaskTraceEvent[];
+  next_cursor?: string | null;
+  error?: string;
+}
+
 export interface WorkflowLock {
   locked: boolean;
   workflow_id: string | null;
@@ -302,6 +351,7 @@ interface WebSocketContextValue {
   variables: Record<string, any>;
   workflowStatus: WorkflowStatus;
   deploymentStatus: DeploymentStatus;
+  workflowControlStatuses: Record<string, WorkflowControlStatus>;
   workflowLock: WorkflowLock;
   compactionStats: Record<string, CompactionStats>;  // session_id -> stats (current workflow)
 
@@ -349,6 +399,12 @@ interface WebSocketContextValue {
   getDeploymentStatus: (workflowId?: string) => Promise<{ isRunning: boolean; activeRuns: number; settings?: any; workflow_id?: string }>;
   cancelExecution: (workflowId: string, nodeId?: string) => Promise<any>;
   getWorkflowStatus: (workflowId: string) => Promise<{ executing: boolean }>;
+  startWorkflow: (workflowId: string, nodes: any[], edges: any[], sessionId?: string, expectedRevision?: number) => Promise<WorkflowControlStatus>;
+  pauseWorkflow: (workflowId: string, expectedRevision: number) => Promise<WorkflowControlStatus>;
+  resumeWorkflow: (workflowId: string, expectedRevision: number) => Promise<WorkflowControlStatus>;
+  resetWorkflow: (workflowId: string, expectedRevision: number) => Promise<WorkflowControlStatus>;
+  getWorkflowControlStatus: (workflowId: string) => Promise<WorkflowControlStatus>;
+  getTeamTaskTrace: (scope: Record<string, any>) => Promise<TeamTaskTraceResponse>;
 
   // AI Operations
   executeAiNode: (nodeId: string, nodeType: string, parameters: Record<string, any>, model: string, workflowId: string, nodes: any[], edges: any[]) => Promise<any>;
@@ -409,6 +465,38 @@ const defaultDeploymentStatus: DeploymentStatus = {
   isRunning: false,
   activeRuns: 0,
   status: 'idle'
+};
+
+const emptyWorkflowControlStatus = (workflowId?: string): WorkflowControlStatus => ({
+  workflow_id: workflowId || null,
+  state: 'never_started',
+  revision: 0,
+  active_count: 0,
+  in_flight_count: 0,
+  queued_count: 0,
+  can_start: true,
+  can_pause: false,
+  can_resume: false,
+  can_reset: false,
+});
+
+const normalizeWorkflowControlStatus = (value: any, workflowId?: string): WorkflowControlStatus => {
+  const source = value?.status && typeof value.status === 'object' ? value.status : value || {};
+  const state = source.state || source.control_state || (source.is_running ? 'running' : 'never_started');
+  return {
+    ...emptyWorkflowControlStatus(workflowId),
+    ...source,
+    workflow_id: source.workflow_id ?? workflowId ?? null,
+    state,
+    revision: Number(source.revision || 0),
+    active_count: Number(source.active_count ?? source.active_runs ?? 0),
+    in_flight_count: Number(source.in_flight_count ?? source.active_count ?? source.active_runs ?? 0),
+    queued_count: Number(source.queued_count || 0),
+    can_start: source.can_start ?? state === 'never_started',
+    can_pause: source.can_pause ?? state === 'running',
+    can_resume: source.can_resume ?? state === 'paused',
+    can_reset: source.can_reset ?? state !== 'never_started',
+  };
 };
 
 const defaultWorkflowLock: WorkflowLock = {
@@ -505,6 +593,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [allVariables, setAllVariables] = useState<Record<string, Record<string, any>>>({});
   const [workflowStatus, setWorkflowStatus] = useState<WorkflowStatus>(defaultWorkflowStatus);
   const [deploymentStatus, setDeploymentStatus] = useState<DeploymentStatus>(defaultDeploymentStatus);
+  const [workflowControlStatuses, setWorkflowControlStatuses] = useState<Record<string, WorkflowControlStatus>>({});
   const [workflowLock, setWorkflowLock] = useState<WorkflowLock>(defaultWorkflowLock);
   // Per-workflow compaction stats: workflow_id -> session_id -> CompactionStats (n8n pattern)
   const [allCompactionStats, setAllCompactionStats] = useState<Record<string, Record<string, CompactionStats>>>({});
@@ -1116,6 +1205,19 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             }
             return next;
           });
+          break;
+        }
+
+        case 'workflow_control_status':
+        case 'workflow.control.status': {
+          const payload = message.data || message;
+          const workflowId = payload.workflow_id;
+          if (workflowId) {
+            setWorkflowControlStatuses((previous) => ({
+              ...previous,
+              [workflowId]: normalizeWorkflowControlStatus(payload, workflowId),
+            }));
+          }
           break;
         }
 
@@ -2255,6 +2357,76 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   }, [sendRequest]);
 
+  const controlMutation = useCallback(async (
+    type: 'start_workflow' | 'pause_workflow' | 'resume_workflow' | 'reset_workflow',
+    workflowId: string,
+    data: Record<string, any>,
+  ): Promise<WorkflowControlStatus> => {
+    const response = await sendRequest<any>(type, {
+      workflow_id: workflowId,
+      idempotency_key: crypto.randomUUID(),
+      ...data,
+    });
+    const normalized = normalizeWorkflowControlStatus(response, workflowId);
+    setWorkflowControlStatuses((previous) => ({ ...previous, [workflowId]: normalized }));
+    return normalized;
+  }, [sendRequest]);
+
+  const graphEnvelope = (nodes: any[], edges: any[]) => ({
+    nodes: nodes.map((node) => ({ id: node.id, type: node.type || '', data: node.data || {} })),
+    edges: edges.map((edge) => ({
+      id: edge.id, source: edge.source, target: edge.target,
+      sourceHandle: edge.sourceHandle || undefined,
+      targetHandle: edge.targetHandle || undefined,
+    })),
+  });
+
+  const startWorkflowAsync = useCallback((workflowId: string, nodes: any[], edges: any[], sessionId?: string, expectedRevision = 0) =>
+    controlMutation('start_workflow', workflowId, {
+      ...graphEnvelope(nodes, edges), session_id: sessionId || 'default', expected_revision: expectedRevision,
+    }), [controlMutation]);
+
+  const pauseWorkflowAsync = useCallback((workflowId: string, expectedRevision: number) =>
+    controlMutation('pause_workflow', workflowId, { expected_revision: expectedRevision }), [controlMutation]);
+
+  const resumeWorkflowAsync = useCallback((workflowId: string, expectedRevision: number) =>
+    controlMutation('resume_workflow', workflowId, { expected_revision: expectedRevision }), [controlMutation]);
+
+  const resetWorkflowAsync = useCallback((workflowId: string, expectedRevision: number) =>
+    controlMutation('reset_workflow', workflowId, { expected_revision: expectedRevision }), [controlMutation]);
+
+  const getWorkflowControlStatusAsync = useCallback(async (workflowId: string) => {
+    try {
+      const response = await sendRequest<any>('get_workflow_control_status', { workflow_id: workflowId });
+      const normalized = normalizeWorkflowControlStatus(response, workflowId);
+      setWorkflowControlStatuses((previous) => ({ ...previous, [workflowId]: normalized }));
+      return normalized;
+    } catch (error) {
+      console.error('[WebSocket] Failed to get workflow control status:', error);
+      return emptyWorkflowControlStatus(workflowId);
+    }
+  }, [sendRequest]);
+
+  const getTeamTaskTraceAsync = useCallback(async (scope: Record<string, any>): Promise<TeamTaskTraceResponse> => {
+    const response = await sendRequest<any>('get_team_task_trace', scope);
+    const payload = response?.trace || response || {};
+    const execution = payload.execution || {};
+    return {
+      ...payload,
+      state: payload.status || payload.state || payload.trace_state || 'execution_not_registered',
+      workflow_id: execution.child_workflow_id || execution.runner_workflow_id || execution.workflow_id,
+      run_id: execution.child_run_id || execution.runner_run_id || execution.run_id,
+      events: Array.isArray(payload.events) ? payload.events.map((event: any) => ({
+        ...event,
+        event_id: event.event_id ?? event.id,
+        event_type: event.event_type || event.type || event.activity_type || event.workflow_type || 'event',
+        category: event.category || event.activity_type || event.workflow_type,
+        name: event.name || event.activity_type || event.workflow_type,
+        failure: typeof event.failure === 'string' ? event.failure : event.failure?.message,
+      })) : [],
+    };
+  }, [sendRequest]);
+
   // Cancel any active ad-hoc execution(s) for a workflow.  The backend
   // resets every node currently glowing for this workflow_id and clears
   // its active-run counter.  Distinct from cancelDeployment, which only
@@ -2860,6 +3032,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     variables,
     workflowStatus,
     deploymentStatus,
+    workflowControlStatuses,
     workflowLock,
 
     // Compaction stats (real-time via broadcasts)
@@ -2918,6 +3091,12 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     getDeploymentStatus: getDeploymentStatusAsync,
     cancelExecution: cancelExecutionAsync,
     getWorkflowStatus: getWorkflowStatusAsync,
+    startWorkflow: startWorkflowAsync,
+    pauseWorkflow: pauseWorkflowAsync,
+    resumeWorkflow: resumeWorkflowAsync,
+    resetWorkflow: resetWorkflowAsync,
+    getWorkflowControlStatus: getWorkflowControlStatusAsync,
+    getTeamTaskTrace: getTeamTaskTraceAsync,
 
     // AI Operations
     executeAiNode: executeAiNodeAsync,
@@ -2963,7 +3142,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     apiKeyStatuses,
     consoleLogs, terminalLogs, chatMessages,
     nodeStatuses, nodeParameters,
-    variables, workflowStatus, deploymentStatus, workflowLock,
+    variables, workflowStatus, deploymentStatus, workflowControlStatuses, workflowLock,
     compactionStats, updateCompactionStats,
     getNodeStatus, getApiKeyStatus, getVariable,
     requestStatus, clearNodeStatus,
@@ -2975,6 +3154,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     cancelEventWaitAsync,
     deployWorkflowAsync, cancelDeploymentAsync, getDeploymentStatusAsync,
     cancelExecutionAsync, getWorkflowStatusAsync,
+    startWorkflowAsync, pauseWorkflowAsync, resumeWorkflowAsync, resetWorkflowAsync,
+    getWorkflowControlStatusAsync, getTeamTaskTraceAsync,
     executeAiNodeAsync, getAiModelsAsync,
     validateApiKeyAsync, getStoredApiKeyAsync, saveApiKeyAsync, deleteApiKeyAsync,
     getAndroidDevicesAsync, executeAndroidActionAsync,

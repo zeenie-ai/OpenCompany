@@ -4,7 +4,7 @@ description: Coordinate durable team tasks by assigning connected teammates, rev
 allowed-tools: task_manager
 metadata:
   author: opencompany
-  version: "2.2"
+  version: "2.3"
   category: automation
 ---
 
@@ -27,8 +27,14 @@ to this lead's `input-teammates` handle.
    three descendants across the whole agent tree; excess tasks remain queued.
    After `assign_task` returns `queued`, report that delegation started and
    return immediately. Do not poll or wait in the assigning invocation.
-5. When a teammate submits work, inspect the complete result, error, attempt
-   history, and acceptance criteria. Copy `task.id` to `task_id` and
+5. When a teammate submits work or an attempt fails, call `get_task`, then use
+   `inspect_task_trace` before retrying, reassigning, or reporting a terminal
+   failure. Start with `detail="summary"`; use `failures` or a paginated
+   `timeline` only when the summary does not explain the outcome. For large
+   histories use `detail="search"` with a narrow `query`, inspect the returned
+   context lines, and follow `next_cursor` until the match is found or the
+   cursor is empty. Prefer `categories` and `all_terms` over broad searches.
+   Copy `task.id` to `task_id` and
    `task.revision` to `expected_revision` for the review mutation.
 6. Choose exactly one review outcome:
    - `accept_task` when the result satisfies the task;
@@ -47,6 +53,7 @@ to this lead's `input-teammates` handle.
 | `assign_task` | Persist and queue a bounded mission | `title`, `mission`, `assignee_node_id` or `delegate_name`, optional `context`, `acceptance_criteria`, `depends_on` |
 | `list_tasks` | Inspect current or historical tasks | optional `status_filter`, `include_history` |
 | `get_task` | Review one task and all attempts | `task_id` |
+| `inspect_task_trace` | Inspect or grep the task attempt's sanitized Temporal events | `task_id`; optional `attempt`, `detail`, `cursor`, `limit`; search supports `query`, `search_mode`, `categories`, `context_lines`, `scan_limit` |
 | `modify_task` | Change queued/blocked work | `task_id`, `expected_revision`, changed task fields |
 | `cancel_task` | Cancel queued or running work | `task_id`, `expected_revision`, `reason` |
 | `retry_task` | Queue a new attempt | `task_id`, `expected_revision`, optional revision context |
@@ -76,6 +83,13 @@ Do not treat `submitted` as finished team work. Do not poll a running task;
 `taskTrigger` starts a separate review invocation carrying the owning execution.
 Do not invent teammate IDs, team IDs, or
 execution IDs—the runtime supplies authority and rejects cross-team access.
+Trace output is intentionally sanitized and scoped to the persisted task
+execution. Never request or infer raw Temporal workflow IDs.
+
+Trace search is a bounded grep-like read over normalized event metadata, never
+raw payloads. A call scans at most 500 events and returns only matches plus up
+to five surrounding events. Continue from `next_cursor`; do not restart from
+the beginning or load the entire timeline when a targeted search is sufficient.
 
 ## Team Monitor interpretation
 

@@ -1,5 +1,11 @@
 # Event Framework (Wave 12)
 
+> **Current architecture:** This document retains the Wave-12 rollout history.
+> Controlled deployments now consolidate push registration, event Signals, and
+> polling activities inside `WorkflowControlWorkflow`; see
+> [Temporal Execution Engine RFC](temporal-execution-engine-rfc.md). Listener
+> workflows described in the phase log are legacy compatibility contracts.
+
 Temporal-native event-routing layer for OpenCompany. Implements RFC sections
 6.3 (Temporal worker contract) + 6.4 (CloudEvents broadcast contract) from
 [plugin_authoring_rfc.md](./ARCHIVE/plugin_authoring_rfc.md).
@@ -222,8 +228,14 @@ Locked by `TestCloudEventTypeMatchesSearchAttribute` in [`test_canary_registry.p
 
 `event_waiter.dispatch` / `broadcaster.send_custom_event` calls inside canary-registered plugin `_events.py` files (chat / webhook / task / telegram / email) had zero consumers in canary-on mode — the deployment manager skips `setup_event_trigger` when `is_canary_trigger_type(...)` is True, so no legacy waiter ever registered. Removed.
 
-- `dispatch.emit(envelope, wire_routing_key=...)` is now the single delivery path. It Signals running `TriggerListenerWorkflow` consumers via Temporal Visibility AND broadcasts to FE on the same wire key.
-- `google/_events.py:dispatch_gmail_received` deleted (gmail polling uses `PollingTriggerWorkflow`, not `event_waiter`).
+- `dispatch.emit(envelope, wire_routing_key=...)` is the single delivery path. It signals legacy `EventType` consumers and running workflow controllers through one Temporal Visibility query, while broadcasting to the frontend on the same wire key. Each controller filters against its durable trigger registry.
+- For workflow-control generations, trigger definitions, push-event signals,
+  and polling activities live directly in the generation's
+  `WorkflowControlWorkflow`. There are no separate listener workflow runs;
+  only an actual graph execution is started as a child. Standalone
+  `TriggerListenerWorkflow` / `PollingTriggerWorkflow` starts remain only as a
+  compatibility path for legacy deployments without a controller.
+- `google/_events.py:dispatch_gmail_received` deleted. Controlled Gmail polling runs as an activity inside the controller; `PollingTriggerWorkflow` remains the legacy compatibility implementation.
 - `whatsapp/_events.py` kept the legacy raw frame on `whatsapp_message_received` for received messages because the FE message-list handler reads `data.sender` (legacy shape) directly — drop blocked on FE migration (D4 follow-up). The duplicate typed-envelope sibling on the same wire key was dropped.
 - `twitter/_events.py` keeps both paths — twitter is the only deferred canary plugin (needs PollingTriggerNode subclass refactor first).
 
@@ -231,11 +243,11 @@ Locked by `TestCloudEventTypeMatchesSearchAttribute` in [`test_canary_registry.p
 
 Pre-fix the canary listener broadcast `waiting` once at deploy and stayed there forever — when an event fired, FE saw downstream nodes light up but no visual signal on the trigger node itself. The legacy `services/deployment/triggers.py` collector/processor did `waiting → idle (Graph executing...) → waiting` per event; canary skipped this.
 
-Fix: new `broadcast_trigger_status_activity` ([activities.py](../server/services/temporal/activities.py)). `TriggerListenerWorkflow._spawn_child_run` calls it before + after each child spawn:
+Fix: `broadcast_trigger_status_activity` ([activities.py](../server/services/temporal/activities.py)). The shared trigger-run helper used by the controller and legacy `TriggerListenerWorkflow` calls it before + after each child spawn:
 - Before: `status="idle"` with `message="Graph executing..."` data
 - After: `status="waiting"` with the next-event message
 
-`PollingTriggerWorkflow._spawn_child_run` does the same. Matches legacy UX.
+The controller's polling path and legacy `PollingTriggerWorkflow` use the same status lifecycle. Pause overrides the armed `waiting` projection with an explicit paused state and Resume rearms it.
 
 ### 4. Polling `seen` set OOM leak
 

@@ -17,7 +17,7 @@ const STATUS_STYLE: Record<string, string> = {
 
 interface Props { nodeId: string; workflowId?: string; nodes: Node[]; edges: Edge[] }
 interface Member { agent_node_id: string; agent_type?: string; label?: string; status?: string }
-interface Task { id: string; title: string; status: string; assigned_to?: string; assignee_label?: string; queue_position?: number }
+interface Task { id: string; title: string; status: string; assigned_to?: string; assignee_label?: string; queue_position?: number; child_workflow_id?: string; child_run_id?: string; temporal_status?: string; trace_id?: string }
 
 const TeamMonitorPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges }) => {
   const { sendRequest, addEventListener } = useWebSocket();
@@ -76,7 +76,8 @@ const TeamMonitorPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
   useEffect(() => {
     const update = () => void refresh(true);
     const removers = ['team_event', 'team.task.queued', 'team.task.running', 'team.task.submitted',
-      'team.task.accepted', 'team.task.failed', 'team.task.cancelled'].map((event) => addEventListener(event, update));
+      'team.task.accepted', 'team.task.failed', 'team.task.cancelled', 'workflow_control_status',
+      'workflow.control.status'].map((event) => addEventListener(event, update));
     return () => removers.forEach((remove) => remove());
   }, [addEventListener, refresh]);
 
@@ -97,6 +98,7 @@ const TeamMonitorPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
       <div className="mt-4 grid grid-cols-4 gap-2 lg:grid-cols-7">
         {counts.map(({ name, value }) => <div key={name} className="rounded-md border border-border-default bg-bg-elevated p-2"><div className="text-xs capitalize text-fg-muted">{name}</div><div className={cn('text-lg font-semibold tabular-nums', STATUS_STYLE[name])}>{value}</div></div>)}
       </div>
+      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-fg-muted"><span>Generation <strong className="text-fg-default">{status?.control_generation ?? status?.generation ?? '—'}</strong></span><span>Root execution <strong className="text-fg-default">{status?.root_execution_id ? String(status.root_execution_id).slice(0, 16) : '—'}</strong></span><span>Controller <strong className="text-fg-default">{status?.controller_workflow_id ? String(status.controller_workflow_id).slice(0, 20) : '—'}</strong></span><span>Temporal state <Badge variant="outline" className="ml-1 capitalize">{status?.control_state || status?.temporal_status || 'unavailable'}</Badge></span></div>
     </div>
     <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-auto p-4 lg:grid-cols-[minmax(220px,0.75fr)_minmax(0,2fr)]">
       <section className="rounded-md border border-border-default bg-bg-elevated">
@@ -105,7 +107,7 @@ const TeamMonitorPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
       </section>
       <section className="min-w-0 rounded-md border border-border-default bg-bg-elevated">
         <div className="border-b border-border-default px-4 py-3 font-medium">Current execution tasks</div>
-        <div className="divide-y divide-border-default/70">{tasks.map((task) => <div key={task.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-4 px-4 py-3"><div className="truncate font-medium text-fg-default">{task.title}</div><span className="text-xs text-fg-muted">{task.assignee_label || task.assigned_to || 'Unassigned'}</span><Badge variant="outline" className={cn('capitalize', STATUS_STYLE[task.status])}>{task.status}{task.queue_position ? ` #${task.queue_position}` : ''}</Badge></div>)}{tasks.length === 0 && <div className="p-8 text-center text-sm text-fg-muted">No tasks in this execution.</div>}</div>
+        <div className="divide-y divide-border-default/70">{tasks.map((task) => <div key={task.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-4 px-4 py-3"><div className="min-w-0"><div className="truncate font-medium text-fg-default">{task.title}</div><div className="truncate text-[11px] text-fg-muted">{task.child_workflow_id ? `Temporal ${task.child_workflow_id}${task.child_run_id ? ` · ${task.child_run_id.slice(0, 8)}` : ''}` : 'Temporal execution not registered'}</div></div><span className="text-xs text-fg-muted">{task.assignee_label || task.assigned_to || 'Unassigned'}</span><div className="text-right"><Badge variant="outline" className={cn('capitalize', STATUS_STYLE[task.status])}>{task.status}{task.queue_position ? ` #${task.queue_position}` : ''}</Badge>{task.temporal_status && <div className="mt-1 text-[11px] capitalize text-fg-muted">{task.temporal_status}</div>}</div></div>)}{tasks.length === 0 && <div className="p-8 text-center text-sm text-fg-muted">No tasks in this execution.</div>}</div>
       </section>
     </div>
   </div>;

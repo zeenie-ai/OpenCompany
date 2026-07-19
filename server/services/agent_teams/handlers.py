@@ -179,6 +179,24 @@ async def handle_get_team_task(data: Dict[str, Any], websocket: WebSocket) -> Di
     return {"task": task}
 
 
+@ws_handler("workflow_id", "team_lead_node_id", "task_id")
+async def handle_get_team_task_trace(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    """Read Temporal history through the task's trusted execution link."""
+    from services.team_task_trace import get_team_task_trace_service
+
+    trace = await get_team_task_trace_service().get_trace(
+        workflow_id=data["workflow_id"], team_lead_node_id=data["team_lead_node_id"],
+        execution_id=data.get("execution_id"), task_id=data["task_id"],
+        attempt=data.get("attempt"), cursor=data.get("cursor"),
+        limit=int(data.get("limit") or 50), detail=str(data.get("detail") or "summary"),
+        query=data.get("query"), search_mode=str(data.get("search_mode") or "literal"),
+        case_sensitive=bool(data.get("case_sensitive", False)),
+        context_lines=int(data.get("context_lines", 2)),
+        scan_limit=int(data.get("scan_limit", 250)), categories=data.get("categories"),
+    )
+    return {"trace": trace}
+
+
 @ws_handler("workflow_id", "team_lead_node_id", "task_id", "operation")
 async def handle_manage_team_task(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     from services.agent_team import get_agent_team_service
@@ -246,6 +264,7 @@ WS_HANDLERS: Dict[str, Any] = {
     "get_team_tasks": handle_get_team_tasks,
     "assign_team_task": handle_assign_team_task,
     "get_team_task": handle_get_team_task,
+    "get_team_task_trace": handle_get_team_task_trace,
     "manage_team_task": handle_manage_team_task,
     "finish_team": handle_finish_team,
     "send_team_message": handle_send_team_message,
@@ -263,6 +282,7 @@ __all__ = [
     "handle_get_team",
     "handle_get_team_messages",
     "handle_get_team_status",
+    "handle_get_team_task_trace",
     "handle_get_team_tasks",
     "handle_send_team_message",
 ]

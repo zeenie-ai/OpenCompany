@@ -267,6 +267,44 @@ class TestStartCanaryListener:
         assert call["task_queue"] == "machina-tasks"
 
     @pytest.mark.asyncio
+    async def test_controlled_listener_is_registered_under_controller(self, monkeypatch):
+        mgr, _ = _build_manager_with_state(
+            "wf-controlled", nodes=[_node("wh-1", "webhookTrigger")], edges=[],
+        )
+        controller_handle = MagicMock()
+        controller_handle.signal = AsyncMock()
+        client = MagicMock()
+        client.get_workflow_handle.return_value = controller_handle
+        client.start_workflow = AsyncMock()
+        wrapper = MagicMock(client=client)
+        control = MagicMock(
+            status="running", controller_workflow_id="workflow-control-wf-controlled-g1",
+            controller_run_id="controller-run-1",
+        )
+        database = MagicMock()
+        database.get_latest_workflow_control = AsyncMock(return_value=control)
+
+        from core import container as container_mod
+
+        monkeypatch.setattr(container_mod.container, "temporal_client", lambda: wrapper)
+        monkeypatch.setattr(container_mod.container, "database", lambda: database)
+
+        listener_id = await mgr._start_canary_listener(
+            _node("wh-1", "webhookTrigger"), "wf-controlled", params={},
+        )
+
+        assert listener_id == "wf-controlled-webhookTrigger"
+        client.start_workflow.assert_not_awaited()
+        client.get_workflow_handle.assert_called_once_with(
+            "workflow-control-wf-controlled-g1", run_id="controller-run-1",
+        )
+        signal_name, spec = controller_handle.signal.await_args.args
+        assert signal_name == "register_trigger"
+        assert spec["listener_id"] == listener_id
+        assert spec["workflow_type"] == "TriggerListenerWorkflow"
+        assert spec["workflow_id"] == "wf-controlled"
+
+    @pytest.mark.asyncio
     async def test_search_attributes_include_event_workflow_id(self, monkeypatch):
         """Cancel path queries by EventWorkflowId — start must set it."""
         from temporalio.common import (
@@ -693,3 +731,20 @@ class TestNoInstanceStateForCanaryListeners:
 
         # Both helpers can be called on the class without an instance.
         assert DeploymentManager._listener_workflow_id("wf", "node") == "wf-node"
+@pytest.mark.asyncio
+async def test_pause_status_disarms_trigger_nodes_without_touching_agents():
+    mgr, broadcaster = _build_manager_with_state(
+        "wf-pause",
+        nodes=[
+            _node("start-1", "start"), _node("chat-1", "chatTrigger"),
+            _node("agent-1", "aiAgent"),
+        ],
+        edges=[],
+    )
+
+    changed = await mgr.update_trigger_pause_status("wf-pause", paused=True)
+
+    assert changed == 1
+    broadcaster.update_node_status.assert_awaited_once_with(
+        "chat-1", "idle", {"paused": True, "message": "Paused"}, workflow_id="wf-pause",
+    )

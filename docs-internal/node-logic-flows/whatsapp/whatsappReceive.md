@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | whatsapp / trigger |
-| **Backend handler** | [`server/nodes/whatsapp/whatsapp_receive.py`](../../../server/nodes/whatsapp/whatsapp_receive.py) (`WhatsAppReceiveNode`, a `TriggerNode`); the filter closure is built by `build_filter()` -> [`server/nodes/whatsapp/_filters.py::build_filter`](../../../server/nodes/whatsapp/_filters.py) (self-registered into `event_waiter.FILTER_BUILDERS` as `whatsappReceive`). Canary-registered with CloudEvents type `com.opencompany.whatsapp.message.received`; deployment fires via `TriggerListenerWorkflow`. |
+| **Backend handler** | [`server/nodes/whatsapp/whatsapp_receive.py`](../../../server/nodes/whatsapp/whatsapp_receive.py) (`WhatsAppReceiveNode`, a `TriggerNode`); filtering is built by [`server/nodes/whatsapp/_filters.py`](../../../server/nodes/whatsapp/_filters.py). CloudEvents type: `com.opencompany.whatsapp.message.received`; controlled deployment routes through `WorkflowControlWorkflow`. |
 | **Tests** | [`server/tests/nodes/test_whatsapp.py`](../../../server/tests/nodes/test_whatsapp.py) |
 | **Skill (if any)** | n/a |
 | **Dual-purpose tool** | no - pure trigger node |
@@ -11,11 +11,12 @@
 ## Purpose
 
 Event-driven trigger that waits for incoming WhatsApp messages and starts a
-workflow run when one matches. `whatsappReceive` is canary-registered
-(CloudEvents type `com.opencompany.whatsapp.message.received`): on deployment the
-manager spawns a `TriggerListenerWorkflow` per (deployment, trigger) pair which
-receives the CloudEvents envelope via Temporal Signal and spawns a child
-`MachinaWorkflow` per matching event. Single-node "Run" (non-deployed test)
+workflow run when one matches. `whatsappReceive` is registered with CloudEvents
+type `com.opencompany.whatsapp.message.received`. In a controlled deployment,
+the manager signals its trigger definition into `WorkflowControlWorkflow`;
+`dispatch.emit` signals the controller, which filters/deduplicates the envelope
+and starts a child `MachinaWorkflow` only for a real match. There is no separate
+listener workflow run. Single-node "Run" (non-deployed test)
 still uses the `TriggerNode.execute` event-waiter path: register a waiter with
 the filter closure, broadcast `waiting`, then await a
 `whatsapp_message_received` event. In both paths `build_filter` decides which

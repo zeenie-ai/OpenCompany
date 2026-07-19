@@ -335,7 +335,12 @@ async def lifespan(app: FastAPI):
                         # TEMPORAL_TERMINATE_RUNNING_ON_STARTUP=false.
                         if settings.temporal_terminate_running_on_startup:
                             try:
-                                terminated = await temporal_client_wrapper.terminate_running_workflows()
+                                has_controls = await container.database().has_active_workflow_controls()
+                                terminated = 0
+                                if has_controls:
+                                    logger.info("Skipping startup Temporal termination sweep; durable workflow controls are active")
+                                else:
+                                    terminated = await temporal_client_wrapper.terminate_running_workflows()
                                 if terminated:
                                     _startup_log(
                                         f"[Temporal] Terminated {terminated} running workflow(s) " "at startup (history preserved)"
