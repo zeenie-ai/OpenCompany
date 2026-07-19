@@ -389,7 +389,14 @@ async def _start_controller(control) -> Optional[str]:
         return None
     handle = await wrapper.client.start_workflow(
         "WorkflowControlWorkflow",
-        args=[{"generation": control.generation, "state": "running"}],
+        args=[{
+            "workflow_id": control.workflow_id,
+            "generation": control.generation,
+            "execution_id": control.execution_id,
+            "root_execution_id": control.root_execution_id,
+            "data_scope_id": control.data_scope_id or control.execution_id,
+            "state": "running",
+        }],
         id=control.controller_workflow_id,
         task_queue="machina-tasks",
         search_attributes=TypedSearchAttributes([
@@ -536,7 +543,19 @@ async def handle_start_workflow(data: Dict[str, Any], websocket: WebSocket) -> D
                 control, expected_revision=control.revision, from_statuses={"starting"}, status="starting",
                 values={"controller_run_id": run_id},
             )
-        deployed = await handle_deploy_workflow(data, websocket)
+            await service.database.update_workflow_run_data_scope(
+                control.data_scope_id or control.execution_id, temporal_run_id=run_id,
+            )
+        # Runtime persistence is generation-scoped. The caller's session is
+        # retained on the scope for provenance, but must never namespace node
+        # outputs for a controlled run.
+        deploy_data = {
+            **data,
+            "session_id": control.data_scope_id or control.execution_id,
+            "execution_id": control.execution_id,
+            "root_execution_id": control.root_execution_id,
+        }
+        deployed = await handle_deploy_workflow(deploy_data, websocket)
         if not deployed.get("success"):
             await service.fail(control, str(deployed.get("error", "deployment_failed")))
             return deployed
@@ -621,6 +640,17 @@ async def handle_reset_workflow(data: Dict[str, Any], websocket: WebSocket) -> D
         current, expected_revision=current.revision, from_statuses={"resetting"}, status="reset",
         values={"terminal_reason": "workflow_reset", "completed_at": datetime.now(timezone.utc)},
     )
+    await service.database.update_workflow_run_data_scope(
+        current.data_scope_id or current.execution_id,
+        status="archived", archived_at=datetime.now(timezone.utc),
+    )
+    from services.status_broadcaster import get_status_broadcaster
+    await get_status_broadcaster().broadcast({
+        "type": "workflow_runtime_reset",
+        "workflow_id": workflow_id,
+        "generation": current.generation,
+        "data_scope_id": current.data_scope_id or current.execution_id,
+    })
     return await _with_runtime_counts(
         {"success": True, "terminated_executions": terminated, **serialize_control(current)},
         workflow_id,

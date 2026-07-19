@@ -790,6 +790,11 @@ class DeploymentManager:
         if control is not None and control.controller_workflow_id and control.status in {
             "starting", "running", "pausing", "paused", "resuming",
         }:
+            listener_args.update({
+                "execution_id": control.execution_id,
+                "root_execution_id": control.root_execution_id,
+                "data_scope_id": control.data_scope_id or control.execution_id,
+            })
             # The controller owns listeners as child workflows. This keeps
             # trigger activity in the deployment's Temporal execution tree
             # instead of presenting each listener as an unrelated root trace.

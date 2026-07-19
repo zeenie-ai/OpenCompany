@@ -109,6 +109,7 @@ class Database:
             await self._migrate_user_settings()
             await self._migrate_agent_teams()
             await self._migrate_workflow_controls()
+            await self._migrate_generation_scoped_runtime_data()
 
             logger.info("Database initialized successfully")
 
@@ -339,6 +340,7 @@ class Database:
                 additions = {
                     "controller_workflow_id": "VARCHAR(500)",
                     "controller_run_id": "VARCHAR(255)",
+                    "data_scope_id": "VARCHAR(255)",
                     "resource_manifest": "JSON DEFAULT '{}'",
                     "terminal_reason": "VARCHAR(2000)",
                     "completed_at": "DATETIME",
@@ -348,8 +350,51 @@ class Database:
                         await conn.execute(text(f"ALTER TABLE workflow_control_executions ADD COLUMN {column} {definition}"))
                 await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_workflow_control_generation ON workflow_control_executions(workflow_id, generation)"))
                 await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_workflow_control_idempotency ON workflow_control_executions(workflow_id, idempotency_key)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_workflow_control_data_scope_id ON workflow_control_executions(data_scope_id)"))
+                # Preview releases already have durable generations but no
+                # explicit runtime-data namespace. Their execution identity is
+                # the only safe deterministic scope key.
+                await conn.execute(text(
+                    "UPDATE workflow_control_executions "
+                    "SET data_scope_id = execution_id WHERE data_scope_id IS NULL"
+                ))
+                await conn.execute(text("""
+                    INSERT OR IGNORE INTO workflow_run_data_scopes (
+                        id, control_id, workflow_id, generation, execution_id,
+                        root_execution_id, temporal_workflow_id, temporal_run_id,
+                        source_session_id, graph_hash, node_data, runtime_data,
+                        status, created_at, archived_at
+                    )
+                    SELECT
+                        execution_id, id, workflow_id, generation, execution_id,
+                        root_execution_id, controller_workflow_id, controller_run_id,
+                        session_id, graph_hash, '{}', '{}',
+                        CASE WHEN status IN ('reset', 'failed') THEN 'archived' ELSE 'active' END,
+                        created_at,
+                        CASE WHEN status IN ('reset', 'failed') THEN completed_at ELSE NULL END
+                    FROM workflow_control_executions
+                    WHERE execution_id IS NOT NULL
+                """))
         except Exception as exc:
             logger.warning(f"Workflow-control migration check failed: {exc}")
+
+    async def _migrate_generation_scoped_runtime_data(self):
+        """Add nullable generation keys while preserving legacy history."""
+        try:
+            async with self.engine.begin() as conn:
+                for table_name in ("chat_messages", "console_logs"):
+                    result = await conn.execute(text(f"PRAGMA table_info({table_name})"))
+                    columns = {row[1] for row in result.fetchall()}
+                    if columns and "execution_id" not in columns:
+                        await conn.execute(text(
+                            f"ALTER TABLE {table_name} ADD COLUMN execution_id VARCHAR(255)"
+                        ))
+                    await conn.execute(text(
+                        f"CREATE INDEX IF NOT EXISTS ix_{table_name}_execution_id "
+                        f"ON {table_name}(execution_id)"
+                    ))
+        except Exception as exc:
+            logger.warning(f"Generation runtime-data migration check failed: {exc}")
 
     async def run_runtime_mutation(
         self,
@@ -1086,11 +1131,17 @@ class Database:
     # Chat Messages (Console Panel persistence)
     # ============================================================================
 
-    async def add_chat_message(self, session_id: str, role: str, message: str) -> bool:
+    async def add_chat_message(
+        self, session_id: str, role: str, message: str,
+        execution_id: Optional[str] = None,
+    ) -> bool:
         """Add a chat message to the console panel history."""
         try:
             async with self.get_session() as session:
-                chat_msg = ChatMessage(session_id=session_id, role=role, message=message)
+                chat_msg = ChatMessage(
+                    session_id=session_id, role=role, message=message,
+                    execution_id=execution_id,
+                )
                 session.add(chat_msg)
                 await session.commit()
                 logger.debug(f"[Chat] Added {role} message to session '{session_id}'")
@@ -1100,11 +1151,16 @@ class Database:
             logger.error("Failed to add chat message", session_id=session_id, error=str(e))
             return False
 
-    async def get_chat_messages(self, session_id: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    async def get_chat_messages(
+        self, session_id: str, limit: Optional[int] = None,
+        execution_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         """Get chat messages for a session, optionally limited to last N."""
         try:
             async with self.get_session() as session:
                 stmt = select(ChatMessage).where(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at.asc())
+                if execution_id is not None:
+                    stmt = stmt.where(ChatMessage.execution_id == execution_id)
 
                 result = await session.execute(stmt)
                 messages = result.scalars().all()
@@ -1186,6 +1242,7 @@ class Database:
                     node_id=log_data.get("node_id", ""),
                     label=log_data.get("label", ""),
                     workflow_id=log_data.get("workflow_id"),
+                    execution_id=log_data.get("execution_id"),
                     data=json.dumps(log_data.get("data", {})),
                     formatted=log_data.get("formatted", ""),
                     format=log_data.get("format", "text"),
@@ -1202,7 +1259,10 @@ class Database:
             logger.error("Failed to add console log", error=str(e))
             return False
 
-    async def get_console_logs(self, limit: int = 100, workflow_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def get_console_logs(
+        self, limit: int = 100, workflow_id: Optional[str] = None,
+        execution_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         """Get console logs, optionally limited and scoped to a workflow.
 
         ``workflow_id=None`` returns the global stream (legacy behavior, used
@@ -1218,6 +1278,8 @@ class Database:
                 stmt = select(ConsoleLog).order_by(ConsoleLog.created_at.desc()).limit(limit)
                 if workflow_id is not None:
                     stmt = stmt.where(ConsoleLog.workflow_id == workflow_id)
+                if execution_id is not None:
+                    stmt = stmt.where(ConsoleLog.execution_id == execution_id)
 
                 result = await session.execute(stmt)
                 logs = result.scalars().all()
@@ -1229,6 +1291,7 @@ class Database:
                         "node_id": log.node_id,
                         "label": log.label,
                         "workflow_id": log.workflow_id,
+                        "execution_id": log.execution_id,
                         "data": json.loads(log.data) if log.data else {},
                         "formatted": log.formatted,
                         "format": log.format,
@@ -2445,11 +2508,67 @@ class Database:
             return result.scalar_one_or_none()
 
     async def create_workflow_control(self, control: WorkflowControlExecution) -> WorkflowControlExecution:
+        from models.database import WorkflowRunDataScope
+
         async with self.get_session() as session:
             session.add(control)
+            scope_id = control.data_scope_id or control.execution_id
+            control.data_scope_id = scope_id
+            session.add(WorkflowRunDataScope(
+                id=scope_id,
+                control_id=control.id,
+                workflow_id=control.workflow_id,
+                generation=control.generation,
+                execution_id=control.execution_id,
+                root_execution_id=control.root_execution_id,
+                temporal_workflow_id=control.controller_workflow_id,
+                temporal_run_id=control.controller_run_id,
+                source_session_id=control.session_id,
+                graph_hash=control.graph_hash,
+                node_data={
+                    str(node.get("id")): {
+                        "type": node.get("type"),
+                        "data": node.get("data", {}),
+                    }
+                    for node in control.graph_snapshot.get("nodes", [])
+                    if node.get("id")
+                },
+            ))
             await session.commit()
             await session.refresh(control)
             return control
+
+    async def update_workflow_run_data_scope(
+        self, scope_id: str, *, temporal_run_id: Optional[str] = None,
+        status: Optional[str] = None, archived_at: Optional[datetime] = None,
+    ) -> bool:
+        """Update the execution link/lifecycle without mutating its node snapshot."""
+        from models.database import WorkflowRunDataScope
+
+        values: Dict[str, Any] = {}
+        if temporal_run_id is not None:
+            values["temporal_run_id"] = temporal_run_id
+        if status is not None:
+            values["status"] = status
+        if archived_at is not None:
+            values["archived_at"] = archived_at
+        if not values:
+            return True
+        async with self.get_session() as session:
+            result = await session.execute(
+                update(WorkflowRunDataScope).where(WorkflowRunDataScope.id == scope_id).values(**values)
+            )
+            await session.commit()
+            return result.rowcount == 1
+
+    async def get_workflow_run_data_scope(self, scope_id: str):
+        from models.database import WorkflowRunDataScope
+
+        async with self.get_session() as session:
+            result = await session.execute(
+                select(WorkflowRunDataScope).where(WorkflowRunDataScope.id == scope_id)
+            )
+            return result.scalar_one_or_none()
 
     async def transition_workflow_control(
         self, control_id: str, *, expected_revision: int, from_statuses: set[str], status: str,

@@ -493,6 +493,33 @@ stateDiagram-v2
 
 ## 11. Persistence model
 
+### 11.1 Saved definition versus run-data scope
+
+`workflows` stores the editable, stable canvas definition. Runtime state is
+partitioned by `workflow_run_data_scopes`, with exactly one scope per workflow
+control generation. The scope snapshots all admitted node data, maps the
+application execution identity to the actual Temporal controller Workflow/Run
+identity, and supplies the session namespace used by node-output persistence.
+
+Reset archives the scope rather than deleting it. A later Start creates a new
+scope and therefore a fresh node-data namespace, while archived task, output,
+trace, and graph-snapshot records remain available for historical inspection.
+
+Durable configuration nodes are not owned by that disposable namespace.
+In particular, `simpleMemory` remains authoritative in `node_parameters`:
+workflow Reset preserves its transcript, JSONL/session metadata, long-term
+cache, and compaction/token state. The archived scope contains only the
+historical value admitted by that generation. The next Start reads the current
+memory row; memory is cleared only by the explicit Clear Memory contract.
+
+| State class | Reset behavior | Current source after Reset |
+|---|---|---|
+| Graph/node execution outputs and statuses | archived; live projection cleared | new generation scope |
+| Console and chat-trigger run rows | archived by root execution | new generation scope |
+| Team tasks, attempts, and traces | archived and queryable | selected execution history |
+| Node parameters and canvas configuration | preserved | `node_parameters` / `workflows` |
+| `simpleMemory` transcript and session state | preserved | `node_parameters` + memory services |
+
 ```mermaid
 erDiagram
   WORKFLOW_CONTROL_EXECUTION {

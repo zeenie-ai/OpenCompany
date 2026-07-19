@@ -25,6 +25,41 @@ All mutations require an expected revision and support an idempotency key.
 The toolbar and command palette derive available actions from the server's
 `can_start`, `can_pause`, `can_resume`, and `can_reset` fields.
 
+## Generation-scoped workflow data
+
+The editable `workflows` row is the stable canvas definition; it is not runtime
+state. Every successful **Start** atomically creates a
+`workflow_run_data_scopes` row alongside the control generation. The scope:
+
+- has the same durable `execution_id` used by the controller and team records;
+- snapshots each node's type and complete `data` payload at admission time;
+- records the controller's actual Temporal Workflow ID and Run ID;
+- becomes the session namespace for node outputs, conversations, and other
+  session-keyed runtime records;
+- remains immutable as an execution snapshot while runtime records accumulate
+  under its scope ID.
+
+**Reset** terminates the generation and marks its data scope `archived`; it does
+not delete outputs, tasks, traces, or the graph snapshot. The toolbar returns to
+**Start**. The next Start creates a new generation, execution ID, Temporal
+controller, and empty runtime namespace from the then-current saved canvas.
+Historical scopes therefore remain queryable without leaking state into the
+new run.
+
+The editor's live projection follows the same boundary. Reset broadcasts
+`workflow_runtime_reset`, clears node statuses, variables, and console/chat
+projections, and remounts the parameter panel so local output
+reducers cannot retain results. Persisted console and chat rows carry the root
+execution ID; current-run reads filter by that ID while archived rows remain in
+the database. Node parameters are canvas configuration and intentionally remain
+unchanged across Reset.
+
+`simpleMemory` is explicitly outside the disposable generation projection.
+Its `memory_content`, JSONL, configured session, long-term store, and compaction
+statistics remain attached to the durable memory node across Reset. Resetting a
+workflow must not behave like the memory panel's explicit **Clear Memory**
+operation.
+
 On server restart, active controlled deployments are excluded from the legacy
 startup termination sweep. `TEMPORAL_TERMINATE_RUNNING_ON_STARTUP` defaults to
 `false`; enabling it is intended only for legacy installations that explicitly

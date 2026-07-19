@@ -118,6 +118,7 @@ export interface WorkflowControlStatus {
   generation?: number;
   execution_id?: string | null;
   root_execution_id?: string | null;
+  data_scope_id?: string | null;
   controller_workflow_id?: string | null;
   controller_run_id?: string | null;
   state: WorkflowControlState;
@@ -1217,6 +1218,23 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               ...previous,
               [workflowId]: normalizeWorkflowControlStatus(payload, workflowId),
             }));
+          }
+          break;
+        }
+
+        case 'workflow_runtime_reset': {
+          const workflowId = message.workflow_id || message.data?.workflow_id;
+          if (workflowId) {
+            useNodeStatusStore.getState().clearWorkflow(workflowId);
+            setAllVariables((previous) => {
+              const next = { ...previous };
+              delete next[workflowId];
+              return next;
+            });
+            if (useAppStore.getState().currentWorkflow?.id === workflowId) {
+              setConsoleLogs([]);
+              setChatMessages([]);
+            }
           }
           break;
         }
@@ -2392,8 +2410,24 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const resumeWorkflowAsync = useCallback((workflowId: string, expectedRevision: number) =>
     controlMutation('resume_workflow', workflowId, { expected_revision: expectedRevision }), [controlMutation]);
 
-  const resetWorkflowAsync = useCallback((workflowId: string, expectedRevision: number) =>
-    controlMutation('reset_workflow', workflowId, { expected_revision: expectedRevision }), [controlMutation]);
+  const resetWorkflowAsync = useCallback(async (workflowId: string, expectedRevision: number) => {
+    const result = await controlMutation(
+      'reset_workflow', workflowId, { expected_revision: expectedRevision },
+    );
+    // The broadcast clears every connected tab; repeat locally so the
+    // initiating tab is correct even if a proxy suppresses self-echo.
+    useNodeStatusStore.getState().clearWorkflow(workflowId);
+    setAllVariables((previous) => {
+      const next = { ...previous };
+      delete next[workflowId];
+      return next;
+    });
+    if (useAppStore.getState().currentWorkflow?.id === workflowId) {
+      setConsoleLogs([]);
+      setChatMessages([]);
+    }
+    return result;
+  }, [controlMutation]);
 
   const getWorkflowControlStatusAsync = useCallback(async (workflowId: string) => {
     try {

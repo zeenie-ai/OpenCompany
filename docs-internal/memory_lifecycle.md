@@ -96,6 +96,28 @@ Three stores are cleared in one call:
 
 Frontend `clear_memory` WS handler ([`routers/websocket.py:2167`](../server/routers/websocket.py)) calls this; UI presents a Reset Memory button on the simpleMemory parameter panel.
 
+### Workflow Reset is not Memory Clear
+
+Temporal workflow **Reset** and the Simple Memory panel's **Clear Memory** are
+separate lifecycle operations:
+
+| Operation | `memory_content` / `memory_jsonl` | session metadata | vector cache | compaction/token state |
+|---|---|---|---|---|
+| Workflow Reset | preserved | preserved | preserved | preserved |
+| Clear Memory | reset | cleared | optional (`clear_long_term`) | cleared for the selected session |
+
+`workflow_runtime_reset` removes only the editor's disposable execution
+projection: node statuses and outputs, variables, and current console/chat
+views. It must not evict the Simple Memory query, compaction projection, or
+node-parameter row. The next Temporal generation reads the same durable
+`simpleMemory` parameters through `edge_walker._build_memory_entry`, so agent
+conversation continuity survives a workflow Reset.
+
+The archived workflow-generation snapshot may contain the memory-node values
+admitted for that historical run. That is an immutable historical copy, not a
+move of the authoritative memory row: `node_parameters` remains live and is
+still the source of truth for the next Start.
+
 ## 6. claude_code_agent native session resume bridge
 
 `claude_code_agent` does **not** inject `memory_content` as a system prompt. It calls claude's CLI with `--resume <UUID>` so claude reads its own native JSONL transcript on disk (`<CLAUDE_CONFIG_DIR>/projects/<project_key>/<session_id>.jsonl`). The bridge has three coupled mechanisms; full plumbing in [cli_agent_framework.md → Memory bridge](./cli_agent_framework.md#memory-bridge--simplememory--claude_code_agent).

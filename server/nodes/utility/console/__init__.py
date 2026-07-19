@@ -185,6 +185,7 @@ class ConsoleNode(ActionNode):
                 "formatted": formatted_output,
                 "format": format_type,
                 "workflow_id": ctx.workflow_id,
+                "execution_id": ctx.raw.get("root_execution_id") or ctx.execution_id,
                 "source_node_id": source_info.get("id") if source_info else None,
                 "source_node_type": source_info.get("type") if source_info else None,
                 "source_node_label": source_info.get("label") if source_info else None,

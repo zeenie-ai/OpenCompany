@@ -1058,7 +1058,15 @@ async def handle_send_chat_message(data: Dict[str, Any], websocket: WebSocket) -
 
     # Save to database for persistence
     database = container.database()
-    await database.add_chat_message(session_id, role, message)
+    control = await database.get_latest_workflow_control(session_id)
+    execution_id = (
+        control.root_execution_id
+        if control is not None and control.status != "reset"
+        else None
+    )
+    await database.add_chat_message(
+        session_id, role, message, execution_id=execution_id,
+    )
 
     # Build event data matching chatTrigger output schema
     event_data = {"message": message, "timestamp": timestamp, "session_id": session_id}
@@ -1080,7 +1088,14 @@ async def handle_get_chat_messages(data: Dict[str, Any], websocket: WebSocket) -
     limit = data.get("limit")  # Optional limit
 
     database = container.database()
-    messages = await database.get_chat_messages(session_id, limit)
+    control = await database.get_latest_workflow_control(session_id)
+    if control is not None and control.status == "reset":
+        messages = []
+    else:
+        messages = await database.get_chat_messages(
+            session_id, limit,
+            execution_id=control.root_execution_id if control is not None else None,
+        )
 
     return {"success": True, "messages": messages, "session_id": session_id}
 
@@ -1103,7 +1118,14 @@ async def handle_get_console_logs(data: Dict[str, Any], websocket: WebSocket) ->
     workflow_id = data.get("workflow_id")
 
     database = container.database()
-    logs = await database.get_console_logs(limit, workflow_id=workflow_id)
+    control = await database.get_latest_workflow_control(workflow_id) if workflow_id else None
+    if control is not None and control.status == "reset":
+        logs = []
+    else:
+        logs = await database.get_console_logs(
+            limit, workflow_id=workflow_id,
+            execution_id=control.root_execution_id if control is not None else None,
+        )
 
     return {
         "success": True,
@@ -1161,7 +1183,15 @@ async def handle_save_chat_message(data: Dict[str, Any], websocket: WebSocket) -
     session_id = data.get("session_id", "default")
 
     database = container.database()
-    success = await database.add_chat_message(session_id, role, message)
+    control = await database.get_latest_workflow_control(session_id)
+    success = await database.add_chat_message(
+        session_id, role, message,
+        execution_id=(
+            control.root_execution_id
+            if control is not None and control.status != "reset"
+            else None
+        ),
+    )
 
     return {"success": success, "message": "Chat message saved" if success else "Failed to save chat message"}
 

@@ -829,7 +829,12 @@ const DashboardContent: React.FC = () => {
 
   const handleResetWorkflow = async () => {
     if (!currentWorkflow?.id) return;
-    try { await resetWorkflow(currentWorkflow.id, workflowControl.revision); }
+    try {
+      await resetWorkflow(currentWorkflow.id, workflowControl.revision);
+      clearWorkflowExecutionState(currentWorkflow.id);
+      setExecutionResult(null);
+      setShowResult(false);
+    }
     catch (error: any) { toast.error(error?.message || 'Unable to reset workflow'); }
   };
 
@@ -1442,7 +1447,7 @@ const DashboardContent: React.FC = () => {
 
         {/* Parameter Panels */}
         <ErrorBoundary>
-          <ParameterPanel />
+          <ParameterPanel key={`${currentWorkflow?.id || 'none'}:${workflowControl.generation || 0}:${workflowControl.state}`} />
           <LocationParameterPanel />
         </ErrorBoundary>
         

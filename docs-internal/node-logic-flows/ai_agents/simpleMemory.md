@@ -27,6 +27,24 @@ snapshot of the `services.memory_store` in-memory session, **which is a
 separate store from the markdown `memory_content` pipeline used by the
 agents**. See "Edge cases" below.
 
+## Workflow Reset semantics
+
+`simpleMemory` is durable workflow configuration and is deliberately excluded
+from generation cleanup. Resetting the Temporal workflow:
+
+- does not modify `memory_content`, `memory_jsonl`, `session_id`,
+  `last_session_id`, window settings, or long-term-memory settings;
+- does not evict the memory node's compaction/token projection in the UI;
+- does not clear either in-memory vector-store cache;
+- may retain an immutable copy of the admitted memory values in the archived
+  generation snapshot, while the authoritative `node_parameters` row remains
+  active;
+- makes the next workflow generation load the current memory-node parameters.
+
+Only the explicit **Clear Memory** action calls
+`clear_agent_session_state`. Workflow Reset must never call that service or
+simulate it by clearing memory-related frontend queries.
+
 ## Inputs (handles)
 
 _None._ `simpleMemory` has no incoming handles.

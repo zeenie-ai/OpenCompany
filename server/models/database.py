@@ -196,6 +196,7 @@ class ChatMessage(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     session_id: str = Field(default="default", index=True, max_length=255)
+    execution_id: Optional[str] = Field(default=None, index=True, max_length=255)
     role: str = Field(max_length=20)  # 'user' or 'assistant'
     message: str = Field(max_length=50000)  # Large content support
     created_at: datetime = Field(
@@ -216,6 +217,7 @@ class ConsoleLog(SQLModel, table=True):
     node_id: str = Field(index=True, max_length=255)  # Console node ID
     label: str = Field(max_length=255)  # User-defined label
     workflow_id: Optional[str] = Field(default=None, max_length=255)
+    execution_id: Optional[str] = Field(default=None, index=True, max_length=255)
     data: str = Field(max_length=100000)  # JSON-encoded data
     formatted: str = Field(max_length=100000)  # Pre-formatted string
     format: str = Field(default="text", max_length=20)  # json, json_compact, text, table
@@ -471,6 +473,7 @@ class WorkflowControlExecution(SQLModel, table=True):
     generation: int = Field(index=True)
     execution_id: str = Field(index=True, max_length=255)
     root_execution_id: str = Field(index=True, max_length=255)
+    data_scope_id: Optional[str] = Field(default=None, index=True, max_length=255)
     controller_workflow_id: Optional[str] = Field(default=None, max_length=500)
     controller_run_id: Optional[str] = Field(default=None, max_length=255)
     session_id: str = Field(default="default", max_length=255)
@@ -484,6 +487,37 @@ class WorkflowControlExecution(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: Optional[datetime] = Field(default=None)
+
+
+class WorkflowRunDataScope(SQLModel, table=True):
+    """Immutable graph snapshot and isolated runtime namespace for one generation.
+
+    The saved :class:`Workflow` remains the editable canvas definition. Each
+    Start creates a new scope so node outputs, conversations, and other
+    session-keyed runtime data cannot bleed across Reset boundaries.
+    """
+
+    __tablename__ = "workflow_run_data_scopes"
+    __table_args__ = (
+        UniqueConstraint("workflow_id", "generation", name="uq_workflow_run_data_generation"),
+        UniqueConstraint("control_id", name="uq_workflow_run_data_control"),
+    )
+
+    id: str = Field(primary_key=True, max_length=255)
+    control_id: str = Field(index=True, max_length=255)
+    workflow_id: str = Field(index=True, max_length=255)
+    generation: int = Field(index=True)
+    execution_id: str = Field(index=True, max_length=255)
+    root_execution_id: str = Field(index=True, max_length=255)
+    temporal_workflow_id: Optional[str] = Field(default=None, max_length=500)
+    temporal_run_id: Optional[str] = Field(default=None, max_length=255)
+    source_session_id: str = Field(default="default", max_length=255)
+    graph_hash: str = Field(max_length=64)
+    node_data: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    runtime_data: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    status: str = Field(default="active", index=True, max_length=20)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    archived_at: Optional[datetime] = Field(default=None)
 
 
 class TeamMember(SQLModel, table=True):

@@ -1,9 +1,39 @@
+import importlib.util
+import sys
+import uuid
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 
 from services.deployment.control import WorkflowControlService, serialize_control
+
+
+@pytest.fixture
+async def control_database():
+    module_name = "tests._real_workflow_control_database"
+    spec = importlib.util.spec_from_file_location(
+        module_name, Path(__file__).resolve().parents[2] / "core" / "database.py"
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    db_path = Path.cwd() / f".workflow-control-{uuid.uuid4().hex}.db"
+    database = module.Database(SimpleNamespace(
+        database_url=f"sqlite+aiosqlite:///{db_path.as_posix()}",
+        database_echo=False, database_pool_size=5, database_max_overflow=5,
+    ))
+    await database.startup()
+    try:
+        yield database
+    finally:
+        await database.shutdown()
+        sys.modules.pop(module_name, None)
+        for candidate in (db_path, Path(f"{db_path}-wal"), Path(f"{db_path}-shm")):
+            candidate.unlink(missing_ok=True)
 
 
 @pytest.mark.asyncio
@@ -21,7 +51,53 @@ async def test_begin_generation_is_idempotent():
     assert created is True
     assert control.generation == 1
     assert control.status == "starting"
+    assert control.data_scope_id == control.execution_id
+    assert serialize_control(control)["data_scope_id"] == control.execution_id
     assert serialize_control(control)["can_pause"] is False
+
+
+@pytest.mark.asyncio
+async def test_generation_atomically_creates_and_archives_isolated_data_scope(control_database):
+    service = WorkflowControlService(control_database)
+    control, created = await service.begin_generation(
+        workflow_id="wf-scope",
+        nodes=[{"id": "agent-1", "type": "aiAgent", "data": {"label": "Researcher"}}],
+        edges=[], session_id="browser-session", idempotency_key="scope-1",
+    )
+    assert created is True
+    scope = await control_database.get_workflow_run_data_scope(control.data_scope_id)
+    assert scope.execution_id == control.execution_id
+    assert scope.source_session_id == "browser-session"
+    assert scope.node_data["agent-1"]["data"]["label"] == "Researcher"
+    assert scope.status == "active"
+
+    await control_database.update_workflow_run_data_scope(
+        scope.id, temporal_run_id="temporal-run-1", status="archived",
+    )
+    archived = await control_database.get_workflow_run_data_scope(scope.id)
+    assert archived.temporal_workflow_id == control.controller_workflow_id
+    assert archived.temporal_run_id == "temporal-run-1"
+    assert archived.status == "archived"
+
+    await control_database.add_chat_message("wf-scope", "user", "archived", execution_id=scope.id)
+    await control_database.add_chat_message("wf-scope", "user", "new", execution_id="new-scope")
+    current_chat = await control_database.get_chat_messages(
+        "wf-scope", execution_id="new-scope",
+    )
+    assert [item["message"] for item in current_chat] == ["new"]
+
+    await control_database.add_console_log({
+        "node_id": "console-1", "label": "Console", "workflow_id": "wf-scope",
+        "execution_id": scope.id, "data": {"value": "archived"}, "formatted": "archived",
+    })
+    await control_database.add_console_log({
+        "node_id": "console-1", "label": "Console", "workflow_id": "wf-scope",
+        "execution_id": "new-scope", "data": {"value": "new"}, "formatted": "new",
+    })
+    current_logs = await control_database.get_console_logs(
+        workflow_id="wf-scope", execution_id="new-scope",
+    )
+    assert [item["formatted"] for item in current_logs] == ["new"]
 
 
 @pytest.mark.asyncio
@@ -62,6 +138,7 @@ async def test_reset_generation_is_ready_for_explicit_start():
     reset_control.revision = 9
     reset_control.execution_id = "old-execution"
     reset_control.root_execution_id = "old-execution"
+    reset_control.data_scope_id = "old-execution"
     reset_control.controller_workflow_id = "old-controller"
     reset_control.controller_run_id = "old-run"
     reset_control.created_at = None

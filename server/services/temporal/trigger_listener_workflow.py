@@ -169,7 +169,9 @@ class TriggerListenerWorkflow:
             use_latest_graph = bool(workflow_id) and workflow.patched("trigger-latest-graph-v1")
         except RuntimeError:  # direct unit invocation outside Temporal runtime
             use_latest_graph = False
-        if use_latest_graph:
+        # Controlled generations execute their immutable admitted snapshot.
+        # Legacy deployments retain hot graph lookup for compatibility.
+        if use_latest_graph and not listener_data.get("data_scope_id"):
             try:
                 latest = await workflow.execute_activity(
                     "load_persisted_workflow_graph_activity",
@@ -238,6 +240,9 @@ class TriggerListenerWorkflow:
                     "workflow_id": workflow_id,
                     "workflow_slug": workflow_slug,
                     "tenant_id": tenant_id,
+                    "execution_id": listener_data.get("execution_id"),
+                    "root_execution_id": listener_data.get("root_execution_id"),
+                    "data_scope_id": listener_data.get("data_scope_id"),
                 }
             ],
             id=child_id,
