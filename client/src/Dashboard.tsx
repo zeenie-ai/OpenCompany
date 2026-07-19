@@ -247,7 +247,7 @@ const DashboardContent: React.FC = () => {
   const isCurrentWorkflowLocked = workflowLock.locked &&
     workflowLock.workflow_id === currentWorkflow?.id;
   const [globalModelDefaults, setGlobalModelDefaults] = React.useState<{ provider: string; model: string } | null>(null);
-  const { onDragOver, onDrop, handleComponentDragStart } = useDragAndDrop({ nodes, setNodes, saveNodeParameters, globalModelDefaults });
+  const { onDragOver, onDrop, handleComponentDragStart } = useDragAndDrop({ nodes, setNodes, saveNodeParameters, globalModelDefaults, workflowId: currentWorkflow?.id ?? 'new' });
   const { onConnect: baseOnConnect, onNodesDelete, onEdgesDelete: baseOnEdgesDelete } = useReactFlowNodes({ setNodes, setEdges });
   const { onConnect, onEdgesDelete } = useAutoSkillEdges({
     baseOnConnect,
@@ -260,7 +260,7 @@ const DashboardContent: React.FC = () => {
   // Apply runtime canvas mutations pushed from the backend (e.g.,
   // Agent Builder tools called by the LLM mid-execution).
   useWorkflowOpsListener({ nodes, edges, setNodes, setEdges });
-  const { copySelectedNodes, pasteNodes } = useCopyPaste({ nodes, edges, setNodes, setEdges, saveNodeParameters });
+  const { copySelectedNodes, pasteNodes } = useCopyPaste({ nodes, edges, setNodes, setEdges, saveNodeParameters, workflowId: currentWorkflow?.id ?? 'new' });
 
   // Override all agent nodes to use the global model. Agent membership is
   // derived at call time from the backend-served `group` field — by the

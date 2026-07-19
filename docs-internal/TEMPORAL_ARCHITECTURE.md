@@ -112,7 +112,7 @@ Each node receives an immutable context snapshot:
 
 ```python
 context = {
-    "node_id": "aiAgent-123",
+    "node_id": "1:aiAgent:1",
     "node_type": "aiAgent",
     "node_data": {
         "model": "gpt-4",
@@ -120,15 +120,13 @@ context = {
         "systemMessage": "You are a helpful assistant"
     },
     "inputs": {  # Outputs from upstream nodes
-        "chatTrigger-456": {"message": "Hello", "timestamp": "..."},
+        "1:chatTrigger:1": {"message": "Hello", "timestamp": "..."},
     },
-    "workflow_id": "6868cbbf4a36409fbd07ca24999f8b66",  # 32-hex UUID, stable across rename
+    "workflow_id": "1",                              # Backend-allocated application identity
     "workflow_slug": "AI_Assistant_1",                  # Human-readable, used for Temporal child IDs
     "session_id": "session-xyz",
-    "execution_id": "AI_Assistant_1-a1b2c3d4",  # Stable per run (= the MachinaWorkflow Temporal id);
-                                                # threaded into AgentWorkflow tool payloads + delegate
-                                                # children so session-keyed nodes (browser) reuse one
-                                                # instance per run instead of minting a uuid per call
+    "execution_id": "1:execution:1",             # Application execution identity; distinct from
+                                                  # Temporal Workflow ID and Temporal Run ID
     "nodes": [...],  # Full list for tool/memory detection
     "edges": [...],  # Full list for tool/memory detection
 }

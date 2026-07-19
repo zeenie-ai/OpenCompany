@@ -396,13 +396,14 @@ See [ui_migration_plan.md](./ui_migration_plan.md) Phase 6.
   The older `deployment_snapshot` and binary deployment status remain migration
   adapters for legacy deployments and must not override a resolved controller
   generation. See [Temporal Execution Engine RFC](temporal-execution-engine-rfc.md).
-- **Runtime Reset clears projections, not durable memory.** The
+- **Runtime Reset clears execution and conversation projections.** The
   `workflow_runtime_reset` broadcast drops the workflow's node-status slot,
   variables, and current console/chat arrays; `Dashboard` remounts the
   parameter panel so local output reducers cannot leak the previous run.
-  Simple Memory node-parameter queries and `compactionStats` are intentionally
-  retained. Only the memory panel's explicit Clear Memory mutation may reset
-  those stores. See [Memory Lifecycle](memory_lifecycle.md#workflow-reset-is-not-memory-clear).
+  Simple Memory parameters are refreshed from the backend's cleared-row
+  broadcast, and `compactionStats` caches are evicted. The old transcript stays
+  available only through the archived generation. See
+  [Memory Lifecycle](memory_lifecycle.md#workflow-reset-archives-then-clears-memory).
 - **`currentWorkflowId` lives in `useAppStore` only.** Non-React listeners (WS handlers) read it via `useAppStore.getState().currentWorkflow?.id` -- the documented Zustand escape hatch (https://github.com/pmndrs/zustand#read-state-without-subscription). The previous `currentWorkflowIdRef` mirror inside WebSocketContext was a one-render-late copy that misrouted broadcasts during workflow switches. The push to `nodeStatusStore.setCurrentWorkflowId` is driven from a single `useEffect` in `Dashboard.tsx`.
 
 ## Ownership boundary: TanStack Query vs Zustand vs WebSocketContext

@@ -30,8 +30,11 @@ export interface WorkflowData {
 
 export interface SaveWorkflowResult {
   success: boolean;
+  /** Backend-allocated canonical decimal id (also returned for updates). */
+  id: string;
   slug?: string;
   name?: string;
+  nodeIdAliases?: Record<string, string>;
 }
 
 export const workflowApi = {
@@ -45,7 +48,15 @@ export const workflowApi = {
       });
       const result = await response.json();
       if (!result.success) return null;
-      return { success: true, slug: result.slug, name: result.name };
+      const canonicalId = result.id ?? result.workflow_id;
+      if (!canonicalId && workflowId === 'new') return null;
+      return {
+        success: true,
+        id: canonicalId ?? workflowId,
+        slug: result.slug,
+        name: result.name,
+        nodeIdAliases: result.node_id_aliases ?? {},
+      };
     } catch (error) {
       console.error('Failed to save workflow:', error);
       return null;

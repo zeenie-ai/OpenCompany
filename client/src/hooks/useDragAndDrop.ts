@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { Node } from 'reactflow';
-import { snapToGrid, getDefaultNodePosition } from '../utils/workflow';
+import { snapToGrid, getDefaultNodePosition, nextNodeInstanceId } from '../utils/workflow';
 import { theme } from '../styles/theme';
 import { getCachedNodeSpec } from '../lib/nodeSpec';
 
@@ -19,6 +19,7 @@ interface UseDragAndDropProps {
   setNodes: (nodes: Node[] | ((nodes: Node[]) => Node[])) => void;
   saveNodeParameters?: (nodeId: string, parameters: Record<string, any>) => Promise<boolean>;
   globalModelDefaults?: { provider: string; model: string } | null;
+  workflowId: string;
 }
 
 /**
@@ -47,7 +48,7 @@ export const generateUniqueLabel = (displayName: string, nodeType: string, exist
   return `${displayName} ${suffix}`;
 };
 
-export const useDragAndDrop = ({ nodes, setNodes, saveNodeParameters, globalModelDefaults }: UseDragAndDropProps) => {
+export const useDragAndDrop = ({ nodes, setNodes, saveNodeParameters, globalModelDefaults, workflowId }: UseDragAndDropProps) => {
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
@@ -86,7 +87,7 @@ export const useDragAndDrop = ({ nodes, setNodes, saveNodeParameters, globalMode
         const uniqueLabel = generateUniqueLabel(displayName, nodeData.type, nodes);
 
         const newNode: Node = {
-          id: `${nodeData.type}-${Date.now()}`,
+          id: nextNodeInstanceId(workflowId, nodeData.type, nodes),
           type: nodeData.type,
           position,
           data: {
@@ -117,7 +118,7 @@ export const useDragAndDrop = ({ nodes, setNodes, saveNodeParameters, globalMode
         console.error('Error dropping node:', error);
       }
     },
-    [setNodes, nodes, saveNodeParameters, globalModelDefaults]
+    [setNodes, nodes, saveNodeParameters, globalModelDefaults, workflowId]
   );
 
   const handleComponentDragStart = useCallback((event: React.DragEvent, definition: any) => {

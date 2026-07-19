@@ -1,7 +1,36 @@
 import { Node, Edge } from 'reactflow';
 
-export const generateWorkflowId = (): string => 
-  `workflow-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+/** Marker used until the backend atomically allocates the next workflow id. */
+export const NEW_WORKFLOW_ID = 'new';
+
+/**
+ * Allocate the next stable instance id for a plugin node in a workflow.
+ *
+ * Plugin `type` is the fixed metadata identity. The final ordinal keeps
+ * multiple instances of that plugin distinct without timestamps/randomness.
+ * The server repeats this validation while saving/importing, so this helper is
+ * primarily what keeps live canvas operations canonical before persistence.
+ */
+export const nextNodeInstanceId = (
+  workflowId: string,
+  nodeType: string,
+  existingNodes: Pick<Node, 'id' | 'type'>[],
+): string => {
+  const scope = workflowId || NEW_WORKFLOW_ID;
+  const prefix = `${scope}:${nodeType}:`;
+  let largest = 0;
+
+  for (const node of existingNodes) {
+    if (node.type !== nodeType || !node.id.startsWith(prefix)) continue;
+    const ordinal = Number.parseInt(node.id.slice(prefix.length), 10);
+    if (Number.isSafeInteger(ordinal) && ordinal > largest) largest = ordinal;
+  }
+
+  // Legacy ids do not contain an ordinal. Counting them prevents a migrated
+  // canvas from issuing `:1` for what is visibly a later plugin instance.
+  const sameTypeCount = existingNodes.filter(node => node.type === nodeType).length;
+  return `${prefix}${Math.max(largest, sameTypeCount) + 1}`;
+};
 
 export const sanitizeNodesForComparison = (nodes: Node[]): Node[] =>
   nodes.map(n => ({ ...n, selected: undefined, dragging: undefined }));

@@ -118,6 +118,21 @@ class BaseNode:
     call the sole operation regardless of the ``operation`` field.
     """
 
+    # Mutable state owned by a node belongs to an execution scope, never to
+    # deployment orchestration. Plugins that keep state outside normal node
+    # outputs override this hook; stateless nodes inherit the no-op contract.
+    @classmethod
+    async def reset_execution_state(
+        cls,
+        *,
+        node_id: str,
+        workflow_id: str,
+        execution_id: str,
+        graph: Dict[str, Any],
+        database: Any,
+    ) -> Dict[str, Any]:
+        return {"reset": False}
+
     # ---- declaration (override in subclass) -------------------------------
     type: ClassVar[str] = ""
     version: ClassVar[int] = 1

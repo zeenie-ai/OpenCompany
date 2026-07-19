@@ -15,7 +15,6 @@ from typing import List, Tuple
 import pytest
 
 from services.workflow_naming import (
-    new_workflow_id,
     next_available_slug,
     slugify_name,
 )
@@ -166,28 +165,3 @@ async def test_next_available_slug_empty_name_uses_fallback_base() -> None:
 async def test_next_available_slug_special_chars_in_name() -> None:
     db = _fake_db([])
     assert await next_available_slug("Test/Workflow:Beta!", db) == "Test_Workflow_Beta_1"
-
-
-# ---------------------------------------------------------------------------
-# new_workflow_id — UUID shape
-# ---------------------------------------------------------------------------
-
-
-def test_new_workflow_id_is_32_hex_chars() -> None:
-    wid = new_workflow_id()
-    assert len(wid) == 32
-    assert all(c in "0123456789abcdef" for c in wid)
-
-
-def test_new_workflow_id_is_unique() -> None:
-    ids = {new_workflow_id() for _ in range(1000)}
-    assert len(ids) == 1000
-
-
-def test_new_workflow_id_no_prefix() -> None:
-    # Wave 14 dropped the per-site prefixes (wf_, workflow-, example_).
-    wid = new_workflow_id()
-    assert not wid.startswith("wf_")
-    assert not wid.startswith("workflow-")
-    assert not wid.startswith("example_")
-    assert "-" not in wid  # bare hex, no separators

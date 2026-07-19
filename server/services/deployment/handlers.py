@@ -645,14 +645,27 @@ async def handle_reset_workflow(data: Dict[str, Any], websocket: WebSocket) -> D
         status="archived", archived_at=datetime.now(timezone.utc),
     )
     from services.status_broadcaster import get_status_broadcaster
-    await get_status_broadcaster().broadcast({
+    from services.deployment.runtime_state import archive_and_reset_node_state
+    broadcaster = get_status_broadcaster()
+    node_state = await archive_and_reset_node_state(
+        current, service.database, broadcaster,
+    )
+    await broadcaster.broadcast({
         "type": "workflow_runtime_reset",
         "workflow_id": workflow_id,
         "generation": current.generation,
         "data_scope_id": current.data_scope_id or current.execution_id,
+        "archived_nodes": node_state["archived_nodes"],
+        "reset_nodes": node_state["reset_nodes"],
     })
     return await _with_runtime_counts(
-        {"success": True, "terminated_executions": terminated, **serialize_control(current)},
+        {
+            "success": True,
+            "terminated_executions": terminated,
+            "archived_nodes": node_state["archived_nodes"],
+            "reset_nodes": node_state["reset_nodes"],
+            **serialize_control(current),
+        },
         workflow_id,
     )
 

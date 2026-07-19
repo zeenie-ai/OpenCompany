@@ -36,7 +36,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from core.logging import get_logger
 from services.node_registry import get_node_class
 from services.workflow_migrations import normalize_legacy_android_toolkit
-from services.workflow_naming import new_workflow_id, next_available_slug
+from services.workflow_naming import canonicalize_node_ids, next_available_slug
 from services.workflow_validator import validate_workflow
 
 logger = get_logger(__name__)
@@ -311,9 +311,16 @@ async def import_workflow(
         node_parameters,
     )
 
-    # 7. Save. UUID-based system identity + name-derived slug for
+    # 7. Save. Incremental system identity + name-derived slug for
     #    human-visible surfaces (folder names, Temporal Web UI).
-    workflow_id = new_workflow_id()
+    workflow_id = await database.allocate_workflow_id()
+    remapped_nodes, remapped_edges, canonical_aliases = canonicalize_node_ids(
+        workflow_id, remapped_nodes, remapped_edges
+    )
+    remapped_params = {
+        canonical_aliases.get(node_id, node_id): params
+        for node_id, params in remapped_params.items()
+    }
     slug = await next_available_slug(proposed_name, database)
     saved = await database.save_workflow(
         workflow_id=workflow_id,

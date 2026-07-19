@@ -29,21 +29,24 @@ agents**. See "Edge cases" below.
 
 ## Workflow Reset semantics
 
-`simpleMemory` is durable workflow configuration and is deliberately excluded
-from generation cleanup. Resetting the Temporal workflow:
+`simpleMemory` configuration is durable, but its conversation state follows the
+workflow generation. Resetting the Temporal workflow:
 
-- does not modify `memory_content`, `memory_jsonl`, `session_id`,
-  `last_session_id`, window settings, or long-term-memory settings;
-- does not evict the memory node's compaction/token projection in the UI;
-- does not clear either in-memory vector-store cache;
-- may retain an immutable copy of the admitted memory values in the archived
-  generation snapshot, while the authoritative `node_parameters` row remains
-  active;
-- makes the next workflow generation load the current memory-node parameters.
+- archives the current memory parameters under the old generation;
+- resets `memory_content`, `memory_jsonl`, `last_session_id`, and provider
+  continuation identifiers while preserving configuration such as window size;
+- clears connected agent sessions, long-term vector caches, direct memory-store
+  sessions, conversation rows, and token/compaction counters;
+- broadcasts the cleared node parameters so the open panel updates immediately;
+- makes the next workflow generation start from an empty conversation.
 
-Only the explicit **Clear Memory** action calls
-`clear_agent_session_state`. Workflow Reset must never call that service or
-simulate it by clearing memory-related frontend queries.
+The explicit **Clear Memory** action remains available for clearing memory
+without resetting the whole workflow. Workflow Reset invokes the same
+cross-store clear contract only after its archival write succeeds.
+
+Implementation is plugin-owned: `SimpleMemoryNode.reset_execution_state`
+implements the generic `BaseNode` lifecycle hook. The deployment/reset service
+does not recognize the `simpleMemory` type or know its session topology.
 
 ## Inputs (handles)
 

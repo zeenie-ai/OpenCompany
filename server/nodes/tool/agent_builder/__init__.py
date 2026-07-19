@@ -33,7 +33,6 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
-import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
@@ -43,7 +42,7 @@ from core.logging import get_logger
 from services import workflow_ops
 from services.node_registry import registered_node_classes
 from services.plugin import NodeContext, Operation, TaskQueue, ToolNode
-from services.workflow_naming import new_workflow_id, next_available_slug
+from services.workflow_naming import next_available_slug
 
 
 logger = get_logger(__name__)
@@ -1227,9 +1226,9 @@ class AgentBuilderNode(ToolNode):
         from services.plugin.deps import get_database
 
         database = get_database()
-        workflow_id = new_workflow_id()
+        workflow_id = await database.allocate_workflow_id()
         slug = await next_available_slug(name, database)
-        start_node_id = f"start-{uuid.uuid4().hex[:8]}"
+        start_node_id = f"{workflow_id}:start:1"
         description = (params.workflow_description or "").strip()
         workflow_data = {
             "id": workflow_id,

@@ -16,6 +16,7 @@ from core.config import Settings
 from models.database import (
     NodeParameter,
     RuntimeMutation,
+    IdentitySequence,
     Workflow,
     Execution,
     APIKey,
@@ -116,6 +117,51 @@ class Database:
         except Exception as e:
             logger.error("Database startup failed", error=str(e))
             raise
+
+    async def allocate_identity(self, namespace: str) -> int:
+        """Atomically allocate the next positive integer in ``namespace``."""
+        if not namespace or len(namespace) > 512:
+            raise ValueError("invalid_identity_namespace")
+        # A compare-and-swap update is portable and prevents duplicate values
+        # when multiple API/Temporal worker processes allocate concurrently.
+        for _ in range(20):
+            async with self.get_session() as session:
+                row = await session.get(IdentitySequence, namespace)
+                if row is None:
+                    session.add(IdentitySequence(namespace=namespace, next_value=2))
+                    try:
+                        await session.commit()
+                        return 1
+                    except IntegrityError:
+                        await session.rollback()
+                        continue
+                current = row.next_value
+                result = await session.execute(
+                    update(IdentitySequence)
+                    .where(
+                        IdentitySequence.namespace == namespace,
+                        IdentitySequence.next_value == current,
+                    )
+                    .values(next_value=current + 1, updated_at=datetime.now(timezone.utc))
+                )
+                if result.rowcount == 1:
+                    await session.commit()
+                    return current
+                await session.rollback()
+        raise RuntimeError("identity_allocation_conflict")
+
+    async def allocate_workflow_id(self) -> str:
+        """Return the next canonical workflow ID: ``1``, ``2``, ..."""
+        return str(await self.allocate_identity("workflow"))
+
+    async def allocate_execution_id(self, workflow_id: str) -> str:
+        """Return a workflow-scoped application execution identity.
+
+        The canonical workflow alias is used in the visible ID. This method
+        never manufactures or replaces a Temporal Run ID.
+        """
+        value = await self.allocate_identity(f"workflow-execution:{workflow_id}")
+        return f"{workflow_id}:execution:{value}"
 
     async def _migrate_user_settings(self):
         """Add missing columns to user_settings table."""
@@ -627,7 +673,8 @@ class Database:
     ) -> bool:
         """Save or update workflow.
 
-        ``slug`` is required for new rows and is updated on every save
+        ``workflow_id`` accepts either the canonical decimal identity or a
+        retained legacy alias. ``slug`` is required for new rows and is updated on every save
         for existing rows (so a rename routed through this path stays
         consistent). Callers compute the slug via
         :func:`services.workflow_naming.next_available_slug` before
@@ -698,11 +745,10 @@ class Database:
             return []
 
     async def rename_workflow(self, workflow_id: str, new_name: str, new_slug: str) -> bool:
-        """Atomically update display name + slug. ``id`` (PK) never moves.
+        """Atomically update display name + slug. The storage PK never moves.
 
-        Cross-table FK references (``Execution.workflow_id``) and soft
-        refs (``ConsoleLog`` / ``TokenUsageMetric`` / etc.) all key on
-        the UUID, so renaming is a single-row UPDATE — no cascade
+        Cross-table FK references and retained Temporal history may still key
+        on a legacy storage identity, so renaming is a single-row UPDATE — no cascade
         needed. The unique constraint on ``slug`` is the collision
         guard; the caller must pre-allocate a free slug via
         :func:`services.workflow_naming.next_available_slug`.
@@ -2514,6 +2560,28 @@ class Database:
             session.add(control)
             scope_id = control.data_scope_id or control.execution_id
             control.data_scope_id = scope_id
+            graph_nodes = [
+                node for node in control.graph_snapshot.get("nodes", [])
+                if node.get("id")
+            ]
+            node_ids = [str(node["id"]) for node in graph_nodes]
+            parameter_rows = []
+            if node_ids:
+                parameter_result = await session.execute(
+                    select(NodeParameter).where(NodeParameter.node_id.in_(node_ids))
+                )
+                parameter_rows = list(parameter_result.scalars().all())
+            parameters_by_id = {
+                row.node_id: dict(row.parameters or {}) for row in parameter_rows
+            }
+            runtime_nodes = {
+                str(node["id"]): {
+                    "type": node.get("type"),
+                    "canvas_data": dict(node.get("data") or {}),
+                    "parameters": parameters_by_id.get(str(node["id"]), {}),
+                }
+                for node in graph_nodes
+            }
             session.add(WorkflowRunDataScope(
                 id=scope_id,
                 control_id=control.id,
@@ -2533,6 +2601,7 @@ class Database:
                     for node in control.graph_snapshot.get("nodes", [])
                     if node.get("id")
                 },
+                runtime_data={"nodes": runtime_nodes},
             ))
             await session.commit()
             await session.refresh(control)
@@ -2541,6 +2610,7 @@ class Database:
     async def update_workflow_run_data_scope(
         self, scope_id: str, *, temporal_run_id: Optional[str] = None,
         status: Optional[str] = None, archived_at: Optional[datetime] = None,
+        runtime_data: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Update the execution link/lifecycle without mutating its node snapshot."""
         from models.database import WorkflowRunDataScope
@@ -2552,6 +2622,8 @@ class Database:
             values["status"] = status
         if archived_at is not None:
             values["archived_at"] = archived_at
+        if runtime_data is not None:
+            values["runtime_data"] = runtime_data
         if not values:
             return True
         async with self.get_session() as session:

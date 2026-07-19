@@ -23,6 +23,7 @@
  */
 
 import { useCallback } from 'react';
+import { useAppStore } from '../store/useAppStore';
 import type { Node, Edge, Connection } from 'reactflow';
 import { useWebSocket } from '../contexts/WebSocketContext';
 import { useUserSettingsQuery } from './useUserSettingsQuery';
@@ -103,6 +104,7 @@ export function useAutoSkillEdges({
       if (!result?.operations?.length) return;
 
       await applyOperations(result.operations, {
+        workflowId: useAppStore.getState().currentWorkflow?.id,
         nodes,
         edges,
         setNodes,

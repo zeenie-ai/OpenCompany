@@ -62,12 +62,20 @@ async def handle_save_workflow(data: Dict[str, Any], websocket: WebSocket) -> Di
     ``updateWorkflow({name})`` -> debounced save) flows through this
     handler, so renaming happens here — no dedicated rename endpoint.
     """
-    from services.workflow_naming import next_available_slug
+    from services.workflow_naming import canonicalize_node_ids, next_available_slug
 
     database = container.database()
-    workflow_id = data["workflow_id"]
+    requested_id = str(data.get("workflow_id") or "").strip()
+    is_new_marker = requested_id.lower() in {"", "new"}
+    existing = await database.get_workflow(requested_id) if requested_id and not is_new_marker else None
+    if is_new_marker:
+        workflow_id = await database.allocate_workflow_id()
+    elif existing is None:
+        return {"success": False, "error": "workflow_not_found"}
+    else:
+        workflow_id = requested_id
     name = data["name"]
-    existing = await database.get_workflow(workflow_id)
+    storage_id = existing.id if existing is not None else workflow_id
 
     if existing and existing.name == name and existing.slug:
         slug = existing.slug
@@ -80,9 +88,16 @@ async def handle_save_workflow(data: Dict[str, Any], websocket: WebSocket) -> Di
     nodes, edges, _, migration_warnings = normalize_legacy_android_toolkit(
         workflow_data.get("nodes") or [], workflow_data.get("edges") or []
     )
+    # New workflows use canonical IDs from their first persistence boundary.
+    # Existing legacy workflows are deliberately left byte-for-byte compatible;
+    # there is no startup or save-time migration.
+    if is_new_marker:
+        nodes, edges, node_id_aliases = canonicalize_node_ids(workflow_id, nodes, edges)
+    else:
+        node_id_aliases = {}
     normalized_data = {**workflow_data, "nodes": nodes, "edges": edges}
     success = await database.save_workflow(
-        workflow_id=workflow_id,
+        workflow_id=storage_id,
         name=name,
         slug=slug,
         data=normalized_data,
@@ -98,6 +113,7 @@ async def handle_save_workflow(data: Dict[str, Any], websocket: WebSocket) -> Di
         "name": name,
         "slug": slug,
         "migration_warnings": migration_warnings,
+        "node_id_aliases": node_id_aliases,
     }
 
 

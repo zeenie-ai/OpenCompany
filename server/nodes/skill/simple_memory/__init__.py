@@ -104,6 +104,45 @@ class SimpleMemoryNode(ActionNode):
     Params = SimpleMemoryParams
     Output = SimpleMemoryOutput
 
+    @classmethod
+    async def reset_execution_state(
+        cls, *, node_id: str, workflow_id: str, execution_id: str,
+        graph: dict[str, Any], database: Any,
+    ) -> dict[str, Any]:
+        """Clear this plugin's mutable state after the execution is archived."""
+        from services.memory import clear_agent_session_state
+        from services.memory_store import clear_session as clear_direct_session
+
+        params = await database.get_node_parameters(node_id) or {}
+        configured = str(params.get("session_id") or "").strip()
+        if configured and configured != "default":
+            sessions = [configured]
+        else:
+            sessions = [
+                str(edge.get("target"))
+                for edge in graph.get("edges", [])
+                if edge.get("source") == node_id
+                and (edge.get("targetHandle") or edge.get("target_handle")) == "input-memory"
+                and edge.get("target")
+            ]
+            sessions.append("default")
+        sessions = list(dict.fromkeys(sessions))
+        for index, session_id in enumerate(sessions):
+            await clear_agent_session_state(
+                session_id=session_id,
+                workflow_id=workflow_id,
+                clear_long_term=True,
+                memory_node_id=node_id if index == 0 else None,
+            )
+            clear_direct_session(session_id)
+            await database.clear_conversation(session_id)
+            await database.reset_session_token_state(session_id)
+        return {
+            "reset": True,
+            "parameters": await database.get_node_parameters(node_id) or {},
+            "sessions": sessions,
+        }
+
     @Operation("read")
     async def read(self, ctx: NodeContext, params: SimpleMemoryParams) -> SimpleMemoryOutput:
         """Return the current message log for the session.

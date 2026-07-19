@@ -70,6 +70,7 @@ export function useWorkflowOpsListener({
       if (ops.length === 0) return;
 
       void applyOperations(ops, {
+        workflowId: currentWorkflowId,
         nodes,
         edges,
         setNodes,

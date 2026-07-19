@@ -20,8 +20,8 @@ export const useWorkflowManagement = () => {
     saveWorkflow();
   }, [saveWorkflow]);
 
-  const handleNew = useCallback(() => {
-    createNewWorkflow();
+  const handleNew = useCallback(async () => {
+    await createNewWorkflow();
   }, [createNewWorkflow]);
 
   const handleOpen = useCallback(() => {

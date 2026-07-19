@@ -1231,6 +1231,12 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               delete next[workflowId];
               return next;
             });
+            setAllCompactionStats((previous) => {
+              const next = { ...previous };
+              delete next[workflowId];
+              return next;
+            });
+            queryClient.removeQueries({ queryKey: queryKeys.compactionStats._def });
             if (useAppStore.getState().currentWorkflow?.id === workflowId) {
               setConsoleLogs([]);
               setChatMessages([]);
@@ -2422,6 +2428,12 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       delete next[workflowId];
       return next;
     });
+    setAllCompactionStats((previous) => {
+      const next = { ...previous };
+      delete next[workflowId];
+      return next;
+    });
+    queryClient.removeQueries({ queryKey: queryKeys.compactionStats._def });
     if (useAppStore.getState().currentWorkflow?.id === workflowId) {
       setConsoleLogs([]);
       setChatMessages([]);

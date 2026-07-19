@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 from services.deployment.control import WorkflowControlService, serialize_control
+from services.deployment.runtime_state import archive_and_reset_node_state
 
 
 @pytest.fixture
@@ -69,6 +70,11 @@ async def test_generation_atomically_creates_and_archives_isolated_data_scope(co
     assert scope.execution_id == control.execution_id
     assert scope.source_session_id == "browser-session"
     assert scope.node_data["agent-1"]["data"]["label"] == "Researcher"
+    assert scope.runtime_data["nodes"]["agent-1"] == {
+        "type": "aiAgent",
+        "canvas_data": {"label": "Researcher"},
+        "parameters": {},
+    }
     assert scope.status == "active"
 
     await control_database.update_workflow_run_data_scope(
@@ -98,6 +104,44 @@ async def test_generation_atomically_creates_and_archives_isolated_data_scope(co
         workflow_id="wf-scope", execution_id="new-scope",
     )
     assert [item["formatted"] for item in current_logs] == ["new"]
+
+
+@pytest.mark.asyncio
+async def test_reset_archives_every_node_then_calls_plugin_lifecycle(monkeypatch):
+    database = AsyncMock()
+    database.get_node_parameters.side_effect = [
+        {"configured": True},
+    ]
+    database.get_workflow_run_data_scope.return_value = SimpleNamespace(
+        runtime_data={"existing": True},
+    )
+    broadcaster = SimpleNamespace(
+        broadcast_node_parameters_updated=AsyncMock(),
+    )
+    lifecycle = AsyncMock(return_value={
+        "reset": True, "parameters": {"configured": True, "runtime": "empty"},
+    })
+    node_class = SimpleNamespace(reset_execution_state=lifecycle)
+    monkeypatch.setattr("services.node_registry.get_node_class", lambda _node_type: node_class)
+    control = SimpleNamespace(
+        workflow_id="wf",
+        execution_id="execution-1",
+        data_scope_id="scope-1",
+        graph_snapshot={
+            "nodes": [
+                {"id": "stateful-1", "type": "statefulPlugin", "data": {"label": "Node"}},
+            ],
+            "edges": [],
+        },
+    )
+
+    result = await archive_and_reset_node_state(control, database, broadcaster)
+
+    assert result == {"archived_nodes": 1, "reset_nodes": ["stateful-1"]}
+    archived = database.update_workflow_run_data_scope.await_args.kwargs["runtime_data"]
+    assert archived["nodes"]["stateful-1"]["parameters"] == {"configured": True}
+    lifecycle.assert_awaited_once()
+    broadcaster.broadcast_node_parameters_updated.assert_awaited_once()
 
 
 @pytest.mark.asyncio

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -65,7 +64,7 @@ class WorkflowControlService:
         if latest and latest.status != "reset" and not reset:
             raise ValueError("workflow_already_started")
         generation = (latest.generation + 1) if latest else 1
-        execution_id = f"{workflow_id}:g{generation}:{uuid.uuid4().hex[:12]}"
+        execution_id = await self.database.allocate_execution_id(workflow_id)
         control = WorkflowControlExecution(
             id=f"workflow-control:{workflow_id}:{generation}", workflow_id=workflow_id,
             generation=generation, execution_id=execution_id, root_execution_id=execution_id,

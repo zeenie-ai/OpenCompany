@@ -28,8 +28,8 @@ A workflow JSON document contains:
   "properties": {
     "id": {
       "type": "string",
-      "description": "Stable system UUID — 32 lowercase hex chars (uuid.uuid4().hex). Never changes on rename. FK target for cross-table refs + Temporal Search Attributes + CloudEvents extension + log context.",
-      "pattern": "^[0-9a-f]{32}$"
+      "description": "Stable positive decimal application identity allocated atomically by the backend for new workflows. Existing legacy records are not migrated.",
+      "pattern": "^[1-9][0-9]*$"
     },
     "name": {
       "type": "string",
@@ -638,9 +638,9 @@ This resolves to the `message` property from the Start node's output data.
 ## Validation Rules
 
 1. Workflow must have required fields: id, name, slug, nodes, edges, createdAt, lastModified
-2. Workflow ID must be a 32-char lowercase hex UUID (`^[0-9a-f]{32}$`) — stable for the lifetime of the workflow, never changes on rename
+2. New workflow IDs must be positive decimal strings (`^[1-9][0-9]*$`) allocated by the backend — stable for the workflow lifetime and never changed on rename. Pre-cutover records retain their stored IDs.
 3. Workflow slug must be `<Sanitized_Name>_<N>` (`^[A-Za-z0-9]+(_[0-9]+)?$`) — derived from `name` via `services.workflow_naming.next_available_slug`; unique across active workflows; mutable on rename
-4. Each node must have: id, type, position (with x and y)
+4. Each node must have `id`, `type`, and `position`; canonical node IDs are `<workflow_id>:<plugin_type>:<ordinal>`, where plugin type comes from fixed plugin metadata and the ordinal permits repeated instances
 5. Each edge must have: id, source, target
 6. Edge source and target must reference existing nodes
 7. Node types must be one of the supported types

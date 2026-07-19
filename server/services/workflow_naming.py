@@ -2,7 +2,7 @@
 
 Separates two concerns the system used to conflate:
 
-* ``Workflow.id`` (UUID) — stable system identity. Never changes on
+* ``Workflow.id`` (positive decimal string) — stable system identity. Never changes on
   rename. Used for FK references (``Execution.workflow_id``), Temporal
   Search Attributes, CloudEvents extensions, log context, cache keys,
   in-memory ``DeploymentManager._deployments`` dict keys, frontend
@@ -28,7 +28,6 @@ Temporal-safe up to 1000 chars).
 from __future__ import annotations
 
 import re
-import uuid
 from typing import Any, Dict, Set
 
 from core.logging import get_logger
@@ -133,24 +132,51 @@ async def next_available_slug(
     return f"{base}_{n}"
 
 
-def new_workflow_id() -> str:
-    """Canonical workflow UUID: 32 lowercase hex chars, no prefix.
+def canonicalize_node_ids(
+    workflow_id: str, nodes: list[dict], edges: list[dict]
+) -> tuple[list[dict], list[dict], dict[str, str]]:
+    """Give node instances stable IDs derived from plugin metadata.
 
-    Replaces the three pre-Wave-14 generation conventions
-    (``wf_<12hex>`` from agent_builder, ``workflow-<ms>-<8hex>`` from
-    workflow_import, ``example_<original_id>`` from example_loader)
-    with a single stable form. The id never appears in human-readable
-    surfaces — it's pure system identity — so a bare UUID is the right
-    shape. Stays on stdlib to avoid adding a dep for marginal benefit
-    (ULID/UUIDv7 would gain sortability but every consumer treats the
-    id as opaque).
+    Plugin ``type`` is the fixed identity while the per-type ordinal permits
+    repeatable plugins such as ``aiAgent``. List order is the stable migration
+    order used for legacy graphs. The function is pure and idempotent.
     """
-    return uuid.uuid4().hex
+    prefix = f"{workflow_id}:"
+    counts: dict[str, int] = {}
+    mapping: dict[str, str] = {}
+    normalized_nodes: list[dict] = []
+    for node in nodes:
+        item = dict(node)
+        plugin_type = str(item.get("type") or (item.get("data") or {}).get("type") or "node")
+        plugin_type = re.sub(r"[^A-Za-z0-9_-]+", "-", plugin_type).strip("-") or "node"
+        counts[plugin_type] = counts.get(plugin_type, 0) + 1
+        old_id = str(item.get("id") or "")
+        expected = f"{prefix}{plugin_type}:{counts[plugin_type]}"
+        # Already canonical graphs retain their ordinals even if nodes were
+        # reordered by a later layout/save operation.
+        match = re.fullmatch(re.escape(prefix + plugin_type) + r":([1-9]\d*)", old_id)
+        if match:
+            counts[plugin_type] = max(counts[plugin_type], int(match.group(1)))
+            expected = old_id
+        if old_id and old_id != expected:
+            mapping[old_id] = expected
+        item["id"] = expected
+        normalized_nodes.append(item)
+
+    normalized_edges: list[dict] = []
+    for edge in edges:
+        item = dict(edge)
+        for key in ("source", "target", "sourceNode", "targetNode"):
+            value = item.get(key)
+            if isinstance(value, str) and value in mapping:
+                item[key] = mapping[value]
+        normalized_edges.append(item)
+    return normalized_nodes, normalized_edges, mapping
 
 
 __all__ = [
     "slugify_name",
     "node_label_slug",
     "next_available_slug",
-    "new_workflow_id",
+    "canonicalize_node_ids",
 ]

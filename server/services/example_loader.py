@@ -54,18 +54,16 @@ async def import_examples_for_user(database) -> int:
     Returns the count of workflows imported.
     """
     from services.workflow_import import remap_node_ids
-    from services.workflow_naming import new_workflow_id, next_available_slug
+    from services.workflow_naming import canonicalize_node_ids, next_available_slug
     from services.workflow_validator import validate_workflow
 
     examples = get_example_workflows()
     imported = 0
 
     for example in examples:
-        # Fresh UUID for each example (pre-Wave-14 used "example_"
-        # prefix + JSON id which produced ugly "example_example_workflow-..."
-        # double-prefixed strings). Slug comes from the seed's display
-        # name via the standard helper.
-        workflow_id = new_workflow_id()
+        # Examples use the same incremental identity allocator as user-created
+        # and imported workflows.
+        workflow_id = await database.allocate_workflow_id()
         example_name = example.get("name", "Example Workflow")
         slug = await next_available_slug(example_name, database)
 
@@ -76,7 +74,11 @@ async def import_examples_for_user(database) -> int:
             example.get("edges", []),
             example.get("nodeParameters", {}),
         )
-
+        nodes, edges, node_aliases = canonicalize_node_ids(workflow_id, nodes, edges)
+        node_parameters = {
+            node_aliases.get(node_id, node_id): params
+            for node_id, params in node_parameters.items()
+        }
         # Pre-save validation. parameters_by_id is the freshly-remapped
         # map so INVALID_PARAM check sees the configured defaults instead
         # of empty dicts.

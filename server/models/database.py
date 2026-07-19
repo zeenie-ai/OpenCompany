@@ -52,7 +52,8 @@ class Workflow(SQLModel, table=True):
 
     Three identity carriers (Wave 14 split):
 
-    * ``id`` — opaque UUID, stable for the lifetime of the workflow.
+    * ``id`` — positive decimal application identity for new workflows.
+      Existing legacy rows remain unchanged; no automatic migration runs.
       FK target for every cross-table reference (``Execution.workflow_id``,
       soft refs on ``ConsoleLog`` / ``TokenUsageMetric`` / etc.), Temporal
       Search Attributes, log context. Never changes on rename.
@@ -468,6 +469,7 @@ class WorkflowControlExecution(SQLModel, table=True):
         UniqueConstraint("workflow_id", "idempotency_key", name="uq_workflow_control_idempotency"),
     )
 
+
     id: str = Field(primary_key=True, max_length=255)
     workflow_id: str = Field(index=True, max_length=255)
     generation: int = Field(index=True)
@@ -487,6 +489,23 @@ class WorkflowControlExecution(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: Optional[datetime] = Field(default=None)
+
+
+class IdentitySequence(SQLModel, table=True):
+    """Atomic counters for application-owned, human-readable identities.
+
+    Temporal Run IDs and transport correlation IDs deliberately do not use
+    this table: those identities are owned by Temporal/the transport layer.
+    """
+
+    __tablename__ = "identity_sequences"
+
+    namespace: str = Field(primary_key=True, max_length=512)
+    next_value: int = Field(default=1)
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), onupdate=func.now()),
+    )
 
 
 class WorkflowRunDataScope(SQLModel, table=True):

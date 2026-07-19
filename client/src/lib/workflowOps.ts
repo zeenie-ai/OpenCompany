@@ -18,6 +18,7 @@
  */
 
 import type { Node, Edge } from 'reactflow';
+import { NEW_WORKFLOW_ID, nextNodeInstanceId } from '../utils/workflow';
 
 // ---------------------------------------------------------------------------
 // Wire types -- mirror server/services/workflow_ops.py 1:1
@@ -104,6 +105,8 @@ export type WorkflowOperation =
 // ---------------------------------------------------------------------------
 
 export interface ApplyContext {
+  /** Canonical workflow identity used when minting plugin node instances. */
+  workflowId?: string;
   /** Current React Flow nodes (read-only -- used for anchor resolution). */
   nodes: Node[];
   /** Current React Flow edges (read-only -- used for delete-cascade). */
@@ -131,10 +134,6 @@ export interface ApplyResult {
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-
-function newId(nodeType: string): string {
-  return `${nodeType}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-}
 
 function resolveNodeRef(ref: NodeRef, refMap: Record<string, string>): string | null {
   if (typeof ref === 'string') return ref;
@@ -188,7 +187,11 @@ export async function applyOperations(
           // Prefer the BE-minted id when present (agentBuilder hot-spawn
           // path) so status broadcasts dispatched against the same id
           // land on this React Flow node and the canvas glows.
-          const id = op.minted_id || newId(op.node_type);
+          const id = op.minted_id || nextNodeInstanceId(
+            ctx.workflowId ?? NEW_WORKFLOW_ID,
+            op.node_type,
+            liveNodes,
+          );
           result.refMap[op.client_ref] = id;
           const position = resolvePosition(op.position, ctx, liveNodes);
           const label = op.label ?? op.parameters?.label ?? op.node_type;
@@ -252,7 +255,11 @@ export async function applyOperations(
         case 'replace_node': {
           const existing = liveNodes.find(n => n.id === op.node_id);
           if (!existing) throw new Error(`replace_node: node ${op.node_id} not found`);
-          const newNodeId = newId(op.node_type);
+          const newNodeId = nextNodeInstanceId(
+            ctx.workflowId ?? NEW_WORKFLOW_ID,
+            op.node_type,
+            liveNodes,
+          );
           const label = op.label ?? op.parameters?.label ?? op.node_type;
           const replacement: Node = {
             id: newNodeId,

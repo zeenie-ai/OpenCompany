@@ -54,11 +54,18 @@ execution ID; current-run reads filter by that ID while archived rows remain in
 the database. Node parameters are canvas configuration and intentionally remain
 unchanged across Reset.
 
-`simpleMemory` is explicitly outside the disposable generation projection.
-Its `memory_content`, JSONL, configured session, long-term store, and compaction
-statistics remain attached to the durable memory node across Reset. Resetting a
-workflow must not behave like the memory panel's explicit **Clear Memory**
-operation.
+`simpleMemory` configuration survives, but conversation state does not leak
+across generations. Reset snapshots current memory parameters into the archived
+scope, then clears the live transcript, continuation metadata, connected
+sessions, vector/direct-memory caches, conversation rows, and token/compaction
+state. The explicit **Clear Memory** action performs the same clear without
+resetting the workflow.
+
+This is a framework contract, not a Reset special case. The runtime coordinator
+archives every node's canvas data and parameters under the current execution,
+then invokes the registered node class's `reset_execution_state` hook. Stateless
+nodes inherit the no-op base implementation; stateful plugins own cleanup of
+their external stores. Deployment control never switches on node type.
 
 On server restart, active controlled deployments are excluded from the legacy
 startup termination sweep. `TEMPORAL_TERMINATE_RUNNING_ON_STARTUP` defaults to

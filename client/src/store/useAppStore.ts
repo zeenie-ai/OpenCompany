@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { Node, Edge } from 'reactflow';
 import { toast } from 'sonner';
-import { generateWorkflowId } from '../utils/workflow';
+import { NEW_WORKFLOW_ID } from '../utils/workflow';
 import { theme } from '../styles/theme';
 import {
   exportWorkflowToJSON as exportToJSON,
@@ -23,7 +23,7 @@ export interface WorkflowData {
   nodes: Node[];
   edges: Edge[];
   name: string;
-  /** Stable UUID — backend system identity. Never changes on rename. */
+  /** Stable backend-allocated decimal identity. Never changes on rename. */
   id: string;
   /** Human-readable slug derived from name (e.g. "AI_Assistant_1").
    *  Backend recomputes on every name change and rotates the on-disk
@@ -72,7 +72,7 @@ interface AppStore {
   // Workflow actions
   setCurrentWorkflow: (workflow: WorkflowData) => void;
   updateWorkflow: (updates: Partial<Omit<WorkflowData, 'id' | 'createdAt'>>) => void;
-  createNewWorkflow: () => void;
+  createNewWorkflow: () => Promise<void>;
   saveWorkflow: () => Promise<void>;
   loadWorkflow: (id: string) => Promise<void>;
   deleteWorkflow: (id: string) => Promise<boolean>;
@@ -123,7 +123,7 @@ interface AppStore {
 
 // Helper functions
 const createDefaultWorkflow = (): WorkflowData => ({
-  id: generateWorkflowId(),
+  id: NEW_WORKFLOW_ID,
   name: theme.constants.defaultWorkflowName,
   slug: '',  // Server allocates on first save.
   nodes: [],
@@ -227,13 +227,29 @@ export const useAppStore = create<AppStore>((set, get) => ({
     });
   },
   
-  createNewWorkflow: () => {
+  createNewWorkflow: async () => {
     const newWorkflow = createDefaultWorkflow();
-    set({ 
-      currentWorkflow: newWorkflow,
+    // The database owns the cross-client sequence. Persist the empty draft to
+    // reserve its id before any node parameters are written against the graph.
+    const result = await workflowApi.saveWorkflow(
+      NEW_WORKFLOW_ID,
+      newWorkflow.name,
+      { nodes: [], edges: [] },
+    );
+    if (!result?.id) {
+      console.error('Failed to allocate workflow identity');
+      return;
+    }
+    set({
+      currentWorkflow: {
+        ...newWorkflow,
+        id: result.id,
+        slug: result.slug ?? newWorkflow.slug,
+      },
       hasUnsavedChanges: false,
       selectedNode: null,
     });
+    invalidateWorkflowsList();
   },
   
   saveWorkflow: async () => {
@@ -255,12 +271,29 @@ export const useAppStore = create<AppStore>((set, get) => ({
       return;
     }
 
+    const aliases = result.nodeIdAliases ?? {};
+    const nodes = currentWorkflow.nodes.map(node => {
+      const canonicalId = aliases[node.id];
+      return canonicalId ? { ...node, id: canonicalId } : node;
+    });
+    const edges = currentWorkflow.edges.map(edge => ({
+      ...edge,
+      source: aliases[edge.source] ?? edge.source,
+      target: aliases[edge.target] ?? edge.target,
+    }));
+
     set({
       currentWorkflow: {
         ...currentWorkflow,
+        id: result.id,
+        nodes,
+        edges,
         slug: result.slug ?? currentWorkflow.slug,
         lastModified: new Date(),
       },
+      selectedNode: get().selectedNode && aliases[get().selectedNode!.id]
+        ? { ...get().selectedNode!, id: aliases[get().selectedNode!.id] }
+        : get().selectedNode,
       hasUnsavedChanges: false,
     });
     invalidateWorkflowsList();
@@ -302,12 +335,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     // If deleting current workflow, create a new one
     if (currentWorkflow?.id === id) {
-      const newWorkflow = createDefaultWorkflow();
-      set({
-        currentWorkflow: newWorkflow,
-        hasUnsavedChanges: false,
-        selectedNode: null,
-      });
+      await get().createNewWorkflow();
     }
 
     invalidateWorkflowsList();

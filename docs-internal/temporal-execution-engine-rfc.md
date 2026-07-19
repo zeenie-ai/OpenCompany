@@ -166,12 +166,23 @@ flowchart TB
 
 Identity rules:
 
+- New workflow IDs are backend-allocated positive integers (`1`, `2`, ...).
+  Existing legacy records remain exactly as stored; the server does not run an
+  identity migration or rewrite historical Temporal links.
+- Application execution IDs are workflow-scoped sequences
+  (`<workflow_id>:execution:<sequence>`). They are not Temporal Run IDs.
+- Node instance IDs are `<workflow_id>:<plugin_type>:<ordinal>`. The plugin
+  type is the fixed metadata identity; the ordinal distinguishes multiple
+  instances, including multiple `aiAgent` nodes.
 - Browser and model callers never choose a Temporal workflow/run ID for trace
   access. The server resolves it from an authorized task attempt.
 - Workflow IDs and Run IDs are distinct. Resume signals the existing workflow;
   it does not manufacture a replacement Run ID.
 - A Reset archives the current generation and returns control state `ready`.
   The next Start creates generation `N + 1`.
+- Random IDs remain appropriate only for correlation, idempotency, events,
+  leases, and provider-owned identities. They are not application workflow,
+  execution, or node identities.
 
 ## 6. Deployment control plane
 
@@ -505,12 +516,11 @@ Reset archives the scope rather than deleting it. A later Start creates a new
 scope and therefore a fresh node-data namespace, while archived task, output,
 trace, and graph-snapshot records remain available for historical inspection.
 
-Durable configuration nodes are not owned by that disposable namespace.
-In particular, `simpleMemory` remains authoritative in `node_parameters`:
-workflow Reset preserves its transcript, JSONL/session metadata, long-term
-cache, and compaction/token state. The archived scope contains only the
-historical value admitted by that generation. The next Start reads the current
-memory row; memory is cleared only by the explicit Clear Memory contract.
+`simpleMemory` settings remain durable, but its conversation state is
+generation-bound. Reset first writes the final memory parameters to the
+archived scope's `runtime_data.simple_memory`, then clears the live transcript,
+continuation metadata, connected sessions, vector/direct-memory caches,
+conversation rows, and token counters. The next Start reads the reset live row.
 
 | State class | Reset behavior | Current source after Reset |
 |---|---|---|
@@ -518,7 +528,28 @@ memory row; memory is cleared only by the explicit Clear Memory contract.
 | Console and chat-trigger run rows | archived by root execution | new generation scope |
 | Team tasks, attempts, and traces | archived and queryable | selected execution history |
 | Node parameters and canvas configuration | preserved | `node_parameters` / `workflows` |
-| `simpleMemory` transcript and session state | preserved | `node_parameters` + memory services |
+| `simpleMemory` transcript and session state | archived, then cleared | reset `node_parameters` + memory services |
+
+### 11.2 Generic node runtime lifecycle
+
+Reset orchestration must not contain node-type branches. The framework archives
+every admitted node under `WorkflowRunDataScope.runtime_data.nodes`, keyed by
+node ID and therefore transitively by `{workflow_id, execution_id, node_id}`.
+Each entry contains the node type, admitted canvas data, and final parameter
+snapshot.
+
+After the generic archive succeeds, the coordinator resolves each node through
+the node registry and calls `BaseNode.reset_execution_state(...)`. The default
+implementation is a no-op for stateless nodes. A stateful plugin overrides the
+hook to clear stores it owns and returns refreshed parameters for the standard
+`node_parameters_updated` broadcast. Adding another stateful node therefore
+requires a plugin lifecycle declaration, not a deployment-manager condition.
+
+Normal execution output remains isolated by the generation's `data_scope_id`
+session namespace. Console/chat rows, teams, tasks, attempts, and traces carry
+the root execution ID explicitly. Together these identities prevent a current
+run from reading another generation's mutable data while keeping archived runs
+inspectable.
 
 ```mermaid
 erDiagram

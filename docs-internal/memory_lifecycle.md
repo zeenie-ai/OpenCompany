@@ -96,27 +96,26 @@ Three stores are cleared in one call:
 
 Frontend `clear_memory` WS handler ([`routers/websocket.py:2167`](../server/routers/websocket.py)) calls this; UI presents a Reset Memory button on the simpleMemory parameter panel.
 
-### Workflow Reset is not Memory Clear
+### Workflow Reset archives then clears Memory
 
 Temporal workflow **Reset** and the Simple Memory panel's **Clear Memory** are
 separate lifecycle operations:
 
 | Operation | `memory_content` / `memory_jsonl` | session metadata | vector cache | compaction/token state |
 |---|---|---|---|---|
-| Workflow Reset | preserved | preserved | preserved | preserved |
+| Workflow Reset | archived, then reset | cleared | cleared | reset for connected sessions |
 | Clear Memory | reset | cleared | optional (`clear_long_term`) | cleared for the selected session |
 
-`workflow_runtime_reset` removes only the editor's disposable execution
-projection: node statuses and outputs, variables, and current console/chat
-views. It must not evict the Simple Memory query, compaction projection, or
-node-parameter row. The next Temporal generation reads the same durable
-`simpleMemory` parameters through `edge_walker._build_memory_entry`, so agent
-conversation continuity survives a workflow Reset.
+`workflow_runtime_reset` removes the editor's disposable execution projection
+and invalidates memory/compaction projections. Before clearing, Reset copies
+the authoritative Simple Memory parameters into the archived generation's
+`runtime_data.simple_memory` map. It then resets the live memory-node fields,
+connected agent sessions, vector caches, direct memory-store sessions,
+conversation rows, and token counters. The next Temporal generation therefore
+starts with the empty conversation placeholder.
 
-The archived workflow-generation snapshot may contain the memory-node values
-admitted for that historical run. That is an immutable historical copy, not a
-move of the authoritative memory row: `node_parameters` remains live and is
-still the source of truth for the next Start.
+The archived copy is immutable history; the live `node_parameters` row remains
+the source of truth and is reset to the empty-state value for the next Start.
 
 ## 6. claude_code_agent native session resume bridge
 

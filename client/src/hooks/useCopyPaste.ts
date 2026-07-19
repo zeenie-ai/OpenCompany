@@ -2,12 +2,14 @@ import { useCallback, useRef } from 'react';
 import { Node, Edge } from 'reactflow';
 import { generateUniqueLabel } from './useDragAndDrop';
 import { resolveNodeDescription } from '../lib/nodeSpec';
+import { nextNodeInstanceId } from '../utils/workflow';
 interface UseCopyPasteProps {
   nodes: Node[];
   edges: Edge[];
   setNodes: (nodes: Node[] | ((nodes: Node[]) => Node[])) => void;
   setEdges: (edges: Edge[] | ((edges: Edge[]) => Edge[])) => void;
   saveNodeParameters?: (nodeId: string, parameters: Record<string, any>) => Promise<boolean>;
+  workflowId: string;
 }
 
 interface ClipboardData {
@@ -28,7 +30,8 @@ export const useCopyPaste = ({
   edges,
   setNodes,
   setEdges,
-  saveNodeParameters
+  saveNodeParameters,
+  workflowId,
 }: UseCopyPasteProps) => {
   // In-memory clipboard (simpler than browser clipboard API)
   const clipboardRef = useRef<ClipboardData | null>(null);
@@ -70,11 +73,11 @@ export const useCopyPaste = ({
 
     // Generate ID mapping (old ID -> new ID)
     const idMap = new Map<string, string>();
-    const now = Date.now();
-
-    copiedNodes.forEach((node, index) => {
-      // Use timestamp + index to ensure unique IDs
-      idMap.set(node.id, `${node.type}-${now + index}`);
+    const allocatedNodes = [...nodes];
+    copiedNodes.forEach((node) => {
+      const newId = nextNodeInstanceId(workflowId, node.type!, allocatedNodes);
+      idMap.set(node.id, newId);
+      allocatedNodes.push({ ...node, id: newId });
     });
 
     // Offset for pasted nodes to avoid stacking on original
@@ -139,7 +142,7 @@ export const useCopyPaste = ({
     setEdges(eds => [...eds, ...newEdges]);
 
     console.log(`[CopyPaste] Pasted ${newNodes.length} nodes and ${newEdges.length} edges`);
-  }, [nodes, setNodes, setEdges, saveNodeParameters]);
+  }, [nodes, setNodes, setEdges, saveNodeParameters, workflowId]);
 
   /**
    * Check if clipboard has content.
