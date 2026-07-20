@@ -60,6 +60,7 @@ class BatchContext:
     workspace_dir: Path
     execution_id: Optional[str] = None
     connected_skill_names: Set[str] = field(default_factory=set)
+    connected_skill_descriptors: List[Dict[str, Any]] = field(default_factory=list)
     allowed_credentials: Set[str] = field(default_factory=set)
     # Connected ``input-tools`` nodes (entries from
     # ``services.plugin.edge_walker.collect_agent_connections``). Each
@@ -152,6 +153,7 @@ def rebind_batch(
     broadcaster: Any = _UNSET,
     connected_tools: Optional[List[Dict[str, Any]]] = None,
     connected_skill_names: Optional[Set[str]] = None,
+    connected_skill_descriptors: Optional[List[Dict[str, Any]]] = None,
     allowed_credentials: Optional[Set[str]] = None,
     workspace_dir: Optional[Path] = None,
 ) -> Optional[BatchContext]:
@@ -219,6 +221,8 @@ def rebind_batch(
         )
     if connected_skill_names is not None:
         ctx.connected_skill_names = set(connected_skill_names)
+    if connected_skill_descriptors is not None:
+        ctx.connected_skill_descriptors = list(connected_skill_descriptors)
     if allowed_credentials is not None:
         ctx.allowed_credentials = set(allowed_credentials)
     if workspace_dir is not None:
@@ -439,7 +443,7 @@ def _build_tools(mcp: Any) -> None:  # FastMCP type
             "docs). The skill must be connected to the parent agent node."
         ),
     )
-    def get_skill(name: str) -> Dict[str, Any]:
+    async def get_skill(name: str) -> Dict[str, Any]:
         ctx = _require_batch()
         if name not in ctx.connected_skill_names:
             return {
@@ -447,25 +451,49 @@ def _build_tools(mcp: Any) -> None:  # FastMCP type
                 "name": name,
             }
         try:
-            from services.skill_loader import get_skill_loader
+            from services.skill_runtime import execute_skill_tool
 
-            loader = get_skill_loader()
-            skill = loader.load_skill(name)
-            if skill is None:
-                return {"error": f"skill {name!r} not found", "name": name}
-            return {
-                "name": skill.metadata.name,
-                "description": skill.metadata.description,
-                "instructions": skill.instructions,
-                "allowed_tools": list(skill.metadata.allowed_tools),
-                "metadata": dict(skill.metadata.metadata) if skill.metadata.metadata else {},
-                "scripts": dict(skill.scripts),
-                "references": dict(skill.references),
-                # `assets` (binary) excluded by default — too big for MCP responses.
-            }
+            descriptors = ctx.connected_skill_descriptors or [
+                {"skill_name": item, "node_id": item, "parameters": {}}
+                for item in ctx.connected_skill_names
+            ]
+            return await execute_skill_tool(
+                {"action": "load", "skill_name": name},
+                {"parameters": {"skill_descriptors": descriptors, "agent_node_id": ctx.node_id},
+                 "workflow_id": ctx.workflow_id, "execution_id": ctx.execution_id, "parent_node_id": ctx.node_id,
+                 "skill_invocation_source": "native_mcp"},
+            )
         except Exception as exc:  # pragma: no cover
             logger.exception("[CC-Agent MCP] getSkill failed for %r", name)
             return {"error": str(exc), "name": name}
+
+    @mcp.tool(name="readSkillResource", description="Read a bounded page of a declared resource from a loaded connected skill.")
+    async def read_skill_resource(name: str, path: str, cursor: int = 0, limit: int = 4000) -> Dict[str, Any]:
+        ctx = _require_batch()
+        try:
+            from services.skill_runtime import execute_skill_tool
+            descriptors = ctx.connected_skill_descriptors or [{"skill_name": item, "node_id": item, "parameters": {}} for item in ctx.connected_skill_names]
+            return await execute_skill_tool(
+                {"action": "read_resource", "skill_name": name, "path": path, "cursor": cursor, "limit": limit},
+                {"parameters": {"skill_descriptors": descriptors, "agent_node_id": ctx.node_id}, "workflow_id": ctx.workflow_id,
+                 "execution_id": ctx.execution_id, "parent_node_id": ctx.node_id, "skill_invocation_source": "native_mcp"},
+            )
+        except Exception as exc:
+            return {"error": str(exc), "name": name, "path": path}
+
+    @mcp.tool(name="searchSkillResource", description="Search a declared text resource in a loaded connected skill and return line-numbered matches.")
+    async def search_skill_resource(name: str, path: str, query: str, cursor: int = 0, limit: int = 20) -> Dict[str, Any]:
+        ctx = _require_batch()
+        try:
+            from services.skill_runtime import execute_skill_tool
+            descriptors = ctx.connected_skill_descriptors or [{"skill_name": item, "node_id": item, "parameters": {}} for item in ctx.connected_skill_names]
+            return await execute_skill_tool(
+                {"action": "search_resource", "skill_name": name, "path": path, "query": query, "cursor": cursor, "limit": limit},
+                {"parameters": {"skill_descriptors": descriptors, "agent_node_id": ctx.node_id}, "workflow_id": ctx.workflow_id,
+                 "execution_id": ctx.execution_id, "parent_node_id": ctx.node_id, "skill_invocation_source": "native_mcp"},
+            )
+        except Exception as exc:
+            return {"error": str(exc), "name": name, "path": path}
 
     @mcp.tool(
         name="getCredential",

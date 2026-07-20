@@ -208,25 +208,52 @@ if skill_type == 'masterSkill':
         if not skill_cfg.get('enabled', False):
             continue  # Skip disabled skills
 
-        # DB-first: use stored instructions
-        instructions = skill_cfg.get('instructions', '')
-
-        if not instructions:
-            # Fallback: load from SKILL.md on disk
-            skill = skill_loader.load_skill(skill_key)
-            if skill:
-                instructions = skill.instructions
-
         skill_data.append({
             'node_id': f"{source_node_id}_{skill_key}",  # Unique composite ID
+            'master_skill_node_id': source_node_id,
             'node_type': 'masterSkill',
             'skill_name': skill_key,
-            'parameters': {'instructions': instructions, 'skillName': skill_key},
+            'description': metadata.description,
+            # Customized instructions remain authoritative but are not put in
+            # the initial prompt for standard skills.
+            'parameters': {'instructions': skill_cfg.get('instructions', '')},
             'label': skill_key
         })
 ```
 
 One Master Skill node with 5 enabled skills produces 5 separate `skill_data` entries.
+
+Standard entries use progressive disclosure. They do not alter the agent system
+prompt. Their bounded name/description catalogue is carried by the dynamically
+bound provider-neutral `Skill` tool, using the same contract as other connected
+tool nodes.
+
+The Assistant folder contains a required `skill` entry whose editable SKILL.md
+body teaches use of that tool. Master Skill defaults and legacy expansion keep
+it enabled, so the row appears checked as **Skill** beside the other Assistant
+skills. This makes the usage prompt visible/configurable on the node instead of
+hardcoding it into every agent prompt.
+`Skill.load` returns authoritative instructions and a resource manifest;
+`read_resource` and `search_resource` provide bounded access to declared text
+files after loading. Personality skills are the sole eager-body exception.
+Duplicate enabled names across connected Master Skill nodes fail with
+`DUPLICATE_CONNECTED_SKILL_NAME` before the first model call.
+
+The runtime revalidates the connected descriptor on each call, keys loaded-body
+deduplication by workflow execution and agent, and emits sanitized CloudEvents
+`com.opencompany.agent.skill.loading|loaded|resource_read|failed|cleared`.
+Ordinary tools emit the parallel
+`com.opencompany.agent.tool.started|completed|failed` contract. `subject` and
+`data.author_node_id` both identify the exact invoking agent;
+`data.target_node_id` identifies only its connected capability node. Temporal
+event IDs are deterministic per model tool call and lifecycle stage, and
+consumers deduplicate by `(source, id)`. Bodies and resource contents appear
+only in tool results, never status broadcasts.
+The generic loop, chat/specialized-agent loop, RLM bridge, Claude/Codex native
+MCP bridge, and Temporal AgentWorkflow all emit the same parent-agent
+capability phases. Consequently
+every agent component renders `skill <name>` and `tool <name>` consistently;
+this behavior is not owned by the team-lead implementation.
 
 ### 4. SkillLoader Architecture
 
@@ -255,7 +282,8 @@ SkillLoader
 1. Check `_cache` -- return immediately if cached
 2. Look up `_registry[name]` -- fail if not registered
 3. Read `SKILL.md`, strip frontmatter, extract markdown body as `instructions`
-4. Load optional `scripts/` and `references/` directories
+4. Discover optional `scripts/` and `references/`; the Skill tool returns a
+   manifest and reads their text separately rather than injecting them eagerly
 5. Cache and return `Skill` dataclass
 
 **`get_skill_loader()` is database-wired** (`skill_loader.py`):

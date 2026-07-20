@@ -342,7 +342,14 @@ async def _append_skill_entries(
             )
             return
 
-        skills_config = skill_params.get("skills_config", {})
+        skills_config = dict(skill_params.get("skills_config", {}))
+        # The Assistant Master Skill owns the provider-neutral Skill tool's
+        # usage contract. Keep this real, editable skill enabled for legacy
+        # nodes whose saved params predate the default.
+        if (skill_params.get("skill_folder") or "assistant") == "assistant":
+            configured = dict(skills_config.get("skill") or {})
+            configured.update({"enabled": True, "required": True})
+            skills_config["skill"] = configured
         logger.debug(f"{log_prefix} Master Skill found with {len(skills_config)} configured skills")
         entries = await expander(source_node_id, skills_config)
         skill_data.extend(entries)

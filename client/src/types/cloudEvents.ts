@@ -33,14 +33,14 @@
  */
 
 export interface WorkflowEvent<TData = unknown> {
-  // CloudEvents v1.0 required fields (ordered to match envelope.py).
+  // CloudEvents v1.0 required context attributes.
   specversion: '1.0';
   id: string;
   source: string;
   type: string;
   /**
-   * ISO 8601 string. The backend serialises `datetime` via Pydantic's
-   * `model_dump(mode="json")` which produces RFC 3339 UTC timestamps.
+   * CloudEvents makes `time` optional; OpenCompany's producer model always
+   * supplies it. Pydantic JSON mode serialises it as an RFC 3339 timestamp.
    */
   time: string;
   subject?: string;
@@ -48,13 +48,85 @@ export interface WorkflowEvent<TData = unknown> {
   dataschema?: string;
   data: TData;
 
-  // CloudEvents extension attributes used by OpenCompany.
+  // Legacy OpenCompany extension attributes. Their underscores are not
+  // CloudEvents-conformant; new event contracts keep workflow/execution
+  // scope in `data` instead. These remain optional compatibility reads.
   // `model_config = ConfigDict(extra="allow")` on the Pydantic side means
   // additional fields may appear and should be tolerated; cast through
   // `WorkflowEvent<T> & {extra?: unknown}` if you need to read them.
   workflow_id?: string | null;
   trigger_node_id?: string | null;
   correlation_id?: string | null;
+}
+
+export type AgentCapabilityKind = 'skill' | 'tool';
+export type AgentCapabilityState =
+  | 'loading'
+  | 'loaded'
+  | 'resource_read'
+  | 'cleared'
+  | 'started'
+  | 'completed'
+  | 'failed';
+
+/** Safe payload for `com.opencompany.agent.(skill|tool).*` events. */
+export interface AgentCapabilityLifecycleData {
+  workflow_id: string;
+  execution_id?: string;
+  root_execution_id?: string;
+  agent_node_id: string;
+  author_node_id: string;
+  target_node_id?: string;
+  capability_kind: AgentCapabilityKind;
+  capability_name: string;
+  state: AgentCapabilityState;
+  action?: string;
+  provider?: string;
+  invocation_source?: string;
+  tool_call_id?: string;
+  duration_ms?: number;
+  returned_characters?: number;
+  token_estimate?: number;
+  content_hash?: string;
+  error_code?: string;
+}
+
+const AGENT_CAPABILITY_STATES: Record<AgentCapabilityKind, ReadonlySet<AgentCapabilityState>> = {
+  skill: new Set(['loading', 'loaded', 'resource_read', 'failed', 'cleared']),
+  tool: new Set(['started', 'completed', 'failed']),
+};
+
+/** Strict consumer guard for the agent-capability CloudEvents contract. */
+export function isAgentCapabilityEvent(
+  value: unknown,
+): value is WorkflowEvent<AgentCapabilityLifecycleData> {
+  if (!value || typeof value !== 'object') return false;
+  const event = value as Partial<WorkflowEvent<Partial<AgentCapabilityLifecycleData>>>;
+  const payload = event.data;
+  if (!payload || typeof payload !== 'object') return false;
+  const kind = payload.capability_kind;
+  const state = payload.state;
+  if (kind !== 'skill' && kind !== 'tool') return false;
+  if (typeof state !== 'string' || !AGENT_CAPABILITY_STATES[kind].has(state as AgentCapabilityState)) {
+    return false;
+  }
+  return (
+    event.specversion === '1.0' &&
+    typeof event.id === 'string' && event.id.length > 0 &&
+    event.source === 'opencompany://services/agent' &&
+    event.type === `com.opencompany.agent.${kind}.${state}` &&
+    typeof payload.workflow_id === 'string' && payload.workflow_id.length > 0 &&
+    typeof payload.agent_node_id === 'string' && payload.agent_node_id.length > 0 &&
+    typeof payload.author_node_id === 'string' &&
+    payload.author_node_id === payload.agent_node_id &&
+    event.subject === payload.agent_node_id &&
+    typeof payload.capability_name === 'string' && payload.capability_name.length > 0
+  );
+}
+
+/** CloudEvents duplicate identity is the tuple `(source, id)`. */
+export function cloudEventIdentity(event: Pick<WorkflowEvent, 'source' | 'id'>): string {
+  return `${event.source}\u0000${event.id}`;
 }
 
 const TYPE_PREFIXES = [

@@ -1,15 +1,17 @@
 """WorkflowEvent — CloudEvents v1.0 envelope (in-house, no external dep).
 
-Field set mirrors https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/spec.md
-verbatim so future interop with EventBridge / Knative is a JSON-schema swap.
-The OpenCompany extensions (``workflow_id``, ``trigger_node_id``,
-``correlation_id``) ride as CloudEvents extension attributes. Spec §3.1
-SHOULDs lowercase-alphanumeric extension names; we deliberately keep
-Python snake_case for codebase consistency — the rest of the project
-uses snake_case as a strict naming convention and the readability win
-outweighs the spec recommendation. Internal interop only; if we ever
-publish events to an external CloudEvents broker, an alias layer can
-translate at the producer boundary.
+The core field set mirrors
+https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/spec.md. New
+factories must keep application scope in ``data`` unless they use a valid
+lowercase-alphanumeric extension name. CloudEvents 1.0 makes that spelling a
+MUST, not a recommendation.
+
+The historical ``workflow_id``, ``trigger_node_id`` and ``correlation_id``
+model fields remain readable for wire compatibility, but their underscores
+make them non-conformant extension attributes. They are legacy debt, not the
+template for new event types. ``agent_capability`` demonstrates the current
+contract: standards-shaped context attributes plus snake_case application
+fields nested under ``data``.
 
 Type strings carry the reverse-DNS prefix ``com.opencompany.`` per
 Primer guidance. ``dataschema`` is auto-populated from ``type`` so
@@ -82,9 +84,10 @@ class WorkflowEvent(BaseModel):
     dataschema: Optional[str] = None
     data: Any = None
 
-    # CloudEvents extension attributes. Snake-case (Python convention)
-    # rather than lowercase-alphanumeric (CloudEvents §3.1 SHOULD) —
-    # see module docstring.
+    # Legacy non-conformant extension attributes. CloudEvents §3.1 requires
+    # lowercase-alphanumeric names; do not add more snake_case fields here.
+    # New application scope belongs in ``data`` until these compatibility
+    # fields receive a coordinated wire migration.
     workflow_id: Optional[str] = None
     trigger_node_id: Optional[str] = None
     correlation_id: Optional[str] = None
@@ -271,6 +274,92 @@ class WorkflowEvent(BaseModel):
                 **(dict(data) if data else {}),
             },
         )
+
+    @classmethod
+    def agent_capability(
+        cls,
+        agent_node_id: str,
+        *,
+        capability_kind: Literal["skill", "tool"],
+        capability_name: str,
+        state: Literal[
+            "loading",
+            "loaded",
+            "resource_read",
+            "cleared",
+            "started",
+            "completed",
+            "failed",
+        ],
+        workflow_id: Optional[str] = None,
+        execution_id: Optional[str] = None,
+        root_execution_id: Optional[str] = None,
+        target_node_id: Optional[str] = None,
+        action: Optional[str] = None,
+        provider: Optional[str] = None,
+        invocation_source: Optional[str] = None,
+        tool_call_id: Optional[str] = None,
+        duration_ms: Optional[int] = None,
+        returned_characters: Optional[int] = None,
+        token_estimate: Optional[int] = None,
+        content_hash: Optional[str] = None,
+        error_code: Optional[str] = None,
+        event_id: Optional[str] = None,
+    ) -> "WorkflowEvent":
+        """One safe, node-owned skill/tool lifecycle occurrence.
+
+        This is observability telemetry, not a trigger input. Operational
+        scope stays inside ``data`` rather than becoming custom top-level
+        attributes: CloudEvents 1.0 requires extension attribute names to be
+        lowercase ASCII letters/digits, while OpenCompany's application
+        payload convention intentionally uses snake_case.
+
+        Prompts, tool arguments, instruction/resource contents, results,
+        secrets, and raw errors are deliberately absent from this contract.
+        ``subject`` is always the exact invoking agent; ``target_node_id`` is
+        the exact connected Master Skill or tool node.
+        """
+        valid_states = {
+            "skill": {"loading", "loaded", "resource_read", "failed", "cleared"},
+            "tool": {"started", "completed", "failed"},
+        }
+        if capability_kind not in valid_states:
+            raise ValueError(f"Invalid capability kind: {capability_kind}")
+        if not agent_node_id or not capability_name:
+            raise ValueError("agent_node_id and capability_name are required")
+        if state not in valid_states[capability_kind]:
+            raise ValueError(
+                f"Invalid {capability_kind} capability state: {state}"
+            )
+        payload = {
+            "workflow_id": workflow_id,
+            "execution_id": execution_id,
+            "root_execution_id": root_execution_id,
+            "agent_node_id": agent_node_id,
+            "author_node_id": agent_node_id,
+            "target_node_id": target_node_id,
+            "capability_kind": capability_kind,
+            "capability_name": capability_name,
+            "state": state,
+            "action": action,
+            "provider": provider,
+            "invocation_source": invocation_source,
+            "tool_call_id": tool_call_id,
+            "duration_ms": duration_ms,
+            "returned_characters": returned_characters,
+            "token_estimate": token_estimate,
+            "content_hash": content_hash,
+            "error_code": error_code,
+        }
+        event_kwargs: dict[str, Any] = {
+            "source": "opencompany://services/agent",
+            "type": f"{_TYPE_PREFIX}agent.{capability_kind}.{state}",
+            "subject": agent_node_id,
+            "data": {key: value for key, value in payload.items() if value is not None},
+        }
+        if event_id:
+            event_kwargs["id"] = event_id
+        return cls(**event_kwargs)
 
     @classmethod
     def node_parameters_updated(

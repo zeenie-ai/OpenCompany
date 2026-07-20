@@ -16,8 +16,9 @@ import { resolveNodeDescription } from '../lib/nodeSpec';
 import { NodeIcon } from '../assets/icons';
 import { useNodeSpec } from '../lib/nodeSpec';
 import { useAppTheme } from '../hooks/useAppTheme';
-import { useWebSocket } from '../contexts/WebSocketContext';
+import { useNodeStatus } from '../contexts/WebSocketContext';
 import EditableNodeLabel from './ui/EditableNodeLabel';
+import { Badge } from '@/components/ui/badge';
 
 const ToolkitNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectable, selected }) => {
   const theme = useAppTheme();
@@ -25,10 +26,13 @@ const ToolkitNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
   const setRenamingNodeId = useAppStore((s) => s.setRenamingNodeId);
   const updateNodeData = useAppStore((s) => s.updateNodeData);
 
-  // Get node status from WebSocket context
-  const { getNodeStatus } = useWebSocket();
-  const nodeStatus = getNodeStatus(id);
+  // Subscribe to this exact workflow/node status slot.  The imperative
+  // getNodeStatus snapshot does not trigger a render when Zustand receives a
+  // skill lifecycle event, so Master Skill glow/badges would update only after
+  // some unrelated canvas render.
+  const nodeStatus = useNodeStatus(id);
   const executionStatus = nodeStatus?.status || 'idle';
+  const activeSkills = (nodeStatus?.data?.active_skills as Array<{ name: string; state: string }> | undefined) ?? [];
 
   // Wave 6 Phase 3e: backend NodeSpec -> legacy fallback
   const definition = resolveNodeDescription(type || '');
@@ -204,6 +208,15 @@ const ToolkitNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
         onLabelChange={handleLabelChange}
         onActivate={handleLabelActivate}
       />
+      {activeSkills.length > 0 && (
+        <div className="mt-1 flex max-w-40 flex-wrap justify-center gap-1" aria-label="Master Skill activity">
+          {activeSkills.map((skill) => (
+            <Badge key={`${skill.name}-${skill.state}`} variant="outline" className="max-w-40 truncate text-[9px]">
+              skill {skill.name}
+            </Badge>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

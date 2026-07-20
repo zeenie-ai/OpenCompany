@@ -100,7 +100,9 @@ class ToolBridgeAdapter:
 
     @staticmethod
     def bridge(
-        tool_data: Optional[List[Dict[str, Any]]], context: Optional[Dict] = None, loop: Optional[asyncio.AbstractEventLoop] = None
+        tool_data: Optional[List[Dict[str, Any]]], context: Optional[Dict] = None, loop: Optional[asyncio.AbstractEventLoop] = None,
+        broadcaster=None, parent_node_id: Optional[str] = None, workflow_id: Optional[str] = None,
+        provider: Optional[str] = None,
     ) -> Dict[str, Dict]:
         from constants import AI_AGENT_TYPES, AI_CHAT_MODEL_TYPES
         from services.handlers.tools import execute_tool
@@ -121,32 +123,109 @@ class ToolBridgeAdapter:
             node_id = tool_info.get("node_id", "")
             label = tool_info.get("label", node_type)
             params = tool_info.get("parameters", {})
+            # Provider-visible name is the capability identity shown to the
+            # model and UI. Human labels remain descriptions only.
+            tool_name = re.sub(r"[^a-zA-Z0-9_]", "_", label.lower().replace(" ", "_"))
 
-            def _make_sync_wrapper(t_type, t_id, t_params, t_label):
+            def _make_sync_wrapper(t_type, t_id, t_params, t_label, t_name):
                 def wrapper(**kwargs):
                     config = {
                         "node_type": t_type,
                         "node_id": t_id,
                         "parameters": t_params,
                         "label": t_label,
+                        "workflow_id": workflow_id,
+                        "parent_node_id": parent_node_id,
+                        "provider": provider,
                     }
                     if context:
                         config["nodes"] = context.get("nodes", [])
                         config["edges"] = context.get("edges", [])
-                    future = asyncio.run_coroutine_threadsafe(
-                        execute_tool(t_label, kwargs, config),
-                        main_loop,
-                    )
+                        config["execution_id"] = context.get("execution_id")
+                        config["root_execution_id"] = context.get("root_execution_id")
+
+                    async def execute_with_parent_status():
+                        if broadcaster and parent_node_id:
+                            await broadcaster.update_node_status(
+                                parent_node_id,
+                                "executing",
+                                {"phase": "executing_tool", "agent_type": "rlm", "tool_name": t_name},
+                                workflow_id=workflow_id,
+                            )
+                            if t_type != "_builtin_skill":
+                                await broadcaster.broadcast_agent_capability(
+                                    parent_node_id,
+                                    capability_kind="tool",
+                                    capability_name=t_name,
+                                    state="started",
+                                    workflow_id=workflow_id,
+                                    execution_id=str((context or {}).get("execution_id") or "") or None,
+                                    root_execution_id=str((context or {}).get("root_execution_id") or "") or None,
+                                    target_node_id=str(t_id or "") or None,
+                                    provider=provider,
+                                    invocation_source="rlm",
+                                )
+                        try:
+                            result = await execute_tool(t_label, kwargs, config)
+                            if broadcaster and parent_node_id:
+                                await broadcaster.update_node_status(
+                                    parent_node_id,
+                                    "executing",
+                                    {"phase": "tool_completed", "agent_type": "rlm", "tool_name": t_name},
+                                    workflow_id=workflow_id,
+                                )
+                                if t_type != "_builtin_skill":
+                                    await broadcaster.broadcast_agent_capability(
+                                        parent_node_id,
+                                        capability_kind="tool",
+                                        capability_name=t_name,
+                                        state="completed",
+                                        workflow_id=workflow_id,
+                                        execution_id=str((context or {}).get("execution_id") or "") or None,
+                                        root_execution_id=str((context or {}).get("root_execution_id") or "") or None,
+                                        target_node_id=str(t_id or "") or None,
+                                        provider=provider,
+                                        invocation_source="rlm",
+                                    )
+                            return result
+                        except Exception as exc:
+                            if broadcaster and parent_node_id:
+                                await broadcaster.update_node_status(
+                                    parent_node_id,
+                                    "executing",
+                                    {
+                                        "phase": "tool_completed",
+                                        "agent_type": "rlm",
+                                        "tool_name": t_name,
+                                        "tool_failed": True,
+                                    },
+                                    workflow_id=workflow_id,
+                                )
+                                if t_type != "_builtin_skill":
+                                    await broadcaster.broadcast_agent_capability(
+                                        parent_node_id,
+                                        capability_kind="tool",
+                                        capability_name=t_name,
+                                        state="failed",
+                                        workflow_id=workflow_id,
+                                        execution_id=str((context or {}).get("execution_id") or "") or None,
+                                        root_execution_id=str((context or {}).get("root_execution_id") or "") or None,
+                                        target_node_id=str(t_id or "") or None,
+                                        provider=provider,
+                                        invocation_source="rlm",
+                                        error_code=type(exc).__name__,
+                                    )
+                            raise
+
+                    future = asyncio.run_coroutine_threadsafe(execute_with_parent_status(), main_loop)
                     return future.result(timeout=60)
 
                 return wrapper
 
-            # Clean tool name (same pattern as _build_tool_from_node ai.py:2567)
-            tool_name = re.sub(r"[^a-zA-Z0-9_]", "_", label.lower().replace(" ", "_"))
-            description = ToolBridgeAdapter.TOOL_DESCRIPTIONS.get(node_type, f"Execute {label} ({node_type})")
+            description = params.get("tool_description") or ToolBridgeAdapter.TOOL_DESCRIPTIONS.get(node_type, f"Execute {label} ({node_type})")
 
             tools[tool_name] = {
-                "tool": _make_sync_wrapper(node_type, node_id, params, label),
+                "tool": _make_sync_wrapper(node_type, node_id, params, label, tool_name),
                 "description": description,
             }
             logger.info(f"[RLM] Bridged tool: {tool_name} ({node_type})")

@@ -55,8 +55,8 @@ class RLMService:
             prompt = parameters.get("prompt", "")
             system_message = parameters.get("system_message", "")
 
-            # Skill injection (reuse ai.py:833 _build_skill_system_prompt)
-            # Collected as supplementary context -- appended to RLM prompt, never replaces it
+            # Personality skills remain eager. Standard skills are added to
+            # the same callable tool surface as every other connected tool.
             from services.ai import _build_skill_system_prompt
 
             supplementary_context = ""
@@ -89,6 +89,10 @@ class RLMService:
                     "message": f"Initializing RLM with {provider}/{model}",
                     "provider": provider,
                     "model": model,
+                    "active_skills": [],
+                    "last_skills": [],
+                    "last_tool_name": None,
+                    "last_capability": None,
                 },
             )
 
@@ -106,7 +110,21 @@ class RLMService:
             # === Adapter: Bridge tool nodes as RLM custom_tools ===
             await broadcast_status("building_tools", {"message": "Bridging connected tools..."})
             running_loop = asyncio.get_running_loop()
-            custom_tools = ToolBridgeAdapter.bridge(tool_data, context, loop=running_loop)
+            from services.skill_runtime import skill_tool_info
+
+            effective_tool_data = list(tool_data or [])
+            progressive_skill_tool = skill_tool_info(skill_data or [], node_id)
+            if progressive_skill_tool:
+                effective_tool_data.append(progressive_skill_tool)
+            custom_tools = ToolBridgeAdapter.bridge(
+                effective_tool_data,
+                context,
+                loop=running_loop,
+                broadcaster=broadcaster,
+                parent_node_id=node_id,
+                workflow_id=workflow_id,
+                provider=provider,
+            )
 
             # === RLM-specific parameters ===
             max_iterations = int(flattened.get("max_iterations", DEFAULT_MAX_ITERATIONS))
@@ -211,3 +229,11 @@ class RLMService:
                 "error": str(e),
                 "execution_time": execution_time,
             }
+        finally:
+            from services.skill_runtime import clear_skill_turn
+
+            await clear_skill_turn(
+                workflow_id or "",
+                str((context or {}).get("execution_id") or ""),
+                node_id,
+            )

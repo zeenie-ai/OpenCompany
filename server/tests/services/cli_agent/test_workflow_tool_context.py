@@ -1,6 +1,7 @@
 """Execution identity passed from CLI BatchContext to connected tools."""
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from pydantic import BaseModel
@@ -14,11 +15,16 @@ class _Params(BaseModel):
 
 
 async def test_handler_forwards_execution_workspace_and_parent_identity():
+    broadcaster = SimpleNamespace(
+        update_node_status=AsyncMock(),
+        broadcast_agent_capability=AsyncMock(),
+    )
     context = BatchContext(
         workflow_id="workflow-1",
         node_id="cli-parent-1",
         execution_id="execution-1",
         workspace_dir=Path("workspace-1").resolve(),
+        broadcaster=broadcaster,
         connected_tools=[
             {
                 "node_id": "tool-1",
@@ -42,3 +48,13 @@ async def test_handler_forwards_execution_workspace_and_parent_identity():
     assert config["execution_id"] == "execution-1"
     assert config["workspace_dir"] == str(Path("workspace-1").resolve())
     assert config["parent_node_id"] == "cli-parent-1"
+    assert [call.kwargs["state"] for call in broadcaster.broadcast_agent_capability.await_args_list] == [
+        "started",
+        "completed",
+    ]
+    started = broadcaster.broadcast_agent_capability.await_args_list[0]
+    assert started.args == ("cli-parent-1",)
+    assert started.kwargs["capability_name"] == "contextTestTool"
+    assert started.kwargs["target_node_id"] == "tool-1"
+    assert started.kwargs["workflow_id"] == "workflow-1"
+    assert started.kwargs["execution_id"] == "execution-1"

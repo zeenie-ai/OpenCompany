@@ -89,6 +89,54 @@ company start
 
 ---
 
+### 2a. Temporal OpenTelemetry Lines Appear Twice
+
+**Symptom**: SDK spans appear in exact adjacent pairs with the same operation
+and Temporal identity fields:
+
+```text
+CompleteWorkflow:AgentWorkflow ... temporalWorkflowID=<same> temporalRunID=<same>
+CompleteWorkflow:AgentWorkflow ... temporalWorkflowID=<same> temporalRunID=<same>
+StartActivity:node.console.v1 ... temporalWorkflowID=<same> temporalRunID=<same>
+StartActivity:node.console.v1 ... temporalWorkflowID=<same> temporalRunID=<same>
+```
+
+The OpenCompany `node.console.execute` span may appear only once between those
+pairs.
+
+**Root cause**: `TracingInterceptor` was attached to the shared Temporal client
+and repeated in `Worker(..., interceptors=...)`. The Python SDK automatically
+prepends worker-compatible client interceptors, so the activity and workflow
+pass through two tracing interceptors. The two generated OpenTelemetry spans
+have distinct span IDs, but the compact console formatter displays only the
+operation and Temporal attributes; they therefore look identical.
+
+This does **not** mean that the node executed twice. `StartActivity` is the
+workflow-side scheduling span, `RunActivity` is the worker-side invocation
+span, and `node.<type>.execute` surrounds the application body. Separate
+`CompleteWorkflow:AgentWorkflow` and `CompleteWorkflow:MachinaWorkflow` lines
+represent the child and parent workflow. A `CompleteWorkflow` duration of
+`0ms` is normal for Temporal's replay-safe terminal marker.
+
+**Fix**: keep exactly one `TracingInterceptor` on `Client.connect(...)`. Do not
+repeat it in worker interceptor lists; workers explicitly register only
+`ObservabilityWorkerInterceptor` and distinct plugin-owned interceptors. Apply
+the invariant to manager, specialized-pool, standalone, helper, and test worker
+construction paths.
+
+**Verification**:
+
+1. Compare operation name, `temporalWorkflowID`, `temporalRunID`, and
+   `temporalActivityID`; each identity tuple should occur once per phase.
+2. Confirm Temporal Event History contains one activity attempt. A genuine
+   retry has another attempt and is reported by the application observability
+   interceptor.
+3. Confirm one `node.<type>.execute` span for one plugin-body invocation.
+4. Keep the expected single `StartActivity`, `RunActivity`, and workflow
+   completion entries; they are different lifecycle layers.
+
+---
+
 ## 3. Temporal Activity `CancelledError` on Long-Running Nodes
 
 **Symptom**: Nodes that run for more than ~2 minutes (Deep Agent, browser automation, AI multi-tool loops) fail with:

@@ -24,6 +24,8 @@ const PHASE_CONFIG: Record<string, { icon: string; label: string; color: string 
   invoking_llm: { icon: '🧠', label: 'Thinking...', color: 'var(--node-trigger)' },
   executing_tool: { icon: '⚡', label: 'Using Tool', color: 'var(--node-trigger)' },
   tool_completed: { icon: '✓', label: 'Tool Done', color: 'var(--success)' },
+  loading_skill: { icon: '📚', label: 'Loading Skill', color: 'var(--node-agent)' },
+  skill_loaded: { icon: '✓', label: 'Skill Loaded', color: 'var(--success)' },
   saving_memory: { icon: '💾', label: 'Saving Memory', color: 'var(--node-agent)' },
 };
 
@@ -76,6 +78,37 @@ const AIAgentNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
   const isExecuting = nodeStatus?.status === 'executing';
   const currentPhase = nodeStatus?.data?.phase as string | undefined;
   const phaseConfig = currentPhase ? PHASE_CONFIG[currentPhase] : null;
+  const activeSkills = (nodeStatus?.data?.active_skills as Array<{ name: string; state: string }> | undefined) ?? [];
+  const lastSkills = (nodeStatus?.data?.last_skills as Array<{ name: string; state: string }> | undefined) ?? [];
+  const currentSkill = activeSkills.find((skill) => skill.state === 'loading') ?? activeSkills[activeSkills.length - 1];
+  const previousSkill = lastSkills[lastSkills.length - 1];
+  const activeToolName = nodeStatus?.data?.tool_name as string | undefined;
+  const lastToolName = nodeStatus?.data?.last_tool_name as string | undefined;
+  const lastCapability = nodeStatus?.data?.last_capability as
+    | { kind?: 'skill' | 'tool'; name?: string; state?: string }
+    | undefined;
+  const currentOrdinaryTool =
+    (currentPhase === 'executing_tool' || currentPhase === 'tool_completed') && activeToolName && activeToolName !== 'Skill'
+      ? activeToolName
+      : undefined;
+  // Capability text is live turn state, not node history. Sticky summaries
+  // survive fast intermediate broadcasts so normal agents have time to paint
+  // them, but a terminal/idle agent must return to its configured subtitle.
+  // This also prevents several previously-used agents from looking as though
+  // they are all using the same capability at once.
+  const capabilityLabel = !isExecuting
+    ? undefined
+    : currentOrdinaryTool
+      ? `tool ${currentOrdinaryTool}`
+      : currentSkill
+        ? `skill ${currentSkill.name}`
+        : lastCapability?.kind && lastCapability?.name
+          ? `${lastCapability.kind} ${lastCapability.name}`
+          : previousSkill
+            ? `skill ${previousSkill.name}`
+            : lastToolName
+              ? `tool ${lastToolName}`
+              : undefined;
   // Live agent-loop counter. Backed by the `agent_progress` CloudEvents
   // broadcast (services/ai.py:_run_agent_loop emits one per iteration via
   // the progress_callback). `iteration` advances per turn; `max_iterations`
@@ -247,7 +280,9 @@ const AIAgentNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnecta
         lineHeight: '1.2', marginBottom: theme.spacing.lg, transition: 'color 0.3s ease',
         overflowWrap: 'break-word', wordBreak: 'break-word', whiteSpace: 'normal',
         textAlign: 'center',
-      }}>{isExecuting && phaseConfig ? phaseConfig.label : subtitle}</div>
+      }} aria-label={capabilityLabel ? 'Current agent capability' : undefined} title={capabilityLabel}>
+        {capabilityLabel || (isExecuting && phaseConfig ? phaseConfig.label : subtitle)}
+      </div>
 
       {/* Left inputs below the main one (Memory / Task / etc.) */}
       {leftInputs.map(h => (

@@ -172,6 +172,11 @@ async def _dispatch_tool(tool_name: str, tool_args: Dict[str, Any], config: Dict
 
     logger.info("[Tool] Executing '%s' (node_type=%s, workspace=%s)", tool_name, node_type, context["workspace_dir"])
 
+    if node_type == "_builtin_skill":
+        from services.skill_runtime import execute_skill_tool
+
+        return await execute_skill_tool(tool_args, config)
+
     # ----------------------------------------------------------------
     # Plugin fast-path (Wave 11.B.1): if this node_type is a
     # BaseNode subclass, invoke BaseNode.execute_as_tool() — the

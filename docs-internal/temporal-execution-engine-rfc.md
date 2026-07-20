@@ -666,9 +666,50 @@ five surrounding events. Raw payload mode does not exist. Prompts, tool
 arguments, credentials, tokens, raw results, and arbitrary failure payloads are
 excluded by allowlist normalization and secret redaction.
 
-Temporal clients and workers use the SDK OpenTelemetry tracing interceptor.
-Only opaque correlation identities are added. Application task records remain
-available when Temporal retention has removed detailed history.
+### 12.1 OpenTelemetry interceptor ownership
+
+`core.tracing.init_tracing()` owns the process-wide `TracerProvider` and span
+exporter. The shared Temporal client owns exactly one SDK
+`TracingInterceptor`. A Python SDK `Worker` automatically prepends compatible
+interceptors from its client, so worker interceptor lists **must not** repeat
+`TracingInterceptor`; they contain only OpenCompany's
+`ObservabilityWorkerInterceptor` and any distinct plugin-owned worker
+interceptors.
+
+```text
+Temporal client
+└── TracingInterceptor (registered once)
+    └── inherited by every Worker built from that client
+        └── ObservabilityWorkerInterceptor (explicit, worker-only)
+```
+
+Registering `TracingInterceptor` on both `Client.connect(...)` and
+`Worker(...)` wraps every workflow and activity twice. The resulting spans are
+different OpenTelemetry spans, but the compact console formatter omits their
+span IDs, so adjacent copies have the same operation name and Temporal
+workflow/run/activity attributes and appear identical. This is duplicate
+instrumentation, not evidence that Temporal executed the workflow twice.
+
+| Span or log | Meaning |
+|---|---|
+| `StartActivity:<activity>` | Workflow-side scheduling and trace-context propagation; not the activity body |
+| `RunActivity:<activity>` | Worker-side activity invocation; a real retry is a separate attempt |
+| `node.<type>.execute` | OpenCompany plugin-body span emitted by `BaseNode.execute()` |
+| `CompleteWorkflow:AgentWorkflow` | Terminal marker for an agent child workflow |
+| `CompleteWorkflow:MachinaWorkflow` | Terminal marker for the graph workflow |
+
+`CompleteWorkflow` commonly reports `0ms`: the SDK emits a replay-safe
+instantaneous completion marker rather than a wall-clock workflow-duration
+span. Separate agent-child and graph-workflow completions are expected, as are
+one `StartActivity` and one `RunActivity` for the same activity. Exact adjacent
+repeats of the *same* phase and Temporal identity tuple indicate interceptor
+duplication. Temporal Event History remains the execution authority; a single
+`node.<type>.execute` span and one activity attempt in history corroborate that
+the node body ran once.
+
+Only opaque correlation identities are added to tracing attributes. Prompts,
+credentials, tool arguments, and raw results are excluded. Application task
+records remain available when Temporal retention has removed detailed history.
 
 ## 13. Worker and task-queue topology
 
@@ -834,6 +875,7 @@ triggered graph invocation does.
 | Temporal start identity | `server/services/temporal/executor.py` |
 | Agent and delegation workflows | `server/services/temporal/agent_workflow.py` |
 | Agent lifecycle activities | `server/services/temporal/agent_activities.py` |
+| Progressive skill runtime | `server/services/skill_runtime.py`, `server/services/skill_prompt.py` |
 | Team/task authorization | `server/services/agent_team.py` |
 | Trace service | `server/services/team_task_trace.py` |
 | Worker topology | `server/services/temporal/worker.py`, `server/services/temporal/plugin_activities.py` |
@@ -866,3 +908,24 @@ Any change to this engine must demonstrate:
 7. Sanitized trace output with bounded pagination/search.
 8. UI reconciliation from backend authority after reconnect.
 9. Focused unit tests plus an integration or replay test proportional to risk.
+
+## 23. Progressive skill activities
+
+Temporal agents expose metadata on the connected `Skill` tool (not through a
+hardcoded agent prompt) and schedule `agent.skill.invoke.v1` only
+after the model calls `Skill`. Its deterministic tool activity ID includes the
+agent, iteration, and model call index, so the returned instructions are written
+to workflow history and activity retries do not refetch into replay. Customized
+Master Skill content is authoritative. Supporting resources are bounded and
+separate. `agent.skill.clear.v1` clears canvas-only state at turn completion;
+loaded tool results remain in the conversation until that execution ends.
+
+Every Temporal skill/tool lifecycle is also emitted as a sanitized
+`com.opencompany.agent.(skill|tool).<state>` CloudEvent. Its ID is derived from
+workflow execution, agent, model tool-call identity, capability, and stage, so
+an activity retry redelivers the same occurrence instead of inventing a second
+one. `subject` remains the invoking child agent; parent progress mirroring never
+copies child capability metadata. Workflow/execution scope stays inside event
+`data` rather than non-conformant snake_case extension attributes. These events
+are direct observability fan-out, not trigger Signals; Temporal Event History
+continues to be the durable execution authority.

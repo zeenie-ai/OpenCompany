@@ -221,7 +221,7 @@ const DashboardContent: React.FC = () => {
   } = useWorkflowManagement();
 
   const { collapsedSections, searchQuery, setSearchQuery, toggleSection } = useComponentPalette();
-  const { saveNodeParameters, getAllNodeParameters, executeWorkflow, deployWorkflow, getWorkflowStatus, nodeStatuses, deploymentStatus, workflowControlStatuses, startWorkflow, pauseWorkflow, resumeWorkflow, resetWorkflow, getWorkflowControlStatus, workflowLock, isConnected, isReady, sendRequest } = useWebSocket();
+  const { saveNodeParameters, getAllNodeParameters, executeWorkflow, deployWorkflow, getWorkflowStatus, nodeStatuses, deploymentStatus, workflowControlStatuses, startWorkflow, pauseWorkflow, resumeWorkflow, resetWorkflow, getWorkflowControlStatus, workflowLock, isConnected, isReady, sendRequest, clearNodeStatus } = useWebSocket();
   const applyUIDefaults = useAppStore((state) => state.applyUIDefaults);
 
   // Workflows list: server-owned data, cached by TanStack Query.
@@ -248,7 +248,7 @@ const DashboardContent: React.FC = () => {
     workflowLock.workflow_id === currentWorkflow?.id;
   const [globalModelDefaults, setGlobalModelDefaults] = React.useState<{ provider: string; model: string } | null>(null);
   const { onDragOver, onDrop, handleComponentDragStart } = useDragAndDrop({ nodes, setNodes, saveNodeParameters, globalModelDefaults, workflowId: currentWorkflow?.id ?? 'new' });
-  const { onConnect: baseOnConnect, onNodesDelete, onEdgesDelete: baseOnEdgesDelete } = useReactFlowNodes({ setNodes, setEdges });
+  const { onConnect: baseOnConnect, onNodesDelete, onEdgesDelete: baseOnEdgesDelete } = useReactFlowNodes({ setNodes, setEdges, clearNodeStatus });
   const { onConnect, onEdgesDelete } = useAutoSkillEdges({
     baseOnConnect,
     baseOnEdgesDelete,

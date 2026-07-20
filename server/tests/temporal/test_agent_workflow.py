@@ -16,7 +16,7 @@ canary agent migration lands. This file locks the static contracts:
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 
 class TestAgentWorkflowDefinition:
@@ -281,6 +281,8 @@ class TestAgentActivities:
             "agent.refresh_tools.v1",
             "agent.register_task_execution.v1",
             "agent.release_subagent_permit.v1",
+            "agent.skill.clear.v1",
+            "agent.skill.invoke.v1",
             "agent.store_output.v1",
         ]
 
@@ -295,6 +297,103 @@ class TestAgentActivities:
 
         defn = getattr(broadcast_agent_progress, "__temporal_activity_definition")
         assert defn.name == "agent.broadcast_progress.v1"
+
+    async def test_temporal_tool_progress_preserves_visible_tool_name(self, monkeypatch):
+        """A phase-only Temporal event must still update the agent card.
+
+        AgentWorkflow intentionally omits ``status`` for intermediate tool
+        phases.  The activity therefore owns translating a tool-bearing
+        progress payload into an executing node status; otherwise the
+        frontend receives only the generic phase and cannot render
+        ``tool <name>`` for normal AI agents.
+        """
+        import services.status_broadcaster as broadcaster_module
+        from services.temporal.agent_activities import broadcast_agent_progress
+
+        broadcaster = MagicMock()
+        broadcaster.update_node_status = AsyncMock()
+        broadcaster.broadcast_agent_progress = AsyncMock()
+        broadcaster.broadcast_agent_capability = AsyncMock()
+        monkeypatch.setattr(
+            broadcaster_module,
+            "get_status_broadcaster",
+            lambda: broadcaster,
+        )
+
+        await broadcast_agent_progress(
+            {
+                "node_id": "normal-agent",
+                "workflow_id": "7",
+                "iteration": 1,
+                "max_iterations": 20,
+                "phase": "executing_tool",
+                "tool_name": "write_todos",
+                "tool_node_id": "7:writeTodos:1",
+            }
+        )
+
+        broadcaster.update_node_status.assert_awaited_once_with(
+            "normal-agent",
+            "executing",
+            {
+                "agent_type": "temporal",
+                "phase": "executing_tool",
+                "tool_name": "write_todos",
+                "tool_node_id": "7:writeTodos:1",
+            },
+            workflow_id="7",
+        )
+        broadcaster.broadcast_agent_capability.assert_awaited_once()
+        capability = broadcaster.broadcast_agent_capability.await_args
+        assert capability.args == ("normal-agent",)
+        assert capability.kwargs["capability_kind"] == "tool"
+        assert capability.kwargs["capability_name"] == "write_todos"
+        assert capability.kwargs["state"] == "started"
+        assert capability.kwargs["target_node_id"] == "7:writeTodos:1"
+        assert capability.kwargs["event_id"].startswith("agent-capability-")
+
+    def test_llm_failure_clears_skills_and_emits_terminal_error(self):
+        import inspect
+
+        from services.temporal.agent_workflow import AgentWorkflow
+
+        source = inspect.getsource(AgentWorkflow.run)
+        failure = source.index("except Exception as e:", source.index('"agent.execute_llm_step.v1"'))
+        terminal_return = source.index('"error_type": "LLMStepError"', failure)
+        cleanup = source.index('activity_id="clear-active-skills-failed"', failure)
+        error_phase = source.index('phase="failed"', cleanup)
+        assert failure < cleanup < error_phase < terminal_return
+
+    async def test_child_capability_metadata_is_not_mirrored_to_parent(self, monkeypatch):
+        """Only the agent that invoked a capability may display its name."""
+        import services.temporal.agent_workflow as workflow_module
+        from services.temporal.agent_workflow import AgentWorkflow
+
+        execute_activity = AsyncMock(return_value=None)
+        monkeypatch.setattr(workflow_module.workflow, "execute_activity", execute_activity)
+
+        agent = AgentWorkflow()
+        agent._parent_node_id = "lead-agent"
+        await agent._emit_phase(
+            "child-agent",
+            "7",
+            2,
+            20,
+            phase="executing_tool",
+            extra={"tool_name": "child_search", "tool_node_id": "7:search:1"},
+        )
+
+        child_payload = execute_activity.await_args_list[0].kwargs["args"][0]
+        parent_payload = execute_activity.await_args_list[1].kwargs["args"][0]
+        assert child_payload["node_id"] == "child-agent"
+        assert child_payload["tool_name"] == "child_search"
+        assert parent_payload == {
+            "node_id": "lead-agent",
+            "workflow_id": "7",
+            "iteration": 2,
+            "max_iterations": 20,
+            "phase": "delegating",
+        }
 
 
 class TestWorkerWiring:

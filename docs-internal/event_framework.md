@@ -19,7 +19,7 @@ phase plan lives in `~/.claude/plans/properly-fix-the-tech-dreamy-tarjan.md`.
 
 | Phase | State |
 |---|---|
-| A1-A9 — Temporal primitives + CloudEvents spec compliance | ✅ commit `c3dc85a` (16 tests) |
+| A1-A9 — Temporal primitives + core CloudEvents envelope compliance | ✅ commit `c3dc85a` (16 tests; legacy extension-name debt documented below) |
 | A7 completion — `_pop_matching_event` helper | ✅ commit `0e835e2` (4 tests) |
 | B1-B10 — plugin-owned `_events.py` modules (9 plugin folders) | ✅ commits `7e4ff7b` / `c4d9428` / `da63d73` / `de8be88` |
 | C1 canary (webhookTrigger) — `TriggerListenerWorkflow` | ✅ commit `c24bc62` (25 tests) |
@@ -158,21 +158,53 @@ or hand back to the server for retry instead of being killed mid-call.
 
 ## CloudEvents envelope
 
-Every server→FE broadcast wraps `WorkflowEvent` (CloudEvents v1.0;
-`services/events/envelope.py`). Spec-compliant ID, source, type, time,
-plus OpenCompany extension attributes (`workflow_id`, `trigger_node_id`,
-`correlation_id` — kept in snake_case per the documented internal-naming
-rationale at `envelope.py:4-12`).
+Domain/lifecycle broadcasts wrap `WorkflowEvent` (CloudEvents v1.0;
+`services/events/envelope.py`). High-frequency state projections such as
+`node_status`, output, variables, and log streams remain the explicitly tested
+telemetry carve-out; they are reconnect snapshots, not lifecycle occurrences.
+
+New envelopes use the required `specversion`, `id`, `source`, and `type`
+attributes, a reverse-DNS `type`, and an exact entity `subject`. Application
+scope such as `workflow_id`, `execution_id`, and `root_execution_id` belongs
+inside `data`. CloudEvents requires extension-attribute names to contain only
+lowercase ASCII letters and digits, so the historical top-level
+`workflow_id`, `trigger_node_id`, and `correlation_id` fields are compatibility
+debt and must not be copied into new contracts.
 
 Wire shape: `{"type": "<legacy_wire_key>", "data": <WorkflowEvent JSON>}`.
-The outer `type` is what FE switches on; the inner envelope is what
-parses for spec-compliant routing + dataschema lookup.
+The outer `type` is what FE switches on; the inner envelope carries the
+CloudEvents routing identity and dataschema lookup.
+
+### Agent capability occurrences
+
+Skill and tool activity uses the `agent_capability` WebSocket route with a
+complete CloudEvent inside `data`:
+
+- `source = opencompany://services/agent`;
+- `type = com.opencompany.agent.(skill|tool).<state>`;
+- `subject = data.agent_node_id`, the exact invoking agent;
+- `data.target_node_id`, when present, is the exact connected Master Skill or
+  tool node;
+- Temporal occurrences use a deterministic `id`; consumers deduplicate on the
+  CloudEvents `(source, id)` identity pair.
+
+The browser rejects envelopes whose type/state/subject disagree, ignores late
+events from an archived root execution, and updates only the stated agent and
+target nodes. Prompts, tool arguments, instruction/resource bodies, raw
+results, secrets, and raw exceptions are forbidden from the payload.
+
+Capability telemetry broadcasts directly to WebSocket clients through
+`StatusBroadcaster.broadcast_agent_capability`. It does not use
+`services.events.dispatch.emit`: that path performs Temporal Visibility lookup
+and signals trigger consumers, while capability activity is an observation of
+an execution already in progress. The paired raw `node_status` frame is only a
+latest-state/reconnect projection; the CloudEvent is the canonical occurrence.
 
 ### Plugin-owned event factories
 
 Plugin-specific events (e.g. `com.opencompany.telegram.message.received`)
 live in `nodes/<plugin>/_events.py`. Cross-cutting factories
-(`credential`, `oauth_completed`, `agent_progress`, `task_completed`,
+(`credential`, `oauth_completed`, `agent_progress`, `agent_capability`, `task_completed`,
 `workflow_lifecycle`, `deployment_snapshot`, `team_event`,
 `node_parameters_updated`) stay in `services/events/envelope.py`.
 
@@ -282,4 +314,4 @@ Locked by `TestCancelSweepsStuckNodeStatuses` in [`test_deployment_canary_listen
 - Plan: `~/.claude/plans/properly-fix-the-tech-dreamy-tarjan.md`
 - RFC: [`plugin_authoring_rfc.md`](./ARCHIVE/plugin_authoring_rfc.md)
 - Temporal: [Search Attributes](https://docs.temporal.io/search-attribute) · [Signals](https://docs.temporal.io/develop/python/message-passing) · [Schedules](https://docs.temporal.io/develop/python/schedules) · [Retry Policies](https://docs.temporal.io/encyclopedia/retry-policies)
-- CloudEvents: [v1.0 spec](https://github.com/cloudevents/spec/blob/main/cloudevents/spec.md)
+- CloudEvents: [v1.0.2 spec](https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/spec.md)

@@ -8,7 +8,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { matchesType, type WorkflowEvent } from '../cloudEvents';
+import {
+  cloudEventIdentity,
+  isAgentCapabilityEvent,
+  matchesType,
+  type WorkflowEvent,
+} from '../cloudEvents';
 
 const sample: WorkflowEvent = {
   specversion: '1.0',
@@ -99,7 +104,7 @@ describe('WorkflowEvent shape', () => {
     expect(matchesType(legacyEnvelope, 'credential.*')).toBe(true);
   });
 
-  it('preserves CloudEvents extension attributes when present', () => {
+  it('preserves legacy extension-shaped compatibility fields when present', () => {
     const event: WorkflowEvent = {
       ...sample,
       workflow_id: 'wf_42',
@@ -109,5 +114,47 @@ describe('WorkflowEvent shape', () => {
     expect(event.workflow_id).toBe('wf_42');
     expect(event.trigger_node_id).toBe('trigger_abc');
     expect(event.correlation_id).toBe('corr_xyz');
+  });
+});
+
+describe('agent capability CloudEvents', () => {
+  const capability = {
+    specversion: '1.0',
+    id: 'cap-1',
+    source: 'opencompany://services/agent',
+    type: 'com.opencompany.agent.skill.loading',
+    time: '2026-07-20T12:00:00Z',
+    subject: 'agent-1',
+    data: {
+      workflow_id: '7',
+      execution_id: '3',
+      agent_node_id: 'agent-1',
+      author_node_id: 'agent-1',
+      target_node_id: 'master-1',
+      capability_kind: 'skill',
+      capability_name: 'todo-skill',
+      state: 'loading',
+    },
+  };
+
+  it('accepts the exact subject/type/state contract', () => {
+    expect(isAgentCapabilityEvent(capability)).toBe(true);
+    expect(cloudEventIdentity(capability)).toBe('opencompany://services/agent\u0000cap-1');
+  });
+
+  it('rejects spoofed subjects and invalid kind/state pairs', () => {
+    expect(isAgentCapabilityEvent({ ...capability, subject: 'agent-2' })).toBe(false);
+    expect(isAgentCapabilityEvent({
+      ...capability,
+      type: 'com.opencompany.agent.skill.started',
+      data: { ...capability.data, state: 'started' },
+    })).toBe(false);
+  });
+
+  it('rejects a mismatched or non-canonical source', () => {
+    expect(isAgentCapabilityEvent({
+      ...capability,
+      source: 'opencompany://services/other',
+    })).toBe(false);
   });
 });

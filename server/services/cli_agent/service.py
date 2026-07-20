@@ -76,6 +76,7 @@ class AICliService:
         broadcaster: Any,
         repo_root: Optional[Path] = None,
         connected_skill_names: Optional[List[str]] = None,
+        connected_skill_descriptors: Optional[List[Dict[str, Any]]] = None,
         connected_tools: Optional[List[Dict[str, Any]]] = None,
         connected_memory: Optional[Dict[str, Any]] = None,
         execution_id: Optional[str] = None,
@@ -173,8 +174,12 @@ class AICliService:
             workflow_id=workflow_id,
             node_id=node_id,
             workspace_dir=Path(workspace_dir).resolve(),
-            execution_id=execution_id,
+            # A batch token is a safe ephemeral conversation scope when the
+            # caller has no durable execution id; never share loaded-skill
+            # state across later CLI runs of the same workflow/node.
+            execution_id=execution_id or token,
             connected_skill_names=set(connected_skill_names or []),
+            connected_skill_descriptors=list(connected_skill_descriptors or []),
             allowed_credentials=set(allowed_credentials or []),
             connected_tools=list(connected_tools or []),
             broadcaster=broadcaster,
@@ -291,6 +296,9 @@ class AICliService:
         finally:
             async with self._lock:
                 self._active_sessions.pop(key, None)
+            from services.skill_runtime import clear_skill_turn
+
+            await clear_skill_turn(workflow_id, str(ctx.execution_id or ""), node_id)
             # When ``use_pool`` is True, the bearer token for THIS batch
             # is consumed by ``ClaudeSessionPool.acquire`` directly:
             #   - Cold spawn: pool stores ``token`` on

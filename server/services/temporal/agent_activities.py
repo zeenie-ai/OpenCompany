@@ -35,6 +35,7 @@ References:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -389,12 +390,71 @@ async def broadcast_agent_progress(payload: Dict[str, Any]) -> Dict[str, Any]:
     # _node_activity wrapper uses). Lets the FE swap node colors on
     # executing/success/error without a separate CloudEvents handler.
     status = payload.get("status")
-    if status:
+    # Tool phases normally keep the AgentWorkflow itself in its existing
+    # ``executing`` state, so their callers do not need to repeat a status on
+    # every progress event.  They *do* carry the LLM-visible tool name though.
+    # Previously this activity only copied payload details into ``node_status``
+    # when ``status`` was explicitly present.  The parallel ``agent_progress``
+    # CloudEvent contains phase/counter fields only, which meant normal
+    # Temporal agents rendered a generic "Using Tool" phase and immediately
+    # lost the actual capability name.  Team leads appeared healthier because
+    # their Task Manager/skill paths also emitted dedicated status events.
+    capability_data = {
+        key: payload[key]
+        for key in ("tool_name", "tool_node_id", "tool_failed")
+        if payload.get(key) is not None
+    }
+    status_for_node = status or ("executing" if capability_data else None)
+    if status_for_node:
+        lifecycle_data = {
+            "agent_type": "temporal",
+            **({"phase": phase} if phase else {}),
+            **capability_data,
+        }
+        if phase == "starting":
+            lifecycle_data.update({"active_skills": [], "last_skills": [], "last_tool_name": None, "last_capability": None})
         await broadcaster.update_node_status(
             node_id,
-            status,
-            {"agent_type": "temporal", **({"phase": phase} if phase else {})},
+            status_for_node,
+            lifecycle_data,
             workflow_id=workflow_id,
+        )
+
+    # Tool use is a first-class CloudEvents occurrence.  Keep it separate
+    # from the raw node-status projection: the latter is a reconnect snapshot,
+    # while this envelope supplies durable identity, ownership and retry
+    # deduplication semantics to live consumers.
+    tool_name = str(payload.get("tool_name") or "")
+    if tool_name and tool_name != "Skill" and phase in {"executing_tool", "tool_completed"}:
+        state = (
+            "started"
+            if phase == "executing_tool"
+            else ("failed" if payload.get("tool_failed") else "completed")
+        )
+        identity = "|".join(
+            (
+                str(workflow_id or ""),
+                str(payload.get("execution_id") or ""),
+                node_id,
+                str(payload.get("tool_call_id") or payload.get("iteration") or ""),
+                tool_name,
+                state,
+            )
+        )
+        await broadcaster.broadcast_agent_capability(
+            node_id,
+            capability_kind="tool",
+            capability_name=tool_name,
+            state=state,
+            workflow_id=workflow_id,
+            execution_id=str(payload.get("execution_id") or "") or None,
+            root_execution_id=str(payload.get("root_execution_id") or "") or None,
+            target_node_id=str(payload.get("tool_node_id") or "") or None,
+            provider=str(payload.get("provider") or "") or None,
+            invocation_source="temporal",
+            tool_call_id=str(payload.get("tool_call_id") or "") or None,
+            error_code=("TOOL_EXECUTION_FAILED" if state == "failed" else None),
+            event_id=f"agent-capability-{hashlib.sha256(identity.encode()).hexdigest()}",
         )
 
     # CloudEvents v1.0 envelope (com.opencompany.agent.progress). Drives
@@ -741,7 +801,13 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     # blew up Gemini's ``convert_to_genai_function_declarations``
     # (``properties.<field> Input should be a valid dictionary or object``).
     tools_payload: List[Dict[str, Any]] = []
-    for tool_info in tool_data or []:
+    from services.skill_runtime import skill_tool_info
+
+    effective_tool_data = list(tool_data or [])
+    progressive_skill_tool = skill_tool_info(skill_data or [], node_id)
+    if progressive_skill_tool:
+        effective_tool_data.append(progressive_skill_tool)
+    for tool_info in effective_tool_data:
         try:
             tool, _config = await ai_service._build_tool_from_node(tool_info)
         except Exception as e:  # noqa: BLE001 — defensive: skip a broken tool
@@ -1010,6 +1076,48 @@ async def refresh_agent_tools(payload: Dict[str, Any]) -> Dict[str, Any]:
         len(operations),
     )
     return {"tools": new_tools_payload}
+
+
+@activity.defn(name="agent.skill.invoke.v1")
+async def invoke_agent_skill(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Retry-safe, history-recorded progressive skill invocation."""
+    from services.skill_runtime import execute_skill_tool
+
+    node_data = dict(payload.get("node_data") or {})
+    descriptors = node_data.pop("skill_descriptors", [])
+    action_args = {
+        key: node_data.get(key)
+        for key in ("action", "skill_name", "path", "query", "cursor", "limit")
+        if key in node_data
+    }
+    return await execute_skill_tool(
+        action_args,
+        {
+            "parameters": {"skill_descriptors": descriptors, "agent_node_id": payload.get("parent_node_id")},
+            "workflow_id": payload.get("workflow_id"),
+            "execution_id": payload.get("execution_id"),
+            "root_execution_id": payload.get("root_execution_id"),
+            "parent_node_id": payload.get("parent_node_id"),
+            # New histories carry the provider call id. The Temporal activity
+            # id is a stable fallback for pre-marker histories and remains
+            # identical across activity retries.
+            "tool_call_id": payload.get("tool_call_id") or activity.info().activity_id,
+            "provider": payload.get("provider"),
+            "skill_invocation_source": "temporal",
+        },
+    )
+
+
+@activity.defn(name="agent.skill.clear.v1")
+async def clear_agent_skills(payload: Dict[str, Any]) -> Dict[str, Any]:
+    from services.skill_runtime import clear_skill_turn
+
+    await clear_skill_turn(
+        str(payload.get("workflow_id") or ""),
+        str(payload.get("execution_id") or ""),
+        str(payload.get("agent_node_id") or ""),
+    )
+    return {"cleared": True}
 
 
 @activity.defn(name="agent.begin_delegation.v1")
@@ -1297,6 +1405,8 @@ def collect_agent_activities() -> List[Any]:
         broadcast_agent_progress,
         store_agent_output,
         refresh_agent_tools,
+        invoke_agent_skill,
+        clear_agent_skills,
         begin_agent_delegation,
         queue_agent_delegation,
         acquire_subagent_permit,

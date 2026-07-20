@@ -387,6 +387,7 @@ class ClaudeCodeAgentNode(ActionNode):
             broadcaster=broadcaster,
             repo_root=repo_root,
             connected_skill_names=connected_skills,
+            connected_skill_descriptors=skill_data,
             connected_tools=tool_data,
             connected_memory=memory_data,
             execution_id=ctx.execution_id,

@@ -46,7 +46,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useWebSocket } from '../../contexts/WebSocketContext';
+import { useNodeStatus, useWebSocket } from '../../contexts/WebSocketContext';
 import { NodeIcon } from '../../assets/icons';
 import { cn } from '@/lib/utils';
 import { useFolderSkills } from '../../hooks/useFolderSkills';
@@ -58,6 +58,7 @@ interface SkillConfig {
   enabled: boolean;
   instructions: string;
   isCustomized: boolean;
+  required?: boolean;
 }
 
 interface MasterSkillConfig {
@@ -105,6 +106,7 @@ interface PendingSkillData {
 // tears down the React Flow canvas.
 const EMPTY_USER_SKILLS: UserSkill[] = [];
 const EMPTY_FOLDER_SKILLS: AvailableSkill[] = [];
+const REQUIRED_ASSISTANT_SKILL = 'skill';
 
 interface MasterSkillEditorProps {
   skillsConfig: MasterSkillConfig;
@@ -128,6 +130,18 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
   nodeId
 }) => {
   const { sendRequest } = useWebSocket();
+  const masterSkillStatus = useNodeStatus(nodeId || '');
+  const displayedSkillActivity = useMemo(() => {
+    const active = (masterSkillStatus?.data?.active_skills as Array<{ name: string; state: string }> | undefined) ?? [];
+    if (active.length > 0) return active;
+    return (masterSkillStatus?.data?.last_skills as Array<{ name: string; state: string }> | undefined) ?? [];
+  }, [masterSkillStatus?.data?.active_skills, masterSkillStatus?.data?.last_skills]);
+  const activeSkillStates = useMemo(
+    () => new Map(
+      displayedSkillActivity.map((item) => [item.name, item.state]),
+    ),
+    [displayedSkillActivity],
+  );
   const [selectedSkillName, setSelectedSkillName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -273,6 +287,32 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
       setIsLoading(false);
     }
   }, [queryClient, sendRequest]);
+
+  // Existing Master Skill nodes may predate the required Skill-tool entry.
+  // Once the assistant catalogue is available, persist the authoritative
+  // prompt into skills_config so the checkbox and editor behave exactly like
+  // every other skill row rather than relying on a frontend-only illusion.
+  useEffect(() => {
+    if (skillFolder !== 'assistant') return;
+    if (!folderSkills.some((skill) => skill.skillName === REQUIRED_ASSISTANT_SKILL)) return;
+    const existing = skillsConfig[REQUIRED_ASSISTANT_SKILL];
+    if (existing?.enabled && existing?.instructions) return;
+    let cancelled = false;
+    void fetchSkillContent(REQUIRED_ASSISTANT_SKILL).then((instructions) => {
+      if (cancelled || !instructions) return;
+      onConfigChange({
+        ...skillsConfig,
+        [REQUIRED_ASSISTANT_SKILL]: {
+          ...existing,
+          enabled: true,
+          required: true,
+          instructions: existing?.instructions || instructions,
+          isCustomized: existing?.isCustomized || false,
+        },
+      });
+    });
+    return () => { cancelled = true; };
+  }, [skillFolder, folderSkills, skillsConfig, fetchSkillContent, onConfigChange]);
 
   const getCachedSkillContent = useCallback(
     (skillName: string): string | undefined => queryClient.getQueryData<string>(['skillContent', skillName]),
@@ -648,8 +688,10 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
               {filteredSkills.map((skill) => {
                 const config = skillsConfig[skill.skillName];
                 const isSelected = selectedSkillName === skill.skillName && !isCreatingNew;
-                const isEnabled = config?.enabled || false;
+                const isRequired = skillFolder === 'assistant' && skill.skillName === REQUIRED_ASSISTANT_SKILL;
+                const isEnabled = isRequired || config?.enabled || false;
                 const isCustomized = config?.isCustomized || false;
+                const runtimeState = activeSkillStates.get(skill.skillName);
 
                 return (
                   <div
@@ -676,6 +718,7 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
                     <div className="flex w-full items-center gap-2">
                       <Checkbox
                         checked={isEnabled}
+                        disabled={isRequired}
                         onCheckedChange={(checked) => {
                           handleToggleSkill(skill.skillName, checked === true);
                         }}
@@ -700,6 +743,25 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
                             <TooltipContent>Customized</TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
+                      )}
+                      {runtimeState && (
+                        <DSBadge
+                          className={cn(
+                            'h-4 px-1 text-[10px]',
+                            runtimeState === 'failed'
+                              ? 'bg-destructive/20 text-destructive'
+                              : runtimeState === 'loading'
+                                ? 'bg-info/20 text-info'
+                                : 'bg-success/20 text-success',
+                          )}
+                        >
+                          {runtimeState === 'loading' ? 'Loading' : runtimeState === 'failed' ? 'Failed' : runtimeState === 'used' ? 'Used' : 'Loaded'}
+                        </DSBadge>
+                      )}
+                      {isRequired && (
+                        <DSBadge className="h-4 bg-agent/20 px-1 text-[10px] text-agent">
+                          Required
+                        </DSBadge>
                       )}
                       {skill.isUserSkill && (
                         <DSBadge className="h-4 bg-info/20 px-1 text-[10px] text-info">

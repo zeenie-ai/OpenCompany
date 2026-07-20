@@ -216,10 +216,83 @@ def _build_handler(node_type: str, params_cls: type):
             "label": entry.get("label") or node_type,
             "parameters": dict(entry.get("parameters") or {}),
         }
-        result = await execute_tool(node_type, args, config)
+        broadcaster = ctx.broadcaster
+        if broadcaster is None:
+            from services.status_broadcaster import get_status_broadcaster
+
+            broadcaster = get_status_broadcaster()
+        await broadcaster.update_node_status(
+            ctx.node_id,
+            "executing",
+            {
+                "phase": "executing_tool",
+                "agent_type": "native_cli",
+                "tool_name": node_type,
+            },
+            workflow_id=ctx.workflow_id,
+        )
+        await broadcaster.broadcast_agent_capability(
+            ctx.node_id,
+            capability_kind="tool",
+            capability_name=node_type,
+            state="started",
+            workflow_id=ctx.workflow_id,
+            execution_id=ctx.execution_id,
+            target_node_id=str(entry.get("node_id") or "") or None,
+            invocation_source="native_mcp",
+        )
+        try:
+            result = await execute_tool(node_type, args, config)
+        except Exception as exc:
+            await broadcaster.update_node_status(
+                ctx.node_id,
+                "executing",
+                {
+                    "phase": "tool_completed",
+                    "agent_type": "native_cli",
+                    "tool_name": node_type,
+                    "tool_failed": True,
+                },
+                workflow_id=ctx.workflow_id,
+            )
+            await broadcaster.broadcast_agent_capability(
+                ctx.node_id,
+                capability_kind="tool",
+                capability_name=node_type,
+                state="failed",
+                workflow_id=ctx.workflow_id,
+                execution_id=ctx.execution_id,
+                target_node_id=str(entry.get("node_id") or "") or None,
+                invocation_source="native_mcp",
+                error_code=type(exc).__name__,
+            )
+            raise
         if not isinstance(result, dict):
             result = {"result": result}
-        if "error" in result:
+        failed = "error" in result
+        await broadcaster.update_node_status(
+            ctx.node_id,
+            "executing",
+            {
+                "phase": "tool_completed",
+                "agent_type": "native_cli",
+                "tool_name": node_type,
+                "tool_failed": failed,
+            },
+            workflow_id=ctx.workflow_id,
+        )
+        await broadcaster.broadcast_agent_capability(
+            ctx.node_id,
+            capability_kind="tool",
+            capability_name=node_type,
+            state="failed" if failed else "completed",
+            workflow_id=ctx.workflow_id,
+            execution_id=ctx.execution_id,
+            target_node_id=str(entry.get("node_id") or "") or None,
+            invocation_source="native_mcp",
+            error_code="TOOL_RETURNED_ERROR" if failed else None,
+        )
+        if failed:
             logger.warning(
                 "[CC-Agent MCP %s] node=%s ERROR: %s",
                 node_type,

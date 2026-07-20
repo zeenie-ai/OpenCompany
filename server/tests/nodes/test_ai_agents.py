@@ -196,8 +196,13 @@ class TestAIAgent:
         _, kwargs = harness.ai_service.execute_agent.call_args
         skill_data = kwargs["skill_data"]
         assert skill_data is not None
-        assert len(skill_data) == 1  # shell-skill disabled -> skipped
-        assert skill_data[0]["skill_name"] == "python-skill"
+        # The Master Skill's required Assistant ``skill`` entry is always
+        # present so every connected agent can learn the progressive-loading
+        # contract through the same skill surface.  User-disabled entries are
+        # still excluded.
+        names = {item["skill_name"] for item in skill_data}
+        assert names == {"python-skill", "skill"}
+        assert "shell-skill" not in names
         assert skill_data[0]["parameters"]["instructions"] == "Use python."
 
     async def test_task_completion_strips_all_tools(self, harness):

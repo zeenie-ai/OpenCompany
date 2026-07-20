@@ -276,6 +276,8 @@ class AnthropicClaudeProvider:
             "mcp__opencompany__getWorkspaceFiles",
             "mcp__opencompany__listSkills",
             "mcp__opencompany__getSkill",
+            "mcp__opencompany__readSkillResource",
+            "mcp__opencompany__searchSkillResource",
             "mcp__opencompany__getCredential",
             "mcp__opencompany__broadcastLog",
         ]

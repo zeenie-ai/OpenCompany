@@ -142,7 +142,9 @@ def _tool_call_metadata(
         "invoking_agent_node_id": agent_node_id,
         "agent_iteration": iteration + 1,
         "tool_call_index": call_index + 1,
-        "tool_call_id": str(call.get("id", "") or ""),
+        "tool_call_id": str(
+            call.get("id") or f"{iteration + 1}:{call_index + 1}"
+        ),
     }
 
 
@@ -426,6 +428,9 @@ class AgentWorkflow:
         agent_node_id = payload["node_id"]
         agent_workflow_id = payload.get("workflow_id")
         self._parent_node_id: Optional[str] = context.get("parent_node_id")
+        self._execution_id = task_scope_execution_id
+        self._root_execution_id = root_execution_id
+        self._provider = str(payload.get("provider") or "")
 
         # The provider-visible name is the dispatch key. The legacy dict
         # comprehension silently selected the last connected node when two
@@ -574,6 +579,30 @@ class AgentWorkflow:
                 cause = getattr(e, "cause", None)
                 detail = str(cause) if cause is not None else str(e)
                 workflow.logger.error(f"AgentWorkflow LLM step failed (iteration {iteration + 1}, " f"no auto-retry): {detail}")
+                # A failed model step is terminal for this run.  Clear any
+                # turn-scoped skill badges and publish an error status before
+                # returning; otherwise the normal agent can remain visually
+                # stuck on its last capability while the workflow has already
+                # ended.  Keep the public event free of provider error text.
+                await workflow.execute_activity(
+                    "agent.skill.clear.v1",
+                    args=[{
+                        "workflow_id": payload.get("workflow_id"),
+                        "execution_id": task_scope_execution_id,
+                        "agent_node_id": agent_node_id,
+                    }],
+                    activity_id="clear-active-skills-failed",
+                    start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                    retry_policy=AGENT_ACTIVITY_RETRY,
+                )
+                await self._emit_phase(
+                    agent_node_id,
+                    agent_workflow_id,
+                    iteration,
+                    max_iterations,
+                    phase="failed",
+                    status="error",
+                )
                 return {
                     "success": False,
                     "error": f"LLM step failed: {detail}",
@@ -706,6 +735,7 @@ class AgentWorkflow:
                     "session_id": payload.get("session_id", "default"),
                     "execution_id": task_scope_execution_id,
                     "root_execution_id": root_execution_id,
+                    "provider": payload.get("provider"),
                     "parent_node_id": agent_node_id,
                     "delegation_depth": delegation_depth + 1,
                     "team_id": payload.get("team_id") or context.get("team_id"),
@@ -1194,10 +1224,20 @@ class AgentWorkflow:
                     # so canvas-mutating tools (agentBuilder) render their
                     # summary text to match the user's current preference.
                     "auto_rebind_tools": bool(payload.get("auto_rebind_tools", True)),
+                    # Provider call ids are normally present. The stable
+                    # workflow position keeps CloudEvents occurrence IDs
+                    # unique when an adapter omits one.
+                    "tool_call_id": str(
+                        call.get("id") or f"{iteration + 1}:{call_index + 1}"
+                    ),
                     **call_metadata,
                 }
 
-                tool_activity_name = f"node.{tool_info['node_type']}.v{tool_info['version']}"
+                tool_activity_name = (
+                    "agent.skill.invoke.v1"
+                    if tool_info["node_type"] == "_builtin_skill"
+                    else f"node.{tool_info['node_type']}.v{tool_info['version']}"
+                )
 
                 await self._emit_phase(
                     agent_node_id,
@@ -1205,7 +1245,13 @@ class AgentWorkflow:
                     iteration,
                     max_iterations,
                     phase="executing_tool",
-                    extra={"tool_name": call.get("name", ""), "tool_node_id": tool_info["tool_node_id"]},
+                    extra={
+                        "tool_name": call.get("name", ""),
+                        "tool_node_id": tool_info["tool_node_id"],
+                        "tool_call_id": str(
+                            call.get("id") or f"{iteration + 1}:{call_index + 1}"
+                        ),
+                    },
                 )
 
                 try:
@@ -1334,7 +1380,13 @@ class AgentWorkflow:
                         iteration,
                         max_iterations,
                         phase="tool_completed",
-                        extra={"tool_name": call.get("name", "")},
+                        extra={
+                            "tool_name": call.get("name", ""),
+                            "tool_node_id": tool_info["tool_node_id"],
+                            "tool_call_id": str(
+                                call.get("id") or f"{iteration + 1}:{call_index + 1}"
+                            ),
+                        },
                     )
 
                     # Hot-rebind: if the tool returned ``operations`` (canvas
@@ -1458,6 +1510,25 @@ class AgentWorkflow:
                             retry_policy=AGENT_ACTIVITY_RETRY,
                         )
                     tool_content = f'{{"error": "{type(e).__name__}: {e}"}}'
+                    await self._emit_phase(
+                        agent_node_id,
+                        agent_workflow_id,
+                        iteration,
+                        max_iterations,
+                        phase="tool_completed",
+                        extra={
+                            "tool_name": call.get("name", ""),
+                            "tool_node_id": tool_info["tool_node_id"],
+                            "tool_call_id": str(
+                                call.get("id") or f"{iteration + 1}:{call_index + 1}"
+                            ),
+                            # Do not put raw failures into public status
+                            # events.  This safe flag is enough for the
+                            # broadcaster to retain ``tool <name>`` with a
+                            # failed capability state.
+                            "tool_failed": True,
+                        },
+                    )
 
                 messages.append(
                     {
@@ -1574,6 +1645,15 @@ class AgentWorkflow:
             retry_policy=AGENT_ACTIVITY_RETRY,
         )
 
+        await workflow.execute_activity(
+            "agent.skill.clear.v1",
+            args=[{"workflow_id": payload.get("workflow_id"), "execution_id": task_scope_execution_id,
+                   "agent_node_id": agent_node_id}],
+            activity_id="clear-active-skills",
+            start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+            retry_policy=AGENT_ACTIVITY_RETRY,
+        )
+
         # Final lifecycle broadcast — canvas glow goes green + FE
         # consumers of com.opencompany.agent.progress see phase="completed".
         await self._emit_phase(
@@ -1617,6 +1697,9 @@ class AgentWorkflow:
                     "iteration": iteration,
                     "max_iterations": max_iterations,
                     "phase": phase,
+                    "execution_id": getattr(self, "_execution_id", None),
+                    "root_execution_id": getattr(self, "_root_execution_id", None),
+                    "provider": getattr(self, "_provider", None),
                     **({"status": status} if status else {}),
                     **(extra or {}),
                 }
@@ -1626,6 +1709,14 @@ class AgentWorkflow:
         )
 
         if self._parent_node_id:
+            # Parent progress is a relationship signal, not capability
+            # ownership.  Never mirror the child's ``tool_name`` /
+            # ``tool_node_id`` extras onto the parent: the status activity
+            # turns those fields into durable ``last_capability`` metadata,
+            # which made a child's tool usage appear on other agent cards.
+            # The parent keeps its own delegate/task-manager tool status while
+            # this phase-only event merely indicates that descendant work is
+            # advancing.
             await workflow.execute_activity(
                 "agent.broadcast_progress.v1",
                 args=[
@@ -1635,7 +1726,6 @@ class AgentWorkflow:
                         "iteration": iteration,
                         "max_iterations": max_iterations,
                         "phase": "delegating",
-                        **(extra or {}),
                     }
                 ],
                 start_to_close_timeout=PERSIST_TURN_TIMEOUT,

@@ -33,7 +33,7 @@ import TaskManagerPanel from './TaskManagerPanel';
 import TeamMonitorPanel from './TeamMonitorPanel';
 import ProcessManagerPanel from './ProcessManagerPanel';
 import { useAppStore } from '../../store/useAppStore';
-import { useWebSocket, CompactionStats } from '../../contexts/WebSocketContext';
+import { useNodeStatus, useWebSocket, CompactionStats } from '../../contexts/WebSocketContext';
 import { useUserSettingsQuery } from '../../hooks/useUserSettingsQuery';
 import { nodeParamsQueryKey, type NodeParametersResponse } from '../../hooks/useNodeParamsQuery';
 import { folderSkillsQueryKey, type AvailableSkill } from '../../hooks/useFolderSkills';
@@ -66,11 +66,13 @@ const Stat: React.FC<{ title: React.ReactNode; value: React.ReactNode }> = ({ ti
 
 interface ConnectedSkill {
   id: string;
+  skillName: string;
   name: string;
   type: string;
   icon: string;
   description: string;
   color: string;
+  instructions?: string;
 }
 
 interface MiddleSectionProps {
@@ -93,6 +95,14 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
   isLoadingParameters = false,
   executionResults = []
 }) => {
+  const agentNodeStatus = useNodeStatus(nodeId);
+  const skillRuntimeStates = useMemo(() => {
+    const active = (agentNodeStatus?.data?.active_skills as Array<{ name: string; state: string }> | undefined) ?? [];
+    const recent = active.length > 0
+      ? active
+      : ((agentNodeStatus?.data?.last_skills as Array<{ name: string; state: string }> | undefined) ?? []);
+    return new Map(recent.map((item) => [item.name, item.state]));
+  }, [agentNodeStatus?.data?.active_skills, agentNodeStatus?.data?.last_skills]);
   const currentWorkflow = useAppStore((s) => s.currentWorkflow);
   const { clearMemory, resetSkill, sendRequest, getNodeParameters, compactionStats: contextCompactionStats, updateCompactionStats } = useWebSocket();
 
@@ -437,11 +447,13 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
       const def = resolveNodeDescription(nodeType);
       skills.push({
         id: edge.source,
+        skillName: String(sourceNode?.data?.skillName || sourceNode?.data?.skill_name || nodeType),
         name: sourceNode?.data?.label || def?.displayName || nodeType,
         type: nodeType,
         icon: def?.icon || '',
         description: def?.description || '',
         color: (def?.defaults?.color as string) || 'var(--node-agent)',
+        instructions: String(sourceNode?.data?.instructions || sourceNode?.data?.parameters?.instructions || ''),
       });
     }
     return skills;
@@ -479,11 +491,13 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
           const meta = skillMetadataByName[skillName];
           skills.push({
             id: `${edge.source}_${skillName}`,
+            skillName,
             name: meta?.displayName || skillName,
             type: 'masterSkill',
             icon: meta?.icon || '',
             description: meta?.description || '',
             color: meta?.color || 'var(--node-agent)',
+            instructions: String(config?.instructions || ''),
           });
         }
       }
@@ -851,7 +865,9 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
                     </div>
                   ) : (
                     <div className="flex flex-col gap-2">
-                      {expandedConnectedSkills.map((skill) => (
+                      {expandedConnectedSkills.map((skill) => {
+                        const runtimeState = skillRuntimeStates.get(skill.skillName);
+                        return (
                         <div
                           key={skill.id}
                           className="flex items-start gap-3 rounded-md border border-border bg-muted/40 p-3"
@@ -877,10 +893,23 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
                             <div className="line-clamp-2 break-words text-xs text-muted-foreground">
                               {skill.description}
                             </div>
+                            {skill.instructions && (
+                              <details className="mt-2 text-xs">
+                                <summary className="cursor-pointer font-medium text-fg-muted hover:text-fg-default">
+                                  Skill prompt
+                                </summary>
+                                <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-bg-panel p-2 font-mono text-[11px] leading-relaxed text-fg-muted">
+                                  {skill.instructions}
+                                </pre>
+                              </details>
+                            )}
                           </div>
-                          <Badge variant="success" className="shrink-0">Active</Badge>
+                          <Badge variant="success" className="shrink-0">
+                            {runtimeState === 'loading' ? 'Loading' : runtimeState === 'failed' ? 'Failed' : runtimeState === 'used' ? 'Used' : runtimeState === 'loaded' ? 'Loaded' : 'Active'}
+                          </Badge>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </AccordionContent>

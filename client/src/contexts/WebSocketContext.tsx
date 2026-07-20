@@ -21,7 +21,14 @@ import { queryKeys } from '../lib/queryConfig';
 import { invalidateCatalogue } from '../hooks/useCatalogueQuery';
 import { nodeParamsQueryKey } from '../hooks/useNodeParamsQuery';
 import { WORKFLOWS_QUERY_KEY } from '../hooks/useWorkflowsQuery';
-import type { WorkflowEvent } from '../types/cloudEvents';
+import type {
+  AgentCapabilityLifecycleData,
+  WorkflowEvent,
+} from '../types/cloudEvents';
+import {
+  cloudEventIdentity,
+  isAgentCapabilityEvent,
+} from '../types/cloudEvents';
 import { WS_CLOSE, WS_RECONNECT } from '../lib/connectionConfig';
 import { todoQueryKeyFromEvent } from '../lib/todoQuery';
 import {
@@ -595,6 +602,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [workflowStatus, setWorkflowStatus] = useState<WorkflowStatus>(defaultWorkflowStatus);
   const [deploymentStatus, setDeploymentStatus] = useState<DeploymentStatus>(defaultDeploymentStatus);
   const [workflowControlStatuses, setWorkflowControlStatuses] = useState<Record<string, WorkflowControlStatus>>({});
+  const workflowControlStatusesRef = useRef<Record<string, WorkflowControlStatus>>({});
   const [workflowLock, setWorkflowLock] = useState<WorkflowLock>(defaultWorkflowLock);
   // Per-workflow compaction stats: workflow_id -> session_id -> CompactionStats (n8n pattern)
   const [allCompactionStats, setAllCompactionStats] = useState<Record<string, Record<string, CompactionStats>>>({});
@@ -613,6 +621,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // listen for ad-hoc broadcasts without growing the switch statement
   // or the context state shape.
   const eventListenersRef = useRef<Map<string, Set<(data: any) => void>>>(new Map());
+  // CloudEvents duplicates are identified by (source, id), per CE 1.0.
+  // Bound the insertion-ordered set so a long-running editor cannot grow it
+  // without limit; retries normally arrive close together.
+  const processedCloudEventsRef = useRef<Set<string>>(new Set());
   // Pending-send queue for backpressure + replay across reconnects.
   // Drained inside `ws.onopen` after the init burst. Source of truth
   // for currentWorkflowId is `useAppStore.getState().currentWorkflow?.id`
@@ -622,6 +634,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // comparison inside the workflow-switch effect below. NOT a global mirror;
   // do not read from elsewhere.
   const previousWorkflowIdForSwitchRef = useRef<string | undefined>(currentWorkflowId);
+
+  useEffect(() => {
+    workflowControlStatusesRef.current = workflowControlStatuses;
+  }, [workflowControlStatuses]);
 
   // Detect workflow switches and refresh deployment status from the backend.
   // The single source of truth for currentWorkflowId is `useAppStore`; the
@@ -1003,6 +1019,159 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             });
           }
           break;
+
+        case 'agent_capability': {
+          // Canonical CloudEvents v1.0 lifecycle occurrence.  The outer
+          // `agent_capability` key is only the WebSocket transport route;
+          // identity, type and payload ownership come from the envelope.
+          const envelope = data;
+
+          // Do not infer ownership from the legacy outer message or a target
+          // id. CloudEvents `subject` is the exact invoking agent, and must
+          // agree with the safe application payload before anything is
+          // projected into node state.
+          if (!isAgentCapabilityEvent(envelope)) {
+            console.warn('[WebSocket] Ignoring invalid agent capability CloudEvent');
+            break;
+          }
+          const payload: AgentCapabilityLifecycleData = envelope.data;
+
+          // CloudEvents defines (source, id) as the duplicate-detection key.
+          // Keep a small insertion-ordered window: Temporal activity retries
+          // can redeliver the same occurrence, while distinct lifecycle
+          // stages deliberately have distinct ids.
+          const duplicateKey = cloudEventIdentity(envelope);
+          if (processedCloudEventsRef.current.has(duplicateKey)) break;
+          processedCloudEventsRef.current.add(duplicateKey);
+          if (processedCloudEventsRef.current.size > 1000) {
+            const oldest = processedCloudEventsRef.current.values().next().value;
+            if (oldest) processedCloudEventsRef.current.delete(oldest);
+          }
+
+          // Ignore late delivery from an archived/reset generation. Prefer
+          // the root execution identity because descendants have their own
+          // child execution ids.
+          const activeControl = workflowControlStatusesRef.current[payload.workflow_id];
+          if (
+            activeControl?.root_execution_id &&
+            payload.root_execution_id &&
+            activeControl.root_execution_id !== payload.root_execution_id
+          ) {
+            break;
+          }
+
+          const store = useNodeStatusStore.getState();
+          const previous =
+            store.allStatuses[payload.workflow_id]?.[payload.agent_node_id] ||
+            ({} as NodeStatus);
+          const previousData = previous.data || {};
+          const previousSkills = (
+            previousData.active_skills as Array<{ name: string; state: string }> | undefined
+          ) ?? [];
+          let nextSkills = previousSkills;
+          let nextData: Record<string, any> = { ...previousData };
+
+          if (payload.capability_kind === 'skill') {
+            if (payload.state === 'cleared') {
+              nextSkills = previousSkills.filter((skill) => skill.name !== payload.capability_name);
+              const previousLastSkills = (
+                previousData.last_skills as Array<{ name: string; state: string }> | undefined
+              ) ?? [];
+              const completedSkill = previousSkills.find(
+                (skill) => skill.name === payload.capability_name,
+              ) ?? previousLastSkills.find(
+                (skill) => skill.name === payload.capability_name,
+              );
+              const completedState = completedSkill?.state === 'failed' ? 'failed' : 'used';
+              nextData = {
+                ...nextData,
+                active_skills: nextSkills,
+                last_skills: [
+                  ...previousLastSkills.filter((skill) => skill.name !== payload.capability_name),
+                  { name: payload.capability_name, state: completedState },
+                ],
+                last_capability: {
+                  kind: 'skill',
+                  name: payload.capability_name,
+                  state: completedState,
+                },
+              };
+            } else {
+              nextSkills = [
+                ...previousSkills.filter((skill) => skill.name !== payload.capability_name),
+                { name: payload.capability_name, state: payload.state },
+              ];
+              nextData = {
+                ...nextData,
+                phase: payload.state === 'loading' ? 'loading_skill' : 'skill_loaded',
+                active_skills: nextSkills,
+                last_capability: {
+                  kind: 'skill',
+                  name: payload.capability_name,
+                  state: payload.state,
+                },
+              };
+            }
+          } else {
+            nextData = {
+              ...nextData,
+              phase: payload.state === 'started' ? 'executing_tool' : 'tool_completed',
+              tool_name: payload.capability_name,
+              last_tool_name: payload.capability_name,
+              last_capability: {
+                kind: 'tool',
+                name: payload.capability_name,
+                state: payload.state === 'failed' ? 'failed' : 'used',
+              },
+              tool_failed: payload.state === 'failed',
+            };
+          }
+
+          const terminalStatus = previous.status === 'success' || previous.status === 'error';
+          store.setStatus(payload.workflow_id, payload.agent_node_id, {
+            ...previous,
+            status: terminalStatus
+              ? previous.status
+              : payload.capability_kind === 'skill' && payload.state === 'cleared'
+                ? (previous.status || 'idle')
+                : 'executing',
+            workflow_id: payload.workflow_id,
+            data: nextData,
+          });
+
+          // Master Skill is a tool-like target: only the exact connected node
+          // glows while fetching. Loaded/failed/cleared transitions end that
+          // glow; no sibling or similarly-named node is touched.
+          if (payload.capability_kind === 'skill' && payload.target_node_id) {
+            const targetPrevious =
+              store.allStatuses[payload.workflow_id]?.[payload.target_node_id] ||
+              ({} as NodeStatus);
+            const targetData = targetPrevious.data || {};
+            const targetSkills = (
+              targetData.active_skills as Array<{ name: string; state: string }> | undefined
+            ) ?? [];
+            const targetNextSkills = payload.state === 'cleared'
+              ? targetSkills.filter((skill) => skill.name !== payload.capability_name)
+              : [
+                  ...targetSkills.filter((skill) => skill.name !== payload.capability_name),
+                  { name: payload.capability_name, state: payload.state },
+                ];
+            store.setStatus(payload.workflow_id, payload.target_node_id, {
+              ...targetPrevious,
+              status:
+                payload.state === 'loading'
+                  ? 'executing'
+                  : payload.state === 'failed'
+                    ? 'error'
+                    : payload.state === 'cleared'
+                      ? 'idle'
+                      : 'success',
+              workflow_id: payload.workflow_id,
+              data: { ...targetData, active_skills: targetNextSkills },
+            });
+          }
+          break;
+        }
 
         case 'agent_progress': {
           // CloudEvents v1.0 envelope from broadcaster.broadcast_agent_progress.

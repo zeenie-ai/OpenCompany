@@ -2,7 +2,7 @@
 
 Constructs system message text from connected skill nodes.
 Personality skills get full SKILL.md instructions injected.
-Standard skills get brief registry descriptions.
+Standard skills are represented only by the connected ``Skill`` tool.
 """
 
 from typing import Dict, Any, List
@@ -16,7 +16,9 @@ def build_skill_system_prompt(skill_data: List[Dict[str, Any]], log_prefix: str 
     """Build skill injection text for the system message.
 
     Personality skills (names ending in '-personality') get their FULL SKILL.md
-    instructions injected. All other skills get brief registry descriptions only.
+    instructions injected. Standard skills do not alter the system prompt; their
+    names and descriptions live on the dynamically bound ``Skill`` tool, exactly
+    like other connected tool nodes.
 
     Args:
         skill_data: List of skill entries from _collect_agent_connections.
@@ -30,13 +32,8 @@ def build_skill_system_prompt(skill_data: List[Dict[str, Any]], log_prefix: str 
     if not skill_data:
         return "", False
 
-    from services.skill_loader import get_skill_loader
-
-    skill_loader = get_skill_loader()
-    skill_loader.scan_skills()
-
     personality_blocks = []
-    non_personality_names = []
+    standard_count = 0
 
     for skill_info in skill_data:
         skill_name = skill_info.get("skill_name") or skill_info.get("node_type", "").replace("Skill", "-skill").lower()
@@ -51,7 +48,7 @@ def build_skill_system_prompt(skill_data: List[Dict[str, Any]], log_prefix: str 
             else:
                 logger.warning(f"{log_prefix} Personality skill {skill_name} has no instructions")
         else:
-            non_personality_names.append(skill_name)
+            standard_count += 1
             logger.debug(f"{log_prefix} Skill detected: {skill_name}")
 
     parts = []
@@ -59,14 +56,10 @@ def build_skill_system_prompt(skill_data: List[Dict[str, Any]], log_prefix: str 
     for block in personality_blocks:
         parts.append(block)
 
-    if non_personality_names:
-        registry_prompt = skill_loader.get_registry_prompt(non_personality_names)
-        if registry_prompt:
-            parts.append(registry_prompt)
-
     if parts:
         logger.debug(
-            f"{log_prefix} Enhanced system message: {len(personality_blocks)} personality, {len(non_personality_names)} standard skills"
+            f"{log_prefix} Enhanced system message: {len(personality_blocks)} personality; "
+            f"{standard_count} standard skills exposed through the Skill tool"
         )
 
     return "\n\n".join(parts), len(personality_blocks) > 0

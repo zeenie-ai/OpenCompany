@@ -127,6 +127,12 @@ Default `True`; invariant `test_temporal_worker_pool_enabled_defaults_true`; doc
 
 ### 17.3 `ObservabilityInterceptor`
 NEW `temporal/_interceptors.py` (~50 LOC): `ActivityObservabilityInterceptor` (log `activity_start` / `activity_retry` when `activity.info().attempt > 1` / `activity_end` + outcome), `WorkflowObservabilityInterceptor` (log `workflow_start` guarded by `not workflow.unsafe.is_read_only()` — replay-safe per SDK docs), `ObservabilityWorkerInterceptor` wiring class. Pass `interceptors=[...]` to manager Worker (L159-181) + pool Worker (L334-341).
+
+**Implemented ownership invariant**: the worker list above refers to
+`ObservabilityWorkerInterceptor` only. SDK `TracingInterceptor` is owned by the
+shared Temporal client and inherited automatically by workers; repeating it in
+the worker list produces duplicate OpenTelemetry spans for one execution.
+
 **Verify**: kill worker mid-activity, restart → one `activity_retry` log at attempt=2.
 
 ### 17.4 `DEPLOYMENT_MODE` + worker identity

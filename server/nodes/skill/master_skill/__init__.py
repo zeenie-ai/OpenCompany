@@ -18,7 +18,14 @@ from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
 class MasterSkillParams(BaseModel):
     skill_folder: str = Field(default="assistant")
     skills_config: Dict[str, Any] = Field(
-        default_factory=dict,
+        default_factory=lambda: {
+            "skill": {
+                "enabled": True,
+                "instructions": "",
+                "isCustomized": False,
+                "required": True,
+            }
+        },
     )
 
     model_config = ConfigDict(extra="ignore")

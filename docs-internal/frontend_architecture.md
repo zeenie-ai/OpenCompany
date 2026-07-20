@@ -455,6 +455,43 @@ Defined on `INodeTypeDescription.uiHints` ([client/src/types/INodeProperties.ts]
 
 Adding new panel behaviour: add a flag to `INodeUIHints`, annotate the relevant node definitions (or extend the auto-derivation rule on the backend), read the flag in the panel. Don't add another `nodeDefinition.name === '…'` branch — six such checks for `'masterSkill'` were retired in this round in favour of `uiHints.isMasterSkillEditor`. Pytest invariant `test_ui_hints_only_carry_known_flags` in `server/tests/test_node_spec.py` locks the flag set; new flags must be added there too.
 
+### Observable skill loading
+
+The `agent_capability` wire route carries the canonical CloudEvents occurrence;
+`node_status.data.active_skills` is its reconnect/latest-state projection. The
+consumer validates `specversion`, reverse-DNS type, allowed kind/state, and
+exact `subject === data.agent_node_id === data.author_node_id`, then
+deduplicates on `(source, id)`. Root-execution checks reject late events from a
+reset generation. It never falls back to an outer message node id or a label.
+Agent cards show Loading/Loaded/Failed badges for the current turn;
+the exact Master Skill card glows only during retrieval, then returns to a
+non-executing success/error state while retaining the same safe names.
+Agent live text replaces the card's center subtitle with `skill <name>` for
+instruction retrieval or `tool <name>` for ordinary tool execution; it is never
+rendered as an extra line near the bottom handles. Capability ownership is the
+exact invoking agent node: descendant tool metadata is never mirrored to its
+parent, completed agents restore their configured subtitle, and deleting a node
+clears its status slot before that ID can be reused. The Master Skill editor projects runtime state onto
+the matching enabled skill row so operators can see which listed skill is active.
+Every agent's Connected Skills section also exposes an expandable, read-only
+`Skill prompt` sourced from the connected Master Skill's authoritative
+`skills_config.instructions`; this is configuration inspection, not runtime
+status broadcasting or system-prompt injection.
+Capability summaries are producer-owned. The status broadcaster preserves the
+allowlisted `last_capability`, `last_tool_name`, and `last_skills` fields across
+generic phase and outer terminal snapshots, but only within the same workflow;
+the next agent initialization explicitly clears them. Temporal and legacy tool
+paths emit the same typed capability lifecycle and also publish a raw executing
+node status containing only safe tool-name fields for reconnect snapshots. The
+parallel `agent_progress` CloudEvent intentionally carries only phase and
+iteration counters. Do not deep-merge arbitrary status data in the browser:
+omitted fields are not universally equivalent to unchanged fields. Capability
+payloads never carry prompts, arguments, results, contents, secrets, or raw
+exception text.
+Ref-counted backend state prevents concurrent calls from clearing one another.
+`agent.skill.cleared`, reconnect reconciliation, cancellation, pause, and reset
+remove transient badges. This is independent from ordinary tool-node glow.
+
 ### Node output shape — backend as single source of truth
 
 Frontend does **not** declare output shapes anymore. The backend owns them exclusively via Pydantic models in [server/services/node_output_schemas.py](../server/services/node_output_schemas.py) — live size via `len(NODE_OUTPUT_SCHEMAS)`. JSON Schema is emitted via Pydantic's `model_json_schema()` and exposed two ways:

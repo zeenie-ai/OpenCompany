@@ -7,9 +7,10 @@ import { resolveNodeDescription } from '../lib/nodeSpec';
 interface UseReactFlowNodesProps {
   setNodes: (nodes: Node[] | ((nodes: Node[]) => Node[])) => void;
   setEdges: (edges: Edge[] | ((edges: Edge[]) => Edge[])) => void;
+  clearNodeStatus?: (nodeId: string) => void | Promise<void>;
 }
 
-export const useReactFlowNodes = ({ setNodes, setEdges }: UseReactFlowNodesProps) => {
+export const useReactFlowNodes = ({ setNodes, setEdges, clearNodeStatus }: UseReactFlowNodesProps) => {
   const selectedNode = useAppStore((s) => s.selectedNode);
   const setSelectedNode = useAppStore((s) => s.setSelectedNode);
 
@@ -168,13 +169,19 @@ export const useReactFlowNodes = ({ setNodes, setEdges }: UseReactFlowNodesProps
     (deleted: Node[]) => {
       const removable = deleted.filter((node) => node.type !== 'taskManager');
       setNodes((nds) => nds.filter((node) => !removable.find((d) => d.id === node.id)));
+      // Node ids can be reused after deletion. Clear the exact backend and
+      // workflow-scoped frontend status slot so a replacement node never
+      // inherits the deleted node's skill/tool capability label.
+      removable.forEach((node) => {
+        void clearNodeStatus?.(node.id);
+      });
       
       // Clear selected node if it was deleted
       if (selectedNode && removable.find((d) => d.id === selectedNode.id)) {
         setSelectedNode(null);
       }
     },
-    [setNodes, selectedNode, setSelectedNode]
+    [setNodes, selectedNode, setSelectedNode, clearNodeStatus]
   );
 
   const onEdgesDelete = useCallback(

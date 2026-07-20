@@ -9,7 +9,7 @@ import hmac
 import json
 import time
 from typing import Iterable
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -65,6 +65,76 @@ class TestWorkflowEvent:
         assert ev.type == "whatsapp_message_received"
         assert ev.data == {"text": "hi"}
         assert ev.source.startswith("legacy://")
+
+    def test_agent_capability_is_a_safe_cloudevent(self):
+        from services.events import WorkflowEvent
+
+        ev = WorkflowEvent.agent_capability(
+            "agent-7",
+            capability_kind="skill",
+            capability_name="write-todos",
+            state="loaded",
+            workflow_id="7",
+            execution_id="12",
+            root_execution_id="10",
+            target_node_id="master-skill-7",
+            tool_call_id="call-1",
+            content_hash="sha256-safe",
+            event_id="occurrence-1",
+        )
+        dumped = ev.model_dump(mode="json", exclude_none=True)
+
+        assert dumped["specversion"] == "1.0"
+        assert dumped["id"] == "occurrence-1"
+        assert dumped["source"] == "opencompany://services/agent"
+        assert dumped["type"] == "com.opencompany.agent.skill.loaded"
+        assert dumped["subject"] == "agent-7"
+        assert dumped["dataschema"].endswith("agent.skill.loaded.json")
+        assert dumped["data"]["author_node_id"] == "agent-7"
+        # Operational scope belongs to data, not invalid snake_case
+        # CloudEvents extension attributes.
+        assert "execution_id" not in {key for key in dumped if dumped[key] is not None}
+        for secret_field in ("prompt", "tool_args", "result", "instructions", "resource", "error"):
+            assert secret_field not in dumped["data"]
+
+    @pytest.mark.parametrize(
+        ("kind", "state"),
+        [("skill", "started"), ("tool", "loaded"), ("other", "started")],
+    )
+    def test_agent_capability_rejects_invalid_kind_state_pairs(self, kind, state):
+        from services.events import WorkflowEvent
+
+        with pytest.raises(ValueError):
+            WorkflowEvent.agent_capability(
+                "agent-1",
+                capability_kind=kind,
+                capability_name="capability",
+                state=state,
+            )
+
+    def test_capability_broadcaster_keeps_cloudevent_envelope_intact(self):
+        from services.status_broadcaster import StatusBroadcaster
+
+        broadcaster = StatusBroadcaster()
+        broadcaster.broadcast = AsyncMock()
+        event = _run(
+            broadcaster.broadcast_agent_capability(
+                "agent-1",
+                capability_kind="tool",
+                capability_name="write_todos",
+                state="started",
+                workflow_id="1",
+                event_id="tool-start-1",
+            )
+        )
+
+        assert event.subject == "agent-1"
+        wire = broadcaster.broadcast.await_args.args[0]
+        assert wire["type"] == "agent_capability"
+        assert wire["data"]["specversion"] == "1.0"
+        assert wire["data"]["id"] == "tool-start-1"
+        assert wire["data"]["type"] == "com.opencompany.agent.tool.started"
+        assert wire["data"]["data"]["workflow_id"] == "1"
 
 
 # ============================================================================

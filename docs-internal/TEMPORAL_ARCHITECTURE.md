@@ -318,7 +318,8 @@ Env overrides: `TEMPORAL_<QUEUE>_CONCURRENCY` (int) and `TEMPORAL_<QUEUE>_RATE_L
 - **Sticky workflow cache** (Wave 18.2, manager worker only): `max_cached_workflows` = local 50 / cloud 500 / self_hosted 100. Cached workflows skip Event-History replay; evictions are a latency cost, not an error.
 - **Poller autoscaling** (Wave 18.3): `PollerBehaviorAutoscaling` — manager activity pollers 1-10 (initial 2), workflow pollers 1-20 (initial 2); pool workers 1-5 (initial 1). Invariant per the [worker-performance docs](https://docs.temporal.io/develop/worker-performance): pollers stay below executor slots.
 - **Resource-based slot supplier** (Wave 18.4): `ai-heavy` + `browser` (unpredictable workloads) use `ResourceBasedSlotSupplier` targeting 80% host CPU + memory, `minimum_slots=1`, `maximum_slots` = the per-queue concurrency. Requires `temporalio>=1.25.0` (pinned).
-- **Observability interceptors** (Wave 17.3, `services/temporal/_interceptors.py`): `activity_retry` WARN when `activity.info().attempt > 1` — the "worker died and Temporal re-dispatched" signal; `workflow_start` guarded by `workflow.unsafe.is_replaying()`.
+- **SDK tracing interceptor ownership**: `TracingInterceptor` is registered exactly once on the shared `Client.connect(...)`. The Temporal Python SDK automatically prepends compatible client interceptors to every `Worker` built from that client. Worker constructors must not repeat `TracingInterceptor`; doing so creates paired OpenTelemetry spans for one execution.
+- **Application observability interceptor** (Wave 17.3, `services/temporal/_interceptors.py`): workers explicitly register `ObservabilityWorkerInterceptor` for `activity_retry` WARN logs when `activity.info().attempt > 1` — the "worker died and Temporal re-dispatched" signal — and replay-guarded `workflow_start` logs. This is separate from SDK tracing and remains worker-owned.
 - **Periodic activity heartbeat** (Wave 17.6, `plugin/base.py::as_activity`): 30s background beat during long bodies so a laptop-sleep crash is detected within one `heartbeat_timeout` (2 min) instead of `start_to_close` (10 min).
 - **Cron catch-up bound** (Wave 17.1, `services/temporal/schedules.py`): `SchedulePolicy(catchup_window=24h)` + `SKIP` overlap — a laptop offline a week does not replay 168 hourly ticks on wake.
 - **One-shot LLM-step retry** (Wave 17.2): `LLM_STEP_RETRY(maximum_attempts=1)` on `agent.execute_llm_step.v1` — LLM calls are not idempotent; the workflow surfaces the failure instead of silently re-billing the prompt. `agent.refresh_tools.v1` deliberately keeps 3 attempts (idempotent canvas rebuild).
@@ -580,6 +581,51 @@ One supervisor-build-time env var (read inside `_temporal_specs.py`, not in `Set
 ## Debugging
 
 The Web UI is at http://localhost:8080; the UI's HTTP API is served at http://localhost:8233.
+
+### Reading Temporal tracing output
+
+The compact OpenTelemetry formatter intentionally places one completed span on
+one line. Several lines for a single node are normal because they describe
+different layers of the same execution:
+
+| Span or log | Layer and interpretation |
+|---|---|
+| `StartActivity:<activity>` | Workflow-side scheduling span; propagates trace context but does not execute the node body |
+| `RunActivity:<activity>` | Worker-side invocation span covering the activity attempt |
+| `node.<type>.execute` | OpenCompany application span around the plugin's `execute()` body |
+| `CompleteWorkflow:AgentWorkflow` | Agent child workflow reached a terminal state |
+| `CompleteWorkflow:MachinaWorkflow` | Parent graph workflow reached a terminal state |
+
+`CompleteWorkflow ... 0ms` is expected. Temporal creates the completion span at
+one replay-safe workflow timestamp, so its duration is not the workflow's
+wall-clock runtime. An `AgentWorkflow` completion and a `MachinaWorkflow`
+completion are also separate parent/child lifecycle events.
+
+Exact adjacent pairs are not expected. If `StartActivity`, `RunActivity`, or
+`CompleteWorkflow` appears twice with the same operation name,
+`temporalWorkflowID`, `temporalRunID`, and (when present)
+`temporalActivityID`, inspect interceptor ownership before investigating task
+retries. The shared client already carries `TracingInterceptor`, and the SDK
+prepends it to workers; adding a second instance to `Worker(...,
+interceptors=...)` creates two nested spans with the same Temporal attributes.
+The compact formatter does not print OpenTelemetry span IDs, which makes those
+distinct spans look byte-for-byte identical.
+
+Verification checklist:
+
+1. `Client.connect(...)` contains one `TracingInterceptor`.
+2. Manager, pool, standalone, and test worker constructors do not add another;
+   their explicit list contains `ObservabilityWorkerInterceptor` and any
+   distinct plugin interceptors only.
+3. Temporal Event History contains one activity attempt unless a real retry
+   occurred.
+4. The application log contains one `node.<type>.execute` span for one node-body
+   invocation.
+
+After correcting duplicate instrumentation, one `StartActivity`, one
+`RunActivity`, and one application node span may still appear for the same
+activity. Those are expected scheduling, worker, and application layers—not
+duplicate execution.
 
 ```bash
 # Temporal Web UI

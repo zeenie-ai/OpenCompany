@@ -917,49 +917,11 @@ def _build_skill_system_prompt(skill_data: List[Dict[str, Any]], log_prefix: str
         append to system_message. has_personality indicates whether any
         personality skills were found (used to drop the default system message).
     """
-    if not skill_data:
-        return "", False
+    # Kept as a compatibility entry point for callers and tests; the shared
+    # builder is the sole progressive-disclosure implementation.
+    from services.skill_prompt import build_skill_system_prompt
 
-    from services.skill_loader import get_skill_loader
-
-    skill_loader = get_skill_loader()
-    skill_loader.scan_skills()
-
-    personality_blocks = []
-    non_personality_names = []
-
-    for skill_info in skill_data:
-        skill_name = skill_info.get("skill_name") or skill_info.get("node_type", "").replace("Skill", "-skill").lower()
-        if skill_name.endswith("skill") and "-" not in skill_name:
-            skill_name = skill_name[:-5] + "-skill"
-
-        if skill_name.endswith("-personality"):
-            instructions = skill_info.get("parameters", {}).get("instructions", "")
-            if instructions:
-                personality_blocks.append(instructions)
-                logger.debug(f"{log_prefix} Personality skill injected (full): {skill_name}")
-            else:
-                logger.warning(f"{log_prefix} Personality skill {skill_name} has no instructions")
-        else:
-            non_personality_names.append(skill_name)
-            logger.debug(f"{log_prefix} Skill detected: {skill_name}")
-
-    parts = []
-
-    for block in personality_blocks:
-        parts.append(block)
-
-    if non_personality_names:
-        registry_prompt = skill_loader.get_registry_prompt(non_personality_names)
-        if registry_prompt:
-            parts.append(registry_prompt)
-
-    if parts:
-        logger.debug(
-            f"{log_prefix} Enhanced system message: {len(personality_blocks)} personality, {len(non_personality_names)} standard skills"
-        )
-
-    return "\n\n".join(parts), len(personality_blocks) > 0
+    return build_skill_system_prompt(skill_data, log_prefix)
 
 
 class AIService:
@@ -1677,7 +1639,7 @@ class AIService:
             temperature = _resolve_temperature(flattened, model, provider, bool(thinking_config and thinking_config.enabled))
 
             # Broadcast: Initializing model
-            await broadcast_status("initializing", {"message": f"Initializing {provider} model...", "provider": provider, "model": model})
+            await broadcast_status("initializing", {"message": f"Initializing {provider} model...", "provider": provider, "model": model, "active_skills": [], "last_skills": [], "last_tool_name": None, "last_capability": None})
 
             # Check for proxy URL (stored as {provider}_proxy credential)
             proxy_url = await self.auth.get_api_key(f"{provider}_proxy")
@@ -1748,10 +1710,19 @@ class AIService:
             tool_identities: List[Dict[str, str]] = []
             tool_bindings: List[tuple[Any, Dict[str, Any]]] = []
 
-            if tool_data:
-                await broadcast_status("building_tools", {"message": f"Building {len(tool_data)} tool(s)...", "tool_count": len(tool_data)})
+            # Standard skills are progressively disclosed through one scoped
+            # provider-neutral tool. Personality skills were injected above.
+            from services.skill_runtime import skill_tool_info
 
-                for tool_info in tool_data:
+            skill_info = skill_tool_info(skill_data or [], node_id)
+            effective_tool_data = list(tool_data or [])
+            if skill_info:
+                effective_tool_data.append(skill_info)
+
+            if effective_tool_data:
+                await broadcast_status("building_tools", {"message": f"Building {len(effective_tool_data)} tool(s)...", "tool_count": len(effective_tool_data)})
+
+                for tool_info in effective_tool_data:
                     tool, config = await self._build_tool_from_node(tool_info)
                     if tool:
                         tools.append(tool)
@@ -1826,8 +1797,22 @@ class AIService:
 
                 # Parent-agent phase broadcast (does not touch tool node).
                 await broadcast_status(
-                    "executing_tool", {"message": f"Executing tool: {tool_name}", "tool_name": tool_name, "tool_args": tool_args}
+                    "executing_tool", {"message": f"Executing tool: {tool_name}", "tool_name": tool_name}
                 )
+
+                if broadcaster and tool_name and tool_name != "Skill":
+                    await broadcaster.broadcast_agent_capability(
+                        node_id,
+                        capability_kind="tool",
+                        capability_name=tool_name,
+                        state="started",
+                        workflow_id=workflow_id,
+                        execution_id=str((context or {}).get("execution_id") or "") or None,
+                        root_execution_id=str((context or {}).get("root_execution_id") or "") or None,
+                        target_node_id=str(tool_node_id or "") or None,
+                        provider=provider,
+                        invocation_source="legacy",
+                    )
 
                 # Inject services + graph context so execute_tool can scope its
                 # broadcasts and nested agents can execute with their own tools.
@@ -1835,6 +1820,7 @@ class AIService:
                 config["ai_service"] = self
                 config["database"] = self.database
                 config["parent_node_id"] = node_id
+                config["provider"] = provider
                 # Surface the auto-rebind toggle so agentBuilder's summary
                 # text reflects the user's current preference.
                 config["auto_rebind_tools"] = auto_rebind_enabled
@@ -1856,14 +1842,56 @@ class AIService:
 
                     await broadcast_status(
                         "tool_completed",
-                        {"message": f"Tool completed: {tool_name}", "tool_name": tool_name, "result_preview": str(result)[:100]},
+                        {"message": f"Tool completed: {tool_name}", "tool_name": tool_name},
                     )
+
+                    if broadcaster and tool_name and tool_name != "Skill":
+                        await broadcaster.broadcast_agent_capability(
+                            node_id,
+                            capability_kind="tool",
+                            capability_name=tool_name,
+                            state="completed",
+                            workflow_id=workflow_id,
+                            execution_id=str((context or {}).get("execution_id") or "") or None,
+                            root_execution_id=str((context or {}).get("root_execution_id") or "") or None,
+                            target_node_id=str(tool_node_id or "") or None,
+                            provider=provider,
+                            invocation_source="legacy",
+                        )
 
                     return result
 
                 except Exception as e:
                     error_msg = str(e)
                     logger.error(f"[Agent] Tool execution failed: {tool_name}", error=error_msg)
+
+                    # Keep normal AI agents on the same observable contract as
+                    # specialized/team-lead agents.  Without this terminal
+                    # phase a failed fast tool call leaves only the preceding
+                    # generic executing phase, so the canvas cannot retain
+                    # ``tool <name>`` or mark the capability as failed.
+                    await broadcast_status(
+                        "tool_completed",
+                        {
+                            "message": f"Tool failed: {tool_name}",
+                            "tool_name": tool_name,
+                            "tool_failed": True,
+                        },
+                    )
+                    if broadcaster and tool_name and tool_name != "Skill":
+                        await broadcaster.broadcast_agent_capability(
+                            node_id,
+                            capability_kind="tool",
+                            capability_name=tool_name,
+                            state="failed",
+                            workflow_id=workflow_id,
+                            execution_id=str((context or {}).get("execution_id") or "") or None,
+                            root_execution_id=str((context or {}).get("root_execution_id") or "") or None,
+                            target_node_id=str(tool_node_id or "") or None,
+                            provider=provider,
+                            invocation_source="legacy",
+                            error_code=type(e).__name__,
+                        )
 
                     # Re-raise to let _run_agent_loop surface the error to the LLM
                     raise
@@ -2168,6 +2196,11 @@ class AIService:
                 "timestamp": datetime.now().isoformat(),
             }
 
+        finally:
+            from services.skill_runtime import clear_skill_turn
+
+            await clear_skill_turn(workflow_id or "", str((context or {}).get("execution_id") or ""), node_id)
+
     async def execute_chat_agent(
         self,
         node_id: str,
@@ -2237,11 +2270,17 @@ class AIService:
             tool_node_configs = {}  # Map tool name to node config (same as AI Agent's tool_configs)
             tool_identities: List[Dict[str, str]] = []
             tool_bindings: List[tuple[Any, Dict[str, Any]]] = []
-            if tool_data:
-                await broadcast_status("building_tools", {"message": f"Building {len(tool_data)} tool(s)...", "tool_count": len(tool_data)})
+            from services.skill_runtime import skill_tool_info
 
-                task_manager_bound = any(info.get("node_type") == "taskManager" for info in tool_data)
-                durable_delegates = [info for info in tool_data if info.get("delegate_tool_name")]
+            effective_tool_data = list(tool_data or [])
+            progressive_skill_tool = skill_tool_info(skill_data or [], node_id)
+            if progressive_skill_tool:
+                effective_tool_data.append(progressive_skill_tool)
+            if effective_tool_data:
+                await broadcast_status("building_tools", {"message": f"Building {len(effective_tool_data)} tool(s)...", "tool_count": len(effective_tool_data)})
+
+                task_manager_bound = any(info.get("node_type") == "taskManager" for info in effective_tool_data)
+                durable_delegates = [info for info in effective_tool_data if info.get("delegate_tool_name")]
                 if task_manager_bound and durable_delegates:
                     teammate_lines = "\n".join(
                         f"- {info.get('node_id')}: {info.get('label') or info.get('node_type')} ({info.get('node_type')})"
@@ -2259,7 +2298,7 @@ class AIService:
                         f"Connected teammates:\n{teammate_lines}"
                     )
 
-                for tool_info in tool_data:
+                for tool_info in effective_tool_data:
                     if task_manager_bound and tool_info.get("delegate_tool_name"):
                         continue
                     # Use AI Agent's _build_tool_from_node for all tool types
@@ -2361,7 +2400,7 @@ class AIService:
             temperature = _resolve_temperature(flattened, model, provider, bool(thinking_config and thinking_config.enabled))
 
             # Broadcast: Initializing
-            await broadcast_status("initializing", {"message": f"Initializing {provider} model...", "provider": provider, "model": model})
+            await broadcast_status("initializing", {"message": f"Initializing {provider} model...", "provider": provider, "model": model, "active_skills": [], "last_skills": [], "last_tool_name": None, "last_capability": None})
 
             # Check for proxy URL (stored as {provider}_proxy credential)
             proxy_url = await self.auth.get_api_key(f"{provider}_proxy")
@@ -2451,12 +2490,31 @@ class AIService:
                         f"[ChatAgent] Tool config: node_id={tool_node_id}, node_type={config.get('node_type')}, workflow_id={workflow_id}"
                     )
 
+                    await broadcast_status(
+                        "executing_tool",
+                        {"message": f"Executing tool: {tool_name}", "tool_name": tool_name},
+                    )
+                    if broadcaster and tool_name and tool_name != "Skill":
+                        await broadcaster.broadcast_agent_capability(
+                            node_id,
+                            capability_kind="tool",
+                            capability_name=tool_name,
+                            state="started",
+                            workflow_id=workflow_id,
+                            execution_id=str((context or {}).get("execution_id") or "") or None,
+                            root_execution_id=str((context or {}).get("root_execution_id") or "") or None,
+                            target_node_id=str(tool_node_id or "") or None,
+                            provider=provider,
+                            invocation_source="legacy",
+                        )
+
                     # Inject services + graph context so execute_tool can scope its
                     # broadcasts and nested agents can execute with their own tools.
                     config["workflow_id"] = workflow_id
                     config["ai_service"] = self
                     config["database"] = self.database
                     config["parent_node_id"] = node_id
+                    config["provider"] = provider
                     config["auto_rebind_tools"] = auto_rebind_enabled
                     if context:
                         config["nodes"] = context.get("nodes", [])
@@ -2473,10 +2531,45 @@ class AIService:
 
                     try:
                         result = await execute_tool(tool_name, tool_args, config)
+                        await broadcast_status(
+                            "tool_completed",
+                            {"message": f"Tool completed: {tool_name}", "tool_name": tool_name},
+                        )
+                        if broadcaster and tool_name and tool_name != "Skill":
+                            await broadcaster.broadcast_agent_capability(
+                                node_id,
+                                capability_kind="tool",
+                                capability_name=tool_name,
+                                state="completed",
+                                workflow_id=workflow_id,
+                                execution_id=str((context or {}).get("execution_id") or "") or None,
+                                root_execution_id=str((context or {}).get("root_execution_id") or "") or None,
+                                target_node_id=str(tool_node_id or "") or None,
+                                provider=provider,
+                                invocation_source="legacy",
+                            )
                         logger.debug(f"[ChatAgent] Tool executed successfully: {tool_name}")
                         return result
                     except Exception as e:
                         logger.error(f"[ChatAgent] Tool execution failed: {tool_name}", error=str(e))
+                        await broadcast_status(
+                            "tool_completed",
+                            {"message": f"Tool failed: {tool_name}", "tool_name": tool_name, "tool_failed": True},
+                        )
+                        if broadcaster and tool_name and tool_name != "Skill":
+                            await broadcaster.broadcast_agent_capability(
+                                node_id,
+                                capability_kind="tool",
+                                capability_name=tool_name,
+                                state="failed",
+                                workflow_id=workflow_id,
+                                execution_id=str((context or {}).get("execution_id") or "") or None,
+                                root_execution_id=str((context or {}).get("root_execution_id") or "") or None,
+                                target_node_id=str(tool_node_id or "") or None,
+                                provider=provider,
+                                invocation_source="legacy",
+                                error_code=type(e).__name__,
+                            )
                         return {"error": str(e)}
 
                 # Auto-rebind toggle + recursion_limit override: same
@@ -2750,6 +2843,11 @@ class AIService:
                 "timestamp": datetime.now().isoformat(),
             }
 
+        finally:
+            from services.skill_runtime import clear_skill_turn
+
+            await clear_skill_turn(workflow_id or "", str((context or {}).get("execution_id") or ""), node_id)
+
     async def _build_tool_from_node(self, tool_info: Dict[str, Any]) -> tuple:
         """Convert a node configuration into a LangChain StructuredTool.
 
@@ -2782,6 +2880,10 @@ class AIService:
             "_builtin_check_delegated_tasks": (
                 "check_delegated_tasks",
                 "Check status and retrieve results of previously delegated tasks.",
+            ),
+            "_builtin_skill": (
+                "Skill",
+                "Load a connected skill or read/search one of its declared text resources on demand.",
             ),
         }
 
@@ -2973,6 +3075,21 @@ class AIService:
                 )
 
             return DelegateToAgentSchema
+
+        if node_type == "_builtin_skill":
+            from typing import Literal
+
+            class SkillInvocationSchema(BaseModel):
+                action: Literal["load", "read_resource", "search_resource"] = Field(
+                    default="load", description="Load instructions, read a bounded resource page, or search a resource."
+                )
+                skill_name: str = Field(description="Exact connected skill name from Available Skills.")
+                path: Optional[str] = Field(default=None, description="Declared references/<file> or scripts/<file> path.")
+                query: Optional[str] = Field(default=None, description="Case-insensitive search query for search_resource.")
+                cursor: int = Field(default=0, ge=0, description="Pagination cursor.")
+                limit: int = Field(default=4000, ge=1, le=16000, description="Bounded character or match limit.")
+
+            return SkillInvocationSchema
 
         # Built-in check tool for delegation result retrieval (no plugin).
         if node_type == "_builtin_check_delegated_tasks":

@@ -141,7 +141,7 @@ class CodexAgentNode(ActionNode):
                     tasks[i] = t.model_copy(update=changed)
 
         database = get_database()
-        _, skill_data, _, _, _ = await collect_agent_connections(
+        _, skill_data, tool_data, _, _ = await collect_agent_connections(
             node_id,
             ctx.raw,
             database,
@@ -167,6 +167,9 @@ class CodexAgentNode(ActionNode):
             broadcaster=broadcaster,
             repo_root=repo_root,
             connected_skill_names=connected_skills,
+            connected_skill_descriptors=skill_data,
+            connected_tools=tool_data,
+            execution_id=ctx.execution_id,
             allowed_credentials=params.allowed_credentials,
             max_parallel=params.max_parallel,
         )

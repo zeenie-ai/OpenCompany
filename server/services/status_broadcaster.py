@@ -260,8 +260,9 @@ class StatusBroadcaster:
                 ``".disconnected"`` / ``".runtime_failed"``.
             provider: Provider id (e.g. ``"openai"``, ``"twitter"``).
             customer_id: For multi-tenant OAuth flows. Default omitted.
-            workflow_id: Optional CloudEvents extension attribute scoping
-                runtime events to the workflow that triggered them.
+            workflow_id: Optional legacy extension-shaped workflow scope.
+                New event contracts put this field inside ``data`` because
+                underscores are not valid CloudEvents attribute names.
             **data_extra: Additional fields merged into the envelope's
                 ``data`` block (e.g. ``reason``, ``node_id``, ``error``
                 for runtime failure events).
@@ -395,6 +396,65 @@ class StatusBroadcaster:
                 "data": event.model_dump(mode="json"),
             }
         )
+
+    async def broadcast_agent_capability(
+        self,
+        agent_node_id: str,
+        *,
+        capability_kind: str,
+        capability_name: str,
+        state: str,
+        workflow_id: Optional[str] = None,
+        execution_id: Optional[str] = None,
+        root_execution_id: Optional[str] = None,
+        target_node_id: Optional[str] = None,
+        action: Optional[str] = None,
+        provider: Optional[str] = None,
+        invocation_source: Optional[str] = None,
+        tool_call_id: Optional[str] = None,
+        duration_ms: Optional[int] = None,
+        returned_characters: Optional[int] = None,
+        token_estimate: Optional[int] = None,
+        content_hash: Optional[str] = None,
+        error_code: Optional[str] = None,
+        event_id: Optional[str] = None,
+    ):
+        """Emit the canonical CloudEvents capability lifecycle envelope.
+
+        Capability ticks are high-frequency UI/observability telemetry, so
+        they are broadcast directly like ``agent_progress``. They must not go
+        through ``events.dispatch.emit``: that path performs Temporal
+        Visibility queries and Signals workflow controllers for trigger input.
+        """
+        from services.events import WorkflowEvent
+
+        event = WorkflowEvent.agent_capability(
+            agent_node_id,
+            capability_kind=capability_kind,
+            capability_name=capability_name,
+            state=state,
+            workflow_id=workflow_id,
+            execution_id=execution_id,
+            root_execution_id=root_execution_id,
+            target_node_id=target_node_id,
+            action=action,
+            provider=provider,
+            invocation_source=invocation_source,
+            tool_call_id=tool_call_id,
+            duration_ms=duration_ms,
+            returned_characters=returned_characters,
+            token_estimate=token_estimate,
+            content_hash=content_hash,
+            error_code=error_code,
+            event_id=event_id,
+        )
+        await self.broadcast(
+            {
+                "type": "agent_capability",
+                "data": event.model_dump(mode="json", exclude_none=True),
+            }
+        )
+        return event
 
     async def broadcast_claude_session_spawned(
         self,
@@ -574,9 +634,47 @@ class StatusBroadcaster:
         logger.debug(
             f"[BROADCAST] update_node_status: node={node_id}, status={status}, workflow={workflow_id}, connections={len(self._connections)}"
         )
+        incoming_data = dict(data or {})
+        previous = self._status["nodes"].get(node_id) or {}
+        # The cache is historically keyed by node id.  Never inherit sticky
+        # capability fields from a different workflow that happens to reuse
+        # that id; the browser store is workflow-scoped and the server must
+        # uphold the same boundary.  A future cache-key migration can make
+        # this structural, but this guard keeps compatibility snapshots safe.
+        same_workflow = previous.get("workflow_id") == workflow_id
+        previous_data = (previous.get("data") or {}) if same_workflow else {}
+        # Skill activity belongs to the whole agent turn, while ordinary
+        # phase broadcasts belong to one loop step. Preserve the former when
+        # a later invoking_llm/tool_completed update does not mention it.
+        # Callers clear it explicitly with active_skills=[] at turn end.
+        if "active_skills" not in incoming_data and previous_data.get("active_skills"):
+            incoming_data["active_skills"] = previous_data["active_skills"]
+        # Turn cleanup converts active skill calls into a safe last_skills
+        # summary before the outer plugin/Temporal wrapper emits its terminal
+        # success payload. Preserve that summary across the wrapper broadcast;
+        # otherwise short normal-agent runs lose their usage text while slower
+        # team-lead runs appear to work. A new turn explicitly sends [] and
+        # therefore clears it.
+        if "last_skills" not in incoming_data and previous_data.get("last_skills"):
+            incoming_data["last_skills"] = previous_data["last_skills"]
+        # Tool calls are often faster than a paint frame. Retain only the safe
+        # LLM-visible tool name so every agent card can show the most recent
+        # capability after the phase advances back to invoking_llm/completed.
+        tool_name = incoming_data.get("tool_name")
+        if tool_name and tool_name != "Skill":
+            incoming_data["last_tool_name"] = tool_name
+            incoming_data["last_capability"] = {
+                "kind": "tool",
+                "name": tool_name,
+                "state": "failed" if incoming_data.get("error") or incoming_data.get("tool_failed") else "used",
+            }
+        elif "last_tool_name" not in incoming_data and previous_data.get("last_tool_name"):
+            incoming_data["last_tool_name"] = previous_data["last_tool_name"]
+        if "last_capability" not in incoming_data and previous_data.get("last_capability"):
+            incoming_data["last_capability"] = previous_data["last_capability"]
         self._status["nodes"][node_id] = {
             "status": status,
-            "data": data or {},
+            "data": incoming_data,
             "timestamp": asyncio.get_event_loop().time(),
             "workflow_id": workflow_id,
         }
