@@ -64,7 +64,7 @@ dependencies = [
     # (client.interactions with environment= + client.agents) used by the
     # vertex_managed_agent / vertex_agent_admin plugins. 4.2.5 remains
     # compatible with the langchain-core==1.4.7 security floor.
-    "langchain-google-genai==4.2.5",
+    "langchain-google-genai==4.2.7",
     "google-genai==2.11.0",
     "langchain-groq==1.1.2",
     "langchain-cerebras==0.8.2",
