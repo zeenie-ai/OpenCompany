@@ -17,7 +17,7 @@ anthropic==0.94.0
     #   langchain-anthropic
     #   opencompany-server
     #   rlms
-anyio==4.14.1
+anyio==4.14.2
     # via
     #   anthropic
     #   google-genai
