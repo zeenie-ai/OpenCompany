@@ -32,7 +32,7 @@ anyio==4.14.1
     #   sse-starlette
     #   starlette
     #   watchfiles
-apify-client==3.0.5
+apify-client==3.0.6
     # via opencompany-server
 async-timeout==5.0.1
     # via crawlee
