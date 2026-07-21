@@ -785,7 +785,13 @@ class DeploymentManager:
         event_workflow_id_key = SearchAttributeKey.for_keyword("EventWorkflowId")
         event_trigger_kind_key = SearchAttributeKey.for_keyword("EventTriggerKind")
 
-        control_lookup = container.database().get_latest_workflow_control(workflow_id)
+        # Resolve control state through this manager's injected database.
+        # Reading the process-global container here made listener routing
+        # depend on whichever database happened to be installed globally,
+        # rather than the database that owns this deployment. Besides making
+        # parallel/test managers bleed into one another, that could register a
+        # listener under a controller from a different application database.
+        control_lookup = self.database.get_latest_workflow_control(workflow_id)
         control = await control_lookup if inspect.isawaitable(control_lookup) else None
         if control is not None and control.controller_workflow_id and control.status in {
             "starting", "running", "pausing", "paused", "resuming",

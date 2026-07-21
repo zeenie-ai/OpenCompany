@@ -499,6 +499,7 @@ class TestCreateWorkflow:
         )
 
         mock_db = MagicMock()
+        mock_db.allocate_workflow_id = AsyncMock(return_value="1")
         mock_db.save_workflow = AsyncMock(return_value=True)
         # Wave 14: agent_builder calls next_available_slug, which
         # reads ``list_workflow_slugs`` for the dedup counter scan.
@@ -509,10 +510,8 @@ class TestCreateWorkflow:
         with patch("core.container.container", mock_container):
             result = await node.create_workflow(ctx, params)
 
-        assert result.workflow_id is not None
-        # Wave 14: workflow ids are bare 32-hex UUIDs (no prefix).
-        assert len(result.workflow_id) == 32
-        assert all(c in "0123456789abcdef" for c in result.workflow_id)
+        assert result.workflow_id == "1"
+        mock_db.allocate_workflow_id.assert_awaited_once_with()
         # Slug is the human-readable identifier surfaced in the summary.
         assert "My_New_Workflow_1" in result.summary
         mock_db.save_workflow.assert_awaited_once()
@@ -527,6 +526,7 @@ class TestCreateWorkflow:
         )
 
         mock_db = MagicMock()
+        mock_db.allocate_workflow_id = AsyncMock(return_value="1")
         mock_db.save_workflow = AsyncMock(return_value=False)
         mock_db.list_workflow_slugs = AsyncMock(return_value=[])
         mock_container = MagicMock()

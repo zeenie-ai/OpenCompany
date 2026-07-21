@@ -230,6 +230,8 @@ class TestAgentCallIdentity:
                 return {"success": True, "todos": []}
             if name == "agent.store_output.v1":
                 return {"stored": True}
+            if name == "agent.skill.clear.v1":
+                return {"cleared": True}
             raise AssertionError(f"Unexpected activity {name}")
 
         monkeypatch.setattr(patched_workflow, "execute_activity", fake_execute_activity)
@@ -278,6 +280,8 @@ class TestAgentCallIdentity:
                 return {"success": True, "todos": []}
             if name == "agent.store_output.v1":
                 return {"stored": True}
+            if name == "agent.skill.clear.v1":
+                return {"cleared": True}
             raise AssertionError(f"Unexpected activity {name}")
 
         monkeypatch.setattr(patched_workflow, "execute_activity", fake_execute_activity)
@@ -354,6 +358,8 @@ class TestAgentCallIdentity:
                 return {"tools": [_tool("todo-2", label="Conflicting")]}
             if name == "agent.store_output.v1":
                 return {"stored": True}
+            if name == "agent.skill.clear.v1":
+                return {"cleared": True}
             raise AssertionError(f"Unexpected activity {name}")
 
         monkeypatch.setattr(patched_workflow, "execute_activity", fake_execute_activity)

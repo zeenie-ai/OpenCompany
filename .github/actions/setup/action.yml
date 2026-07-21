@@ -10,18 +10,18 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: pnpm/action-setup@v4
-    - uses: actions/setup-node@v4
+    - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+    - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
       with:
         node-version: ${{ inputs.node-version }}
-        # ``cache:`` intentionally omitted -- setup-node's post-job cache
-        # save fails with ``Path Validation Error`` in jobs that didn't
-        # actually run pnpm (e.g. CLI / Backend test lanes), marking
-        # the whole job red even though every test passed.
-    - uses: actions/setup-python@v5
+        package-manager-cache: false
+        # Explicitly disabled: release jobs carry publish credentials, and
+        # several lanes never run pnpm, which also makes post-job cache saves
+        # fail with Path Validation Error.
+    - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
       with:
         python-version: '3.12'
-    - uses: astral-sh/setup-uv@v8.1.0
+    - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
       with:
         enable-cache: false
     - name: Install supervisor CLI

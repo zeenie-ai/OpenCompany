@@ -2,7 +2,7 @@
 
 ``handle_save_workflow`` IS the rename path: when the display name
 changes, the handler must (1) allocate a fresh slug, (2) atomically
-update DB name + slug while keeping the UUID id stable, (3) rename
+update DB name + slug while keeping the system identity stable, (3) rename
 the on-disk workspace dir if it exists, (4) broadcast a CloudEvents
 ``workflow.renamed`` envelope so other clients refresh.
 """
@@ -27,6 +27,12 @@ import pytest
 class _FakeDatabase:
     def __init__(self) -> None:
         self._rows: Dict[str, SimpleNamespace] = {}
+        self._next_workflow_id = 1
+
+    async def allocate_workflow_id(self) -> str:
+        workflow_id = str(self._next_workflow_id)
+        self._next_workflow_id += 1
+        return workflow_id
 
     async def get_workflow(self, workflow_id: str):
         return self._rows.get(workflow_id)
@@ -126,16 +132,16 @@ async def test_save_new_workflow_allocates_slug(patched_handler_deps) -> None:
     from services.workflow_storage.handlers import handle_save_workflow
 
     result = await handle_save_workflow(
-        {"workflow_id": "uuid-1", "name": "AI Assistant", "data": {"nodes": []}},
+        {"workflow_id": "new", "name": "AI Assistant", "data": {"nodes": []}},
         websocket=None,
     )
 
     assert result["success"] is True
-    assert result["workflow_id"] == "uuid-1"
+    assert result["workflow_id"] == "1"
     assert result["name"] == "AI Assistant"
     assert result["slug"] == "AI_Assistant_1"
 
-    row = await patched_handler_deps.db.get_workflow("uuid-1")
+    row = await patched_handler_deps.db.get_workflow("1")
     assert row.slug == "AI_Assistant_1"
     assert row.name == "AI Assistant"
 
@@ -146,12 +152,12 @@ async def test_save_existing_workflow_same_name_keeps_slug(patched_handler_deps)
     from services.workflow_storage.handlers import handle_save_workflow
 
     await handle_save_workflow(
-        {"workflow_id": "uuid-1", "name": "AI Assistant", "data": {"nodes": []}},
+        {"workflow_id": "new", "name": "AI Assistant", "data": {"nodes": []}},
         websocket=None,
     )
     # Second save with same name — slug stays as _1.
     result = await handle_save_workflow(
-        {"workflow_id": "uuid-1", "name": "AI Assistant", "data": {"nodes": [], "marker": "a"}},
+        {"workflow_id": "1", "name": "AI Assistant", "data": {"nodes": [], "marker": "a"}},
         websocket=None,
     )
 
@@ -162,28 +168,28 @@ async def test_save_existing_workflow_same_name_keeps_slug(patched_handler_deps)
 
 @pytest.mark.asyncio
 async def test_rename_via_save_recomputes_slug(patched_handler_deps) -> None:
-    """The whole user story: create, rename, observe new slug + UUID stable."""
+    """The whole user story: create, rename, observe a stable system ID."""
     from services.workflow_storage.handlers import handle_save_workflow
 
     create = await handle_save_workflow(
-        {"workflow_id": "uuid-1", "name": "AI Assistant", "data": {"nodes": []}},
+        {"workflow_id": "new", "name": "AI Assistant", "data": {"nodes": []}},
         websocket=None,
     )
     assert create["slug"] == "AI_Assistant_1"
 
     rename = await handle_save_workflow(
-        {"workflow_id": "uuid-1", "name": "Cool Bot", "data": {"nodes": []}},
+        {"workflow_id": "1", "name": "Cool Bot", "data": {"nodes": []}},
         websocket=None,
     )
 
-    # UUID unchanged; slug + name updated.
-    assert rename["workflow_id"] == "uuid-1"
+    # System identity unchanged; slug + name updated.
+    assert rename["workflow_id"] == "1"
     assert rename["name"] == "Cool Bot"
     assert rename["slug"] == "Cool_Bot_1"
 
     # DB reflects the same.
-    row = await patched_handler_deps.db.get_workflow("uuid-1")
-    assert row.id == "uuid-1"
+    row = await patched_handler_deps.db.get_workflow("1")
+    assert row.id == "1"
     assert row.name == "Cool Bot"
     assert row.slug == "Cool_Bot_1"
 
@@ -194,7 +200,7 @@ async def test_rename_moves_workspace_directory(patched_handler_deps) -> None:
     from services.workflow_storage.handlers import handle_save_workflow
 
     await handle_save_workflow(
-        {"workflow_id": "uuid-1", "name": "AI Assistant", "data": {"nodes": []}},
+        {"workflow_id": "new", "name": "AI Assistant", "data": {"nodes": []}},
         websocket=None,
     )
     # Simulate execution having created the workspace folder.
@@ -203,7 +209,7 @@ async def test_rename_moves_workspace_directory(patched_handler_deps) -> None:
     (old_ws / "marker.txt").write_text("preserved")
 
     await handle_save_workflow(
-        {"workflow_id": "uuid-1", "name": "Cool Bot", "data": {"nodes": []}},
+        {"workflow_id": "1", "name": "Cool Bot", "data": {"nodes": []}},
         websocket=None,
     )
 
@@ -219,7 +225,7 @@ async def test_rename_without_workspace_dir_is_harmless(patched_handler_deps) ->
     from services.workflow_storage.handlers import handle_save_workflow
 
     await handle_save_workflow(
-        {"workflow_id": "uuid-1", "name": "AI Assistant", "data": {}},
+        {"workflow_id": "new", "name": "AI Assistant", "data": {}},
         websocket=None,
     )
 
@@ -228,7 +234,7 @@ async def test_rename_without_workspace_dir_is_harmless(patched_handler_deps) ->
 
     # Rename should still succeed.
     result = await handle_save_workflow(
-        {"workflow_id": "uuid-1", "name": "Cool Bot", "data": {}},
+        {"workflow_id": "1", "name": "Cool Bot", "data": {}},
         websocket=None,
     )
 
@@ -241,13 +247,13 @@ async def test_rename_broadcasts_workflow_lifecycle(patched_handler_deps) -> Non
     from services.workflow_storage.handlers import handle_save_workflow
 
     await handle_save_workflow(
-        {"workflow_id": "uuid-1", "name": "AI Assistant", "data": {}},
+        {"workflow_id": "new", "name": "AI Assistant", "data": {}},
         websocket=None,
     )
     patched_handler_deps.broadcaster.broadcast_workflow_lifecycle.reset_mock()
 
     await handle_save_workflow(
-        {"workflow_id": "uuid-1", "name": "Cool Bot", "data": {}},
+        {"workflow_id": "1", "name": "Cool Bot", "data": {}},
         websocket=None,
     )
 
@@ -256,7 +262,7 @@ async def test_rename_broadcasts_workflow_lifecycle(patched_handler_deps) -> Non
     args, kwargs = bcast.call_args
     assert args == ("renamed",)
     assert kwargs == {
-        "workflow_id": "uuid-1",
+        "workflow_id": "1",
         "name": "Cool Bot",
         "slug": "Cool_Bot_1",
         "old_slug": "AI_Assistant_1",
@@ -269,13 +275,13 @@ async def test_three_same_name_workflows_get_sequential_slugs(patched_handler_de
     from services.workflow_storage.handlers import handle_save_workflow
 
     r1 = await handle_save_workflow(
-        {"workflow_id": "uuid-1", "name": "AI Assistant", "data": {}}, websocket=None,
+        {"workflow_id": "new", "name": "AI Assistant", "data": {}}, websocket=None,
     )
     r2 = await handle_save_workflow(
-        {"workflow_id": "uuid-2", "name": "AI Assistant", "data": {}}, websocket=None,
+        {"workflow_id": "new", "name": "AI Assistant", "data": {}}, websocket=None,
     )
     r3 = await handle_save_workflow(
-        {"workflow_id": "uuid-3", "name": "AI Assistant", "data": {}}, websocket=None,
+        {"workflow_id": "new", "name": "AI Assistant", "data": {}}, websocket=None,
     )
 
     assert (r1["slug"], r2["slug"], r3["slug"]) == (
@@ -294,10 +300,10 @@ async def test_save_returns_slug_for_frontend_sync(patched_handler_deps) -> None
     from services.workflow_storage.handlers import handle_save_workflow
 
     result = await handle_save_workflow(
-        {"workflow_id": "uuid-1", "name": "AI Assistant", "data": {}},
+        {"workflow_id": "new", "name": "AI Assistant", "data": {}},
         websocket=None,
     )
 
     assert set(result.keys()) >= {"success", "workflow_id", "name", "slug"}
-    assert result["workflow_id"] == "uuid-1"
+    assert result["workflow_id"] == "1"
     assert result["slug"] == "AI_Assistant_1"

@@ -504,7 +504,7 @@ Replace `create_model` (`ai.py:1206-1353`) and LangChain message shapes in
 
 ### 7.2 What explicitly stays
 
-The deepagents-based Deep Agent node remains LangChain — `deepagents==0.5.2` pulls
+The deepagents-based Deep Agent node remains LangChain — `deepagents==0.6.9` pulls
 `langchain-core` itself, so those pins survive Stage B; *our* loop simply stops using
 them. Removable after Stage B: `langchain-openai`, `langchain-anthropic`,
 `langchain-google-genai`, `langchain-groq`, `langchain-cerebras` pins (and with them the

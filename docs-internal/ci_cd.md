@@ -2,7 +2,7 @@
 
 Internal reference for OpenCompany's GitHub Actions setup. Workflow inventory, release flow, and the composite setup action.
 
-The repo currently ships **exactly 4 workflows** plus one composite action. A number of hardening / security workflows described in earlier revisions of this doc (CodeQL, zizmor, rollback, reusable PyPI publish, cross-platform test-install) are **not yet implemented** — see [Planned (not yet implemented)](#planned-not-yet-implemented) at the end.
+The repo currently ships **three workflows** plus one composite action. A number of hardening / security workflows described in earlier revisions of this doc (CodeQL, zizmor, rollback, reusable PyPI publish, cross-platform test-install) are **not yet implemented** — see [Planned (not yet implemented)](#planned-not-yet-implemented) at the end.
 
 ---
 
@@ -67,10 +67,10 @@ The repo currently ships **exactly 4 workflows** plus one composite action. A nu
 
 | Tool | Version source | Action |
 |------|---------------|--------|
-| pnpm | `pnpm/action-setup@v4` default | `pnpm/action-setup@v4` |
-| Node.js | `node-version` input, default `22` | `actions/setup-node@v4` |
-| Python | hard-coded `3.12` (matches `.python-version`) | `actions/setup-python@v5` |
-| uv | `astral-sh/setup-uv@v8.1.0`, cache disabled | `astral-sh/setup-uv@v8.1.0` |
+| pnpm | `pnpm/action-setup` v4.3.0 default | Immutable commit SHA |
+| Node.js | `node-version` input, default `22` | `actions/setup-node` v6.5.0, immutable commit SHA; package cache disabled |
+| Python | hard-coded `3.12` (matches `.python-version`) | `actions/setup-python` v5.6.0, immutable commit SHA |
+| uv | `astral-sh/setup-uv` v8.1.0, cache disabled | Immutable commit SHA |
 
 `setup-node`'s `cache:` is intentionally omitted — its post-job cache save fails with a `Path Validation Error` in lanes that didn't run pnpm (CLI / backend test jobs), which would mark the whole job red even when every test passed.
 
@@ -102,7 +102,7 @@ Reusable `workflow_call` workflow with four independent jobs (no plan/change-det
 | Push of `v*.*.*` tag | predeploy gate, then publish to npm + GitHub Packages |
 | `workflow_dispatch` | Same job graph (manual run; there is no dry-run switch) |
 
-`permissions:` — `contents: read`, `id-token: write`, `packages: write`.
+The workflow default is `contents: read`. Publishing permissions are scoped to the job that needs them: npm receives `id-token: write` for provenance, while GitHub Packages receives `packages: write`. Checkout credentials are not persisted in either publishing job.
 
 ### Job graph
 
@@ -121,7 +121,7 @@ publish-npm                    publish-github-packages
       npmjs, public + provenance     npm.pkg.github.com
 ```
 
-- Both publish jobs `needs: predeploy`, run on `ubuntu-latest`, and share the same prefix: `actions/checkout` → composite setup → `actions/setup-node@v4` (with the target `registry-url`) → `pnpm install --frozen-lockfile` → `pnpm run build` → `python -m cli version sync`.
+- Both publish jobs `needs: predeploy`, run on `ubuntu-latest`, and share the same prefix: immutable `actions/checkout` with `persist-credentials: false` → composite setup → immutable `actions/setup-node` (with the target `registry-url`) → `pnpm install --frozen-lockfile` → `pnpm run build` → `python -m cli version sync`.
 - `publish-npm` — validates the token with `npm whoami`, then publishes the canonical public npmjs package `@zeenie-ai/opencompany` via `npm publish --access public --provenance` with `NODE_AUTH_TOKEN=secrets.NPM_TOKEN`. The `--provenance` flag emits an npm provenance attestation (backed by the workflow's `id-token: write`).
 - `publish-github-packages` — rewrites `package.json` `name` to `@zeenie-ai/opencompany` and sets `publishConfig.registry = https://npm.pkg.github.com`, then `npm publish` with `NODE_AUTH_TOKEN=secrets.GITHUB_TOKEN`.
 
@@ -152,6 +152,7 @@ folder — both the folder and the workflow are gone.
 | `.github/workflows/predeploy.yml` | Reusable validation (build/lint + backend tests + CLI tests + OS matrix build/start) |
 | `.github/workflows/release.yml` | Tag / manual release: predeploy gate → publish npm + GitHub Packages |
 | `.github/actions/setup/action.yml` | Composite: pnpm + Node + Python + uv + editable CLI install |
+| `.github/dependabot.yml` | Weekly npm, Python, and GitHub Actions update coverage |
 | `.python-version` | Toolchain pin (`3.12`) — single source of truth |
 
 ---
@@ -167,6 +168,4 @@ The following existed in earlier drafts of this doc but are **not present in the
 - **`rollback.yml`** — manual `npm deprecate` + optional revert PR.
 - **`codeql.yml`** — Python + JS/TS SAST (`security-extended`).
 - **`check-zizmor.yml`** — workflow-security linter (SARIF to the Security tab).
-- **`.github/dependabot.yml`** — weekly grouped npm + pip + github-actions updates.
 - **`.pre-commit-config.yaml`** — ruff / prettier / eslint / actionlint hooks (note: the project rule is to verify with pytest + tsgo/eslint, not ruff).
-- **Commit-SHA pinning of action `uses:`** — the shipped workflows currently pin to major-version tags (`@v4`, `@v5`, `@v8.1.0`), not commit SHAs.

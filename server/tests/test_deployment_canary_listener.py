@@ -76,6 +76,10 @@ def _build_manager_with_state(workflow_id: str, nodes, edges, session_id="sess")
 
     database = MagicMock()
     database.get_node_parameters = AsyncMock(return_value={})
+    # Listener routing must never consult a developer's persisted workflow
+    # controls. Each test starts in the legacy/no-controller state unless it
+    # explicitly installs a control on this manager-owned database.
+    database.get_latest_workflow_control = AsyncMock(return_value=None)
     broadcaster = MagicMock()
     broadcaster.update_node_status = AsyncMock()
 
@@ -251,6 +255,14 @@ class TestStartCanaryListener:
         from core import container as container_mod
 
         monkeypatch.setattr(container_mod.container, "temporal_client", lambda: wrapper)
+        monkeypatch.setattr(
+            container_mod.container,
+            "database",
+            lambda: pytest.fail(
+                "listener control lookup must use DeploymentManager.database, "
+                "not process-global persisted state"
+            ),
+        )
 
         node = _node("wh-1", "webhookTrigger")
         listener_id = await mgr._start_canary_listener(node, "wf-abc", params={"path": "hook"})
@@ -281,13 +293,11 @@ class TestStartCanaryListener:
             status="running", controller_workflow_id="workflow-control-wf-controlled-g1",
             controller_run_id="controller-run-1",
         )
-        database = MagicMock()
-        database.get_latest_workflow_control = AsyncMock(return_value=control)
+        mgr.database.get_latest_workflow_control = AsyncMock(return_value=control)
 
         from core import container as container_mod
 
         monkeypatch.setattr(container_mod.container, "temporal_client", lambda: wrapper)
-        monkeypatch.setattr(container_mod.container, "database", lambda: database)
 
         listener_id = await mgr._start_canary_listener(
             _node("wh-1", "webhookTrigger"), "wf-controlled", params={},

@@ -10,8 +10,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
-  packages: write
 
 jobs:
   predeploy:
@@ -21,12 +19,18 @@ jobs:
     name: Publish to npm
     needs: predeploy
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
+          package-manager-cache: false
           registry-url: 'https://registry.npmjs.org'
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
@@ -44,12 +48,18 @@ jobs:
     name: Publish to GitHub Packages
     needs: predeploy
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
+          package-manager-cache: false
           registry-url: 'https://npm.pkg.github.com'
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
@@ -62,6 +72,8 @@ jobs:
             pkg.publishConfig = { registry: 'https://npm.pkg.github.com' };
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
-      - run: npm publish
+      # GitHub Packages uses the repository-scoped GITHUB_TOKEN; npm's OIDC
+      # trusted-publisher flow applies to npmjs.org, not npm.pkg.github.com.
+      - run: npm publish # zizmor: ignore[use-trusted-publishing]
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
