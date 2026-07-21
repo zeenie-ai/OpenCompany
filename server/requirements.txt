@@ -390,7 +390,7 @@ pydantic==2.12.5
     #   pydantic-settings
     #   sqlmodel
     #   xdk
-pydantic-core==2.41.5
+pydantic-core==2.47.0
     # via pydantic
 pydantic-monty==0.0.18
     # via opencompany-server
