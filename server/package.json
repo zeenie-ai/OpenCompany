@@ -13,7 +13,7 @@
     "express": "^5.2.1",
     "morgan": "^1.11.0",
     "tailwind-merge": "^3.5.0",
-    "three": "^0.184.0"
+    "three": "^0.185.1"
   },
   "overrides": {
     "body-parser": "^2.3.0",
