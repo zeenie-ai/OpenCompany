@@ -520,7 +520,7 @@ tqdm==4.68.4
     #   portkey-ai
 types-protobuf==7.34.1.20260518
     # via temporalio
-types-requests==2.33.0.20260518
+types-requests==2.33.0.20260712
     # via portkey-ai
 typing-extensions==4.16.0
     # via
