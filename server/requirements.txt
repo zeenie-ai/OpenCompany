@@ -87,7 +87,7 @@ cryptography==49.0.0
     #   pyjwt
 ddgs==9.14.4
     # via opencompany-server
-deepagents==0.5.2
+deepagents==0.6.12
     # via opencompany-server
 dependency-injector==4.49.1
     # via opencompany-server
