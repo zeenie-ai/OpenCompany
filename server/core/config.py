@@ -6,6 +6,41 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 
 
+# The dev placeholder secrets shipped in ``.env.template``. SSOT for these
+# literals — ``company build`` scaffolds fresh values over the ``dev-``
+# placeholders and ``company deploy`` mints per-deploy keys. Drift-locked
+# against the template by ``tests/core_config/test_dev_secret_guard.py``.
+DEV_SECRET_LITERALS: frozenset = frozenset(
+    {
+        "dev-secret-key-12345678901234567890123456789012",
+        "dev-jwt-secret-key-12345678901234567890",
+        "dev-encryption-key-12345678901234567890123456",
+    }
+)
+
+
+def dev_secret_offenders(settings) -> list[str]:
+    """Env-var names still carrying dev placeholder secrets, non-dev posture only.
+
+    Dev posture = auth disabled (``VITE_AUTH_ENABLED == "false"``, matching
+    ``middleware/auth.py``) AND ``deployment_mode == "local"`` — returns []
+    there. Duck-typed: accepts any object with the three secret attrs plus
+    ``vite_auth_enabled`` and ``deployment_mode``.
+    """
+    auth_disabled = (settings.vite_auth_enabled or "").lower() == "false"
+    if auth_disabled and settings.deployment_mode == "local":
+        return []
+    offenders: list[str] = []
+    for attr, env_name in (
+        ("secret_key", "SECRET_KEY"),
+        ("jwt_secret_key", "JWT_SECRET_KEY"),
+        ("api_key_encryption_key", "API_KEY_ENCRYPTION_KEY"),
+    ):
+        if getattr(settings, attr, None) in DEV_SECRET_LITERALS:
+            offenders.append(env_name)
+    return offenders
+
+
 class Settings(BaseSettings):
     """Application settings driven entirely by environment variables."""
 
@@ -59,17 +94,18 @@ class Settings(BaseSettings):
     # F4.A: per-type activity dispatch. When True, MachinaWorkflow.run() schedules
     # `node.{type}.v{version}` per plugin (with task_queue=cls.task_queue) instead
     # of the single `execute_node_activity` legacy name. Workers register per-type
-    # activities alongside the legacy one. Default off so existing deployments
-    # behave identically; flip via TEMPORAL_PER_TYPE_DISPATCH=true.
+    # activities alongside the legacy one. Default on as shipped in
+    # .env.template; TEMPORAL_PER_TYPE_DISPATCH=false is the rollback.
     temporal_per_type_dispatch: bool = Field(env="TEMPORAL_PER_TYPE_DISPATCH")
     # F4.B: agent-as-child-workflow. When True, MachinaWorkflow.run() schedules
-    # AgentWorkflow (child workflow) for the 14 migrating agent types
+    # AgentWorkflow (child workflow) for the 15 migrating agent types
     # (aiAgent / chatAgent / 11 specialized agents / 2 team leads) instead of
     # an activity. Tool calls inside the agent become per-type Temporal
     # activities. `rlm_agent`, `claude_code_agent` continue to run as F4.A
     # per-type activities (NOT migrated -- their external session state would
-    # break across activity boundaries). Default off. Implies
-    # temporal_per_type_dispatch=True.
+    # break across activity boundaries). Default on as shipped in
+    # .env.template; TEMPORAL_AGENT_WORKFLOW_ENABLED=false is the rollback.
+    # Implies temporal_per_type_dispatch=True.
     temporal_agent_workflow_enabled: bool = Field(
         env="TEMPORAL_AGENT_WORKFLOW_ENABLED",
     )

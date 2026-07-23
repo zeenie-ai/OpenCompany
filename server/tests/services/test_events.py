@@ -334,8 +334,10 @@ class TestWebhookSourceHandle:
             _run(src.handle(req))
         assert exc.value.status_code == 400
 
-    def test_missing_secret_accepts_unverified(self):
-        """No secret captured yet -> log warning, accept event."""
+    def test_missing_secret_rejects_503(self):
+        """Credential resolution fails -> fail closed with 503 + Retry-After."""
+        from fastapi import HTTPException
+
         src = self._build_source(secret_value=None)
         body = b'{"event":"payload"}'
 
@@ -346,9 +348,46 @@ class TestWebhookSourceHandle:
                 return body
 
         with patch("services.event_waiter.dispatch") as dispatch:
-            ev = _run(src.handle(FakeReq()))
-        assert ev.type == "fake.event"
-        dispatch.assert_called_once()
+            with pytest.raises(HTTPException) as exc:
+                _run(src.handle(FakeReq()))
+        assert exc.value.status_code == 503
+        assert exc.value.headers.get("Retry-After") == "5"
+        dispatch.assert_not_called()
+
+    def test_secret_field_absent_rejects_503(self):
+        """Credential resolves but lacks the secret field -> fail closed with 503."""
+        from fastapi import HTTPException
+        from services.events import StripeVerifier, WebhookSource, WorkflowEvent
+
+        class _Cred:
+            @classmethod
+            async def resolve(cls):
+                return {"api_key": "sk_test"}  # secret_field key missing
+
+        class FakeSource(WebhookSource):
+            type = "fake.hook"
+            path = "fake"
+            verifier = StripeVerifier
+            secret_field = "test_secret"
+            credential = _Cred
+
+            async def shape(self, request, body, payload):
+                return WorkflowEvent(source="fake://x", type="fake.event", data=payload)
+
+        src = FakeSource()
+        body = b'{"event":"payload"}'
+
+        class FakeReq:
+            headers = {}
+
+            async def body(self):
+                return body
+
+        with patch("services.event_waiter.dispatch") as dispatch:
+            with pytest.raises(HTTPException) as exc:
+                _run(src.handle(FakeReq()))
+        assert exc.value.status_code == 503
+        dispatch.assert_not_called()
 
 
 # ============================================================================

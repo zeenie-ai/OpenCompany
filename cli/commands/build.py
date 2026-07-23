@@ -52,7 +52,46 @@ COMPILEALL_SOURCE_DIRS: tuple[str, ...] = (
 )
 
 
+# Secret keys scaffolded with fresh values when ``.env`` is created from
+# ``.env.template``. The template ships ``dev-`` placeholder values (the
+# exact literals are the SSOT frozenset ``DEV_SECRET_LITERALS`` in
+# ``server/core/config.py``, drift-locked against the template by
+# ``server/tests/core_config/test_dev_secret_guard.py``); anything still
+# carrying that placeholder prefix is replaced so a bare ``company build``
+# never runs with publicly known secrets.
+_SCAFFOLD_SECRET_KEYS: tuple[str, ...] = (
+    "SECRET_KEY",
+    "JWT_SECRET_KEY",
+    "API_KEY_ENCRYPTION_KEY",
+)
+_DEV_PLACEHOLDER_PREFIX = "dev-"
+
+
 # ---------------------------------------------------------------- helpers
+
+
+def _scaffold_env_secrets(content: str) -> tuple[str, list[str]]:
+    """Replace dev placeholder secrets with freshly generated values.
+
+    Only lines whose value still carries the template's ``dev-``
+    placeholder prefix are touched, so an operator-customised template
+    passes through unchanged. stdlib-only (``secrets``) — this verb must
+    run on bare system Python.
+    """
+    import secrets
+
+    generated: list[str] = []
+    lines = content.splitlines(keepends=True)
+    for i, line in enumerate(lines):
+        key, sep, value = line.strip().partition("=")
+        if not sep or key not in _SCAFFOLD_SECRET_KEYS:
+            continue
+        if not value.startswith(_DEV_PLACEHOLDER_PREFIX):
+            continue
+        ending = line[len(line.rstrip("\r\n")):]
+        lines[i] = f"{key}={secrets.token_hex(24)}{ending}"
+        generated.append(key)
+    return "".join(lines), generated
 
 
 def _which_python() -> str | None:
@@ -173,8 +212,16 @@ def build_command() -> None:
     # timestamped — diff between consecutive timestamps is the wall-clock
     # cost of that step, no manual instrumentation needed.
     if not env_path.exists() and template_path.exists():
-        shutil.copy2(template_path, env_path)
-        console.log("[0/6] Created .env from template")
+        content, generated = _scaffold_env_secrets(
+            template_path.read_text(encoding="utf-8")
+        )
+        env_path.write_text(content, encoding="utf-8")
+        if generated:
+            console.log(
+                f"[0/6] Created .env from template (generated fresh secrets: {', '.join(generated)})"
+            )
+        else:
+            console.log("[0/6] Created .env from template")
 
     if not is_postinstall:
         console.log("[1/6] Installing dependencies...")

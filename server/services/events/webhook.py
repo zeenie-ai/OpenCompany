@@ -80,15 +80,22 @@ class WebhookSource(PushEventSource):
         if self.verifier is not None:
             secret = await self._resolve_secret()
             if not secret:
+                # Fail closed: a declared verifier with no secret means we
+                # cannot authenticate the sender — reject instead of
+                # accepting an unverifiable event.
                 logger.warning(
-                    "[%s] no signing secret available; accepting unverified event",
+                    "[%s] no signing secret available; rejecting event (503)",
                     self.type or self.path,
                 )
-            else:
-                try:
-                    self.verifier.verify(dict(request.headers), body, secret)
-                except ValueError as e:
-                    raise HTTPException(status_code=400, detail=str(e))
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"webhook signing secret for {self.path!r} unavailable; retry later",
+                    headers={"Retry-After": "5"},
+                )
+            try:
+                self.verifier.verify(dict(request.headers), body, secret)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
 
         try:
             payload = json.loads(body.decode() or "{}")

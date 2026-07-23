@@ -48,6 +48,7 @@ def build_app_env(
         "WORKSPACE_BASE_DIR": "workspaces",
         "SERVE_STATIC_CLIENT": "true",
         "VITE_AUTH_ENABLED": "true",
+        "DEPLOYMENT_MODE": "cloud",
         "AUTH_MODE": "single",
         "JWT_COOKIE_SECURE": "false",
         "JWT_COOKIE_SAMESITE": "lax",

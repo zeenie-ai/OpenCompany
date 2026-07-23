@@ -46,7 +46,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # [debug] ...``) because the supervisor already prepends
 # ``[HH:MM:SS.fff]`` to every aggregated line.
 _startup_log("Importing settings + logging...")
-from core.config import Settings
+from core.config import Settings, dev_secret_offenders
 from core.logging import configure_logging, get_logger, setup_websocket_logging, shutdown_websocket_logging
 from core.tracing import init_tracing
 
@@ -77,6 +77,22 @@ async def lifespan(app: FastAPI):
     """Application lifespan management."""
     # Startup
     _startup_log("Lifespan startup begin")
+
+    # Non-fatal security posture check: warn loudly when the shipped dev
+    # placeholder secrets are still in use outside a local dev posture
+    # (auth enabled, or DEPLOYMENT_MODE != local). Never raises — the
+    # operator gets a prominent banner instead of a bricked server.
+    offenders = dev_secret_offenders(settings)
+    if offenders:
+        logger.error(
+            "SECURITY WARNING: dev placeholder secrets detected in a non-dev posture.\n"
+            "The following env vars still carry the publicly known .env.template values:\n"
+            "    %s\n"
+            "Generate real secrets, e.g.:\n"
+            "    python -c \"import secrets; print(secrets.token_hex(24))\"\n"
+            "and set them in .env (or the process environment), then restart.",
+            ", ".join(offenders),
+        )
 
     # Wave 10.C: discover node plugins so their register_node() calls
     # populate the four registries before any router serves NodeSpec.
