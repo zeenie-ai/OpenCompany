@@ -20,7 +20,9 @@ One command provisions a login-gated OpenCompany VM on a cloud provider. Two sta
    script that installs Node 22 + uv + the package and runs `company serve` under systemd.
 
 Login gate = built-in auth (`VITE_AUTH_ENABLED=true`, `AUTH_MODE=single`) with the owner
-credential generated at deploy time and seeded on first boot.
+credential generated at deploy time and seeded on first boot. `build_app_env`
+(`cli/commands/deploy/_secrets.py`) also sets `DEPLOYMENT_MODE=cloud` on the VM and mints
+fresh `JWT_SECRET_KEY` / `SECRET_KEY` / `API_KEY_ENCRYPTION_KEY` per deploy.
 
 ```bash
 company deploy up --provider gcp --owner-email you@example.com   # provision + install + print URL/creds

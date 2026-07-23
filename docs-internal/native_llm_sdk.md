@@ -26,7 +26,6 @@ server/services/llm/
 |-- unifier.py            ChatUnifier — the dispatch facade execute_chat delegates every provider to;
 |                         translates typed SDK errors -> NodeUserError
 |-- vertex.py             Vertex / Agent-Platform key handling
-|-- factory.py            LEGACY — create_provider()/NATIVE_PROVIDERS no longer consulted by ai.py
 |-- messages.py           filter_empty_messages, is_valid_message_content
 `-- providers/
     |-- __init__.py
@@ -61,7 +60,7 @@ The native layer currently supports **12 providers**, grouped by implementation:
 | `groq` | `providers/_compat.py` + base_url | `openai` | OpenAI-compatible (chat-path LangChain fallback retired in Phase D) |
 | `cerebras` | `providers/_compat.py` + base_url | `openai` | OpenAI-compatible (chat-path LangChain fallback retired in Phase D) |
 
-Source of truth for this list: `server/config/llm_defaults.json` (the `providers` dict) and the `register_provider(ProviderSpec(...))` calls in `server/services/llm/providers/` (each provider module registers itself at import; `factory.py` is legacy and no longer consulted by `ai.py`).
+Source of truth for this list: `server/config/llm_defaults.json` (the `providers` dict) and the `register_provider(ProviderSpec(...))` calls in `server/services/llm/providers/` (each provider module registers itself at import; the legacy `factory.py` was removed).
 
 ### Native chat path vs agent dropdown — two different counts
 
@@ -179,9 +178,9 @@ also owns error translation: typed SDK exceptions (resolved lazily from
 with a user-correctable message. There is no per-provider branch anywhere
 in `ai.py`.
 
-`factory.py` (`create_provider` / `is_native_provider` / `NATIVE_PROVIDERS`)
-is **legacy** — it still exists on disk but is no longer consulted by
-`ai.py`; do not extend it.
+The legacy `factory.py` (`create_provider` / `is_native_provider` /
+`NATIVE_PROVIDERS`) was **removed** — `ChatUnifier` + `registry.py` is the
+only dispatch layer.
 
 ## Config-Driven Base URLs
 
@@ -429,7 +428,7 @@ the plugin folder or add a `visuals.json` entry (`"openrouterChatModel":
    - Create `services/llm/providers/<name>.py` implementing the `LLMProvider` protocol.
    - At module bottom call `register_provider(ProviderSpec(name=..., factory=..., sdk_exception_refs=("sdk_module:ErrorClass",)))` — the lazy factory + string exception refs keep the SDK unimported until first use (never import the SDK at registration; locked by `tests/llm/test_lazy_sdk_imports.py`).
    - Add a config entry in `llm_defaults.json` (no `base_url` needed if the SDK handles URLs itself).
-   - Do NOT touch `factory.py` — it is legacy and no longer consulted.
+   - There is no `factory.py` to touch — the legacy factory module was removed; registration via `register_provider` is the only entry point.
 
 3. **Credentials + agent exposure:**
    - Add a `Credential` subclass in `server/nodes/model/_credentials.py` — surfaces in the Credentials Modal automatically.

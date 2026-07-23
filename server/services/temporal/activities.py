@@ -68,8 +68,10 @@ class NodeExecutionActivities:
     async def execute_node_activity(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a single workflow node with isolated context.
 
-        This activity can run on ANY worker in the cluster, enabling
-        horizontal scaling and multi-tenant distribution.
+        This activity delegates execution over WebSocket back to the
+        originating FastAPI server (ws://{host}:{port}/ws/internal per
+        _resolve_urls), so any worker running it must be able to reach
+        that server -- it is not freely relocatable across a cluster.
 
         Each node execution is independent - if it fails, Temporal will retry
         on the same or different worker without affecting other nodes.

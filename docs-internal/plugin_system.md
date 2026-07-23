@@ -509,12 +509,13 @@ themselves** into those registries from their package `__init__.py`.
 
 ```
 server/nodes/telegram/
-├── __init__.py          # imports + 5 register_* calls covering 5 registries (no logic)
+├── __init__.py          # imports + register_* calls covering six registries (no logic)
 ├── _credentials.py      # TelegramCredential (ApiKeyCredential)
 ├── _service.py          # TelegramService singleton (bot lifecycle)
 ├── _handlers.py         # WebSocket handlers + WS_HANDLERS dict
 ├── _filters.py          # build_telegram_filter (event_waiter filter)
 ├── _refresh.py          # refresh_telegram_status + precheck_telegram_trigger
+├── _events.py           # typed CloudEvents factory + broadcast_telegram_status
 ├── telegram_send.py     # ActionNode + AI tool
 └── telegram_receive.py  # TriggerNode
 ```
@@ -782,10 +783,11 @@ All Wave 10 invariants in `test_node_spec.py` still run; Wave 11 invariants in `
 - F4.B — `AgentWorkflow` child workflow + 3 agent activities behind
   `TEMPORAL_AGENT_WORKFLOW_ENABLED` flag (commit `a4d009e`). Tool
   calls inside AI agents become per-type activities.
-- Wave 11.E — Declarative credentials: 18 `Credential` subclasses
+- Wave 11.E — Declarative credentials: 25 `Credential` subclasses
   (GoogleCredential + GoogleMapsCredential + TwitterCredential +
-  TelegramCredential + ApifyCredential + 10 LLM providers + 3 inline
-  search credentials). 29 plugins now declare `credentials = (...)`.
+  TelegramCredential + ApifyCredential + 12 LLM providers + 3 inline
+  search credentials + Stripe / Vercel / GitHub / Cloudflare /
+  WhatsApp). 29 plugins now declare `credentials = (...)`.
   Agents stay poly-provider (empty tuple).
 - Wave 11.E.1 — Modularised credentials into per-domain
   `nodes/<group>/_credentials.py` files. `server/credentials/`
@@ -815,7 +817,9 @@ All Wave 10 invariants in `test_node_spec.py` still run; Wave 11 invariants in `
   execute_android_service_tool}` with a single canonical
   `SERVICE_ID_MAP` and a shared `_execute_with_broadcast` helper
   (previously duplicated in `tools.py`). `tools.py` from 1,255 → 821
-  LOC.
+  LOC. (`execute_android_toolkit` has since been removed along with the
+  `androidTool` aggregator node; only `execute_android_service_tool`
+  remains.)
 - Wave 11.G — Nodes cookbook (`server/nodes/README.md`) + CLAUDE.md
   plugin section + this file refreshed to match shipped state.
 - Wave 11.H — Self-contained plugin folders. Six generic registries
@@ -1137,7 +1141,11 @@ Drop-in HMAC schemes covering the major providers:
 | `HmacVerifier` | configurable header + prefix | HMAC-SHA256 over body | generic fallback |
 
 Each verifier raises `ValueError` on mismatch; `WebhookSource.handle`
-catches it and returns HTTP 400.
+catches it and returns HTTP 400. When a verifier is declared but no
+signing secret resolves, `handle` fails closed: HTTP 503 with
+`Retry-After: 5` (the provider retries the delivery once the secret
+lands). The legacy generic `/webhook/{path}` route used by
+`webhookTrigger` is unaffected.
 
 ### Wiring helpers
 

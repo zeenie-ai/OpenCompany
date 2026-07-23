@@ -621,10 +621,11 @@ natively by LiteLLM *and* enforced by our adapter regardless.)
 **Phase 3 — delete dead code.**
 - Delete: `providers/openai.py` (200), `anthropic.py` (203), `gemini.py` (268 — minus
   the AQ. fallback if the contingency fired), `openrouter.py` (99), `_compat.py` (109),
-  provider imports in `providers/__init__.py`, `factory.py` (75), the flag + legacy
-  branch in `unifier.py`, and the `create_provider` / `is_native_provider` /
-  `NATIVE_PROVIDERS` exports.
-- Tests: delete `test_providers.py` + `test_factory.py`; rewrite
+  provider imports in `providers/__init__.py`, the flag + legacy
+  branch in `unifier.py`. (`factory.py` and its `create_provider` /
+  `is_native_provider` / `NATIVE_PROVIDERS` exports were already deleted
+  independently of this RFC — ChatUnifier + registry is the only dispatch layer.)
+- Tests: delete `test_providers.py` (`test_factory.py` is already gone with `factory.py`); rewrite
   `test_provider_self_registration.py` (data-driven registration) and the
   provider-construction halves of `test_vertex_key.py` (detection + curated-list halves
   survive); update `test_plugin_shape.py` grep-guards. Surviving unchanged:

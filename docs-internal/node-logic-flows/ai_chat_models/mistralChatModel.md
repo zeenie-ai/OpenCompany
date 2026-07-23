@@ -64,7 +64,7 @@ flowchart TD
   D -- no --> X[error envelope]
   D -- yes --> E[detect_ai_provider -> 'mistral']
   E --> F[Strip 'owner/' prefix]
-  F --> G[Native path: create_provider mistral<br/>OpenAI SDK w/ Mistral base_url]
+  F --> G[ChatUnifier.chat -> registry.get_provider mistral<br/>OpenAI SDK w/ Mistral base_url]
   G --> H[provider.chat - thinking ignored]
   H --> I[success envelope, thinking=null]
   G -- Exception --> X

@@ -21,7 +21,7 @@ Related docs:
 
 ## Execution Modes
 
-`WorkflowService` in `server/services/workflow.py` is a thin facade (~460 lines) that routes every workflow run through one of three execution modes. Selection is based on available infrastructure:
+`WorkflowService` in `server/services/workflow.py` is a thin facade (~460 lines) that routes every workflow run based on available infrastructure. In every shipped configuration the effective routing is Temporal -> sequential:
 
 ```
 workflow.execute(workflow_id, workflow_data)
@@ -33,20 +33,9 @@ workflow.execute(workflow_id, workflow_data)
     +---------------------+             v
             | no                   TemporalExecutor
             v                      (per-node activities,
-    +---------------------+         retries, horizontal scaling)
-    | Redis available?    |
-    +---------------------+
-            | yes --> _execute_parallel()
-            |             |
-            v             v
-            |         WorkflowExecutor
-            |         (decide loop, Kahn layers,
-            |          distributed locking)
-            |
-            | no --> _execute_sequential()
-            v
-        Sequential fallback
-        (simple topological walk)
+    _execute_sequential()           retries, horizontal scaling)
+    Sequential fallback
+    (simple topological walk)
 ```
 
 ### 1. Temporal Distributed (primary production mode)
@@ -55,21 +44,21 @@ When `TEMPORAL_ENABLED=true` and the Temporal server is reachable, every workflo
 
 Full dispatch matrix + activity inventory (legacy + per-type + the 5 F4.B agent activities) + worker configuration + heartbeat semantics live in [TEMPORAL_ARCHITECTURE.md](TEMPORAL_ARCHITECTURE.md). Tool-call dispatch under F4.A: [tool_building_pipeline.md §9](./tool_building_pipeline.md).
 
-### 2. Parallel Local (Redis)
+### 2. Sequential Fallback
 
-When Temporal is not enabled but Redis is available, workflows use `WorkflowExecutor` in `services/execution/executor.py`:
+When Temporal is not available, workflow execution falls back to a simple topological walk with no parallelism, no caching, and no retry. Intended only for minimal environments and CI smoke tests.
+
+### Redis-parallel branch (unreachable in shipped configs)
+
+`workflow.py` still contains a `_execute_parallel()` branch that routes to `WorkflowExecutor` in `services/execution/executor.py` when Redis is enabled:
 
 - Conductor's decide pattern in `_workflow_decide()` under distributed Redis SETNX locks
-- Fork/join via `asyncio.gather()` for concurrent node execution
+- Continuous scheduling via `asyncio.wait(FIRST_COMPLETED)` (`_execute_with_continuous_scheduling` — the only scheduling implementation; the legacy Fork/Join `_execute_parallel_nodes` helper was removed)
 - Prefect-style result caching keyed by `hash_inputs()` (see `services/execution/cache.py`)
 - Crash recovery via `RecoverySweeper` with heartbeats
 - Dead Letter Queue for failed nodes (`services/execution/dlq.py`)
 
-This is the local-development default when `REDIS_ENABLED=true` is set in `server/.env`.
-
-### 3. Sequential Fallback
-
-When neither Temporal nor Redis is available, workflow execution falls back to a simple topological walk with no parallelism, no caching, and no retry. Intended only for minimal environments and CI smoke tests.
+No shipped configuration sets `REDIS_ENABLED=true`, so this branch is unreachable in practice; treat Temporal -> sequential as the routing contract.
 
 ---
 
@@ -144,17 +133,12 @@ async def _workflow_decide(self, ctx: ExecutionContext):
         if not ready_nodes:
             return  # All done or stuck
 
-        # 2. Execute batch (parallel if multiple)
-        if len(ready_nodes) > 1:
-            await self._execute_parallel_nodes(ctx, ready_nodes)
-        else:
-            await self._execute_single_node(ctx, ready_nodes[0])
+        # 2. Execute with continuous scheduling -- newly-ready
+        #    dependents start as soon as their dependency completes
+        await self._execute_with_continuous_scheduling(ctx, ready_nodes)
 
         # 3. Checkpoint and persist
         await self.cache.save_execution_state(ctx)
-
-        # 4. Recurse for next batch
-        await self._decide_iteration(ctx)
 ```
 
 **Benefits**:
@@ -163,27 +147,28 @@ async def _workflow_decide(self, ctx: ExecutionContext):
 - Natural support for parallel execution
 - Easy to add features (retries, timeouts)
 
-### 2. Fork/Join Parallel Execution
+### 2. Continuous Scheduling (Temporal/Conductor Pattern)
 
-**Source**: Netflix Conductor + Java ForkJoinPool
+**Source**: Temporal + Netflix Conductor
 
-Independent nodes (no dependencies on each other) execute in parallel using `asyncio.gather()`.
+Independent nodes execute in parallel, and each completion immediately unlocks its dependents — no layer barrier. `_execute_with_continuous_scheduling` is the only scheduling implementation (the earlier layer-based Fork/Join helper `_execute_parallel_nodes`, which `asyncio.gather()`-ed a whole batch and waited for all of it, was removed as dead code).
 
 ```python
-async def _execute_parallel_nodes(self, ctx, nodes):
-    """Fork/Join pattern with asyncio.gather."""
-    tasks = [
-        self._execute_node_with_caching(ctx, node)
-        for node in nodes
-    ]
+async def _execute_with_continuous_scheduling(self, ctx, initial_nodes):
+    """When any node completes, immediately start newly-ready dependents."""
+    task_to_node = {
+        asyncio.create_task(self._execute_node_with_caching(ctx, n)): n
+        for n in initial_nodes
+    }
 
-    # True parallelism - all tasks run concurrently
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    # Join - process all results
-    for node, result in zip(nodes, results):
-        if isinstance(result, Exception):
-            ctx.status = WorkflowStatus.FAILED
+    while task_to_node:
+        done, _ = await asyncio.wait(task_to_node, return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            node = task_to_node.pop(task)
+            # ... record result, then start any newly-ready dependents
+            for ready in self._find_ready_nodes(ctx):
+                task_to_node[asyncio.create_task(
+                    self._execute_node_with_caching(ctx, ready))] = ready
 ```
 
 **DAG Layer Computation** (Kahn's Algorithm):

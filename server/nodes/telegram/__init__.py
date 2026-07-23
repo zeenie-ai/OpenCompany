@@ -14,12 +14,14 @@ waiter, trigger handler) read at dispatch time:
     telegram_send.py    workflow ActionNode + AI tool
     telegram_receive.py workflow TriggerNode
 
-On import, this package self-registers four callbacks:
+On import, this package self-registers six callbacks:
 
-    1. WS handlers     -> services.ws_handler_registry
-    2. Event filter    -> services.event_waiter.FILTER_BUILDERS
-    3. Trigger precheck-> services.event_waiter._TRIGGER_PRECHECKS
-    4. Status refresh  -> services.status_broadcaster._SERVICE_REFRESH_CALLBACKS
+    1. WS handlers      -> services.ws_handler_registry
+    2. Event filter     -> services.event_waiter.FILTER_BUILDERS
+    3. Trigger precheck -> services.event_waiter._TRIGGER_PRECHECKS
+    4. Status refresh   -> services.status_broadcaster._SERVICE_REFRESH_CALLBACKS
+    5. Output schemas   -> services.node_output_schemas (telegramReceive + telegramSend)
+    6. Canary trigger   -> services.deployment.canary_registry (telegramReceive)
 
 Adding a new plugin folder follows the same shape -- consumers do not
 need to learn its name.

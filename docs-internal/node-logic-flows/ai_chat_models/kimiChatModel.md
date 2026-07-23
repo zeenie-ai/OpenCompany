@@ -66,7 +66,7 @@ flowchart TD
   D -- yes --> E[detect_ai_provider -> 'kimi']
   E --> F[Strip 'owner/' prefix]
   F --> G[native_resolve_temperature<br/>forces 0.6 or 1.0 based on model + thinking]
-  G --> H[Native path: create_provider kimi<br/>OpenAI SDK w/ Moonshot base_url]
+  G --> H[ChatUnifier.chat -> registry.get_provider kimi<br/>OpenAI SDK w/ Moonshot base_url]
   H --> I[provider.chat]
   I --> J[success envelope]
   H -- Exception --> X

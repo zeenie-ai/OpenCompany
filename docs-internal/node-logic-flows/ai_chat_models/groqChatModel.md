@@ -11,7 +11,7 @@
 
 ## Purpose
 
-Ultra-fast inference via Groq's LPU hardware. Models include Llama 3.x / 4, Qwen3-32b, GPT-OSS. The `ChatModelBase.chat` operation calls `AIService.execute_chat`; unlike OpenAI/Anthropic/Gemini, Groq routes through the **LangChain fallback** (`create_model` + `chat_model.invoke`) because `is_native_provider('groq')` returns False.
+Ultra-fast inference via Groq's LPU hardware. Models include Llama 3.x / 4, Qwen3-32b, GPT-OSS. The `ChatModelBase.chat` operation calls `AIService.execute_chat`, which routes every provider through `ChatUnifier`; Groq is one of the eight OpenAI-compatible providers registered in `providers/_compat.py` (the chat-path LangChain fallback was retired — LangChain `ChatGroq` remains only on the agent path).
 
 ## Inputs (handles)
 
@@ -66,44 +66,41 @@ flowchart TD
   D -- no --> X[error envelope]
   D -- yes --> E[detect_ai_provider -> 'groq']
   E --> F[Strip 'owner/' prefix from model<br/>non-OpenRouter]
-  F --> G[is_native_provider groq? NO]
-  G --> H[LangChain fallback:<br/>self.create_model groq + ChatOpenAI-compatible]
-  H --> I[chat_model.invoke messages]
-  I --> J[extract_thinking_from_response<br/>reads additional_kwargs.reasoning]
-  J --> K[success envelope]
-  H -- Exception --> X
+  F --> G[ChatUnifier.chat provider='groq']
+  G --> H[registry.get_provider groq<br/>_compat.py spec: OpenAIProvider + Groq base_url]
+  H --> I[await provider.chat -> LLMResponse]
+  I --> K[success envelope]
+  H -- typed SDK error --> X
 ```
 
 ## Decision Logic
 
 - **Validation**: missing api_key / empty prompt -> error envelope.
 - **Provider routing**: matches `'groq' in node_type.lower()`. Note the ordering in `detect_ai_provider`: deepseek/kimi/mistral/cerebras checked first, so none of those accidentally resolve to groq.
-- **LangChain fallback**: `is_native_provider('groq')` is False -> goes through `create_model` -> `chat_model.invoke`. The model's `base_url` is loaded from `llm_defaults.json`.
+- **Native OpenAI-compatible path**: `ChatUnifier` resolves the `groq` spec registered in `providers/_compat.py` (reuses `OpenAIProvider` with the `base_url` from `llm_defaults.json`). No LangChain on the chat path.
 - **Reasoning**: only Qwen3-32b actually honors `reasoningFormat`. Non-Qwen models ignore the flag.
 - **Model string scrubbing**: `[FREE] ` prefix stripped; `owner/` prefix stripped (non-OpenRouter).
-- **Finish reason**: hardcoded to `"stop"` on the LangChain path (no fine-grained mapping).
 
 ## Side Effects
 
 - **Database writes**: none on bare chat path.
 - **Broadcasts**: none.
-- **External API calls**: `POST https://api.groq.com/openai/v1/chat/completions` via LangChain's `ChatOpenAI` with `base_url` override.
+- **External API calls**: `POST https://api.groq.com/openai/v1/chat/completions` via the native `openai` SDK with `base_url` override.
 - **File I/O**: none.
 - **Subprocess**: none.
 
 ## External Dependencies
 
 - **Credentials**: `auth_service.get_api_key('groq', 'default')` plus optional `groq_proxy`.
-- **Services**: `langchain_openai.ChatOpenAI` (base_url-ed), `AIService.create_model`.
-- **Python packages**: `langchain-openai`.
+- **Services**: `ChatUnifier` + `OpenAIProvider` (base_url-ed) on the chat path; `langchain_groq.ChatGroq` on the agent path.
+- **Python packages**: `openai` (chat path), `langchain-groq` (agent path).
 - **Environment variables**: none.
 
 ## Edge cases & known limits
 
-- **LangChain path, not native SDK**: unlike OpenAI/Anthropic/Gemini/OpenRouter, Groq goes through LangChain. This means model fetching also uses the curated list via httpx, not the native `fetch_models`.
 - **Reasoning only on Qwen3-32b**: QwQ has been removed from Groq. Other models ignore `reasoningFormat`.
 - **`reasoningFormat=hidden` suppresses `thinking`**: response contains only the final answer.
-- **Finish reason always `"stop"`**: fine-grained reasons (length, content_filter, tool_calls) are flattened.
+- **Finish reason**: passed through from the API response (`"stop"` fallback when absent).
 - **Errors swallowed into envelope**.
 
 ## Related

@@ -20,11 +20,12 @@ Each workflow node executes as a **Temporal activity** with its own isolated con
 
 ## Execution Routing & Running
 
-`WorkflowService.execute_workflow` picks one of three executors in priority order (`server/services/workflow.py`):
+`WorkflowService.execute_workflow` routes each run (`server/services/workflow.py`):
 
 1. If `TEMPORAL_ENABLED=true` and Temporal is configured → `_execute_temporal()` (the distributed path documented in this file).
-2. Else if Redis is available → `_execute_parallel()` (local parallel orchestration via `WorkflowExecutor`).
-3. Else → `_execute_sequential()` (single-threaded fallback).
+2. Else → `_execute_sequential()` (single-threaded fallback).
+
+(The Redis-backed `_execute_parallel()` branch still exists in the facade but is unreachable in all shipped configs — no shipped configuration enables Redis — so the effective routing is Temporal → sequential.)
 
 **Running with Temporal** — the Temporal server and the embedded worker start automatically with every launch script:
 
@@ -298,7 +299,7 @@ Pre-flight invariants live in `server/tests/test_task_queue_coverage.py` (every 
 
 ### Worker Performance Tuning (Waves 17-18)
 
-All knobs live in `services/temporal/worker.py`; every default is env-overridable. `DEPLOYMENT_MODE` (`local` / `cloud` / `self_hosted`) is the topology hint (`core/config.py`).
+All knobs live in `services/temporal/worker.py`; every default is env-overridable. `DEPLOYMENT_MODE` (`local` / `cloud` / `self_hosted`) is the topology hint (`core/config.py`) and also feeds the dev-placeholder-secret startup guard (`dev_secret_offenders()` warns when placeholders survive outside `local`). `company deploy` sets `DEPLOYMENT_MODE=cloud` on deployed VMs (`cli/commands/deploy/_secrets.py::build_app_env`).
 
 | Queue | Concurrency (cloud) | Concurrency (local = halved, floor 1) | Rate limit (act/s) | Slot sizing |
 |---|---|---|---|---|
@@ -560,7 +561,7 @@ The Temporal binary + persistence are managed in-process by the plugin-folder pa
 
 | Setting | Env var | `.env.template` default | Purpose |
 |---|---|---|---|
-| `temporal_enabled` | `TEMPORAL_ENABLED` | `true` | Master toggle. When false, `WorkflowService` falls back to parallel/sequential executor. |
+| `temporal_enabled` | `TEMPORAL_ENABLED` | `true` | Master toggle. When false, `WorkflowService` falls back to the sequential executor. |
 | `temporal_server_address` | `TEMPORAL_SERVER_ADDRESS` | `localhost:7233` | Address the Python SDK client connects to. |
 | `temporal_namespace` | `TEMPORAL_NAMESPACE` | `default` | Bootstrapped at server start. |
 | `temporal_task_queue` | `TEMPORAL_TASK_QUEUE` | `machina-tasks` | Default task queue for the embedded worker. |

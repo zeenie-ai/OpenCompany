@@ -11,7 +11,7 @@
 
 ## Purpose
 
-Ultra-fast inference on Cerebras' custom AI hardware. Models include Llama 3.1, GPT-OSS-120b, Qwen-3-235b. The `ChatModelBase.chat` operation calls `AIService.execute_chat`. Like Groq, routes through the **LangChain fallback** (`is_native_provider('cerebras')` is False).
+Ultra-fast inference on Cerebras' custom AI hardware. Models include Llama 3.1, GPT-OSS-120b, Qwen-3-235b. The `ChatModelBase.chat` operation calls `AIService.execute_chat`, which routes through `ChatUnifier`. Like Groq, Cerebras is one of the eight OpenAI-compatible providers registered in `providers/_compat.py` (the chat-path LangChain fallback was retired; LangChain `ChatCerebras` remains only on the agent path).
 
 ## Inputs (handles)
 
@@ -67,18 +67,18 @@ flowchart TD
   D -- no --> X[error envelope]
   D -- yes --> E[detect_ai_provider -> 'cerebras']
   E --> F[Strip 'owner/' prefix]
-  F --> G[LangChain fallback path]
-  G --> H[ChatOpenAI w/ base_url=api.cerebras.ai/v1]
-  H --> I[invoke messages]
+  F --> G[ChatUnifier.chat provider='cerebras']
+  G --> H[registry.get_provider cerebras<br/>_compat.py spec: OpenAIProvider + base_url=api.cerebras.ai/v1]
+  H --> I[await provider.chat -> LLMResponse]
   I --> J[success envelope]
-  H -- Exception --> X
+  H -- typed SDK error --> X
 ```
 
 ## Decision Logic
 
 - **Validation**: missing api_key / empty prompt -> error envelope.
 - **Provider routing**: `detect_ai_provider` matches `'cerebras' in node_type.lower()` **before** the groq branch, so routing is unambiguous.
-- **LangChain fallback**: `is_native_provider('cerebras')` False. Uses `ChatOpenAI` with Cerebras base_url.
+- **Native OpenAI-compatible path**: `ChatUnifier` resolves the `cerebras` spec registered in `providers/_compat.py` (reuses `OpenAIProvider` with the Cerebras base_url). No LangChain on the chat path.
 - **Reasoning**: same parsed/hidden mechanism as Groq Qwen - only the Qwen-3-235b variant honors it.
 - **Temperature range**: narrower (0-1.5 clamp) than OpenAI/Groq. `_resolve_temperature` applies the clamp.
 
@@ -86,20 +86,19 @@ flowchart TD
 
 - **Database writes**: none on bare chat path.
 - **Broadcasts**: none.
-- **External API calls**: `POST https://api.cerebras.ai/v1/chat/completions` via LangChain `ChatOpenAI` with `base_url` override.
+- **External API calls**: `POST https://api.cerebras.ai/v1/chat/completions` via the native `openai` SDK with `base_url` override.
 - **File I/O**: none.
 - **Subprocess**: none.
 
 ## External Dependencies
 
 - **Credentials**: `auth_service.get_api_key('cerebras', 'default')` plus optional `cerebras_proxy`.
-- **Services**: `langchain_openai.ChatOpenAI`.
-- **Python packages**: `langchain-openai`.
+- **Services**: `ChatUnifier` + `OpenAIProvider` (base_url-ed) on the chat path; `langchain_cerebras.ChatCerebras` on the agent path.
+- **Python packages**: `openai` (chat path), `langchain-cerebras` (agent path, optional on Python >= 3.13).
 - **Environment variables**: none.
 
 ## Edge cases & known limits
 
-- **LangChain path, not native** (same as Groq).
 - **Temperature capped at 1.5**, not 2.
 - **Reasoning only on Qwen-3-235b**.
 - **Small max output**: 8K for most models; exceeding this surfaces as a provider-side error in the envelope.

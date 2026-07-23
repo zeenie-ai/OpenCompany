@@ -66,7 +66,7 @@ flowchart TD
   D -- no --> X[error envelope]
   D -- yes --> E[detect_ai_provider -> 'deepseek']
   E --> F[Strip 'owner/' prefix]
-  F --> G[Native path: create_provider deepseek<br/>OpenAI SDK w/ DeepSeek base_url]
+  F --> G[ChatUnifier.chat -> registry.get_provider deepseek<br/>OpenAI SDK w/ DeepSeek base_url]
   G --> H[provider.chat]
   H --> I[success envelope]
   G -- Exception --> X

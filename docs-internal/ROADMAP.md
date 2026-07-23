@@ -19,7 +19,7 @@ This document tracks the implementation status of the robust workflow execution 
 
 ### Phase 2: Decide Pattern + Parallel Execution
 - [x] `workflow_decide()` with distributed locking (Conductor pattern)
-- [x] `execute_parallel_nodes()` using `asyncio.gather()` for Fork/Join
+- [x] `execute_parallel_nodes()` using `asyncio.gather()` for Fork/Join (since removed; superseded by continuous scheduling via `asyncio.wait(FIRST_COMPLETED)`)
 - [x] `_compute_execution_layers()` for DAG topological sort
 - [x] `_find_ready_nodes()` to detect nodes with satisfied dependencies
 - [x] Redis distributed locks via SETNX with TTL
@@ -322,7 +322,7 @@ class DLQEntry:
 - `_execute_node_with_retry()` - Wraps node execution with retry loop
 - `_add_to_dlq()` - Adds failed nodes to DLQ after exhausted retries
 - `replay_dlq_entry()` - Re-execute failed node from DLQ
-- `_execute_parallel_nodes()` - Updated to use retry wrapper
+- `_execute_parallel_nodes()` - Updated to use retry wrapper (helper since removed; continuous scheduling is the only implementation)
 - `_execute_single_node()` - Updated to use retry wrapper
 
 #### WebSocket API Handlers (`server/routers/websocket.py`)
@@ -388,8 +388,9 @@ TEMPORAL_TASK_QUEUE=machina-tasks
 
 #### Execution Routing (`workflow.py`)
 1. If `TEMPORAL_ENABLED=true` and Temporal configured -> `_execute_temporal()`
-2. Else if Redis available -> `_execute_parallel()` (local parallel)
-3. Else -> `_execute_sequential()` (fallback)
+2. Else -> `_execute_sequential()` (fallback)
+
+(The Redis-parallel `_execute_parallel()` branch is unreachable in all shipped configs; effective routing is Temporal -> sequential.)
 
 ---
 
@@ -407,7 +408,7 @@ TEMPORAL_TASK_QUEUE=machina-tasks
 | AI Chat Models | 6 | openai, anthropic, gemini, openrouter, groq, cerebras |
 | AI Agents & Memory | 3 | aiAgent, chatAgent, simpleMemory |
 | AI Skills | 9 | claude, whatsapp, memory, maps, http, scheduler, android, code, custom |
-| AI Tools | 4 | calculator, currentTime, webSearch, androidTool |
+| AI Tools | 4 | calculator, currentTime, webSearch, androidTool (androidTool since retired; services connect directly to `input-tools`) |
 | Android Services | 16 | battery, network, system, location, apps(2), automation(6), sensors(2), media(2) |
 | Android Device | 1 | androidDeviceSetup |
 | WhatsApp | 4 | send, connect, receive, chatHistory |

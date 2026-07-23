@@ -153,10 +153,11 @@ class TemporalWorkerManager:
             # workflow.py:_resolve_activity picks one of the two paths per node
             # based on the temporal_per_type_dispatch flag; both must be served
             # by the worker. Per-type activities register WITHOUT a task_queue
-            # filter (cls.task_queue is the *declared* preference; the single
-            # worker actually polls self.task_queue regardless). When
-            # TemporalWorkerPool is wired (future enhancement), per-queue
-            # filtering will move there. Registration cost: ~1.6s startup;
+            # filter here (cls.task_queue is the *declared* preference; this
+            # framework worker polls self.task_queue regardless). Per-queue
+            # filtering lives in TemporalWorkerPool (below in this file),
+            # which is default-on (Wave 16.4) and runs one activity-only
+            # worker per declared queue. Registration cost: ~1.6s startup;
             # zero runtime cost when the flag is off (orchestrator routes to
             # execute_node_activity, per-type entries sit idle).
             #

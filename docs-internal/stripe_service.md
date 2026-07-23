@@ -567,9 +567,11 @@ implements [Stripe's webhook signature scheme](https://stripe.com/docs/webhooks/
 Verifier raises `ValueError` on mismatch; `WebhookSource.handle`
 catches it and returns HTTP 400. If the signing secret hasn't been
 captured yet (race between first webhook and the `whsec_…` banner),
-the framework logs a warning and accepts the event without
-verification — this only happens during the first ~5 seconds of
-daemon startup.
+the framework **fails closed**: it logs a warning and rejects the
+event with HTTP 503 + `Retry-After: 5` instead of accepting it
+unverified. Stripe retries the delivery, so events arriving during
+the first ~5 seconds of daemon startup are re-delivered once the
+secret lands.
 
 ## Status broadcasting — marker token + generic catalogue invalidation
 
@@ -779,11 +781,12 @@ its own credentials at `~/.config/stripe/config.toml` (or
 
 The first ~5 seconds after `stripe_connect`, the secret-capture task
 hasn't yet matched the `whsec_…` line in stderr. If a webhook arrives
-during that window, the framework logs a warning and accepts the
-event without verification. In practice this is benign because Stripe
-won't deliver real events until the daemon is fully ready, but
-synthetic events triggered via `stripe_trigger` immediately after
-connect can hit this path.
+during that window, the framework fails closed: it logs a warning and
+rejects the event with HTTP 503 + `Retry-After: 5` (no unverified
+acceptance). Stripe retries the delivery, so real events are simply
+re-delivered once the secret lands; synthetic events triggered via
+`stripe_trigger` immediately after connect can hit the 503 and are
+retried by the CLI the same way.
 
 ### Single global daemon
 

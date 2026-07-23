@@ -147,7 +147,7 @@ these first before writing new code:
 | `agent/` | `_specialized.SpecializedAgentBase` | Base for 13 specialized agents |
 | `model/` | `_base.ChatModelBase` | 11 chat models inherit → same `@Operation("chat")` body that calls `ai_service.execute_chat` |
 | `android/` | `_base.AndroidServiceBase` | 16 Android services inherit; payload translation + `SERVICE_ID_MAP` lives on this base |
-| `android/` | `_base.execute_android_toolkit` / `execute_android_service_tool` | AI-tool dispatchers — called from `services/handlers/tools.py` for the toolkit aggregator + direct service tool branches |
+| `android/` | `_base.execute_android_service_tool` | AI-tool dispatcher — called from `services/handlers/tools.py` for direct service tools (the `androidTool` aggregator + `execute_android_toolkit` were retired) |
 | `code/` | `_base.CodeExecutorBase` + `_nodejs.NodeJSClient` | Python/JS/TS executors; `monty_executor/` is sandboxed Python via `pydantic-monty` (enforced limits + opt-in capabilities) |
 | `google/` | `_base.build_google_service` / `track_google_usage` | 7 Google plugins (OAuth + API) |
 | `google/` | `_gmail.fetch_email_details` / `mark_email_as_read` | gmail + gmail_receive |
@@ -244,12 +244,13 @@ similar plugin.
 
 ```
 server/nodes/telegram/
-├── __init__.py          # imports + 5 register_* calls covering 5 registries (zero logic)
+├── __init__.py          # imports + register_* calls covering six registries (zero logic)
 ├── _credentials.py      # TelegramCredential subclass
 ├── _service.py          # singleton bot lifecycle (connect / send / poll)
 ├── _handlers.py         # WS_HANDLERS dict (telegram_connect, …)
 ├── _filters.py          # build_telegram_filter (event_waiter filter)
 ├── _refresh.py          # WS-connect refresh + trigger precheck
+├── _events.py           # typed CloudEvents factory + broadcast_telegram_status
 ├── telegram_send.py     # ActionNode + AI tool
 └── telegram_receive.py  # TriggerNode
 ```

@@ -76,8 +76,8 @@ flowchart TD
   G -- yes --> H[detect_ai_provider -> 'openai']
   H --> I[Build NativeThinkingConfig if thinkingEnabled]
   I --> J[Lookup openai_proxy credential]
-  J --> K{is_native_provider?}
-  K -- yes for openai --> L[Native path:<br/>create_provider openai + OpenAI SDK<br/>await provider.chat]
+  J --> K[ChatUnifier.chat provider='openai']
+  K --> L[registry.get_provider openai + OpenAI SDK<br/>await provider.chat]
   L --> M[Build response dict<br/>response / thinking / model / provider / finish_reason]
   M --> N[Return success envelope]
   L -- Exception --> X
@@ -87,7 +87,7 @@ flowchart TD
 
 - **Validation**: missing `api_key` -> ValueError; empty/whitespace `prompt` (via `is_valid_message_content`) -> ValueError. Both produce a `success=false` envelope.
 - **Provider routing**: `detect_ai_provider(node_type)` returns `'openai'` for this node; falls through the else branch in `constants.detect_ai_provider`.
-- **Native vs LangChain**: `is_native_provider('openai')` is True, so the native `openai` SDK is used via `create_provider('openai', api_key, proxy_url=...)`.
+- **Native path**: `ChatUnifier` resolves the self-registered `openai` spec, so the native `openai` SDK is used via `spec.factory(api_key, proxy_url=...)`. (LangChain is agent-path only.)
 - **Model string scrubbing**: strips `[FREE] ` prefix if present. For non-OpenRouter providers (like this one), any `provider/model` slash prefix is stripped so the OpenAI API sees a flat ID.
 - **Thinking config**: only built when `thinkingEnabled` is truthy; passed through to the provider's `chat()` method.
 - **System prompt**: accepts `system_prompt`, `systemMessage`, or `systemPrompt`. Only prepended as a `SystemMessage` when non-empty (`is_valid_message_content`).

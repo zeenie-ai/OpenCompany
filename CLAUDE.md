@@ -16,7 +16,7 @@ This is a React Flow-based workflow automation platform implementing n8n-inspire
 | **[Theme System](./docs-internal/theme_system.md)** | 12-way visual theme system — 2 base (light, dark) + 5 utopian (renaissance, greek, edo, steampunk, atomic) + 5 dystopian (cyber, wasteland, rot, plague, surveillance) — driven by `<html data-theme>` + per-theme CSS files in `client/src/themes/`. Token taxonomy (surface / fg / border / accent / typography / motion) in **hex + `color-mix()`**; `@theme inline` bridge maps `--color-X: var(--X)` (no `hsl()` wrapper); per-theme files own the colour hex, base.css owns the shared `--tint-*` alpha scale; action role tokens (incl. `-ink` readable text), **per-theme `--code-*` syntax tokens** (tier 6 — the code editor, console/output JSON viewers, and chat code blocks paint in each theme's own palette: keyword→trigger, string→success, number→agent, function→model, on an adaptive dark/light code surface; replaced the global dracula `--prism-*` block + dead `getPrismTokenCSS`; the `OutputPanel` JSON viewer reads the same vars), per-theme `--pulse-keyframe` animation system + `.opencompany-*` helpers in `animations.css`, decorative-layer wrappers (`.app-frame` / `.canvas-host` / `.modal-frame`), per-component decorative ornaments (panel textures + canvas decorations + node pseudo-element overlays + theme-specific keyframes), **canvas-node visual contract via `--node-color` CSS custom property** (no inline `background` / `border` on node components — base.css + per-theme CSS owns visuals; `NodeStyle` helper type at [types/NodeTypes.ts](./client/src/types/NodeTypes.ts) makes the inline custom-prop typecheck-clean), **`--node-pulse-color` separate from `--node-color`** so executing-node glow uses each theme's highest-contrast accent regardless of plugin accent (Cyber neon cyan, Surveillance REC red, Renaissance ultramarine, etc.), **`data-page-hidden` animation pause** (toggled by Dashboard's `visibilitychange` listener; base.css declares `html[data-page-hidden] *, *::before, *::after { animation-play-state: paused !important }` to prevent compositor stall on tab return), **per-theme icon glyph system** (290 SVGs across 29 keys × 10 themes via [themedGlyphs.ts](./client/src/assets/icons/themedGlyphs.ts) + theme-aware [NodeIcon.tsx](./client/src/assets/icons/NodeIcon.tsx)), **per-theme canvas-grid + custom cursors** via `--canvas-grid` / `--cursor-default` slots, **decorative HTML primitives** (`<SvgFilterDefs>` mounting `#ink-blot` / `#noise` / `#crt` filter IDs at app root, `<DropCap>` wrapper for Renaissance ornament rule), **parameter panel migrated to Tailwind tokens** (no `useAppTheme()` reads; section headers carry the display-typography triplet; raw `<Button>` swapped to `<ActionButton intent>`), **per-theme scrollbar webkit rules** in all 12 themes, 9-event WebAudio sound system (10 packs via `--sound-pack` token + `useSound()` hook + global hover delegate + sonner toast monkey-patch + `withSound()` HOC + `Sounds.unlock()` gesture-unlock for AudioContext autoplay-policy compliance), `@media (prefers-reduced-motion: reduce)` accessibility, 30 ms throttle on `type` / `hover`, migration recipe, anti-patterns. Read this before adding a new theme, migrating a component to the new contract, or adding a canvas-node component. |
 | **[Design System Bundle](./docs-internal/design-system/IMPLEMENTATION.md)** | Canonical, vendored design-system reference (extracted from this repo; see its `IMPLEMENTATION.md` for the contract). Tokens are **hex + `color-mix()`** (`tokens/{colors,typography,spacing,motion,fonts,base}.css`) — the format the live codebase standardizes on. Includes 34 reference components (`components/`, inline-style reference only — recreate in Tailwind/shadcn idioms), full-app UI kit (`ui_kits/opencompany/index.html`), and 12-theme docs (`guidelines/THEMES.md`, `reference/themes/`). Copy token values verbatim; do not re-derive by eye. Pairs with [Theme System](./docs-internal/theme_system.md). |
 | **[Schema Source of Truth RFC](./docs-internal/schema_source_of_truth_rfc.md)** | Backend is SSOT for node schemas, visual metadata, handlers, palette metadata, icons. Plugin pattern: one `BaseNode` subclass in `server/nodes/<group>/<plugin>/__init__.py`. Wire format: `asset:<key>` / `<lib>:<brand>` / URL / emoji. Endpoint: `/api/schemas/nodes/{type}/spec.json`. Live invariant total via `pytest --collect-only`. |
-| **[Plugin System (Wave 11)](./docs-internal/plugin_system.md)** | Class-based plugin-first architecture. `BaseNode` / `ActionNode` / `TriggerNode` / `ToolNode` + `@Operation` decorator. Pydantic `Params`/`Output`. Declarative `Routing` DSL + `Connection` facade (Nango pattern). 18 `Credential` subclasses live in each node folder's `_credentials.py` (or inline for single-use). `TaskQueue` constants route to Temporal worker pools. Plugins live across 9 queues (live count via `glob server/nodes/**/__init__.py`); handler bodies fully inlined (`services/handlers/` shrank 12.8K → 1.1K LOC across 16 → 4 files; only cross-cutting orchestration remains: `tools.py` AI-tool dispatch + agent delegation, `triggers.py` generic trigger-node handler, `todo.py` writeTodos shim — `google_auth.py` was retired into `nodes/google/_auth_helper.py`). **Wave 11.H added "self-contained plugin folders"** — up to six generic registries (`ws_handler_registry`, `register_router`, `event_waiter.{register_filter_builder,register_trigger_precheck}`, `status_broadcaster.register_service_refresh`, `node_output_schemas.register_output_schema`) so rich plugins like telegram own their entire surface area without core-services edits. |
+| **[Plugin System (Wave 11)](./docs-internal/plugin_system.md)** | Class-based plugin-first architecture. `BaseNode` / `ActionNode` / `TriggerNode` / `ToolNode` + `@Operation` decorator. Pydantic `Params`/`Output`. Declarative `Routing` DSL + `Connection` facade (Nango pattern). 25 `Credential` subclasses live in each node folder's `_credentials.py` (or inline for single-use). `TaskQueue` constants route to Temporal worker pools. Plugins live across 9 queues (live count via `glob server/nodes/**/__init__.py`); handler bodies fully inlined (`services/handlers/` shrank 12.8K → 1.1K LOC across 16 → 4 files; only cross-cutting orchestration remains: `tools.py` AI-tool dispatch + agent delegation, `triggers.py` generic trigger-node handler, `todo.py` writeTodos shim — `google_auth.py` was retired into `nodes/google/_auth_helper.py`). **Wave 11.H added "self-contained plugin folders"** — up to six generic registries (`ws_handler_registry`, `register_router`, `event_waiter.{register_filter_builder,register_trigger_precheck}`, `status_broadcaster.register_service_refresh`, `node_output_schemas.register_output_schema`) so rich plugins like telegram own their entire surface area without core-services edits. |
 | **[Nodes Cookbook](./server/nodes/README.md)** | 5-minute recipe + folder map + shared helpers (`_base.py` / `_inline.py` per domain) + shared credentials + **canonical folder-per-plugin shape (telegram is the reference implementation)** + contract invariants + common pitfalls. Lives next to the plugin files. |
 | **[Node Creation Guide](./docs-internal/node_creation.md)** | Canonical plugin recipe — one self-contained folder per plugin under `server/nodes/<group>/<plugin>/`, rooted at `__init__.py`. Multi-file split (`_service.py` / `_handlers.py` / etc.) when the plugin owns long-lived state. Zero frontend edits, zero core-services edits. Auto-registers via `BaseNode.__init_subclass__` + the six `register_*` hooks. Covers tool nodes, dual-purpose nodes (workflow + AI tool), and specialized agents as variations of the same recipe. |
 | **[Agent Architecture](./docs-internal/agent_architecture.md)** | How AI Agent and Chat Agent discover skills/tools, inject them into LLM prompts, and execute via the plain-async `_run_agent_loop` |
@@ -81,7 +81,7 @@ Every plugin is a self-contained folder under `server/nodes/<group>/<plugin>/` r
 - [server/nodes/README.md](./server/nodes/README.md) — 5-minute walkthrough with the canonical folder template
 - [docs-internal/plugin_system.md → Self-contained plugin folders](./docs-internal/plugin_system.md#self-contained-plugin-folders) — full reference, plus the **up-to-six generic registries** plugins self-wire into (`register_ws_handlers`, `register_router`, `register_filter_builder`, `register_trigger_precheck`, `register_service_refresh`, `register_output_schema`)
 - [docs-internal/node_creation.md](./docs-internal/node_creation.md) — decision tree for action / trigger / tool / dual-purpose / specialized-agent nodes
-- [server/nodes/telegram/](./server/nodes/telegram/) — reference implementation of the multi-file split (`_service.py` / `_handlers.py` / `_filters.py` / `_refresh.py` / `_credentials.py` / two node files)
+- [server/nodes/telegram/](./server/nodes/telegram/) — reference implementation of the multi-file split (`_service.py` / `_handlers.py` / `_filters.py` / `_refresh.py` / `_credentials.py` / `_events.py` / two node files)
 
 **Wire format is the contract — not module paths.** The frontend identifies plugin commands by WebSocket message-type strings (`telegram_connect`, `telegram_status`, …). Moving handler bodies between Python files is invisible to the frontend so long as the registered keys stay the same.
 
@@ -90,7 +90,7 @@ Every plugin is a self-contained folder under `server/nodes/<group>/<plugin>/` r
 ### 1. Use Existing Patterns - No Tribal Code
 - **Never add ad-hoc workarounds** - Use the established patterns documented in DESIGN.md
 - **Conductor Decide Pattern** - All orchestration goes through `_workflow_decide()` loop
-- **Fork/Join Parallelism** - Use `asyncio.gather()` for concurrent node execution
+- **Continuous Scheduling** - Dependent nodes start immediately via `asyncio.wait(FIRST_COMPLETED)`; the layer-barrier Fork/Join helper (`_execute_parallel_nodes`) was removed
 - **Prefect Task Caching** - Cache results via `hash_inputs()` and `generate_cache_key()`
 - **Distributed Locking** - Use Redis SETNX pattern for concurrent access control
 
@@ -134,7 +134,7 @@ server/services/
 │                            #  nodes/agent/claude_code_agent/_oauth.py — CLAUDE_CONFIG_DIR=<DATA_DIR>/claude/)
 ├── tracked_http.py          # HTTPX event hooks for automatic API cost tracking
 ├── whatsapp_service.py      # WhatsApp RPC proxy helpers (used by nodes/whatsapp/*, not an APIRouter)
-├── handlers/                # Cross-cutting orchestration only (Wave 11: 16 → 3 files, 12.8K → 1.1K LOC)
+├── handlers/                # Cross-cutting orchestration only (Wave 11: 16 → 4 files, 12.8K → 1.1K LOC)
 │   ├── tools.py             # AI-tool dispatch + agent delegation (~821 LOC)
 │   ├── triggers.py          # Generic event-trigger handler
 │   ├── todo.py              # writeTodos execution shim (used by every agent)
@@ -143,7 +143,6 @@ server/services/
 │   ├── __init__.py          # Public API exports
 │   ├── protocol.py          # ThinkingConfig, Message, LLMResponse, LLMProvider Protocol
 │   ├── config.py            # ProviderConfig, resolve_max_tokens, resolve_temperature
-│   ├── factory.py           # create_provider() lazy-import factory
 │   ├── registry.py          # ProviderSpec + register_provider — sdk_exception_refs are LAZY "module:Class" strings resolved via pkgutil.resolve_name at except/read time; NEVER import an SDK at registration (locked by tests/llm/test_lazy_sdk_imports.py)
 │   ├── unifier.py           # ChatUnifier facade — routes chat/fetch_models, translates typed SDK errors → NodeUserError, applies incompatible_models filter
 │   ├── vertex.py            # Vertex / Agent-Platform key handling
@@ -225,8 +224,8 @@ Persistent Node.js server for JavaScript/TypeScript code execution, replacing su
 │         ▲                                                    │
 │         │                                                    │
 │  ┌──────┴─────────┐                                         │
-│  │ code.py        │                                         │
-│  │ handlers       │                                         │
+│  │ nodes/code/    │                                         │
+│  │ plugins        │                                         │
 │  └────────────────┘                                         │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -242,9 +241,9 @@ server/nodejs/
     └── package.json
 
 server/services/
-├── nodejs_client.py          # Async HTTP client for Node.js server
-└── handlers/
-    └── code.py               # handle_javascript_executor, handle_typescript_executor
+└── nodejs_client.py          # Async HTTP client for Node.js server
+
+server/nodes/code/                # Executor plugins (javascript_executor, typescript_executor)
 ```
 
 **Endpoints:**
@@ -688,7 +687,7 @@ Node groups (palette categories): agent, model, skill, tool, trigger, workflow, 
 
 ### Temporal Distributed Execution
 
-Workflows execute via Temporal for durability and horizontal scaling, gated by `TEMPORAL_ENABLED`. Three dispatch paths exist — legacy single `execute_node_activity` (fallback), per-type `node.{type}.v{version}` activities (F4.A, `TEMPORAL_PER_TYPE_DISPATCH=true`), and Agent-as-child-workflow (F4.B, `TEMPORAL_AGENT_WORKFLOW_ENABLED=true`) — with `rlm_agent`/`claude_code_agent` always bypassing AgentWorkflow. **Per-queue activity routing is production-default (Wave 16)**: a `TemporalWorkerPool` runs one activity-only worker per plugin-declared `cls.task_queue` (ai-heavy / browser / code-exec / rest-api / messaging / ...) with per-queue concurrency + rate limits + resource-based tuning for ai-heavy/browser; rollback via `TEMPORAL_WORKER_POOL_ENABLED=false`. Resilience knobs (Waves 17-18): `DEPLOYMENT_MODE` (local halves concurrency; sizes the sticky cache), one-shot retry on `agent.execute_llm_step.v1` (LLM calls are not idempotent), observability interceptors (`activity_retry` WARN on re-dispatch), 30s periodic heartbeat during long activity bodies, cron `catchup_window=24h`, poller autoscaling. Execution routing falls back Temporal → Redis-parallel → sequential; the Temporal dev server + embedded worker are managed in-process under `server/services/temporal/` (pooch-downloaded CLI, single `temporal server start-dev` process, gRPC 7233 + Web UI 8080, SQLite at `~/.opencompany/temporal.db`). Full architecture, dispatch matrix, per-node + agent-loop lifecycle, the 7 F4.B `agent.*.v1` activities, heartbeat semantics, delegation input contract, resumption toggle (`TEMPORAL_TERMINATE_RUNNING_ON_STARTUP`), the worker tuning recipe, and all `.env` tunables live in [docs-internal/TEMPORAL_ARCHITECTURE.md](./docs-internal/TEMPORAL_ARCHITECTURE.md).
+Workflows execute via Temporal for durability and horizontal scaling, gated by `TEMPORAL_ENABLED`. Three dispatch paths exist — legacy single `execute_node_activity` (fallback), per-type `node.{type}.v{version}` activities (F4.A, `TEMPORAL_PER_TYPE_DISPATCH=true`), and Agent-as-child-workflow (F4.B, `TEMPORAL_AGENT_WORKFLOW_ENABLED=true`) — with `rlm_agent`/`claude_code_agent` always bypassing AgentWorkflow. **Per-queue activity routing is production-default (Wave 16)**: a `TemporalWorkerPool` runs one activity-only worker per plugin-declared `cls.task_queue` (ai-heavy / browser / code-exec / rest-api / messaging / ...) with per-queue concurrency + rate limits + resource-based tuning for ai-heavy/browser; rollback via `TEMPORAL_WORKER_POOL_ENABLED=false`. Resilience knobs (Waves 17-18): `DEPLOYMENT_MODE` (local halves concurrency; sizes the sticky cache), one-shot retry on `agent.execute_llm_step.v1` (LLM calls are not idempotent), observability interceptors (`activity_retry` WARN on re-dispatch), 30s periodic heartbeat during long activity bodies, cron `catchup_window=24h`, poller autoscaling. Execution routing falls back Temporal → sequential; the Temporal dev server + embedded worker are managed in-process under `server/services/temporal/` (pooch-downloaded CLI, single `temporal server start-dev` process, gRPC 7233 + Web UI 8080, SQLite at `~/.opencompany/temporal.db`). Full architecture, dispatch matrix, per-node + agent-loop lifecycle, the 7 F4.B `agent.*.v1` activities, heartbeat semantics, delegation input contract, resumption toggle (`TEMPORAL_TERMINATE_RUNNING_ON_STARTUP`), the worker tuning recipe, and all `.env` tunables live in [docs-internal/TEMPORAL_ARCHITECTURE.md](./docs-internal/TEMPORAL_ARCHITECTURE.md).
 
 **Temporal tracing ownership is strict.** Register the SDK `TracingInterceptor` exactly once on the shared `Client.connect(...)`; the Python SDK automatically prepends compatible client interceptors to every worker. Never repeat `TracingInterceptor` in `Worker(..., interceptors=...)`. Worker lists contain the distinct `ObservabilityWorkerInterceptor` and plugin-specific worker interceptors only. Exact paired `StartActivity` / `RunActivity` / `CompleteWorkflow` console spans with identical Temporal identities indicate duplicate instrumentation, not duplicate execution; use Temporal Event History and the `node.<type>.execute` application span to verify actual attempts. See the tracing and debugging sections in [TEMPORAL_ARCHITECTURE.md](./docs-internal/TEMPORAL_ARCHITECTURE.md) and [errors.md](./docs-internal/errors.md).
 
@@ -707,31 +706,16 @@ company help         # Show all commands
 
 ### npm Scripts
 ```bash
-# Core
-npm run start            # Start all services (client, backend, WhatsApp, Temporal)
-npm run stop             # Stop all services
-npm run build            # Build for production
-npm run clean            # Clean build artifacts
-
-# Docker (development)
-npm run docker:up        # Start dev stack
-npm run docker:down      # Stop dev stack
-npm run docker:build     # Build images
-npm run docker:logs      # View logs
-
-# Docker (production)
-npm run docker:prod:up   # Start production
-npm run docker:prod:down # Stop production
-npm run deploy           # Deploy to server
+# Core (thin wrappers over the Python CLI)
+npm run start            # Start all services (python -m cli start)
+npm run stop             # Stop all services (python -m cli stop)
+npm run build            # Build for production (python -m cli build)
+npm run clean            # Clean build artifacts (python -m cli clean)
+npm run deploy           # Self-deploy to a cloud VM (python -m cli deploy)
 ```
 
 ### Cross-Platform Scripts
-All scripts in `scripts/` are cross-platform Node.js (Windows, macOS, Linux, WSL, Git Bash):
-- `start.js` - Starts services, auto-installs deps, frees ports
-- `stop.js` - Kills processes on configured ports
-- `build.js` - Full production build (client, Python, WhatsApp)
-- `clean.js` - Removes node_modules, dist, .venv
-- `docker.js` - Docker Compose wrapper with v2 detection and Redis profile support
+Service orchestration lives in the Python CLI (`company start/dev/stop/build/clean/serve/daemon/deploy/docs/version` — see `cli/`). The `scripts/` directory retains only the npm install lifecycle helpers (`install.js`, `preinstall.js`, `postinstall.js`) and `serve-client.js`.
 
 See **[Scripts Reference](./docs-internal/SCRIPTS.md)** for full documentation.
 
@@ -1157,6 +1141,8 @@ VM (new deployments use the `opencompany` resource id), firewall, artifact bucke
 account, and a cloud-init startup script that installs Node 22 + uv + the package and runs
 `company serve` under systemd. Login gate = built-in auth (`VITE_AUTH_ENABLED=true`,
 `AUTH_MODE=single`) with the owner credential generated at deploy time and seeded on first boot.
+`build_app_env` (`cli/commands/deploy/_secrets.py`) also sets `DEPLOYMENT_MODE=cloud` on
+deployed VMs and mints fresh `JWT_SECRET_KEY` / `SECRET_KEY` / `API_KEY_ENCRYPTION_KEY` per deploy.
 
 ```bash
 company deploy up --provider gcp --owner-email you@example.com   # provision + install + print URL/creds
@@ -1459,11 +1445,10 @@ Tool nodes display execution status via the standard node status system:
 | braveSearch | BraveSearchSchema | `handle_brave_search()` | Brave Search API web results |
 | serperSearch | SerperSearchSchema | `handle_serper_search()` | Google SERP via Serper API |
 | perplexitySearch | PerplexitySearchSchema | `handle_perplexity_search()` | AI-powered search with citations |
-| androidTool | AndroidToolSchema | `_execute_android_toolkit()` | Android device control via connected services |
 | Android service nodes | Per-service schema | `_execute_android_service()` | Direct Android service tools (see below) |
 
 ### Direct Android Service Tools
-Android service nodes (batteryMonitor, wifiAutomation, etc.) can be connected directly to any agent's `input-tools` handle without using the androidTool aggregator. The `execute_tool()` function detects these via `ANDROID_SERVICE_NODE_TYPES` and routes to `_execute_android_service()`.
+Android service nodes (batteryMonitor, wifiAutomation, etc.) connect directly to any agent's `input-tools` handle — this is the only Android tool path (the former `androidTool` aggregator was retired; legacy graphs are migrated on load by `workflow_migrations.normalize_legacy_android_toolkit`). The `execute_tool()` function detects these via `ANDROID_SERVICE_NODE_TYPES` and routes to `_execute_android_service()`.
 
 **Service ID Mapping** (camelCase node type -> snake_case service ID):
 ```python
@@ -1487,31 +1472,15 @@ service_id_map = {
 }
 ```
 
-### Android Toolkit Pattern
-The androidTool follows n8n Sub-Node and LangChain Toolkit patterns:
-- **Gateway Pattern**: Single tool node aggregates multiple Android service nodes
-- **Dynamic Schema**: Schema built at runtime from connected services only
-- **Service Routing**: Tool execution routes to appropriate connected Android node
+### Android Toolkit Pattern (retired)
+The former `androidTool` gateway node (single `android_device` tool aggregating multiple Android service nodes, n8n Sub-Node / LangChain Toolkit pattern) no longer exists. Android service nodes connect straight to `input-tools`, and sub-node exclusion keys solely on AI-agent config handles (`input-memory` / `input-tools` / `input-skill` / `input-teammates`) — the `TOOLKIT_NODE_TYPES` constant was deleted along with all its usage sites. Legacy `service -> androidTool -> agent` graphs are rewritten on load by `services/workflow_migrations.normalize_legacy_android_toolkit`.
 
-```
-[Battery Monitor] --+
-                    +--> [Android Toolkit] --> [AI Agent]
-[WiFi Automation] --+
-```
-
-The AI sees a single `android_device` tool with schema showing only connected services:
-- `service_id`: Which service to use (e.g., "battery", "wifi_automation")
-- `action`: Action to perform (e.g., "status", "enable", "disable")
-- `parameters`: Action-specific parameters
-
-### Tool Schema Editor
-The Android Toolkit node includes a schema editor UI for customizing the LLM-visible schema of connected services.
+### Tool Schemas (per-service customization)
+Custom LLM-visible schemas for Android service tools persist in the `tool_schemas` table and are read by the AI service at execution time. (The `ToolSchemaEditor.tsx` UI component shipped with the retired Android Toolkit node and was removed with it; the `useToolSchema` hook, WebSocket handlers, and database CRUD remain.)
 
 #### Architecture
 ```
-ToolSchemaEditor Component
-        ↓
-  useToolSchema Hook (WebSocket CRUD)
+useToolSchema Hook (WebSocket CRUD)
         ↓
   Database (tool_schemas table)
         ↓
@@ -1521,7 +1490,6 @@ ToolSchemaEditor Component
 #### Key Files
 | File | Description |
 |------|-------------|
-| `client/src/components/parameterPanel/ToolSchemaEditor.tsx` | Schema editor UI component |
 | `client/src/hooks/useToolSchema.ts` | WebSocket hook for schema CRUD operations |
 | `server/models/database.py` | `ToolSchema` SQLModel table definition |
 | `server/core/database.py` | Database CRUD methods for tool schemas |
@@ -1535,14 +1503,8 @@ class ToolSchema(SQLModel, table=True):
     tool_name: str        # Display name (e.g., "Battery Monitor")
     tool_description: str # Description shown to LLM
     schema_config: Dict   # Schema fields and types (JSON)
-    connected_services: Optional[Dict]  # For toolkit aggregation
+    connected_services: Optional[Dict]  # Legacy field from the retired toolkit aggregation
 ```
-
-#### UI Features
-- **Service Selector**: Dropdown showing only Android service nodes connected to the toolkit
-- **Schema Fields Editor**: Add/remove/edit fields with name, type, description, required flag
-- **Per-Service Schema**: Each connected service has its own independent schema stored by service node ID
-- **Save/Reset**: Changes tracked locally, saved to database on demand
 
 #### WebSocket Messages
 | Message Type | Description |
@@ -1649,48 +1611,11 @@ The `isConfigNode` flag is **auto-derived on the backend** by `_derive_auto_ui_h
 2. Use `input-<type>` naming for the target handle on the parent node.
 3. Input inheritance and filtering work automatically — the frontend reads `definition.uiHints.isConfigNode`, never the group strings.
 
-### Toolkit Sub-Node Execution Pattern
+### Sub-Node Execution Exclusion
 
-Toolkit nodes (like `androidTool`) aggregate sub-nodes that should only execute when called via the toolkit's tool interface, not as independent workflow nodes.
+Sub-nodes (tools, memory, skills, teammates) connect TO an agent, not from it, so in parallel execution mode Kahn's algorithm would see them with in-degree 0 and incorrectly schedule them in layer 0. The executor excludes them: any node whose edge targets an AI-agent config handle (`input-memory`, `input-tools`, `input-skill`, `input-teammates`) is detected as a sub-node in `ExecutionContext.create()` / `_compute_execution_layers()` and skipped from execution layers — it executes only when the agent invokes it (e.g. as an AI tool).
 
-**Problem**: In parallel execution mode, Kahn's algorithm schedules nodes with in-degree 0 first. Sub-nodes connect TO the toolkit (not from it), so they have in-degree 0 and would be incorrectly scheduled in layer 0.
-
-**Solution**: The executor detects and excludes toolkit sub-nodes from execution layers.
-
-**Key Constants** (`server/constants.py`):
-```python
-# Toolkit node types that aggregate sub-nodes
-TOOLKIT_NODE_TYPES: FrozenSet[str] = frozenset([
-    'androidTool',  # Aggregates Android service nodes
-])
-
-# Config nodes excluded from execution (includes tool nodes)
-CONFIG_NODE_TYPES: FrozenSet[str] = (
-    AI_MEMORY_TYPES | AI_TOOL_TYPES | AI_CHAT_MODEL_TYPES
-)
-```
-
-**Detection Logic** (in `ExecutionContext.create()` and `_compute_execution_layers()`):
-```python
-# Find toolkit sub-nodes (nodes that connect TO a toolkit)
-toolkit_node_ids = {n.get("id") for n in nodes if n.get("type") in TOOLKIT_NODE_TYPES}
-subnode_ids: set = set()
-for edge in edges:
-    source = edge.get("source")
-    target = edge.get("target")
-    # Any node that connects TO a toolkit is a sub-node
-    if target in toolkit_node_ids and source:
-        subnode_ids.add(source)
-```
-
-**Example Workflow**:
-```
-[WhatsApp Trigger] → [AI Agent] ← [Android Toolkit] ← [Battery Monitor]
-                                                    ← [Location]
-```
-- `Battery Monitor` and `Location` connect TO `Android Toolkit`
-- They are detected as sub-nodes and excluded from execution layers
-- They only execute when AI Agent calls the toolkit's tool interface
+Toolkit aggregator nodes (the former `androidTool` and its `TOOLKIT_NODE_TYPES` constant) were retired; Android service nodes now connect directly to the agent's `input-tools` handle. Legacy `service -> androidTool -> agent` graphs are migrated on load by `services/workflow_migrations.normalize_legacy_android_toolkit` (pure, idempotent: services re-wire directly to each agent, orphaned toolkits are removed with a warning).
 
 ## Android Services Development Guide
 
@@ -1721,7 +1646,7 @@ Adding a new Android service:
    shared ADB infrastructure lives in `AndroidService`.
 
 ### Key Files
-- **Shared base**: `server/nodes/android/_base.py` — `AndroidServiceBase`, `SERVICE_ID_MAP`, `execute_android_toolkit`, `execute_android_service_tool`
+- **Shared base**: `server/nodes/android/_base.py` — `AndroidServiceBase`, `SERVICE_ID_MAP`, `execute_android_service_tool`
 - **Backend Router**: `server/routers/android.py` - API endpoints for Android operations
 - **Workflow Handler**: `server/services/workflow.py` - Execution logic for all nodes
 - **Execution Service**: `src/services/executionService.ts` - Routes Android nodes to Python backend
@@ -2711,11 +2636,7 @@ This function:
   - `server/models/cache.py` - CacheEntry SQLModel for SQLite persistence
   - `server/core/database.py` - Cache CRUD methods (get/set/delete/cleanup)
   - Supports TTL expiration and automatic cleanup of expired entries
-- **Conditional Redis with Docker Profiles**: Redis container only starts when explicitly enabled
-  - Uses Docker Compose profiles: Redis service has `profiles: [redis]`
-  - `scripts/docker.js` wrapper auto-adds `--profile redis` when `REDIS_ENABLED=true` in `.env`
-  - npm scripts (`docker:up`, `docker:down`, etc.) use the wrapper for seamless handling
-  - Backend no longer depends on Redis - depends only on WhatsApp service
+- **Conditional Redis (historical)**: the Docker Compose topology (Redis profiles, `scripts/docker.js` wrapper) is historical — see [docs-internal/deployment_legacy.md](./docs-internal/deployment_legacy.md)
 - **WebSocket Reconnect via PartySocket** (`partysocket/ws` from Cloudflare): native-WS-compatible class handles jittered exponential backoff, message replay (`maxEnqueuedMessages: 200`), and intentional-close (RFC 6455 §7.4.1 code 1000) automatically. Replaces the previous flat 3 s `setTimeout(connect, 3000)` loop. Reconnect envelope (`MIN_DELAY_MS: 250`, `MAX_DELAY_MS: 8000`, `GROW_FACTOR: 1.3`) lives in `client/src/lib/connectionConfig.ts`. The +12 s WS-drop-and-reconnect cycle observed under React Strict Mode is gone — verified across two consecutive cold launches with zero `Client disconnected` events through 130+ s of activity. See `docs-internal/performance.md` for measurements.
 - **Docker Backend Fix**: Backend container uses Python uvicorn directly
   - Changed from `npm run start` (failed - npm not in Python image) to `python -m uvicorn`

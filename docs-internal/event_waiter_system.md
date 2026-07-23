@@ -13,7 +13,6 @@ Before this system, each trigger had its own ad-hoc waiting code. That meant:
 
 - No common cancel path
 - No common filter semantics
-- No way to persist waits across Temporal worker restarts
 - No way to debug which triggers were active
 
 A single waiter module replaces all of that. Adding a new trigger now means adding one entry to the registry and one filter builder.
@@ -31,7 +30,6 @@ class Waiter:
     node_id: str                     # workflow node waiting
     node_type: str                   # 'whatsappReceive', 'webhookTrigger', ...
     event_type: str                  # 'whatsapp_message_received', ...
-    params: Dict                     # node parameters (filter provenance)
     filter_fn: Callable[[Dict], bool]
     future: Optional[asyncio.Future] # resolved by dispatch() on match
     cancelled: bool
@@ -143,7 +141,7 @@ Users can cancel a waiting trigger from the UI (Cancel button on the trigger nod
 
 ## Debugging
 
-`event_waiter.get_active_waiters()` returns a list of all currently active waiters with age, backend mode, and done/cancelled status. The `get_active_waiters` WebSocket handler exposes this to the frontend for the active-triggers debug view.
+`event_waiter.get_active_waiters()` returns a list of all currently active waiters with age and done/cancelled status. The `get_active_waiters` WebSocket handler exposes this to the frontend for the active-triggers debug view. (`get_backend_mode()` still exists for compatibility but always returns `"memory"` — the Redis-Streams backend was retired in Wave 15.3.)
 
 ```python
 {
@@ -154,7 +152,7 @@ Users can cancel a waiting trigger from the UI (Cancel button on the trigger nod
     "done": False,
     "cancelled": False,
     "age_seconds": 142.3,
-    "mode": "redis"  # or "memory"
+    "mode": "memory"  # always "memory" since Wave 15.3
 }
 ```
 
@@ -201,4 +199,4 @@ No changes are needed in the execution engine, cancel path, or deployment manage
 
 - [DESIGN.md](DESIGN.md) - how triggers fit into execution
 - [workflow-schema.md](workflow-schema.md) - trigger node catalog
-- [TEMPORAL_ARCHITECTURE.md](TEMPORAL_ARCHITECTURE.md) - why Redis mode exists for Temporal workers
+- [TEMPORAL_ARCHITECTURE.md](TEMPORAL_ARCHITECTURE.md) - how deployed triggers get durability from Temporal

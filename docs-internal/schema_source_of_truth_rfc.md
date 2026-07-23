@@ -342,7 +342,7 @@ bulk files + dead dispatcher fallbacks is complete (Wave 11.D.13).
 - **11.E.1** — credentials modularised into per-domain
   `server/nodes/<group>/_credentials.py` files (or inline for
   single-use). **Central `server/credentials/` directory deleted.**
-  18 `Credential` subclasses total.
+  18 `Credential` subclasses at the time (25 concrete subclasses today).
 - **11.E.2 / E.3 / E.4** — credential polish + doc sync.
 - **11.F** — per-plugin Temporal activities
   (`cls.as_activity()` named `node.{type}.v{version}`),

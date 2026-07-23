@@ -40,7 +40,7 @@ Canonical home for how AI Agents discover connected tool nodes, build LangChain 
 (memory_data, skill_data, tool_data, input_data, task_data)
 ```
 
-- **`tool_data`** is a list of dicts. Each entry: `{node_id, node_type, parameters, label, connected_services?}`. The `connected_services` field is only populated for `androidTool` (the gateway-tool pattern — see §6).
+- **`tool_data`** is a list of dicts. Each entry: `{node_id, node_type, parameters, label}`. (The `connected_services` extra belonged to the retired `androidTool` gateway tool — see §7.)
 - **MasterSkill expansion** runs at discovery time: a single `masterSkill` connection with `skillsConfig` expands into N individual skill entries, one per enabled skill key.
 - **Team-lead expansion** (`orchestrator_agent` / `ai_employee`): agents connected
   to `input-teammates` become authorized descriptors. Internal `delegate_to_*`
@@ -105,7 +105,7 @@ config = {
     "database": database,
     "nodes": nodes,
     "edges": edges,
-    # ... per-tool extras (e.g., connected_services for androidTool)
+    # ... per-tool extras
 }
 ```
 
@@ -150,25 +150,14 @@ When the LLM emits `tool_calls` in its response, `_run_agent_loop` iterates them
 | `aiAgent` / `chatAgent` / `<specialized>_agent` | `_execute_delegated_agent` (fire-and-forget background task) |
 | `_builtin_check_delegated_tasks` | `_execute_check_delegated_tasks` |
 | `batteryMonitor` / `wifiAutomation` / ... (16 service types) | `_execute_android_service` (snake_case service ID via SERVICE_ID_MAP) |
-| `androidTool` (gateway) | `_execute_android_toolkit` (dispatches to a connected Android service) |
 | `whatsappSend` / `whatsappDb` / `pythonExecutor` / ... | Per-plugin `usable_as_tool=True` handler (the plugin's own `execute()` method) |
 | `calculatorTool` / `currentTimeTool` / `taskManager` / `writeTodos` | `_execute_<name>` direct implementations |
 | `braveSearch` / `serperSearch` / `perplexitySearch` | `handle_<provider>_search` (httpx async, credential resolution, usage tracking) |
 | All else | `_execute_generic` (catch-all) |
 
-## 7. Gateway-tool pattern (Android Toolkit)
+## 7. Gateway-tool pattern (retired)
 
-`androidTool` is the only **gateway tool** today — a single `StructuredTool` that the LLM sees as `android_device`, but which fans out to multiple connected Android service nodes:
-
-```
-[Battery Monitor] ──┐
-[WiFi Automation] ──┼──► [Android Toolkit] ──► [AI Agent]
-[Location]        ──┘
-```
-
-The LLM sees one tool with `{service_id, action, parameters}` arguments. `_execute_android_toolkit` looks up the matching connected service, asserts it's actually connected to this toolkit instance, and forwards to the service handler. The toolkit's `connected_services` list (populated during stage 1) drives schema generation in `_get_tool_schema` so the LLM only sees actions for services that are present.
-
-Direct Android service tools (16 individual entries in `DEFAULT_TOOL_NAMES`) are an alternative path — connect a service node directly to `input-tools` without using the toolkit aggregator. Both paths exist; the toolkit is preferred when you want one cohesive `android_device` tool.
+`androidTool` was the only **gateway tool** — a single `StructuredTool` the LLM saw as `android_device` that fanned out to multiple connected Android service nodes via a `connected_services` list. The node no longer exists: Android service tools are the 16 individual entries in `DEFAULT_TOOL_NAMES`, connected directly to `input-tools`. Legacy `service -> androidTool -> agent` graphs are rewritten on load by `services/workflow_migrations.normalize_legacy_android_toolkit`, and sub-node exclusion keys solely on the AI-agent config handles (`input-memory` / `input-tools` / `input-skill` / `input-teammates`) — the `TOOLKIT_NODE_TYPES` constant is gone.
 
 ## 8. Internal delegation identities (`delegate_to_*`)
 

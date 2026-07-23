@@ -1,16 +1,15 @@
 """OpenAI-compatible provider registrations.
 
-Six providers (``xai`` / ``deepseek`` / ``kimi`` / ``mistral`` / ``ollama`` /
-``lmstudio``) all ride the OpenAI Python SDK with a custom ``base_url``,
+Eight providers (``xai`` / ``deepseek`` / ``kimi`` / ``mistral`` / ``ollama`` /
+``lmstudio`` / ``groq`` / ``cerebras``) all ride the OpenAI Python SDK with a custom ``base_url``,
 so they share one factory (``OpenAIProvider``) and one typed-exception
 tuple (``openai.OpenAIError``). The per-provider differences live in
 ``llm_defaults.json`` (``base_url``, plus the provider quirks block
 added in Phase C) — there is no per-provider Python here.
 
 Adding a new OpenAI-compat provider is a JSON edit + one entry in
-``_COMPAT_PROVIDERS`` below. Groq + Cerebras stay behind the LangChain
-fallback in ``ai.py`` until Phase D deletes the fallback; they will
-register here at that point.
+``_COMPAT_PROVIDERS`` below. Groq + Cerebras registered here in
+Phase D (see the ``_COMPAT_PROVIDERS`` comment below).
 """
 
 from __future__ import annotations

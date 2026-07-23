@@ -11,7 +11,7 @@
 
 ## Purpose
 
-Run local LLMs (llama, mistral, qwen, deepseek-r1, ...) through a locally-running Ollama server. Ollama exposes an OpenAI-shaped `/v1` endpoint, so the existing OpenAI-compatible fallback in `services/llm/factory.py` hands it to `OpenAIProvider` with `base_url` from `llm_defaults.json` — same path as deepseek/kimi/mistral. The user's custom server URL (if not localhost) is stored as the `ollama_proxy` credential and flows through the same `proxy_url` parameter cloud providers already use for Ollama-style auth delegation. `OllamaChatModelNode` uses the shared `ChatModelParams` unchanged. The `ChatModelBase.chat` operation calls `AIService.execute_chat`.
+Run local LLMs (llama, mistral, qwen, deepseek-r1, ...) through a locally-running Ollama server. Ollama exposes an OpenAI-shaped `/v1` endpoint, so the OpenAI-compatible spec registered in `services/llm/providers/_compat.py` hands it to `OpenAIProvider` with `base_url` from `llm_defaults.json` — same path as deepseek/kimi/mistral. The user's custom server URL (if not localhost) is stored as the `ollama_proxy` credential and flows through the same `proxy_url` parameter cloud providers already use for Ollama-style auth delegation. `OllamaChatModelNode` uses the shared `ChatModelParams` unchanged. The `ChatModelBase.chat` operation calls `AIService.execute_chat`.
 
 ## Inputs (handles)
 
@@ -66,7 +66,7 @@ flowchart TD
   D -- no --> X[error envelope]
   D -- yes --> E[detect_ai_provider -> 'ollama']
   E --> F[Lookup ollama_proxy credential -> base_url override]
-  F --> G[create_provider ollama -> OpenAIProvider<br/>base_url=user server, api_key='ollama']
+  F --> G[ChatUnifier.chat -> registry.get_provider ollama -> OpenAIProvider<br/>base_url=user server, api_key='ollama']
   G --> H[provider.chat]
   H --> I[success envelope]
   G -- Exception --> X

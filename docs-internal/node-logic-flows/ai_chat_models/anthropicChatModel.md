@@ -71,7 +71,7 @@ flowchart TD
   E -- yes --> F[detect_ai_provider -> 'anthropic']
   F --> G[Build NativeThinkingConfig if thinkingEnabled<br/>budget from thinkingBudget]
   G --> H[Lookup anthropic_proxy credential]
-  H --> I[Native path: create_provider anthropic<br/>await provider.chat with thinking]
+  H --> I[ChatUnifier.chat -> registry.get_provider anthropic<br/>await provider.chat with thinking]
   I --> J[Return success envelope with response + thinking]
   I -- Exception --> X
 ```
@@ -80,7 +80,7 @@ flowchart TD
 
 - **Validation**: missing api_key or empty prompt -> error envelope.
 - **Provider routing**: `detect_ai_provider` matches `'anthropic'` on `'anthropic' in node_type.lower()` branch.
-- **Native provider**: `is_native_provider('anthropic')` is True - uses the `anthropic` Python SDK.
+- **Native provider**: `ChatUnifier` resolves the self-registered `anthropic` spec - uses the `anthropic` Python SDK.
 - **Model ID scrubbing**: strips `[FREE] ` prefix; strips `owner/` prefix for non-OpenRouter providers.
 - **Temperature override**: when `thinkingEnabled=true`, temperature is auto-forced to 1 by `native_resolve_temperature`.
 - **Thinking config**: `NativeThinkingConfig(enabled=True, budget=int(thinkingBudget))` forwarded to the SDK, which maps to Anthropic's `thinking={type: "enabled", budget_tokens: N}`.

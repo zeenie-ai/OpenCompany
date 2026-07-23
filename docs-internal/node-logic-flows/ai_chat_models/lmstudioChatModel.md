@@ -11,7 +11,7 @@
 
 ## Purpose
 
-Run local LLMs through LM Studio's OpenAI-compatible server (default `http://localhost:1234/v1`). The existing OpenAI-compatible fallback in `services/llm/factory.py` routes it through `OpenAIProvider` with `base_url` from `llm_defaults.json` — same path as deepseek/kimi/mistral/ollama. The user's custom server URL is stored as the `lmstudio_proxy` credential. `LMStudioChatModelNode` uses the shared `ChatModelParams` unchanged. The `ChatModelBase.chat` operation calls `AIService.execute_chat`.
+Run local LLMs through LM Studio's OpenAI-compatible server (default `http://localhost:1234/v1`). The OpenAI-compatible spec registered in `services/llm/providers/_compat.py` routes it through `OpenAIProvider` with `base_url` from `llm_defaults.json` — same path as deepseek/kimi/mistral/ollama. The user's custom server URL is stored as the `lmstudio_proxy` credential. `LMStudioChatModelNode` uses the shared `ChatModelParams` unchanged. The `ChatModelBase.chat` operation calls `AIService.execute_chat`.
 
 ## Inputs (handles)
 
@@ -66,7 +66,7 @@ flowchart TD
   D -- no --> X[error envelope]
   D -- yes --> E[detect_ai_provider -> 'lmstudio']
   E --> F[Lookup lmstudio_proxy credential -> base_url override]
-  F --> G[create_provider lmstudio -> OpenAIProvider<br/>base_url=user server, api_key='ollama']
+  F --> G[ChatUnifier.chat -> registry.get_provider lmstudio -> OpenAIProvider<br/>base_url=user server, api_key='ollama']
   G --> H[provider.chat]
   H --> I[success envelope]
   G -- Exception --> X

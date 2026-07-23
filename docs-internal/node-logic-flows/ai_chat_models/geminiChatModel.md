@@ -68,7 +68,7 @@ flowchart TD
   D -- no --> X[error envelope]
   D -- yes --> E[detect_ai_provider -> 'gemini']
   E --> F[Build NativeThinkingConfig w/ budget]
-  F --> G[Native path: create_provider gemini<br/>google.genai.Client]
+  F --> G[ChatUnifier.chat -> registry.get_provider gemini<br/>google.genai.Client]
   G --> H[provider.chat -> LLMResponse]
   H --> I[success envelope]
   G -- Exception --> X

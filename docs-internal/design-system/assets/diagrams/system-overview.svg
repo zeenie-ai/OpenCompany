@@ -70,7 +70,7 @@
 
   <rect class="box p-purple" x="250" y="558" width="920" height="64" rx="8"/>
   <text class="h2" x="710" y="584" text-anchor="middle">Execution engine</text>
-  <text class="sub" x="710" y="607" text-anchor="middle">Temporal -&gt; Redis-parallel -&gt; sequential (auto-fallback)</text>
+  <text class="sub" x="710" y="607" text-anchor="middle">Temporal -&gt; sequential (auto-fallback)</text>
 
   <!-- Backend -> Sidecars -->
   <path class="conn" d="M 710 646 L 710 722" marker-end="url(#arrow)"/>

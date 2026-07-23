@@ -70,7 +70,7 @@ flowchart TD
   E -- no --> X[error envelope]
   E -- yes --> F[detect_ai_provider -> 'openrouter']
   F --> G[DO NOT strip 'owner/' prefix<br/>provider == openrouter]
-  G --> H[Native path: create_provider openrouter<br/>OpenAI SDK w/ base_url=openrouter.ai/api/v1]
+  G --> H[ChatUnifier.chat -> registry.get_provider openrouter<br/>OpenAI SDK w/ base_url=openrouter.ai/api/v1]
   H --> I[provider.chat -> response]
   I --> J[success envelope]
   H -- Exception --> X

@@ -7,6 +7,8 @@
 cp .env.template .env
 ```
 
+(If you run `company build` instead, its step [0/6] scaffolds `.env` from `.env.template` automatically and generates fresh random secrets — `secrets.token_hex(24)` — for `SECRET_KEY`, `JWT_SECRET_KEY`, and `API_KEY_ENCRYPTION_KEY` instead of copying the dev placeholders. An existing `.env` is never touched.)
+
 2. Edit `.env` and add your API keys:
 ```bash
 # Required for remote Android devices
@@ -48,10 +50,12 @@ The `.env.template` file contains development-safe defaults.
 
 For production:
 1. Change `DEBUG=false`
-2. Generate new secure `SECRET_KEY` and `API_KEY_ENCRYPTION_KEY`
+2. Generate new secure `SECRET_KEY` and `API_KEY_ENCRYPTION_KEY` (a `company build`-scaffolded `.env` already has fresh random values; a hand-copied template does not)
 3. Set `RATE_LIMIT_ENABLED=true`
 4. Configure proper CORS origins
 5. Consider enabling Redis caching
+
+The server also guards against placeholder secrets at startup: `server/core/config.py` exposes `DEV_SECRET_LITERALS` + `dev_secret_offenders()`, and the lifespan logs a non-fatal error banner if dev placeholder secrets are detected while auth is enabled or `DEPLOYMENT_MODE` is not `local`.
 
 ## Authentication & Encryption
 

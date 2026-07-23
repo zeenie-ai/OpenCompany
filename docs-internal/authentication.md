@@ -149,7 +149,12 @@ JWT_COOKIE_SAMESITE=lax
 ```
 
 `core/config.py` carries the `vite_auth_enabled` field (required because
-Pydantic Settings uses `extra="forbid"`).
+Pydantic Settings uses `extra="forbid"`). It also exposes `DEV_SECRET_LITERALS`
+and `dev_secret_offenders()`: server startup (lifespan) logs a non-fatal error
+banner when `SECRET_KEY` / `JWT_SECRET_KEY` / `API_KEY_ENCRYPTION_KEY` still
+carry the dev template placeholders while auth is enabled or `DEPLOYMENT_MODE`
+is not `local`. A `company build`-scaffolded `.env` avoids this by generating
+fresh `secrets.token_hex(24)` values at scaffold time.
 
 ## Race Condition Handling (TanStack Query bootstrap)
 The frontend starts before the backend is ready during cold launch, so the

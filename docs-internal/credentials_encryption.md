@@ -183,6 +183,8 @@ AWS_REGION=us-east-1
 
 If `API_KEY_ENCRYPTION_KEY` is missing or changed, existing ciphertext becomes undecryptable. There is no key-rotation mechanism today: users re-enter their keys after a key change. This is a deliberate simplification inherited from the n8n pattern.
 
+When `company build` scaffolds `.env` from `.env.template` (step `[0/6]`), it generates a fresh `secrets.token_hex(24)` value for `API_KEY_ENCRYPTION_KEY` (and `SECRET_KEY` / `JWT_SECRET_KEY`) instead of copying the dev placeholder; an existing `.env` is never touched. If the dev placeholder survives while auth is enabled or `DEPLOYMENT_MODE != local`, startup logs a non-fatal error banner (`dev_secret_offenders()` in `core/config.py`).
+
 ## Security Properties
 
 - **Server-scoped key**: not tied to user login sessions. JWT cookies expire, but the encryption key survives across restarts.

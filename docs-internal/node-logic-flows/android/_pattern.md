@@ -193,8 +193,8 @@ preserved.
 - Android service infrastructure: [`server/nodes/android/`](../../../server/nodes/android/)
 - Status broadcaster (two-state model): [Status Broadcaster](../../status_broadcaster.md)
 - Android-agent skills: [`server/skills/android_agent/`](../../../server/skills/android_agent/)
-- AI-tool dispatch (`androidTool` aggregator + direct service tools):
-  `execute_android_toolkit` and `execute_android_service_tool` in
+- AI-tool dispatch (direct service tools; the `androidTool` aggregator was
+  retired): `execute_android_service_tool` in
   [`server/nodes/android/_base.py`](../../../server/nodes/android/_base.py),
   called from
   [`server/services/handlers/tools.py::execute_tool`](../../../server/services/handlers/tools.py)

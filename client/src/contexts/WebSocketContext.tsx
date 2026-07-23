@@ -333,10 +333,11 @@ interface WebSocketContextValue {
   // Connection state
   isConnected: boolean;
   /**
-   * `true` once the socket is open AND the post-open init burst has
-   * settled (api-key probes, terminal/chat/console history). Queries
-   * that depend on backend-served data should gate on this rather
-   * than `isConnected` so they fire once instead of racing the burst.
+   * `true` once the socket is open and the pending-send queue has
+   * drained (Wave 32: flips immediately on open — history restores run
+   * as background fire-and-forget; the api-key probe loop was removed).
+   * Queries that depend on backend-served data should gate on this
+   * rather than `isConnected` so queued sends replay first.
    */
   isReady: boolean;
   reconnecting: boolean;

@@ -71,6 +71,10 @@ Two halves (both required; see [performance.md](performance.md) for the
 
 The npm tarball still excludes `__pycache__/` per `package.json` `files` (cross-Python-minor pyc fragility) — `compileall` runs on the user's machine via `company build` or `scripts/install.js` post-install.
 
+### 4a-bis. `.env` scaffolding with fresh secrets (step `[0/6]`)
+
+- When no `.env` exists, `company build` step `[0/6]` scaffolds it from `.env.template` and replaces the dev placeholder values of `SECRET_KEY` / `JWT_SECRET_KEY` / `API_KEY_ENCRYPTION_KEY` with fresh `secrets.token_hex(24)` values (`_scaffold_env_secrets` in `cli/commands/build.py`). An existing `.env` is never modified. The placeholder literals themselves are the SSOT frozenset `DEV_SECRET_LITERALS` in `server/core/config.py`; server startup logs a non-fatal error banner via `dev_secret_offenders()` when placeholders are detected with auth enabled or `DEPLOYMENT_MODE != local`.
+
 ### 4b. Temporal binary fetch + DATA_DIR parity
 
 - Step `[6/6]` runs `uv run python -m services.temporal._install`, which pooch-downloads the official `temporal` CLI into `<DATA_DIR>/packages/temporal/` (= `~/.opencompany/packages/temporal/` by default). Pre-fetching at build time turns the ~114 MB download into a sub-second cache hit on first `company start`. The download uses an explicit `HTTPDownloader(timeout=300)` (per-socket-read timeout — slow links can finish; pooch's 30 s default aborted them). Fatality differs by entry point: `company build` keeps the step **fatal** (locked by `test_temporal_install_is_fatal_on_failure`), while npm postinstall (`scripts/install.js`) wraps it in a **non-fatal** try/catch because `TemporalServerRuntime._pre_spawn()` re-downloads lazily on first `company start`. The cache survives `company clean` (`packages` ∈ `_OPENCOMPANY_KEEP`), so clean+build cycles don't re-download.
