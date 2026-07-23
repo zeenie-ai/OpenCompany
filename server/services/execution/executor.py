@@ -455,151 +455,6 @@ class WorkflowExecutor:
 
             ctx.status = WorkflowStatus.FAILED
 
-    # =========================================================================
-    # PARALLEL EXECUTION (Legacy - Fork/Join with FIRST_COMPLETED pattern)
-    # =========================================================================
-
-    async def _execute_parallel_nodes(self, ctx: ExecutionContext, nodes: List[NodeExecution], enable_caching: bool) -> None:
-        """Execute multiple nodes in parallel using asyncio.wait with FIRST_COMPLETED.
-
-        Uses the standard asyncio pattern for mixed task types:
-        - Regular nodes complete quickly
-        - Trigger nodes wait indefinitely for external events
-        - If a regular node fails, cancel remaining trigger nodes immediately
-
-        This follows Python asyncio best practices:
-        https://docs.python.org/3/library/asyncio-task.html#asyncio.wait
-
-        Args:
-            ctx: ExecutionContext
-            nodes: List of NodeExecution to run in parallel
-            enable_caching: Whether to use result caching
-        """
-        # Mark all as scheduled
-        for node in nodes:
-            node.status = TaskStatus.SCHEDULED
-            await self._notify_status(node.node_id, "scheduled", {})
-
-        # Create named tasks for parallel execution
-        # Using dict to track node -> task mapping for proper result handling
-        node_to_task: Dict[str, asyncio.Task] = {}
-        task_to_node: Dict[asyncio.Task, NodeExecution] = {}
-
-        for node in nodes:
-            task = asyncio.create_task(self._execute_node_with_retry(ctx, node, enable_caching), name=f"node_{node.node_id}")
-            node_to_task[node.node_id] = task
-            task_to_node[task] = node
-
-        pending: Set[asyncio.Task] = set(node_to_task.values())
-        workflow_failed = False
-
-        # Process tasks as they complete using FIRST_COMPLETED pattern
-        while pending:
-            # Wait for any task to complete
-            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
-
-            # Process completed tasks
-            for task in done:
-                node = task_to_node[task]
-
-                try:
-                    result = task.result()
-
-                    if isinstance(result, Exception):
-                        # Task raised exception
-                        node.status = TaskStatus.FAILED
-                        node.error = str(result)
-                        node.completed_at = time.time()
-                        ctx.errors.append(
-                            {
-                                "node_id": node.node_id,
-                                "error": str(result),
-                                "timestamp": time.time(),
-                            }
-                        )
-                        await self._notify_status(node.node_id, "error", {"error": str(result)})
-                        logger.error("Parallel node failed", node_id=node.node_id, error=str(result))
-                        workflow_failed = True
-
-                    elif result.get("retries_exhausted"):
-                        # Node failed after all retries - already in DLQ
-                        node.status = TaskStatus.FAILED
-                        node.error = result.get("error", "Unknown error")
-                        node.completed_at = time.time()
-                        ctx.errors.append(
-                            {
-                                "node_id": node.node_id,
-                                "error": node.error,
-                                "retries_exhausted": True,
-                                "timestamp": time.time(),
-                            }
-                        )
-                        workflow_failed = True
-
-                    elif not result.get("success"):
-                        # Node returned failure without exhausting retries
-                        node.status = TaskStatus.FAILED
-                        node.error = result.get("error", "Unknown error")
-                        node.completed_at = time.time()
-                        ctx.errors.append(
-                            {
-                                "node_id": node.node_id,
-                                "error": node.error,
-                                "timestamp": time.time(),
-                            }
-                        )
-                        await self._notify_status(node.node_id, "error", {"error": node.error})
-                        logger.error("Parallel node failed", node_id=node.node_id, error=node.error)
-                        workflow_failed = True
-
-                except asyncio.CancelledError:
-                    # Task was cancelled (by us or externally)
-                    node.status = TaskStatus.CANCELLED
-                    node.completed_at = time.time()
-                    logger.info("Parallel node cancelled", node_id=node.node_id)
-
-                except Exception as e:
-                    # Unexpected exception from task.result()
-                    node.status = TaskStatus.FAILED
-                    node.error = str(e)
-                    node.completed_at = time.time()
-                    ctx.errors.append(
-                        {
-                            "node_id": node.node_id,
-                            "error": str(e),
-                            "timestamp": time.time(),
-                        }
-                    )
-                    await self._notify_status(node.node_id, "error", {"error": str(e)})
-                    logger.error("Parallel node exception", node_id=node.node_id, error=str(e))
-                    workflow_failed = True
-
-            # If workflow failed, cancel remaining pending tasks
-            # This prevents trigger nodes from blocking forever when a regular node fails
-            if workflow_failed and pending:
-                logger.info("Workflow failed, cancelling remaining tasks", pending_count=len(pending))
-
-                for task in pending:
-                    task.cancel()
-
-                # Wait for cancelled tasks to finish
-                if pending:
-                    cancelled_done, _ = await asyncio.wait(pending, return_when=asyncio.ALL_COMPLETED)
-
-                    # Mark cancelled nodes
-                    for task in cancelled_done:
-                        node = task_to_node[task]
-                        if node.status not in (TaskStatus.COMPLETED, TaskStatus.FAILED):
-                            node.status = TaskStatus.CANCELLED
-                            node.completed_at = time.time()
-                            logger.info("Cancelled pending node", node_id=node.node_id)
-
-                pending = set()  # All done now
-
-        # Mark workflow as failed if any node failed
-        if workflow_failed:
-            ctx.status = WorkflowStatus.FAILED
-
     async def _execute_single_node(self, ctx: ExecutionContext, node: NodeExecution, enable_caching: bool) -> None:
         """Execute a single node with retry logic.
 
@@ -879,7 +734,7 @@ class WorkflowExecutor:
         workflow. They listen for specific events/conditions and initiate
         the execution of the entire workflow.
 
-        Config nodes and toolkit sub-nodes are excluded from layers since
+        Config nodes and AI-agent sub-nodes are excluded from layers since
         they don't execute as independent workflow nodes.
 
         Args:
@@ -889,13 +744,10 @@ class WorkflowExecutor:
         Returns:
             List of layers, where each layer is a list of node IDs
         """
-        from constants import CONFIG_NODE_TYPES, TOOLKIT_NODE_TYPES, AI_AGENT_TYPES
+        from constants import CONFIG_NODE_TYPES, AI_AGENT_TYPES
 
         # Build node type lookup for trigger detection
         node_types: Dict[str, str] = {node["id"]: node.get("type", "unknown") for node in nodes}
-
-        # Find toolkit sub-nodes (nodes that connect TO a toolkit)
-        toolkit_node_ids = {n.get("id") for n in nodes if n.get("type") in TOOLKIT_NODE_TYPES}
 
         # Find AI Agent nodes (all agent types have config handles)
         ai_agent_node_ids = {n.get("id") for n in nodes if n.get("type") in AI_AGENT_TYPES}
@@ -905,10 +757,6 @@ class WorkflowExecutor:
             source = edge.get("source")
             target = edge.get("target")
             target_handle = edge.get("targetHandle")
-
-            # Any node that connects TO a toolkit is a sub-node
-            if target in toolkit_node_ids and source:
-                subnode_ids.add(source)
 
             # Nodes connected to AI Agent config handles are sub-nodes
             # These handles: input-memory, input-tools, input-skill, input-teammates

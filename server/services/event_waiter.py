@@ -363,19 +363,14 @@ async def run_trigger_precheck(node_type: str, parameters: Dict) -> Any:
 
 @dataclass
 class Waiter:
-    """Single event waiter.
-
-    In memory mode: uses asyncio.Future
-    In Redis mode: uses stream polling with stored metadata
-    """
+    """Single event waiter, resolved via asyncio.Future."""
 
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     node_id: str = ""
     node_type: str = ""
     event_type: str = ""
-    params: Dict = field(default_factory=dict)  # Store params for Redis mode filter rebuild
     filter_fn: Callable[[Dict], bool] = field(default_factory=lambda: lambda x: True)
-    future: Optional[asyncio.Future] = None  # Only used in memory mode
+    future: Optional[asyncio.Future] = None
     cancelled: bool = False
     created_at: float = field(default_factory=time.time)
 
@@ -409,7 +404,6 @@ async def register(node_type: str, node_id: str, params: Dict) -> Waiter:
         node_id=node_id,
         node_type=node_type,
         event_type=config.event_type,
-        params=params,
         filter_fn=build_filter(node_type, params),
     )
 
@@ -605,5 +599,8 @@ def clear_all() -> int:
 
 
 def get_backend_mode() -> str:
-    """Get current backend mode for debugging."""
+    """Get current backend mode for debugging.
+
+    Always "memory" — the Redis-Streams backend was retired in Wave 15.3.
+    """
     return "memory"

@@ -1,4 +1,4 @@
-"""LLM service layer -- native provider SDKs, config, protocol types, factory."""
+"""LLM service layer -- native provider SDKs, config, protocol types."""
 
 from services.llm.config import (
     ProviderConfig,
@@ -21,7 +21,6 @@ from services.llm.protocol import (
     LLMProvider,
 )
 from services.llm.messages import is_valid_message_content, filter_empty_messages
-from services.llm.factory import create_provider, is_native_provider, NATIVE_PROVIDERS
 from services.llm.registry import (
     ProviderSpec,
     register_provider,
@@ -59,10 +58,6 @@ __all__ = [
     # Messages
     "is_valid_message_content",
     "filter_empty_messages",
-    # Factory (legacy — replaced by unifier in Phase A3; kept for back-compat)
-    "create_provider",
-    "is_native_provider",
-    "NATIVE_PROVIDERS",
     # Plugin registry + unifier (Phase A — single SERVICE facade)
     "ProviderSpec",
     "register_provider",

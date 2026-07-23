@@ -69,7 +69,7 @@ AGENT_WORKFLOW_TYPES = frozenset(
     [
         "aiAgent",
         "chatAgent",
-        # Specialized agents (12)
+        # Specialized agents (11)
         "android_agent",
         "coding_agent",
         "web_agent",
@@ -578,9 +578,6 @@ class MachinaWorkflow:
                     return node_id, {"success": False, "error": str(e)}
 
         # Wait for first completion using Temporal's wait
-        [h for _, h in items]
-
-        # Use asyncio.wait pattern via workflow.wait
         await workflow.wait_condition(lambda: any(h.done() for _, h in items))
 
         # Find the completed one

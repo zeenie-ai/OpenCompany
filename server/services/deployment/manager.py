@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING
 
 from core.logging import get_logger
-from constants import POLLING_TRIGGER_TYPES, TOOLKIT_NODE_TYPES, WORKFLOW_TRIGGER_TYPES
+from constants import POLLING_TRIGGER_TYPES, WORKFLOW_TRIGGER_TYPES
 from services import event_waiter
 from services.events.envelope import equivalent_event_types
 from .state import DeploymentState, TriggerInfo
@@ -1200,20 +1200,6 @@ class DeploymentManager:
                 if source_type in WORKFLOW_TRIGGER_TYPES:
                     continue
                 downstream_ids.add(source)
-
-        # Include sub-nodes connected to toolkit nodes (n8n Sub-Node pattern).
-        # Service nodes connect to a toolkit's input-main (not a config
-        # handle) and need to be included so the toolkit can discover
-        # them. ``TOOLKIT_NODE_TYPES`` is the canonical set; today only
-        # toolkit node types are in it.
-        toolkit_node_ids = {n["id"] for n in nodes if n.get("type") in TOOLKIT_NODE_TYPES and n["id"] in downstream_ids}
-        for edge in edges:
-            target = edge.get("target")
-            source = edge.get("source")
-            # Include nodes that connect to toolkit nodes
-            if target in toolkit_node_ids and source not in downstream_ids:
-                downstream_ids.add(source)
-                logger.debug(f"[Deployment] Including sub-node {source} connected to toolkit {target}")
 
         # Include tool nodes connected to AI Agent nodes (for capability discovery)
         # When a child agent is included, we need its connected tools so the parent

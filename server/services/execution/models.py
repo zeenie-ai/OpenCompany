@@ -315,10 +315,10 @@ class ExecutionContext:
         Config nodes (memory, tools, model configs) are excluded from execution
         as they provide configuration to other nodes via special handles.
 
-        Toolkit sub-nodes (nodes connected to an aggregator) are also
-        excluded - they execute only when called via the toolkit's tool interface.
+        Sub-nodes connected to an AI Agent's config handles are also
+        excluded - they execute only when called via the agent's tool interface.
         """
-        from constants import CONFIG_NODE_TYPES, TOOLKIT_NODE_TYPES, AI_AGENT_TYPES
+        from constants import CONFIG_NODE_TYPES, AI_AGENT_TYPES
 
         execution_id = str(uuid.uuid4())
         ctx = cls(
@@ -329,10 +329,6 @@ class ExecutionContext:
             edges=edges or [],
         )
 
-        # Find toolkit sub-nodes (nodes that connect TO a toolkit node)
-        # These should only execute when called via the toolkit, not as workflow nodes
-        toolkit_node_ids = {n.get("id") for n in (nodes or []) if n.get("type") in TOOLKIT_NODE_TYPES}
-
         # Find AI Agent nodes (all agent types have config handles)
         ai_agent_node_ids = {n.get("id") for n in (nodes or []) if n.get("type") in AI_AGENT_TYPES}
 
@@ -341,10 +337,6 @@ class ExecutionContext:
             source = edge.get("source")
             target = edge.get("target")
             target_handle = edge.get("targetHandle")
-
-            # Any node that connects TO a toolkit is a sub-node
-            if target in toolkit_node_ids and source:
-                subnode_ids.add(source)
 
             # Nodes connected to AI Agent config handles are sub-nodes
             # These handles: input-memory, input-tools, input-skill, input-teammates

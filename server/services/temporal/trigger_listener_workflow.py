@@ -353,7 +353,6 @@ def _build_run_graph(
     """
     from constants import (
         AI_AGENT_TYPES,
-        TOOLKIT_NODE_TYPES,
         WORKFLOW_TRIGGER_TYPES,
     )
 
@@ -386,14 +385,6 @@ def _build_run_graph(
         if is_config and target in downstream_ids and source not in downstream_ids:
             if node_types.get(source, "") in WORKFLOW_TRIGGER_TYPES:
                 continue
-            downstream_ids.add(source)
-
-    # Sub-nodes connected to toolkit nodes (n8n Sub-Node pattern).
-    toolkit_ids = {n["id"] for n in nodes if n.get("type") in TOOLKIT_NODE_TYPES and n["id"] in downstream_ids}
-    for edge in edges:
-        target = edge.get("target")
-        source = edge.get("source")
-        if target in toolkit_ids and source not in downstream_ids:
             downstream_ids.add(source)
 
     # Tool nodes connected to AI Agent's input-tools handle.

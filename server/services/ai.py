@@ -134,11 +134,9 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 # Native LLM provider imports (dual-path: native for chat, LangChain for agents)
 # ---------------------------------------------------------------------------
-# ``create_provider`` / ``is_native_provider`` are no longer called from
-# this module — ``ChatUnifier`` (injected via DI) owns provider
-# dispatch. The imports stay deleted; Phase D removes the legacy
-# factory functions entirely once the LangChain fallback for
-# groq/cerebras lands behind the unifier.
+# ``ChatUnifier`` (injected via DI) owns provider dispatch. The legacy
+# ``services.llm.factory`` module (``create_provider`` /
+# ``is_native_provider``) was removed after the unifier cutover.
 from services.llm.protocol import (
     Message as NativeMessage,
     ThinkingConfig as NativeThinkingConfig,

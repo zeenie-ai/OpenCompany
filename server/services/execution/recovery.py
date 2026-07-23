@@ -194,8 +194,6 @@ class RecoverySweeper:
 
         return needs_recovery
 
-        return cleaned
-
 
 # Global sweeper instance (initialized by main.py)
 _sweeper: Optional[RecoverySweeper] = None
