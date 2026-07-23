@@ -34,12 +34,31 @@ def test_openrouter_global_models_exist_in_latest_router_cache() -> None:
 
 
 def test_latest_router_families_are_exposed() -> None:
+    # Global lists carry only >=1M-context models (llm_defaults _description
+    # policy, 2026-07-23) — hence grok-4.20 (2M) rather than the 500K grok-4.5.
     providers = _defaults()["providers"]
     assert "gpt-5.6-sol-pro" in providers["openai"]["popular_models"]
     assert "claude-sonnet-5" in providers["anthropic"]["popular_models"]
     assert "gemini-3.5-flash" in providers["gemini"]["popular_models"]
     assert "kimi-k3" in providers["kimi"]["popular_models"]
-    assert "grok-4.5" in providers["xai"]["popular_models"]
+    assert "grok-4.20" in providers["xai"]["popular_models"]
+
+
+def test_global_lists_only_carry_1m_context_models() -> None:
+    """Every popular_models entry must have a >=1M-token context window.
+
+    Context comes from the provider's own curated context_length map;
+    entries without a per-model value (e.g. openrouter's vendor-prefixed
+    ids) are exempt because their true windows live in the router cache.
+    """
+    providers = _defaults()["providers"]
+    for provider, config in providers.items():
+        context_map = config.get("context_length", {})
+        for model in config.get("popular_models", []):
+            ctx = context_map.get(model)
+            if ctx is None:
+                continue
+            assert ctx >= 1_000_000, f"{provider}/{model} has {ctx} < 1M context but is in the global list"
 
 
 def test_ai_service_offline_fallback_uses_explicit_order() -> None:

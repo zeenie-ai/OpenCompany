@@ -1,6 +1,6 @@
 {
   "version": "2026.07",
-  "last_updated": "2026-07-11",
+  "last_updated": "2026-07-23",
 
   "llm": {
     "openai": {
@@ -38,12 +38,19 @@
       "_default": {"input": 0.50, "output": 3.00}
     },
     "groq": {
+      "gpt-oss-120b": {"input": 0.15, "output": 0.60},
+      "gpt-oss-20b": {"input": 0.075, "output": 0.30},
       "llama-4-scout": {"input": 0.11, "output": 0.34},
       "llama-4-maverick": {"input": 0.15, "output": 0.60},
       "llama-3.3-70b": {"input": 0.10, "output": 0.10},
       "llama-3.1-8b": {"input": 0.05, "output": 0.08},
       "qwen3-32b": {"input": 0.29, "output": 0.59},
       "_default": {"input": 0.15, "output": 0.60}
+    },
+    "xai": {
+      "grok-4.5": {"input": 2.00, "output": 6.00},
+      "grok-4.20": {"input": 2.00, "output": 6.00},
+      "_default": {"input": 2.00, "output": 6.00}
     },
     "cerebras": {
       "gpt-oss-120b": {"input": 0.35, "output": 0.75},
@@ -55,11 +62,14 @@
       "_default": {"input": 1.00, "output": 5.00}
     },
     "deepseek": {
+      "deepseek-v4-pro": {"input": 0.435, "output": 0.87},
+      "deepseek-v4-flash": {"input": 0.14, "output": 0.28},
       "deepseek-chat": {"input": 0.28, "output": 0.42, "cache_read": 0.028},
       "deepseek-reasoner": {"input": 0.55, "output": 2.19, "cache_read": 0.14},
       "_default": {"input": 0.28, "output": 0.42}
     },
     "kimi": {
+      "kimi-k3": {"input": 3.00, "output": 15.00, "cache_read": 0.30},
       "kimi-k2.5": {"input": 0.60, "output": 2.50, "cache_read": 0.15},
       "kimi-k2-thinking": {"input": 0.60, "output": 2.50, "cache_read": 0.15},
       "moonshot-v1-8k": {"input": 0.20, "output": 2.00},

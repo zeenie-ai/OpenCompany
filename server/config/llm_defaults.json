@@ -1,7 +1,7 @@
 {
-  "version": "2026.07.18",
-  "last_updated": "2026-07-18",
-  "_description": "LLM provider defaults. popular_models drives the ordered global selector and offline fallback independently of token constraints. Connection config drives native SDK and LangChain paths; model specs are enriched by model_registry.json (OpenRouter cache).",
+  "version": "2026.07.23",
+  "last_updated": "2026-07-23",
+  "_description": "LLM provider defaults. popular_models drives the ordered global selector and offline fallback independently of token constraints. POLICY (2026-07-23): popular_models lists only models with >= 1M-token context windows — providers whose models are all below 1M carry an empty list and contribute nothing to the global selector (their models stay reachable via the live per-provider fetch_models dropdown). Connection config drives native SDK and LangChain paths; model specs are enriched by model_registry.json (OpenRouter cache).",
 
   "agent": {
     "_description": "Agent execution defaults. recursion_limit and compaction.ratio are sourced from the environment (AGENT_RECURSION_LIMIT, COMPACTION_RATIO via core.config.Settings) — these JSON values are last-resort fallbacks when the env vars aren't loaded (e.g. one-off CLI scripts that bypass Settings). default_temperature stays JSON-resident since it has no env override yet.",
@@ -53,7 +53,7 @@
     },
     "anthropic": {
       "default_model": "claude-opus-4-8",
-      "popular_models": ["claude-fable-5", "claude-sonnet-5", "claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"],
+      "popular_models": ["claude-fable-5", "claude-sonnet-5", "claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-4-6"],
       "detection_patterns": ["claude", "anthropic"],
       "base_url": "https://api.anthropic.com/v1",
       "models_endpoint": "https://api.anthropic.com/v1/models",
@@ -82,7 +82,7 @@
     },
     "gemini": {
       "default_model": "gemini-3.5-flash",
-      "popular_models": ["gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite", "gemini-3-flash-preview", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemma-4-31b-it", "gemma-4-26b-a4b-it"],
+      "popular_models": ["gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite", "gemini-3-flash-preview", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"],
       "detection_patterns": ["gemini", "google", "gemma"],
       "_detection_patterns_note": "'gemma' makes is_model_valid_for_provider accept the API-served Gemma models (gemma-4-*-it) on gemini nodes — without it the four agent-path call sites silently swap gemma to default_model. Cerebras keeps its own 'gemma-4' pattern for its gemma-4-31b (no -it suffix); is_model_valid_for_provider is per-provider so both coexist. Only the runtime-unused detect_provider_from_model classifier prefers gemini for gemma-* names (dict order).",
       "base_url": "https://generativelanguage.googleapis.com/v1beta",
@@ -124,7 +124,7 @@
     },
     "openrouter": {
       "default_model": "anthropic/claude-sonnet-5",
-      "popular_models": ["anthropic/claude-sonnet-5", "openai/gpt-5.6-terra", "openai/gpt-5.6-sol", "google/gemini-3.5-flash", "moonshotai/kimi-k3", "x-ai/grok-4.20", "openrouter/auto-beta"],
+      "popular_models": ["anthropic/claude-sonnet-5", "openai/gpt-5.6-terra", "openai/gpt-5.6-sol", "google/gemini-3.5-flash", "moonshotai/kimi-k3", "x-ai/grok-4.20"],
       "detection_patterns": ["openrouter"],
       "base_url": "https://openrouter.ai/api/v1",
       "models_endpoint": "https://openrouter.ai/api/v1/models",
@@ -140,13 +140,15 @@
       "temperature_range": [0.0, 2.0]
     },
     "groq": {
-      "default_model": "llama-3.3-70b-versatile",
-      "popular_models": ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.3-70b-versatile", "llama-3.1-8b-instant", "qwen/qwen3-32b"],
+      "default_model": "openai/gpt-oss-120b",
+      "popular_models": [],
+      "_popular_note": "Empty per the 1M-context policy — no Groq-served model reaches 1M (all top out at 131072). Models remain reachable via live fetch_models.",
       "detection_patterns": ["groq"],
       "base_url": "https://api.groq.com/openai/v1",
       "models_endpoint": "https://api.groq.com/openai/v1/models",
       "api_key_param": "api_key",
       "max_tokens_param": "max_tokens",
+      "_models_note": "Default moved to openai/gpt-oss-120b (production route). Groq announced deprecation of llama-3.3-70b-versatile and llama-3.1-8b-instant on 2026-06-17 (console.groq.com/docs/deprecations); kept in the list while still served — they fall back to _default constraints after removal.",
       "max_output_tokens": {
         "openai/gpt-oss-120b": 65536,
         "openai/gpt-oss-20b": 65536,
@@ -169,7 +171,8 @@
     },
     "cerebras": {
       "default_model": "gpt-oss-120b",
-      "popular_models": ["gpt-oss-120b", "zai-glm-4.7", "gemma-4-31b"],
+      "popular_models": [],
+      "_popular_note": "Empty per the 1M-context policy — no Cerebras model reaches 1M (all 131072). Models remain reachable via live fetch_models.",
       "detection_patterns": ["cerebras", "gpt-oss", "zai-glm", "gemma-4"],
       "base_url": "https://api.cerebras.ai/v1",
       "models_endpoint": "https://api.cerebras.ai/v1/models",
@@ -194,13 +197,16 @@
     },
     "xai": {
       "default_model": "grok-4.20",
-      "popular_models": ["grok-4.20", "grok-4.20-multi-agent", "grok-4.5", "grok-4.3", "grok-3"],
+      "popular_models": ["grok-4.20", "grok-4.20-multi-agent", "grok-4.3"],
+      "_popular_note": "grok-4.5 (flagship, released 2026-07-08) and grok-3 excluded per the 1M-context policy (500K / 131072); reachable via live fetch_models. Default stays grok-4.20 (2M) so the default is selectable from the global list.",
       "detection_patterns": ["grok", "xai"],
       "base_url": "https://api.x.ai/v1",
       "models_endpoint": "https://api.x.ai/v1/models",
       "api_key_param": "api_key",
       "max_tokens_param": "max_tokens",
+      "_models_note": "grok-4.5 (released 2026-07-08): 500K context, configurable reasoning effort (default high), $2/$6 per MTok. Output cap undocumented by xAI — curated 131072 matches the rest of the grok family; registry cache wins when present.",
       "max_output_tokens": {
+        "grok-4.5": 131072,
         "grok-4.20": 131072,
         "grok-4.3": 131072,
         "grok-3": 131072,
@@ -218,7 +224,8 @@
     },
     "deepseek": {
       "default_model": "deepseek-v4-flash",
-      "popular_models": ["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner"],
+      "popular_models": ["deepseek-v4-flash", "deepseek-v4-pro"],
+      "_popular_note": "deepseek-chat / deepseek-reasoner dropped from the global list per the 1M-context policy (131072); reachable via live fetch_models.",
       "detection_patterns": ["deepseek"],
       "base_url": "https://api.deepseek.com",
       "models_endpoint": "https://api.deepseek.com/models",
@@ -243,8 +250,10 @@
       "temperature_range": [0.0, 2.0]
     },
     "kimi": {
-      "default_model": "kimi-k2.6",
-      "popular_models": ["kimi-k3", "kimi-k2.7-code", "kimi-k2.6", "kimi-k2.5"],
+      "default_model": "kimi-k3",
+      "popular_models": ["kimi-k3"],
+      "_popular_note": "Only kimi-k3 meets the 1M-context policy (k2.x are 262144); k2.x remain reachable via live fetch_models.",
+      "_models_note": "kimi-k3 GA (platform.kimi.ai): 2.8T params, 1M context, vision + tool calling + structured outputs, $3/$15 per MTok ($0.30 cache-hit). Default max_completion_tokens 131072 (configurable up to the full window). k2.x kept as cheaper tiers.",
       "detection_patterns": ["kimi", "moonshot"],
       "base_url": "https://api.moonshot.ai/v1",
       "models_endpoint": "https://api.moonshot.ai/v1/models",
@@ -254,6 +263,7 @@
       "thinking_default_on": ["kimi-k2.6", "kimi-k2.5", "kimi-k2.7-code"],
       "fixed_temperature": {"kimi-k2.6": 0.6, "kimi-k2.5": 0.6, "kimi-k2.7-code": 0.6},
       "max_output_tokens": {
+        "kimi-k3": 131072,
         "kimi-k2.6": 32768,
         "kimi-k2.5": 98304,
         "kimi-k2.7-code": 98304,
@@ -270,7 +280,8 @@
     },
     "mistral": {
       "default_model": "mistral-large-latest",
-      "popular_models": ["mistral-large-latest", "mistral-medium-latest", "mistral-small-latest", "codestral-latest"],
+      "popular_models": [],
+      "_popular_note": "Empty per the 1M-context policy — Mistral tops out at 262144 (large/medium). Models remain reachable via live fetch_models.",
       "detection_patterns": ["mistral", "codestral"],
       "base_url": "https://api.mistral.ai/v1",
       "models_endpoint": "https://api.mistral.ai/v1/models",
