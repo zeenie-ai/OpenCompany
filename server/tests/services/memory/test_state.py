@@ -84,6 +84,38 @@ async def test_unsaved_memory_clear_removes_every_unsaved_todo_node(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_memory_clear_removes_native_vector_store(monkeypatch):
+    from services import todo_service as todo_service_module
+    from services.memory.vector_store import (
+        MemoryVectorStoreKey,
+        _memory_vector_stores,
+    )
+
+    monkeypatch.setattr(todo_service_module, "_service", TodoService())
+    marker = object()
+    composite_key = MemoryVectorStoreKey(
+        session_id="native-session",
+        provider="openai",
+        model="text-embedding-3-small",
+        endpoint="",
+        credential_fingerprint="fingerprint",
+    )
+    _memory_vector_stores["native-session"] = marker
+    _memory_vector_stores[composite_key] = marker
+    try:
+        result = await clear_agent_session_state(
+            session_id="native-session",
+            clear_long_term=True,
+        )
+        assert result["cleared_vector_store"] is True
+        assert "native-session" not in _memory_vector_stores
+        assert composite_key not in _memory_vector_stores
+    finally:
+        _memory_vector_stores.pop("native-session", None)
+        _memory_vector_stores.pop(composite_key, None)
+
+
+@pytest.mark.asyncio
 async def test_memory_node_clear_uses_atomic_mutation_and_preserves_unrelated_fields(
     monkeypatch,
 ):

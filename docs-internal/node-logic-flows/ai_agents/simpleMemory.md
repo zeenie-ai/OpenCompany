@@ -17,9 +17,10 @@ its own — `ui_hints.hideRunButton` is set. When an `aiAgent` / `chatAgent`
 reads this node's saved parameters (`memory_content`, `window_size`,
 `long_term_enabled`, etc.) via `_build_memory_entry` and forwards them to
 `AIService.execute_agent` / `execute_chat_agent`. The service parses the
-markdown, feeds the messages to the LLM, appends the new exchange, trims to
-window, and saves the updated markdown back to the memory node via
-`database.save_node_parameters`.
+markdown into native provider-neutral `Message` values, feeds them to the
+shared native agent loop, appends the new exchange, trims to window, and saves
+the updated markdown back to the memory node through the atomic memory
+persistence helper.
 
 The plugin's own `@Operation("read")` method is only invoked when a user
 explicitly hits Run (or via direct dispatch); it returns an inspector-style
@@ -66,15 +67,18 @@ button).
 | `session_id` | string | `""` | no | - | Session override. Empty -> agent node_id is used by the agent-side collection; the `read` op resolves empty to `"default"`. |
 | `window_size` | int | `100` | no | - | Message *pairs* to keep in short-term memory; 1-100. |
 | `memory_content` | string (code editor, markdown, rows 15) | `# Conversation History\n\n*No messages yet.*\n` | no | - | Markdown body (`### **Human** (ts)` / `### **Assistant** (ts)` blocks). Edited in-place in the UI. |
-| `long_term_enabled` | boolean | `false` | no | - | When true, trimmed messages are archived to an `InMemoryVectorStore`. |
+| `long_term_enabled` | boolean | `false` | no | - | When true, trimmed messages are archived to a per-session `NativeMemoryVectorStore`. |
 | `retrieval_count` | int | `3` | no | `long_term_enabled=[true]` | Relevant messages to retrieve at query time (1-10). |
+| `embedding_provider` | options | `huggingface` | no | `long_term_enabled=[true]` | `huggingface`, `openai`, or `ollama`. |
+| `embedding_model` | string | `""` | no | `long_term_enabled=[true]` | Empty selects the provider default (`BAAI/bge-small-en-v1.5`, `text-embedding-3-small`, or `nomic-embed-text`). |
+| `embedding_endpoint` | string | `""` | no | `long_term_enabled=[true]` | Optional OpenAI base URL or Ollama host. Never contains credentials. |
 | `last_session_id` | string (optional, **hidden**) | `None` | no | - | Internal/display-only: last Claude session UUID. `claude_code_agent` no longer reads it; cleared when memory is wiped. |
 
 Parameters consumed when an agent pulls the memory:
 
 | Name | Where it comes from | Where it is read |
 |------|---------------------|------------------|
-| `memory_content`, `window_size`, `long_term_enabled`, `retrieval_count`, `last_session_id` | `database.get_node_parameters(source_node_id)` inside `edge_walker._build_memory_entry` | Packed into the `memory_data` dict and forwarded to `AIService`. |
+| `memory_content`, `window_size`, `long_term_enabled`, `retrieval_count`, `embedding_provider`, `embedding_model`, `embedding_endpoint`, `last_session_id` | `database.get_node_parameters(source_node_id)` inside `edge_walker._build_memory_entry` | Packed into the `memory_data` dict and forwarded to the agent runtime. |
 
 Parameters consumed when the node is run directly (`@Operation("read")`):
 
@@ -137,12 +141,12 @@ flowchart TD
 - **Window semantics**: `window_size` counts *pairs* (Human + Assistant), so
   `trim_markdown_window` keeps `window_size * 2` blocks. Trimmed blocks are
   returned as raw text for optional vector-store archival.
-- **Long-term retrieval**: `services.memory.get_memory_vector_store(session_id)`
-  lazily creates an `InMemoryVectorStore` with
-  `HuggingFaceEmbeddings(BAAI/bge-small-en-v1.5)` the first time it is requested
-  for that session. On `ImportError` (e.g. `langchain_huggingface` missing) the
-  function returns `None` and the agent silently skips archival - **no error is
-  surfaced**.
+- **Long-term retrieval**: async
+  `services.memory.get_memory_vector_store(...)` creates a
+  `NativeMemoryVectorStore` backed by the selected direct SDK. OpenAI keys are
+  resolved from `AuthService`; cache keys retain only a credential
+  fingerprint. Missing optional `sentence-transformers` support returns
+  `None`, so the agent skips archival without failing.
 - **Direct-run memory store is different**: the `read` op pulls from
   `services.memory_store` (via `get_messages`), **not** from the markdown
   `memory_content`. A user who clicks Run on a `simpleMemory` node actively
@@ -155,20 +159,22 @@ flowchart TD
   updated markdown back to this node's `node_parameters` row via
   `database.save_node_parameters` after each turn.
 - **Broadcasts**: none. The node is passive.
-- **External API calls**: none in the `read` op. When `long_term_enabled` is set
-  and the agent archives, `HuggingFaceEmbeddings` loads the
-  `BAAI/bge-small-en-v1.5` model locally (no network once cached).
-- **File I/O**: none. The vector store is `InMemoryVectorStore` - not
-  persisted to disk; it is lost on process restart.
+- **External API calls**: none in the `read` op. Agent archival may call
+  OpenAI embeddings, Ollama, or load a local SentenceTransformer according to
+  the selected provider.
+- **File I/O**: none after the embedding model has loaded. The native vector
+  index is not persisted to disk and is lost on process restart.
 - **Subprocess**: none.
 
 ## External Dependencies
 
-- **Credentials**: none.
+- **Credentials**: OpenAI long-term memory resolves the stored OpenAI key
+  through `AuthService`. Plaintext keys are not persisted in memory-node
+  parameters or vector-store cache keys.
 - **Services**: `services.memory_store` (direct-run path), `AIService` (via
   agents), `Database` (for parameter persistence).
-- **Python packages**: `langchain-core` (messages), `langchain_huggingface`
-  + `sentence-transformers` (long-term vector store only, optional).
+- **Python packages**: `sentence-transformers` via the optional
+  `local-embeddings` extra (long-term vector store only).
 - **Environment variables**: none.
 
 ## Edge cases & known limits
@@ -178,11 +184,11 @@ flowchart TD
   `read` op) are **independent**. Clicking Run on the node does not
   reflect what the agents see, and vice-versa. This is a known architectural
   seam noted in the CLAUDE.md overview.
-- **Vector store is in-memory only**. The per-session cache in
-  `services.memory.vector_store` is a module-global dict keyed by session id.
-  A server restart empties it; long-term memory is not actually durable
-  without external persistence.
-- **`HuggingFaceEmbeddings` import is silent-catch**. If the dependency is
+- **Vector store is in-memory only**. Its cache is keyed by session, provider,
+  model, endpoint, and a non-secret credential fingerprint. A server restart
+  empties it; long-term memory is not actually durable without external
+  persistence.
+- **Optional embedder import is silent-catch**. If `sentence-transformers` is
   missing at runtime, `get_memory_vector_store` logs a warning and returns
   `None`; the agent continues without archival and the user never learns.
 - **No token budgeting**. `window_size` is a message-pair count, not a token

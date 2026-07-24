@@ -13,7 +13,7 @@ from google.genai import errors as google_genai_errors
 from unittest.mock import AsyncMock, MagicMock
 
 import services.llm  # noqa: F401 — populate registry
-from services.llm.registry import ProviderSpec, register_provider, _reset_for_tests, get_provider
+from services.llm.registry import ProviderSpec, get_provider
 from services.llm.unifier import ChatUnifier
 from services.llm.protocol import Message
 from services.plugin import NodeUserError
@@ -64,13 +64,15 @@ def _replace_factory(provider_name: str, exc: Exception):
 async def test_anthropic_typed_error_becomes_node_user_error(unifier):
     original = _replace_factory("anthropic", anthropic.APIError(message="bad key", request=MagicMock(), body=None))
     try:
-        with pytest.raises(NodeUserError, match="bad key"):
+        with pytest.raises(NodeUserError) as caught:
             await unifier.chat(
                 provider="anthropic",
                 api_key="sk-test",
                 messages=[Message(role="user", content="hi")],
                 model="claude-sonnet-4-6",
             )
+        assert str(caught.value) == "Anthropic request failed."
+        assert "bad key" not in str(caught.value)
     finally:
         from services.llm import registry as _registry
 
@@ -81,13 +83,17 @@ async def test_anthropic_typed_error_becomes_node_user_error(unifier):
 async def test_openai_typed_error_becomes_node_user_error(unifier):
     original = _replace_factory("openai", openai.AuthenticationError(message="bad key", response=MagicMock(), body=None))
     try:
-        with pytest.raises(NodeUserError, match="bad key"):
+        with pytest.raises(NodeUserError) as caught:
             await unifier.chat(
                 provider="openai",
                 api_key="sk-test",
                 messages=[Message(role="user", content="hi")],
                 model="gpt-5",
             )
+        assert str(caught.value) == (
+            "OpenAI authentication failed. Check the configured API key."
+        )
+        assert "bad key" not in str(caught.value)
     finally:
         from services.llm import registry as _registry
 
@@ -104,13 +110,17 @@ async def test_gemini_typed_error_becomes_node_user_error(unifier):
         google_genai_errors.APIError(code=400, response_json={"message": "This model only supports Interactions API."}),
     )
     try:
-        with pytest.raises(NodeUserError, match="Interactions API"):
+        with pytest.raises(NodeUserError) as caught:
             await unifier.chat(
                 provider="gemini",
                 api_key="key",
                 messages=[Message(role="user", content="hi")],
                 model="antigravity-preview-05-2026",
             )
+        assert str(caught.value) == (
+            "Gemini rejected the model request configuration."
+        )
+        assert "Interactions API" not in str(caught.value)
     finally:
         from services.llm import registry as _registry
 
@@ -121,13 +131,18 @@ async def test_gemini_typed_error_becomes_node_user_error(unifier):
 async def test_openrouter_typed_error_becomes_node_user_error(unifier):
     original = _replace_factory("openrouter", openai.RateLimitError(message="429", response=MagicMock(), body=None))
     try:
-        with pytest.raises(NodeUserError, match="429"):
+        with pytest.raises(NodeUserError) as caught:
             await unifier.chat(
                 provider="openrouter",
                 api_key="or-key",
                 messages=[Message(role="user", content="hi")],
                 model="anthropic/claude-sonnet-4.6",
             )
+        assert str(caught.value) == (
+            "OpenRouter is rate-limiting requests. "
+            "Retry after a short delay."
+        )
+        assert "429" not in str(caught.value)
     finally:
         from services.llm import registry as _registry
 

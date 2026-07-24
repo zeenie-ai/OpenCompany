@@ -59,13 +59,11 @@ class FileModifyNode(ActionNode):
     @Operation("modify")
     async def modify(self, ctx: NodeContext, params: FileModifyParams) -> Any:
         """Inlined from handlers/filesystem.py (Wave 11.D.1)."""
-        from deepagents.backends.utils import perform_string_replacement
-
         from .._backend import (
-            atomic_write_text,
             get_backend,
             get_path_lock,
             normalize_virtual_path,
+            perform_string_replacement,
             run_sync_until_complete,
         )
 
@@ -80,7 +78,7 @@ class FileModifyNode(ActionNode):
             def _do_write():
                 if resolved.exists() and resolved.is_dir():
                     raise IsADirectoryError(f"Cannot write to {file_path}: path is a directory")
-                atomic_write_text(resolved, params.content)
+                backend.atomic_write_text(resolved, params.content)
 
             try:
                 async with path_lock:
@@ -95,14 +93,14 @@ class FileModifyNode(ActionNode):
             def _do_edit():
                 if not resolved.exists() or not resolved.is_file():
                     return None, None, f"Error: File '{file_path}' not found"
-                content = resolved.read_text(encoding="utf-8")
+                content = backend.read_text_secure(resolved)
                 old_string = params.old_string.replace("\r\n", "\n").replace("\r", "\n")
                 new_string = params.new_string.replace("\r\n", "\n").replace("\r", "\n")
                 replacement = perform_string_replacement(content, old_string, new_string, params.replace_all)
                 if isinstance(replacement, str):
                     return None, None, replacement
                 new_content, occurrences = replacement
-                atomic_write_text(resolved, new_content)
+                backend.atomic_write_text(resolved, new_content)
                 return file_path, int(occurrences), None
 
             try:

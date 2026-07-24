@@ -78,7 +78,8 @@ flowchart TD
 
 - **Validation**: missing api_key / empty prompt -> error envelope.
 - **Provider routing**: matches `'gemini' in node_type.lower()`.
-- **Native SDK**: uses `google.genai.Client` (NOT LangChain's `langchain_google_genai`) to dodge the Windows/Python 3.13 gRPC import hang.
+- **Native SDK**: `ChatUnifier` uses `google.genai.Client` for both chat and
+  current agent requests.
 - **Thinking budget**: `thinkingBudget` -> `NativeThinkingConfig.budget` -> Gemini `thinking_budget` API parameter.
 - **Model string scrubbing**: `[FREE] ` prefix stripped; `owner/model` prefix stripped (non-OpenRouter).
 
@@ -99,7 +100,9 @@ flowchart TD
 
 ## Edge cases & known limits
 
-- **Windows/Python 3.13 quirk**: importing `langchain_google_genai` hangs due to a gRPC deadlock. The native path bypasses this entirely. The LangChain fallback is NEVER used for Gemini on `execute_chat` - it is only lazy-imported for agent execution.
+- **Windows/Python 3.13 quirk**: the native `google-genai` provider avoids the
+  former adapter's gRPC import deadlock. Both current chat and agent
+  executions use the native path.
 - **Thinking budget units**: expressed as token count, not low/medium/high effort levels. Defaults to 2048.
 - **Safety settings**: forwarded via the SDK; malformed values surface as `success=false` in the envelope.
 - **`maxTokens` clamp**: capped at the model's ceiling (65K for 2.5/3.x).

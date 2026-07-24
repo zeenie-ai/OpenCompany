@@ -10,11 +10,10 @@
 
 ## Purpose
 
-Split documents into overlapping text chunks suitable for embedding. Uses
-LangChain's `RecursiveCharacterTextSplitter` (default) or
-`MarkdownTextSplitter` for structure-aware splitting of Markdown content.
-Typically sits between `documentParser` and `embeddingGenerator` in a RAG
-pipeline.
+Split documents into overlapping text chunks suitable for embedding. The
+dependency-free local splitter preserves the former recursive-character and
+Markdown separator/overlap semantics. Typically sits between
+`documentParser` and `embeddingGenerator` in a RAG pipeline.
 
 ## Inputs (handles)
 
@@ -62,8 +61,8 @@ flowchart TD
   A[TextChunkerNode.chunk] --> B{documents empty?}
   B -- yes --> Ret0[Return success=true<br/>chunks=[], chunk_count=0]
   B -- no --> C{strategy}
-  C -- markdown --> Cm[MarkdownTextSplitter]
-  C -- other --> Cr[RecursiveCharacterTextSplitter]
+  C -- markdown --> Cm[Local Markdown separator set]
+  C -- other --> Cr[Local recursive separator set]
   Cm --> D[For each doc: extract content + source]
   Cr --> D
   D --> E{content truthy?}
@@ -93,13 +92,15 @@ flowchart TD
 ## External Dependencies
 
 - **Credentials**: none.
-- **Python packages**: `langchain-text-splitters>=0.3.0`.
+- **Python packages**: none beyond the standard library; splitting lives in
+  `server/nodes/document/text_chunker/_splitter.py`.
 - **Environment variables**: none.
 
 ## Edge cases & known limits
 
 - `token` strategy is mentioned in the frontend options/description but there is no branch for it; it currently falls through to recursive. Documented gotcha.
-- `chunkSize`/`chunkOverlap` are cast via `int(...)` without clamping - out-of-range values pass through to LangChain and may raise if `overlap >= chunkSize`.
+- `chunkSize`/`chunkOverlap` are cast via `int(...)`; the local splitter raises
+  if `overlap > chunkSize`.
 - Pure function, no randomness - deterministic given the same inputs.
 - Chunks preserve order per-document but there is no global index across documents.
 

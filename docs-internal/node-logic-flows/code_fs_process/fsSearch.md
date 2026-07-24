@@ -4,7 +4,7 @@
 |------|-------|
 | **Category** | code_fs_process / filesystem |
 | **Backend handler** | [`server/nodes/filesystem/fs_search/__init__.py::FsSearchNode.search`](../../../server/nodes/filesystem/fs_search/__init__.py) (dispatched via `BaseNode.execute()` + `@Operation("search")`) |
-| **Backend** | `NushellBackend` (subclasses `deepagents.backends.LocalShellBackend`; `ls_info`, `glob_info`, `grep_raw`) in [`server/nodes/filesystem/_backend.py`](../../../server/nodes/filesystem/_backend.py) |
+| **Backend** | Native `WorkspaceBackend` (`ls_info`, `glob_info`, `grep_raw`) in [`server/nodes/filesystem/_backend.py`](../../../server/nodes/filesystem/_backend.py) |
 | **Tests** | [`server/tests/nodes/test_code_fs_process.py`](../../../server/tests/nodes/test_code_fs_process.py) |
 | **Skill (if any)** | [`server/skills/coding_agent/fs-search-skill/SKILL.md`](../../../server/skills/coding_agent/fs-search-skill/SKILL.md) |
 | **Dual-purpose tool** | yes - tool name `fs_search` |
@@ -12,9 +12,10 @@
 ## Purpose
 
 Three-mode filesystem query node confined to the per-workflow workspace.
-Dispatches to `ls_info()`, `glob_info()`, or `grep_raw()` on `NushellBackend`
-(`virtual_mode=True`, `inherit_env=True`) via `get_backend()` depending on
-`mode`. The `path` is run through `normalize_virtual_path()` first.
+Dispatches to `ls_info()`, `glob_info()`, or `grep_raw()` on the native
+`WorkspaceBackend` via `get_backend()` depending on `mode`. The `path` is run
+through `normalize_virtual_path()` first, and each filesystem operation
+resolves the target beneath the workspace root with symlink containment.
 
 ## Inputs (handles)
 
@@ -28,7 +29,7 @@ Dispatches to `ls_info()`, `glob_info()`, or `grep_raw()` on `NushellBackend`
 |------|------|---------|----------|---------------------|-------------|
 | `mode` | `ls` \| `glob` \| `grep` (Literal) | `ls` | no | - | `ls`, `glob`, or `grep` |
 | `path` | string | `.` | no | - | Directory path to search in (workspace-relative) |
-| `pattern` | string | `""` | yes (when `mode != ls`) | - | Glob pattern or grep regex |
+| `pattern` | string | `""` | yes (when `mode != ls`) | - | Glob pattern or literal grep text |
 
 `FsSearchParams` uses `extra="ignore"` — there are NO `file_filter` or
 `working_directory` params; the model drops unknown keys. The grep mode passes
@@ -52,8 +53,8 @@ declared on these fields in the current Params model.)
 { path: string; pattern: string; matches: Array<GrepMatch>; count: number }
 ```
 
-`FileInfo` and `GrepMatch` are the dataclass shapes returned by the
-`deepagents` backend, converted via `dict(entry)`.
+`FileInfo` and `GrepMatch` are JSON-safe dictionaries returned by the native
+backend. The node defensively copies each with `dict(entry)`.
 `node_output_schemas.FsSearchOutput` declares `path` / `entries` / `matches` /
 `pattern` / `count` (extra fields allowed by `_OutputBase`).
 
@@ -100,12 +101,12 @@ flowchart TD
 - **File I/O**:
   - `get_backend` ensures the workspace root exists.
   - Reads directory listings and file contents under `<root>/<path>`.
-- **Subprocess**: none (`grep_raw` is a Python regex walk in recent
-  `deepagents`; not a `grep(1)` exec).
+- **Subprocess**: none (`grep_raw` is a local Python file walk and literal
+  substring search; it does not invoke `grep(1)`).
 
 ## External Dependencies
 
-- **Python packages**: `deepagents` (via `NushellBackend`).
+- **Python packages**: standard library only.
 - **Environment variables**: `WORKSPACE_BASE_DIR`.
 
 ## Edge cases & known limits
@@ -121,9 +122,8 @@ flowchart TD
 - **`path='.'` resolves against the workspace root, not the server CWD**.
 - **`working_directory` not exposed**: `extra="ignore"` means the sandbox
   cannot be widened via a node param on this node.
-- **Dataclass `dict()` conversion**: relies on `FileInfo` / `GrepMatch`
-  being dataclasses (they implement `__iter__` via dataclass). A future
-  backend upgrade that returns `TypedDict`s could break this.
+- **Result copying**: `dict()` makes each native result mapping independent
+  before output validation and serialization.
 
 ## Related
 

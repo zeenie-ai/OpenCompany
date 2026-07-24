@@ -87,6 +87,8 @@ class TestAIAgent:
                 "memory_content": "# Conversation History\n\n### **Human** (t)\nhi\n",
                 "long_term_enabled": True,
                 "retrieval_count": 5,
+                "embedding_provider": "ollama",
+                "embedding_endpoint": "http://localhost:11434",
             }
         )
 
@@ -110,6 +112,9 @@ class TestAIAgent:
         assert mem["window_size"] == 7
         assert mem["long_term_enabled"] is True
         assert mem["retrieval_count"] == 5
+        assert mem["embedding_provider"] == "ollama"
+        assert mem["embedding_model"] == "nomic-embed-text"
+        assert mem["embedding_endpoint"] == "http://localhost:11434"
         assert "### **Human**" in mem["memory_content"]
 
     async def test_memory_explicit_session_overrides_auto(self, harness):

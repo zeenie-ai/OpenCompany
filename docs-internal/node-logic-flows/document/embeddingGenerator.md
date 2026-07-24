@@ -12,8 +12,8 @@
 
 Generate vector embeddings from a list of text chunks using one of three
 backends: HuggingFace (local sentence-transformers, default), OpenAI
-(API-hosted), or Ollama (local server). The heavy embedding call runs in a
-thread pool via `asyncio.to_thread` so the event loop is not blocked.
+(API-hosted), or Ollama (local server). Local HuggingFace encoding runs in a
+worker thread; OpenAI and Ollama use their native asynchronous SDK clients.
 
 ## Inputs (handles)
 
@@ -28,8 +28,9 @@ thread pool via `asyncio.to_thread` so the event loop is not blocked.
 | `chunks` | array | `[]` | yes | - | List of `{content, source, chunk_index}` dicts |
 | `provider` | options | `huggingface` | no | - | `huggingface` / `openai` / `ollama` |
 | `model` | string | `BAAI/bge-small-en-v1.5` | no | - | Model name for the chosen provider |
-| `batch_size` | number | `32` | no | - | Texts per embedding batch (1-256). Declared but not currently used by the embed op. |
+| `batch_size` | number | `32` | no | - | Texts per embedding batch (1-256), used by every provider |
 | `api_key` | string (password) | `""` | no (required for openai) | `provider=openai` | OpenAI API key |
+| `endpoint` | string | `""` | no | `provider=openai/ollama` | Optional OpenAI `base_url` or Ollama `host` |
 
 Params are snake_case (`Params = EmbeddingGeneratorParams`).
 
@@ -67,15 +68,14 @@ flowchart TD
   A[EmbeddingGeneratorNode.embed] --> B{chunks empty?}
   B -- yes --> Ret0[Return success=true<br/>zero-valued payload]
   B -- no --> C[Extract text list: dict.content or str(chunk)]
-  C --> D{provider}
-  D -- huggingface --> Dh[Import langchain_huggingface<br/>raise NodeUserError with install hint if missing]
-  D -- openai --> Do[Import langchain_openai.OpenAIEmbeddings]
-  D -- ollama --> Dl[Import langchain_ollama.OllamaEmbeddings]
-  D -- other --> Dx[raise NodeUserError Unknown provider]
-  Dh --> E[HuggingFaceEmbeddings(model_name=model)]
-  Do --> F[OpenAIEmbeddings(model=model, api_key=api_key)]
-  Dl --> G[OllamaEmbeddings(model=model)]
-  E --> H[asyncio.to_thread embedder.embed_documents(texts)]
+  C --> D[services.memory.vector_store.create_embedder]
+  D --> Dh[HuggingFace: lazy SentenceTransformer]
+  D --> Do[OpenAI: openai.AsyncOpenAI]
+  D --> Dl[Ollama: ollama.AsyncClient]
+  Dh --> E[SentenceTransformer model<br/>encode batches in asyncio.to_thread]
+  Do --> F[Await embeddings.create per batch]
+  Dl --> G[Await client.embed per batch]
+  E --> H[Normalized number vectors]
   F --> H
   G --> H
   H --> I[Compute dimensions from len(embeddings[0])]
@@ -85,10 +85,15 @@ flowchart TD
 ## Decision Logic
 
 - **Empty chunks**: short-circuits to the empty-payload success envelope.
-- **Provider dispatch**: string match on `provider`; `provider` is a `Literal` so Pydantic rejects unknown values before dispatch (the `else: NodeUserError` is a dead path).
-- **Embedding call**: always runs in a worker thread via `asyncio.to_thread`.
+- **Provider dispatch**: the node and long-term memory use the same
+  `create_embedder` factory and `AsyncEmbedder` protocol. `provider` is a
+  `Literal`, so Pydantic rejects unknown values before dispatch.
+- **Embedding call**: Hugging Face encoding runs in a worker thread; OpenAI
+  and Ollama use their native async SDKs directly.
 - **Dimensions**: inferred from first embedding; `0` if the call returned `[]`.
-- **Missing huggingface package**: raises `NodeUserError` with an install hint (`pip install langchain-huggingface sentence-transformers`); `BaseNode.execute()` logs one WARN line (no traceback) and returns `{success: false, error_type: "NodeUserError"}`.
+- **Missing huggingface package**: raises `NodeUserError` with an install hint
+  for the `local-embeddings` extra; `BaseNode.execute()` logs one WARN line
+  (no traceback) and returns `{success: false, error_type: "NodeUserError"}`.
 
 ## Side Effects
 
@@ -103,14 +108,17 @@ flowchart TD
 
 ## External Dependencies
 
-- **Credentials**: `api_key` param (OpenAI only). Not fetched from `auth_service` - must be passed as a node parameter.
-- **Python packages**: `langchain-huggingface` + `sentence-transformers` (HF), `langchain-openai` (OpenAI), `langchain-ollama` (Ollama).
-- **Environment variables**: `OLLAMA_HOST` respected by `langchain_ollama`.
+- **Credentials**: `api_key` parameter (OpenAI only). This document node is
+  outside `AI_MODEL_TYPES`, so callers must provide it explicitly.
+- **Python packages**: optional `sentence-transformers` (HF), direct `openai`
+  SDK (OpenAI), and direct `ollama` SDK (Ollama).
+- **Environment variables**: `OLLAMA_HOST` is respected by `ollama.AsyncClient`.
 
 ## Edge cases & known limits
 
-- OpenAI `api_key` is read from the node parameter, NOT from `auth_service.get_api_key('openai')`. This is inconsistent with other OpenAI-using nodes (documented gotcha).
-- `batch_size` is a declared param but the embed op passes everything in one `embed_documents` call; provider-side batch limits apply.
+- OpenAI `api_key` is passed to the shared factory in memory only and is never
+  included in output.
+- `batch_size` controls requests/encoding batches for every provider.
 - HF first-run model download can take minutes; the node will appear to hang.
 - Model name default (`BAAI/bge-small-en-v1.5`) is HF-specific; you must override `model` when switching provider.
 - No cost tracking (unlike LLM chat nodes).

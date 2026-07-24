@@ -50,30 +50,21 @@ dependencies = [
     # Credential Encryption
     "cryptography>=44.0.0",
 
-    # AI - All providers (directly imported in ai.py)
-    # Keep this stack in lockstep. These floors cover unsafe deserialization
-    # in old langchain-core, the OpenAI/text-splitter SSRF advisories, and
-    # GHSA-gr75-jv2w-4656 (file-search path traversal/sandbox escape).
-    "langchain==1.3.9",
+    # Native LLM SDKs. OpenAI also drives the eight OpenAI-compatible
+    # providers through configured base URLs.
+    "openai==2.45.0",
+    "anthropic==0.96.0",
+    "google-genai==2.11.0",
+
+    # Temporary pre-cutover Temporal-history compatibility. New chat and agent
+    # executions do not import these adapters. Remove this block together with
+    # the legacy activity branch after all recorded histories have drained.
     "langchain-core==1.4.7",
     "langchain-openai==1.1.14",
     "langchain-anthropic==1.4.6",
-    "anthropic==0.96.0",
-    # langchain-google-genai 4.2.4+ widens its google-genai pin to <3.0.0,
-    # unblocking google-genai 2.x — required for the Interactions API
-    # (client.interactions with environment= + client.agents) used by the
-    # vertex_managed_agent / vertex_agent_admin plugins. 4.2.5 remains
-    # compatible with the langchain-core==1.4.7 security floor.
     "langchain-google-genai==4.2.5",
-    "google-genai==2.11.0",
     "langchain-groq==1.1.2",
     "langchain-cerebras==0.8.2",
-    # textChunker plugin (recursive / markdown / token strategies). Bumped
-    # to 1.1.2+ alongside the langchain-core security floor to clear the
-    # HTMLHeaderTextSplitter SSRF advisory; the 1.1 line requires
-    # langchain-core>=1.3, which we now satisfy.
-    "langchain-text-splitters==1.1.2",
-    "deepagents==0.6.9",
 
     # Pydantic 2.13 changed validator ordering; pin to main's 2.12 line
     # to keep AIMessage construction/tool-schema generation identical.
@@ -175,8 +166,11 @@ dependencies = [
 docs = [
     "beautifulsoup4>=4.12.0",
     "pypdf>=5.0.0",
-    # `langchain-text-splitters` moved to top-level dependencies (above) —
-    # the textChunker plugin is part of the runtime, not optional.
+]
+local-embeddings = [
+    # Optional because the model + torch stack is large. The embedding node and
+    # long-term memory surface a clear install hint when it is absent.
+    "sentence-transformers",
 ]
 keyring = [
     "keyring>=25.0.0",  # OS-native credential storage (Windows/macOS/Linux)

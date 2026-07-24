@@ -19,12 +19,20 @@ logger = get_logger(__name__)
 class OpenRouterProvider(OpenAIProvider):
     provider_name = "openrouter"
 
-    def __init__(self, api_key: str, *, proxy_url: Optional[str] = None):
+    def __init__(
+        self,
+        api_key: str,
+        *,
+        proxy_url: Optional[str] = None,
+        max_retries: int = 2,
+    ):
         import openai
 
+        self.provider_name = "openrouter"
         kwargs: Dict[str, Any] = {
             "api_key": api_key,
             "base_url": proxy_url or "https://openrouter.ai/api/v1",
+            "max_retries": max(0, int(max_retries)),
             "default_headers": {
                 "HTTP-Referer": "http://localhost:3000",
                 "X-Title": "OpenCompany",

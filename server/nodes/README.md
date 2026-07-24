@@ -368,8 +368,8 @@ Full reference: [docs-internal/plugin_system.md → "Self-contained plugin folde
   Pydantic models or `Union`, the LLM-schema emission will add `$defs`
   and fail the invariant. Keep tool-facing Params flat; move nested
   types to `Output` instead.
-- **Return plain data, never raw third-party objects.** Backend / SDK
-  result objects (deepagents `ReadResult` / `WriteResult`, httpx
+- **Return plain data, never raw backend or third-party objects.** Backend /
+  SDK result objects (native filesystem `ReadResult`, httpx
   responses, …) must be unwrapped to plain fields before returning —
   the Output validation rejects them, and everything downstream
   (`node_outputs` JSON column, orjson WS broadcast,

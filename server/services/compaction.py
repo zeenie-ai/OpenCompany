@@ -8,6 +8,7 @@ Threshold strategy: per-session custom_threshold > model-aware threshold > globa
 Model-aware threshold = 50% of model's context window (e.g., 100K for a 200K model).
 """
 
+from dataclasses import asdict
 from pydantic import BaseModel
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, TYPE_CHECKING
@@ -132,31 +133,12 @@ class CompactionService:
 
     async def track(self, session_id: str, node_id: str, provider: str, model: str, usage: Dict[str, int]) -> Dict[str, Any]:
         """Track token usage and cost, return compaction status."""
-        # Calculate cost using PricingService
-        pricing_service = get_pricing_service()
-        cost = pricing_service.calculate_cost(
+        cost = await self._record_usage_metric(
+            session_id=session_id,
+            node_id=node_id,
             provider=provider,
             model=model,
-            input_tokens=usage.get("input_tokens", 0),
-            output_tokens=usage.get("output_tokens", 0),
-            cache_read_tokens=usage.get("cache_read_tokens", 0),
-            cache_creation_tokens=usage.get("cache_creation_tokens", 0),
-            reasoning_tokens=usage.get("reasoning_tokens", 0),
-        )
-
-        # Save token metric with cost fields
-        await self._db.save_token_metric(
-            {
-                "session_id": session_id,
-                "node_id": node_id,
-                "provider": provider,
-                "model": model,
-                **usage,
-                "input_cost": cost["input_cost"],
-                "output_cost": cost["output_cost"],
-                "cache_cost": cost["cache_cost"],
-                "total_cost": cost["total_cost"],
-            }
+            usage=usage,
         )
 
         state = await self._db.get_or_create_session_token_state(session_id)
@@ -198,6 +180,46 @@ class CompactionService:
             "context_length": context_length,
             "needs_compaction": self._config.enabled and new_total >= threshold,
         }
+
+    async def _record_usage_metric(
+        self,
+        *,
+        session_id: str,
+        node_id: str,
+        provider: str,
+        model: str,
+        usage: Dict[str, int],
+        iteration: int = 1,
+    ) -> Dict[str, float]:
+        """Persist billed usage without changing active-context counters."""
+
+        pricing_service = get_pricing_service()
+        cost = pricing_service.calculate_cost(
+            provider=provider,
+            model=model,
+            input_tokens=usage.get("input_tokens", 0),
+            output_tokens=usage.get("output_tokens", 0),
+            cache_read_tokens=usage.get("cache_read_tokens", 0),
+            cache_creation_tokens=usage.get("cache_creation_tokens", 0),
+            reasoning_tokens=usage.get("reasoning_tokens", 0),
+        )
+
+        # Save token metric with cost fields
+        await self._db.save_token_metric(
+            {
+                "session_id": session_id,
+                "node_id": node_id,
+                "provider": provider,
+                "model": model,
+                "iteration": iteration,
+                **usage,
+                "input_cost": cost["input_cost"],
+                "output_cost": cost["output_cost"],
+                "cache_cost": cost["cache_cost"],
+                "total_cost": cost["total_cost"],
+            }
+        )
+        return cost
 
     async def record(
         self, session_id: str, node_id: str, provider: str, model: str, tokens_before: int, tokens_after: int, summary: Optional[str] = None
@@ -272,6 +294,8 @@ class CompactionService:
         provider: str,
         api_key: str,
         model: str,
+        *,
+        explicit_max_retries: int = 2,
     ) -> Dict[str, Any]:
         """Perform compaction by summarizing conversation history.
 
@@ -286,6 +310,7 @@ class CompactionService:
 
         state = await self._db.get_or_create_session_token_state(session_id)
         tokens_before = state["cumulative_total"]
+        compaction_usage: Dict[str, int] = {}
 
         try:
             prompt = f"""Summarize this conversation into a structured format:
@@ -318,24 +343,56 @@ Provide a concise but complete summary."""
             model_max = get_model_registry().get_max_output_tokens(model, provider)
             summary_tokens = min(4096, model_max)
 
-            llm = self._ai_service.create_model(provider=provider, api_key=api_key, model=model, temperature=0.3, max_tokens=summary_tokens)
+            if self._ai_service.chat_unifier is None:
+                raise RuntimeError("ChatUnifier is required for compaction")
 
-            from langchain_core.messages import HumanMessage
+            from services.agent_runtime import run_native_llm_step
+            from services.llm.protocol import Message
 
-            response = await llm.ainvoke([HumanMessage(content=prompt)])
-            raw_content = response.content if hasattr(response, "content") else str(response)
-            summary = _extract_text_from_response(raw_content)
+            response = await run_native_llm_step(
+                self._ai_service.chat_unifier,
+                provider=provider,
+                api_key=api_key,
+                messages=[Message(role="user", content=prompt)],
+                model=model,
+                temperature=0.3,
+                max_tokens=summary_tokens,
+                sdk_max_retries=0,
+                explicit_max_retries=explicit_max_retries,
+            )
+            compaction_usage = asdict(response.usage)
+            await self._record_usage_metric(
+                session_id=session_id,
+                node_id=node_id,
+                provider=provider,
+                model=model,
+                usage=compaction_usage,
+                # Iteration zero distinguishes the summarizer call in the
+                # existing metric schema without adding a public field.
+                iteration=0,
+            )
+            summary = _extract_text_from_response(response.content)
 
             new_memory = f"# Conversation Summary (Compacted)\n*Generated: {datetime.now(timezone.utc).isoformat()}*\n\n{summary}"
 
             await self.record(session_id, node_id, provider, model, tokens_before, 0, new_memory)
             logger.info(f"[Compaction] Session {session_id}: {tokens_before} -> 0 tokens")
 
-            return {"success": True, "summary": new_memory, "tokens_before": tokens_before, "tokens_after": 0}
+            return {
+                "success": True,
+                "summary": new_memory,
+                "tokens_before": tokens_before,
+                "tokens_after": 0,
+                "usage": compaction_usage,
+            }
 
         except Exception as e:
             logger.error(f"[Compaction] Failed: {e}")
-            return {"success": False, "error": str(e)}
+            return {
+                "success": False,
+                "error": str(e),
+                "usage": compaction_usage,
+            }
 
 
 _service: Optional[CompactionService] = None

@@ -11,8 +11,8 @@ External side-effects are mocked:
   - documentParser: each parser library is patched at the module level
     (`services.handlers.document.<lib>`), or real HTML is fed through
     BeautifulSoup for the happy path.
-  - textChunker: pure function, exercised with real LangChain splitters.
-  - embeddingGenerator: the embedder class is patched to return canned vectors.
+  - textChunker: pure local function.
+  - embeddingGenerator: native SDK clients are patched to return canned vectors.
   - vectorStore: the ChromaDB client is patched to a fake collection.
 """
 
@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import sys
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -340,14 +340,15 @@ class TestTextChunker:
 
 class TestEmbeddingGenerator:
     async def test_huggingface_happy_path_with_patched_embedder(self, harness):
-        # Patch langchain_huggingface at its lazy import site.
         fake_embedder = MagicMock()
-        fake_embedder.embed_documents = MagicMock(return_value=[[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
+        fake_embedder.encode = MagicMock(
+            return_value=[[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
+        )
 
         fake_hf_mod = MagicMock()
-        fake_hf_mod.HuggingFaceEmbeddings = MagicMock(return_value=fake_embedder)
+        fake_hf_mod.SentenceTransformer = MagicMock(return_value=fake_embedder)
 
-        with patch.dict(sys.modules, {"langchain_huggingface": fake_hf_mod}):
+        with patch.dict(sys.modules, {"sentence_transformers": fake_hf_mod}):
             result = await harness.execute(
                 "embeddingGenerator",
                 {
@@ -370,9 +371,11 @@ class TestEmbeddingGenerator:
         assert payload["dimensions"] == 3
         assert payload["provider"] == "huggingface"
         # Embedder was constructed with the requested model
-        fake_hf_mod.HuggingFaceEmbeddings.assert_called_once()
-        kwargs = fake_hf_mod.HuggingFaceEmbeddings.call_args.kwargs
-        assert kwargs.get("model_name") == "BAAI/bge-small-en-v1.5"
+        fake_hf_mod.SentenceTransformer.assert_called_once_with(
+            "BAAI/bge-small-en-v1.5"
+        )
+        fake_embedder.encode.assert_called_once()
+        assert fake_embedder.encode.call_args.kwargs["batch_size"] == 32
 
     async def test_empty_chunks_short_circuits(self, harness):
         result = await harness.execute("embeddingGenerator", {"chunks": [], "provider": "huggingface"})
@@ -391,13 +394,18 @@ class TestEmbeddingGenerator:
         assert "invalid parameters" in result["error"].lower()
 
     async def test_openai_provider_uses_apikey_param(self, harness):
-        fake_embedder = MagicMock()
-        fake_embedder.embed_documents = MagicMock(return_value=[[0.9, 0.8]])
+        fake_client = MagicMock()
+        fake_client.embeddings.create = AsyncMock(
+            return_value=SimpleNamespace(
+                data=[SimpleNamespace(index=0, embedding=[0.9, 0.8])]
+            )
+        )
+        fake_client.close = AsyncMock()
 
         fake_openai_mod = MagicMock()
-        fake_openai_mod.OpenAIEmbeddings = MagicMock(return_value=fake_embedder)
+        fake_openai_mod.AsyncOpenAI = MagicMock(return_value=fake_client)
 
-        with patch.dict(sys.modules, {"langchain_openai": fake_openai_mod}):
+        with patch.dict(sys.modules, {"openai": fake_openai_mod}):
             result = await harness.execute(
                 "embeddingGenerator",
                 {
@@ -409,10 +417,84 @@ class TestEmbeddingGenerator:
             )
 
         harness.assert_envelope(result, success=True)
-        fake_openai_mod.OpenAIEmbeddings.assert_called_once()
-        kwargs = fake_openai_mod.OpenAIEmbeddings.call_args.kwargs
-        assert kwargs.get("model") == "text-embedding-3-small"
-        assert kwargs.get("api_key") == "sk-test"
+        fake_openai_mod.AsyncOpenAI.assert_called_once_with(api_key="sk-test")
+        fake_client.embeddings.create.assert_awaited_once_with(
+            model="text-embedding-3-small",
+            input=["only"],
+        )
+        fake_client.close.assert_awaited_once()
+
+    async def test_openai_provider_requires_api_key(self, harness):
+        result = await harness.execute(
+            "embeddingGenerator",
+            {
+                "chunks": [{"content": "only"}],
+                "provider": "openai",
+                "model": "text-embedding-3-small",
+                "api_key": "",
+            },
+        )
+
+        harness.assert_envelope(result, success=False)
+        assert result.get("error_type") == "NodeUserError"
+        assert "api key is required" in result["error"].lower()
+
+    async def test_openai_sdk_failure_is_a_user_safe_node_error(
+        self,
+        harness,
+    ):
+        fake_client = MagicMock()
+        fake_client.embeddings.create = AsyncMock(
+            side_effect=RuntimeError("transport exploded"),
+        )
+        fake_client.close = AsyncMock()
+        fake_openai_mod = MagicMock()
+        fake_openai_mod.AsyncOpenAI = MagicMock(return_value=fake_client)
+
+        with patch.dict(sys.modules, {"openai": fake_openai_mod}):
+            result = await harness.execute(
+                "embeddingGenerator",
+                {
+                    "chunks": [{"content": "only"}],
+                    "provider": "openai",
+                    "model": "text-embedding-3-small",
+                    "api_key": "sk-test",
+                },
+            )
+
+        harness.assert_envelope(result, success=False)
+        assert result.get("error_type") == "NodeUserError"
+        assert "openai embedding request failed" in result["error"].lower()
+        assert "transport exploded" not in result["error"]
+        fake_client.close.assert_awaited_once()
+
+    async def test_ollama_provider_uses_native_batch_api(self, harness):
+        fake_client = MagicMock()
+        fake_client.embed = AsyncMock(
+            return_value={"embeddings": [[0.2, 0.4], [0.6, 0.8]]}
+        )
+        fake_client.close = AsyncMock()
+        fake_ollama_mod = MagicMock()
+        fake_ollama_mod.AsyncClient = MagicMock(return_value=fake_client)
+
+        with patch.dict(sys.modules, {"ollama": fake_ollama_mod}):
+            result = await harness.execute(
+                "embeddingGenerator",
+                {
+                    "chunks": [{"content": "one"}, {"content": "two"}],
+                    "provider": "ollama",
+                    "model": "nomic-embed-text",
+                    "batch_size": 2,
+                },
+            )
+
+        harness.assert_envelope(result, success=True)
+        fake_client.embed.assert_awaited_once_with(
+            model="nomic-embed-text",
+            input=["one", "two"],
+        )
+        fake_client.close.assert_awaited_once()
+        assert result["result"]["dimensions"] == 2
 
 
 # ============================================================================

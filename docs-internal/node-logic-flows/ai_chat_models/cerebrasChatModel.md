@@ -11,7 +11,12 @@
 
 ## Purpose
 
-Ultra-fast inference on Cerebras' custom AI hardware. Models include Llama 3.1, GPT-OSS-120b, Qwen-3-235b. The `ChatModelBase.chat` operation calls `AIService.execute_chat`, which routes through `ChatUnifier`. Like Groq, Cerebras is one of the eight OpenAI-compatible providers registered in `providers/_compat.py` (the chat-path LangChain fallback was retired; LangChain `ChatCerebras` remains only on the agent path).
+Ultra-fast inference on Cerebras' custom AI hardware. Models include Llama
+3.1, GPT-OSS-120b, Qwen-3-235b. The `ChatModelBase.chat` operation calls
+`AIService.execute_chat`, which routes through `ChatUnifier`. Like Groq,
+Cerebras is one of the eight OpenAI-compatible providers registered in
+`providers/_compat.py`; bare chat and current agent executions share this
+native provider path.
 
 ## Inputs (handles)
 
@@ -78,7 +83,9 @@ flowchart TD
 
 - **Validation**: missing api_key / empty prompt -> error envelope.
 - **Provider routing**: `detect_ai_provider` matches `'cerebras' in node_type.lower()` **before** the groq branch, so routing is unambiguous.
-- **Native OpenAI-compatible path**: `ChatUnifier` resolves the `cerebras` spec registered in `providers/_compat.py` (reuses `OpenAIProvider` with the Cerebras base_url). No LangChain on the chat path.
+- **Native OpenAI-compatible path**: `ChatUnifier` resolves the `cerebras`
+  spec registered in `providers/_compat.py` (reuses `OpenAIProvider` with the
+  Cerebras `base_url`) for both chat and agent requests.
 - **Reasoning**: same parsed/hidden mechanism as Groq Qwen - only the Qwen-3-235b variant honors it.
 - **Temperature range**: narrower (0-1.5 clamp) than OpenAI/Groq. `_resolve_temperature` applies the clamp.
 
@@ -93,8 +100,8 @@ flowchart TD
 ## External Dependencies
 
 - **Credentials**: `auth_service.get_api_key('cerebras', 'default')` plus optional `cerebras_proxy`.
-- **Services**: `ChatUnifier` + `OpenAIProvider` (base_url-ed) on the chat path; `langchain_cerebras.ChatCerebras` on the agent path.
-- **Python packages**: `openai` (chat path), `langchain-cerebras` (agent path, optional on Python >= 3.13).
+- **Services**: `ChatUnifier` + `OpenAIProvider` with the Cerebras `base_url`.
+- **Python packages**: `openai`.
 - **Environment variables**: none.
 
 ## Edge cases & known limits

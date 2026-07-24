@@ -15,7 +15,11 @@ Canonical home for how conversation memory is loaded, appended, trimmed, archive
 | **Markdown transcript** | [`services/memory/markdown.py`](../server/services/memory/markdown.py) | aiAgent, chatAgent, rlm_agent, claude_code_agent (mirror) | `### **Human/Assistant** (timestamp)` blocks under a top-level `# Conversation History` heading |
 | **Anthropic-Messages JSONL** | [`services/memory/jsonl.py`](../server/services/memory/jsonl.py) | Standalone primitive — not used by any agent today | One JSON object per line: `{"role": "user"|"assistant", "content": str \| [ContentBlock], ...metadata}` |
 
-The markdown format is the visible UI surface — `simpleMemory.memory_content` is rendered as a markdown editor in the parameter panel. The JSONL helpers were prepared for a future SDK migration; the live `claude_code_agent` bridge uses claude's own native session JSONL on disk (see §6) and mirrors the transcript into `memory_content` via the **markdown** helpers for user visibility.
+The markdown format is the visible UI surface — `simpleMemory.memory_content`
+is rendered as a markdown editor in the parameter panel. The normalized JSONL
+helpers remain a standalone primitive; the live `claude_code_agent` bridge
+uses claude's own native session JSONL on disk (see §6) and mirrors the
+transcript into `memory_content` via the **markdown** helpers for visibility.
 
 ## 2. Markdown helper API
 
@@ -23,13 +27,13 @@ Three pure functions, no I/O, locked by `tests/services/memory/`:
 
 ```python
 from services.memory import (
-    parse_memory_markdown,      # str -> List[BaseMessage]
+    parse_memory_markdown,      # str -> List[services.llm.protocol.Message]
     append_to_memory_markdown,  # (content, role: "human"|"ai", message) -> str
     trim_markdown_window,       # (content, window_size_pairs) -> (trimmed, removed_texts)
 )
 ```
 
-- **`parse_memory_markdown`** — regex-extracts `### **(Human|Assistant)**[^\n]*\n(body)` blocks; returns LangChain `HumanMessage` / `AIMessage` instances ready to feed an agent loop.
+- **`parse_memory_markdown`** — regex-extracts `### **(Human|Assistant)**[^\n]*\n(body)` blocks; returns normalized native `Message(role="user"|"assistant", content=...)` instances ready for `ChatUnifier`.
 - **`append_to_memory_markdown`** — drops the empty-state placeholder (`*No messages yet.*`), appends a `### **{label}** (YYYY-MM-DD HH:MM:SS)\n{message}\n` entry. Timestamp comes from `datetime.now()`.
 - **`trim_markdown_window`** — keeps the last `window_size * 2` blocks (N user/assistant pairs); returns `(trimmed_content, removed_texts)`. Removed bodies are returned so the caller can hand them to the long-term vector store (§4).
 
@@ -43,37 +47,51 @@ from services.memory import (
 
 This is also the value `clear_agent_session_state` resets `memory_content` to (see §5). Defined as `DEFAULT_MEMORY_CONTENT` in [`services/memory/state.py`](../server/services/memory/state.py).
 
-## 3. Known duplication: ai.py inlines its own copies
+## 3. Canonical implementation and call sites
 
-[`services/ai.py:158-234`](../server/services/ai.py) carries `_parse_memory_markdown`, `_append_to_memory_markdown`, `_trim_markdown_window`, and `_get_memory_vector_store` as private helpers — byte-equivalent reimplementations of the public ones in `services/memory/`. The `services.memory` package was carved out later; existing call sites inside `ai.py` were never switched to import from it. Future cleanup will consolidate; for now both paths exist and produce identical output. Pytest doesn't lock cross-equivalence — treat the `services.memory` package as the canonical surface for **new** code.
+`services.memory` is the single implementation. `services.ai` keeps only a
+thin `_parse_memory_markdown` compatibility wrapper and aliases the canonical
+vector-store cache so older internal imports continue to resolve without
+creating duplicate state. Runtime appends use
+`services.memory.runtime.append_memory_turns_atomic`, which performs the
+append/trim mutation transactionally and idempotently.
 
-Newer call sites (already on the public helpers):
-
-| File | Imports |
+| File | Canonical surface |
 |---|---|
-| `services/temporal/agent_activities.py:251` — `agent.persist_turn.v1` activity (F4.B) | `append_to_memory_markdown`, `trim_markdown_window` |
-| `services/cli_agent/service.py:490` — `_persist_memory` for claude_code_agent | `append_to_memory_markdown`, `trim_markdown_window` |
-| `routers/websocket.py:2167` — `clear_memory` handler | `clear_agent_session_state` |
-
-Older call sites (still on the underscore-prefixed copies inside ai.py):
-
-| File | Symbols |
-|---|---|
-| `services/ai.py:execute_agent` / `execute_chat_agent` | `_parse_memory_markdown`, `_append_to_memory_markdown`, `_trim_markdown_window`, `_memory_vector_stores` |
+| `services/ai.py` — native in-process agents | `parse_memory_markdown`, `append_memory_turns_atomic`, canonical vector store |
+| `services/temporal/agent_activities.py` — `agent.persist_turn.v1` | `append_memory_turns_atomic` |
+| `services/cli_agent/service.py` — claude_code_agent mirror | markdown/runtime helpers and canonical vector store |
+| `services/memory/state.py` — reset orchestration | canonical vector-store cache + atomic parameter mutation |
 
 ## 4. Long-term vector store
 
-[`services/memory/vector_store.py`](../server/services/memory/vector_store.py) caches one `InMemoryVectorStore` per `session_id`. Embeddings come from `langchain_huggingface.HuggingFaceEmbeddings(model_name="BAAI/bge-small-en-v1.5")` — lazy-imported; missing dep returns `None` with a warning (long-term archival is best-effort).
+[`services/memory/vector_store.py`](../server/services/memory/vector_store.py)
+provides a shared async embedder factory for direct `openai.AsyncOpenAI`,
+`ollama.AsyncClient`, and optional `sentence-transformers` adapters, then
+ranks entries locally by cosine similarity. Hugging Face model load and
+encoding run in a worker thread. When its `local-embeddings` extra is absent,
+the factory returns `None` with a warning, so long-term archival remains
+best-effort.
 
 ```python
 from services.memory import get_memory_vector_store
-store = get_memory_vector_store("user-123")
+store = await get_memory_vector_store(
+    "user-123",
+    provider="openai",
+    model="text-embedding-3-small",
+    auth_service=auth_service,
+)
 if store:
-    store.add_texts(removed_texts)         # archive trimmed messages
-    results = store.similarity_search(q)   # retrieve for the next turn
+    await store.add_texts(removed_texts)         # archive trimmed messages
+    results = await store.similarity_search(q)   # retrieve next-turn context
 ```
 
-**Two caches exist.** The live one used by `services/ai.py:execute_agent` is `services.ai._memory_vector_stores`. The one in `services.memory.vector_store` is a package-private second copy referenced by `clear_agent_session_state` for forward-cleanup. Same caveat as §3: consolidation is future work. The state-clear orchestration deletes from the live `services.ai` cache.
+There is one cache. `services.ai._memory_vector_stores` is a compatibility
+alias to `services.memory.vector_store._memory_vector_stores`, so state clear,
+native agents, and the CLI bridge observe the same stores. Cache identity is
+session + provider + model + endpoint + credential fingerprint; plaintext
+credentials are never stored in a key. Clearing a session removes and closes
+every matching configuration.
 
 ## 5. State clear orchestration
 
@@ -90,7 +108,7 @@ await clear_agent_session_state(
 
 Three stores are cleared in one call:
 
-1. **Vector store** (when `clear_long_term=True`) — `del services.ai._memory_vector_stores[session_id]`.
+1. **Vector store** (when `clear_long_term=True`) — delete and close every provider/model cache entry for the session (the `services.ai` alias observes the same deletion).
 2. **TodoService** — every candidate key (`workflow_id`, `session_id`, `"default"`) is cleared because [`server/nodes/tool/write_todos/__init__.py`](../server/nodes/tool/write_todos/__init__.py) uses `ctx.workflow_id or ctx.node_id or "default"` as the storage key and we want to clear whichever fallback the write path actually used.
 3. **simpleMemory node fields** (when `memory_node_id` provided) — `memory_content` → `DEFAULT_MEMORY_CONTENT`; `last_session_id` → `None` (so claude_code_agent starts fresh next run instead of `--resume`-ing into a wiped transcript); orphan `memory_jsonl` field popped if present.
 
@@ -140,41 +158,42 @@ Turn N starts
 1. handle_ai_agent / handle_chat_agent reads simpleMemory.memory_content from DB
     │
     ▼
-2. _parse_memory_markdown(content) → List[BaseMessage]
+2. _parse_memory_markdown(content) → List[native Message]
     │
     ▼
-3. (Optional) get_memory_vector_store(session_id).similarity_search(prompt)
+3. (Optional) await get_memory_vector_store(config);
+   await store.similarity_search(prompt)
    → prepend retrieved long-term context as a system message
     │
     ▼
-4. Agent loop runs (_run_agent_loop: ainvoke + tool calls)
+4. Agent loop runs (run_native_agent_loop: ChatUnifier + native tool calls)
     │
     ▼
 5. _track_token_usage(...) — see memory_compaction.md
    → if threshold tripped: CompactionService.compact_context(...) → reset messages
     │
     ▼
-6. _append_to_memory_markdown(content, "human", prompt)
-   _append_to_memory_markdown(content, "ai", response)
+6. append_memory_turns_atomic(prompt, response, window_size)
+   → append markdown pair + trim in one idempotent DB transaction
     │
     ▼
-7. trimmed_content, removed_texts = _trim_markdown_window(content, window_size)
-    │
-    ▼
-8. (Optional) store.add_texts(removed_texts) — long-term archival
-    │
-    ▼
-9. save_node_parameters(memory_node_id, {"memory_content": trimmed_content, ...})
-   broadcast_node_parameters_updated(...)  # CloudEvents source_hint="agent"
+7. (Optional) await store.add_texts(removed_texts) — long-term archival
 ```
 
-F4.B `AgentWorkflow` runs steps 4-9 as separate Temporal activities (`prepare_payload.v1` resolves DB params + `{{templates}}` via `workflow_service._param_resolver.resolve`; `execute_llm_step.v1` invokes the LLM with LangChain `messages_to_dict` / `messages_from_dict` round-trip preserving Gemini `thought_signature` + Anthropic cache markers + OpenAI reasoning content; `persist_turn.v1` appends per turn; `compact_memory.v1` summarises when threshold trips; `store_output.v1` writes to the OutputStore via `workflow_service.store_node_output` so downstream nodes can resolve `{{aiAgent.response}}`; `broadcast_progress.v1` emits CloudEvents `agent_progress` per phase). Per-turn persistence means a mid-loop failure doesn't lose progress. F4.A and legacy paths run steps 4-9 inline inside one activity.
+F4.B `AgentWorkflow` runs steps 4-9 as separate Temporal activities.
+`prepare_payload.v1` records `llm_engine` and the message wire version;
+new executions use native Message Wire V2, preserving Gemini thought
+signatures, Anthropic signed/redacted thinking, and OpenAI continuation
+metadata. Histories recorded before cutover lack that engine field and
+deterministically use the temporary LangChain compatibility branch.
+`persist_turn.v1` appends per turn, so a mid-loop failure does not lose
+progress.
 
 ## 8. Engine-specific adapters
 
 | Engine | Memory shape on input | Memory shape on output | Notes |
 |---|---|---|---|
-| `aiAgent` / `chatAgent` | LangChain `BaseMessage` list parsed from markdown | Appended pair + trim | Standard path; see §7 |
+| `aiAgent` / `chatAgent` | Native `Message` list parsed from markdown | Atomic appended pair + trim | Native SDK path; see §7 |
 | `rlm_agent` | Markdown injected as REPL pre-context | Last `FINAL(...)` call's payload | RLM internal recursion uses its own state machine; only entry/exit cross the memory boundary |
 | `claude_code_agent` | `--resume <UUID>` reads native JSONL; `memory_content` ignored on input | Bridge writes markdown mirror + saves `last_session_id` | See §6 |
 
@@ -190,8 +209,9 @@ The compaction service is the SSOT for thresholds, native-API integration (Anthr
 server/tests/services/memory/
 ├── test_markdown.py    # parse → append → trim round-trips
 ├── test_jsonl.py       # parse_jsonl + append_message + trim_window
-└── (state.py / vector_store.py have no dedicated test files;
-    coverage rides on test_ai_agents.py + test_status_broadcasts.py)
+├── test_state.py       # cross-store reset behavior
+├── test_memory_store.py # legacy/canonical role normalization
+└── test_vector_store.py # native cosine ranking and empty operations
 ```
 
 The CloudEvents `node_parameters_updated` envelope emitted on every memory write is locked by `tests/test_status_broadcasts.py:test_node_parameters_updated_envelope_shape` — see [status_broadcaster.md](./status_broadcaster.md) for the contract.

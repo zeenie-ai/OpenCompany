@@ -95,8 +95,8 @@ flowchart TD
 - **Credentials**: `auth_service.get_api_key(<provider>)` for big LM, and
   optionally the small-LM provider wired as a connected chat-model node.
 - **Services**: `RLMService`, `StatusBroadcaster`, `PricingService`.
-- **Python packages**: standard library + LangChain core; no special
-  deepagents dependency.
+- **Python packages**: the `rlm` package plus the native OpenCompany LLM
+  configuration and tool-bridge helpers.
 
 ## Edge cases & known limits
 

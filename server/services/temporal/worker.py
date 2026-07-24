@@ -644,6 +644,11 @@ async def run_standalone_worker(
         # Cleanup session on shutdown
         if not session.closed:
             await session.close()
+        # Activities resolve the singleton unifier through the global
+        # container. Close its pooled SDK clients in standalone workers too.
+        from core.container import container
+
+        await container.chat_unifier().aclose()
 
 
 async def create_worker(

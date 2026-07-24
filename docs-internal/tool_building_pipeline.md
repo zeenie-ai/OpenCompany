@@ -1,9 +1,13 @@
 # Tool Building Pipeline
 
-Canonical home for how AI Agents discover connected tool nodes, build LangChain `StructuredTool` instances, bind them to the LLM, and dispatch tool calls back to the right handler. Replaces the partial explanations previously scattered across `agent_architecture.md` and `agent_delegation.md`.
+Canonical home for how AI Agents discover connected tool nodes, build
+provider-neutral `AgentToolSpec` / `ToolDef` values, expose them through the
+native `ChatUnifier`, and dispatch tool calls back to the right handler.
+Replaces the partial explanations previously scattered across
+`agent_architecture.md` and `agent_delegation.md`.
 
 > **Related docs:**
-> - [agent_architecture.md](./agent_architecture.md) — overall agent loop that holds the bound tools
+> - [agent_architecture.md](./agent_architecture.md) — overall agent loop that owns the current tool surface
 > - [agent_delegation.md](./agent_delegation.md) — `delegate_to_*` tools + taskTrigger / input-task patterns
 > - [TEMPORAL_ARCHITECTURE.md](./TEMPORAL_ARCHITECTURE.md) — per-type Temporal activity dispatch (F4.A) that backs tool calls when the flag is on
 > - [node_creation.md](./node_creation.md) — recipe for adding a new tool node
@@ -16,11 +20,11 @@ Canonical home for how AI Agents discover connected tool nodes, build LangChain 
                        │
                        ▼
 2. BUILD        services/ai.py:AIService._build_tool_from_node
-                  → tool_data entry → (StructuredTool, config_dict)
+                  → tool_data entry → (AgentToolSpec, config_dict)
                        │
                        ▼
-3. BIND         services/ai.py:_run_agent_loop
-                  → chat_model.bind_tools(tools)
+3. EXPOSE       services/agent_runtime.py:run_native_agent_loop
+                  → ToolDef list → ChatUnifier → provider schema compiler
                        │
                        ▼
 4. INVOKE       LLM emits tool_calls in its response
@@ -34,7 +38,7 @@ Canonical home for how AI Agents discover connected tool nodes, build LangChain 
 
 ## 2. Stage 1 — Discovery (plugin/edge_walker.py)
 
-[`collect_agent_connections(node_id, context, database)`](../server/services/plugin/edge_walker.py) walks the workflow edges and returns a 4-tuple per agent:
+[`collect_agent_connections(node_id, context, database)`](../server/services/plugin/edge_walker.py) walks the workflow edges and returns a 5-tuple per agent:
 
 ```
 (memory_data, skill_data, tool_data, input_data, task_data)
@@ -49,25 +53,28 @@ Canonical home for how AI Agents discover connected tool nodes, build LangChain 
 
 ## 3. Stage 2 — Build (services/ai.py:_build_tool_from_node)
 
-[`AIService._build_tool_from_node(tool_info)`](../server/services/ai.py#L2609) at line 2609 returns `(StructuredTool, config_dict)` or `(None, None)` on failure.
+[`AIService._build_tool_from_node(tool_info)`](../server/services/ai.py)
+returns `(AgentToolSpec, config_dict)` or `(None, None)` on failure.
 
 ### 3a. Tool name resolution
 
-The hardcoded `DEFAULT_TOOL_NAMES` map at [`services/ai.py:2622-2691`](../server/services/ai.py#L2622) maps `node_type` → LLM-visible tool name:
+The LLM-visible name and description come from the plugin rather than a
+central map:
 
-| `node_type` | Tool name | Category |
-|---|---|---|
-| `calculatorTool` | `calculator` | Dedicated tool |
-| `currentTimeTool` | `get_current_time` | Dedicated tool |
-| `duckduckgoSearch` | `web_search` | Dedicated tool |
-| `pythonExecutor` | `python_code` | Dual-purpose |
-| `whatsappSend` | `whatsapp_send` | Dual-purpose |
-| `whatsappDb` | `whatsapp_db` | Dual-purpose |
-| `aiAgent` → `delegate_to_ai_agent` | (18 agent types total) | Agent delegation |
-| `batteryMonitor` → `android_battery` | (16 service types) | Direct Android service |
-| ... | | |
+1. A per-node `delegate_tool_name` wins for expanded teammate/delegation
+   identities.
+2. A database `ToolSchema` override wins when present.
+3. Otherwise declared node parameters (`tool_name` / `tool_description`) may
+   override the defaults.
+4. Plugin class variables `tool_name` / `tool_description` provide the normal
+   default; `tool_description` falls back to the plugin's human-facing
+   `description`.
+5. Built-in pseudo-tools such as `Skill` and `check_delegated_tasks` use the
+   small `_PSEUDO_TOOL_FALLBACK` table.
+6. The last resort is `tool_<label>` / `Execute <label>`.
 
-Adding a new tool type requires adding a row here. The frontend never reads this map — it's a backend-internal mapping.
+The resolved name is normalized to alphanumeric characters and underscores.
+Duplicate visible names are rejected before the first billed model call.
 
 ### 3b. Schema resolution
 
@@ -75,57 +82,77 @@ Adding a new tool type requires adding a row here. The frontend never reads this
 schema = self._get_tool_schema(node_type, schema_params)
 ```
 
-[`_get_tool_schema`](../server/services/ai.py#L2888) at line 2888 returns a Pydantic `BaseModel` subclass.
-
-Two paths:
+[`_get_tool_schema`](../server/services/ai.py) returns a Pydantic `BaseModel`
+subclass.
 
 | Path | Source | When |
 |---|---|---|
 | **Database override** (preferred) | `ToolSchema` table (`server/models/database.py`) via `db.get_tool_schema(node_id)` | User customized the schema in the Tool Schema Editor UI |
-| **Dynamic generation** (fallback) | Hardcoded per-type schemas inside `_get_tool_schema` | No DB override; default behavior |
+| **Plugin schema** (normal) | Registered plugin class's Pydantic `Params` model | No DB override |
+| **Special built-in schema** | Delegation, `Skill`, and `check_delegated_tasks` definitions in `_get_tool_schema` | The LLM invocation contract intentionally differs from a node's configuration model, or no plugin exists |
+| **Generic fallback** | One required string `input` field | Unknown non-plugin node type |
 
 `ToolSchema.schema_config` is JSON of `{description, fields: {name: {type, description, required}}}`. CRUD handlers in [`routers/websocket.py`](../server/routers/websocket.py): `get_tool_schema`, `save_tool_schema`, `delete_tool_schema`, `get_all_tool_schemas`.
 
-### 3c. StructuredTool construction
+### 3c. `AgentToolSpec` construction
 
 ```python
-tool = StructuredTool.from_function(
-    name=tool_name,
-    description=description,
-    args_schema=schema,
-    func=_make_callback(node_id, node_type, ...),  # closure → execute_tool
-    coroutine=_make_callback_async(...),
-)
 config = {
     "node_id": node_id,
     "node_type": node_type,
-    "workflow_id": workflow_id,
-    "parameters": parameters,
-    "ai_service": self,
-    "database": database,
-    "nodes": nodes,
-    "edges": edges,
-    # ... per-tool extras
+    "parameters": node_params,
+    "label": node_label,
+    "connected_services": connected_services,
 }
+parameters = inline_schema_refs(schema.model_json_schema())
+tool = AgentToolSpec(
+    definition=ToolDef(
+        name=tool_name,
+        description=tool_description,
+        parameters=parameters,
+    ),
+    args_schema=schema,
+    execution=config,
+)
 ```
 
-The returned `config` is threaded down to `execute_tool` so handlers can read injected services + graph context without going through globals.
+`ToolDef` is the provider-facing declaration. `AgentToolSpec` retains the
+Pydantic validation model and local execution metadata. The returned `config`
+is augmented by the agent's callback with services and graph context before it
+reaches `execute_tool`.
 
-## 4. Stage 3 — Bind (`_run_agent_loop`)
+## 4. Stage 3 — Expose (`run_native_agent_loop`)
 
-[`services/ai.py:execute_agent`](../server/services/ai.py) calls `_run_agent_loop(chat_model, ...)`, which does `chat_model.bind_tools(tools)` once at the top before the iteration loop. `bind_tools` reads each tool's `args_schema` to render a JSON Schema in the LLM's tool-use prompt.
+[`services/ai.py:execute_agent`](../server/services/ai.py) calls
+`run_native_agent_loop(ChatUnifier, ..., tools=tools)`. On each LLM step,
+`run_native_llm_step` passes only the `ToolDef` declarations to
+`ChatUnifier.chat`. The selected native provider compiles
+`ToolDef.parameters` into its SDK's tool schema; there is no mutable
+chat-model binding object.
 
-Per-provider quirks live in the chat model class, not here — see [native_llm_sdk.md](./native_llm_sdk.md) for the OpenAI / Anthropic / Gemini differences.
+Provider-specific handling for nullable values, unions, enums, nested
+objects, and unsupported keywords remains inside the native provider layer.
+See [native_llm_sdk.md](./native_llm_sdk.md) for the OpenAI / Anthropic /
+Gemini differences.
 
 ## 5. Stage 4 — Invoke (LLM response handling)
 
-When the LLM emits `tool_calls` in its response, `_run_agent_loop` iterates them and dispatches each via the supplied `tool_executor` callback — the `_make_callback_async` closure created in stage 2 — and inside that closure:
+When the native `LLMResponse` contains tool calls,
+`run_native_agent_loop` first appends the exact replayable
+`assistant_message`, then validates and dispatches each call through the
+supplied `tool_executor` callback. Inside the callback:
 
 1. Broadcast `executing_tool` to the parent agent (phase broadcast, not the tool node's lifecycle).
 2. `from services.handlers.tools import execute_tool`
 3. `result = await execute_tool(tool_name, tool_args, config)` — this owns the tool node's lifecycle.
 4. Broadcast `tool_completed` to the parent agent.
-5. Return `result` to the loop → wrapped as a `ToolMessage`, appended to `messages`, fed back to the LLM on the next turn.
+5. Return `result` to the loop → serialized into a native
+   `Message(role="tool", tool_call_id=...)`, appended to `messages`, and fed
+   back to the LLM on the next turn.
+
+Malformed JSON arguments retain `raw_arguments` plus a parse error. The loop
+returns a deterministic tool-error result to the model instead of invoking the
+tool or crashing.
 
 **Single-source-of-truth rule.** `execute_tool` owns `executing` / `success` / `error` broadcasts for the **tool node**. The parent-agent closure in `services/ai.py` only emits `executing_tool` / `tool_completed` phase events for the **parent agent**. Don't duplicate either.
 
@@ -157,7 +184,16 @@ When the LLM emits `tool_calls` in its response, `_run_agent_loop` iterates them
 
 ## 7. Gateway-tool pattern (retired)
 
-`androidTool` was the only **gateway tool** — a single `StructuredTool` the LLM saw as `android_device` that fanned out to multiple connected Android service nodes via a `connected_services` list. The node no longer exists: Android service tools are the 16 individual entries in `DEFAULT_TOOL_NAMES`, connected directly to `input-tools`. Legacy `service -> androidTool -> agent` graphs are rewritten on load by `services/workflow_migrations.normalize_legacy_android_toolkit`, and sub-node exclusion keys solely on the AI-agent config handles (`input-memory` / `input-tools` / `input-skill` / `input-teammates`) — the `TOOLKIT_NODE_TYPES` constant is gone.
+`androidTool` was the only **gateway tool** — a single LLM-visible
+`android_device` declaration that fanned out to multiple connected Android
+service nodes via a `connected_services` list. The node no longer exists:
+Android service plugins expose their own `tool_name` class variables and
+connect directly to `input-tools`. Legacy
+`service -> androidTool -> agent` graphs are rewritten on load by
+`services/workflow_migrations.normalize_legacy_android_toolkit`, and sub-node
+exclusion keys solely on the AI-agent config handles (`input-memory` /
+`input-tools` / `input-skill` / `input-teammates`) — the
+`TOOLKIT_NODE_TYPES` constant is gone.
 
 ## 8. Internal delegation identities (`delegate_to_*`)
 
@@ -188,12 +224,27 @@ Parent agents see results via three paths — see [agent_delegation.md](./agent_
 
 When `TEMPORAL_PER_TYPE_DISPATCH=true` and the run is happening inside a Temporal workflow, tool calls do NOT go through `execute_tool` directly. Instead:
 
-1. `AgentWorkflow` (the F4.B child workflow) gets the LLM's tool_calls list back from `agent.execute_llm_step.v1`.
-2. For each tool call, the workflow schedules `f"node.{node_type}.v{version}"` as a Temporal activity on the plugin's declared `task_queue`.
-3. The per-type activity body in [`server/services/plugin/base.py:as_activity`](../server/services/plugin/base.py) runs the same pipeline `execute_tool` would have — broadcasts, plugin `execute()` call, terminal broadcast — but inside the activity boundary.
-4. Result returns to the workflow, gets appended to the messages history, next LLM step sees it.
+1. `agent.prepare_payload.v1` records `llm_engine="native"` and
+   `message_wire_version=2` for new executions.
+2. `AgentWorkflow` (the F4.B child workflow) gets the LLM's tool-calls list
+   back from `agent.execute_llm_step.v1`, whose native branch sends `ToolDef`
+   declarations through `ChatUnifier`.
+3. For each tool call, the workflow schedules
+   `f"node.{node_type}.v{version}"` as a Temporal activity on the plugin's
+   declared `task_queue`.
+4. The per-type activity body in
+   [`server/services/plugin/base.py:as_activity`](../server/services/plugin/base.py)
+   runs the same pipeline `execute_tool` would have — broadcasts, plugin
+   `execute()` call, terminal broadcast — but inside the activity boundary.
+5. The result returns to the workflow, is appended to the native message
+   history, and the next LLM step sees it.
 
 This means tool calls inside an agent loop get Temporal's retry / timeout / heartbeat semantics independently of the parent agent's. A `code-exec` task burns its own retries; a `browser` task survives past the parent's `start_to_close_timeout` via its own heartbeat. See [TEMPORAL_ARCHITECTURE.md](./TEMPORAL_ARCHITECTURE.md).
+
+Histories recorded before the engine marker existed deterministically replay
+the frozen LangChain branch, which rebuilds the historical `StructuredTool`
+surface. That compatibility branch is selected only by the missing
+`llm_engine` marker; it is not the path for new executions.
 
 ## 10. Auto-skill edges
 
@@ -219,18 +270,26 @@ The shortest path:
 
 1. Create the plugin folder: `server/nodes/tool/<plugin>/__init__.py` extending `ToolNode` (or `ActionNode` with `usable_as_tool = True` for dual-purpose).
 2. Declare `type`, `display_name`, `Params` (the schema the LLM sees), `Output`, `@Operation`-decorated `execute()`.
-3. Add a row to `DEFAULT_TOOL_NAMES` in `services/ai.py:2622-2691` — `node_type` → LLM-visible tool name.
-4. (Optional) Add a clause to `_get_tool_schema` if the dynamic-generation default isn't what you want.
-5. (Optional) Add a dispatch clause to `_dispatch_tool` if your plugin needs custom handler logic; otherwise the generic per-plugin path runs `cls.execute()` directly.
+3. Declare the plugin's `tool_name` and, when the LLM-facing wording differs,
+   `tool_description` class variables.
+4. (Optional) Add a special schema clause to `_get_tool_schema` only when the
+   plugin's `Params` model is not the correct invocation contract.
+5. (Optional) Add a dispatch clause to `_dispatch_tool` if your plugin needs
+   custom handler logic; otherwise the generic per-plugin path runs
+   `cls.execute()` directly.
 
-Steps 3-5 are the only edits OUTSIDE the plugin folder. Steps 4-5 are usually unnecessary — most new tools use the dynamic default.
+Steps 4-5 are usually unnecessary — most new tools are fully described by
+their plugin class.
 
 See [node_creation.md](./node_creation.md) for the broader recipe and [server/nodes/README.md](../server/nodes/README.md) for the 5-minute walkthrough.
 
 ## 13. What NOT to do
 
 - Don't broadcast `executing` / `success` / `error` from inside `_dispatch_tool` or a handler — `execute_tool` owns the tool node's lifecycle. Returning `{"status": "delegated"}` is the documented opt-out.
-- Don't bypass `_build_tool_from_node` to hand-craft a `StructuredTool`. The closure shape and `config` dict contents are load-bearing — agents inject services through them.
-- Don't add a new entry to `DEFAULT_TOOL_NAMES` without also handling the schema generation. The tool will register but the LLM will see `{}` for the schema and hallucinate arguments.
+- Don't bypass `_build_tool_from_node` to hand-craft an `AgentToolSpec` or
+  `ToolDef`. Schema dereferencing, validation metadata, execution routing, and
+  duplicate-name checks are load-bearing.
+- Don't expose a tool without a real Pydantic invocation schema. An empty
+  schema makes argument generation unreliable.
 - Don't catch exceptions inside the tool callback and return them as `{"error": ...}` — re-raise so `execute_tool` can broadcast `error`. The LLM-sees-tool-errors-and-continues pattern depends on this.
 - Don't store per-execution state on `AIService` (it's a singleton). Use `config` or per-call closures.

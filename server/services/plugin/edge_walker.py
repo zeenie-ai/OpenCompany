@@ -294,6 +294,16 @@ async def _build_memory_entry(
         session_id = configured_session
     else:
         session_id = agent_node_id
+    embedding_provider = str(
+        memory_params.get("embedding_provider") or "huggingface"
+    ).strip().lower()
+    embedding_model = str(
+        memory_params.get("embedding_model") or {
+            "huggingface": "BAAI/bge-small-en-v1.5",
+            "openai": "text-embedding-3-small",
+            "ollama": "nomic-embed-text",
+        }.get(embedding_provider, "")
+    ).strip()
     entry = {
         "node_id": memory_node_id,
         "session_id": session_id,
@@ -304,6 +314,11 @@ async def _build_memory_entry(
         ),
         "long_term_enabled": memory_params.get("long_term_enabled", False),
         "retrieval_count": int(memory_params.get("retrieval_count", 3)),
+        "embedding_provider": embedding_provider,
+        "embedding_model": embedding_model,
+        "embedding_endpoint": str(
+            memory_params.get("embedding_endpoint") or ""
+        ).strip(),
         # Claude Code CLI session continuity: the UUID claude returned on
         # the previous successful run. claude_code_agent passes this as
         # `--resume <UUID>` so claude finds its own JSONL transcript at

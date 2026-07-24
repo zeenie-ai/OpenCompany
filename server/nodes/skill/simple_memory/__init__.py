@@ -15,7 +15,7 @@ manual "Clear Memory" button instead.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -61,6 +61,41 @@ class SimpleMemoryParams(BaseModel):
         title="Retrieval Count",
         description="Number of relevant memories to retrieve from long-term storage",
         json_schema_extra={"displayOptions": {"show": {"long_term_enabled": [True]}}},
+    )
+    embedding_provider: Literal["huggingface", "openai", "ollama"] = Field(
+        default="huggingface",
+        title="Embedding Provider",
+        description=(
+            "Provider for long-term semantic memory. HuggingFace uses the "
+            "optional local-embeddings extra; OpenAI uses the stored OpenAI "
+            "credential."
+        ),
+        json_schema_extra={
+            "displayOptions": {"show": {"long_term_enabled": [True]}}
+        },
+    )
+    embedding_model: str = Field(
+        default="",
+        title="Embedding Model",
+        description=(
+            "Provider-specific embedding model. Empty uses BAAI/"
+            "bge-small-en-v1.5 for HuggingFace, text-embedding-3-small "
+            "for OpenAI, or nomic-embed-text for Ollama."
+        ),
+        json_schema_extra={
+            "displayOptions": {"show": {"long_term_enabled": [True]}}
+        },
+    )
+    embedding_endpoint: str = Field(
+        default="",
+        title="Embedding Endpoint",
+        description=(
+            "Optional OpenAI-compatible base URL or Ollama host. "
+            "Credentials are never stored here."
+        ),
+        json_schema_extra={
+            "displayOptions": {"show": {"long_term_enabled": [True]}}
+        },
     )
     last_session_id: Optional[str] = Field(
         default=None,

@@ -70,8 +70,8 @@ class FileReadNode(ActionNode):
             # File doesn't exist / is a directory / bad offset — the
             # LLM should retry with corrected input, not fail the run.
             raise NodeUserError(str(e)) from e
-        # backend.read returns deepagents' ReadResult dataclass — unwrap
-        # it into the declared Output contract (same shape fileModify /
+        # Unwrap the backend result into the declared Output contract (same
+        # shape fileModify /
         # fsSearch already return for their backend results). Returning
         # the raw dataclass breaks JSON persistence of node_outputs.
         if result.error:

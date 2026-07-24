@@ -41,7 +41,7 @@ class ShellNode(ActionNode):
     display_name = "Shell"
     subtitle = "Run Command"
     group = ("filesystem", "tool")
-    description = "Execute shell commands (sandboxed; no system PATH)"
+    description = "Execute short-lived shell commands from the workflow workspace"
     tool_name = "shell_execute"
     tool_description = "Execute a shell command. Returns stdout, stderr, and exit code."
     component_kind = "square"

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from services.memory.vector_store import (
+    EmbeddingError,
+    create_embedder,
+)
 from services.plugin import ActionNode, NodeContext, NodeUserError, Operation, TaskQueue
 
 
@@ -32,6 +35,18 @@ class EmbeddingGeneratorParams(BaseModel):
         json_schema_extra={
             "password": True,
             "displayOptions": {"show": {"provider": ["openai"]}},
+        },
+    )
+    endpoint: str = Field(
+        default="",
+        description=(
+            "Optional provider endpoint. OpenAI uses it as base_url; "
+            "Ollama uses it as host."
+        ),
+        json_schema_extra={
+            "displayOptions": {
+                "show": {"provider": ["openai", "ollama"]}
+            }
         },
     )
 
@@ -84,27 +99,24 @@ class EmbeddingGeneratorNode(ActionNode):
             )
 
         texts = [c.get("content", "") if isinstance(c, dict) else str(c) for c in chunks]
+        embedder = None
+        try:
+            embedder = create_embedder(
+                provider,
+                model=model,
+                api_key=api_key,
+                endpoint=params.endpoint,
+            )
+            embeddings = await embedder.embed_documents(
+                texts,
+                batch_size=params.batch_size,
+            )
+        except (EmbeddingError, ValueError) as exc:
+            raise NodeUserError(str(exc)) from exc
+        finally:
+            if embedder is not None:
+                await embedder.aclose()
 
-        if provider == "huggingface":
-            try:
-                from langchain_huggingface import HuggingFaceEmbeddings
-            except ImportError:
-                raise NodeUserError(
-                    "HuggingFace embeddings unavailable. " "pip install langchain-huggingface sentence-transformers",
-                )
-            embedder = HuggingFaceEmbeddings(model_name=model)
-        elif provider == "openai":
-            from langchain_openai import OpenAIEmbeddings
-
-            embedder = OpenAIEmbeddings(model=model, api_key=api_key)
-        elif provider == "ollama":
-            from langchain_ollama import OllamaEmbeddings
-
-            embedder = OllamaEmbeddings(model=model)
-        else:
-            raise NodeUserError(f"Unknown provider: {provider}")
-
-        embeddings = await asyncio.to_thread(embedder.embed_documents, texts)
         dimensions = len(embeddings[0]) if embeddings else 0
 
         return EmbeddingGeneratorOutput(

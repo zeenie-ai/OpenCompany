@@ -1,32 +1,22 @@
-"""Simple in-memory conversation storage for AI agents.
+"""Simple in-memory conversation storage for AI agents."""
 
-Uses standard Python data structures with LangChain message compatibility.
-No deprecated APIs - follows LangChain 0.3+ recommendations.
-"""
-
-from typing import Dict, List, Optional
-from dataclasses import dataclass, field
 from datetime import datetime
 import logging
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
+
+from services.llm.protocol import Message
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class Message:
-    """Single conversation message."""
-
-    role: str  # 'human' or 'ai'
-    content: str
-    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
-
-
-@dataclass
 class ConversationSession:
-    """Conversation session with message history."""
+    """Conversation session storing canonical native LLM messages."""
 
     session_id: str
     messages: List[Message] = field(default_factory=list)
+    message_timestamps: List[str] = field(default_factory=list)
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
 
@@ -45,7 +35,14 @@ def get_session(session_id: str) -> ConversationSession:
 def add_message(session_id: str, role: str, content: str) -> None:
     """Add a message to a session."""
     session = get_session(session_id)
-    session.messages.append(Message(role=role, content=content))
+    canonical_role = {
+        "human": "user",
+        "ai": "assistant",
+    }.get(role, role)
+    session.messages.append(
+        Message(role=canonical_role, content=str(content))
+    )
+    session.message_timestamps.append(datetime.now().isoformat())
     logger.info(f"[Memory] Added {role} message to session '{session_id}' (total: {len(session.messages)})")
 
 
@@ -53,9 +50,18 @@ def get_messages(session_id: str, window_size: Optional[int] = None) -> List[Dic
     """Get messages from a session, optionally limited to last N."""
     session = get_session(session_id)
     messages = session.messages
+    timestamps = session.message_timestamps
     if window_size and window_size > 0:
         messages = messages[-window_size:]
-    return [{"role": m.role, "content": m.content, "timestamp": m.timestamp} for m in messages]
+        timestamps = timestamps[-window_size:]
+    return [
+        {
+            "role": message.role,
+            "content": message.content,
+            "timestamp": timestamp,
+        }
+        for message, timestamp in zip(messages, timestamps)
+    ]
 
 
 def clear_session(session_id: str) -> int:
@@ -63,6 +69,7 @@ def clear_session(session_id: str) -> int:
     if session_id in _sessions:
         count = len(_sessions[session_id].messages)
         _sessions[session_id].messages = []
+        _sessions[session_id].message_timestamps = []
         logger.info(f"[Memory] Cleared {count} messages from session '{session_id}'")
         return count
     return 0
@@ -82,18 +89,17 @@ def get_all_sessions() -> List[Dict]:
     return [{"session_id": s.session_id, "message_count": len(s.messages), "created_at": s.created_at} for s in _sessions.values()]
 
 
-def get_langchain_messages(session_id: str, window_size: Optional[int] = None):
-    """Convert session messages to LangChain message format.
+def get_native_messages(
+    session_id: str,
+    window_size: Optional[int] = None,
+) -> List[Message]:
+    """Return the canonical messages already stored by the session."""
 
-    Uses langchain_core.messages (modern API, not deprecated).
-    """
-    from langchain_core.messages import HumanMessage, AIMessage
-
-    messages = get_messages(session_id, window_size)
-    lc_messages = []
-    for m in messages:
-        if m["role"] == "human":
-            lc_messages.append(HumanMessage(content=m["content"]))
-        elif m["role"] == "ai":
-            lc_messages.append(AIMessage(content=m["content"]))
-    return lc_messages
+    messages = list(get_session(session_id).messages)
+    if window_size and window_size > 0:
+        messages = messages[-window_size:]
+    return [
+        message
+        for message in messages
+        if message.role in {"user", "assistant"}
+    ]

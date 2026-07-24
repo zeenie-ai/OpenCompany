@@ -35,13 +35,19 @@ References:
 from __future__ import annotations
 
 import asyncio
+from dataclasses import asdict
 import hashlib
 import logging
+import os
 from typing import Any, Dict, List, Optional
 
 from temporalio import activity
 
 logger = logging.getLogger(__name__)
+
+_NATIVE_LLM_ENGINE = "native"
+_LEGACY_LLM_ENGINE = "langchain"
+_LLM_ENGINES = frozenset({_NATIVE_LLM_ENGINE, _LEGACY_LLM_ENGINE})
 
 
 # Activity result shapes — keep these in sync with AgentWorkflow's
@@ -65,7 +71,11 @@ def _ensure_llm_contents(messages: List[Any]) -> None:
     docs.temporal.io/encyclopedia/retry-policies) — instead of burning
     the retry budget on a deterministic failure.
     """
-    if any(getattr(m, "type", "") in ("human", "ai", "tool") for m in messages):
+    if any(
+        (getattr(m, "role", None) or getattr(m, "type", ""))
+        in ("user", "assistant", "human", "ai", "tool")
+        for m in messages
+    ):
         return
     from temporalio.exceptions import ApplicationError
 
@@ -79,6 +89,269 @@ def _ensure_llm_contents(messages: List[Any]) -> None:
     )
 
 
+def _configured_llm_engine() -> str:
+    """Return the engine that new prepare activity results will record."""
+
+    engine = os.getenv("AGENT_LLM_ENGINE", _NATIVE_LLM_ENGINE).strip().lower()
+    if engine not in _LLM_ENGINES:
+        raise ValueError(
+            "AGENT_LLM_ENGINE must be either 'native' or 'langchain'; "
+            f"received {engine!r}"
+        )
+    return engine
+
+
+async def _resolve_activity_api_key(payload: Dict[str, Any]) -> str:
+    """Resolve a provider credential inside an activity, never workflow state.
+
+    Pre-cutover histories already contain ``api_key`` and continue to use it.
+    New histories carry only provider/node identifiers so credentials are not
+    written into Temporal history. The database fallback preserves nodes that
+    keep a key in their own configuration instead of the credential service.
+    """
+
+    recorded = payload.get("api_key")
+    if isinstance(recorded, str) and recorded:
+        return recorded
+
+    from core.container import container
+
+    provider = str(payload.get("provider") or "")
+    auth = container.auth_service()
+    api_key = await auth.get_api_key(provider)
+    if not api_key:
+        api_key = await auth.get_api_key(f"{provider}_api_key")
+
+    if not api_key and payload.get("node_id"):
+        database = container.database()
+        parameters = (
+            await database.get_node_parameters(str(payload["node_id"])) or {}
+        )
+        options = parameters.get("options") or {}
+        candidate = parameters.get("api_key") or options.get("api_key")
+        if isinstance(candidate, str) and candidate:
+            api_key = candidate
+
+    if not api_key:
+        from temporalio.exceptions import ApplicationError
+
+        raise ApplicationError(
+            f"API key for provider {provider!r} is not configured",
+            type="MissingAgentProviderCredential",
+            non_retryable=True,
+        )
+    return str(api_key)
+
+
+def _as_temporal_llm_error(error: Any):
+    """Translate a structured SDK failure at the Temporal boundary.
+
+    Raw provider messages can contain payload fragments or internal endpoint
+    details. The user-facing message is category-based, while the complete
+    structured diagnostics remain JSON-safe in ``ApplicationError.details``
+    and therefore in Temporal history for operators.
+    """
+
+    from temporalio.exceptions import ApplicationError
+
+    category_value = getattr(getattr(error, "category", None), "value", None)
+    category = str(category_value or "unknown")
+    provider = str(getattr(error, "provider", None) or "LLM provider")
+    safe_message = str(
+        getattr(error, "user_message", None)
+        or "The language model provider request failed."
+    )
+    details = {
+        "provider": provider,
+        "category": category,
+        "retryable": bool(getattr(error, "retryable", False)),
+        "status_code": getattr(error, "status_code", None),
+        "provider_code": getattr(error, "provider_code", None),
+        "request_id": getattr(error, "request_id", None),
+        "retry_after": getattr(error, "retry_after", None),
+        "retry_after_raw": getattr(error, "retry_after_raw", None),
+    }
+    return ApplicationError(
+        safe_message,
+        details,
+        type=f"LLMError.{category}",
+        non_retryable=not details["retryable"],
+    )
+
+
+def _native_tool_definition(tool: Any) -> Dict[str, Any]:
+    """Serialize an AgentToolSpec (or legacy StructuredTool) for history."""
+
+    definition = getattr(tool, "definition", None)
+    if definition is not None:
+        return {
+            "name": str(definition.name),
+            "description": str(definition.description or ""),
+            "parameters": dict(definition.parameters or {}),
+        }
+
+    schema = getattr(tool, "args_schema", None)
+    if isinstance(schema, dict):
+        parameters = dict(schema)
+    elif schema is not None and hasattr(schema, "model_json_schema"):
+        parameters = schema.model_json_schema()
+    elif schema is not None and hasattr(schema, "schema"):
+        parameters = schema.schema()
+    else:
+        parameters = {"type": "object", "properties": {}}
+
+    from services.plugin.tool import inline_schema_refs
+
+    return {
+        "name": str(getattr(tool, "name", "")),
+        "description": str(getattr(tool, "description", "") or ""),
+        "parameters": inline_schema_refs(parameters),
+    }
+
+
+async def _await_with_llm_heartbeats(
+    awaitable: Any,
+    *,
+    detail: str,
+    interval_seconds: float = 20.0,
+) -> Any:
+    """Await one buffered SDK request while heartbeating the activity."""
+
+    task = asyncio.ensure_future(awaitable)
+    try:
+        while True:
+            try:
+                return await asyncio.wait_for(
+                    asyncio.shield(task),
+                    timeout=interval_seconds,
+                )
+            except TimeoutError:
+                activity.heartbeat(detail)
+    finally:
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+
+async def _execute_native_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Run one native-SDK model turn and retain the v1 activity envelope."""
+
+    from core.container import container
+    from services.agent_runtime import run_native_llm_step
+    from services.llm.messages import filter_empty_messages
+    from services.llm.protocol import (
+        LLMError,
+        MESSAGE_WIRE_VERSION,
+        NATIVE_MESSAGE_WIRE_VERSIONS,
+        Message,
+        ThinkingConfig,
+        ToolDef,
+        message_to_wire,
+        messages_from_wire,
+    )
+
+    wire_version = int(
+        payload.get("message_wire_version") or MESSAGE_WIRE_VERSION
+    )
+    if wire_version not in NATIVE_MESSAGE_WIRE_VERSIONS:
+        from temporalio.exceptions import ApplicationError
+
+        raise ApplicationError(
+            f"Unsupported native message wire version {wire_version}",
+            type="InvalidAgentMessageWireVersion",
+            non_retryable=True,
+        )
+
+    messages = filter_empty_messages(
+        messages_from_wire(payload.get("messages") or [])
+    )
+    _ensure_llm_contents(messages)
+
+    tool_defs: List[ToolDef] = []
+    for value in payload.get("tools") or []:
+        definition = value.get("definition", value)
+        tool_defs.append(
+            ToolDef(
+                name=str(definition.get("name") or ""),
+                description=str(definition.get("description") or ""),
+                parameters=dict(
+                    definition.get("parameters")
+                    or {"type": "object", "properties": {}}
+                ),
+            )
+        )
+
+    thinking_data = payload.get("thinking_config")
+    thinking = (
+        ThinkingConfig(**thinking_data)
+        if isinstance(thinking_data, dict)
+        else None
+    )
+    api_key = await _resolve_activity_api_key(payload)
+    try:
+        response = await _await_with_llm_heartbeats(
+            run_native_llm_step(
+                container.chat_unifier(),
+                provider=payload["provider"],
+                api_key=api_key,
+                messages=messages,
+                model=payload["model"],
+                temperature=payload.get("temperature", 0.7),
+                max_tokens=payload.get("max_tokens", 4096),
+                thinking=thinking,
+                tools=tool_defs,
+                # Temporal owns the one-shot retry contract. SDK retries could
+                # otherwise re-bill a request after an ambiguous transport loss.
+                sdk_max_retries=0,
+                explicit_max_retries=0,
+                # Keep structured metadata until this activity boundary,
+                # where it is converted to a safe Temporal failure.
+                translate_errors=False,
+            ),
+            detail=f"LLM step waiting: {payload.get('model')}",
+        )
+    except LLMError as error:
+        raise _as_temporal_llm_error(error) from error
+
+    assistant = response.assistant_message or Message(
+        role="assistant",
+        content=response.content or "",
+        tool_calls=list(response.tool_calls or []),
+    )
+    assistant_wire = message_to_wire(assistant)
+    usage = asdict(response.usage)
+
+    if response.tool_calls:
+        calls = []
+        for tool_call in response.tool_calls:
+            call = {
+                "id": tool_call.id,
+                "name": tool_call.name,
+                "args": tool_call.args,
+            }
+            raw_arguments = getattr(tool_call, "raw_arguments", None)
+            parse_error = getattr(tool_call, "parse_error", None)
+            if raw_arguments is not None:
+                call["raw_arguments"] = raw_arguments
+            if parse_error:
+                call["parse_error"] = parse_error
+            calls.append(call)
+        return {
+            "kind": "tool_calls",
+            "assistant_message": assistant_wire,
+            "calls": calls,
+            "usage": usage,
+        }
+
+    return {
+        "kind": "final",
+        "assistant_message": assistant_wire,
+        "content": response.content or "",
+        "thinking": response.thinking,
+        "usage": usage,
+    }
+
+
 @activity.defn(name="agent.execute_llm_step.v1")
 async def execute_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Run one LLM turn with bound tools and return the structured response.
@@ -88,7 +361,7 @@ async def execute_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
         {
             "provider": "anthropic" | "openai" | ...,
             "model": "claude-sonnet-4-6",
-            "api_key": "...",                  # already resolved
+            "node_id": "...",                  # credential lookup only
             "messages": [{"role": "user", "content": "..."}, ...],
             "tools": [                          # tool schemas (already built)
                 {"name": "calculator", "description": "...", "args_schema": {...}}
@@ -115,6 +388,28 @@ async def execute_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
     )
     activity.heartbeat(f"LLM step starting: {payload.get('model')}")
 
+    # The engine marker is recorded in ``agent.prepare_payload.v1`` output.
+    # Its absence is the migration sentinel for histories started before the
+    # native cutover and MUST continue through the untouched LangChain path.
+    engine_value = payload.get("llm_engine")
+    engine = (
+        _LEGACY_LLM_ENGINE
+        if engine_value is None
+        else str(engine_value).strip().lower()
+    )
+    if engine not in _LLM_ENGINES:
+        from temporalio.exceptions import ApplicationError
+
+        raise ApplicationError(
+            f"Unsupported agent LLM engine {engine!r}",
+            type="InvalidAgentLLMEngine",
+            non_retryable=True,
+        )
+    if engine == _NATIVE_LLM_ENGINE:
+        result = await _execute_native_llm_step(payload)
+        activity.heartbeat("LLM step: model returned")
+        return result
+
     # Lazy import — keep top-level light so the worker can register this
     # activity without pulling LangChain in for every plugin.
     from core.container import container
@@ -122,7 +417,7 @@ async def execute_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     provider = payload["provider"]
     model = payload["model"]
-    api_key = payload["api_key"]
+    api_key = await _resolve_activity_api_key(payload)
     messages = payload.get("messages", [])
     tool_data = payload.get("tool_data", [])
     temperature = payload.get("temperature", 0.7)
@@ -149,7 +444,13 @@ async def execute_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
     for tool_info in tool_data:
         tool, _config = await ai_service._build_tool_from_node(tool_info)
         if tool is not None:
-            bound_tools.append(tool)
+            # Stage-1 compatibility: the canonical builder now returns the
+            # provider-neutral AgentToolSpec.  Old histories still need the
+            # exact LangChain binding surface until they drain.
+            to_langchain = getattr(tool, "to_langchain", None)
+            bound_tools.append(
+                to_langchain() if callable(to_langchain) else tool
+            )
     if bound_tools:
         chat_model = chat_model.bind_tools(bound_tools)
 
@@ -162,7 +463,7 @@ async def execute_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
     # blows up Gemini's ``Function call is missing a thought_signature``
     # on the next turn.
     from langchain_core.messages import messages_from_dict
-    from services.ai import filter_empty_messages
+    from services.llm.messages import filter_empty_messages
 
     rehydrated = messages_from_dict(messages)
     # Same filter ``_run_agent_loop`` runs in services/ai.py — empty-content
@@ -171,7 +472,10 @@ async def execute_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
     _ensure_llm_contents(rehydrated)
 
     activity.heartbeat("LLM step: invoking model")
-    response = await chat_model.ainvoke(rehydrated)
+    response = await _await_with_llm_heartbeats(
+        chat_model.ainvoke(rehydrated),
+        detail=f"LLM step waiting: {model}",
+    )
     activity.heartbeat("LLM step: model returned")
 
     # Extract usage if present (anthropic-style token counts).
@@ -311,13 +615,14 @@ async def compact_agent_memory(payload: Dict[str, Any]) -> Dict[str, Any]:
             "node_id": str,
             "memory_content": str,
             "provider": str,
-            "api_key": str,
+            "node_id": str,
             "model": str,
         }
 
-    Returns ``{"success": bool, "summary": str, "tokens_before": int, "tokens_after": int}``.
-    Caller (workflow) replaces its ``messages`` with a single system
-    message wrapping the summary, resets token counters, and continues.
+    Returns ``{"success": bool, "summary": str, "tokens_before": int,
+    "tokens_after": int, "usage": dict}``. Caller replaces its ``messages``
+    with a single summary, resets only the context-threshold counter, and
+    retains both pre-compaction and summarizer usage for final billing.
     """
     from services.compaction import get_compaction_service
 
@@ -335,14 +640,18 @@ async def compact_agent_memory(payload: Dict[str, Any]) -> Dict[str, Any]:
             "summary": "",
             "tokens_before": 0,
             "tokens_after": 0,
+            "usage": {},
         }
     return await svc.compact_context(
         session_id=payload["session_id"],
         node_id=payload["node_id"],
         memory_content=payload.get("memory_content", ""),
         provider=payload["provider"],
-        api_key=payload["api_key"],
+        api_key=await _resolve_activity_api_key(payload),
         model=payload["model"],
+        # Temporal owns activity retries; never repeat an ambiguous provider
+        # request inside the activity or SDK.
+        explicit_max_retries=0,
     )
 
 
@@ -557,15 +866,19 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     # worker can register this activity without dragging the whole
     # AI service in for every plugin.
     from core.container import container
-    from services.ai import _resolve_max_tokens, _resolve_temperature
-    from services.ai import ThinkingConfig, get_default_model_async, is_model_valid_for_provider
+    from services.llm.config import (
+        get_default_model_async,
+        is_model_valid_for_provider,
+        resolve_max_tokens,
+        resolve_temperature,
+    )
+    from services.llm.protocol import ThinkingConfig
     from services.plugin.edge_walker import (
         collect_agent_connections,
         collect_teammate_connections,
         extract_task_event_payload,
         format_task_context,
     )
-
     node_id = context["node_id"]
     node_type = context["node_type"]
     workflow_id = context.get("workflow_id")
@@ -639,7 +952,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
             f"API key for provider {provider!r} required for AgentWorkflow " f"node {node_id!r}; configure it in the Credentials Modal."
         )
 
-    max_tokens = _resolve_max_tokens(flattened, model, provider)
+    max_tokens = resolve_max_tokens(flattened, model, provider)
 
     thinking_config_obj: Any = None
     thinking_config_dict: Any = None
@@ -648,7 +961,9 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
             enabled=True,
             budget=int(flattened.get("thinking_budget", 2048)),
             effort=flattened.get("reasoning_effort", "medium"),
-            level=flattened.get("thinking_level", "medium"),
+            # Do not invent a level for Gemini 2.5/Vertex; those models reject
+            # receiving thinking_level alongside a token budget.
+            level=flattened.get("thinking_level"),
             format=flattened.get("reasoning_format", "parsed"),
         )
         thinking_config_dict = {
@@ -659,7 +974,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
             "format": thinking_config_obj.format,
         }
 
-    temperature = _resolve_temperature(
+    temperature = resolve_temperature(
         flattened,
         model,
         provider,
@@ -825,6 +1140,11 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         tools_payload.append(
             {
                 "name": tool.name,
+                # Provider-neutral function declaration for the native
+                # activity branch.  It is JSON-only so it can live safely in
+                # Temporal history and never requires rebuilding a
+                # StructuredTool inside the native LLM activity.
+                "definition": _native_tool_definition(tool),
                 "node_type": tool_info.get("node_type", ""),
                 "version": version,
                 "task_queue": task_queue,
@@ -950,6 +1270,13 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         except Exception:  # noqa: BLE001 — last-resort fallback
             effective_recursion_limit = 200
 
+    llm_engine = _configured_llm_engine()
+    message_wire_version = 1
+    if llm_engine == _NATIVE_LLM_ENGINE:
+        from services.llm.protocol import MESSAGE_WIRE_VERSION
+
+        message_wire_version = MESSAGE_WIRE_VERSION
+
     return {
         "node_id": node_id,
         "node_type": node_type,
@@ -957,7 +1284,6 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         "session_id": session_id,
         "provider": provider,
         "model": model,
-        "api_key": api_key,
         "max_tokens": max_tokens,
         "temperature": temperature,
         "system_message": system_message,
@@ -980,6 +1306,11 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
             or context.get("execution_id")
             or ""
         ),
+        # Sticky execution-engine selection: this activity result is recorded
+        # in Temporal history, so environment changes cannot flip a run
+        # halfway through its agent loop.
+        "llm_engine": llm_engine,
+        "message_wire_version": message_wire_version,
     }
 
 
@@ -1060,6 +1391,7 @@ async def refresh_agent_tools(payload: Dict[str, Any]) -> Dict[str, Any]:
         new_tools_payload.append(
             {
                 "name": tool.name,
+                "definition": _native_tool_definition(tool),
                 "node_type": node_type,
                 "version": version,
                 "task_queue": task_queue,

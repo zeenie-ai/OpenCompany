@@ -2,7 +2,10 @@
 
 > **Authoring model (post-Wave-11):** each chat-model node is a self-contained Python plugin folder under `server/nodes/model/<provider>_chat_model/` that emits a `NodeSpec`. The frontend reads specs via [client/src/lib/nodeSpec.ts](../client/src/lib/nodeSpec.ts) + [adapters/nodeSpecToDescription.ts](../client/src/adapters/nodeSpecToDescription.ts) and renders through `SquareNode` with zero TS edits. See [plugin_system.md](./plugin_system.md) and [server/nodes/README.md](../server/nodes/README.md) for the plugin model, and "Adding a New Provider" below for the chat-model recipe.
 
-OpenCompany uses a hybrid LLM architecture: a native SDK layer in `server/services/llm/` for direct chat completions and model fetching, and a LangChain-backed agent loop in `server/services/ai.py` (the plain `_run_agent_loop` async function) for agent tool-calling. This document describes the native layer, its design, and how both paths coexist.
+OpenCompany routes chat-model nodes and all new agent executions through the
+native SDK layer in `server/services/llm/`. The shared buffered tool loop lives
+in `server/services/agent_runtime.py`. A narrowly isolated LangChain branch is
+retained only while Temporal histories recorded before the cutover drain.
 
 ## Why a Native Layer
 
@@ -25,6 +28,7 @@ server/services/llm/
 |                         sdk_exception_refs are lazy "module:Class" strings resolved at except time
 |-- unifier.py            ChatUnifier — the dispatch facade execute_chat delegates every provider to;
 |                         translates typed SDK errors -> NodeUserError
+|-- schema.py             Provider-aware tool JSON-schema compilation
 |-- vertex.py             Vertex / Agent-Platform key handling
 |-- messages.py           filter_empty_messages, is_valid_message_content
 `-- providers/
@@ -65,8 +69,10 @@ Source of truth for this list: `server/config/llm_defaults.json` (the `providers
 ### Native chat path vs agent dropdown — two different counts
 
 - **Native chat path (`execute_chat` / `fetch_models`) supports 12 providers, all native** — Anthropic and Gemini via their own SDKs; OpenAI and OpenRouter via the openai SDK; and 8 more through the shared OpenAI-compatible client with a per-provider `base_url` (xai, deepseek, kimi, mistral, groq, cerebras, ollama, lmstudio — registered in `providers/_compat.py`). `execute_chat` delegates every provider to `ChatUnifier.chat`; there is no per-provider branch and no chat-path LangChain fallback. `xai` lives here.
-- **The agent dropdown exposes 11 providers** for `aiAgent`, `chatAgent` (Zeenie), and all specialized agents — the `provider` Literal in [`nodes/agent/ai_agent/__init__.py`](../server/nodes/agent/ai_agent/__init__.py), [`chat_agent.py`](../server/nodes/agent/chat_agent/__init__.py), and [`_specialized.py`](../server/nodes/agent/_specialized.py): `openai`, `anthropic`, `gemini`, `openrouter`, `groq`, `cerebras`, `deepseek`, `kimi`, `mistral`, `ollama`, `lmstudio`. **`xai` is native-chat-only and is NOT in the agent Literal** (no agent dropdown entry).
-- Groq and Cerebras are available as standalone chat-model nodes AND in the agent dropdown. Chat runs on the native OpenAI-compatible client; only the agent path uses LangChain (`ChatGroq` / `ChatCerebras`) — the same chat-native / agent-LangChain split every provider has.
+- **The agent dropdown exposes the same 12 providers** for `aiAgent`,
+  `chatAgent` (Zeenie), and all specialized agents, including `xai`.
+- Groq, Cerebras, xAI, and the other compatible endpoints use the same native
+  OpenAI SDK adapter for both standalone chat and agent tool calls.
 
 ### Provider / model reference table
 
@@ -110,7 +116,11 @@ Ollama and LM Studio expose an OpenAI-compatible `/v1` HTTP API, so they ride th
 
 **Both servers must have a model loaded** for the probe to return entries. The validator's "no models loaded" message is symmetric across providers.
 
-**Runtime path** — `execute_chat()` and `execute_agent()` read `{provider}_proxy` via `auth.get_api_key()` and pass it as `proxy_url` into the provider build (`ChatUnifier` -> `spec.factory(...)`). `OpenAIProvider.__init__` overrides `kwargs["base_url"]` with the user's URL and forces `api_key="ollama"` (the documented placeholder for unauthenticated local servers). The openai SDK then sends `POST {user_url}/chat/completions` — **traffic stays on the user's machine, never reaches api.openai.com**.
+**Runtime path** — `ChatUnifier` resolves `{provider}_proxy` and passes it to
+the registered provider factory. `OpenAIProvider` overrides `base_url` with the
+user's URL and uses the documented placeholder key for unauthenticated local
+servers. The OpenAI SDK then sends to the configured local endpoint — traffic
+never reaches api.openai.com.
 
 **Provider detection** ([`server/constants.py:detect_ai_provider`](../server/constants.py)) MUST list `ollama` / `lmstudio` substrings, and the agent dropdown's `provider` Literal in [`ai_agent.py`](../server/nodes/agent/ai_agent/__init__.py) / [`chat_agent.py`](../server/nodes/agent/chat_agent/__init__.py) / [`_specialized.py`](../server/nodes/agent/_specialized.py) MUST include `"ollama"` / `"lmstudio"` — otherwise the chat-model node silently falls through to `'openai'` and the runtime calls the OpenAI cloud with the local-server placeholder key.
 
@@ -151,9 +161,12 @@ class LLMResponse:
     model: str = ""
     finish_reason: str = "stop"
     raw: Any = None
+    assistant_message: Optional[Message] = None  # canonical replay envelope
 ```
 
-Downstream code never special-cases a provider SDK shape.
+`assistant_message` is the durable source of truth. The flat `content`,
+`thinking`, and `tool_calls` fields remain convenience views; `raw` is never
+written to memory or Temporal history.
 
 ## Registry, Unifier, and Lazy Imports
 
@@ -215,32 +228,25 @@ Adding a new OpenAI-compatible provider is a pure config change:
 
 No new provider class, no new import. `providers/_compat.py` registers a spec whose factory reuses `OpenAIProvider` with the config's `base_url`.
 
-## Native Path vs LangChain Path
-
-`AIService` in `server/services/ai.py` has two top-level execution methods. They take different routes:
+## Unified Native Execution Path
 
 ```
-execute_chat(parameters, node_id, node_type)          -> native SDK where possible
-execute_agent(parameters, node_id)                    -> LangChain chat model + _run_agent_loop
-execute_chat_agent(parameters, node_id)               -> LangChain chat model + _run_agent_loop
-```
-
-**`execute_chat()` routing (no per-provider branch, no LangChain fallback):**
-
-```
-node_type / model selects provider
+execute_chat / execute_agent / execute_chat_agent
         |
         v
-ChatUnifier.chat(provider=...)
+ChatUnifier.chat(provider=..., Message[], ToolDef[])
         |
-        +--> registry.get_provider(name) -> spec.factory(...) -> provider.chat(...) -> LLMResponse
+        +--> registry.get_provider(name)
+        +--> official SDK or OpenAI-compatible base URL
+        +--> LLMResponse(assistant_message=lossless MessageWireV2)
 ```
 
-**`execute_agent()` and `execute_chat_agent()` routing:**
-
-All providers go through `create_model()` which returns a LangChain `ChatOpenAI` / `ChatAnthropic` / `ChatGoogleGenerativeAI` / `ChatGroq` / `ChatCerebras` instance. The agent then calls `chat_model.bind_tools(tools)` and runs `_run_agent_loop` (plain async while loop, ~140 LOC). LangChain's chat-model classes are used because they unify `bind_tools` + `usage_metadata` + `content_blocks` extraction across all providers; the native-SDK layer doesn't yet have provider-unified tool binding.
-
-OpenAI-compatible providers like DeepSeek/Kimi/Mistral still use `ChatOpenAI` with `base_url` from `llm_defaults.json` in the agent path, and pass `max_tokens` via `extra_body` to bypass LangChain's `max_completion_tokens` conversion.
+`run_native_agent_loop` appends the provider's exact assistant envelope before
+executing tools. This preserves Gemini thought signatures, Anthropic signed and
+redacted thinking blocks, and OpenAI reasoning continuation state across
+in-process and Temporal turns. Temporal executions created before the migration
+remain pinned to the legacy engine by their recorded prepare-activity result;
+new executions record `llm_engine=native` and wire version 2.
 
 ## Thinking and Reasoning
 
@@ -252,7 +258,7 @@ class ThinkingConfig:
     enabled: bool = False
     budget: int = 2048      # Anthropic budget_tokens, Gemini 2.5 thinking_budget
     effort: str = "medium"  # OpenAI reasoning_effort (low/medium/high)
-    level: str = "medium"   # Gemini 3+ thinking_level
+    level: Optional[str] = None  # Gemini 3+ thinking_level, only when explicit
     format: str = "parsed"  # Groq Qwen3 reasoning_format (parsed/hidden)
 ```
 
@@ -271,9 +277,11 @@ Each provider's `chat()` method reads only the fields it supports. The extracted
 
 The thinking/reasoning fields (`thinkingEnabled`, `thinkingBudget`, `reasoningEffort`, `reasoningFormat`) live in the backend NodeSpec for each chat model (`server/nodes/model/<provider>_chat_model/`) and are surfaced through `AIChatModelParams` in `server/models/nodes.py`. The frontend renders them automatically via the universal parameter panel.
 
-### Thinking extraction (LangChain path)
+### Thinking extraction (legacy replay path)
 
-On the LangChain path, `extract_thinking_from_response(response, provider)` in `server/services/ai.py` pulls reasoning text out of provider-specific response shapes:
+Native providers normalize reasoning directly into `LLMResponse.thinking` and
+ordered `Message.blocks`. The helper below remains only for pre-cutover
+Temporal histories executing the legacy branch:
 
 ```python
 def extract_thinking_from_response(response, provider: str) -> Optional[str]:
@@ -349,18 +357,9 @@ AI providers support optional proxy-based authentication — requests route thro
 
 **Configuration:** proxy URLs are stored in the credentials DB under the `{provider}_proxy` pattern (e.g., `anthropic_proxy`, `openai_proxy`). Falls back to direct API key if no proxy configured. This is the SAME mechanism the native Ollama / LM Studio path uses (see "Local LLM Providers" above) — the validator persists the user's server URL under `{provider}_proxy`, and at runtime it carries into `OpenAIProvider`'s `base_url`.
 
-**Native chat path:** `proxy_url` flows through `ChatUnifier` into `spec.factory(...)`. **LangChain agent path:** `create_model()` sets `base_url`:
-
-```python
-def create_model(self, provider: str, api_key: str, model: str,
-                temperature: float, max_tokens: int,
-                thinking: Optional[ThinkingConfig] = None,
-                proxy_url: Optional[str] = None):
-    # ...
-    if proxy_url:
-        kwargs['base_url'] = proxy_url
-        kwargs[config.api_key_param] = "ollama"  # Ollama-style placeholder token
-```
+For every new chat and agent run, `proxy_url` flows through `ChatUnifier` into
+the cached native provider factory. The old `create_model()` proxy path exists
+only for histories already pinned to `llm_engine=langchain`.
 
 **Use cases:** Claude Code CLI proxy for Anthropic models; native Ollama / LM Studio support; custom auth proxies; dev/testing with mock servers.
 
@@ -422,7 +421,8 @@ the plugin folder or add a `visuals.json` entry (`"openrouterChatModel":
 1. **OpenAI-compatible provider** (DeepSeek, Kimi, Mistral pattern):
    - Add an entry to `llm_defaults.json` with `base_url`, `default_model`, `detection_patterns`, `max_output_tokens._default`, `context_length._default`, `temperature_range`.
    - Add the provider name to the compat list in `services/llm/providers/_compat.py` — its import loop calls `register_provider(ProviderSpec(...))` for every listed name.
-   - The LangChain agent path needs no Python branching — `create_model()` reuses `ChatOpenAI` with `base_url` from `llm_defaults.json`.
+   - Chat and agent calls both use the native OpenAI SDK with that configured
+     `base_url`; do not add a branch in `AIService`.
 
 2. **Custom-SDK provider** (Anthropic, Gemini pattern):
    - Create `services/llm/providers/<name>.py` implementing the `LLMProvider` protocol.
@@ -444,7 +444,8 @@ the plugin folder or add a `visuals.json` entry (`"openrouterChatModel":
 | `server/services/llm/providers/<provider>.py` | Native SDK provider (Protocol-based) + `register_provider(ProviderSpec)` at module bottom |
 | `server/services/llm/registry.py` | `ProviderSpec` / `register_provider` — the provider registration contract |
 | `server/services/llm/unifier.py` | `ChatUnifier` — chat dispatch facade + typed-error translation |
-| `server/services/ai.py` | Routing: native chat path (via ChatUnifier) + LangChain agent path |
+| `server/services/agent_runtime.py` | Shared native agent step/loop and `AgentToolSpec` |
+| `server/services/ai.py` | Node orchestration; legacy factory retained only for recorded Temporal histories |
 | `client/src/Dashboard.tsx` | Generic `COMPONENT_BY_KIND` dispatch — no per-provider entry needed |
 
 ## Related Docs
@@ -452,4 +453,21 @@ the plugin folder or add a `visuals.json` entry (`"openrouterChatModel":
 - [DESIGN.md](DESIGN.md) - overall backend architecture
 - [memory_compaction.md](memory_compaction.md) - token tracking and compaction using this layer
 - [pricing_service.md](pricing_service.md) - cost calculation from `LLMResponse.usage`
-- [agent_architecture.md](agent_architecture.md) - how agents use LangChain path on top of this layer
+- [agent_architecture.md](agent_architecture.md) - agent execution architecture
+
+## Temporal migration and dependency lifecycle
+
+`agent.prepare_payload.v1` records both `llm_engine` and
+`message_wire_version`. New histories default to `native`/`2`; histories whose
+recorded result lacks those fields deterministically keep the legacy activity
+payload and LangChain replay path. `AGENT_LLM_ENGINE=langchain` is an emergency
+switch for newly prepared runs only.
+
+The remaining LangChain adapter pins in `server/pyproject.toml` are therefore a
+temporary deployment compatibility requirement, not a runtime dependency of
+new executions. Remove the legacy activity branch, compatibility factory and
+pins together only after Temporal visibility confirms that no retained or
+retryable history can still select the legacy engine. The source-boundary test
+keeps `langchain*` confined to the three explicitly allowlisted legacy bridge
+modules, rejects `langgraph*`/`langsmith` everywhere else, and rejects
+`deepagents` throughout production during that drain window.

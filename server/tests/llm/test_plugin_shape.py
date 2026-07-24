@@ -35,8 +35,8 @@ def test_every_provider_has_a_module_or_is_registered_by_compat():
 
     Dedicated providers (anthropic / openai / gemini / openrouter) live
     in their own file. OpenAI-compat providers (xai / deepseek / kimi /
-    mistral / ollama / lmstudio) all register through ``_compat.py``
-    using the same ``OpenAIProvider`` factory.
+    mistral / ollama / lmstudio / groq / cerebras) all register through
+    ``_compat.py`` using the same ``OpenAIProvider`` factory.
     """
     dedicated_files = {p.stem for p in PROVIDERS_DIR.glob("*.py") if not p.name.startswith("_")}
     for provider in all_providers():
@@ -58,12 +58,9 @@ def test_every_provider_has_a_module_or_is_registered_by_compat():
 # 2. No per-provider Python inside execute_chat / fetch_models bodies
 # ---------------------------------------------------------------------------
 #
-# Scoped contract: Phase A only refactored the chat-model node path
-# (``execute_chat`` + ``fetch_models``). The agent paths (``execute_agent``,
-# ``execute_chat_agent``) keep their ``except openai.OpenAIError`` blocks
-# until Phase G migrates the agent loop off LangChain. AST-walking each
-# method body avoids false positives from those still-LangChain code
-# paths. Phase G should extend this test to cover the agent methods.
+# Chat and agent entry points all delegate through the native unifier.
+# AST-walking each method body avoids false positives from the isolated
+# pre-cutover Temporal compatibility factory that remains elsewhere.
 
 
 def _method_source(class_name: str, method_name: str, source: str) -> str:
@@ -104,10 +101,12 @@ _FORBIDDEN_PATTERNS_IN_UNIFIED_METHODS = (
 )
 
 
-@pytest.mark.parametrize("method_name", ["execute_chat", "fetch_models"])
+@pytest.mark.parametrize(
+    "method_name",
+    ["execute_chat", "fetch_models", "execute_agent", "execute_chat_agent"],
+)
 def test_unified_methods_have_no_per_provider_python(method_name):
-    """``execute_chat`` and ``fetch_models`` must delegate to the unifier
-    instead of carrying per-provider branches or typed-exception blocks."""
+    """Every new-run LLM entry point must delegate to the native unifier."""
     source = AI_PY.read_text(encoding="utf-8")
     method_src = _method_source("AIService", method_name, source)
     for pattern in _FORBIDDEN_PATTERNS_IN_UNIFIED_METHODS:
@@ -136,13 +135,28 @@ def test_every_provider_declares_sdk_exception_types():
         assert spec.sdk_exception_types, (
             f"provider {provider!r} has empty sdk_exception_types — typed "
             f"SDK errors would surface as bare RuntimeErrors with tracebacks "
-            f"instead of clean NodeUserError envelopes."
-        )
+                f"instead of clean NodeUserError envelopes."
+            )
         # And every tuple member must be an exception class
         for exc in spec.sdk_exception_types:
             assert isinstance(exc, type) and issubclass(exc, BaseException), (
                 f"provider {provider!r} sdk_exception_types contains a non-exception: {exc!r}"
             )
+
+
+def test_all_registered_providers_are_agent_selectable():
+    """Agent surfaces must not silently omit a native provider."""
+
+    from typing import get_args
+
+    from nodes.agent._specialized import SpecializedAgentParams
+    from nodes.agent.ai_agent import AIAgentParams
+    from nodes.agent.chat_agent import ChatAgentParams
+
+    expected = set(all_providers())
+    for params_type in (AIAgentParams, ChatAgentParams, SpecializedAgentParams):
+        annotation = params_type.model_fields["provider"].annotation
+        assert set(get_args(annotation)) == expected
 
 
 # ---------------------------------------------------------------------------

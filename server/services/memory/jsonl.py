@@ -13,18 +13,18 @@ Used by :mod:`nodes.agent.claude_code_agent` (session memory) via
 import json
 from typing import Any, List, Tuple
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from services.llm.protocol import Message
 
 
-def parse_jsonl(text: str) -> List[BaseMessage]:
-    """Standard JSONL -> LangChain ``BaseMessage`` list.
+def parse_jsonl(text: str) -> List[Message]:
+    """Standard JSONL -> native :class:`Message` list.
 
     Tool-call content blocks collapse to text; rows with unknown roles
     or unparseable JSON are skipped (forward compatibility).
     """
     if not text:
         return []
-    out: List[BaseMessage] = []
+    out: List[Message] = []
     for line in text.splitlines():
         line = line.strip()
         if not line:
@@ -44,9 +44,9 @@ def parse_jsonl(text: str) -> List[BaseMessage]:
         if not isinstance(content, str):
             continue
         if role == "user":
-            out.append(HumanMessage(content=content))
+            out.append(Message(role="user", content=content))
         elif role == "assistant":
-            out.append(AIMessage(content=content))
+            out.append(Message(role="assistant", content=content))
     return out
 
 

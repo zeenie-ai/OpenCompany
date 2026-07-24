@@ -8,7 +8,12 @@
 
 How memory, parameters, and execution context flow when one AI agent delegates work to another agent connected as a tool.
 
-> **Related docs:** [tool_building_pipeline.md](./tool_building_pipeline.md) for the underlying `_build_tool_from_node` + `execute_tool` pipeline that backs `delegate_to_*` (delegation tools share the same StructuredTool construction path as other AI tools — what makes them special is the fire-and-forget background task and the `{"status": "delegated"}` lifecycle opt-out documented there).
+> **Related docs:** [tool_building_pipeline.md](./tool_building_pipeline.md)
+> for the underlying `_build_tool_from_node` + `execute_tool` pipeline that
+> backs `delegate_to_*` (delegation tools use the same provider-neutral
+> `AgentToolSpec` / `ToolDef` construction path as other AI tools — what makes
+> them special is the fire-and-forget background task and the
+> `{"status": "delegated"}` lifecycle opt-out documented there).
 
 ## Overview
 
@@ -520,7 +525,7 @@ Every delegated agent broadcasts status at key phases via WebSocket:
 | `delegated_task` | Child starts executing | Child's node ID |
 | `initializing` | Creating LLM model | Child's node ID |
 | `loading_memory` | Parsing markdown history | Child's node ID |
-| `building_tools` | Converting tool nodes to StructuredTool | Child's node ID |
+| `building_tools` | Converting tool nodes to `AgentToolSpec` values | Child's node ID |
 | `invoking_llm` | Calling model | Child's node ID |
 | `executing_tool` | Running a tool called by child's LLM | Tool node ID |
 | `delegated_complete` | Child finishes successfully | Child's node ID |

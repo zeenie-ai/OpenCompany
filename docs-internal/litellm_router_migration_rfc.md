@@ -1,6 +1,10 @@
 # LiteLLM Router Migration RFC
 
-**Status:** Draft · **Owner:** trohitg · **Created:** 2026-07-02 · **Target:** `server/services/llm/` + the chat/agent LLM paths in `server/services/ai.py`
+**Status:** Superseded by [Native LLM SDK](native_llm_sdk.md) · **Owner:** trohitg · **Created:** 2026-07-02 · **Target:** `server/services/llm/` + the chat/agent LLM paths in `server/services/ai.py`
+
+> Historical RFC only. The adopted implementation uses provider-native SDKs,
+> not LiteLLM; dependency and migration claims below are retained solely as
+> design-history context.
 
 ---
 

@@ -11,8 +11,7 @@ from __future__ import annotations
 
 import json
 
-from langchain_core.messages import AIMessage, HumanMessage
-
+from services.llm.protocol import Message
 from services.memory.jsonl import append_message, parse_jsonl, trim_window
 from services.memory import (  # public re-exports
     parse_jsonl as parse_jsonl_reexport,
@@ -35,8 +34,10 @@ def test_parse_jsonl_basic_user_assistant_pair():
     text = '{"role": "user", "content": "hi"}\n' '{"role": "assistant", "content": "hello"}\n'
     msgs = parse_jsonl(text)
     assert len(msgs) == 2
-    assert isinstance(msgs[0], HumanMessage) and msgs[0].content == "hi"
-    assert isinstance(msgs[1], AIMessage) and msgs[1].content == "hello"
+    assert isinstance(msgs[0], Message)
+    assert (msgs[0].role, msgs[0].content) == ("user", "hi")
+    assert isinstance(msgs[1], Message)
+    assert (msgs[1].role, msgs[1].content) == ("assistant", "hello")
 
 
 def test_parse_jsonl_skips_unparseable_lines_forward_compat():
@@ -132,7 +133,7 @@ def test_append_message_metadata_round_trips_via_parse_jsonl():
     assert obj["session_id"] == "abc-123"
     assert obj["model"] == "claude"
     # parse_jsonl still returns the message; metadata is preserved on the
-    # wire even if it's not surfaced on BaseMessage.
+    # wire even if it isn't surfaced on the normalized Message.
     msgs = parse_jsonl(text)
     assert msgs[0].content == "blue."
 

@@ -31,9 +31,8 @@ logger = get_logger(__name__)
 # Groq + Cerebras moved here in Phase D (May 2026). Both expose
 # OpenAI-compatible `/v1` endpoints (``api.groq.com/openai/v1`` /
 # ``api.cerebras.ai/v1``) so they share the ``OpenAIProvider`` factory
-# with the other compat providers. Registering them here makes the
-# LangChain fallback path in ``services/ai.py`` dead code, which Phase
-# D then deletes.
+# with the other compat providers. The only remaining LangChain path is the
+# temporary Temporal-history compatibility branch.
 _COMPAT_PROVIDERS: Tuple[str, ...] = (
     "xai",
     "deepseek",
@@ -49,10 +48,8 @@ _COMPAT_PROVIDERS: Tuple[str, ...] = (
 def _load_compat_base_urls() -> dict[str, str]:
     """Read ``providers.<name>.base_url`` from llm_defaults.json.
 
-    Lazy so we don't add a hard import dependency on the JSON parser at
-    module import. The JSON is already cached by ``services/ai.py`` 's
-    ``_LLM_DEFAULTS``; we re-read it here so this module can register
-    without depending on the ``ai`` service.
+    Kept independent from ``services.ai`` so provider registration does not
+    import the orchestration or legacy Temporal-compatibility layer.
     """
     import json
     from pathlib import Path
@@ -98,7 +95,10 @@ def _register_compat_providers() -> None:
                 name=name,
                 factory=OpenAIProvider,
                 sdk_exception_refs=("openai:OpenAIError",),
-                client_kwargs={"base_url": base_url},
+                client_kwargs={
+                    "base_url": base_url,
+                    "provider_name": name,
+                },
             )
         )
 

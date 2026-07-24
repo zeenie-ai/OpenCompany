@@ -11,7 +11,11 @@
 
 ## Purpose
 
-Ultra-fast inference via Groq's LPU hardware. Models include Llama 3.x / 4, Qwen3-32b, GPT-OSS. The `ChatModelBase.chat` operation calls `AIService.execute_chat`, which routes every provider through `ChatUnifier`; Groq is one of the eight OpenAI-compatible providers registered in `providers/_compat.py` (the chat-path LangChain fallback was retired — LangChain `ChatGroq` remains only on the agent path).
+Ultra-fast inference via Groq's LPU hardware. Models include Llama 3.x / 4,
+Qwen3-32b, GPT-OSS. The `ChatModelBase.chat` operation calls
+`AIService.execute_chat`, which routes through `ChatUnifier`; Groq is one of
+the eight OpenAI-compatible providers registered in `providers/_compat.py`.
+Bare chat and current agent executions share this native provider path.
 
 ## Inputs (handles)
 
@@ -77,7 +81,9 @@ flowchart TD
 
 - **Validation**: missing api_key / empty prompt -> error envelope.
 - **Provider routing**: matches `'groq' in node_type.lower()`. Note the ordering in `detect_ai_provider`: deepseek/kimi/mistral/cerebras checked first, so none of those accidentally resolve to groq.
-- **Native OpenAI-compatible path**: `ChatUnifier` resolves the `groq` spec registered in `providers/_compat.py` (reuses `OpenAIProvider` with the `base_url` from `llm_defaults.json`). No LangChain on the chat path.
+- **Native OpenAI-compatible path**: `ChatUnifier` resolves the `groq` spec
+  registered in `providers/_compat.py` (reuses `OpenAIProvider` with the
+  `base_url` from `llm_defaults.json`) for both chat and agent requests.
 - **Reasoning**: only Qwen3-32b actually honors `reasoningFormat`. Non-Qwen models ignore the flag.
 - **Model string scrubbing**: `[FREE] ` prefix stripped; `owner/` prefix stripped (non-OpenRouter).
 
@@ -92,8 +98,8 @@ flowchart TD
 ## External Dependencies
 
 - **Credentials**: `auth_service.get_api_key('groq', 'default')` plus optional `groq_proxy`.
-- **Services**: `ChatUnifier` + `OpenAIProvider` (base_url-ed) on the chat path; `langchain_groq.ChatGroq` on the agent path.
-- **Python packages**: `openai` (chat path), `langchain-groq` (agent path).
+- **Services**: `ChatUnifier` + `OpenAIProvider` with the Groq `base_url`.
+- **Python packages**: `openai`.
 - **Environment variables**: none.
 
 ## Edge cases & known limits

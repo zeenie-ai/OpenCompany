@@ -648,12 +648,20 @@ class AICliService:
 
         if connected_memory.get("long_term_enabled") and removed_texts:
             from services.memory.vector_store import get_memory_vector_store
+            from services.plugin.deps import get_auth_service
 
-            store = get_memory_vector_store(
+            store = await get_memory_vector_store(
                 connected_memory.get("session_id") or "default",
+                provider=connected_memory.get(
+                    "embedding_provider",
+                    "huggingface",
+                ),
+                model=connected_memory.get("embedding_model"),
+                endpoint=connected_memory.get("embedding_endpoint"),
+                auth_service=get_auth_service(),
             )
             if store is not None:
-                await asyncio.to_thread(store.add_texts, removed_texts)
+                await store.add_texts(removed_texts)
 
     @staticmethod
     async def _resolve_repo_root(

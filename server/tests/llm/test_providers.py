@@ -90,6 +90,32 @@ class TestAnthropicProvider:
         assert call_kwargs["thinking"]["budget_tokens"] == 4096
         assert call_kwargs["temperature"] == 1
 
+    @pytest.mark.asyncio
+    async def test_chat_clamps_thinking_budget_and_expands_max_tokens(
+        self, provider
+    ):
+        mock_resp = MagicMock()
+        mock_resp.content = [MagicMock(type="text", text="ok")]
+        mock_resp.usage = MagicMock(
+            input_tokens=5,
+            output_tokens=2,
+            cache_creation_input_tokens=0,
+            cache_read_input_tokens=0,
+        )
+        mock_resp.stop_reason = "end_turn"
+        provider._client.messages.create = AsyncMock(return_value=mock_resp)
+
+        await provider.chat(
+            [Message(role="user", content="test")],
+            model="claude-sonnet-4-6",
+            max_tokens=500,
+            thinking=ThinkingConfig(enabled=True, budget=100),
+        )
+
+        call_kwargs = provider._client.messages.create.call_args.kwargs
+        assert call_kwargs["thinking"]["budget_tokens"] == 1024
+        assert call_kwargs["max_tokens"] == 2048
+
 
 # ---------------------------------------------------------------------------
 # OpenAI: message formatting + response normalization
@@ -201,11 +227,26 @@ class TestGeminiProvider:
 
     def test_tool_response_format(self, provider):
         msgs = [
-            Message(role="tool", content="42", name="calc"),
+            Message(
+                role="tool",
+                content="42",
+                name="calc",
+                tool_call_id="call-1",
+            ),
+            Message(
+                role="tool",
+                content="7",
+                name="calc",
+                tool_call_id="call-2",
+            ),
         ]
         _, contents = provider._split_system_and_contents(msgs)
-        assert contents[0]["role"] == "function"
+        assert len(contents) == 1
+        assert contents[0]["role"] == "user"
+        assert len(contents[0]["parts"]) == 2
         assert "function_response" in contents[0]["parts"][0]
+        assert contents[0]["parts"][0]["function_response"]["id"] == "call-1"
+        assert contents[0]["parts"][1]["function_response"]["id"] == "call-2"
 
     def test_normalize_text(self, provider):
         part = MagicMock(thought=False, function_call=None, text="Hello")
@@ -238,8 +279,8 @@ class TestGeminiProvider:
         assert result.content == "Answer"
 
     @pytest.mark.asyncio
-    async def test_chat_thinking_forwards_to_sdk(self, provider):
-        """Thinking config fields are forwarded to the SDK's ThinkingConfig."""
+    async def test_chat_thinking_level_takes_precedence_over_budget(self, provider):
+        """Gemini 3 level and Gemini 2.5 budget are mutually exclusive."""
         mock_types = MagicMock()
         mock_resp = MagicMock()
         mock_resp.candidates = []
@@ -255,8 +296,9 @@ class TestGeminiProvider:
             )
 
         call_kwargs = mock_types.ThinkingConfig.call_args[1]
-        assert call_kwargs["thinking_budget"] == 4096
+        assert call_kwargs["include_thoughts"] is True
         assert call_kwargs["thinking_level"] == "high"
+        assert "thinking_budget" not in call_kwargs
 
     @pytest.mark.asyncio
     async def test_chat_no_thinking_when_disabled(self, provider):

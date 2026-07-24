@@ -53,7 +53,7 @@ All 13 agents share these input handles.
 | `input-main` | input/main | no | Upstream data; auto-prompt fallback when `prompt` param is empty |
 | `input-skill` | input/skill | no | Skill node(s) providing SKILL.md context |
 | `input-memory` | input/memory | no | `simpleMemory` node for conversation history |
-| `input-tools` | input/tools | no | Tool nodes exposed to the LLM via `chat_model.bind_tools` |
+| `input-tools` | input/tools | no | Tool nodes compiled into provider-neutral `AgentToolSpec` definitions |
 | `input-task` | input/task | no | `taskTrigger` events from delegated child agents |
 | `input-teammates` | input/teammates | no | **Only on `orchestrator_agent` and `ai_employee`** (via `team_lead_agent_handles()`) -- connected agents become Task Manager-authorized assignees |
 
@@ -72,7 +72,7 @@ There are **no** per-agent parameter extras: `orchestrator_agent` and
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
 | `prompt` | string | `""` | no | - | User prompt; falls back to upstream output when empty (4 rows) |
-| `provider` | enum | `openai` | no | - | `openai` / `anthropic` / `gemini` / `openrouter` / `groq` / `cerebras` / `deepseek` / `kimi` / `mistral` / `ollama` / `lmstudio` |
+| `provider` | enum | `openai` | no | - | `openai` / `anthropic` / `gemini` / `openrouter` / `xai` / `groq` / `cerebras` / `deepseek` / `kimi` / `mistral` / `ollama` / `lmstudio` |
 | `model` | string | `""` | no | - | Model ID (resolved against the provider; empty falls through to default) |
 | `system_message` | string\|null | `"You are a helpful assistant"` | no | - | System instructions (3 rows) |
 | `temperature` | float\|null | `None` | no | group `options` | 0.0-2.0; `None` -> `agent.default_temperature` in `llm_defaults.json` |
@@ -162,8 +162,9 @@ flowchart TD
   agent's execution phase (`executing`, `executing_tool`, `success`,
   `error`), plus `executing_tool` fired on connected tool nodes when the LLM
   invokes them.
-- **External API calls**: one or more calls to the configured LLM provider
-  (see `services/ai.py::execute_chat_agent` -> LangChain chat model + `_run_agent_loop`).
+- **External API calls**: one or more calls through `ChatUnifier` to the
+  configured native provider SDK. Tool-enabled turns use the shared
+  `run_native_agent_loop`.
 - **Subprocess / file I/O**: none directly in the plugin; tools invoked by
   the LLM may trigger those themselves.
 
@@ -171,9 +172,11 @@ flowchart TD
 
 - **Credentials**: `auth_service.get_api_key(<provider>)` for the
   configured LLM provider.
-- **Services**: `AIService.execute_chat_agent`, `CompactionService`,
-  `PricingService`, `StatusBroadcaster`.
-- **Python packages**: `langchain-core`, plus provider SDKs.
+- **Services**: `AIService.execute_chat_agent`, `ChatUnifier`,
+  `run_native_agent_loop`, `CompactionService`, `PricingService`,
+  `StatusBroadcaster`.
+- **Python packages**: native provider SDKs (`anthropic`, `openai`,
+  `google-genai`).
 
 ## Edge cases & known limits
 

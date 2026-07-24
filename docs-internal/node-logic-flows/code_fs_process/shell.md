@@ -4,22 +4,22 @@
 |------|-------|
 | **Category** | code_fs_process / filesystem |
 | **Backend handler** | [`server/nodes/filesystem/shell/__init__.py::ShellNode.execute_op`](../../../server/nodes/filesystem/shell/__init__.py) (dispatched via `BaseNode.execute()` + `@Operation("execute")`) |
-| **Backend** | `NushellBackend.execute` (subclasses `deepagents.backends.LocalShellBackend`) in [`server/nodes/filesystem/_backend.py`](../../../server/nodes/filesystem/_backend.py) |
+| **Backend** | `WorkspaceBackend.execute` (with `NushellBackend` retained as a compatibility alias) in [`server/nodes/filesystem/_backend.py`](../../../server/nodes/filesystem/_backend.py) |
 | **Tests** | [`server/tests/nodes/test_code_fs_process.py`](../../../server/tests/nodes/test_code_fs_process.py) |
 | **Skill (if any)** | [`server/skills/terminal/shell-skill/SKILL.md`](../../../server/skills/terminal/shell-skill/SKILL.md) |
 | **Dual-purpose tool** | yes - tool name `shell_execute` |
 
 ## Purpose
 
-Runs a short-lived shell command inside the per-workflow workspace. The backend
-is **Nushell** (`NushellBackend`, a `LocalShellBackend` subclass) constructed
-with `inherit_env=True`, so external tools like `npm`, `node`, `python`, and
-`git` ARE reachable on PATH (it falls back to upstream `LocalShellBackend.execute()`
-/ POSIX `sh` / cmd.exe only when `nu` isn't installed). The command grammar is
-Nushell, not bash — `&&` / `||` / `$VAR` / backticks / `>` do not work; see
-`shell-skill/SKILL.md` for the Nu equivalents. For long-running processes
-(dev servers, watchers) users are directed to [`processManager`](./processManager.md);
-this node kills the command at `timeout`.
+Runs a short-lived shell command inside the per-workflow workspace. The native
+`WorkspaceBackend` is constructed with `inherit_env=True`, so external tools
+like `npm`, `node`, `python`, and `git` ARE reachable on PATH. It uses Nushell
+when `nu` is installed and otherwise uses the host shell (`sh` or `cmd.exe`).
+When Nushell is selected, `&&` / `||` / `$VAR` / backticks / `>` do not use
+bash semantics; see `shell-skill/SKILL.md` for the Nu equivalents. For
+long-running processes (dev servers, watchers), users are directed to
+[`processManager`](./processManager.md); this node kills the command at
+`timeout`.
 
 NOTE: the node's `description` metadata still reads "sandboxed; no system PATH",
 which no longer matches the `inherit_env=True` backend — a code-side copy
@@ -75,7 +75,7 @@ backend root is `ctx.workspace_dir`.
 flowchart TD
   A[execute_op] --> P{_BASH_CHAIN_RE matches<br/> && / || ?}
   P -- yes --> Pe[raise NodeUserError:<br/>use ; or try{}catch{}]
-  P -- no --> C[get_backend workspace root<br/>NushellBackend virtual_mode, inherit_env]
+  P -- no --> C[get_backend workspace root<br/>WorkspaceBackend, inherited environment]
   C --> D[to_thread backend.execute command, timeout]
   D --> S[strip_ansi result.output]
   S --> I{exit_code?}
@@ -90,7 +90,7 @@ flowchart TD
 - **Validation**: empty `command` is rejected by Pydantic `min_length=1` (no
   manual check). A ` && ` / ` || ` in the command -> `raise NodeUserError` with
   a Nushell-equivalent hint (`;` or `try { … } catch { … }`).
-- **Inherited PATH**: `NushellBackend(inherit_env=True)` — external tools
+- **Inherited PATH**: `WorkspaceBackend(inherit_env=True)` — external tools
   (`npm`, `node`, `python`, `git`, …) ARE reachable. The previous "scrubbed
   PATH" framing no longer holds. AI agents are still steered toward
   `process_manager` for long-running daemons (the shell kills at `timeout`).
@@ -100,9 +100,9 @@ flowchart TD
 - **Non-zero exit still returns `success: true`**: the envelope-level success
   reflects whether the handler itself finished, not whether the command
   succeeded. Users must inspect `exit_code` in the payload.
-- **Truncation**: the backend caps output size internally; when capped
-  `truncated=true` surfaces to the caller. The exact cap lives in
-  `deepagents`.
+- **Truncation**: the native backend caps output at 100,000 characters by
+  default; when capped, `truncated=true` and a trailing marker surface to the
+  caller.
 - **ANSI stripping**: `result.output` is run through `core.ansi.strip_ansi`
   (a wrapper over **`click.unstyle`**) before being returned as `stdout` (and
   before the operator-log line), so colour/cursor codes from tools like
@@ -126,7 +126,7 @@ flowchart TD
 
 ## External Dependencies
 
-- **Python packages**: `deepagents` (via `NushellBackend`), `core.ansi`.
+- **Python packages**: standard library plus `core.ansi`.
 - **Environment variables**: `WORKSPACE_BASE_DIR`.
 - **OS utilities**: `nu` (Nushell) on PATH for the primary path; whatever the
   command references is reachable because PATH is inherited.
@@ -147,9 +147,9 @@ flowchart TD
   command - `input_data` from upstream nodes does not reach it.
 - **No environment variable override**: users cannot inject env vars via
   parameters; the backend inherits the server's env (`inherit_env=True`).
-- **Windows path traversal check is string-based**: `virtual_mode=True`
-  normalises paths but trust-boundary violations depend on the backend
-  implementation.
+- **Shell commands are open-world**: filesystem helper methods enforce
+  workspace containment, but a shell command can use absolute paths or invoke
+  external programs. This preserves the node's historical shell behavior.
 
 ## Related
 

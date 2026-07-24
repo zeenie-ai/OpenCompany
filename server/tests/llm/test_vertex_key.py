@@ -255,7 +255,10 @@ class TestGeminiProviderVertexMode:
             )
 
         kwargs = mock_types.ThinkingConfig.call_args[1]
-        assert kwargs == {"thinking_budget": 1024}
+        assert kwargs == {
+            "include_thoughts": True,
+            "thinking_budget": 1024,
+        }
 
 
 # ---------------------------------------------------------------------------

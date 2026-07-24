@@ -4,18 +4,18 @@
 |------|-------|
 | **Category** | code_fs_process / filesystem |
 | **Backend handler** | [`server/nodes/filesystem/file_read/__init__.py::FileReadNode.read`](../../../server/nodes/filesystem/file_read/__init__.py) (dispatched via `BaseNode.execute()` + `@Operation("read")`) |
-| **Backend** | `NushellBackend` (subclasses `deepagents.backends.LocalShellBackend`) in [`server/nodes/filesystem/_backend.py`](../../../server/nodes/filesystem/_backend.py) |
+| **Backend** | Native `WorkspaceBackend` in [`server/nodes/filesystem/_backend.py`](../../../server/nodes/filesystem/_backend.py) |
 | **Tests** | [`server/tests/nodes/test_code_fs_process.py`](../../../server/tests/nodes/test_code_fs_process.py) |
 | **Skill (if any)** | [`server/skills/coding_agent/file-read-skill/SKILL.md`](../../../server/skills/coding_agent/file-read-skill/SKILL.md) |
 | **Dual-purpose tool** | yes - tool name `file_read` |
 
 ## Purpose
 
-Reads a file within the per-workflow workspace. Delegates to `backend.read()`
-on `NushellBackend` (a `LocalShellBackend` subclass) via `get_backend()` in
+Reads a file within the per-workflow workspace. Delegates to
+`WorkspaceBackend.read()` via `get_backend()` in
 [`_backend.py`](../../../server/nodes/filesystem/_backend.py). The backend is
-instantiated with `virtual_mode=True`, `inherit_env=True`, and a `root_dir`
-pinned to `<DATA_DIR>/workspaces/<workflow_slug>/` (resolution:
+instantiated with a `root_dir` pinned to
+`<DATA_DIR>/workspaces/<workflow_slug>/` (resolution:
 `working_directory` param > `ctx.workspace_dir` >
 `Settings().workspace_base_resolved/default`), so path traversal outside the
 workspace is rejected by the backend. The plugin first runs the requested
@@ -71,7 +71,7 @@ flowchart TD
   A[read] --> B{file_path empty?}
   B -- yes --> E[raise NodeUserError:<br/>file_path is required]
   B -- no --> C[get_backend params, ctx.raw:<br/>root = ctx.workspace_dir OR<br/>Settings().workspace_base_resolved/default]
-  C --> D[NushellBackend root_dir=root,<br/>virtual_mode=True, inherit_env=True]
+  C --> D[WorkspaceBackend root_dir=root,<br/>inherit_env=True]
   D --> N[file_path = normalize_virtual_path]
   N --> G[to_thread backend.read file_path, offset, limit]
   G -- FileNotFound/IsADir/ValueError --> H[raise NodeUserError str e]
@@ -88,8 +88,8 @@ flowchart TD
 - **Directory creation**: `get_backend` ensures the resolved root exists before
   building the backend, so a read against a fresh workflow works.
 - **Path normalization**: `normalize_virtual_path()` strips drive/root/UNC
-  anchors; `virtual_mode=True` then rejects `..`/`~` traversal that escapes the
-  root.
+  anchors; the backend rejects `..`/`~`, resolves symlinks, and verifies the
+  final path remains under the workspace root.
 - **Error paths**: `FileNotFoundError` / `IsADirectoryError` / `ValueError`
   (bad offset, path escape) are caught and re-raised as `NodeUserError`; a
   non-empty `result.error` from the backend also raises `NodeUserError`. Both
@@ -109,8 +109,7 @@ flowchart TD
 
 - **Credentials**: none.
 - **Services**: none.
-- **Python packages**: `deepagents` (via `NushellBackend` in `_backend.py`),
-  `asyncio`.
+- **Python packages**: none beyond the standard library.
 - **Environment variables**: `WORKSPACE_BASE_DIR` (read by `core.config.Settings`).
 
 ## Edge cases & known limits
@@ -118,9 +117,7 @@ flowchart TD
 - **Errors are `NodeUserError`**: "file not found", "is a directory", "path
   escapes workspace", "bad offset" all become `error_type="NodeUserError"`
   envelopes with a string message (no distinct error code per case).
-- **Binary files**: `backend.read()` decodes as text; a binary file raises a
-  `UnicodeDecodeError` (uncaught here, so it surfaces with a full traceback as a
-  generic error envelope, not `NodeUserError`).
+- **Binary files**: invalid UTF-8 is returned as base64 content.
 - **`offset`/`limit` Pydantic-validated**: `offset>=0`, `limit` clamped 1-10000.
   Negative inputs are rejected at validation, not forwarded.
 - **`working_directory` not exposed**: `FileReadParams` uses `extra="ignore"`,

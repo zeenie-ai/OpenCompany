@@ -11,11 +11,11 @@ import re
 from datetime import datetime
 from typing import List
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from services.llm.protocol import Message
 
 
-def parse_memory_markdown(content: str) -> List[BaseMessage]:
-    """Parse markdown memory content into LangChain messages.
+def parse_memory_markdown(content: str) -> List[Message]:
+    """Parse markdown memory content into native LLM messages.
 
     Markdown format:
         ### **Human** (timestamp)
@@ -24,13 +24,17 @@ def parse_memory_markdown(content: str) -> List[BaseMessage]:
         ### **Assistant** (timestamp)
         response content
     """
-    messages: List[BaseMessage] = []
+    messages: List[Message] = []
     pattern = r"### \*\*(Human|Assistant)\*\*[^\n]*\n(.*?)(?=\n### \*\*|$)"
     for role, text in re.findall(pattern, content, re.DOTALL):
         text = text.strip()
         if text:
-            msg_class = HumanMessage if role == "Human" else AIMessage
-            messages.append(msg_class(content=text))
+            messages.append(
+                Message(
+                    role="user" if role == "Human" else "assistant",
+                    content=text,
+                )
+            )
     return messages
 
 

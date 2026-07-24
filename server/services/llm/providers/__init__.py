@@ -23,4 +23,4 @@ from services.llm.providers import anthropic  # noqa: F401
 from services.llm.providers import openai  # noqa: F401
 from services.llm.providers import gemini  # noqa: F401
 from services.llm.providers import openrouter  # noqa: F401
-from services.llm.providers import _compat  # noqa: F401  (registers 6 OpenAI-compat providers)
+from services.llm.providers import _compat  # noqa: F401  (registers 8 OpenAI-compat providers)

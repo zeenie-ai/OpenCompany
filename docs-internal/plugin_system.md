@@ -105,7 +105,7 @@ Practical rules for plugin authors:
 
 1. Prefer returning the `Output` model instance (`return ExampleOutput(...)`). Dicts work but get validated.
 2. `Output` models declare `extra="allow"` + all-`Optional` fields by convention — extra context keys pass through; only type mismatches fail.
-3. Never put raw third-party objects (dataclasses like deepagents' `ReadResult`, SDK response objects) into the result — unwrap to plain fields. Everything downstream (JSON column, orjson WS broadcast, `_serialise_tool_result`) expects JSON-compatible data.
+3. Never put raw backend or SDK objects (for example a native filesystem `ReadResult` or provider response object) into the result — unwrap to plain fields. Everything downstream (JSON column, orjson WS broadcast, `_serialise_tool_result`) expects JSON-compatible data.
 4. LLM-facing string formatting is the dispatcher's job (`_serialise_tool_result` JSON-dumps the whole payload) — return real lists/dicts, not pre-stringified JSON.
 5. Params fields that may receive LLM-stringified JSON (Gemini sometimes stringifies array/object args in tool calls) coerce at the boundary with `field_validator(..., mode="before")` — see `AndroidServiceParams._coerce_parameters` and `WriteTodosParams._coerce_todos` for the canonical shape.
 
@@ -647,7 +647,7 @@ server/
 │   │   ├── _inline.py           # prepare_agent_call()
 │   │   ├── _specialized.py      # SpecializedAgentBase
 │   │   └── <agent>/__init__.py  # one folder per agent
-│   ├── model/                   # AI chat models (11 providers; xai native-chat-only)
+│   ├── model/                   # AI chat models (12 providers; all agent-capable)
 │   │   ├── _base.py             # ChatModelBase + ChatModelParams/Output
 │   │   └── <provider>_chat_model/__init__.py
 │   ├── android/                 # 16 Android service nodes
@@ -658,7 +658,7 @@ server/
 │   │   ├── _nodejs.py           # Shared NodeJSClient singleton
 │   │   └── <lang>_executor/__init__.py
 │   ├── filesystem/              # file_read / file_modify / shell / fs_search
-│   │   ├── _backend.py          # Shared LocalShellBackend helper
+│   │   ├── _backend.py          # Native workspace-contained filesystem helper
 │   │   └── <op>/__init__.py
 │   ├── document/                # http_scraper / parser / chunker / embedding / vector
 │   │   ├── _helpers.py          # delegate() wrapper

@@ -73,7 +73,7 @@ async def handle_save_user_settings(data: Dict[str, Any], websocket: WebSocket) 
 async def handle_get_provider_defaults(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Get default parameters for a provider."""
     from core.container import container
-    from services.ai import get_default_model
+    from services.llm.config import get_default_model
     from services.model_registry import get_model_registry
 
     database = container.database()
@@ -134,7 +134,7 @@ async def handle_get_validated_ai_providers(
     auth_service = container.auth_service()
     database = container.database()
 
-    from services.ai import PROVIDER_CONFIGS
+    from services.llm.config import PROVIDER_CONFIGS
 
     AI_PROVIDERS = list(PROVIDER_CONFIGS.keys())
 

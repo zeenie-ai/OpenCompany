@@ -128,7 +128,7 @@ class TokenUsageMetric(SQLModel, table=True):
     provider: str                               # openai, anthropic, gemini, groq
     model: str                                  # Model identifier
 
-    # Core token counts (LangChain UsageMetadata compatible)
+    # Core token counts (native Usage contract)
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0
@@ -377,31 +377,25 @@ ws.send(JSON.stringify({
 
 ## Integration with AI Service
 
-### Token Extraction from LangChain
+### Token Extraction from Native Agent Responses
 
-LangChain normalizes token usage across all providers via `UsageMetadata`:
+Every provider normalizes token accounting into
+`services.llm.protocol.Usage`. The shared native agent loop adds usage from
+every iteration, including cache and reasoning tokens, and returns the
+aggregate in `final_state["usage"]`:
 
 ```python
-from langchain_core.messages.ai import UsageMetadata, add_usage
+final_state = await run_native_agent_loop(...)
+usage = final_state["usage"]
 
-# After AI execution
-response = await model.ainvoke(messages)
-usage = response.usage_metadata
-
-# Example usage_metadata:
-# {
-#     'input_tokens': 8,
-#     'output_tokens': 304,
-#     'total_tokens': 312,
-#     'input_token_details': {'cache_read': 0, 'cache_creation': 0},
-#     'output_token_details': {'reasoning': 256}
-# }
-
-# Aggregate across agent-loop iterations
-total_usage = None
-for msg in final_state["messages"]:
-    if hasattr(msg, 'usage_metadata') and msg.usage_metadata:
-        total_usage = add_usage(total_usage, msg.usage_metadata)
+# services.llm.protocol.Usage(
+#     input_tokens=8,
+#     output_tokens=304,
+#     total_tokens=312,
+#     cache_creation_tokens=0,
+#     cache_read_tokens=0,
+#     reasoning_tokens=256,
+# )
 ```
 
 ### Integration Point
@@ -409,31 +403,19 @@ for msg in final_state["messages"]:
 In `server/services/ai.py`, after agent execution:
 
 ```python
-# After agent-loop execution, before memory save
+# After native agent-loop execution, before memory save
 if memory_data and memory_data.get('session_id'):
-    from services.compaction import get_compaction_service
-    svc = get_compaction_service()
-
-    if svc and ai_response and ai_response.usage_metadata:
-        usage = ai_response.usage_metadata
-        tracking = await svc.track(
-            session_id=memory_data['session_id'],
-            node_id=node_id,
-            provider=provider,
-            model=model,
-            usage={
-                "input_tokens": usage.get('input_tokens', 0),
-                "output_tokens": usage.get('output_tokens', 0),
-                "total_tokens": usage.get('total_tokens', 0),
-                "cache_creation_tokens": usage.get('input_token_details', {}).get('cache_creation', 0),
-                "cache_read_tokens": usage.get('input_token_details', {}).get('cache_read', 0),
-                "reasoning_tokens": usage.get('output_token_details', {}).get('reasoning', 0),
-            }
-        )
-
-        if tracking.get('needs_compaction'):
-            # Trigger native compaction or client-side summarization
-            ...
+    compaction_result = await self._track_token_usage(
+        session_id=memory_data['session_id'],
+        node_id=node_id,
+        provider=provider,
+        model=model,
+        ai_response=final_state["usage"],
+        all_messages=final_state["messages"],
+        memory_content=memory_data.get("memory_content", ""),
+        api_key=api_key,
+        memory_node_id=memory_data.get("node_id"),
+    )
 ```
 
 ## File Reference

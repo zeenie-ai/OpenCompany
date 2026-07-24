@@ -1,51 +1,42 @@
-"""AI service: LangChain-based chat-model construction + plain async agent loop."""
+"""AI service backed by the native provider SDK layer.
+
+The LangChain model factory and loop below are retained temporarily and are
+used only by pre-cutover Temporal histories.  Every new in-process or durable
+agent execution uses :mod:`services.agent_runtime`.
+"""
 
 from __future__ import annotations
 
 import functools
-import re
 import time
-import httpx
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Awaitable, Dict, Any, List, Optional, Callable, Type, TYPE_CHECKING
 
 # ---------------------------------------------------------------------------
-# LangChain imports — fully lazy except for ``BaseMessage``.
+# LangChain imports — fully lazy and retained only for old Temporal histories.
 #
 # Cold-start measurement (Windows, fresh disk):
 #   ``from langchain_openai import ChatOpenAI``          ~20.8s (pulls openai SDK + tiktoken)
 # Deferring the heavy imports until the first agent run trims server-ready time.
 #
-# ``services/llm/`` (the native LLM SDK layer) handles ``execute_chat()`` and
-# ``fetch_models()`` without LangChain. LangChain is only needed on the agent
-# execution path (``execute_agent`` / ``execute_chat_agent``) for the per-
-# provider ``ChatOpenAI`` / ``ChatAnthropic`` / ``ChatGoogleGenerativeAI``
-# instances and ``chat_model.bind_tools()`` provider-unified tool calling.
-#
-# ``BaseMessage`` stays eager because ``_run_agent_loop`` type-hints it in
-# its signature; the import is cheap (no tiktoken / openai SDK pull) and
-# keeps type checkers happy. Everything else is lazy via
-# ``@functools.cache``'d helpers or local imports inside the methods that
-# need them.
+# ``services/llm/`` and ``services/agent_runtime.py`` handle every new chat
+# and agent execution. The imports below are type-checking-only or function-
+# local so a native process never loads LangChain unless it must execute an
+# already-recorded legacy Temporal activity.
 # ---------------------------------------------------------------------------
 
-from langchain_core.messages import BaseMessage  # eager: type hint for _run_agent_loop
 import json
 
 # ``NodeUserError`` is the framework's "user-correctable, no-traceback"
 # sentinel used to surface typed SDK errors cleanly through
-# ``BaseNode.execute()``. The ``openai`` SDK itself is imported
-# function-locally in ``execute_agent`` / ``execute_chat_agent`` (its
-# only consumers here, via ``except openai.OpenAIError``) — a top-level
-# import cost seconds of boot time and re-created the eager-LLM-SDK
-# anti-pattern (docs-internal/performance.md).
+# ``BaseNode.execute()``.
 from services.plugin import NodeUserError
 from services.tool_identity import DuplicateToolNameError, ensure_unique_tool_names
 
 if TYPE_CHECKING:
     from langchain_openai import ChatOpenAI  # noqa: F401
-    from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage  # noqa: F401
+    from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage  # noqa: F401
     from langchain_core.tools import StructuredTool  # noqa: F401
     from pydantic import BaseModel, Field, create_model  # noqa: F401
     from langchain_anthropic import ChatAnthropic  # noqa: F401
@@ -121,7 +112,7 @@ def __getattr__(name: str):
         except ImportError as e:
             return str(e)
     if name == "PROVIDER_CONFIGS":
-        return get_provider_configs()
+        return NATIVE_PROVIDER_CONFIGS
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -132,7 +123,7 @@ from services.auth import AuthService
 logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
-# Native LLM provider imports (dual-path: native for chat, LangChain for agents)
+# Native LLM provider/runtime imports for every new chat and agent execution
 # ---------------------------------------------------------------------------
 # ``ChatUnifier`` (injected via DI) owns provider dispatch. The legacy
 # ``services.llm.factory`` module (``create_provider`` /
@@ -141,12 +132,21 @@ from services.llm.protocol import (
     Message as NativeMessage,
     ThinkingConfig as NativeThinkingConfig,
     LLMResponse,
+    ToolDef,
+    Usage,
 )
 from services.llm.config import (
+    PROVIDER_CONFIGS as NATIVE_PROVIDER_CONFIGS,
+    detect_provider_from_model as native_detect_provider_from_model,
+    get_default_model as native_get_default_model,
+    get_default_model_async as native_get_default_model_async,
+    is_model_valid_for_provider as native_is_model_valid_for_provider,
     resolve_max_tokens as native_resolve_max_tokens,
     resolve_temperature as native_resolve_temperature,
 )
 from services.llm.vertex import is_vertex_express_key
+from services.llm.messages import filter_empty_messages as _filter_native_messages
+from services.agent_runtime import AgentToolSpec, run_native_agent_loop
 
 
 # =============================================================================
@@ -154,84 +154,72 @@ from services.llm.vertex import is_vertex_express_key
 # =============================================================================
 
 
-def _parse_memory_markdown(content: str) -> List[BaseMessage]:
-    """Parse markdown memory content into LangChain messages.
-
-    Markdown format:
-    ### **Human** (timestamp)
-    message content
-
-    ### **Assistant** (timestamp)
-    response content
-    """
-    from langchain_core.messages import HumanMessage, AIMessage
-
-    messages = []
-    pattern = r"### \*\*(Human|Assistant)\*\*[^\n]*\n(.*?)(?=\n### \*\*|$)"
-    for role, text in re.findall(pattern, content, re.DOTALL):
-        text = text.strip()
-        if text:
-            msg_class = HumanMessage if role == "Human" else AIMessage
-            messages.append(msg_class(content=text))
-    return messages
+_USAGE_FIELDS = (
+    "input_tokens",
+    "output_tokens",
+    "total_tokens",
+    "cache_creation_tokens",
+    "cache_read_tokens",
+    "reasoning_tokens",
+)
 
 
-def _append_to_memory_markdown(content: str, role: str, message: str) -> str:
-    """Append a message to markdown memory content."""
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    label = "Human" if role == "human" else "Assistant"
-    entry = f"\n### **{label}** ({ts})\n{message}\n"
-    # Remove empty state message if present
-    return content.replace("*No messages yet.*\n", "") + entry
+def _coerce_native_usage(value: Any) -> Usage:
+    if isinstance(value, Usage):
+        return value
+    if isinstance(value, dict):
+        return Usage(
+            **{
+                key: value.get(key, 0)
+                for key in _USAGE_FIELDS
+            }
+        )
+    return Usage()
 
 
-def _trim_markdown_window(content: str, window_size: int) -> tuple:
-    """Keep last N message pairs, return (trimmed_content, removed_texts).
+def _accumulate_compaction_usage(
+    final_state: Dict[str, Any],
+    compaction_result: Optional[Dict[str, Any]],
+) -> None:
+    """Add summarizer billing to execution usage, not context thresholds."""
 
-    Args:
-        content: Full markdown content
-        window_size: Number of message PAIRS to keep (human+assistant)
-
-    Returns:
-        Tuple of (trimmed markdown, list of removed message texts for archival)
-    """
-    pattern = r"(### \*\*(Human|Assistant)\*\*[^\n]*\n.*?)(?=\n### \*\*|$)"
-    blocks = [m[0] for m in re.findall(pattern, content, re.DOTALL)]
-
-    if len(blocks) <= window_size * 2:
-        return content, []
-
-    keep = blocks[-(window_size * 2) :]
-    removed = blocks[: -(window_size * 2)]
-
-    # Extract text from removed blocks for vector storage
-    removed_texts = []
-    for block in removed:
-        match = re.search(r"\n(.*)$", block, re.DOTALL)
-        if match:
-            removed_texts.append(match.group(1).strip())
-
-    return "# Conversation History\n" + "\n".join(keep), removed_texts
+    if not compaction_result or not compaction_result.get("usage"):
+        return
+    final_state["usage"] = _coerce_native_usage(
+        final_state.get("usage")
+    ) + _coerce_native_usage(compaction_result["usage"])
 
 
-# Global cache for vector stores per session (InMemoryVectorStore)
-_memory_vector_stores: Dict[str, Any] = {}
+def _parse_memory_markdown(content: str) -> List[NativeMessage]:
+    """Compatibility wrapper for the native Markdown memory parser."""
+
+    from services.memory.markdown import parse_memory_markdown
+
+    return parse_memory_markdown(content)
 
 
-def _get_memory_vector_store(session_id: str):
-    """Get or create InMemoryVectorStore for a session."""
-    if session_id not in _memory_vector_stores:
-        try:
-            from langchain_core.vectorstores import InMemoryVectorStore
-            from langchain_huggingface import HuggingFaceEmbeddings
+# Compatibility alias for callers that clear the historical cache directly.
+# The implementation and ownership now live in ``services.memory.vector_store``.
+from services.memory.vector_store import (
+    _memory_vector_stores as _memory_vector_stores,
+    get_memory_vector_store as _get_memory_vector_store,
+)
 
-            embeddings = HuggingFaceEmbeddings(model_name="BAAI/bge-small-en-v1.5")
-            _memory_vector_stores[session_id] = InMemoryVectorStore(embeddings)
-            logger.debug(f"[Memory] Created vector store for session '{session_id}'")
-        except ImportError as e:
-            logger.warning(f"[Memory] Vector store not available: {e}")
-            return None
-    return _memory_vector_stores[session_id]
+
+async def _get_configured_memory_vector_store(
+    session_id: str,
+    memory_data: Dict[str, Any],
+    auth_service: Any,
+):
+    """Resolve one memory node's async native embedding store."""
+
+    return await _get_memory_vector_store(
+        session_id,
+        provider=memory_data.get("embedding_provider", "huggingface"),
+        model=memory_data.get("embedding_model"),
+        endpoint=memory_data.get("embedding_endpoint"),
+        auth_service=auth_service,
+    )
 
 
 # =============================================================================
@@ -256,23 +244,8 @@ class ProviderConfig:
     supported_params: Optional[List[str]] = None  # API-supported params (from llm_defaults.json)
 
 
-@dataclass
-class ThinkingConfig:
-    """Unified thinking/reasoning configuration across AI providers.
-
-    LangChain parameters per provider (Jan 2026):
-    - Claude: thinking={"type": "enabled", "budget_tokens": budget}, temp must be 1
-    - OpenAI o-series: reasoning_effort ('minimal', 'low', 'medium', 'high')
-    - Gemini 3+: thinking_level ('low', 'medium', 'high')
-    - Gemini 2.5: thinking_budget (int tokens)
-    - Groq: reasoning_format ('parsed', 'hidden')
-    """
-
-    enabled: bool = False
-    budget: int = 2048  # Token budget (Claude, Gemini 2.5)
-    effort: str = "medium"  # Effort level: 'minimal', 'low', 'medium', 'high' (OpenAI o-series)
-    level: str = "medium"  # Thinking level: 'low', 'medium', 'high' (Gemini 3+)
-    format: str = "parsed"  # Output format: 'parsed', 'hidden' (Groq)
+# Compatibility export. Native configuration is the single source of truth.
+ThinkingConfig = NativeThinkingConfig
 
 
 def _openai_headers(api_key: str) -> dict:
@@ -367,37 +340,13 @@ def _resolve_max_tokens(flattened: dict, model: str, provider: str) -> int:
 
 
 def _resolve_temperature(flattened: dict, model: str, provider: str, thinking_enabled: bool) -> float:
-    """Resolve temperature with model-specific constraints.
-
-    Handles:
-    - O-series models: always temp=1
-    - Claude with thinking: always temp=1
-    - Range clamping per provider
-    """
-    from services.model_registry import get_model_registry
-
-    registry = get_model_registry()
-
-    user_val = flattened.get("temperature")
-    if user_val is None:
-        user_val = registry.get_agent_defaults()["default_temperature"]
-    user_temp = float(user_val)
-
-    # O-series reasoning models always require temperature=1
-    if registry.is_reasoning_model(model, provider):
-        if user_temp != 1:
-            logger.info(f"[AI] Reasoning model '{model}': forcing temperature to 1 (was {user_temp})")
-        return 1.0
-
-    # Claude thinking mode requires temperature=1
-    if thinking_enabled and provider == "anthropic":
-        if user_temp != 1:
-            logger.info(f"[AI] Claude thinking mode: forcing temperature to 1 (was {user_temp})")
-        return 1.0
-
-    # Clamp to valid range for provider/model
-    temp_range = registry.get_temperature_range(model, provider)
-    return max(temp_range[0], min(temp_range[1], user_temp))
+    """Resolve temperature through the native provider configuration."""
+    return native_resolve_temperature(
+        flattened,
+        model,
+        provider,
+        thinking_enabled,
+    )
 
 
 # Provider configurations - built from config/llm_defaults.json on first use.
@@ -451,11 +400,7 @@ def get_provider_configs() -> Dict[str, ProviderConfig]:
 
 def detect_provider_from_model(model: str) -> str:
     """Detect AI provider from model name using registry patterns."""
-    model_lower = model.lower()
-    for provider_name, config in get_provider_configs().items():
-        if any(pattern in model_lower for pattern in config.detection_patterns):
-            return provider_name
-    return "openai"  # default
+    return native_detect_provider_from_model(model)
 
 
 def is_model_valid_for_provider(model: str, provider: str) -> bool:
@@ -476,19 +421,12 @@ def is_model_valid_for_provider(model: str, provider: str) -> bool:
     as always-valid; the local-server SDK will reject genuinely missing
     models at request time with a clear 404.
     """
-    if provider in ("openrouter", "ollama", "lmstudio"):
-        return True
-    config = get_provider_configs().get(provider)
-    if not config:
-        return True
-    model_lower = model.lower()
-    return any(pattern in model_lower for pattern in config.detection_patterns)
+    return native_is_model_valid_for_provider(model, provider)
 
 
 def get_default_model(provider: str) -> str:
     """Get default model for a provider from JSON config."""
-    config = get_provider_configs().get(provider)
-    return config.default_model if config else "gpt-4o-mini"
+    return native_get_default_model(provider)
 
 
 async def get_default_model_async(provider: str, database) -> str:
@@ -496,17 +434,7 @@ async def get_default_model_async(provider: str, database) -> str:
 
     Priority: database user setting > JSON config file > fallback
     """
-    # Check database for user-configured default
-    if database:
-        try:
-            db_defaults = await database.get_provider_defaults(provider)
-            if db_defaults and db_defaults.get("default_model"):
-                return db_defaults["default_model"]
-        except Exception as e:
-            logger.warning(f"Failed to get DB defaults for {provider}: {e}")
-
-    # Fall back to JSON config
-    return get_default_model(provider)
+    return await native_get_default_model_async(provider, database)
 
 
 # =============================================================================
@@ -545,76 +473,10 @@ def is_valid_message_content(content: Any) -> bool:
     return bool(content)
 
 
-def filter_empty_messages(messages: List[BaseMessage]) -> List[BaseMessage]:
-    """Filter out messages with empty content to prevent API errors.
+def filter_empty_messages(messages: List[Any]) -> List[Any]:
+    """Compatibility wrapper around the provider-neutral message filter."""
 
-    This is a standardized utility that handles empty message filtering for all
-    AI providers (OpenAI, Anthropic/Claude, Google Gemini, and future providers).
-
-    Different providers have different sensitivities:
-    - Gemini: Emits "HumanMessage with empty content was removed" warning
-    - Claude/Anthropic: Throws errors for empty HumanMessage content
-    - OpenAI: Generally tolerant but empty messages waste tokens
-
-    This filter preserves:
-    - ToolMessage: Always kept (contains tool execution results)
-    - AIMessage with tool_calls: Kept even if content empty (tool calls are content)
-    - SystemMessage: Kept only if has non-empty content
-    - HumanMessage/others: Filtered if content is empty
-
-    Args:
-        messages: Sequence of LangChain BaseMessage objects
-
-    Returns:
-        Filtered list of messages with empty content removed
-    """
-    from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
-
-    filtered = []
-
-    for m in messages:
-        # ToolMessage - always keep (contains tool execution results)
-        if isinstance(m, ToolMessage):
-            filtered.append(m)
-            continue
-
-        # AIMessage with tool_calls - keep even if content is empty
-        # (the tool calls themselves are the meaningful content)
-        if isinstance(m, AIMessage) and hasattr(m, "tool_calls") and m.tool_calls:
-            filtered.append(m)
-            continue
-
-        # SystemMessage - keep only if has non-empty content
-        if isinstance(m, SystemMessage):
-            if hasattr(m, "content") and m.content and str(m.content).strip():
-                filtered.append(m)
-            continue
-
-        # HumanMessage and other message types - filter out empty content
-        if hasattr(m, "content"):
-            content = m.content
-
-            # Handle list content format (Gemini returns [{"type": "text", "text": "..."}])
-            if isinstance(content, list):
-                has_content = any(
-                    (isinstance(block, dict) and block.get("text", "").strip()) or (isinstance(block, str) and block.strip())
-                    for block in content
-                )
-                if has_content:
-                    filtered.append(m)
-
-            # Handle string content (most common)
-            elif isinstance(content, str) and content.strip():
-                filtered.append(m)
-
-            # Handle other non-empty content types (keep if truthy)
-            elif content:
-                filtered.append(m)
-        else:
-            # Message without content attr - keep it (might be special message type)
-            filtered.append(m)
-
-    return filtered
+    return _filter_native_messages(messages)
 
 
 def extract_thinking_from_response(response) -> tuple:
@@ -629,6 +491,9 @@ def extract_thinking_from_response(response) -> tuple:
     Returns:
         Tuple of (text_content: str, thinking_content: Optional[str])
     """
+    if isinstance(response, LLMResponse):
+        return response.content, response.thinking
+
     text_parts = []
     thinking_parts = []
 
@@ -1097,9 +962,14 @@ class AIService:
         if not svc:
             return
 
-        # Extract usage_metadata from AIMessage (LangChain standardizes this)
+        # Native responses expose a normalized ``Usage`` object.  The
+        # LangChain branches below are retained only for pre-cutover histories.
         usage = None
-        if hasattr(ai_response, "usage_metadata") and ai_response.usage_metadata:
+        if isinstance(ai_response, Usage):
+            usage = ai_response
+        elif isinstance(ai_response, LLMResponse):
+            usage = ai_response.usage
+        elif hasattr(ai_response, "usage_metadata") and ai_response.usage_metadata:
             usage = ai_response.usage_metadata
         elif hasattr(ai_response, "response_metadata"):
             # Fallback: check response_metadata for usage info
@@ -1109,7 +979,7 @@ class AIService:
             elif "token_usage" in meta:
                 usage = meta["token_usage"]
 
-        if not usage:
+        if not usage and all_messages:
             # Aggregate usage from all AI messages if single message has no usage
             total_input = 0
             total_output = 0
@@ -1129,6 +999,9 @@ class AIService:
             "input_tokens": usage.get("input_tokens", 0) if isinstance(usage, dict) else getattr(usage, "input_tokens", 0),
             "output_tokens": usage.get("output_tokens", 0) if isinstance(usage, dict) else getattr(usage, "output_tokens", 0),
             "total_tokens": usage.get("total_tokens", 0) if isinstance(usage, dict) else getattr(usage, "total_tokens", 0),
+            "cache_creation_tokens": usage.get("cache_creation_tokens", 0) if isinstance(usage, dict) else getattr(usage, "cache_creation_tokens", 0),
+            "cache_read_tokens": usage.get("cache_read_tokens", 0) if isinstance(usage, dict) else getattr(usage, "cache_read_tokens", 0),
+            "reasoning_tokens": usage.get("reasoning_tokens", 0) if isinstance(usage, dict) else getattr(usage, "reasoning_tokens", 0),
         }
 
         try:
@@ -1200,8 +1073,8 @@ class AIService:
         config = get_provider_configs().get(provider)
         if not config:
             # Provide helpful error for Cerebras if import failed
-            if provider == "cerebras" and not CEREBRAS_AVAILABLE:
-                error_msg = f"Cerebras provider not available: {CEREBRAS_IMPORT_ERROR or 'langchain-cerebras package not installed'}"
+            if provider == "cerebras" and not _is_cerebras_available():
+                error_msg = "Cerebras provider not available: langchain-cerebras package not installed"
                 logger.error(error_msg)
                 raise ValueError(error_msg)
             raise ValueError(f"Unsupported provider: {provider}")
@@ -1403,11 +1276,6 @@ class AIService:
 
             provider = detect_ai_provider(node_type, flattened)
 
-            # Some APIs return owner-prefixed model IDs (e.g. "openai/gpt-oss-120b")
-            # but chat API expects flat IDs — strip prefix for non-OpenRouter providers
-            if provider != "openrouter" and "/" in model:
-                model = model.split("/", 1)[-1]
-
             # Build thinking config from parameters
             thinking_config = None
             if flattened.get("thinking_enabled"):
@@ -1533,15 +1401,15 @@ class AIService:
         context: Optional[Dict[str, Any]] = None,
         database=None,
     ) -> Dict[str, Any]:
-        """Execute AI Agent via the plain-async agent loop.
+        """Execute AI Agent via the shared native SDK loop.
 
-        Drives :func:`_run_agent_loop` with the LangChain chat model returned by
-        :meth:`create_model`. Each iteration: invoke the model, dispatch any
-        ``tool_calls`` through the supplied closure, append ``ToolMessage`` results,
-        loop until a final response (or the configured recursion limit hits).
+        Each iteration invokes ``ChatUnifier``, appends the exact replayable
+        assistant message, dispatches tool calls, appends native tool-result
+        messages, and continues until a final response or the configured
+        recursion limit.
 
         Features:
-        - Tool calling via ``chat_model.bind_tools`` + the shared tool dispatcher
+        - Provider-neutral tool calling through ``AgentToolSpec``
         - Real-time status broadcasts for UI animations
 
         Args:
@@ -1555,10 +1423,6 @@ class AIService:
             workflow_id: Optional workflow ID for scoped status broadcasts
             context: Optional execution context with nodes, edges for nested agent delegation
         """
-        import openai  # local: bound before the try whose except clause needs it
-
-        from langchain_core.messages import HumanMessage, SystemMessage
-
         start_time = time.time()
         provider = "unknown"
         model = "unknown"
@@ -1629,7 +1493,7 @@ class AIService:
                     enabled=True,
                     budget=int(flattened.get("thinking_budget", 2048)),
                     effort=flattened.get("reasoning_effort", "medium"),
-                    level=flattened.get("thinking_level", "medium"),
+                    level=flattened.get("thinking_level"),
                     format=flattened.get("reasoning_format", "parsed"),
                 )
                 logger.debug(f"[Agent] Thinking enabled: budget={thinking_config.budget}, effort={thinking_config.effort}")
@@ -1638,13 +1502,6 @@ class AIService:
 
             # Broadcast: Initializing model
             await broadcast_status("initializing", {"message": f"Initializing {provider} model...", "provider": provider, "model": model, "active_skills": [], "last_skills": [], "last_tool_name": None, "last_capability": None})
-
-            # Check for proxy URL (stored as {provider}_proxy credential)
-            proxy_url = await self.auth.get_api_key(f"{provider}_proxy")
-
-            # Create LLM using the provider from node configuration
-            logger.debug(f"[Agent] Creating {provider} model: {model}")
-            chat_model = self.create_model(provider, api_key, model, temperature, max_tokens, thinking_config, proxy_url)
 
             # Build initial messages for state. The SystemMessage is
             # PREPENDED after tool building (below), because the
@@ -1656,7 +1513,7 @@ class AIService:
             # and the LLM would never see the delegation contract,
             # which is exactly what previously broke ``aiAgent``-driven
             # delegation through the ``input-tools`` handle.
-            initial_messages: List[BaseMessage] = []
+            initial_messages: List[NativeMessage] = []
 
             # Add memory history from connected simpleMemory node (markdown-based)
             session_id = None
@@ -1676,17 +1533,31 @@ class AIService:
 
                 # If long-term memory enabled, retrieve relevant context
                 if memory_data.get("long_term_enabled"):
-                    store = _get_memory_vector_store(session_id)
-                    if store:
-                        try:
+                    try:
+                        store = await _get_configured_memory_vector_store(
+                            session_id,
+                            memory_data,
+                            self.auth,
+                        )
+                        if store:
                             k = memory_data.get("retrieval_count", 3)
-                            docs = store.similarity_search(prompt, k=k)
+                            docs = await store.similarity_search(prompt, k=k)
                             if docs:
-                                context = "\n---\n".join(d.page_content for d in docs)
-                                initial_messages.append(SystemMessage(content=f"Relevant past context:\n{context}"))
+                                retrieved_context = "\n---\n".join(
+                                    d.page_content for d in docs
+                                )
+                                initial_messages.append(
+                                    NativeMessage(
+                                        role="system",
+                                        content=(
+                                            "Relevant past context:\n"
+                                            f"{retrieved_context}"
+                                        ),
+                                    )
+                                )
                                 logger.info(f"[Agent Memory] Retrieved {len(docs)} relevant memories from long-term store")
-                        except Exception as e:
-                            logger.debug(f"[Agent Memory] Long-term retrieval skipped: {e}")
+                    except Exception as e:
+                        logger.debug(f"[Agent Memory] Long-term retrieval skipped: {e}")
 
                 # Add parsed history messages
                 initial_messages.extend(history_messages)
@@ -1700,7 +1571,7 @@ class AIService:
                 )
 
             # Add current user prompt
-            initial_messages.append(HumanMessage(content=prompt))
+            initial_messages.append(NativeMessage(role="user", content=prompt))
 
             # Build tools if provided
             tools = []
@@ -1777,7 +1648,10 @@ class AIService:
             # See the comment at the original ``initial_messages`` declaration
             # for why this can't happen earlier.
             if system_message:
-                initial_messages.insert(0, SystemMessage(content=system_message))
+                initial_messages.insert(
+                    0,
+                    NativeMessage(role="system", content=system_message),
+                )
 
             # Create tool executor callback. Tool-node status lifecycle
             # (executing/success/error) is owned by ``handlers.tools.execute_tool``
@@ -1809,7 +1683,7 @@ class AIService:
                         root_execution_id=str((context or {}).get("root_execution_id") or "") or None,
                         target_node_id=str(tool_node_id or "") or None,
                         provider=provider,
-                        invocation_source="legacy",
+                        invocation_source="native",
                     )
 
                 # Inject services + graph context so execute_tool can scope its
@@ -1854,7 +1728,7 @@ class AIService:
                             root_execution_id=str((context or {}).get("root_execution_id") or "") or None,
                             target_node_id=str(tool_node_id or "") or None,
                             provider=provider,
-                            invocation_source="legacy",
+                            invocation_source="native",
                         )
 
                     return result
@@ -1887,11 +1761,11 @@ class AIService:
                             root_execution_id=str((context or {}).get("root_execution_id") or "") or None,
                             target_node_id=str(tool_node_id or "") or None,
                             provider=provider,
-                            invocation_source="legacy",
+                            invocation_source="native",
                             error_code=type(e).__name__,
                         )
 
-                    # Re-raise to let _run_agent_loop surface the error to the LLM
+                    # Re-raise so the native loop can surface the error to the LLM.
                     raise
 
             # Auto-rebind toggle: when the user enables "Auto-Rebind Tools
@@ -1915,10 +1789,10 @@ class AIService:
 
             async def _rebind_from_operations(operations: List[Dict[str, Any]]) -> List[Any]:
                 """Translate workflow_ops add_node ops (component_kind='tool')
-                into fresh ``StructuredTool``s via the canonical
+                into fresh :class:`AgentToolSpec` values via the canonical
                 :meth:`_build_tool_from_node` helper. The returned list is
-                appended to ``_run_agent_loop``'s ``current_tools`` and
-                rebound onto the LLM so the LLM can invoke the new tool in
+                appended to the native loop's current tool surface so the LLM
+                can invoke the new tool in
                 its NEXT iteration without a Run-stop-Run cycle.
 
                 Tool configs are folded into the existing ``tool_configs``
@@ -2028,9 +1902,15 @@ class AIService:
                         max_iterations=recursion_limit,
                     )
 
-            final_state = await _run_agent_loop(
-                chat_model,
-                initial_messages,
+            final_state = await run_native_agent_loop(
+                self.chat_unifier,
+                provider=provider,
+                api_key=api_key,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                thinking=thinking_config,
+                initial_messages=initial_messages,
                 tools=tools if tools else None,
                 tool_executor=tool_executor if tools else None,
                 max_iterations=recursion_limit,
@@ -2046,8 +1926,7 @@ class AIService:
                 raise ValueError("No response generated from agent")
 
             # Handle different content formats (Gemini can return list of content blocks)
-            raw_content = ai_response.content
-            response_content = self._extract_text_content(raw_content, ai_response)
+            response_content = self._extract_text_content(ai_response.content, ai_response)
             iterations = final_state.get("iteration", 1)
 
             # Get accumulated thinking content from state
@@ -2064,13 +1943,16 @@ class AIService:
                     node_id=node_id,
                     provider=provider,
                     model=model,
-                    ai_response=ai_response,
+                    ai_response=final_state.get("usage") or ai_response,
                     all_messages=all_messages,
                     broadcaster=broadcaster,
                     workflow_id=workflow_id,
                     memory_content=memory_data.get("memory_content", "") if memory_data else None,
                     api_key=api_key,
                     memory_node_id=memory_data.get("node_id") if memory_data else None,
+                )
+                _accumulate_compaction_usage(
+                    final_state, compaction_result
                 )
 
             # Save to memory if connected (markdown-based with optional vector DB)
@@ -2122,13 +2004,17 @@ class AIService:
 
                 # Store removed messages in long-term vector DB
                 if removed_texts and memory_data.get("long_term_enabled"):
-                    store = _get_memory_vector_store(session_id)
-                    if store:
-                        try:
-                            store.add_texts(removed_texts)
+                    try:
+                        store = await _get_configured_memory_vector_store(
+                            session_id,
+                            memory_data,
+                            self.auth,
+                        )
+                        if store:
+                            await store.add_texts(removed_texts)
                             logger.info(f"[Agent Memory] Archived {len(removed_texts)} messages to long-term store")
-                        except Exception as e:
-                            logger.warning(f"[Agent Memory] Failed to archive to vector store: {e}")
+                    except Exception as e:
+                        logger.warning(f"[Agent Memory] Failed to archive to vector store: {e}")
 
                 logger.info(f"[Agent Memory] Saved markdown to memory node '{memory_node_id}'")
 
@@ -2174,12 +2060,9 @@ class AIService:
                 "timestamp": datetime.now().isoformat(),
             }
 
-        except openai.OpenAIError as e:
-            # See execute_chat for the rationale — typed SDK errors are
-            # user-correctable and re-raised as NodeUserError so BaseNode
-            # logs at WARN without a traceback.
+        except NodeUserError as e:
             log_api_call(logger, provider, model, "agent", False, error=str(e))
-            raise NodeUserError(str(e)) from e
+            raise
 
         except Exception as e:
             logger.error("[Agent] AI agent execution failed", node_id=node_id, error=str(e))
@@ -2228,10 +2111,6 @@ class AIService:
             workflow_id: Optional workflow ID for scoped status broadcasts
             context: Optional execution context with nodes, edges for nested agent delegation
         """
-        import openai  # local: bound before the try whose except clause needs it
-
-        from langchain_core.messages import HumanMessage, SystemMessage
-
         start_time = time.time()
         provider = "unknown"
         model = "unknown"
@@ -2353,7 +2232,7 @@ class AIService:
             logger.debug(f"[ChatAgent] Total tools available: {len(all_tools)}")
             # Debug: log all tool schemas to verify they're correct
             for t in all_tools:
-                schema = t.get_input_schema().model_json_schema()
+                schema = t.parameters
                 logger.debug(f"[ChatAgent] Tool '{t.name}' schema: {schema}")
 
             # Flatten options collection from frontend
@@ -2391,7 +2270,7 @@ class AIService:
                     enabled=True,
                     budget=int(flattened.get("thinking_budget", 2048)),
                     effort=flattened.get("reasoning_effort", "medium"),
-                    level=flattened.get("thinking_level", "medium"),
+                    level=flattened.get("thinking_level"),
                     format=flattened.get("reasoning_format", "parsed"),
                 )
 
@@ -2400,16 +2279,10 @@ class AIService:
             # Broadcast: Initializing
             await broadcast_status("initializing", {"message": f"Initializing {provider} model...", "provider": provider, "model": model, "active_skills": [], "last_skills": [], "last_tool_name": None, "last_capability": None})
 
-            # Check for proxy URL (stored as {provider}_proxy credential)
-            proxy_url = await self.auth.get_api_key(f"{provider}_proxy")
-
-            # Create chat model
-            chat_model = self.create_model(provider, api_key, model, temperature, max_tokens, thinking_config, proxy_url)
-
             # Build messages
-            messages: List[BaseMessage] = []
+            messages: List[NativeMessage] = []
             if system_message:
-                messages.append(SystemMessage(content=system_message))
+                messages.append(NativeMessage(role="system", content=system_message))
 
             # Load memory history if connected (markdown-based like AI Agent)
             session_id = None
@@ -2429,17 +2302,31 @@ class AIService:
 
                 # If long-term memory enabled, retrieve relevant context
                 if memory_data.get("long_term_enabled"):
-                    store = _get_memory_vector_store(session_id)
-                    if store:
-                        try:
+                    try:
+                        store = await _get_configured_memory_vector_store(
+                            session_id,
+                            memory_data,
+                            self.auth,
+                        )
+                        if store:
                             k = memory_data.get("retrieval_count", 3)
-                            docs = store.similarity_search(prompt, k=k)
+                            docs = await store.similarity_search(prompt, k=k)
                             if docs:
-                                context = "\n---\n".join(d.page_content for d in docs)
-                                messages.append(SystemMessage(content=f"Relevant past context:\n{context}"))
+                                retrieved_context = "\n---\n".join(
+                                    d.page_content for d in docs
+                                )
+                                messages.append(
+                                    NativeMessage(
+                                        role="system",
+                                        content=(
+                                            "Relevant past context:\n"
+                                            f"{retrieved_context}"
+                                        ),
+                                    )
+                                )
                                 logger.info(f"[ChatAgent Memory] Retrieved {len(docs)} relevant memories from long-term store")
-                        except Exception as e:
-                            logger.debug(f"[ChatAgent Memory] Long-term retrieval skipped: {e}")
+                    except Exception as e:
+                        logger.debug(f"[ChatAgent Memory] Long-term retrieval skipped: {e}")
 
                 # Add parsed history messages
                 messages.extend(history_messages)
@@ -2452,7 +2339,7 @@ class AIService:
                 )
 
             # Add current prompt
-            messages.append(HumanMessage(content=prompt))
+            messages.append(NativeMessage(role="user", content=prompt))
 
             # Broadcast: Invoking LLM
             await broadcast_status(
@@ -2503,7 +2390,7 @@ class AIService:
                             root_execution_id=str((context or {}).get("root_execution_id") or "") or None,
                             target_node_id=str(tool_node_id or "") or None,
                             provider=provider,
-                            invocation_source="legacy",
+                            invocation_source="native",
                         )
 
                     # Inject services + graph context so execute_tool can scope its
@@ -2544,7 +2431,7 @@ class AIService:
                                 root_execution_id=str((context or {}).get("root_execution_id") or "") or None,
                                 target_node_id=str(tool_node_id or "") or None,
                                 provider=provider,
-                                invocation_source="legacy",
+                                invocation_source="native",
                             )
                         logger.debug(f"[ChatAgent] Tool executed successfully: {tool_name}")
                         return result
@@ -2565,7 +2452,7 @@ class AIService:
                                 root_execution_id=str((context or {}).get("root_execution_id") or "") or None,
                                 target_node_id=str(tool_node_id or "") or None,
                                 provider=provider,
-                                invocation_source="legacy",
+                                invocation_source="native",
                                 error_code=type(e).__name__,
                             )
                         return {"error": str(e)}
@@ -2663,9 +2550,15 @@ class AIService:
                             max_iterations=recursion_limit,
                         )
 
-                final_state = await _run_agent_loop(
-                    chat_model,
-                    messages,
+                final_state = await run_native_agent_loop(
+                    self.chat_unifier,
+                    provider=provider,
+                    api_key=api_key,
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    thinking=thinking_config,
+                    initial_messages=messages,
                     tools=all_tools,
                     tool_executor=chat_tool_executor,
                     max_iterations=recursion_limit,
@@ -2680,27 +2573,36 @@ class AIService:
                 if not ai_response or not hasattr(ai_response, "content"):
                     raise ValueError("No response generated from agent")
 
-                raw_content = ai_response.content
-                response_content = self._extract_text_content(raw_content, ai_response)
+                response_content = self._extract_text_content(ai_response.content, ai_response)
                 iterations = final_state.get("iteration", 1)
                 thinking_content = final_state.get("thinking_content")
             else:
-                # Simple invoke without tools
-                response = await chat_model.ainvoke(messages)
-
-                # Extract response content
-                raw_content = response.content
-                response_content = self._extract_text_content(raw_content, response)
-
-                # Extract thinking content if available
-                _, thinking_content = extract_thinking_from_response(response)
+                final_state = await run_native_agent_loop(
+                    self.chat_unifier,
+                    provider=provider,
+                    api_key=api_key,
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    thinking=thinking_config,
+                    initial_messages=messages,
+                    max_iterations=1,
+                )
+                all_messages = final_state["messages"]
+                ai_response = all_messages[-1] if all_messages else None
+                if ai_response is None:
+                    raise ValueError("No response generated from agent")
+                response_content = self._extract_text_content(
+                    ai_response.content,
+                    ai_response,
+                )
+                thinking_content = final_state.get("thinking_content")
 
             logger.info(f"[ChatAgent] Response generated, thinking={'yes' if thinking_content else 'no'}, iterations={iterations}")
 
             # Track token usage if memory connected (for compaction service)
-            # Use ai_response for tools path, response for simple invoke
-            # Also triggers compaction if threshold exceeded
-            response_msg = ai_response if all_tools else response
+            # Also triggers compaction if threshold exceeded.
+            response_msg = final_state.get("usage") or ai_response
             compaction_result = None
             if session_id and response_msg:
                 compaction_result = await self._track_token_usage(
@@ -2709,12 +2611,15 @@ class AIService:
                     provider=provider,
                     model=model,
                     ai_response=response_msg,
-                    all_messages=all_messages if all_tools else messages + [response_msg],
+                    all_messages=all_messages,
                     broadcaster=broadcaster,
                     workflow_id=workflow_id,
                     memory_content=memory_content,
                     api_key=api_key,
                     memory_node_id=memory_data.get("node_id") if memory_data else None,
+                )
+                _accumulate_compaction_usage(
+                    final_state, compaction_result
                 )
 
             # Save to memory if connected (markdown-based like AI Agent)
@@ -2754,13 +2659,17 @@ class AIService:
 
                 # Store removed messages in long-term vector DB
                 if removed_texts and memory_data.get("long_term_enabled"):
-                    store = _get_memory_vector_store(session_id)
-                    if store:
-                        try:
-                            store.add_texts(removed_texts)
+                    try:
+                        store = await _get_configured_memory_vector_store(
+                            session_id,
+                            memory_data,
+                            self.auth,
+                        )
+                        if store:
+                            await store.add_texts(removed_texts)
                             logger.info(f"[ChatAgent Memory] Archived {len(removed_texts)} messages to long-term store")
-                        except Exception as e:
-                            logger.warning(f"[ChatAgent Memory] Failed to archive to vector store: {e}")
+                    except Exception as e:
+                        logger.warning(f"[ChatAgent Memory] Failed to archive to vector store: {e}")
 
                 logger.info(f"[ChatAgent Memory] Saved markdown to memory node '{memory_node_id}'")
 
@@ -2823,10 +2732,9 @@ class AIService:
                 "timestamp": datetime.now().isoformat(),
             }
 
-        except openai.OpenAIError as e:
-            # Typed SDK error — see execute_chat for rationale.
+        except NodeUserError as e:
             log_api_call(logger, provider, model, "chat_agent", False, error=str(e))
-            raise NodeUserError(str(e)) from e
+            raise
 
         except Exception as e:
             logger.error("[ChatAgent] Execution failed", node_id=node_id, error=str(e))
@@ -2847,7 +2755,7 @@ class AIService:
             await clear_skill_turn(workflow_id or "", str((context or {}).get("execution_id") or ""), node_id)
 
     async def _build_tool_from_node(self, tool_info: Dict[str, Any]) -> tuple:
-        """Convert a node configuration into a LangChain StructuredTool.
+        """Convert a node configuration into a provider-neutral tool spec.
 
         Uses database-stored schema as source of truth if available, otherwise
         falls back to dynamic schema generation.
@@ -2868,10 +2776,8 @@ class AIService:
             tool_info: Dict containing node_id, node_type, parameters, and label
 
         Returns:
-            Tuple of (StructuredTool, config_dict) or (None, None) on failure
+            Tuple of (AgentToolSpec, config_dict) or (None, None) on failure
         """
-        from langchain_core.tools import StructuredTool
-
         # Built-in / aggregator pseudo-types — no plugin class, no ClassVar.
         # These must stay as an explicit fallback dict (Wave 12 D5).
         _PSEUDO_TOOL_FALLBACK = {
@@ -2985,12 +2891,6 @@ class AIService:
                 schema_params["db_schema_config"] = db_schema["schema_config"]
             schema = self._get_tool_schema(node_type, schema_params)
 
-            # Create StructuredTool - the func is a placeholder, actual execution via tool_executor
-            def placeholder_func(**kwargs):
-                return kwargs
-
-            tool = StructuredTool.from_function(name=tool_name, description=tool_description, func=placeholder_func, args_schema=schema)
-
             # Build config dict - include connected_services for toolkit nodes
             config = {
                 "node_type": node_type,
@@ -2999,6 +2899,19 @@ class AIService:
                 "label": node_label,
                 "connected_services": connected_services,  # Pass through for execution
             }
+
+            from services.plugin.tool import inline_schema_refs
+
+            parameters = inline_schema_refs(schema.model_json_schema())
+            tool = AgentToolSpec(
+                definition=ToolDef(
+                    name=tool_name,
+                    description=tool_description,
+                    parameters=parameters,
+                ),
+                args_schema=schema,
+                execution=config,
+            )
 
             logger.debug(f"[Agent] Built tool '{tool_name}' with node_id={node_id}")
             return tool, config

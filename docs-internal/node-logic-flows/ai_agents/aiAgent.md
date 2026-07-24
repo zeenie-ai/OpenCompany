@@ -13,10 +13,11 @@
 `aiAgent` is the general-purpose tool-calling agent node. It reads a prompt
 and system message, optionally merges conversation history from a connected
 `simpleMemory`, loads instructions from connected skill nodes, binds tool nodes
-via `chat_model.bind_tools`, and runs the tool-calling loop until the LLM produces a
-final answer. All of the heavy lifting (LLM invocation, tool execution, memory
-persistence) lives in `AIService.execute_agent`; the handler's job is purely
-to gather the connected-node payloads via
+as provider-neutral `AgentToolSpec` values, and runs
+`run_native_agent_loop` until the LLM produces a final answer. All of the
+heavy lifting (native SDK invocation, tool execution, memory persistence)
+lives behind `AIService.execute_agent`; the handler's job is purely to gather
+the connected-node payloads via
 `edge_walker.collect_agent_connections` (a 5-tuple: memory, skill, tool,
 input, task) and forward them.
 
@@ -26,7 +27,7 @@ input, task) and forward them.
 |--------|-----------------|----------|---------|
 | `input-main` | main | no | Upstream data. Used as auto-prompt when `prompt` is empty. |
 | `input-skill` | main | no | Skill nodes (`masterSkill` is expanded into individual skills). |
-| `input-memory` | main | no | A `simpleMemory` node whose `memoryContent` is parsed into LangChain messages. |
+| `input-memory` | main | no | A `simpleMemory` node whose `memory_content` markdown is parsed into native `Message` values. |
 | `input-tools` | main | no | Tool nodes (search, calculator, HTTP, Android toolkit, child agents, etc.). |
 | `input-task` | main | no | `taskTrigger` output - completed delegated-task payload. |
 
@@ -37,7 +38,7 @@ Source: `AIAgentParams` in [`ai_agent/__init__.py`](../../../server/nodes/agent/
 | Name | Type | Default | Required | Group | Description |
 |------|------|---------|----------|-------|-------------|
 | `prompt` | string (textarea, rows 4) | `""` | no | - | User prompt; may reference upstream node outputs via templates. Empty -> auto-prompt fallback from `input-main`. |
-| `provider` | Literal | `openai` | no | - | One of openai, anthropic, gemini, openrouter, groq, cerebras, deepseek, kimi, mistral, ollama, lmstudio. |
+| `provider` | Literal | `openai` | no | - | One of openai, anthropic, gemini, openrouter, xai, groq, cerebras, deepseek, kimi, mistral, ollama, lmstudio. |
 | `model` | string | `""` | no | - | Model id; loaded dynamically from the provider. |
 | `system_message` | string (rows 3) | `You are a helpful assistant` | no | - | System prompt prepended to the conversation. |
 | `temperature` | number (optional) | `None` | no | options | 0-2, step 0.1. Unset falls through to `agent.default_temperature` in `llm_defaults.json`. |
@@ -133,10 +134,12 @@ flowchart TD
   and potentially `compaction_starting` / `compaction_completed` events.
   `BaseNode.execute()` additionally wraps the body in a `node.aiAgent.execute`
   OpenTelemetry span + `log_context(node_id, node_type, workflow_id)`.
-- **External API calls**: delegated to the native LLM provider SDKs (Anthropic,
-  OpenAI, Gemini, OpenRouter, xAI, DeepSeek, Kimi, Mistral) or the LangChain
-  fallback (Groq, Cerebras). Tool nodes may spawn their own HTTP or subprocess
-  calls via `execute_tool`.
+- **External API calls**: all 12 providers run through `ChatUnifier` and the
+  native provider layer: Anthropic uses `anthropic`, Gemini uses
+  `google-genai`, and OpenAI plus the OpenAI-compatible providers (OpenRouter,
+  Groq, Cerebras, xAI, DeepSeek, Kimi, Mistral, Ollama, and LM Studio) use
+  `openai` with the configured endpoint. Tool nodes may spawn their own HTTP
+  or subprocess calls via `execute_tool`.
 - **File I/O**: none in `execute_op`. Filesystem tool nodes may read/write the
   per-workflow workspace (`context.workspace_dir`).
 - **Subprocess**: none directly. Tool executors (shell, process manager,
@@ -147,10 +150,11 @@ flowchart TD
 - **Credentials**: provider API keys via `auth_service.get_api_key(<provider>)`,
   resolved inside `AIService`. Can be overridden by a provider proxy URL
   (`<provider>_proxy` API key) for Ollama-style local routing.
-- **Services**: `AIService`, `Database`, `StatusBroadcaster`, `CompactionService`,
-  `PricingService`, `SkillLoader` (for `masterSkill` expansion).
-- **Python packages**: `langchain-core`, `langchain-openai`,
-  `langchain-anthropic`, provider SDKs (`anthropic`, `openai`, `google-genai`).
+- **Services**: `AIService`, `ChatUnifier`, `run_native_agent_loop`,
+  `Database`, `StatusBroadcaster`, `CompactionService`, `PricingService`,
+  `SkillLoader` (for `masterSkill` expansion).
+- **Python packages**: native provider SDKs (`anthropic`, `openai`,
+  `google-genai`).
 - **Environment variables**: none read directly by `execute_op`.
 
 ## Edge cases & known limits

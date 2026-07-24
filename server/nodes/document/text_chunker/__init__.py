@@ -44,10 +44,7 @@ class TextChunkerNode(ActionNode):
 
     @Operation("chunk")
     async def chunk(self, ctx: NodeContext, params: TextChunkerParams) -> TextChunkerOutput:
-        from langchain_text_splitters import (
-            MarkdownTextSplitter,
-            RecursiveCharacterTextSplitter,
-        )
+        from ._splitter import split_text
 
         p = params.model_dump()
         documents = p.get("documents") or ([{"content": p.get("text", "")}] if p.get("text") else [])
@@ -58,18 +55,20 @@ class TextChunkerNode(ActionNode):
         if not documents:
             return TextChunkerOutput(chunks=[], chunk_count=0)
 
-        if strategy == "markdown":
-            splitter = MarkdownTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-        else:
-            splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-
         chunks = []
         for doc in documents:
             content = doc.get("content", "") if isinstance(doc, dict) else str(doc)
             source = doc.get("source", "input") if isinstance(doc, dict) else "input"
             if not content:
                 continue
-            for i, chunk_text in enumerate(splitter.split_text(content)):
+            for i, chunk_text in enumerate(
+                split_text(
+                    content,
+                    chunk_size=chunk_size,
+                    overlap=chunk_overlap,
+                    markdown=strategy == "markdown",
+                )
+            ):
                 chunks.append(
                     {
                         "source": source,

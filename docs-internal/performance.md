@@ -60,7 +60,7 @@ T+0.00 — port-free begin
            ├── FastAPI base imports (0.27 s)
            ├── DI container (0.42 s)
            ├── Core service imports (0.36 s)
-           ├── AIService import (0.70 s) ← lazy LangChain payoff
+           ├── AIService import (0.70 s) ← native boundary + lazy history shims
            ├── Routers + plugin walker (0.84 s, 137 plugins)
            └── All imports complete (1.98 s)
 T+2.25 — Lifespan startup
@@ -146,7 +146,7 @@ optimisations above; sum is what hurts.
 |---|---|---|---|---|
 | 1 | Plugin walker at import time (152 modules under `server/nodes/`; ~2 s warm / ~4.7 s cold, dominated by `nodes/google`'s eager `googleapiclient` import) | ~2 s | Backend | `_HANDLER_REGISTRY` populates via `BaseNode.__init_subclass__` at import. Lazy `googleapiclient` is the cheap win (see follow-ups); full lazy-loading of the walker is the big-blast-radius option. |
 | 2 | TanStack Query auth bootstrap retry window | ~3-5 s | Frontend | See "remaining +5 s gap" above. |
-| 3 | LangChain ecosystem imports inside `services/ai.py` | ~0.7 s | Backend | Already lazied; further wins require refactoring `AgentState`'s `Annotated[Sequence[BaseMessage], ...]` to defer `BaseMessage` resolution. |
+| 3 | AIService/native orchestration import graph | ~0.7 s | Backend | Historical May baseline; new agent execution uses native `Message` / `AgentToolSpec` values and provider registration remains lazy. Re-measure before attributing this cost further. |
 | 4 | Status-broadcaster refresh (`refresh_all_services`, 2.6 s) | ~2.6 s | Backend | Runs after `Application startup complete`, doesn't block server-ready. WhatsApp + Telegram are the long tails. |
 | 5 | Process spawn + Python interpreter init | ~0.4 s | Platform | Unavoidable without compiling Python to a binary (Nuitka / PyOxidizer — explicitly out of scope). |
 
@@ -247,7 +247,7 @@ Tracked but explicitly **not** in any active plan.
 | Defer first-launch example import off the workflows REST request | ~8-10 s of first-launch first paint | `routers/database.py:get_all_workflows` awaits `import_examples_for_user` inline, holding the HTTP response. Move to a lifespan background task (pattern: `_refresh_registry` / `_refresh_all_services` / Temporal init in `main.py`) + emit `workflow_lifecycle("imported")` per example so the sidebar refreshes. Secondary: negative cache in `AuthService.has_valid_key` (validation does one credentials-DB read per declared credential per node). |
 | Cold-boot lifespan I/O (9.6 s measured 2026-07-14 vs 1.5 s pre-fix cold boot) | unclear — needs a re-run | Fresh-DB creation 4.4 s + salt/PBKDF2 + encryption ~3 s under Defender/disk contention now that the whole boot compresses into ~20 s. May be noise; measure before optimising. |
 | Plugin walker lazy-loading | ~0.5-0.8 s on server-ready | Would need to defer registration until first NodeSpec request rather than at module-import time. Touches every `BaseNode` subclass — biggest blast radius of the candidates. |
-| `BaseMessage`-free agent loop (drop the only eager `langchain_core.messages` import in `services/ai.py`) | ~0.3-0.5 s | Native-SDK provider classes already use their own message types; `_run_agent_loop` could be retyped against them and the eager import dropped. |
+| Retire legacy Temporal history adapters after the rollback / retention window | negligible startup impact | New executions already use native messages and the compatibility imports are lazy. This is dependency and maintenance cleanup, not a measured cold-start win. |
 | `+5 s` HTTP-ready → first-WS-connect gap | up to 5 s | Diagnostics needed (see "remaining +5 s gap"). May reveal nothing actionable. |
 | Supervisor backend `ready_timeout` (default 30 s, shortest of the three services) | cosmetic | The probe is inert (one-shot, no restart/gating) but a >30 s boot prints an alarming "timed out waiting for port 3010" and skips the ready line. Post-fix boots fit the window; revisit only if cold boots regress past 30 s. |
 | Standalone Nuitka / PyOxidizer release binary | full Python interpreter init (~0.4 s) + `.pyc` regeneration on cold disk | User explicitly declined when scoping the build pipeline; revisit if "ship a single binary" becomes a product requirement. |

@@ -11,7 +11,7 @@ metadata:
 
 # FS Search Tool
 
-Search the filesystem: list directories, glob pattern match files, or grep file contents. Uses deepagents filesystem backend.
+Search the filesystem: list directories, glob pattern match files, or grep file contents. Uses the workspace-contained native filesystem backend.
 
 **Path sandbox:** all paths resolve inside the per-workflow workspace root. Use workspace-relative paths; `..` and `~` segments are rejected, and absolute paths are remapped into the workspace.
 

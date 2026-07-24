@@ -124,7 +124,7 @@ Use **A** for "run these in order regardless of outcome", **B/C** when you must 
 ## Workspace and paths
 
 - The cwd is the per-workflow workspace; relative paths resolve there.
-- Filesystem operations elsewhere on this tool (read/write/edit via `file_*`) honour `virtual_mode=True` and reject `..`/`~` traversal. Shell `execute()` itself is **not** path-restricted (deepagents documents this), so prefer `file_read` / `file_modify` / `fs_search` for actual filesystem work.
+- Filesystem operations elsewhere on this tool (read/write/edit via `file_*`) are workspace-contained and reject `..`/`~` traversal. Shell `execute()` itself retains historical host-shell behavior and is **not** path-restricted, so prefer `file_read` / `file_modify` / `fs_search` for actual filesystem work.
 
 ## Use the right tool
 

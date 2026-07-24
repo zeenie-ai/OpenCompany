@@ -12,15 +12,27 @@ from services.llm.config import (
     build_headers,
 )
 from services.llm.protocol import (
+    MESSAGE_WIRE_VERSION,
+    NATIVE_MESSAGE_WIRE_VERSIONS,
+    SUPPORTED_MESSAGE_WIRE_VERSIONS,
+    MessageWireV2,
     ThinkingConfig,
     ToolDef,
     ToolCall,
+    ContentBlock,
     Message,
     Usage,
     LLMResponse,
+    LLMError,
+    LLMErrorCategory,
     LLMProvider,
+    message_to_wire,
+    message_from_wire,
+    messages_to_wire,
+    messages_from_wire,
 )
 from services.llm.messages import is_valid_message_content, filter_empty_messages
+from services.llm.schema import compile_tool_schema
 from services.llm.registry import (
     ProviderSpec,
     register_provider,
@@ -48,16 +60,28 @@ __all__ = [
     "resolve_temperature",
     "build_headers",
     # Protocol types
+    "MESSAGE_WIRE_VERSION",
+    "NATIVE_MESSAGE_WIRE_VERSIONS",
+    "SUPPORTED_MESSAGE_WIRE_VERSIONS",
+    "MessageWireV2",
     "ThinkingConfig",
     "ToolDef",
     "ToolCall",
+    "ContentBlock",
     "Message",
     "Usage",
     "LLMResponse",
+    "LLMError",
+    "LLMErrorCategory",
     "LLMProvider",
+    "message_to_wire",
+    "message_from_wire",
+    "messages_to_wire",
+    "messages_from_wire",
     # Messages
     "is_valid_message_content",
     "filter_empty_messages",
+    "compile_tool_schema",
     # Plugin registry + unifier (Phase A — single SERVICE facade)
     "ProviderSpec",
     "register_provider",

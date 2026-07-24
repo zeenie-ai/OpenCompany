@@ -569,7 +569,13 @@ class VertexManagedAgentNode(ActionNode):
         configs: Dict[str, Dict[str, Any]] = {}
 
         def _declare(structured: Any, config: Optional[Dict[str, Any]]) -> None:
-            if structured.args_schema is not None:
+            # Native ``AgentToolSpec`` already carries the canonical, locally
+            # resolved ToolDef schema. Keep the args_schema fallback only for
+            # older test doubles and pre-cutover compatibility callers.
+            schema = getattr(structured, "parameters", None)
+            if schema is not None:
+                schema = inline_schema_refs(schema)
+            elif getattr(structured, "args_schema", None) is not None:
                 # Function-calling APIs reject schema indirection —
                 # inline $defs/$ref (nested BaseModel / Enum Params
                 # fields) instead of stripping and leaving dangling refs.

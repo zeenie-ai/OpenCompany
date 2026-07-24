@@ -341,22 +341,23 @@ AgentWorkflow.run(context):
        templates in prompt / system_message become real values BEFORE
        the LLM sees them. Temporal workflows must be deterministic,
        so DB lookups + edge walking + tool schema build live here.
-       Tool entries carry the raw tool_info dict — execute_llm_step
-       rebuilds the StructuredTool via ai_service._build_tool_from_node
-       inside the activity (no JSON-schema round-trip).
+       _build_tool_from_node produces AgentToolSpec values. Tool entries
+       carry the serialized ToolDef declaration plus routing tool_info;
+       native LLM steps consume the definition directly.
+       Records llm_engine="native" + message_wire_version=2.
   emit_phase("starting", status="executing")
   loop until "final" or max_iterations:
     1. emit_phase("llm_step", iteration=N)
     2. execute_activity("agent.execute_llm_step.v1")
          returns {kind, assistant_message, calls?, content?, usage}.
-         assistant_message is the full LangChain-serialized AIMessage
-         (messages_to_dict round-trip preserves provider-specific
-         fields: Gemini thought_signature, Anthropic cache markers,
-         OpenAI reasoning_content) — appended verbatim to messages.
-         After filter_empty_messages, a list with no human/ai/tool
+         assistant_message is MessageWireV2: ordered text/reasoning/tool
+         blocks plus JSON-safe provider continuation state (Gemini thought
+         signatures, Anthropic signed/redacted thinking, OpenAI response
+         metadata). It is appended verbatim to messages.
+         After filter_empty_messages, a list with no user/assistant/tool
          message raises ApplicationError(type="EmptyAgentPrompt",
          non_retryable=True) — providers require >=1 non-system
-         message (Gemini pulls SystemMessages into system_instruction
+         message (Gemini pulls system messages into system_instruction
          and rejects empty contents), so the failure surfaces to the
          parent LLM on attempt 1 instead of consuming the retry budget.
     3. if kind == "tool_calls":
@@ -377,15 +378,16 @@ AgentWorkflow.run(context):
            _serialise_tool_result unwraps F4.A's {success, result, ...}
            envelope so the LLM sees only the handler's return value
            (matches the in-process tool-call serialisation in
-           services/ai.py:_run_agent_loop).
+           services/agent_runtime.py:run_native_agent_loop).
     4. for each tool result with an ``operations`` field
        (canvas-mutating tools — today only ``agentBuilder``):
          if payload["auto_rebind_tools"] is True:
            execute_activity("agent.refresh_tools.v1", {operations: …})
-             translates add_node ops with component_kind=="tool" OR
-             usable_as_tool=True (minus chat-model plugins) into the
-             same tool_payload shape prepare_agent_payload emits.
-             Reuses ai_service._build_tool_from_node + get_node_class.
+              translates add_node ops with component_kind=="tool" OR
+              usable_as_tool=True (minus chat-model plugins) into the
+              same tool_payload shape prepare_agent_payload emits.
+              Reuses ai_service._build_tool_from_node + get_node_class,
+              yielding fresh AgentToolSpec / ToolDef declarations.
            tools.extend(refresh_result["tools"])
            tool_index.update(...)
            # next execute_llm_step.v1 sees the new tools.
@@ -405,6 +407,16 @@ AgentWorkflow.run(context):
   emit_phase("completed", status="success")
 ```
 
+The `agent.prepare_payload.v1` result is recorded in history and therefore
+acts as the deterministic engine selector. New executions default to
+`llm_engine="native"` with Message Wire V2 and use `ChatUnifier` plus the
+native provider SDKs for every turn. Histories whose recorded prepare result
+has no engine marker are pre-cutover histories and follow the frozen LangChain
+path with their historical payload, activity commands, and message shape. The
+temporary `AGENT_LLM_ENGINE=langchain` emergency switch can also pin a newly
+prepared execution to that compatibility path without changing an execution
+after it starts. A native run never falls back after a provider request starts.
+
 `emit_phase(phase, status?)` is a thin helper that schedules `agent.broadcast_progress.v1`. The activity emits `WorkflowEvent.agent_progress` (CloudEvents v1.0, `type="com.opencompany.agent.progress"`) for FE consumers; when `status` is supplied it also drives a raw-dict `update_node_status` for the canvas-glow color (executing / success / error). Same dual-channel pattern F4.A's `_node_activity` uses. When this workflow is itself a delegated child (`context["parent_node_id"]` set), every `emit_phase` call ALSO schedules a second broadcast against the parent's `node_id` with `phase="delegating"` — the parent's canvas badge then advances in real time while the child loops, instead of freezing at "executing" glow until the child completes.
 
 Each LLM step is one activity and each ordinary tool call is one per-type activity. Team-lead Task Manager assignments are different: persistence happens first, then the lead starts a deterministic detached `DelegatedTaskWorkflow` with `ParentClosePolicy.ABANDON` and receives `queued` immediately. The runner owns the root-wide permit, claim, child `AgentWorkflow`, terminal result/usage persistence, `taskTrigger`, and permit release, so the assigning lead can return without polling. Direct non-team delegation retains the child-workflow path. Non-agent tools and excluded types (`rlm_agent`, `claude_code_agent`) still go through `execute_activity`. Failures surface as durable task failures and trigger review rather than being lost when the lead invocation closes.
@@ -419,9 +431,9 @@ Durable event listeners retain their deployment graph as a fallback, but each fi
 
 | Activity | Purpose |
 |---|---|
-| `agent.prepare_payload.v1` | Resolves the DB-backed payload (provider / model / api_key / system_message / user_prompt / tools / memory_node_id / memory_content / memory_window_size / max_iterations / thinking_config / compaction_threshold / auto_rebind_tools). Reads `UserSettings.agent_recursion_limit` + `UserSettings.auto_rebind_tools_after_canvas_change`. Applies the optional `invocation` field (delegation children) after config resolution — per-invocation input always beats stored parameters. |
-| `agent.execute_llm_step.v1` | One LLM turn — rebuilds StructuredTools from the workflow's current `tools` list and returns the assistant message + tool_calls. Guards against un-invokable payloads: post-filter system-only message lists raise `ApplicationError(type="EmptyAgentPrompt", non_retryable=True)`. |
-| `agent.refresh_tools.v1` | Translates `workflow_ops` add_node ops (component_kind="tool" OR usable_as_tool=True) into fresh `tool_payload` entries via `_build_tool_from_node`. Workflow extends `tools` + `tool_index` from the result. |
+| `agent.prepare_payload.v1` | Resolves the DB-backed payload (provider / model / system_message / user_prompt / `AgentToolSpec`-derived tool definitions / memory_node_id / memory_content / memory_window_size / max_iterations / thinking_config / compaction_threshold / auto_rebind_tools), records `llm_engine` + `message_wire_version`, and leaves credential resolution at the LLM activity boundary. Reads `UserSettings.agent_recursion_limit` + `UserSettings.auto_rebind_tools_after_canvas_change`. Applies the optional `invocation` field (delegation children) after config resolution — per-invocation input always beats stored parameters. |
+| `agent.execute_llm_step.v1` | One LLM turn. The native branch decodes Message Wire V2, rebuilds `ToolDef` values, calls `run_native_llm_step(ChatUnifier, ...)` with SDK retries disabled, heartbeats while awaiting the provider, and returns the exact assistant message + tool calls + normalized usage. Guards against un-invokable payloads: post-filter system-only message lists raise `ApplicationError(type="EmptyAgentPrompt", non_retryable=True)`. |
+| `agent.refresh_tools.v1` | Translates `workflow_ops` add_node ops (`component_kind="tool"` OR `usable_as_tool=True`) into fresh `AgentToolSpec`-derived `tool_payload` entries via `_build_tool_from_node`. Workflow extends `tools` + `tool_index` from the result. |
 | `agent.persist_turn.v1` | Appends the latest human/assistant exchange to memory markdown, trims the window, broadcasts `node.parameters.updated`. |
 | `agent.compact_memory.v1` | Token-budget compaction when cumulative tokens hit the threshold. Best-effort: continues with un-compacted history on failure. |
 | `agent.store_output.v1` | Writes `output_main` / `output_top` / `output_0` so downstream nodes resolve `{{aiAgent.response}}` via `ParameterResolver`. |

@@ -67,12 +67,15 @@ class TestAgentResolverDelegates:
         src = inspect.getsource(ai._resolve_max_tokens)
         assert "native_resolve_max_tokens" in src
 
-    def test_temporal_prepare_payload_uses_agent_resolver(self):
-        # The F4.B path must resolve max_tokens through the same helper.
+    def test_temporal_prepare_payload_uses_native_resolver(self):
+        # The F4.B path imports the provider-neutral resolver directly so
+        # newly prepared executions do not enter services.ai compatibility
+        # code.
         from services.temporal.agent_activities import prepare_agent_payload
 
         src = inspect.getsource(prepare_agent_payload)
-        assert "_resolve_max_tokens" in src
+        assert "from services.llm.config import" in src
+        assert "resolve_max_tokens(flattened, model, provider)" in src
 
 
 class TestRegistryAliasNormalization:

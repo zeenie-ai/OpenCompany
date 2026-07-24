@@ -114,12 +114,12 @@ def detect_provider_from_model(model: str) -> str:
 
 
 def is_model_valid_for_provider(model: str, provider: str) -> bool:
-    # Open-world providers — OpenRouter is a multi-vendor proxy, ollama
-    # and lmstudio serve user-installed local models whose names don't
-    # match any "lmstudio"/"ollama" substring. Treat as always-valid;
-    # the upstream API will 404 a genuinely missing model. See the
-    # mirror in services/ai.py for the full rationale.
-    if provider in ("openrouter", "ollama", "lmstudio"):
+    # Open-world providers — OpenRouter is a multi-vendor proxy, Ollama and
+    # LM Studio serve user-installed models, and Groq's owner-qualified model
+    # IDs (for example ``openai/gpt-oss-120b``) do not contain "groq".
+    # Treat them as provider-selected; the upstream API will return a clear
+    # 404 for a genuinely missing model.
+    if provider in ("openrouter", "ollama", "lmstudio", "groq"):
         return True
     cfg = PROVIDER_CONFIGS.get(provider)
     if not cfg:
@@ -186,7 +186,12 @@ def resolve_temperature(params: dict, model: str, provider: str, thinking_enable
 
     user_val = params.get("temperature")
     if user_val is None:
-        user_val = registry.get_agent_defaults()["default_temperature"]
+        user_val = registry.get_agent_defaults().get(
+            "default_temperature",
+            LLM_DEFAULTS.get("agent", {}).get(
+                "default_temperature", 0.7
+            ),
+        )
     user_temp = float(user_val)
 
     if registry.is_reasoning_model(model, provider):

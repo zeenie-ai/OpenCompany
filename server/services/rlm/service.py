@@ -69,7 +69,10 @@ class RLMService:
             flattened = {**parameters, **options}
 
             # Provider/model/API key resolution (same as lines 1998-2014)
-            from services.ai import is_model_valid_for_provider, get_default_model_async
+            from services.llm.config import (
+                get_default_model_async,
+                is_model_valid_for_provider,
+            )
 
             api_key = flattened.get("api_key")
             provider = parameters.get("provider", "openai")

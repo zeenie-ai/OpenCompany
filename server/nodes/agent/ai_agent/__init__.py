@@ -43,13 +43,14 @@ class AIAgentParams(BaseModel):
         "anthropic",
         "gemini",
         "openrouter",
+        "xai",
         "groq",
         "cerebras",
         "deepseek",
         "kimi",
         "mistral",
         # Local-server providers — agent execution reads
-        # ``{provider}_proxy`` to point the LangChain client at the
+        # ``{provider}_proxy`` to point the native OpenAI client at the
         # user's localhost server. Without these entries the dropdown
         # silently falls back to ``"openai"`` and execute_agent ends
         # up calling api.openai.com instead.

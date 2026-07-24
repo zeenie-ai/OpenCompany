@@ -54,17 +54,13 @@ async def clear_agent_session_state(
         (list[str]), and ``cleared_memory_node`` (bool) for
         caller-visible diagnostics.
     """
-    # The live vector-store cache lives in ``services.ai`` (the dict in
-    # ``services.memory.vector_store`` is dormant — future cleanup will
-    # consolidate). Lazy import keeps ``services.ai``'s heavy LangChain
-    # deps off the hot path.
-    from services.ai import _memory_vector_stores as _live_vector_stores
+    from services.memory.vector_store import clear_memory_vector_stores
     from services.todo_service import UNSAVED_WORKFLOW_ID, get_todo_service
 
     cleared_vector_store = False
-    if clear_long_term and session_id in _live_vector_stores:
-        del _live_vector_stores[session_id]
-        cleared_vector_store = True
+    if clear_long_term:
+        cleared_vector_store = await clear_memory_vector_stores(session_id)
+    if cleared_vector_store:
         logger.info(f"[Memory] Cleared vector store for session '{session_id}'")
 
     todo_service = get_todo_service()

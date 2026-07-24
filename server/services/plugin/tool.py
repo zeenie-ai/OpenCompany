@@ -7,6 +7,7 @@ JSON Schema the LLM sees — derived from :class:`Params` automatically.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, ClassVar, Dict, Optional
 
 from core.logging import get_logger
@@ -22,17 +23,76 @@ def inline_schema_refs(schema: Dict[str, Any]) -> Dict[str, Any]:
     Function-calling APIs reject schema indirection, but a Params model
     with nested BaseModel or Enum fields emits ``$defs`` + ``$ref`` under
     Pydantic v2 — stripping ``$defs`` alone would leave dangling refs.
-    Circular refs degrade to a permissive ``{}`` at the cycle point
-    (``dereference_refs`` contract); a dereference failure (out-of-document
-    ref, malformed schema) falls back to a permissive object schema.
+    Circular refs degrade to a permissive ``{}`` at the cycle point.
+    A dereference failure (out-of-document ref, malformed schema) falls
+    back to a permissive object schema.
+
+    Only local JSON Pointers are accepted. Tool schemas are generated from
+    trusted Pydantic models, but keeping the resolver local and document-only
+    also prevents an accidental network/file fetch if an externally supplied
+    schema reaches this helper.
     """
-    # Lazy import: langchain_core is heavyweight and this module loads at
-    # plugin-registration time (cold-start rule).
-    from langchain_core.utils.json_schema import dereference_refs
+    root = deepcopy(schema)
+
+    def _unescape_pointer_token(token: str) -> str:
+        return token.replace("~1", "/").replace("~0", "~")
+
+    def _lookup(ref: str) -> Any:
+        if ref == "#":
+            return root
+        if not ref.startswith("#/"):
+            raise ValueError(f"Only local JSON Pointer refs are supported: {ref!r}")
+        current: Any = root
+        for raw_token in ref[2:].split("/"):
+            token = _unescape_pointer_token(raw_token)
+            if isinstance(current, dict):
+                current = current[token]
+            elif isinstance(current, list):
+                current = current[int(token)]
+            else:
+                raise ValueError(f"Cannot traverse JSON Pointer {ref!r}")
+        return current
+
+    def _resolve(value: Any, active_refs: frozenset[str]) -> Any:
+        if isinstance(value, list):
+            return [_resolve(item, active_refs) for item in value]
+        if not isinstance(value, dict):
+            return value
+
+        if "$ref" in value:
+            ref = value["$ref"]
+            if not isinstance(ref, str):
+                raise ValueError("$ref must be a string")
+            if ref in active_refs:
+                return {}
+            target = _lookup(ref)
+            if not isinstance(target, (dict, list)):
+                raise ValueError(f"JSON Pointer {ref!r} does not target a schema")
+            resolved = _resolve(deepcopy(target), active_refs | {ref})
+            # JSON Schema permits siblings alongside $ref. Preserve them,
+            # with the referencing site taking precedence over the target.
+            siblings = {
+                key: _resolve(item, active_refs)
+                for key, item in value.items()
+                if key != "$ref"
+            }
+            if siblings:
+                if not isinstance(resolved, dict):
+                    raise ValueError(f"Cannot merge siblings into ref {ref!r}")
+                resolved.update(siblings)
+            return resolved
+
+        return {
+            key: _resolve(item, active_refs)
+            for key, item in value.items()
+            if key not in {"$defs", "definitions"}
+        }
 
     try:
-        inlined = dereference_refs(schema)
-    except Exception as e:  # noqa: BLE001 — KeyError/ValueError from _retrieve_ref
+        inlined = _resolve(root, frozenset())
+        if not isinstance(inlined, dict):
+            raise ValueError("Root JSON Schema must be an object")
+    except (KeyError, IndexError, TypeError, ValueError) as e:
         logger.warning(
             "inline_schema_refs: dereference failed (%s) — falling back to permissive schema",
             e,

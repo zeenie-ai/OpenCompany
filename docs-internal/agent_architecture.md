@@ -60,13 +60,13 @@ collect_agent_connections()               server/services/plugin/edge_walker.py
         v
 AIService.execute_agent() / execute_chat_agent()   server/services/ai.py
   1. Inject skills into system message
-  2. Build LangChain StructuredTools from tool_data
-  3. Call _run_agent_loop() (plain async while loop)
+  2. Build provider-neutral AgentToolSpecs from tool_data
+  3. Call run_native_agent_loop(ChatUnifier, ...)
   4. Save memory, return result
         |
         v
-_run_agent_loop() execution
-  invoke LLM -> if tool_calls: dispatch each via tool_executor -> loop
+run_native_agent_loop() execution
+  ChatUnifier -> native SDK -> if tool_calls: dispatch via tool_executor -> loop
   Return on final response (no tool_calls) or max_iterations cap.
         |
         v
@@ -84,7 +84,9 @@ Result broadcast via WebSocket
 | `server/services/plugin/edge_walker.py` | `collect_agent_connections()` (the renamed `_collect_agent_connections`), `format_task_context()` |
 | `server/nodes/agent/_inline.py` | `prepare_agent_call()` — task-context injection + auto-prompt fallback + teammate collection; calls `collect_agent_connections` then `ai_service.execute_[chat_]agent` |
 | `server/nodes/agent/<plugin>/__init__.py` | Per-plugin `execute_op()` (Wave 11 replaced `handle_ai_agent` / `handle_chat_agent`) |
-| `server/services/ai.py` | `AIService` -- `_run_agent_loop`, skill injection, tool building |
+| `server/services/ai.py` | `AIService` facade -- skill injection, tool building, memory and execution-boundary handling |
+| `server/services/agent_runtime.py` | `AgentToolSpec`, `run_native_llm_step`, and `run_native_agent_loop` |
+| `server/services/llm/` | `ChatUnifier`, provider-neutral messages/tool definitions, and native provider SDK adapters |
 | `server/services/handlers/tools.py` | `execute_tool()` -- dispatch router for all tool types |
 | `server/services/skill_loader.py` | `SkillLoader` -- filesystem/DB skill discovery and loading |
 
@@ -92,34 +94,64 @@ Result broadcast via WebSocket
 
 ## Agent Loop
 
-The agent loop is a plain `for iteration in range(max_iterations):` async function in `server/services/ai.py:_run_agent_loop`. No state machine, no graph DSL — each iteration:
+The agent loop is the plain async
+`services.agent_runtime.run_native_agent_loop`. No state machine or graph DSL
+is involved — each iteration:
 
 1. Optional `progress_callback(iteration)` so consumers (UI iteration badge) get a per-turn tick.
-2. `filter_empty_messages(messages)` strips empty `HumanMessage` content (Gemini / Claude reject them).
-3. `response = await chat_model.ainvoke(filtered)` — single LLM call. The full assistant message is appended to `messages` verbatim so provider-specific metadata survives (Gemini `thought_signature`, Anthropic cache markers, OpenAI `reasoning_content`).
-4. `extract_thinking_from_response(response)` — accumulates thinking across iterations with the `--- Iteration N ---` separator (multi-step reasoning).
-5. If `response.tool_calls` is empty → return `{messages, iteration, thinking_content, truncated: False}`.
-6. Otherwise dispatch each `tool_call` via the supplied `tool_executor`, wrap each result as a `ToolMessage`, append. After all calls in this iteration return, inspect each result for a `operations` field (workflow_ops batch from canvas-mutating tools); call `rebind_from_operations(ops)` if wired, extend the local `current_tools` list, and `chat_model.bind_tools(current_tools)` again so the LLM sees the new tools in the NEXT iteration. Loop.
+2. `filter_empty_messages(messages)` strips empty native message content
+   rejected by providers.
+3. `run_native_llm_step` calls `ChatUnifier.chat`, which invokes the selected
+   native provider SDK and returns `LLMResponse`.
+4. The canonical `LLMResponse.assistant_message` is appended verbatim before
+   any tool runs, preserving Gemini thought signatures, Anthropic
+   signed/redacted thinking, and OpenAI continuation metadata. Normalized
+   `Usage` is accumulated across iterations.
+5. Thinking text is accumulated across iterations with the
+   `--- Iteration N ---` separator.
+6. If `response.tool_calls` is empty → return
+   `{messages, iteration, thinking_content, truncated: False, usage,
+   response}`.
+7. Otherwise validate each call against its `AgentToolSpec.args_schema`,
+   dispatch it through `tool_executor`, and append a native
+   `Message(role="tool", tool_call_id=...)`. Malformed arguments become a
+   deterministic tool error containing `raw_arguments` rather than crashing.
+   Results containing workflow `operations` are passed to
+   `rebind_from_operations`; returned `AgentToolSpec` values extend
+   `current_tools` for the next request.
 
-On hitting `max_iterations`, append a terminal `AIMessage` with a truncation note and return `truncated: True`.
+On hitting `max_iterations`, append a terminal native assistant `Message`
+with a truncation note and return `truncated: True`.
 
 ### Signature
 
 ```python
-async def _run_agent_loop(
-    chat_model,
-    initial_messages: List[BaseMessage],
+async def run_native_agent_loop(
+    chat_unifier,
     *,
-    tools: Optional[List[Any]] = None,
+    provider: str,
+    api_key: str,
+    model: str,
+    temperature: float,
+    max_tokens: int,
+    initial_messages: Sequence[Message],
+    thinking: Optional[ThinkingConfig] = None,
+    tools: Optional[Sequence[AgentToolSpec]] = None,
     tool_executor: Optional[Callable] = None,
     max_iterations: int = 500,
     progress_callback: Optional[Callable[[int], Any]] = None,
-    rebind_from_operations: Optional[Callable[[List[Dict[str, Any]]], Awaitable[List[Any]]]] = None,
+    rebind_from_operations: Optional[
+        Callable[[List[Dict[str, Any]]], Awaitable[List[AgentToolSpec]]]
+    ] = None,
 ) -> Dict[str, Any]:
-    """Returns {messages, iteration, thinking_content, truncated}."""
+    """Returns messages, iteration, thinking, truncation, usage, and response."""
 ```
 
-Tools bind at loop start via `chat_model.bind_tools(tools)` and **rebind** mid-loop whenever a tool returns workflow_ops (today only `agentBuilder`). The rebound model is the SAME LangChain `chat_model.bind_tools` method every provider honours — no per-provider plumbing.
+There is no mutable model binding step. Each native LLM request derives its
+provider-facing declarations from the current `AgentToolSpec.definition`
+values. When a canvas-mutating tool returns workflow operations (today only
+`agentBuilder`), newly built specs extend that list and are visible on the
+next iteration.
 
 ### Termination
 
@@ -127,7 +159,7 @@ Tools bind at loop start via `chat_model.bind_tools(tools)` and **rebind** mid-l
 |---|---|
 | LLM emits no `tool_calls` | Return with `truncated: False`. This is the normal exit. |
 | `tool_executor` is `None` but LLM emits tool calls | WARN + return (treat as final). |
-| `iteration` reaches `max_iterations` | Append synthetic terminal `AIMessage` + return with `truncated: True`. |
+| `iteration` reaches `max_iterations` | Append a synthetic native assistant `Message` + return with `truncated: True`. |
 
 ### `max_iterations` precedence
 
@@ -146,7 +178,13 @@ When `agentBuilder` (the only canvas-mutating tool today) spawns a new node mid-
 
 Closure responsibilities:
 
-- **`_rebind_from_operations(ops) -> List[StructuredTool]`** (in `execute_agent` / `execute_chat_agent`): filter ops for `add_node` with the plugin class's `component_kind == "tool"` OR `usable_as_tool=True` (excluding `component_kind == "model"`), synthesize a `tool_info` dict, call `self._build_tool_from_node(tool_info)`, return the new StructuredTools. Tool configs get folded into the captured `tool_configs` dict so the `tool_executor` can dispatch the new call.
+- **`_rebind_from_operations(ops) -> List[AgentToolSpec]`** (in
+  `execute_agent` / `execute_chat_agent`): filter ops for `add_node` with the
+  plugin class's `component_kind == "tool"` OR `usable_as_tool=True`
+  (excluding `component_kind == "model"`), synthesize a `tool_info` dict,
+  call `self._build_tool_from_node(tool_info)`, and return the new specs. Tool
+  configs get folded into the captured `tool_configs` dict so
+  `tool_executor` can dispatch the new call.
 - The closure is gated on the user toggle: `UserSettings.auto_rebind_tools_after_canvas_change` (default `True`). When off, the LLM is told "Available on your next turn" in the operation summary and the closure isn't wired.
 
 For the F4.B Temporal path, the in-process closure is replaced by the `agent.refresh_tools.v1` activity; see [TEMPORAL_ARCHITECTURE.md](TEMPORAL_ARCHITECTURE.md).
@@ -158,7 +196,10 @@ Two callsites in `server/services/ai.py`:
 - `execute_agent` — for `aiAgent` plugins.
 - `execute_chat_agent` — for `chatAgent` + all specialized agents + team leads.
 
-Both build `initial_messages` (system + memory history + current prompt + skill injection), build tools via `_build_tool_from_node`, then call `_run_agent_loop` and extract the final assistant message + accumulated thinking + iteration count from the returned dict.
+Both build native `initial_messages` (system, memory history, current prompt,
+and skill injection), build tools via `_build_tool_from_node`, then call
+`run_native_agent_loop` and extract the final assistant message, accumulated
+thinking, usage, and iteration count from the returned dict.
 
 ---
 
@@ -356,11 +397,20 @@ This text is appended to the system message. The full SKILL.md body (instruction
 
 ## Tool Building Pipeline
 
-Tool building + dispatch lives in [tool_building_pipeline.md](./tool_building_pipeline.md). The five stages (DISCOVER edges → BUILD StructuredTool → BIND via `chat_model.bind_tools` → INVOKE via LLM tool_calls → DISPATCH through execute_tool) and the dispatch matrix (delegated agents / Android services / dual-purpose plugins / direct tools / search APIs / generic fallback) are documented there. The single-source-of-truth rule — execute_tool owns the tool node lifecycle, parent-agent closures only emit phase broadcasts — is the contract test enforces.
+Tool building + dispatch lives in
+[tool_building_pipeline.md](./tool_building_pipeline.md). The five stages
+(DISCOVER edges → BUILD `AgentToolSpec` / `ToolDef` → EXPOSE through
+`ChatUnifier` → INVOKE via native tool calls → DISPATCH through
+`execute_tool`) and the dispatch matrix (delegated agents / Android services /
+dual-purpose plugins / direct tools / search APIs / generic fallback) are
+documented there. The single-source-of-truth rule — `execute_tool` owns the
+tool node lifecycle, parent-agent closures only emit phase broadcasts — is the
+contract tests enforce.
 
 Patterns covered in the canonical doc:
 
-- DEFAULT_TOOL_NAMES map (node_type → LLM-visible tool name)
+- Plugin `tool_name` / `tool_description` class variables and database
+  overrides (node type → LLM-visible identity)
 - Database tool-schema override via ToolSchema model + Tool Schema Editor UI
 - Direct tool pattern (each Android service connects to the agent independently)
 - Direct Android service tools (16 entries, skip the toolkit)
@@ -374,7 +424,18 @@ Patterns covered in the canonical doc:
 
 ## Memory Integration
 
-Memory load + save lives in [memory_lifecycle.md](./memory_lifecycle.md). The agent loop reads `memory_data` from `collect_agent_connections()` (`server/services/plugin/edge_walker.py`, via the `input-memory` edge), prepends parsed history to the system message + current prompt, runs `_run_agent_loop`, then appends the turn + trims the window + archives trimmed text to the vector store. The markdown helpers (`parse_memory_markdown`, `append_to_memory_markdown`, `trim_markdown_window`) and the vector store (`InMemoryVectorStore` with HuggingFace embeddings) are the load-bearing surface — see the canonical doc for signatures, the markdown format, and the engine-specific adapter table (aiAgent / rlm_agent / claude_code_agent native session resume bridge).
+Memory load + save lives in
+[memory_lifecycle.md](./memory_lifecycle.md). The agent loop reads
+`memory_data` from `collect_agent_connections()`
+(`server/services/plugin/edge_walker.py`, via the `input-memory` edge),
+prepends history parsed into native `Message` values to the system message and
+current prompt, runs `run_native_agent_loop`, then atomically appends the turn,
+trims the window, and archives trimmed text to the optional vector store. The
+markdown helpers (`parse_memory_markdown`, `append_to_memory_markdown`,
+`trim_markdown_window`) and `NativeMemoryVectorStore` with the optional direct
+sentence-transformers embedder are the load-bearing surface — see the
+canonical doc for signatures, the markdown format, and the engine-specific
+table.
 
 ---
 
@@ -384,9 +445,9 @@ Both methods live in `server/services/ai.py` and follow the same general pattern
 
 | Aspect | `execute_agent()` | `execute_chat_agent()` |
 |--------|-------------------|----------------------|
-| **Loop call** | Always calls `_run_agent_loop` (even with zero tools — single-turn happy path returns immediately) | Conditional: calls `_run_agent_loop` if tools, simple `await chat_model.ainvoke(messages)` if no tools |
-| **Tool failure** | Re-raises exceptions (the loop wraps them as `{"error": ...}` ToolMessages on retry) | Returns `{"error": str(e)}` (softer handling) |
-| **No-tool path** | N/A -- always uses the loop | `response = await chat_model.ainvoke(messages)` (skips loop overhead) |
+| **Loop call** | Calls `run_native_agent_loop` with the resolved recursion limit | Calls `run_native_agent_loop` with the resolved recursion limit when tools exist and with `max_iterations=1` otherwise |
+| **Tool failure** | Callback re-raises; the shared loop serializes the exception into a native tool-result message | Callback returns `{"error": str(e)}`; the shared loop serializes that result into the same native tool-result shape |
+| **No-tool path** | The first native turn normally returns immediately | One native loop iteration through `ChatUnifier` |
 | **Result metadata** | `agent_type: "agent"` | `agent_type: "chat" / "chat_with_skills" / "chat_with_tools" / "chat_with_skills_and_tools"` |
 
 ### Specialized Agent Routing
@@ -441,9 +502,15 @@ Two settings flags route agent execution through different Temporal paths (see [
 | Flag | Off | On (default) |
 |---|---|---|
 | `TEMPORAL_PER_TYPE_DISPATCH` | Every node routes through the legacy `execute_node_activity` single dispatcher (WS round-trip to the FastAPI handler). | Each node routes through its per-type activity `node.{type}.v{version}` registered via `BaseNode.as_activity()`. Per-plugin retry / timeout / heartbeat configs apply. |
-| `TEMPORAL_AGENT_WORKFLOW_ENABLED` | All specialized + team leads + base agents (`aiAgent` / `chatAgent`) run inside `execute_node_activity` (`_run_agent_loop` in-activity). | The migrating agent types become Temporal **child workflows** (`AgentWorkflow`). LLM steps + tool calls become activities; `agent.prepare_payload.v1` resolves the DB-backed payload as the workflow's first step; `agent.refresh_tools.v1` rebinds the tool surface after canvas mutations. `rlm_agent` / `claude_code_agent` stay on the F4.A per-type activity path (externalised session state). |
+| `TEMPORAL_AGENT_WORKFLOW_ENABLED` | All specialized + team leads + base agents (`aiAgent` / `chatAgent`) run inside `execute_node_activity` using the in-process native loop. | The migrating agent types become Temporal **child workflows** (`AgentWorkflow`). LLM steps + tool calls become activities; `agent.prepare_payload.v1` resolves the DB-backed payload as the workflow's first step; `agent.refresh_tools.v1` refreshes the native tool surface after canvas mutations. `rlm_agent` / `claude_code_agent` stay on the F4.A per-type activity path (externalised session state). |
 
 Both flags default to `true` in `.env.template`.
+
+New `AgentWorkflow` executions record `llm_engine="native"` and
+`message_wire_version=2` in the `agent.prepare_payload.v1` result. Only
+recorded histories whose prepare result predates those markers replay the
+frozen LangChain / `StructuredTool` branch; marker-bearing native executions
+never fall back after a provider request starts.
 
 **Team leads** (`orchestrator_agent`, `ai_employee`) run the same
 `execute_chat_agent` path as the other specialized agents but add an
@@ -473,7 +540,7 @@ Exposed helpers inside the REPL:
 
 Routing: `rlm_agent` is a plugin folder like every other agent. Its
 `execute_op` (`server/nodes/agent/rlm_agent/__init__.py`) delegates to
-`ai_service.rlm_service.execute(...)` rather than `_run_agent_loop`. See
+`ai_service.rlm_service.execute(...)` rather than `run_native_agent_loop`. See
 [rlm_service.md](rlm_service.md) for full details.
 
 ### Chat Agent Conditional Loop
@@ -481,26 +548,43 @@ Routing: `rlm_agent` is a plugin folder like every other agent. Its
 ```python
 # In execute_chat_agent():
 if all_tools:
-    # Run the agent loop with bound tools
-    final_state = await _run_agent_loop(
-        chat_model, messages,
+    final_state = await run_native_agent_loop(
+        self.chat_unifier,
+        provider=provider,
+        api_key=api_key,
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        initial_messages=messages,
         tools=all_tools,
         tool_executor=chat_tool_executor,
         max_iterations=recursion_limit,
-        progress_callback=_emit_progress if broadcaster else None,
     )
 else:
-    # Simple invoke -- no loop overhead
-    response = await chat_model.ainvoke(messages)
+    final_state = await run_native_agent_loop(
+        self.chat_unifier,
+        provider=provider,
+        api_key=api_key,
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        initial_messages=messages,
+        max_iterations=1,
+    )
 ```
 
-This optimisation means tool-less Chat Agent conversations skip `_run_agent_loop` entirely for faster response times.
+The no-tool path uses the same native step contract but is explicitly bounded
+to one iteration.
 
 ---
 
 ## AI Agent vs Chat Agent (Zeenie)
 
-`aiAgent` and `chatAgent` (display name "Zeenie") are near-identical in capability — both run the same `_run_agent_loop`, support memory / skills / tools / task input, and can delegate asynchronously. The differences are which backend method they call and the softness of error handling.
+`aiAgent` and `chatAgent` (display name "Zeenie") are near-identical in
+capability — both run `run_native_agent_loop` through `ChatUnifier`, support
+memory / skills / tools / task input, and can delegate asynchronously. The
+differences are which backend method they call and the softness of callback
+error handling.
 
 | Feature | AI Agent (`aiAgent`) | Zeenie (`chatAgent`) |
 |---------|----------------------|----------------------|
@@ -511,8 +595,8 @@ This optimisation means tool-less Chat Agent conversations skip `_run_agent_loop
 | Bottom Handles | Skill, Tools | Skill, Tools |
 | Left Handles | Input, Memory, Task | Input, Memory, Task |
 | Backend Method | `execute_agent()` | `execute_chat_agent()` |
-| No-tool path | Always uses `_run_agent_loop` | Single `await chat_model.ainvoke(messages)` (skips loop overhead) |
-| Tool-failure handling | Re-raises (loop wraps as `{"error": ...}` ToolMessages) | Returns `{"error": str(e)}` (softer) |
+| No-tool path | Native loop returns after the first final response | Native loop is bounded to one iteration |
+| Tool-failure handling | Callback re-raises; loop creates an error tool-result message | Callback returns `{"error": str(e)}`; loop creates the tool-result message |
 | Async Delegation | Yes (fire-and-forget) | Yes (fire-and-forget) |
 
 See the full method comparison in [execute_agent vs execute_chat_agent](#execute_agent-vs-execute_chat_agent) above.
@@ -538,7 +622,9 @@ Both agents resolve their prompt the same way (logic in `server/nodes/agent/_inl
 Chat Trigger → Zeenie ← HTTP Skill (SKILL.md context)
                        ← HTTP Request (tool node)
 ```
-Zeenie loads SKILL.md instructions from connected skill nodes, builds tools from connected tool nodes (httpRequest, calculatorTool, …), and uses `_run_agent_loop` for tool execution when tools are connected.
+Zeenie loads SKILL.md instructions from connected skill nodes, builds
+`AgentToolSpec` values from connected tool nodes (httpRequest,
+calculatorTool, …), and uses `run_native_agent_loop` for LLM execution.
 
 ---
 

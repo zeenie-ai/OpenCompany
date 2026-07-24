@@ -30,6 +30,7 @@ class ChatAgentParams(BaseModel):
         "anthropic",
         "gemini",
         "openrouter",
+        "xai",
         "groq",
         "cerebras",
         "deepseek",

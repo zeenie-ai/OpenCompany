@@ -532,6 +532,8 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             logger.debug("[CLI MCP] lifespan shutdown: %s", exc)
 
+    # Drain cached native SDK clients before credentials/database teardown.
+    await container.chat_unifier().aclose()
     await container.cache().shutdown()
     await container.database().shutdown()
     logger.info("Services shutdown complete")

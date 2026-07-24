@@ -7,8 +7,8 @@ storage format / concern owns its own module:
     (used by aiAgent / chatAgent / rlm_agent)
   - :mod:`services.memory.jsonl` — Anthropic Messages JSONL
     parse/append/trim (used by claude_code_agent's session bridge)
-  - :mod:`services.memory.vector_store` — per-session
-    ``InMemoryVectorStore`` for long-term archival
+  - :mod:`services.memory.vector_store` — per-session native semantic
+    store for long-term archival
   - :mod:`services.memory.state` — orchestration: clear every store
     keyed by an agent's conversational scope
 
@@ -23,7 +23,11 @@ from services.memory.markdown import (
     trim_markdown_window,
 )
 from services.memory.vector_store import (
+    AsyncEmbedder,
+    NativeMemoryVectorStore,
     _memory_vector_stores,
+    clear_memory_vector_stores,
+    create_embedder,
     get_memory_vector_store,
 )
 from services.memory.state import clear_agent_session_state
@@ -44,8 +48,12 @@ __all__ = [
     "append_to_memory_markdown",
     "trim_markdown_window",
     # Vector-store helpers.
+    "AsyncEmbedder",
+    "NativeMemoryVectorStore",
     "_memory_vector_stores",
+    "create_embedder",
     "get_memory_vector_store",
+    "clear_memory_vector_stores",
     # Orchestration.
     "clear_agent_session_state",
     # JSONL helpers — standalone primitive, not currently used by any

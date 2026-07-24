@@ -423,7 +423,6 @@ class TestPayloadShape:
         "node_type",
         "provider",
         "model",
-        "api_key",
         "system_message",
         "user_prompt",
         "tools",
