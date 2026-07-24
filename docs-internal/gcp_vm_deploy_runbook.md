@@ -7,6 +7,9 @@ Written to be executable by an AI agent (or a human) with no other context.
 This is the manual path — it does NOT use `company deploy` / Terraform
 (`cli/commands/deploy/`, `cli/terraform/`). It was derived from a real deployment to
 `demo.zeenie.xyz` (June 2026, before the scoped-package cutover) and encodes every pitfall hit on the way.
+Re-validated July 2026 against `0.0.95` with an **IP-only variant** (no Cloudflare /
+domain — skip step 4): pitfalls 2 and 3 are fixed in `>= 0.0.95` (annotated below),
+and pitfalls 11-13 were added from that run.
 
 The unscoped `opencompany` package belongs to a different publisher. Do not install
 or remove it while following this runbook.
@@ -42,8 +45,9 @@ print('ENC='+secrets.token_hex(24))"
    project and `gcloud config get-value account` returns an account. On Windows, ignore
    the harmless `Test-Path ... bundledpython ... is denied` stderr noise — output after
    it is still valid.
-2. `cf` (Cloudflare CLI, npm package) installed and authenticated:
-   `cf auth whoami` shows `"authenticated": true` with `dns_records:edit` scope.
+2. Only if doing step 4 (domain): `cf` (Cloudflare CLI, npm package) installed and
+   authenticated: `cf auth whoami` shows `"authenticated": true` with
+   `dns_records:edit` scope. IP-only deploys don't need cf at all.
 3. No Terraform, no ADC needed — plain gcloud credentials suffice.
 
 ## Known pitfalls (read first — these each cost a redeploy or a debugging loop)
@@ -52,17 +56,18 @@ print('ENC='+secrets.token_hex(24))"
    Debian 12 ships 3.11 and `npm install -g @zeenie-ai/opencompany` exits 1
    (`ERROR: Python 3.12+ is required.`). Use **Ubuntu 24.04** (`ubuntu-2404-lts-amd64`
    in `ubuntu-os-cloud`), which ships Python 3.12.
-2. **The released package has no `company serve`.** Released CLI commands are only
-   `start | dev | stop | build | clean | doctor | help | version`. The single-port
-   `serve` command and `SERVE_STATIC_CLIENT` backend support exist only in unreleased
-   source. Production shape for the release is the README's `company start`
-   (static client on **:3000**, backend uvicorn on **:3010**) plus an nginx reverse
-   proxy on :80/:443.
-3. **`MACHINA_OWNER_*` env seeding is NOT honored by the release.** Setting
-   `MACHINA_OWNER_EMAIL/PASSWORD` does nothing in 0.0.88. Instead: with
-   `AUTH_MODE=single`, registration is open until the first user registers and that
-   user becomes owner. Register the owner via `POST /api/auth/register` immediately
-   after first boot (step 7). Registration auto-closes afterwards.
+2. **`company serve` exists only in `>= 0.0.95`.** Releases up to 0.0.88 shipped only
+   `start | dev | stop | build | clean | doctor | help | version`; 0.0.95 added the
+   single-port `serve` (API + WS + SPA, used by the Terraform path). This runbook's
+   tested shape remains `company start` (static client on **:3000**, backend uvicorn
+   on **:3010**) plus an nginx reverse proxy on :80/:443 — it works on every release.
+3. **Owner env seeding requires `>= 0.0.95`.** 0.0.88 ignored `MACHINA_OWNER_*`
+   entirely. Since 0.0.95 the backend seeds the owner at startup from
+   `OPENCOMPANY_OWNER_EMAIL` + `OPENCOMPANY_OWNER_PASSWORD` (>= 8 chars;
+   `MACHINA_OWNER_*` kept as legacy fallback) — verified present in the published
+   package. You can add those two keys to the env file in step 2 instead of racing to
+   register. The manual `POST /api/auth/register` in step 6 remains the fallback for
+   older releases and still works as first-user-becomes-owner either way.
 4. **Unknown env vars are fine, but don't set `PORT=80`.** The released backend does
    not read `PORT`; nginx owns :80. Keep the env file to the keys listed in step 2.
 5. **Cloudflare proxied + "Full" SSL mode → 521 without origin TLS.** If the zone
@@ -81,6 +86,27 @@ print('ENC='+secrets.token_hex(24))"
 10. **WebSocket 403 without a cookie is correct behavior**, not a proxy bug. The
     backend rejects unauthenticated `/ws/status` upgrades; with a valid login cookie
     the same handshake returns `101 Switching Protocols`.
+11. **`JWT_COOKIE_SECURE` must match the transport or login silently bounces.** With
+    `JWT_COOKIE_SECURE=true` and the app accessed over plain `http://<IP>`, the login
+    POST returns 200 + the cookie, but the browser **drops** the `Secure` cookie — the
+    SPA loops straight back to the login page with valid credentials. Set `true` only
+    behind Cloudflare/TLS (the step-4 path); for an **IP-only deploy set
+    `JWT_COOKIE_SECURE=false`** in the env file (matches what the Terraform path's
+    `build_app_env` does). Curl-based verification passes either way (curl ignores
+    `Secure`), so test in a browser or check the `set-cookie` attributes explicitly.
+12. **PowerShell splits unquoted comma lists into separate argv entries.**
+    `--rules=tcp:80,tcp:443` reaches gcloud as `[tcp:80 tcp:443]` and fails with
+    "Firewall rules must be of the form PROTOCOL[:PORT[-PORT]]". Quote the whole
+    argument: `"--rules=tcp:80,tcp:443"` (same for `--source-ranges`, `--target-tags`).
+13. **SSH to the VM: expect port-22 egress blocks, plink prompts, and root-only env.**
+    (a) If plain `gcloud compute ssh` times out, the local network is blocking
+    outbound :22 — add `--tunnel-through-iap` (rides HTTPS; the default-allow-ssh
+    rule already admits IAP's 35.235.240.0/20). (b) On Windows gcloud uses plink,
+    which blocks non-interactively on first-connect host-key confirmation — prefix
+    `echo y | gcloud compute ssh ...`. (c) `/etc/opencompany/opencompany.env` is
+    root-owned chmod 600: an unprivileged `grep`/`cat` on it fails and short-circuits
+    any `cmd1 && cmd2` chain (e.g. skipping a trailing `systemctl restart`). Use
+    `sudo` on every command touching it, or chain with `;` and verify state after.
 
 ## Step 1 — Reserve a static IP
 
@@ -127,14 +153,20 @@ WORKSPACE_BASE_DIR=workspaces
 VITE_AUTH_ENABLED=true
 DEPLOYMENT_MODE=cloud
 AUTH_MODE=single
+# true ONLY behind Cloudflare/TLS (step 4). IP-only deploy: false (pitfall 11).
 JWT_COOKIE_SECURE=true
 JWT_COOKIE_SAMESITE=lax
+# true works on >= 0.0.95 (dev server ships in-package; backend connects to
+# localhost:7233 after restart). false = in-process sequential execution.
 TEMPORAL_ENABLED=false
 REDIS_ENABLED=false
 LOG_FORMAT=text
 JWT_SECRET_KEY=<JWT_KEY>
 SECRET_KEY=<SECRET_KEY>
 API_KEY_ENCRYPTION_KEY=<ENC_KEY>
+# >= 0.0.95 only (pitfall 3): seeds the owner at first boot, replacing step 6.
+# OPENCOMPANY_OWNER_EMAIL=<OWNER_EMAIL>
+# OPENCOMPANY_OWNER_PASSWORD=<OWNER_PASSWORD>
 OPENCOMPANY_ENV_EOF
 chmod 600 /etc/opencompany/opencompany.env
 mkdir -p /var/lib/opencompany
@@ -253,7 +285,11 @@ Notes: `e2-standard-2` (2 vCPU / 8 GB) is comfortable; the old `e2-micro` is too
 Updating an existing firewall rule uses `--rules=` (not `--allow=`):
 `gcloud compute firewall-rules update opencompany-allow-http --rules="tcp:80,tcp:443"`.
 
-## Step 4 — DNS via cf CLI
+## Step 4 — DNS via cf CLI (optional — skip for an IP-only deploy)
+
+Skipping this step is fine: the app is fully reachable at `http://<STATIC_IP>` (and
+`https://<STATIC_IP>` with a browser cert warning). If you skip it, set
+`JWT_COOKIE_SECURE=false` in step 2 (pitfall 11) or browser login will bounce.
 
 The `cf` CLI needs an account + zone context once, and `records create` takes a raw
 JSON `--body` (individual flags like `--type/--name` are NOT supported):
@@ -291,7 +327,9 @@ gcloud compute ssh <VM_NAME> --zone=<ZONE> --quiet --command="systemctl is-activ
 
 ## Step 6 — Register the owner (this IS the login setup)
 
-Because the release ignores `MACHINA_OWNER_*` env (pitfall 3), create the owner via the
+On `>= 0.0.95` you can skip this step by uncommenting `OPENCOMPANY_OWNER_EMAIL` /
+`OPENCOMPANY_OWNER_PASSWORD` in the step-2 env file (pitfall 3) — the backend seeds
+the owner at first boot. Otherwise (or on older releases), create the owner via the
 API the moment health is green. First user in `single` mode becomes owner and closes
 registration:
 
@@ -354,6 +392,9 @@ cf dns records delete <RECORD_ID>
 
 ## Operations cheat sheet
 
+If plain ssh times out or plink prompts, use the pitfall-13 form:
+`echo y | gcloud compute ssh <VM_NAME> --zone=<ZONE> --quiet --tunnel-through-iap --command="..."`.
+
 ```bash
 # logs:
 gcloud compute ssh <VM_NAME> --zone=<ZONE> --quiet --command="sudo journalctl -u opencompany -f"
@@ -361,6 +402,13 @@ gcloud compute ssh <VM_NAME> --zone=<ZONE> --quiet --command="sudo journalctl -u
 gcloud compute ssh <VM_NAME> --zone=<ZONE> --quiet --command="sudo systemctl restart opencompany"
 # upgrade to a new release:
 gcloud compute ssh <VM_NAME> --zone=<ZONE> --quiet --command="sudo npm install -g @zeenie-ai/opencompany@latest && sudo systemctl restart opencompany"
+# flip an env toggle (sudo on EVERY command touching the 600 env file - pitfall 13c):
+gcloud compute ssh <VM_NAME> --zone=<ZONE> --quiet --command="sudo sed -i 's/TEMPORAL_ENABLED=false/TEMPORAL_ENABLED=true/' /etc/opencompany/opencompany.env; sudo systemctl restart opencompany"
+# Temporal Web UI (localhost-bound on the VM; gRPC :7233, UI :8080):
+gcloud compute ssh <VM_NAME> --zone=<ZONE> --tunnel-through-iap -- -L 8080:localhost:8080
+#   then open http://localhost:8080. Note: `company start` runs the Temporal dev
+#   server regardless of TEMPORAL_ENABLED; the flag only controls whether the
+#   backend connects to it (health shows temporal.enabled/connected).
 # env (secrets live here):
 #   /etc/opencompany/opencompany.env   (chmod 600; service reads it via EnvironmentFile)
 # data:
