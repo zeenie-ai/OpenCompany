@@ -103,7 +103,7 @@ export interface ProviderConfig {
   /** WebSocket commands for OAuth flows. */
   ws?: { login: string; logout: string; status: string };
   /** Which status hook to read. */
-  statusHook?: 'whatsapp' | 'android' | 'twitter' | 'google' | 'telegram';
+  statusHook?: 'whatsapp' | 'android' | 'twitter' | 'google' | 'telegram' | 'microsoft';
   /** Config-driven status rows (replaces per-provider conditionals). */
   statusRows?: StatusRowDef[];
   /** Config-driven actions (replaces per-provider handler code). */

@@ -65,6 +65,7 @@ _MIGRATED_PLUGINS = (
     "gcloud",
     "github",
     "google",
+    "microsoft",
     "stripe",
     "telegram",
     "twitter",
@@ -80,6 +81,7 @@ _PLUGINS_WITH_HANDLERS = (
     "gcloud",
     "github",
     "google",
+    "microsoft",
     "stripe",
     "telegram",
     "twitter",
@@ -92,6 +94,7 @@ _PLUGINS_WITH_HANDLERS = (
 _PLUGINS_WITH_ROUTERS = (
     "android",
     "google",
+    "microsoft",
     "twitter",
 )
 

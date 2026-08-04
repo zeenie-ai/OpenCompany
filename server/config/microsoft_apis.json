@@ -1,0 +1,47 @@
+{
+  "version": "2026.08",
+  "last_updated": "2026-08-03",
+  "_source": "https://learn.microsoft.com/en-us/graph/",
+  "_note": "Work/School accounts only. Authority is /organizations (Azure AD org accounts). Personal Microsoft accounts are not supported by this integration.",
+
+  "oauth": {
+    "authority": "https://login.microsoftonline.com/organizations",
+    "auth_uri": "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize",
+    "token_uri": "https://login.microsoftonline.com/organizations/oauth2/v2.0/token",
+    "microsoft_callback_path": "/api/microsoft/callback"
+  },
+
+  "services": {
+    "graph": {
+      "name": "Microsoft Graph API",
+      "version": "v1.0",
+      "base_url": "https://graph.microsoft.com/v1.0",
+      "documentation": "https://learn.microsoft.com/en-us/graph/api/overview"
+    }
+  },
+
+  "scopes": {
+    "userinfo": [
+      "openid",
+      "profile",
+      "email",
+      "offline_access",
+      "User.Read"
+    ],
+    "mail": [
+      "Mail.Send",
+      "Mail.ReadWrite"
+    ],
+    "calendar": [
+      "Calendars.ReadWrite"
+    ]
+  },
+
+  "rate_limits": {
+    "_note": "Microsoft Graph is free; throttling is per-app/per-mailbox. See https://learn.microsoft.com/en-us/graph/throttling",
+    "graph": {
+      "requests_per_10_minutes_per_mailbox": 10000,
+      "concurrent_requests_per_mailbox": 4
+    }
+  }
+}

@@ -376,6 +376,7 @@ POLLING_TRIGGER_TYPES: FrozenSet[str] = frozenset(
         "googleGmailReceive",
         "twitterReceive",
         "emailReceive",
+        "msMailReceive",
     ]
 )
 
@@ -401,6 +402,7 @@ WORKFLOW_TRIGGER_TYPES: FrozenSet[str] = frozenset(
         "googleGmailReceive",
         "telegramReceive",
         "emailReceive",
+        "msMailReceive",
     ]
 )
 

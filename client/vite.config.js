@@ -148,12 +148,20 @@ export default defineConfig(({ mode }) => {
       // uvicorn serves the SPA itself on 5678. Keeps OAuth callback
       // URLs (…:5678/api/...) valid in both modes and removes the
       // cross-origin dependence in dev.
+      //
+      // changeOrigin MUST stay false: the backend derives OAuth redirect
+      // URIs from the incoming Host header (services/oauth_utils.get_base_url
+      // -> websocket.base_url). changeOrigin:true would rewrite Host to the
+      // proxy target (localhost:5679), so the derived redirect URI would be
+      // :5679 — breaking the browser-facing :5678 callback the OAuth app is
+      // registered with (e.g. Microsoft AADSTS50011 redirect-URI mismatch).
+      // Preserving the original Host keeps the :5678 callback correct.
       proxy: Object.fromEntries(
         ['/api', '/ws', '/webhook', '/health', '/mcp'].map((prefix) => [
           prefix,
           {
             target: `http://localhost:${requireEnv('PYTHON_BACKEND_PORT')}`,
-            changeOrigin: true,
+            changeOrigin: false,
             ws: prefix === '/ws',
           },
         ])
