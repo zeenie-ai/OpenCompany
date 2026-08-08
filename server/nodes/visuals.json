@@ -185,6 +185,12 @@
   "googleTasks": {
     "skill": "google-tasks-skill"
   },
+  "msMail": {
+    "skill": "ms-mail-skill"
+  },
+  "msCalendar": {
+    "skill": "ms-calendar-skill"
+  },
   "groqChatModel": {
     "icon": "lobehub:groq"
   },

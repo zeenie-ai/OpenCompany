@@ -247,7 +247,7 @@ def build_command() -> None:
     # python via pipx) and never shares this environment -- see
     # ``cli/platform_.py`` docstring for the rationale. ``uv sync``
     # is idempotent and creates the venv on first run.
-    run(["uv", "sync"], cwd=server_cwd)
+    run(["uv", "sync", "--extra", "docs"], cwd=server_cwd)
 
     # Pre-compile our Python sources to plain .pyc. No `-O`: every
     # runtime (uvicorn via `uv run`, `company serve`'s venv python) runs

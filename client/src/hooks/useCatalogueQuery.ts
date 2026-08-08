@@ -104,7 +104,7 @@ export interface ServerProviderConfig {
   icon_ref?: string;
   fields?: ServerFieldDef[];
   ws?: { login: string; logout: string; status: string };
-  status_hook?: 'whatsapp' | 'android' | 'twitter' | 'google' | 'telegram';
+  status_hook?: 'whatsapp' | 'android' | 'twitter' | 'google' | 'telegram' | 'microsoft';
   status_rows?: ServerStatusRowDef[];
   actions?: ServerActionDef[];
   qr?: ServerQrDef;

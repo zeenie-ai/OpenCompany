@@ -45,6 +45,7 @@ register_group(key="utility", metadata={"label": "Utilities", "icon": "🔧", "c
 register_group(key="api", metadata={"label": "API & Scraping", "icon": "🕷️", "color": "#ffb86c", "visibility": "dev"})
 register_group(key="search", metadata={"label": "Search", "icon": "🔍", "color": "#8be9fd", "visibility": "dev"})
 register_group(key="google", metadata={"label": "Google Workspace", "icon": "asset:google", "color": "#4285F4", "visibility": "dev"})
+register_group(key="microsoft", metadata={"label": "Microsoft Graph", "icon": "lobehub:Microsoft", "color": "#0078D4", "visibility": "dev"})
 register_group(key="scheduler", metadata={"label": "Schedulers", "icon": "📅", "color": "#ff79c6", "visibility": "dev"})
 register_group(key="proxy", metadata={"label": "Proxy", "icon": "🛡", "color": "#bd93f9", "visibility": "dev"})
 register_group(key="whatsapp", metadata={"label": "WhatsApp", "icon": "💬", "color": "#25D366", "visibility": "dev"})
