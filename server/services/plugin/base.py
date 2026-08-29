@@ -949,6 +949,7 @@ class BaseNode:
         @activity.defn(name=activity_name)
         async def _node_activity(context: Dict[str, Any]) -> Dict[str, Any]:
             from datetime import datetime
+            from temporalio.exceptions import ApplicationError
             from core.container import container
             from services.status_broadcaster import get_status_broadcaster
 
@@ -1024,6 +1025,7 @@ class BaseNode:
 
                 beat_task = asyncio.create_task(_beat_loop())
 
+            structured_failure_broadcasted = False
             try:
                 # Heartbeat the long-running side of the pipeline.
                 activity.heartbeat(f"Executing {cls.type}: {node_id}")
@@ -1098,6 +1100,8 @@ class BaseNode:
                         correlated_payload,
                         workflow_id=workflow_id,
                     )
+                    activity.heartbeat(f"Node {node_id} completed")
+                    return result
                 else:
                     activity.logger.warning(f"Node {node_id} failed: {error}")
                     await broadcaster.update_node_status(
@@ -1106,19 +1110,27 @@ class BaseNode:
                         {"error": error, "execution_id": execution_id},
                         workflow_id=workflow_id,
                     )
-
-                activity.heartbeat(f"Node {node_id} completed")
-                return result
+                    structured_failure_broadcasted = True
+                    # Translate the structured failure envelope into a
+                    # Temporal-visible typed failure so the configured
+                    # RetryPolicy can classify it (e.g. NodeUserError is
+                    # non-retryable, RuntimeError is retryable).
+                    error_type = result.get("error_type", type(error).__name__ if error else "Error")
+                    raise ApplicationError(
+                        error or "Activity failed",
+                        type=error_type,
+                    )
 
             except Exception as e:
                 error_msg = f"{type(e).__name__}: {e}"
                 activity.logger.error(f"Node {node_id} crashed: {error_msg}")
-                await broadcaster.update_node_status(
-                    node_id,
-                    "error",
-                    {"error": error_msg, "execution_id": execution_id},
-                    workflow_id=workflow_id,
-                )
+                if not structured_failure_broadcasted:
+                    await broadcaster.update_node_status(
+                        node_id,
+                        "error",
+                        {"error": error_msg, "execution_id": execution_id},
+                        workflow_id=workflow_id,
+                    )
                 raise
             finally:
                 if beat_task is not None:
