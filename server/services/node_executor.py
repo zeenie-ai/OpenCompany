@@ -49,6 +49,11 @@ class ExecutionResult:
     execution_id: str = ""
     execution_time: float = 0.0
     timestamp: str = ""
+    # Failure classification, same keys ``BaseNode._wrap_error`` stamps so
+    # the Temporal activity boundary treats an exception that escaped the
+    # plugin exactly like one the plugin reported itself.
+    error_type: Optional[str] = None
+    retryable: Optional[bool] = None
 
     def to_dict(self) -> Dict[str, Any]:
         d = {
@@ -63,6 +68,10 @@ class ExecutionResult:
             d["result"] = self.result or {}
         else:
             d["error"] = self.error
+            if self.error_type is not None:
+                d["error_type"] = self.error_type
+            if self.retryable is not None:
+                d["retryable"] = self.retryable
         return d
 
 
@@ -203,12 +212,34 @@ class NodeExecutor:
 
         except asyncio.CancelledError:
             return ExecutionResult(
-                False, node_id, node_type, error="Cancelled", execution_id=execution_id, execution_time=time.time() - start_time
+                False,
+                node_id,
+                node_type,
+                error="Cancelled",
+                execution_id=execution_id,
+                execution_time=time.time() - start_time,
+                error_type="Cancelled",
+                retryable=False,
             ).to_dict()
         except Exception as e:
-            logger.error("Node execution error", node_id=node_id, error=str(e))
+            # Anything that escapes ``BaseNode.execute`` lands here: the
+            # payload-size NodeUserError raised while serialising a result,
+            # template resolution, parameter loading, the output store.
+            # Classify it exactly as ``_execute_body`` would have, otherwise
+            # a 3 MB result would re-run its producer three times.
+            from services.plugin.retryability import classify_retryable
+
+            error_type = type(e).__name__
+            logger.error("Node execution error", node_id=node_id, error=str(e), error_type=error_type)
             return ExecutionResult(
-                False, node_id, node_type, error=str(e), execution_id=execution_id, execution_time=time.time() - start_time
+                False,
+                node_id,
+                node_type,
+                error=str(e),
+                execution_id=execution_id,
+                execution_time=time.time() - start_time,
+                error_type=error_type,
+                retryable=classify_retryable(e, error_type=error_type),
             ).to_dict()
 
     async def _prepare_parameters(self, node_id: str, node_type: str, params: Dict, session_id: str) -> Dict:

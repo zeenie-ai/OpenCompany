@@ -38,6 +38,16 @@ class NodeContext:
     #: credential lookup. See constants.DEFAULT_CREDENTIAL_CUSTOMER_ID.
     credential_customer_id: str = "owner"
     workspace_dir: Optional[str] = None
+    #: Temporal activity attempt number (1 on the first run and on every
+    #: non-Temporal path). Attempt 2+ means Temporal re-dispatched this
+    #: node after a retryable failure, a timeout, or a worker crash.
+    attempt: int = 1
+    #: Stable key for one logical activity execution, identical across
+    #: its retry attempts: ``f"{workflow_run_id}-{activity_id}"`` per the
+    #: Temporal Python docs. ``None`` outside Temporal. Nodes that opt
+    #: into retries key their side effects on it so attempt 2 can detect
+    #: and skip work attempt 1 already completed.
+    idempotency_key: Optional[str] = None
     # Original outputs/nodes/edges for graph-aware nodes (console, pythonExecutor, …)
     outputs: Dict[str, Any] = field(default_factory=dict)
     nodes: list = field(default_factory=list)
@@ -72,6 +82,8 @@ class NodeContext:
                 "credential_customer_id", DEFAULT_CREDENTIAL_CUSTOMER_ID
             ),
             workspace_dir=context.get("workspace_dir"),
+            attempt=int(context.get("activity_attempt") or 1),
+            idempotency_key=context.get("activity_idempotency_key"),
             outputs=context.get("outputs", {}) or {},
             nodes=context.get("nodes", []) or [],
             edges=context.get("edges", []) or [],

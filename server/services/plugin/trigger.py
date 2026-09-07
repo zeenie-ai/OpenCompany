@@ -88,7 +88,12 @@ class TriggerNode(BaseNode, abstract=True):
         try:
             params_obj = self._validate_params(parameters)
         except Exception as e:
-            return self._wrap_error(start_time=start_time, error=f"Invalid parameters: {e}")
+            return self._wrap_error(
+                start_time=start_time,
+                error=f"Invalid parameters: {e}",
+                error_type="ValidationError",
+                exc=e,
+            )
 
         if self.mode == "event":
             # Pre-flight: refuse to register a waiter if event_waiter
@@ -99,6 +104,7 @@ class TriggerNode(BaseNode, abstract=True):
                 return self._wrap_error(
                     start_time=start_time,
                     error=f"Unknown trigger type: {self.type}",
+                    error_type="NodeUserError",
                 )
             waiter = await event_waiter.register(
                 node_type=self.type,
@@ -108,7 +114,12 @@ class TriggerNode(BaseNode, abstract=True):
             try:
                 event_data = await waiter.future
             except Exception as e:
-                return self._wrap_error(start_time=start_time, error=str(e))
+                return self._wrap_error(
+                    start_time=start_time,
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    exc=e,
+                )
             return self._wrap_success(start_time=start_time, result=event_data)
 
         # Polling mode: one iteration (deployment mode drives loops).

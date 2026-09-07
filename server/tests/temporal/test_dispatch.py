@@ -267,3 +267,79 @@ class TestPerTypeActivityCollection:
             assert defn is not None, f"activity {a} missing Temporal defn"
             assert defn.name.startswith("node."), defn.name
             assert ".v" in defn.name, defn.name
+
+
+class TestLegacyActivityFailureBoundary:
+    """``execute_node_activity`` (the TEMPORAL_PER_TYPE_DISPATCH=false path)
+    shares the per-type wrapper's failure contract: a structured failure
+    raises a typed ApplicationError, and the flag restores the old return."""
+
+    def _activities(self, envelope):
+        from unittest.mock import AsyncMock, MagicMock
+
+        from services.temporal.activities import NodeExecutionActivities
+
+        activities = NodeExecutionActivities(session=MagicMock())
+        activities._execute_via_websocket = AsyncMock(return_value=dict(envelope))
+        activities._broadcast_status = AsyncMock()
+        return activities
+
+    @staticmethod
+    def _wired(retries: bool):
+        from types import SimpleNamespace
+
+        container = SimpleNamespace(settings=lambda: SimpleNamespace(temporal_plugin_failure_retries=retries))
+        return patch("core.container.container", container)
+
+    @staticmethod
+    def _context():
+        return {
+            "node_id": "py-1",
+            "node_type": "pythonExecutor",
+            "workflow_id": "wf-1",
+            "execution_id": "exec-1",
+            "node_data": {},
+        }
+
+    async def test_structured_failure_raises_typed_error(self):
+        from temporalio.exceptions import ApplicationError
+        from temporalio.testing import ActivityEnvironment
+
+        activities = self._activities(
+            {"success": False, "error": "missing field", "error_type": "NodeUserError", "retryable": False}
+        )
+        with self._wired(True):
+            with pytest.raises(ApplicationError) as excinfo:
+                await ActivityEnvironment().run(activities.execute_node_activity, self._context())
+
+        assert excinfo.value.type == "NodeUserError"
+        assert excinfo.value.non_retryable is True
+        assert excinfo.value.details[0]["error"] == "missing field"
+        statuses = [call.kwargs["status"] for call in activities._broadcast_status.await_args_list]
+        assert statuses == ["executing"], "the WS handler already broadcast the error; no duplicate"
+
+    async def test_flag_off_returns_the_envelope(self):
+        from temporalio.testing import ActivityEnvironment
+
+        activities = self._activities(
+            {"success": False, "error": "missing field", "error_type": "NodeUserError", "retryable": False}
+        )
+        with self._wired(False):
+            result = await ActivityEnvironment().run(activities.execute_node_activity, self._context())
+
+        assert result["success"] is False
+        assert result["error"] == "missing field"
+
+    async def test_executing_broadcast_carries_attempt_metadata_and_forwards_the_key(self):
+        from temporalio.testing import ActivityEnvironment
+
+        activities = self._activities({"success": True, "result": {}})
+        with self._wired(True):
+            await ActivityEnvironment().run(activities.execute_node_activity, self._context())
+
+        executing = activities._broadcast_status.await_args_list[0].kwargs
+        assert executing["data"]["attempt"] == 1
+        assert executing["data"]["max_attempts"] == 1, "pythonExecutor is destructive: one attempt"
+        forwarded = activities._execute_via_websocket.await_args.args[0]
+        assert forwarded["activity_attempt"] == 1
+        assert forwarded["activity_idempotency_key"]

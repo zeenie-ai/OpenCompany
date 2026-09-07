@@ -543,6 +543,12 @@ class BaseNode:
 
         try:
             result = await self._run_operation(op_spec, params_obj, context)
+            # Serialisation runs inside the guard: ``_serialize_result``
+            # raises NodeUserError when a payload exceeds the Temporal
+            # limit, and that must classify like every other
+            # user-correctable failure instead of escaping to
+            # ``NodeExecutor.execute`` with no error_type.
+            return self._wrap_success(start_time=start_time, result=result)
         except PermissionError as e:
             # Credential.resolve() raises PermissionError annotated with
             # .provider / .reason / .auth attributes (see
@@ -600,6 +606,7 @@ class BaseNode:
                 error=str(e),
                 error_type="PermissionDeniedError",
                 extra=extra,
+                exc=e,
             )
         except NodeUserError as e:
             # Expected, user-correctable: log a single WARN line so it
@@ -607,12 +614,10 @@ class BaseNode:
             # LLM gets the message in the structured response and can
             # retry with corrected input.
             logger.warning("[%s] %s op %s: %s", self.type, op_name, type(e).__name__, e)
-            return self._wrap_error(start_time=start_time, error=str(e), error_type="NodeUserError")
+            return self._wrap_error(start_time=start_time, error=str(e), error_type="NodeUserError", exc=e)
         except Exception as e:
             logger.exception("[%s] operation %s failed", self.type, op_name)
-            return self._wrap_error(start_time=start_time, error=str(e), error_type=type(e).__name__)
-
-        return self._wrap_success(start_time=start_time, result=result)
+            return self._wrap_error(start_time=start_time, error=str(e), error_type=type(e).__name__, exc=e)
 
     # ---- AI-tool invocation path ------------------------------------------
 
@@ -797,6 +802,43 @@ class BaseNode:
             return True, result.get("result", {}), None
         return False, None, result.get("error")
 
+    @classmethod
+    def effective_retry_policy(cls) -> RetryPolicy:
+        """Return the retry policy Temporal should schedule this node with.
+
+        Precedence:
+
+        1. A ``retry_policy`` declared on the plugin class or on one of its
+           own bases (anything below ``BaseNode`` in the MRO). An explicit
+           declaration is the plugin author's decision and always wins.
+        2. Triggers (``component_kind == "trigger"``) get one attempt: a
+           retried trigger re-registers its event waiter under a 24 h
+           start-to-close window and the failure is almost always
+           configuration.
+        3. ``annotations["readonly"] is True`` without ``destructive`` keeps
+           the default three attempts: re-running a read on a transient
+           failure is safe.
+        4. Everything else (``destructive``, ``readonly: False``, or no
+           annotations on a non-trigger) gets one attempt. A send, a write,
+           or a paid actor whose first attempt failed after its side effect
+           would otherwise be re-run. Nodes that want retries anyway key
+           their side effects on ``ctx.idempotency_key`` and declare a
+           policy under rule 1.
+        """
+        from services.plugin.scaling import DEFAULT_RETRY, SINGLE_ATTEMPT_RETRY
+
+        for klass in cls.__mro__:
+            if klass is BaseNode:
+                break
+            if "retry_policy" in klass.__dict__:
+                return klass.__dict__["retry_policy"]
+        if cls.component_kind == "trigger":
+            return SINGLE_ATTEMPT_RETRY
+        annotations = cls.annotations or {}
+        if annotations.get("readonly") is True and annotations.get("destructive") is not True:
+            return DEFAULT_RETRY
+        return SINGLE_ATTEMPT_RETRY
+
     def _serialize_result(self, result: Any) -> Any:
         """Enforce the declared ``Output`` contract at the serialization
         boundary — the same semantics FastAPI applies to ``response_model``
@@ -844,11 +886,12 @@ class BaseNode:
           transcript) and breaking them would be a regression.
         * At the **error** threshold it raises. That is not a new failure: a
           payload over Temporal's limit is rejected by the converter anyway.
-          What changes is *how* it fails — ``NodeUserError`` is already in
-          ``NON_RETRYABLE_ERROR_TYPES``, so instead of three attempts that
-          re-run the work (and re-bill whatever produced it) before reporting
-          a generic converter error, the run stops immediately with a message
-          naming the node and the size.
+          What changes is *how* it fails. The ``NodeUserError`` is caught by
+          ``_execute_body`` (serialisation runs inside its guard), becomes a
+          ``retryable=False`` envelope naming the node and the size, and the
+          activity boundary raises it ``non_retryable`` -- one attempt, no
+          re-run of the work that produced the payload, and with
+          ``TEMPORAL_PLUGIN_FAILURE_RETRIES=false`` simply a failed envelope.
 
         This is also why no Temporal-internal error type had to be named: the
         payload never reaches the converter. The installed SDK enforces the
@@ -896,6 +939,7 @@ class BaseNode:
                 start_time=start_time,
                 error=f"Output contract violation: {e}",
                 error_type="OutputValidationError",
+                exc=e,
             )
         return {
             "success": True,
@@ -911,14 +955,33 @@ class BaseNode:
         error: str,
         error_type: str = "Error",
         extra: Optional[Dict[str, Any]] = None,
+        exc: Optional[BaseException] = None,
+        retryable: Optional[bool] = None,
     ) -> Dict[str, Any]:
+        """Build the failure envelope.
+
+        ``retryable`` is the verdict the Temporal activity boundary acts
+        on (``services/temporal/_failures.py``). It is classified here,
+        from the exception object, because only the raising site can tell
+        a 404 from a 503 or see the ``retryable`` attribute on a wrapped
+        ``LLMError``. Pass ``retryable`` explicitly to override, otherwise
+        pass ``exc`` so ``classify_retryable`` can inspect it.
+        """
+        from services.plugin.retryability import classify_retryable, retry_after_of
+
+        if retryable is None:
+            retryable = classify_retryable(exc, error_type=error_type)
         envelope: Dict[str, Any] = {
             "success": False,
             "error": error,
             "error_type": error_type,
+            "retryable": retryable,
             "execution_time": round(time.time() - start_time, 3),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
+        retry_after = retry_after_of(exc)
+        if retry_after is not None:
+            envelope["retry_after_seconds"] = retry_after.total_seconds()
         if extra:
             envelope.update(extra)
         return envelope
@@ -939,6 +1002,14 @@ class BaseNode:
         fetching, NodeContext build, and error handling all match. The
         Temporal worker shares the FastAPI process, so direct DI works.
 
+        Failure contract: a structured ``{success: False}`` envelope is
+        raised as a typed ``ApplicationError`` (``type`` = the envelope's
+        ``error_type``, ``non_retryable`` from its ``retryable`` verdict
+        and the attempt cap, the envelope as ``details[0]``) so the
+        plugin's RetryPolicy applies; see ``services/temporal/_failures``.
+        ``TEMPORAL_PLUGIN_FAILURE_RETRIES=false`` returns the envelope as a
+        normal completion instead (no retries, the pre-fix behaviour).
+
         Returns the decorated async function; the worker collects these
         into ``activities=[...]``.
         """
@@ -949,7 +1020,6 @@ class BaseNode:
         @activity.defn(name=activity_name)
         async def _node_activity(context: Dict[str, Any]) -> Dict[str, Any]:
             from datetime import datetime
-            from temporalio.exceptions import ApplicationError
             from core.container import container
             from services.status_broadcaster import get_status_broadcaster
 
@@ -999,11 +1069,55 @@ class BaseNode:
                 )
                 return result
 
-            # Broadcast executing — UI cyan-glow.
+            # Attempt bookkeeping from activity.info(): the attempt number,
+            # the cap this run honours (plugin effective policy, bounded by
+            # whatever the workflow scheduled), and the docs-recommended
+            # idempotency key. Everything below the flag check is the
+            # pre-fix behaviour when TEMPORAL_PLUGIN_FAILURE_RETRIES=false.
+            from services.temporal._failures import (
+                activity_attempt_info,
+                attempts_exhausted_failure,
+                build_plugin_failure,
+                plugin_failure_retries_enabled,
+            )
+
+            attempt, max_attempts, idempotency_key = activity_attempt_info(cls)
+            retries_enabled = plugin_failure_retries_enabled()
+
+            # Pre-body refusal. Temporal re-dispatches an activity after a
+            # worker crash or a heartbeat / start-to-close timeout even when
+            # the previous attempt's side effect already happened. A node
+            # capped at one attempt must not run again in that case, and a
+            # tool activity scheduled before this change carries no policy
+            # at all (Temporal default: unlimited attempts).
+            if retries_enabled and attempt > max_attempts:
+                refusal = attempts_exhausted_failure(node_id, attempt, max_attempts)
+                activity.logger.warning(f"Node {node_id}: {refusal.message}")
+                await broadcaster.update_node_status(
+                    node_id,
+                    "error",
+                    {
+                        "error": refusal.message,
+                        "execution_id": execution_id,
+                        "attempt": attempt,
+                        "max_attempts": max_attempts,
+                    },
+                    workflow_id=workflow_id,
+                )
+                raise refusal
+
+            # Broadcast executing — UI cyan-glow. ``attempt`` /
+            # ``max_attempts`` ride the existing status so the canvas can
+            # show a retry without a new status string.
             await broadcaster.update_node_status(
                 node_id,
                 "executing",
-                {"node_type": cls.type, "execution_id": execution_id},
+                {
+                    "node_type": cls.type,
+                    "execution_id": execution_id,
+                    "attempt": attempt,
+                    "max_attempts": max_attempts,
+                },
                 workflow_id=workflow_id,
             )
 
@@ -1057,6 +1171,11 @@ class BaseNode:
                 ):
                     if key in context:
                         extras[key] = context[key]
+                # Retry-aware plugins read these as ``ctx.attempt`` and
+                # ``ctx.idempotency_key`` (NodeContext.from_legacy).
+                extras["activity_attempt"] = attempt
+                if idempotency_key is not None:
+                    extras["activity_idempotency_key"] = idempotency_key
                 result = await workflow_service.execute_node(
                     node_id=node_id,
                     node_type=cls.type,
@@ -1102,33 +1221,76 @@ class BaseNode:
                     )
                     activity.heartbeat(f"Node {node_id} completed")
                     return result
-                else:
+
+                # Structured failure. With retries enabled it becomes a typed
+                # ApplicationError (type = error_type, non_retryable from the
+                # envelope's ``retryable`` verdict and the attempt cap, the
+                # envelope itself as details[0]) so the plugin RetryPolicy
+                # finally applies. Only the FINAL attempt broadcasts "error";
+                # an attempt that will be retried keeps the node in
+                # "executing" with the failure attached, so the canvas does
+                # not flash red between attempts.
+                failure = None
+                if retries_enabled:
+                    failure = build_plugin_failure(
+                        result,
+                        node_cls=cls,
+                        attempt=attempt,
+                        max_attempts=max_attempts,
+                    )
+                final = failure is None or failure.non_retryable
+                if final:
                     activity.logger.warning(f"Node {node_id} failed: {error}")
                     await broadcaster.update_node_status(
                         node_id,
                         "error",
-                        {"error": error, "execution_id": execution_id},
+                        {
+                            "error": error,
+                            "execution_id": execution_id,
+                            "attempt": attempt,
+                            "max_attempts": max_attempts,
+                        },
                         workflow_id=workflow_id,
                     )
-                    structured_failure_broadcasted = True
-                    # Translate the structured failure envelope into a
-                    # Temporal-visible typed failure so the configured
-                    # RetryPolicy can classify it (e.g. NodeUserError is
-                    # non-retryable, RuntimeError is retryable).
-                    error_type = result.get("error_type", type(error).__name__ if error else "Error")
-                    raise ApplicationError(
-                        error or "Activity failed",
-                        type=error_type,
+                else:
+                    activity.logger.warning(
+                        f"Node {node_id} failed on attempt {attempt}/{max_attempts}, retrying: {error}"
                     )
+                    await broadcaster.update_node_status(
+                        node_id,
+                        "executing",
+                        {
+                            "node_type": cls.type,
+                            "execution_id": execution_id,
+                            "attempt": attempt,
+                            "max_attempts": max_attempts,
+                            "last_error": error,
+                        },
+                        workflow_id=workflow_id,
+                    )
+                structured_failure_broadcasted = True
+                if failure is not None:
+                    raise failure
+                activity.heartbeat(f"Node {node_id} completed")
+                return result
 
             except Exception as e:
-                error_msg = f"{type(e).__name__}: {e}"
-                activity.logger.error(f"Node {node_id} crashed: {error_msg}")
+                # Infrastructure failure (container, broadcaster, the
+                # execute_node plumbing itself): broadcast once and re-raise
+                # unchanged so Temporal applies the scheduled policy. A
+                # structured failure raised above already broadcast.
                 if not structured_failure_broadcasted:
+                    error_msg = f"{type(e).__name__}: {e}"
+                    activity.logger.error(f"Node {node_id} crashed: {error_msg}")
                     await broadcaster.update_node_status(
                         node_id,
                         "error",
-                        {"error": error_msg, "execution_id": execution_id},
+                        {
+                            "error": error_msg,
+                            "execution_id": execution_id,
+                            "attempt": attempt,
+                            "max_attempts": max_attempts,
+                        },
                         workflow_id=workflow_id,
                     )
                 raise

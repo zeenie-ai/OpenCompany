@@ -38,6 +38,17 @@ from core.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Failure types the plugin layer already reports as a single WARN line
+# (user-correctable input, credential, or contract problems). Their
+# terminal ``activity_end`` is logged at INFO to avoid a duplicate WARN.
+_USER_FAILURE_PREFIXES = (
+    "NodeUserError",
+    "ValidationError",
+    "InvalidParametersError",
+    "PermissionDeniedError",
+    "OutputValidationError",
+)
+
 
 class ActivityObservabilityInterceptor(ActivityInboundInterceptor):
     """Log start / retry / end (with outcome) for every activity."""
@@ -60,12 +71,19 @@ class ActivityObservabilityInterceptor(ActivityInboundInterceptor):
         try:
             result = await self.next.execute_activity(input)
         except Exception as exc:
-            logger.warning(
-                "activity_end",
-                outcome="failure",
-                error=type(exc).__name__,
-                **extra,
-            )
+            # A typed plugin failure (``ApplicationError`` raised by
+            # ``BaseNode.as_activity``) carries the plugin's ``error_type``
+            # and the retry verdict; log those instead of the uniform
+            # wrapper class so the operator log still says WHAT failed.
+            error_name = getattr(exc, "type", None) or type(exc).__name__
+            non_retryable = getattr(exc, "non_retryable", None)
+            failure_extra = {"error": error_name, "non_retryable": non_retryable, **extra}
+            if non_retryable is True and error_name.startswith(_USER_FAILURE_PREFIXES):
+                # User-correctable and final: the plugin already logged one
+                # WARN line; a second WARN per node would double the noise.
+                logger.info("activity_end", outcome="failure", **failure_extra)
+            else:
+                logger.warning("activity_end", outcome="failure", **failure_extra)
             raise
         logger.debug("activity_end", outcome="success", **extra)
         return result
