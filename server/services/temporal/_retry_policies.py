@@ -51,6 +51,9 @@ from temporalio.common import RetryPolicy
 NON_RETRYABLE_ERROR_TYPES: tuple[str, ...] = (
     "NodeUserError",
     "InvalidEvent",
+    # A result that violates the plugin's own declared Output contract is
+    # a plugin bug; retrying re-bills the work and fails identically.
+    "OutputValidationError",
 )
 
 
