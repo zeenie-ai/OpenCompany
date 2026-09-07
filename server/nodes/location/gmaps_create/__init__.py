@@ -50,7 +50,8 @@ class GmapsCreateNode(ActionNode):
         {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
     ui_hints = {"showLocationPanel": True}
-    annotations = {"destructive": False, "readonly": True, "open_world": False}
+    # Creates a map record; a re-run after an ambiguous failure duplicates it.
+    annotations = {"destructive": False, "readonly": False, "open_world": False}
     credentials = (GoogleMapsCredential,)
     task_queue = TaskQueue.DEFAULT
 
