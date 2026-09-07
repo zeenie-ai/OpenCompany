@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, Set
 
 from temporalio import workflow
 
+from ._failures import activity_failure_envelope
 from ._retry_policies import DEFAULT_ACTIVITY_RETRY, QUICK_ACTIVITY_RETRY
 from services.workflow_naming import node_label_slug
 
@@ -36,6 +37,15 @@ with workflow.unsafe.imports_passed_through():
 # routed through Temporal. Gating the skip keeps replay deterministic for
 # histories recorded while every node was scheduled unconditionally.
 CONDITIONAL_EDGES_PATCH = "machina-conditional-edges-v1"
+
+# Plugin failures now raise typed ApplicationErrors at the activity boundary,
+# so the RetryPolicy recorded on each node activity finally matters. Under
+# this patch the policy comes from ``BaseNode.effective_retry_policy`` (a
+# declared policy, else one attempt for mutating nodes and triggers, else the
+# default three). Histories recorded before it keep the class ``retry_policy``
+# they were scheduled with. Shared with AgentWorkflow, whose tool-call
+# activities gain a policy under the same marker.
+PLUGIN_FAILURE_RETRY_PATCH = "machina-plugin-failure-retries-v1"
 
 # Config handles - nodes connecting via these are config nodes (not executed)
 # AI Agent handles: input-context, input-tools, input-model, input-task, input-teammates
@@ -390,6 +400,7 @@ class MachinaWorkflow:
         deps, node_map = self._build_dependency_maps(exec_nodes, exec_edges)
         conditional_edges = self._build_conditional_edge_map(exec_edges, node_map)
         use_conditional_edges = workflow.patched(CONDITIONAL_EDGES_PATCH)
+        use_effective_retry = workflow.patched(PLUGIN_FAILURE_RETRY_PATCH)
 
         # 3. Initialize state
         outputs: Dict[str, Any] = {}  # node_id -> result
@@ -607,8 +618,15 @@ class MachinaWorkflow:
                     from services.node_registry import get_node_class
 
                     node_cls = get_node_class(node_type)
-                    declared_retry = getattr(node_cls, "retry_policy", None)
-                    if declared_retry is not None:
+                    if node_cls is not None:
+                        # Patch-open: the effective policy (annotations
+                        # decide attempts). Patch-closed: the class
+                        # attribute, exactly as pre-patch histories recorded.
+                        declared_retry = (
+                            node_cls.effective_retry_policy()
+                            if use_effective_retry
+                            else node_cls.retry_policy
+                        )
                         activity_retry_policy = declared_retry.to_temporal()
                     start_kwargs: Dict[str, Any] = dict(
                         args=[context],
@@ -653,6 +671,7 @@ class MachinaWorkflow:
                 error_info = {
                     "node_id": done_id,
                     "error": result.get("error", "Unknown error"),
+                    "error_type": result.get("error_type", "Error"),
                 }
                 errors.append(error_info)
                 workflow.logger.error(f"Node failed: {done_id} - {error_info['error']}")
@@ -827,7 +846,10 @@ class MachinaWorkflow:
                     result = await handle
                     return node_id, result
                 except Exception as e:
-                    return node_id, {"success": False, "error": str(e)}
+                    # ``str(ActivityError)`` is the SDK wrapper text; the
+                    # plugin's envelope rides on the cause. Unwrap so
+                    # ``errors[]`` and the pause-on-failure reason keep it.
+                    return node_id, activity_failure_envelope(e)
 
         # Wait for first completion using Temporal's wait
         await workflow.wait_condition(lambda: any(h.done() for _, h in items))
@@ -840,7 +862,10 @@ class MachinaWorkflow:
                     result = await handle
                     return node_id, result
                 except Exception as e:
-                    return node_id, {"success": False, "error": str(e)}
+                    # ``str(ActivityError)`` is the SDK wrapper text; the
+                    # plugin's envelope rides on the cause. Unwrap so
+                    # ``errors[]`` and the pause-on-failure reason keep it.
+                    return node_id, activity_failure_envelope(e)
 
         # Should not reach here
         raise RuntimeError("No activity completed after wait")

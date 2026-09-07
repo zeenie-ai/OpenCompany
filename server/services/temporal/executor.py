@@ -183,7 +183,15 @@ class TemporalExecutor:
                 "execution_id": execution_id,
                 "nodes_executed": result.get("execution_trace", []),
                 "outputs": result.get("outputs", {}),
-                "errors": [result.get("error")] if result.get("error") else [],
+                # MachinaWorkflow returns ``errors`` (a list of
+                # ``{node_id, error}``), never a singular ``error`` key;
+                # reading the wrong key reported every failed run as
+                # error-free. Flattened to strings to match the exception
+                # branch below.
+                "errors": [
+                    f"{err.get('node_id', '?')}: {err.get('error', err)}" if isinstance(err, dict) else str(err)
+                    for err in (result.get("errors") or [])
+                ],
                 "execution_time": execution_time,
                 "temporal_execution": True,
                 "timestamp": datetime.now().isoformat(),
