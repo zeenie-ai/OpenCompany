@@ -145,7 +145,7 @@ dependencies = [
     # Temporal (durable workflow execution). Floor 1.25: Wave 18 uses
     # PollerBehaviorAutoscaling + max_activities_per_second +
     # max_cached_workflows on Worker(...).
-    "temporalio>=1.25.0",
+    "temporalio>=1.31.0",
 
     # RLM (Recursive Language Models) agent
     "rlms>=0.1.1",

@@ -144,6 +144,21 @@ class Settings(BaseSettings):
     temporal_agent_workflow_enabled: bool = Field(
         env="TEMPORAL_AGENT_WORKFLOW_ENABLED",
     )
+    # Plugin failure retries. When True, a node that returns the
+    # structured ``{success: False, error_type, retryable}`` envelope
+    # raises a typed ``ApplicationError`` at the Temporal activity
+    # boundary (``BaseNode.as_activity`` and the legacy
+    # ``execute_node_activity``), so the plugin's RetryPolicy and the
+    # server's ``non_retryable_error_types`` finally apply. Evaluated
+    # activity-side (same posture as WORKFLOW_CONTROL_PAUSE_ON_FAILURE) so
+    # flipping it never touches recorded workflow commands.
+    # TEMPORAL_PLUGIN_FAILURE_RETRIES=false is the rollback: the envelope
+    # is returned as a successful completion and Temporal never retries a
+    # plugin-reported failure (the pre-fix behaviour).
+    temporal_plugin_failure_retries: bool = Field(
+        default=True,
+        env="TEMPORAL_PLUGIN_FAILURE_RETRIES",
+    )
     # Wave 12 A3: SIGTERM grace window for Temporal workers. Activities
     # mid-flight finish (or hand back to the server for retry) instead of
     # being killed mid-call. Default 30s matches the polling-trigger

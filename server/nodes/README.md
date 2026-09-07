@@ -530,6 +530,21 @@ Full reference: [docs-internal/plugin_system.md → "Self-contained plugin folde
   uiHint flags must also be added to `INodeUIHints` in
   `client/src/types/INodeProperties.ts` and to the `known` set in
   `server/tests/test_node_spec.py::test_ui_hints_only_carry_known_flags`.
+- **Side effects must survive a retry.** With `TEMPORAL_PLUGIN_FAILURE_RETRIES`
+  on, a structured failure raises at the activity boundary and Temporal
+  re-runs the node per `effective_retry_policy()`: nodes annotated
+  `readonly: True` (and not `destructive`) get three attempts; everything
+  else (sends, writes, paid actors, triggers, unannotated nodes) gets one.
+  Declare `retry_policy = RetryPolicy(...)` on the class to opt in or out
+  explicitly, and key writes on `ctx.idempotency_key` (stable across the
+  attempts of one activity; `ctx.attempt` says which one this is) so
+  attempt 2 can skip work attempt 1 completed. The verdict is classified
+  from the exception (`services/plugin/retryability.py`): `httpx` 4xx other
+  than 408 / 425 / 429 are permanent, 5xx and transport errors transient, and
+  a boolean `retryable` attribute on the exception or its `__cause__` wins.
+  `tests/fixtures/effective_retry_attempts_snapshot.json` pins the attempt
+  count per node type; regenerate it in the same commit as an annotation
+  change.
 
 ---
 

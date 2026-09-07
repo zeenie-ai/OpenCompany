@@ -254,7 +254,8 @@ class ApifyActorNode(ActionNode):
         {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
         {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},
     )
-    annotations = {"destructive": False, "readonly": True, "open_world": True}
+    # Starts a paid actor run; a re-run after an ambiguous failure bills twice.
+    annotations = {"destructive": False, "readonly": False, "open_world": True}
     credentials = (ApifyCredential,)
     task_queue = TaskQueue.REST_API
     usable_as_tool = True

@@ -204,6 +204,7 @@ class ToolNode(BaseNode, abstract=True):
                     start_time=start_time,
                     error=f"Output contract violation: {e}",
                     error_type="OutputValidationError",
+                    exc=e,
                 )
         return {"result": result}
 

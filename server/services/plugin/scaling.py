@@ -68,6 +68,12 @@ class RetryPolicy:
             # NodeUserError fail fast; the framework surfaces the message
             # to the user / agent loop without traceback noise.
             "NodeUserError",
+            # An operation result that violates the plugin's own declared
+            # Output contract is a plugin bug; re-running the work only
+            # re-bills whatever produced it and fails the same way.
+            "OutputValidationError",
+            # A cancelled execution is a decision, not a fault.
+            "Cancelled",
         )
     )
 
@@ -88,6 +94,15 @@ class RetryPolicy:
 DEFAULT_START_TO_CLOSE = timedelta(minutes=10)
 DEFAULT_HEARTBEAT = timedelta(minutes=2)
 DEFAULT_RETRY = RetryPolicy()
+
+# One attempt, same non-retryable list. ``BaseNode.effective_retry_policy``
+# hands this to nodes whose ``annotations`` say they mutate something
+# (``destructive`` or ``readonly: False``) and to triggers, unless the
+# class declares its own ``retry_policy``. Re-running a send, a write, or
+# a paid actor after an ambiguous failure duplicates the side effect;
+# nodes that want retries anyway key their writes on
+# ``ctx.idempotency_key`` and declare a policy explicitly.
+SINGLE_ATTEMPT_RETRY = RetryPolicy(maximum_attempts=1)
 
 # Kind-specific defaults — picked up when a subclass doesn't override.
 ACTION_START_TO_CLOSE = timedelta(minutes=10)

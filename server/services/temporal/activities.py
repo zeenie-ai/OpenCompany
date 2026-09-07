@@ -141,14 +141,56 @@ class NodeExecutionActivities:
             )
             return result
 
+        # Same failure contract as ``BaseNode.as_activity``: attempt
+        # bookkeeping from activity.info(), a pre-body refusal past the
+        # plugin's cap, and a typed ApplicationError for a structured
+        # failure so the RetryPolicy applies on this dispatch path too.
+        from services.node_registry import get_node_class
+        from services.temporal._failures import (
+            activity_attempt_info,
+            attempts_exhausted_failure,
+            build_plugin_failure,
+            plugin_failure_retries_enabled,
+        )
+
+        node_cls = get_node_class(node_type)
+        attempt, max_attempts, idempotency_key = activity_attempt_info(node_cls)
+        retries_enabled = plugin_failure_retries_enabled()
+        if retries_enabled and attempt > max_attempts:
+            refusal = attempts_exhausted_failure(node_id, attempt, max_attempts)
+            activity.logger.warning(f"Node {node_id}: {refusal.message}")
+            await self._broadcast_status(
+                node_id=node_id,
+                status="error",
+                data={
+                    "error": refusal.message,
+                    "execution_id": execution_id,
+                    "attempt": attempt,
+                    "max_attempts": max_attempts,
+                },
+                workflow_id=workflow_id,
+            )
+            raise refusal
+        context = {
+            **context,
+            "activity_attempt": attempt,
+            **({"activity_idempotency_key": idempotency_key} if idempotency_key is not None else {}),
+        }
+
         # Broadcast "executing" status for UI updates
         await self._broadcast_status(
             node_id=node_id,
             status="executing",
-            data={"node_type": node_type, "execution_id": execution_id},
+            data={
+                "node_type": node_type,
+                "execution_id": execution_id,
+                "attempt": attempt,
+                "max_attempts": max_attempts,
+            },
             workflow_id=workflow_id,
         )
 
+        structured_failure = False
         try:
             # Heartbeat before potentially long WebSocket operation
             activity.heartbeat(f"Executing via WebSocket: {node_id}")
@@ -168,6 +210,14 @@ class NodeExecutionActivities:
                 activity.logger.info(f"Node {node_id} completed successfully")
             else:
                 activity.logger.warning(f"Node {node_id} failed: {result.get('error')}")
+                if retries_enabled:
+                    structured_failure = True
+                    raise build_plugin_failure(
+                        result,
+                        node_cls=node_cls,
+                        attempt=attempt,
+                        max_attempts=max_attempts,
+                    )
 
             # Heartbeat for activity liveness
             activity.heartbeat(f"Node {node_id} completed")
@@ -175,6 +225,10 @@ class NodeExecutionActivities:
             return result
 
         except Exception as e:
+            if structured_failure:
+                # The WS handler already broadcast the node's error status;
+                # re-raise the typed failure untouched.
+                raise
             error_msg = f"{type(e).__name__}: {str(e)}"
             activity.logger.error(f"Node {node_id} execution failed: {error_msg}")
 
@@ -182,7 +236,12 @@ class NodeExecutionActivities:
             await self._broadcast_status(
                 node_id=node_id,
                 status="error",
-                data={"error": error_msg, "execution_id": execution_id},
+                data={
+                    "error": error_msg,
+                    "execution_id": execution_id,
+                    "attempt": attempt,
+                    "max_attempts": max_attempts,
+                },
                 workflow_id=workflow_id,
             )
 
@@ -232,6 +291,8 @@ class NodeExecutionActivities:
             "agent_iteration",
             "tool_call_index",
             "tool_call_id",
+            "activity_attempt",
+            "activity_idempotency_key",
         ):
             if key in context:
                 message[key] = context[key]

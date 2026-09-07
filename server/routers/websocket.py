@@ -460,6 +460,8 @@ async def handle_execute_node(data: Dict[str, Any], websocket: WebSocket) -> Dic
             "agent_iteration",
             "tool_call_index",
             "tool_call_id",
+            "activity_attempt",
+            "activity_idempotency_key",
         )
         if key in data
     }
@@ -536,6 +538,11 @@ async def handle_execute_node(data: Dict[str, Any], websocket: WebSocket) -> Dic
         "execution_id": execution_id,
         "result": result.get("result"),
         "error": result.get("error"),
+        # Failure classification for the legacy Temporal activity, which
+        # only sees this reply: without them every failure would be an
+        # untyped, retryable "Error".
+        "error_type": result.get("error_type"),
+        "retryable": result.get("retryable"),
         "execution_time": result.get("execution_time"),
         "timestamp": time.time(),
     }

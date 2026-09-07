@@ -144,3 +144,28 @@ class TestWorkflowsImportSharedConstant:
             f"services.temporal._retry_policies.{expected_constant} "
             "instead of re-typing the policy inline."
         )
+
+
+class TestOutputValidationIsNonRetryableEverywhere:
+    """An Output-contract violation is a plugin bug; both the workflow-side
+    and the plugin-side lists must refuse to re-run it."""
+
+    def test_workflow_side_list(self):
+        from services.temporal._retry_policies import NON_RETRYABLE_ERROR_TYPES
+
+        assert "OutputValidationError" in NON_RETRYABLE_ERROR_TYPES
+
+    def test_plugin_side_default(self):
+        from services.plugin.scaling import DEFAULT_RETRY, SINGLE_ATTEMPT_RETRY
+
+        assert "OutputValidationError" in DEFAULT_RETRY.non_retryable_error_types
+        assert "OutputValidationError" in SINGLE_ATTEMPT_RETRY.non_retryable_error_types
+        assert SINGLE_ATTEMPT_RETRY.maximum_attempts == 1
+
+    def test_plugin_error_types_are_a_subset_of_the_plugin_policy(self):
+        """Every name the source-side classifier treats as permanent must
+        also be refused by the policy Temporal schedules with."""
+        from services.plugin.retryability import NON_RETRYABLE_ENVELOPE_TYPES
+        from services.plugin.scaling import DEFAULT_RETRY
+
+        assert NON_RETRYABLE_ENVELOPE_TYPES <= set(DEFAULT_RETRY.non_retryable_error_types)

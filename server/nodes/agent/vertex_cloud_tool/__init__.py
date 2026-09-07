@@ -79,7 +79,8 @@ class VertexCloudToolNode(ActionNode):
             "role": "tools",
         },
     )
-    annotations = {"destructive": False, "readonly": True, "open_world": False}
+    # Provisions and mutates cloud tool resources; not safe to re-run blindly.
+    annotations = {"destructive": False, "readonly": False, "open_world": False}
     task_queue = TaskQueue.REST_API
 
     Params = VertexCloudToolParams

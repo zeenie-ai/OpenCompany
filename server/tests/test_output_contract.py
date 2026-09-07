@@ -201,3 +201,18 @@ class TestEngineJsonSerializer:
         assert sorted(decoded["tags"]) == ["a", "b"]
         assert decoded["color"] == "red"
         assert isinstance(decoded["unknown"], str)
+
+
+class TestErrorEnvelopeCarriesTheRetryVerdict:
+    def test_output_violation_is_non_retryable(self):
+        node = _action_stub(_ContentOutput)
+        result = node._wrap_success(start_time=time.time(), result={"content": "x", "line_count": "nope"})
+        assert result["success"] is False
+        assert result["error_type"] == "OutputValidationError"
+        assert result["retryable"] is False
+
+    def test_tool_output_violation_is_non_retryable(self):
+        node = _tool_stub(_ContentOutput)
+        result = node._wrap_success(start_time=time.time(), result={"content": "x", "line_count": "nope"})
+        assert result["success"] is False
+        assert result["retryable"] is False

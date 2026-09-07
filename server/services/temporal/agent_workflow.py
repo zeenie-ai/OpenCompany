@@ -57,13 +57,14 @@ from temporalio.workflow import ActivityCancellationType, ParentClosePolicy
 
 from services.node_registry import get_node_class
 
+from ._failures import activity_failure_envelope
 from ._retry_policies import (
     DEFAULT_ACTIVITY_RETRY,
     DELEGATION_CLEANUP_RETRY,
     LLM_STEP_RETRY,
     PERMIT_WAIT_RETRY,
 )
-from .workflow import AGENT_WORKFLOW_TYPES
+from .workflow import AGENT_WORKFLOW_TYPES, PLUGIN_FAILURE_RETRY_PATCH
 
 
 # Activity timeouts. LLM step can stream for several minutes on
@@ -103,7 +104,10 @@ def _default_max_iterations() -> int:
             return 200
 
 # Retry policy for the agent's own activities (LLM step, persist,
-# compact). Tool activities use their plugin's policy. Wave 12 D1:
+# compact). Tool activities use their plugin's effective policy under
+# ``PLUGIN_FAILURE_RETRY_PATCH`` (``_tool_retry_policy``); before that
+# patch they were scheduled with no policy at all, which is Temporal's
+# unlimited default. Wave 12 D1:
 # delegates to the shared constant so the policy's
 # non_retryable_error_types include ``NodeUserError`` — user-correctable
 # failures inside the LLM step fail fast instead of burning 3 retries.
@@ -197,6 +201,21 @@ def _delegation_child_id(
 def _refresh_tools_activity_id(tool_node_id: str, iteration: int, call_index: int) -> str:
     """Return a stable id for the hot-refresh owned by one tool call."""
     return f"refresh-tools-{tool_node_id}-{iteration + 1}-{call_index + 1}"
+
+
+def _tool_retry_policy(node_type: str) -> RetryPolicy:
+    """Return the Temporal policy for one LLM-invoked tool activity.
+
+    The tool plugin's ``effective_retry_policy`` (declared policy, else
+    one attempt for mutating nodes, else three), so a failing tool call
+    stops after the attempts the plugin allows and the model gets the
+    failure envelope. Pseudo-tools without a node class (``_builtin_skill``)
+    take the agent's own bounded default.
+    """
+    node_cls = get_node_class(node_type)
+    if node_cls is None or not hasattr(node_cls, "effective_retry_policy"):
+        return AGENT_ACTIVITY_RETRY
+    return node_cls.effective_retry_policy().to_temporal()
 
 
 # Keys that identify the durable scope a run executes in. They are injected
@@ -1468,16 +1487,21 @@ class AgentWorkflow:
                         # ``start_activity`` does not yield; one admission
                         # check protects this whole concurrent batch.
                         await self._wait_until_resumed()
+                    preflight_kwargs: Dict[str, Any] = dict(
+                        args=[preflight_payload],
+                        activity_id=(
+                            f"task-manager-preflight-{iteration + 1}-"
+                            f"{preflight_index + 1}"
+                        ),
+                        start_to_close_timeout=TOOL_STEP_TIMEOUT,
+                        heartbeat_timeout=TOOL_HEARTBEAT_TIMEOUT,
+                    )
+                    if workflow.patched(PLUGIN_FAILURE_RETRY_PATCH):
+                        preflight_kwargs["retry_policy"] = _tool_retry_policy("taskManager")
                     task_manager_preflight_handles.append(
                         workflow.start_activity(
                             f"node.taskManager.v{preflight_tool['version']}",
-                            args=[preflight_payload],
-                            activity_id=(
-                                f"task-manager-preflight-{iteration + 1}-"
-                                f"{preflight_index + 1}"
-                            ),
-                            start_to_close_timeout=TOOL_STEP_TIMEOUT,
-                            heartbeat_timeout=TOOL_HEARTBEAT_TIMEOUT,
+                            **preflight_kwargs,
                         )
                     )
 
@@ -1811,12 +1835,23 @@ class AgentWorkflow:
                                 raise tool_result
                         else:
                             await self._wait_until_resumed()
-                            tool_result = await workflow.execute_activity(
-                                tool_activity_name,
+                            tool_kwargs: Dict[str, Any] = dict(
                                 args=[tool_payload],
                                 activity_id=tool_activity_id,
                                 start_to_close_timeout=TOOL_STEP_TIMEOUT,
                                 heartbeat_timeout=TOOL_HEARTBEAT_TIMEOUT,
+                            )
+                            if workflow.patched(PLUGIN_FAILURE_RETRY_PATCH):
+                                # Pre-patch histories scheduled tool calls
+                                # with no policy (Temporal default: unlimited
+                                # attempts); the closed branch reproduces
+                                # that command exactly.
+                                tool_kwargs["retry_policy"] = _tool_retry_policy(
+                                    tool_info["node_type"]
+                                )
+                            tool_result = await workflow.execute_activity(
+                                tool_activity_name,
+                                **tool_kwargs,
                             )
                         if (
                             tool_info["node_type"] == "taskManager"
@@ -1941,7 +1976,15 @@ class AgentWorkflow:
                     # After all retries exhausted, surface the error to
                     # the LLM (per user decision: LLM sees error and
                     # continues — matches the in-process agent loop).
-                    workflow.logger.warning(f"AgentWorkflow tool {tool_info['node_type']!r} failed: {e}")
+                    # ``str(e)`` on an ActivityError is the SDK wrapper
+                    # text; the plugin's envelope rides on the cause, so
+                    # unwrap it and feed the model the same JSON it gets
+                    # from a returned envelope.
+                    failure = activity_failure_envelope(e)
+                    failure_text = f"{failure.get('error_type') or type(e).__name__}: {failure.get('error')}"
+                    workflow.logger.warning(
+                        f"AgentWorkflow tool {tool_info['node_type']!r} failed: {failure_text}"
+                    )
                     team_id = str(payload.get("team_id") or context.get("team_id") or "")
                     if is_delegation and team_id:
                         task_id = (
@@ -1970,7 +2013,7 @@ class AgentWorkflow:
                                     "root_execution_id": root_execution_id,
                                     "trace_id": str(call.get("id", "") or ""),
                                     "success": False,
-                                    "error": f"{type(e).__name__}: {e}",
+                                    "error": failure_text,
                                     "terminal_event_id": f"{task_id}:terminal",
                                 }],
                                 activity_id=(
@@ -1987,7 +2030,7 @@ class AgentWorkflow:
                         except asyncio.CancelledError:
                             await _cleanup_cancelled_delegations()
                             raise
-                    tool_content = f'{{"error": "{type(e).__name__}: {e}"}}'
+                    tool_content = _serialise_tool_result(failure)
                     try:
                         await self._emit_phase(
                             agent_node_id,

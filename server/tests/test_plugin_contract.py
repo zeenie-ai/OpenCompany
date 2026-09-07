@@ -387,3 +387,16 @@ class TestTriggerRegistryAutoPopulate:
             cfg = event_waiter.get_trigger_config(cls.type)
             assert cfg is not None, f"{cls.__qualname__}: get_trigger_config('{cls.type}') returned None"
             assert cfg.event_type == cls.event_type
+
+
+class TestEffectiveRetryPolicy:
+    """Every registered plugin resolves a bounded effective retry policy."""
+
+    def test_effective_retry_policy_is_a_retry_policy(self):
+        from services.plugin.scaling import RetryPolicy
+
+        for cls in _all_plugin_classes():
+            policy = cls.effective_retry_policy()
+            assert isinstance(policy, RetryPolicy), cls.__qualname__
+            assert policy.maximum_attempts >= 1, f"{cls.type}: Temporal treats 0 as unlimited"
+            assert "NodeUserError" in policy.non_retryable_error_types, cls.type

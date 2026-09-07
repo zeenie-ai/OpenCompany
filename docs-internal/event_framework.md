@@ -158,13 +158,22 @@ default attributes (`WorkflowType`, `WorkflowId`, `ExecutionStatus`, …).
 | Class attribute | Purpose | Default |
 |---|---|---|
 | `start_to_close_timeout` | Per-attempt budget (one activity execution) | Kind-base default: ActionNode=10m, TriggerNode=24h, ToolNode=10m |
-| `retry_policy: RetryPolicy` | Backoff + max attempts + non-retryable error types | `DEFAULT_RETRY` — 3 attempts, 1-60s exponential. `NodeUserError` is auto-non-retryable. |
+| `retry_policy: RetryPolicy` | Backoff + max attempts + non-retryable error types | Resolved by `effective_retry_policy()`: a declared policy wins; triggers and mutating nodes (`annotations` `destructive` / `readonly: False` / none) get `SINGLE_ATTEMPT_RETRY`; `readonly: True` keeps `DEFAULT_RETRY` (3 attempts, 1-60s exponential). `NodeUserError`, validation, credential, output-contract and 4xx failures are non-retryable. |
+| `annotations` (`readonly` / `destructive`) | Whether Temporal may re-run the node after a transient failure | `{}` on `BaseNode` (one attempt); `ToolNode` declares `readonly: True` |
 | `heartbeat_timeout` | Max idle between `activity.heartbeat()` calls | 2 minutes |
 | `task_queue` | Worker pool routing | `TaskQueue.DEFAULT` |
 
 Override only when the kind-base default doesn't fit; an inline comment
 explaining why is required (enforced by
 `tests/test_plugin_contract.py::TestStartToCloseTimeoutOverridesAreCommented`).
+
+Inside an operation, `ctx.attempt` is the Temporal attempt number (1 on
+the canvas Run path) and `ctx.idempotency_key` is stable across the
+attempts of one activity execution (`f"{workflow_run_id}-{activity_id}"`);
+a node that declares a multi-attempt `retry_policy` keys its side effects
+on it. Structured failures raise typed `ApplicationError`s at the
+activity boundary (`services/temporal/_failures.py`); see
+[TEMPORAL_ARCHITECTURE.md → Retry & Fault Tolerance](./TEMPORAL_ARCHITECTURE.md).
 
 ### Worker graceful shutdown
 
