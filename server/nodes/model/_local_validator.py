@@ -45,6 +45,7 @@ import httpx
 import lmstudio
 import ollama
 from core.logging import get_logger
+from services.llm.config import normalize_openai_base_url
 from services.plugin.deps import get_auth_service
 from services.status_broadcaster import get_status_broadcaster
 
@@ -258,6 +259,12 @@ async def validate_local_llm(data: Dict[str, Any]) -> Dict[str, Any]:
 
     if not base_url:
         return {"success": False, "valid": False, "error": "Base URL required"}
+
+    # Store the OpenAI-compatible base, not whatever the user pasted: the
+    # runtime reads this value straight into the SDK's ``base_url``, and a
+    # bare host:port silently produces a POST to ``/chat/completions``.
+    # The probe helpers below strip the suffix again for the vendor SDKs.
+    base_url = normalize_openai_base_url(base_url)
 
     auth_service = get_auth_service()
 

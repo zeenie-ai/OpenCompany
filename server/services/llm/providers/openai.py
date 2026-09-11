@@ -44,7 +44,13 @@ class OpenAIProvider:
         }
         url = proxy_url or base_url
         if url:
-            kwargs["base_url"] = url
+            # A user-supplied local URL is routinely a bare host:port, which
+            # the SDK would turn into POST /chat/completions. See
+            # ``normalize_openai_base_url`` for why this is completed here and
+            # not only where the URL is persisted.
+            from services.llm.config import normalize_openai_base_url
+
+            kwargs["base_url"] = normalize_openai_base_url(url)
             if proxy_url:
                 kwargs["api_key"] = "ollama"
         self._client = openai.AsyncOpenAI(**kwargs)

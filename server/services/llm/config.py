@@ -34,6 +34,43 @@ class ProviderConfig:
 
 
 # ---------------------------------------------------------------------------
+# Base-URL normalization (shared with the local-LLM credential validator)
+# ---------------------------------------------------------------------------
+
+
+def normalize_openai_base_url(base_url: str) -> str:
+    """Return ``base_url`` as a usable OpenAI-compatible base (``.../v1``).
+
+    The OpenAI SDK appends ``chat/completions`` **relative to the base URL**,
+    so a bare ``http://host:port`` — the natural thing to paste for a local
+    server, and what LM Studio's own UI displays — makes the runtime POST to
+    ``http://host:port/chat/completions``, which is not a route.
+
+    That failure mode is unusually hard to read, which is why the completion
+    happens here and not only where the URL is stored:
+
+    * The credential validator can't catch it. Model listing goes through the
+      vendor SDKs (LM Studio's native WebSocket, Ollama's REST API), which are
+      happy with the bare host — so the URL validates and only chat breaks.
+    * LM Studio answers the wrong path with **HTTP 200** and a body of
+      ``{"error": "Unexpected endpoint or method. (POST /chat/completions)"}``.
+      The SDK therefore raises nothing, the response parses to empty content,
+      and the agent reports "AI generated empty response" — a message that
+      points at the model instead of at the URL.
+
+    Only a URL with **no path** is completed. One that already carries a path
+    (``/v1``, or a gateway path like ``/openai`` for LiteLLM) is returned
+    untouched: those are deliberate, and rewriting them breaks a working setup.
+    """
+    u = (base_url or "").strip().rstrip("/")
+    if not u:
+        return u
+    from urllib.parse import urlsplit
+
+    return u if urlsplit(u).path else f"{u}/v1"
+
+
+# ---------------------------------------------------------------------------
 # Load config/llm_defaults.json once at import time
 # ---------------------------------------------------------------------------
 
