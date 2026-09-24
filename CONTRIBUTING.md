@@ -17,8 +17,8 @@ See [SETUP.md](docs-internal/SETUP.md) for environment setup and [SCRIPTS.md](do
 
 At a glance:
 
-- **148 workflow nodes** across 33 populated palette groups (34 registered in `server/nodes/groups.py`) (live count: `len(services.node_registry.NODE_METADATA)` *after* importing `nodes` — a bare `server/nodes/**/__init__.py` glob both over-counts helper packages and under-counts groups that hold several node types in one package)
-- **13 native LLM providers** (11 cloud providers plus Ollama and LM Studio; 12 standalone chat-model nodes because xAI is selected directly by agent nodes)
+- **140+ workflow nodes** across 33 populated palette groups (34 registered in `server/nodes/groups.py`) (live count: `len(services.node_registry.NODE_METADATA)` *after* importing `nodes` — a bare `server/nodes/**/__init__.py` glob both over-counts helper packages and under-counts groups that hold several node types in one package)
+- **Native LLM providers**: 11 cloud providers, Ollama and LM Studio, plus any number of user-named OpenAI-compatible endpoints (llama.cpp, vLLM, a LiteLLM proxy) added in the Credentials Modal with no code. One standalone chat-model node per provider except xAI, which agent nodes select directly, plus `openaiCompatibleChatModel` for a named endpoint
 - **Specialized AI agents** with the Agent Teams delegation pattern — SSOT is the `AI_AGENT_TYPES` frozenset in `server/constants.py`, which spans the base/specialized/team-lead agents plus the CLI-backed (`claude_code_agent`, `rlm_agent`) and Vertex-hosted (`vertex_managed_agent`) variants; `codex_agent` is a sibling CLI-agent plugin
 - **WebSocket-first API** replacing most REST endpoints (live handler count = `MESSAGE_HANDLERS` + plugin registries)
 - **78 built-in skills** across 18 folders, editable in-UI with SKILL.md defaults on disk (live count: `find server/skills -name SKILL.md | wc -l`)
@@ -36,7 +36,7 @@ Deep dives: [DESIGN.md](docs-internal/DESIGN.md) - [TEMPORAL_ARCHITECTURE.md](do
 
 [![AI Agent Routing](docs/diagrams/ai-agent-routing.svg)](https://raw.githubusercontent.com/zeenie-ai/OpenCompany/main/docs/diagrams/ai-agent-routing.svg)
 
-Direct chat completions and every new agent execution use the native SDK layer in [services/llm/](server/services/llm/) through `ChatUnifier`. The shared `run_native_agent_loop` consumes lossless native messages and provider-neutral `AgentToolSpec` definitions; Groq, Cerebras, xAI, DeepSeek, Kimi, Mistral, and the local servers ride the OpenAI-compatible client with provider-specific `base_url` values. LangChain has been removed; Temporal histories recorded before the native cutover are refused rather than replayed. Team leads (`orchestrator_agent`, `ai_employee`) receive an intrinsic Task Manager and may assign only agents connected to their `input-teammates` handle. Delegate descriptors stay internal. `task_manager(assign_task)` persists and returns `queued`; Temporal hands work to a detached `DelegatedTaskWorkflow`, while legacy execution reuses the same durable task record. Completion emits `taskTrigger` with owning execution context for a separate lead review. The RLM Agent uses a REPL-based recursive language model pattern. Long-running activities remain alive through activity heartbeats.
+Direct chat completions and every new agent execution use the native SDK layer in [services/llm/](server/services/llm/) through `ChatUnifier`. The shared `run_native_agent_loop` consumes lossless native messages and provider-neutral `AgentToolSpec` definitions; Groq, Cerebras, xAI, DeepSeek, Kimi, Mistral, the local servers and every named OpenAI-compatible endpoint ride the OpenAI-compatible client with provider-specific `base_url` values. LangChain has been removed; Temporal histories recorded before the native cutover are refused rather than replayed. Team leads (`orchestrator_agent`, `ai_employee`) receive an intrinsic Task Manager and may assign only agents connected to their `input-teammates` handle. Delegate descriptors stay internal. `task_manager(assign_task)` persists and returns `queued`; Temporal hands work to a detached `DelegatedTaskWorkflow`, while legacy execution reuses the same durable task record. Completion emits `taskTrigger` with owning execution context for a separate lead review. The RLM Agent uses a REPL-based recursive language model pattern. Long-running activities remain alive through activity heartbeats.
 
 Deep dives: [agent_architecture.md](docs-internal/agent_architecture.md) - [native_llm_sdk.md](docs-internal/native_llm_sdk.md) - [agent_teams.md](docs-internal/agent_teams.md) - [memory_compaction.md](docs-internal/memory_compaction.md) - [cli_agent_framework.md](docs-internal/cli_agent_framework.md)
 
@@ -69,7 +69,7 @@ Fourteen source-backed architecture and product-panel diagrams live next to the 
 | `client/src/components/` | React Flow canvas, parameter panel, modals | [CLAUDE.md](CLAUDE.md) |
 | `server/services/` | WorkflowService, NodeExecutor, AI service | [DESIGN.md](docs-internal/DESIGN.md) |
 | `server/services/handlers/` | Cross-cutting orchestration only (`tools.py` AI-tool dispatch + delegation, `triggers.py`, `todo.py`) — per-node handlers live inside the plugins since Wave 11 | [node_creation.md](docs-internal/node_creation.md) |
-| `server/services/llm/` | Native LLM SDK layer (13 providers) | [native_llm_sdk.md](docs-internal/native_llm_sdk.md) |
+| `server/services/llm/` | Native LLM SDK layer (every provider, plus named OpenAI-compatible endpoints) | [native_llm_sdk.md](docs-internal/native_llm_sdk.md) |
 | `server/services/execution/` | Decide pattern, DLQ, recovery, conditions | [DESIGN.md](docs-internal/DESIGN.md) |
 | `server/services/temporal/` | Distributed execution via Temporal | [TEMPORAL_ARCHITECTURE.md](docs-internal/TEMPORAL_ARCHITECTURE.md) |
 | `server/routers/websocket.py` | WebSocket endpoint + core `MESSAGE_HANDLERS` (plugins register more via `ws_handler_registry`) | [status_broadcaster.md](docs-internal/status_broadcaster.md) |
@@ -97,7 +97,8 @@ The diagram above shows the full lifecycle of a workflow node: one self-containe
 - Guide: [native_llm_sdk.md](docs-internal/native_llm_sdk.md) → "Adding a New Provider"
 - OpenAI-compatible (DeepSeek, Kimi, Mistral pattern): add the provider configuration to `server/config/llm_defaults.json` and its name to `services/llm/providers/_compat.py::_COMPAT_PROVIDERS`
 - Custom-SDK provider: new file in `server/services/llm/providers/` that calls `register_provider(ProviderSpec(...))` at module bottom (lazy factory + `sdk_exception_refs`; the legacy `factory.py` was removed — `register_provider` is the only entry point)
-- Chat-model node plugin: `server/nodes/model/<provider>_chat_model/__init__.py`; for agent-dropdown exposure also extend the `provider` Literal in `nodes/agent/{ai_agent,chat_agent,_specialized}` and `detect_ai_provider` in `server/constants.py`
+- Chat-model node plugin: `server/nodes/model/<provider>_chat_model/__init__.py`, plus a branch in `detect_ai_provider` (`server/constants.py`), or the node falls through to `'openai'`. Agent dropdowns need no edit: their `provider` field is the loader-driven `ProviderRef` (`nodes/agent/_provider.py`), which lists every registered provider
+- A server the user runs (llama.cpp, vLLM, a LiteLLM proxy, another Ollama host) needs no code at all: it is a named endpoint added in the Credentials Modal ([RFC-0003](RFC-0003-OPENAI-COMPATIBLE-PROVIDER-CONTRACT.md))
 
 **Add a dual-purpose tool (workflow node + AI tool)**
 - Guide: [node_creation.md](docs-internal/node_creation.md); live references: the whatsapp / twitter / stripe folders

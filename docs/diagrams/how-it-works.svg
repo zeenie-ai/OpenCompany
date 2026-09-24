@@ -34,7 +34,7 @@
   <text x="176" y="148" text-anchor="middle" font-size="16" font-weight="700" fill="#0d0f13">1</text>
   <text class="h2" x="176" y="172" text-anchor="middle">Pick your blocks</text>
   <text class="sub" x="176" y="196" text-anchor="middle">Drag nodes from the palette -</text>
-  <text class="sub" x="176" y="214" text-anchor="middle">148 blocks: AI Employee, Chat,</text>
+  <text class="sub" x="176" y="214" text-anchor="middle">140+ blocks: AI Employee, Chat,</text>
   <text class="sub" x="176" y="232" text-anchor="middle">Telegram, Gmail, and more</text>
 
   <!-- Arrow 1 -> 2 -->
@@ -99,5 +99,5 @@
   <rect class="panel p-cyan" x="43" y="407" width="1714" height="92" rx="10"/>
   <text class="h1" x="900" y="437" text-anchor="middle">Everything runs on your computer</text>
   <text class="sub" x="900" y="463" text-anchor="middle">Your API keys, your data, your conversations - never sent to OpenCompany servers.</text>
-  <text class="sub" x="900" y="485" text-anchor="middle">Free local AI via Ollama and LM Studio.</text>
+  <text class="sub" x="900" y="485" text-anchor="middle">Free local AI via Ollama, LM Studio, or any OpenAI-compatible server such as llama.cpp.</text>
 </svg>

@@ -99,7 +99,7 @@ Source of truth for this list: `server/config/llm_defaults.json` (the `providers
 
 ### Provider / model reference table
 
-`ModelRegistryService` (`server/services/model_registry.py`) manages the per-model constraints below — fetching from OpenRouter for cloud models and from the user's running local server (`ollama.AsyncClient.ps()` / `lmstudio.AsyncClient.llm.list_loaded()`) for Ollama / LM Studio. Falls back to `llm_defaults.json` only when neither source is available.
+`ModelRegistryService` (`server/services/model_registry.py`) manages the per-model constraints below — fetching from OpenRouter for cloud models and from the user's running local server (`ollama.AsyncClient.ps()` / `lmstudio.AsyncClient.llm.list_loaded()`) for Ollama / LM Studio, and — for a named endpoint — from the server itself or LiteLLM's model table at save time (see [Named OpenAI-compatible endpoints](#named-openai-compatible-endpoints)). Falls back to `llm_defaults.json` only when none of these has a figure.
 
 | Provider | Key Models | Context | Max Output | Thinking | Temp Range |
 |----------|-----------|---------|-----------|----------|------------|
@@ -422,7 +422,7 @@ def resolve_max_tokens(params: dict, model: str, provider: str) -> int:
     return model_max
 ```
 
-Paired with `ModelRegistryService` (`server/services/model_registry.py`), which loads `model_registry.json` (cached from OpenRouter's `/api/v1/models` endpoint) and falls back to `llm_defaults.json` for unknown models. The registry is the single source for:
+Paired with `ModelRegistryService` (`server/services/model_registry.py`), which loads `model_registry.json` (cached from OpenRouter's `/api/v1/models` endpoint) plus the models registered from the user's own servers (`DATA_DIR/local_models.json`; they win lookups), and falls back to `llm_defaults.json` for unknown models. LiteLLM's table (`DATA_DIR/litellm_models.json`) is read only when a generic endpoint is saved; its figures reach lookups through those registered entries. The registry is the single source for:
 
 - `max_output_tokens`
 - `context_length`

@@ -42,7 +42,7 @@ auto-hides both, which would break chaining into `speechToText`.
 | `sample_rate` | number | `null` | no | Where the provider supports it |
 | `provider_options` | object | `{}` | no | Vendor-specific keys, passed through untouched |
 
-**`tts_model`, not `model`.** [`ParameterRenderer.tsx:866`](../../../client/src/components/ParameterRenderer.tsx#L866)
+**`tts_model`, not `model`.** [`ParameterRenderer.tsx:898`](../../../client/src/components/ParameterRenderer.tsx#L898)
 overwrites any field literally named `model` or `api_key` with chat-model data
 whenever a sibling `provider` field exists — and it never checks that the
 provider is an LLM provider. A field named `model` here would be cleared the

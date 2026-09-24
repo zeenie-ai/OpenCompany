@@ -61,8 +61,8 @@ unchanged.
 `server/nodes/__init__.py`, i.e. `len(nodes._DISCOVERED)`, which
 counts every non-private module and subpackage (`_*.py` helpers and
 `_*/` subpackages are skipped by `_discover()`). They are **not**
-node-type counts: `len(services.node_registry.NODE_METADATA)` is 148
-today, spread across 37 group folders under `server/nodes/`. Both are
+node-type counts: `len(services.node_registry.NODE_METADATA)` was 148
+at the September measurement, spread across 37 group folders under `server/nodes/`. Both are
 computed from the tree; neither is hand-maintained here. The dev-mode rows were never benchmarked before (Vite and
 uvicorn compete for I/O during a dev boot, so they are not comparable
 to the prod numbers), and the first dev boot after a reinstall also
