@@ -1,9 +1,10 @@
 """Normal-mode fields on the credential catalogue, and the shared connection
 state (``services.credential_registry.provider_connection_state``).
 
-Normal mode's Connectors grid lists only providers that declare a
-``consumer_category`` and shows their short ``description``, a "by
-{publisher}" line and a verified mark. ``connected``
+Normal mode's Connectors grid lists every catalogue provider under its
+``consumer_category`` and shows its short ``description``, a "by
+{publisher}" line and a verified mark, so every provider must declare all
+four, and every plugin credential needs a catalogue entry. ``connected``
 answers "is this app usable right now": the same as ``stored`` unless a
 provider declares a ``connected_check`` (WhatsApp's live pairing, the
 IMAP/SMTP account's keys).
@@ -56,25 +57,55 @@ class FakeAuth:
 
 
 class TestCatalogueFields:
-    def test_consumer_categories_are_ordered(self, registry):
-        assert [c["key"] for c in registry.get_consumer_categories()] == ["messages", "organize", "business", "ai"]
+    def test_consumer_categories_are_ordered_apps_first_and_ai_last(self, registry):
+        assert [c["key"] for c in registry.get_consumer_categories()] == [
+            "messages",
+            "organize",
+            "business",
+            "research",
+            "language",
+            "developer",
+            "devices",
+            "ai",
+        ]
 
-    def test_every_consumer_provider_has_a_known_category_and_a_short_description(self, registry):
+    def test_every_provider_is_listed_with_a_known_category_and_a_short_description(self, registry):
+        """Home's Connectors page shows the whole catalogue, so a provider
+        without these fields would silently go missing from it."""
         known = {c["key"] for c in registry.get_consumer_categories()}
-        listed = [p for p in registry.get_all_providers() if p.get("consumer_category")]
-        assert listed, "no provider declares a consumer_category"
-        for provider in listed:
-            assert provider["consumer_category"] in known, provider["id"]
+        providers = registry.get_all_providers()
+        assert providers
+        for provider in providers:
+            assert provider.get("consumer_category") in known, provider["id"]
             description = provider.get("description")
             assert isinstance(description, str) and 0 < len(description) <= MAX_DESCRIPTION, provider["id"]
             publisher = provider.get("publisher")
             assert isinstance(publisher, str) and publisher.strip(), provider["id"]
             assert isinstance(provider.get("verified"), bool), provider["id"]
 
-    def test_llm_providers_inherit_the_ai_category_and_deepl_opts_out(self, registry):
+    def test_every_credential_class_has_a_catalogue_entry(self, registry):
+        """A credential with no catalogue entry has no screen that can store
+        its key, so the nodes that need it can never run (xAI, ElevenLabs
+        and Deepgram once sat here)."""
+        import nodes  # noqa: F401 - registers every credential class
+        from services.plugin.credential import CREDENTIAL_REGISTRY
+
+        # Deliberately not connectable, with the reason.
+        not_listed = {
+            # A user identity no node acts as yet; its OAuth app keys are
+            # fields on the Discord entry.
+            "discord_oauth",
+        }
+        listed = {provider["id"] for provider in registry.get_all_providers()}
+        assert set(CREDENTIAL_REGISTRY) - listed - not_listed == set()
+        assert not_listed <= set(CREDENTIAL_REGISTRY), "an exemption outlived its credential"
+
+    def test_llm_providers_inherit_the_ai_category_and_deepl_is_a_language_service(self, registry):
         assert registry.get_provider("openai")["consumer_category"] == "ai"
         assert registry.get_provider("anthropic")["consumer_category"] == "ai"
-        assert registry.get_provider("deepl").get("consumer_category") is None
+        assert registry.get_provider("xai")["consumer_category"] == "ai"
+        # DeepL extends the AI base but translates rather than chats.
+        assert registry.get_provider("deepl")["consumer_category"] == "language"
 
     @pytest.mark.parametrize(
         ("pid", "category"),
@@ -88,14 +119,19 @@ class TestCatalogueFields:
             ("microsoft", "organize"),
             ("stripe", "business"),
             ("ollama", "ai"),
+            ("twitter", "messages"),
+            ("brave_search", "research"),
+            ("google_maps", "research"),
+            ("elevenlabs", "language"),
+            ("deepgram", "language"),
+            ("github", "developer"),
+            ("claude_code", "developer"),
+            ("android_remote", "devices"),
+            ("openai_compatible", "ai"),
         ],
     )
-    def test_v1_apps_are_listed(self, registry, pid, category):
+    def test_providers_are_listed_under_their_category(self, registry, pid, category):
         assert registry.get_provider(pid)["consumer_category"] == category
-
-    def test_editor_only_providers_stay_hidden(self, registry):
-        for pid in ("claude_code", "codex_cli", "openai_compatible", "android_remote", "apify", "github"):
-            assert not registry.get_provider(pid).get("consumer_category"), pid
 
     def test_connected_checks_are_well_formed(self, registry):
         for provider in registry.get_all_providers():

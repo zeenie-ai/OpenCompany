@@ -286,12 +286,17 @@ changing page clears it.
 
   `tests/test_home_catalog_contract.py` holds the bundles and the Discover
   folder to each other and to the app registry.
-- **Connectors**: the providers in `config/credential_providers.json` that
-  declare a `consumer_category` (`messages`, `organize`, `business`, `ai`), a
-  short `description`, a `publisher` (the card's "by …" line) and `verified`.
-  They are listed in category order, so apps come before AI models. The
-  catalogue adds `connected`, which differs from `stored` for providers with a
-  `connected_check` (WhatsApp's live pairing, the IMAP/SMTP account's keys).
+- **Connectors**: every provider in `config/credential_providers.json`, the
+  same set as the editor's Credentials modal. Each declares a
+  `consumer_category` (`messages`, `organize`, `business`, `research`,
+  `language`, `developer`, `devices`, `ai`), a short `description`, a
+  `publisher` (the card's "by …" line) and `verified`, and
+  `test_credential_catalogue_consumer_fields.py` fails when one does not, or
+  when a plugin credential has no catalogue entry at all, so a new connector
+  cannot silently miss the page. They are listed in category order, so apps
+  come before AI models. The catalogue adds `connected`, which differs from
+  `stored` for providers with a `connected_check` (WhatsApp's live pairing,
+  the IMAP/SMTP account's keys).
 
 **The catalog page** ([settings/CatalogLayout.tsx](../client/src/features/home/settings/CatalogLayout.tsx)).
 Skills, Connectors and Plugins are built on a shared page:

@@ -53,6 +53,9 @@ import Github from '@lobehub/icons/es/Github';
 import Cloudflare from '@lobehub/icons/es/Cloudflare';
 import VertexAI from '@lobehub/icons/es/VertexAI';
 import GoogleCloud from '@lobehub/icons/es/GoogleCloud';
+import XAI from '@lobehub/icons/es/XAI';
+import ElevenLabs from '@lobehub/icons/es/ElevenLabs';
+import DeepL from '@lobehub/icons/es/DeepL';
 
 type RawSvg = string;
 
@@ -162,6 +165,9 @@ const LOBEHUB_BRANDS: Readonly<Record<string, any>> = {
   cloudflare: Cloudflare,
   vertexai: VertexAI,
   googlecloud: GoogleCloud,
+  xai: XAI,
+  elevenlabs: ElevenLabs,
+  deepl: DeepL,
 };
 
 const ICON_LIBRARIES: Readonly<Record<string, LibraryResolver>> = {
