@@ -1,0 +1,65 @@
+# Build context for docker/Dockerfile. The image builds everything from
+# source, so keep local state, secrets, VCS metadata and build output out of it
+# (Docker does not read .gitignore).
+
+# VCS and tooling state. Leaving out .git also stops Claude Code / Codex agent
+# runs inside the container from branching worktrees off the app's own source.
+.git
+.agents
+.claude
+.tmp
+.uv-cache
+.ruff_cache
+.pytest_cache
+.pytest-tmp-*
+**/__pycache__
+MagicMock
+test-temp-v2
+media
+import.json
+**/*.log
+
+# Env files: a local .env may hold real keys. Only the template ships.
+**/.env
+**/.env.*
+!.env.template
+
+# Keys and credential files (the same patterns .gitignore keeps out).
+**/*.pem
+**/*.key
+**/*.crt
+**/*.p12
+**/*.pfx
+**/credentials.json
+**/secrets.json
+**/apikeys.json
+
+# Build output and environments; the image rebuilds them.
+**/node_modules
+**/.venv
+.cli-venv
+client/dist
+server/nodejs/dist
+*.tgz
+
+# The Electron shell is not part of the server image.
+desktop
+
+# Terraform providers and state (state files carry secrets).
+**/.terraform
+**/*.tfstate*
+**/*.tfvars*
+
+# Local runtime data, including SQLite's side files and the data dirs a local
+# DATA_DIR may point at (data/, the pre-rebrand .machina/). Keep only the
+# git-tracked seed workflows.
+**/*.db
+**/*.db-journal
+**/*.db-shm
+**/*.db-wal
+**/*.sqlite
+**/*.sqlite3
+.opencompany/*
+!.opencompany/workflows
+.machina
+data

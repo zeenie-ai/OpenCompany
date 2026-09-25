@@ -44,6 +44,19 @@ The script installs bun, Python and uv when they are missing, then the `@zeenie-
 </details>
 
 <details>
+<summary><b>Docker (self-hosting)</b></summary>
+
+```bash
+git clone https://github.com/zeenie-ai/OpenCompany.git
+cd OpenCompany
+docker compose up -d --build
+```
+
+Builds the image from source and starts one container, with all data in the `opencompany-selfhost_data` volume. Open http://localhost:5678 and register the owner account. The port is published on this machine only. See [docker.md](docs-internal/docker.md).
+
+</details>
+
+<details>
 <summary><b>Run from source (contributors)</b></summary>
 
 ```bash

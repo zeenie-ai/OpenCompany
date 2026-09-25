@@ -1,0 +1,44 @@
+# Self-hosted OpenCompany: one container, all state in one named volume.
+#   docker compose up -d --build    then open http://localhost:5678
+# Guide: docs-internal/docker.md
+
+# An explicit project name. Without it compose names the project after the
+# checkout directory ("opencompany"), which can collide with another stack of
+# that name and mix both in `docker compose ps` / `down --remove-orphans`.
+name: opencompany-selfhost
+
+services:
+  opencompany:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        # Optional tools, space separated; the default image has none
+        # (docs-internal/docker.md). Then rebuild: docker compose up -d --build
+        #   browser  Chromium for the browser node, uv for browser-harness
+        #   git      git for the Claude Code and Codex agent nodes
+        EXTRAS: ""
+    image: opencompany:local
+    # Docker's init (tini) reaps the processes the backend spawns: the
+    # Temporal dev server, the bun code sidecar and plugin daemons.
+    init: true
+    ports:
+      # host:container. The container port is PORT in .env.template. Published
+      # on this machine only: to serve other hosts, drop the 127.0.0.1 prefix
+      # and put TLS in front (docs-internal/docker.md).
+      - "127.0.0.1:5678:5678"
+    volumes:
+      - data:/data
+    restart: unless-stopped
+    # Room for the backend to drain its Temporal workers and record a clean
+    # shutdown. A hard kill before that makes the next start pause every
+    # running deployment.
+    stop_grace_period: 120s
+    # Optional: create the owner account on first start instead of
+    # registering it in the browser.
+    # environment:
+    #   OPENCOMPANY_OWNER_EMAIL: you@example.com
+    #   OPENCOMPANY_OWNER_PASSWORD: change-me-now
+
+volumes:
+  data:
