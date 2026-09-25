@@ -40,9 +40,12 @@ governs what Normal mode's Hire may assemble into an employee instead:
 type is not blocked (exact type, or any of its groups, the same matching
 the palette uses) and either `enabled_nodes` is empty or lists it. The graph
 builder checks every node it emits, and node types never come from the hire
-payload. The node types the v1 app registry (`server/config/employee_apps.json`)
-can emit are locked in by `server/tests/test_node_allowlist_hire.py`, so a
-missing entry fails CI rather than a hire.
+payload. The node types Hire can emit, its fixed building blocks (the agent,
+the triggers, Context and Memory, the always-on tools, the approval gate,
+Canvas, and a Skills node when the owner's library has skills on) and every
+node the v1 app registry (`server/config/employee_apps.json`) names, are
+locked in by `server/tests/test_node_allowlist_hire.py`, so a missing entry
+fails CI rather than a hire.
 
 ## Frontend hook API
 

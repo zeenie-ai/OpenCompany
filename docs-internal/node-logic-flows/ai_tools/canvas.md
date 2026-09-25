@@ -15,9 +15,12 @@ A display board workflows and agents push content onto — the platform's
 Claude/ChatGPT-Canvas-style viewing surface. Agents call the `canvas` tool
 after producing something the user should see (a screenshot, a chart, a
 report, a URL); workflow edges push upstream file outputs automatically. The
-board renders in two hosts sharing one component: the node's full-height
-parameter panel (`uiHints.isCanvasPanel`) and the docked right-side canvas
-sidebar (auto-opens on push, resizable, ephemeral click-to-preview mode).
+board renders in three hosts sharing one component: the node's full-height
+parameter panel (`uiHints.isCanvasPanel`), the docked right-side canvas
+sidebar (auto-opens on push, resizable, ephemeral click-to-preview mode),
+and the Canvas tab of Home's Workspace dock, which shows one employee's
+board. Hire gives every new employee a Canvas node, and its instructions ask
+it to put finished work there.
 Items are *references* (serialized `FileRef`s, URLs) and small markdown
 notes — never file bytes (media-transport contract).
 
@@ -91,7 +94,7 @@ flowchart TD
 
 - **Credentials**: none.
 - **Services**: `services.media` (`resolve_media`, `workspace_file_url`), `services.plugin.deps.get_database`.
-- **Frontend**: `client/src/components/parameterPanel/CanvasPanel.tsx` (panel host), `client/src/components/ui/CanvasDock.tsx` (docked sidebar + ephemeral preview), shared `parameterPanel/canvas/CanvasContent.tsx` (carousel, follow-latest image poll, markdown/code/JSON/text via capped client fetch, sandboxed iframes for external URLs + workspace HTML, inline PDF).
+- **Frontend**: `client/src/components/parameterPanel/CanvasPanel.tsx` (panel host), `client/src/components/ui/CanvasDock.tsx` (docked sidebar + ephemeral preview), `client/src/features/home/workspace/WorkspaceCanvas.tsx` (Home's Workspace dock, loaded lazily), shared `parameterPanel/canvas/CanvasContent.tsx` (carousel, follow-latest image poll, markdown/code/JSON/text via capped client fetch, sandboxed iframes for external URLs + workspace HTML, inline PDF).
 
 ## Edge cases & known limits
 

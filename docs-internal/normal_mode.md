@@ -18,9 +18,13 @@ up in Home too, with details derived from their graph.
 | Setup-screen pipeline (parse, normalise, render) | [client/src/features/home/genui/](../client/src/features/home/genui/) |
 | Employees service (list, setup, hire, start, run records) | [server/services/employees/](../server/services/employees/) |
 | Approvals (the "ask me first" step) | [server/services/approvals/](../server/services/approvals/), node [approvalGate](./node-logic-flows/workflow_triggers/approvalGate.md) |
+| Built-in skills offered to new hires (Settings > Skills > Discover) | [server/skills/employee/](../server/skills/employee/) |
 
 The design reference is the `design_handoff_opencompany_home/` bundle (kept
-out of git). Where its token values differ from the repo's, the repo wins.
+out of git; the 2026-09-25 export). Where its token values differ from the
+repo's, the repo wins. Its README's Settings section predates the Settings
+redesign, so for Settings the prototype (`reference/OpenCompany Home.dc.html`)
+is the reference.
 
 ## Switching screens
 
@@ -59,7 +63,7 @@ out of git). Where its token values differ from the repo's, the repo wins.
 |---|---|
 | `HomeShell.tsx` | Sidebar, header, the current view (hire or one employee), the Workspace dock, Settings, the connect dialog, the orb's stage |
 | `sidebar/`, `header/` | The team list, New employee, the profile row; the view title, the Workspace pill, mode toggle and theme button |
-| `hire/` | The hero, the composer, starter jobs |
+| `hire/` | The hero, the composer, and the starter bundles (`starters.json`), which the template chips and Settings > Plugins both read |
 | `genui/` | The setup draft under the composer (below) |
 | `employee/` | One employee's card: status, the current task, apps, "done today", Start / Pause / Resume, Watch live, the drafts waiting for the owner |
 | `workspace/` | The Workspace dock (below), its header pill, and its Canvas tab, which loads in its own chunk |
@@ -337,6 +341,8 @@ Server: `tests/services/employees/`, `tests/services/approvals/`,
 `tests/test_hire_payload_contract.py`, `tests/test_node_allowlist_hire.py`,
 `tests/test_user_settings_profile_fields.py`,
 `tests/test_credential_catalogue_consumer_fields.py`,
+`tests/test_home_catalog_contract.py` (the starter bundles and the Discover
+folder against each other and the app registry),
 `tests/temporal/test_machina_run_record.py` (including replay of a pre-patch
 history). Client: `features/home/**/__tests__`, `app/__tests__`,
 `contexts/__tests__/themePrePaint.test.ts`.

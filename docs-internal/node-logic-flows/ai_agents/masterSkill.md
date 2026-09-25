@@ -101,6 +101,7 @@ flowchart TD
 - **Duplicate names**: `validate_connected_skills` raises `SkillRuntimeError("DUPLICATE_CONNECTED_SKILL_NAME")` when the same `skill_name` reaches an agent from more than one Master Skill node.
 - **Missing expander**: `get_master_skill_expander()` is `None` only when `nodes.skill` was never imported; the walker logs a warning and the agent runs without the node's skills. Re-registering a *different* callable raises `ValueError`.
 - **Auto-skill** (`services/auto_skill.evaluate`, driven by the `auto_add_skill_for_tools` user setting): connecting a tool that has a paired skill to an agent returns a workflow-ops batch that either toggles the skill in the agent's existing Master Skill (`set_node_parameters(master_skill_id, {skills_config})`, preserving customised `instructions` / `isCustomized`) or adds a new `masterSkill` node with that config plus an edge to `input-skill`.
+- **Hire** (`services/employees/builder.py`): a new employee gets one `masterSkill` node built from the owner's skill library, the user skills that are on. It holds the `skill` entry plus one entry per library skill with its `instructions` and `description` copied in, so a later library edit never changes an employee already hired. Names that would take over the Skill tool or the system message (`skill`, `*-personality`) are left out. The editor keeps those extra keys when it toggles, edits or resets an entry, and does not send `is_active: true` on save, which would switch a library skill back on for new hires.
 - **Error paths**: `noop` cannot fail; `load_skill` failures for personality skills are logged (`warning`) and the entry proceeds with empty instructions.
 
 ## Side Effects
@@ -114,7 +115,7 @@ flowchart TD
 
 - **Credentials**: none.
 - **Services**: `services.plugin.edge_walker` (`register_master_skill_expander` / `get_master_skill_expander`), `services.skill_loader`, `services.skill_prompt`, `services.skill_runtime`, `services.auto_skill`, `services.workflow_ops`, `services.events.envelope.WorkflowEvent`.
-- **Frontend**: [`client/src/components/parameterPanel/MasterSkillEditor.tsx`](../../../client/src/components/parameterPanel/MasterSkillEditor.tsx) (dispatched by `MiddleSection` on `uiHints.isMasterSkillEditor`), `Dashboard.tsx` component dispatch to `ToolkitNode`, [`client/src/hooks/useAutoSkillEdges.ts`](../../../client/src/hooks/useAutoSkillEdges.ts).
+- **Frontend**: [`client/src/components/parameterPanel/MasterSkillEditor.tsx`](../../../client/src/components/parameterPanel/MasterSkillEditor.tsx) (dispatched by `MiddleSection` on `uiHints.isMasterSkillEditor`), `Dashboard.tsx` component dispatch to `ToolkitNode`, [`client/src/hooks/useAutoSkillEdges.ts`](../../../client/src/hooks/useAutoSkillEdges.ts), and the skill queries it shares with Home's Settings > Skills ([`useUserSkills.ts`](../../../client/src/hooks/useUserSkills.ts), [`useFolderSkills.ts`](../../../client/src/hooks/useFolderSkills.ts)).
 - **Task queue**: `TaskQueue.DEFAULT` (never dispatched in practice). Annotations: `readonly`.
 
 ## Edge cases & known limits

@@ -65,8 +65,9 @@ client/src/
 │   └── useModeShortcut.ts / useCurrentWorkflowSync.ts / usePageActivitySync.ts / useUIDefaultsOnce.ts
 │
 ├── features/home/           # Normal mode (see docs-internal/normal_mode.md)
-│   ├── HomeShell.tsx        # Sidebar + header + current view + Settings + orb stage
+│   ├── HomeShell.tsx        # Sidebar + header + current view + Workspace dock + Settings + orb stage
 │   ├── sidebar/ header/ hire/ employee/ settings/ approvals/ data/ state/ ui/
+│   ├── workspace/           # The Workspace dock; its Canvas tab loads in its own chunk
 │   ├── genui/               # Setup-screen pipeline; only its index.ts is importable (ESLint)
 │   └── orb/                 # orb.ts (state + lifecycle), orbEngine.ts (three.js, own chunk)
 │
@@ -162,6 +163,8 @@ client/src/
 │   ├── useOnboarding.ts            # Reads via useUserSettingsQuery; writes via mutation
 │   ├── useParameterPanel.ts        # Thin orchestrator over useNodeParamsQuery + save mutation
 │   ├── useWhatsApp.ts             # WS-based WhatsApp ops (Android ops go via useWebSocket directly)
+│   ├── useUserSkills.ts / useFolderSkills.ts # Skill library + skill-folder queries (Home Skills, Master Skill editor)
+│   ├── useCanvasBoard.ts           # One Canvas board's query + remove / clear (every Canvas host)
 │   └── useCopyPaste.ts / useRename.ts
 │
 ├── store/
