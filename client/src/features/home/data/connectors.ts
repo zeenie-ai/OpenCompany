@@ -1,8 +1,9 @@
 /**
- * Normal mode's view of the credential catalogue: the providers an owner
- * can connect (those with a `consumer_category`), in the order of their
- * categories (apps before AI models). Same cache as the editor's
- * Credentials modal, read through the stable actions context.
+ * Normal mode's view of the credential catalogue: every provider, in the
+ * order of its `consumer_category` (apps before AI models). The server
+ * gives every provider one; the filter only drops a malformed entry. Same
+ * cache as the editor's Credentials modal, read through the stable
+ * actions context.
  */
 
 import { useMemo } from 'react';

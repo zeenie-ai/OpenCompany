@@ -156,9 +156,10 @@ class CredentialRegistry:
         return out
 
     def get_consumer_categories(self) -> List[Dict[str, Any]]:
-        """Ordered Normal-mode Connectors categories (Messages, Organize,
-        Business, AI). Only providers with a matching ``consumer_category``
-        appear in Normal mode; the rest stay editor-only."""
+        """Ordered Normal-mode Connectors categories, apps first and AI last.
+        Every provider declares one (locked by
+        tests/test_credential_catalogue_consumer_fields.py), so the
+        Connectors page lists the whole catalogue."""
         categories = self._load_raw().get("consumer_categories", {})
         if not isinstance(categories, dict):
             return []

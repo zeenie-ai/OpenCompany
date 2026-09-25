@@ -88,6 +88,26 @@ describe('resolveLibraryIcon', () => {
     expect(unresolved).toEqual([]);
   });
 
+  /**
+   * The same contract for the credential catalogue: a `lobehub:` brand
+   * with no deep import here draws an empty tile on Home's Connectors page
+   * and in the Credentials modal, with no error anywhere.
+   */
+  it('resolves every library icon declared in the credential catalogue', () => {
+    const file = join(__dirname, '..', '..', '..', '..', 'server', 'config', 'credential_providers.json');
+    const catalogue = JSON.parse(readFileSync(file, 'utf-8')) as {
+      providers: Record<string, { icon_ref?: string | null }>;
+    };
+    // Library refs only: `lobehub:xai`, not a URL's `https://`.
+    const refs = Object.entries(catalogue.providers).filter(
+      (entry): entry is [string, { icon_ref: string }] =>
+        typeof entry[1].icon_ref === 'string' && /^[a-z]+:(?!\/\/)/i.test(entry[1].icon_ref),
+    );
+    expect(refs.length).toBeGreaterThan(0);
+    const unresolved = refs.filter(([, provider]) => resolveLibraryIcon(provider.icon_ref) === null).map(([id]) => id);
+    expect(unresolved).toEqual([]);
+  });
+
   it('returns null for unknown library prefixes', () => {
     expect(resolveLibraryIcon('madeup:Battery')).toBeNull();
   });
