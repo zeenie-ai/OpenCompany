@@ -25,6 +25,7 @@ import {
   useSaveProfile,
   type ProfileForm,
 } from '../data/profile';
+import { SPIKE, spikeOrb } from '../orb/orb';
 import { Avatar } from '../ui/primitives';
 import { pillToast } from '../ui/pillToast';
 
@@ -87,6 +88,7 @@ export function ProfileTab({ onDone }: { onDone: () => void }) {
         fill: 'none',
       });
       pillToast('Profile saved');
+      spikeOrb(SPIKE.profileSaved);
     } catch (error) {
       pillToast(error instanceof Error ? error.message : "Couldn't save your profile", { tone: 'error' });
     }

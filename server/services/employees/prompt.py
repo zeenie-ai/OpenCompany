@@ -54,6 +54,8 @@ class PromptInputs:
     unsupported_apps: Sequence[str] = ()
     has_memory: bool = False
     has_todos: bool = True
+    #: The canvas tool, whose board the owner sees in Home's Workspace.
+    has_canvas: bool = False
 
 
 def _clean(text: str) -> str:
@@ -137,6 +139,11 @@ def _rules(inputs: PromptInputs, owner: str) -> List[str]:
         out.append(
             "- For work with more than one step, keep a short checklist with the write_todos tool: add the steps "
             "first, then mark each one done as you finish it. The owner watches it to see what you are doing."
+        )
+    if inputs.has_canvas:
+        out.append(
+            f"- When you finish something {owner} may want to look at later (a report, a list, a file you made), "
+            "also put it on your canvas with the canvas tool. Don't put routine replies there."
         )
     if inputs.has_memory:
         out.append(

@@ -68,11 +68,14 @@ export function createOrbEngine(onLost: () => void) {
   const amb = new AmbientLight(0xffffff, 0.35 * PI);
   const key = new DirectionalLight(0xffffff, 1.1 * PI);
   key.position.set(3, 4, 5);
+  // Rim light: off in dark, it puts the white highlights on the light theme's black.
+  const rim = new DirectionalLight(0xffffff, 0);
+  rim.position.set(-4, 3, -2);
   const p1 = new PointLight(0xbd93f9, 2.4 * POINT, 20, 0);
   p1.position.set(-3, 1, 3);
   const p2 = new PointLight(0x8be9fd, 2.4 * POINT, 20, 0);
   p2.position.set(3, -1.5, 2.5);
-  scene.add(amb, key, p1, p2);
+  scene.add(amb, rim, key, p1, p2);
 
   const c = document.createElement('canvas');
   c.width = c.height = 128;
@@ -86,11 +89,13 @@ export function createOrbEngine(onLost: () => void) {
     g.fillRect(0, 0, 128, 128);
   }
   const glowTex = new CanvasTexture(c);
+  const sprites: Sprite[] = [];
   const glow = (color: number, size: number, opacity: number) => {
     const s = new Sprite(
       new SpriteMaterial({ map: glowTex, color, transparent: true, opacity, blending: AdditiveBlending, depthWrite: false }),
     );
     s.scale.setScalar(size);
+    sprites.push(s);
     return s;
   };
 
@@ -99,7 +104,7 @@ export function createOrbEngine(onLost: () => void) {
   orb.add(tilt);
   scene.add(orb);
 
-  // Ring: vertex colours purple -> cyan by angle; the light theme's greys kept beside them.
+  // Ring: vertex colours purple -> cyan by angle; the light theme's near-blacks kept beside them.
   const rg = new TorusGeometry(1.2, 0.24, 48, 220);
   const pos = rg.attributes.position;
   const ringDark = new Float32Array(pos.count * 3);
@@ -107,7 +112,7 @@ export function createOrbEngine(onLost: () => void) {
   const tmp = new Color();
   const pairs = [
     [new Color(0xbd93f9), new Color(0x8be9fd), ringDark],
-    [new Color(0x1a1d21), new Color(0x3a3f47), ringLight],
+    [new Color(0x050506), new Color(0x16181c), ringLight],
   ] as const;
   for (let i = 0; i < pos.count; i++) {
     const t = (Math.sin(Math.atan2(pos.getY(i), pos.getX(i)) - 0.8) + 1) / 2;
@@ -147,14 +152,14 @@ export function createOrbEngine(onLost: () => void) {
     const pk = glow(col, 0.45, 0.9);
     orb.add(m, line, pk);
     const cd = new Color(col);
-    const cl = new Color([0x1a1d21, 0x2b2f37][i % 2]);
+    const cl = new Color([0x060607, 0x0e0f12][i % 2]);
     return { m, mat, halo, line, pk, cd, cl, phase: (i * PI) / 2 + PI / 4, r: 2.0 + (i % 2) * 0.15, off: Math.random() };
   });
 
   const N = 900;
   const pp = new Float32Array(N * 3);
   const pc = new Float32Array(N * 3);
-  const pal = [0x8be9fd, 0xbd93f9, 0x6272a4, 0xff79c6].map((hex) => new Color(hex));
+  const pal = [0xffffff, 0xf8f8f2, 0xe8eaed, 0xffffff].map((hex) => new Color(hex));
   for (let i = 0; i < N; i++) {
     const r = 3 + Math.random() * 6;
     const th = Math.random() * PI * 2;
@@ -181,12 +186,14 @@ export function createOrbEngine(onLost: () => void) {
 
   const tc = {
     lD: new Color(0x6272a4),
-    lL: new Color(0x6b7280),
+    lL: new Color(0x1a1d21),
     eD: new Color(0x2a1d4a),
     black: new Color(0x000000),
+    white: new Color(0xffffff),
     gD: new Color(0xf8f8f2),
-    gL: new Color(0x1a1d21),
-    cK: new Color(0x111317),
+    cK: new Color(0x030303),
+    p1: new Color(0xbd93f9),
+    p2: new Color(0x8be9fd),
   };
   const bez = new QuadraticBezierCurve3(new Vector3(), new Vector3(), new Vector3());
   const vh = 2 * 9 * Math.tan((17.5 * PI) / 180);
@@ -220,6 +227,7 @@ export function createOrbEngine(onLost: () => void) {
   let lf = document.documentElement.classList.contains('dark') ? 0 : 1;
   let lfApplied = -1;
   let appliedLight: boolean | null = null;
+  let ptBase = 0.6;
 
   const loop = (now: number) => {
     raf = requestAnimationFrame(loop);
@@ -279,15 +287,15 @@ export function createOrbEngine(onLost: () => void) {
       n.pk.material.opacity = 0.3 + e * 0.7;
     });
 
-    // Light theme: monochrome, blended over ~0.3 s.
+    // Light theme: glossy piano-black, blended over ~0.3 s.
     const light = !document.documentElement.classList.contains('dark');
-    ptsMat.opacity += ((light ? 0.45 : 0.6) - ptsMat.opacity) * k;
+    ptBase += ((light ? 0.85 : 0.8) - ptBase) * k;
     pts.rotation.y += dt * 0.02 * mot * (1 + e * 3);
     pts.rotation.x = rx * 0.3;
     lf += ((light ? 1 : 0) - lf) * Math.min(1, dt * 3.2);
     nodes.forEach((n) => n.line.material.color.copy(tc.lD).lerp(tc.lL, lf));
     ringMat.emissive.copy(tc.eD).lerp(tc.black, lf);
-    coreGlow.material.color.copy(tc.gD).lerp(tc.gL, lf);
+    coreGlow.material.color.copy(tc.gD).lerp(tc.black, lf);
     ringMat.iridescence = 0.7 * (1 - lf);
     ringMat.metalness = 0.25 * (1 - lf);
     ringMat.emissiveIntensity = 0.5 - 0.2 * lf;
@@ -302,35 +310,49 @@ export function createOrbEngine(onLost: () => void) {
       nodes.forEach((n) => {
         n.mat.color.copy(n.cd).lerp(n.cl, lf);
         n.mat.emissive.copy(n.cd).lerp(tc.black, lf);
-        n.pk.material.color.copy(n.cd).lerp(tc.gL, lf);
+        n.pk.material.color.setScalar(1 - lf);
+        n.halo.material.color.copy(n.mat.color);
       });
       const pa = pg.attributes.color.array as Float32Array;
       for (let i = 0; i < pa.length; i += 3) {
-        pa[i] = ptDark[i] + (0.3 - ptDark[i]) * lf;
-        pa[i + 1] = ptDark[i + 1] + (0.31 - ptDark[i + 1]) * lf;
-        pa[i + 2] = ptDark[i + 2] + (0.33 - ptDark[i + 2]) * lf;
+        pa[i] = ptDark[i] - ptDark[i] * lf;
+        pa[i + 1] = ptDark[i + 1] - ptDark[i + 1] * lf;
+        pa[i + 2] = ptDark[i + 2] + (0.01 - ptDark[i + 2]) * lf;
       }
       pg.attributes.color.needsUpdate = true;
     }
-    ringMat.clearcoat = 1 - 0.6 * lf;
-    ringMat.roughness = 0.18 + 0.2 * lf;
+    ringMat.clearcoatRoughness = 0.1 - 0.06 * lf;
+    ringMat.roughness = 0.18 - 0.08 * lf;
+    coreMat.roughness = 0.3 - 0.2 * lf;
     nodes.forEach((n) => {
-      n.mat.emissiveIntensity = 0.35 - 0.2 * lf;
-      n.mat.clearcoat = 1 - 0.6 * lf;
-      n.halo.material.opacity = 0.5 - 0.3 * lf;
+      n.mat.emissiveIntensity = 0.35 * (1 - lf);
+      n.mat.roughness = 0.25 - 0.15 * lf;
+      n.halo.material.opacity = 0.5 - 0.35 * lf;
     });
-    ringGlow.material.opacity *= 1 - 0.8 * lf;
-    coreGlow.material.opacity *= 1 - 0.9 * lf;
-    R.toneMappingExposure = 1.1 - 0.1 * lf;
-    amb.intensity = (0.35 + 0.2 * lf) * PI;
-    key.intensity = (1.1 - 0.4 * lf) * PI;
+    R.toneMappingExposure = 1.1 - 0.2 * lf;
+    amb.intensity = (0.35 - 0.2 * lf) * PI;
+    key.intensity = (1.1 + 1.4 * lf) * PI;
+    rim.intensity = 2.2 * lf * PI;
     p1.intensity = p2.intensity = (2.4 - 1.2 * lf) * POINT;
+    p1.color.copy(tc.p1).lerp(tc.white, lf);
+    p2.color.copy(tc.p2).lerp(tc.white, lf);
+
+    // Additive glow vanishes on white, so light uses normal blending. The swap
+    // happens at lf .5, where sprites and particles fade through zero. Runs
+    // last: every opacity above is reset each frame before this scales it.
     const wantLight = lf > 0.5;
     if (appliedLight !== wantLight) {
       appliedLight = wantLight;
-      ptsMat.blending = ringGlow.material.blending = wantLight ? NormalBlending : AdditiveBlending;
-      ptsMat.needsUpdate = ringGlow.material.needsUpdate = true;
+      for (const material of [ptsMat, ...sprites.map((sprite) => sprite.material)]) {
+        material.blending = wantLight ? NormalBlending : AdditiveBlending;
+        material.needsUpdate = true;
+      }
     }
+    const xf = Math.min(1, Math.abs(lf - 0.5) * 4);
+    ptsMat.opacity = ptBase * xf;
+    ptsMat.size = 0.08 + 0.02 * lf;
+    const sk = xf * (wantLight ? 0.5 : 1);
+    for (const sprite of sprites) sprite.material.opacity *= sk;
     R.render(scene, cam);
   };
 

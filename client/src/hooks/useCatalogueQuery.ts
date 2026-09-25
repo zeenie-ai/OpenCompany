@@ -140,6 +140,10 @@ export interface ServerProviderConfig {
   consumer_category?: string | null;
   /** One short line for the Normal-mode Connectors card. */
   description?: string;
+  /** Who makes the app, for the card's "by …" line. */
+  publisher?: string;
+  /** The card shows a verified mark (every built-in connector). */
+  verified?: boolean;
   /** The provider runs on this computer (Ollama, LM Studio). */
   runs_locally?: boolean;
 }

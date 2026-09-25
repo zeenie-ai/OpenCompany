@@ -223,6 +223,22 @@
   --shadow-float:   0 12px 40px rgb(15 23 42 / 0.10);
   --shadow-popover: 0 12px 32px rgb(15 23 42 / 0.12);
   --shadow-dialog:  0 24px 80px rgb(15 23 42 / 0.16);
+  --shadow-dock:    -24px 0 60px rgb(15 23 42 / 0.10);
+
+  /* ── Home glows (a connect, a new hire's row, the refine ring, a new
+   * task) and the working pip's ring. On white the design swaps each neon
+   * for its ink, at .75 of the alpha and .6 of the blur; dark.css restates
+   * the neon versions. ───────────────────────────────────────────────── */
+  --glow-connect:     0 0 0 1px color-mix(in srgb, var(--status-working-ink) 67.5%, transparent),
+                      0 0 17px color-mix(in srgb, var(--status-working-ink) 26%, transparent);
+  --glow-hire:        0 0 0 1px color-mix(in srgb, var(--status-working-ink) 67.5%, transparent),
+                      0 0 24px color-mix(in srgb, var(--status-working-ink) 30%, transparent);
+  --glow-hire-settle: 0 0 0 1px color-mix(in srgb, var(--status-working-ink) 45%, transparent),
+                      0 0 14px color-mix(in srgb, var(--status-working-ink) 19%, transparent);
+  --glow-refine:      0 0 0 0 color-mix(in srgb, var(--node-agent-ink) 37.5%, transparent);
+  --glow-refine-out:  0 0 0 4px transparent;
+  --glow-task:        color-mix(in srgb, var(--status-working-ink) 41%, transparent);
+  --tint-pip-ring:    45%;
 
   /* A paused employee's dot stays the design's mid grey; only its pill
    * text takes the darker muted ink (base.css). */

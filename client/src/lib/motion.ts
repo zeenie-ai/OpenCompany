@@ -38,6 +38,7 @@ export type DurName =
   | 'scrim-in'
   | 'sidebar-in'
   | 'sidebar-out'
+  | 'dock-in'
   | 'toast-in'
   | 'toast-hold'
   | 'toast-out'
@@ -72,6 +73,7 @@ const DUR_FALLBACK: Record<DurName, number> = {
   'scrim-in': 280,
   'sidebar-in': 380,
   'sidebar-out': 300,
+  'dock-in': 480,
   'toast-in': 420,
   'toast-hold': 2600,
   'toast-out': 240,

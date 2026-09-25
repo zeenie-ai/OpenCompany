@@ -1,7 +1,8 @@
 """Run records: one row per finished run of a deployed workflow.
 
 The employee card's "N done today" counts successful runs since the start
-of the owner's day (``profile_timezone``, UTC when unset). Records are
+of the owner's day (``profile_timezone``, UTC when unset), and Settings >
+Billing counts them since the start of the owner's month. Records are
 written once per run (``run_id`` is unique, so an activity retry or both
 runtimes seeing the same run changes nothing) and pruned after
 ``RETENTION_DAYS``. A new record refreshes the employee's summary through
@@ -24,6 +25,7 @@ from models.employees import WorkflowRunRecord
 
 logger = get_logger(__name__)
 
+#: Longer than any month, so this month's count is always complete.
 RETENTION_DAYS = 35
 RUN_STATUSES = ("success", "failed")
 RUNTIMES = ("temporal", "local")
@@ -49,6 +51,13 @@ def start_of_day(now: datetime, zone: ZoneInfo) -> datetime:
     local = now.astimezone(zone)
     midnight = local.replace(hour=0, minute=0, second=0, microsecond=0)
     return midnight.astimezone(timezone.utc)
+
+
+def start_of_month(now: datetime, zone: ZoneInfo) -> datetime:
+    """Midnight on the 1st of this month in ``zone``, as a UTC instant."""
+    local = now.astimezone(zone)
+    first = local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return first.astimezone(timezone.utc)
 
 
 async def record_run(
@@ -110,6 +119,18 @@ async def done_today(
         return {workflow_id: int(count) for workflow_id, count in result.all()}
 
 
+async def done_this_month(database: Any, *, zone: ZoneInfo, now: Optional[datetime] = None) -> int:
+    """Successful runs since the 1st of the month in the owner's zone, across every workflow."""
+    since = start_of_month(now or _utcnow(), zone)
+    async with database.get_session() as session:
+        result = await session.execute(
+            select(func.count())
+            .select_from(WorkflowRunRecord)
+            .where(WorkflowRunRecord.status == "success", WorkflowRunRecord.finished_at >= since)
+        )
+        return int(result.scalar_one() or 0)
+
+
 async def latest_run(database: Any, workflow_id: str) -> Optional[Dict[str, Any]]:
     async with database.get_session() as session:
         result = await session.execute(
@@ -161,10 +182,12 @@ def reset_for_tests() -> None:
 __all__ = [
     "RETENTION_DAYS",
     "delete_runs_for_workflow",
+    "done_this_month",
     "done_today",
     "latest_run",
     "owner_zone",
     "prune_run_records",
     "record_run",
     "start_of_day",
+    "start_of_month",
 ]

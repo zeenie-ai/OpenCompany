@@ -23,6 +23,7 @@ import { useMemo } from 'react';
 import { create } from 'zustand';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
 import { appRefSchema, type AppRef } from '../data/schemas';
+import { SPIKE, spikeOrb } from '../orb/orb';
 import { setPath, type UiState } from './expressions';
 import { normalizeSpec, type NormalizedSpec } from './normalize';
 import { parseReply } from './parse';
@@ -190,6 +191,7 @@ export function failRequest(token: string, code: SetupErrorCode, request: Pendin
   // Cancelled by a newer request or by Discard; whoever did that owns the state.
   if (code === 'cancelled') return false;
   useDraftStore.setState({ status: 'failed', token: null, failure: { code, ...request } });
+  spikeOrb(SPIKE.draftFailed);
   return true;
 }
 
@@ -216,6 +218,7 @@ export function acceptReply(token: string, response: SetupResponse, request: Pen
     apps: parseApps(response.apps),
     version: state.version + 1,
   });
+  spikeOrb(SPIKE.draftReady);
   return true;
 }
 

@@ -51,6 +51,8 @@ export const employeeSummarySchema = z.object({
   // without one normalizes to "never started".
   control: z.unknown().optional(),
   watch_node_ids: z.array(z.string()).catch([]),
+  /** The Canvas board the Workspace shows; null when the graph has none. */
+  canvas_node_id: z.string().nullable().catch(null),
   revision: z.number().catch(0),
   hired_at: z.string().nullable().catch(null),
 });

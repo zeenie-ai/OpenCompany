@@ -51,15 +51,19 @@ import { NodeIcon } from '../../assets/icons';
 import { theme } from '../../styles/theme';
 import { cn } from '@/lib/utils';
 import { useFolderSkills } from '../../hooks/useFolderSkills';
+import { USER_SKILLS_QUERY_KEY, useUserSkillsQuery, type UserSkill } from '../../hooks/useUserSkills';
 import { useNodeAllowlist } from '../../hooks/useNodeAllowlist';
 
 // Skill configuration stored in node parameters
-// Key is skillName (folder name like 'whatsapp-skill')
+// Key is skillName (folder name like 'whatsapp-skill'). Entries can carry
+// more keys (a hired employee's Skills node adds `description`), so every
+// edit below spreads the existing entry instead of rebuilding it.
 interface SkillConfig {
   enabled: boolean;
   instructions: string;
   isCustomized: boolean;
   required?: boolean;
+  description?: string;
 }
 
 interface MasterSkillConfig {
@@ -74,18 +78,6 @@ interface AvailableSkill {
   color: string;
   description: string;
   isUserSkill?: boolean;  // True if this is a user-created skill from database
-}
-
-// User skill from database
-interface UserSkill {
-  name: string;
-  display_name: string;
-  description: string;
-  instructions: string;
-  icon: string;
-  color: string;
-  category: string;
-  is_active: boolean;
 }
 
 // Pending skill data for create/edit
@@ -153,20 +145,10 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
   const initializedSkillRef = useRef<string | null>(null);
 
   const queryClient = useQueryClient();
-  const userSkillsQuery = useQuery<UserSkill[], Error>({
-    queryKey: ['userSkills'],
-    queryFn: async () => {
-      const response = await sendRequest<{ skills: UserSkill[]; count: number }>(
-        'get_user_skills',
-        { active_only: false },
-      );
-      return response?.skills ?? [];
-    },
-    staleTime: 60_000,
-  });
+  const userSkillsQuery = useUserSkillsQuery();
   const userSkills = userSkillsQuery.data ?? EMPTY_USER_SKILLS;
   const invalidateUserSkills = useCallback(
-    () => queryClient.invalidateQueries({ queryKey: ['userSkills'] }),
+    () => queryClient.invalidateQueries({ queryKey: USER_SKILLS_QUERY_KEY }),
     [queryClient],
   );
 
@@ -230,8 +212,11 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
       skills.push(...folderSkills);
     }
 
-    // Add user-created skills
+    // Add user-created skills. A built-in added to the owner's library from
+    // Home is a copy under the same name: the folder's row already shows it.
+    const folderNames = new Set(skills.map((skill) => skill.skillName));
     userSkills.forEach(us => {
+      if (folderNames.has(us.name)) return;
       skills.push({
         type: 'userSkill',
         skillName: us.name,
@@ -400,12 +385,13 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
       const defaultContent = await fetchSkillContent(skillName);
       onConfigChange({
         ...skillsConfig,
-        [skillName]: { enabled: true, instructions: defaultContent, isCustomized: false }
+        [skillName]: { ...currentConfig, enabled: true, instructions: defaultContent, isCustomized: false }
       });
     } else {
       onConfigChange({
         ...skillsConfig,
         [skillName]: {
+          ...currentConfig,
           enabled,
           instructions: currentConfig?.instructions || '',
           isCustomized: currentConfig?.isCustomized || false
@@ -422,6 +408,7 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
     onConfigChange({
       ...skillsConfig,
       [skillName]: {
+        ...currentConfig,
         enabled: currentConfig?.enabled || false,
         instructions,
         isCustomized
@@ -436,7 +423,7 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
 
     onConfigChange({
       ...skillsConfig,
-      [skillName]: { enabled: currentConfig?.enabled || false, instructions: defaultContent, isCustomized: false }
+      [skillName]: { ...currentConfig, enabled: currentConfig?.enabled || false, instructions: defaultContent, isCustomized: false }
     });
   }, [skillsConfig, onConfigChange, fetchSkillContent, queryClient]);
 
@@ -504,6 +491,8 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
     setSavingSkill(true);
     try {
       const handler = isCreatingNew ? 'create_user_skill' : 'update_user_skill';
+      // No `is_active`: a new skill starts on, and an edit keeps whether the
+      // owner has it on for new hires (Home's Settings > Skills).
       const payload = {
         name: skillName,
         display_name: pendingSkillData.display_name,
@@ -512,7 +501,6 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
         icon: pendingSkillData.icon,
         color: pendingSkillData.color,
         category: skillFolder || 'custom',
-        is_active: true
       };
 
       const result = await sendRequest<{ skill?: UserSkill; success?: boolean; error?: string }>(handler, payload);

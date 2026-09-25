@@ -8,9 +8,13 @@ One employee is one workflow:
 - one agent (aiAgent) labelled with the employee's name, carrying the
   standing instructions (prompt.py) and a per-run prompt that points at the
   trigger's output;
-- tools on the agent: web search, a checklist (writeTodos) and a clock,
-  always; the apps' tools, minus anything that sends or spends while "ask
-  me first" is on; Memory when the owner keeps memory across chats;
+- tools on the agent: web search, a checklist (writeTodos), a clock and a
+  canvas (what the agent puts there shows in Home's Workspace), always; the
+  apps' tools, minus anything that sends or spends while "ask me first" is
+  on; Memory when the owner keeps memory across chats;
+- the owner's skill library (Settings > Skills): every skill that is on, on
+  one Skills node (masterSkill), with its text copied in, so a later edit to
+  the library never changes an employee already hired;
 - a Context only for owner-facing triggers (schedule, Chat): a public
   trigger talks to many strangers, and one shared conversation would mix
   them;
@@ -49,6 +53,7 @@ from services.employees.hire_request import HireEmployeeRequest, HireTrigger
 from services.employees.llm import LLMChoice
 from services.approvals.contract import APPROVAL_GATE_TYPE, NO_REPLY, approved_edge_condition, send_condition
 from services.employees.prompt import OwnerProfile, PromptInputs, build_system_message
+from services.skill_runtime import is_personality_skill
 
 BUILDER_VERSION = 1
 
@@ -58,10 +63,12 @@ SCHEDULE_TYPE = "cronScheduler"
 GATE_TYPE = APPROVAL_GATE_TYPE
 CONSOLE_TYPE = "console"
 CONTEXT_TYPE = "context"
+SKILLS_TYPE = "masterSkill"
 MEMORY_TYPE = "simpleMemory"
 SEARCH_TYPE = "duckduckgoSearch"
 TODOS_TYPE = "writeTodos"
 CLOCK_TYPE = "currentTimeTool"
+CANVAS_TYPE = "canvas"
 
 #: cronScheduler's allowed times and zones (nodes/scheduler/cron_scheduler).
 SCHEDULE_TIMES = ("00:00", "02:00", "04:00", "06:00", "08:00", "09:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00", "22:00")
@@ -98,6 +105,39 @@ class BuildError(ValueError):
         self.code = code
 
 
+@dataclass(frozen=True)
+class LibrarySkill:
+    """A skill from the owner's library that is on for new hires."""
+
+    name: str
+    description: str
+    instructions: str
+
+
+#: The Skill tool's own entry on an assistant Skills node (MasterSkillParams).
+_SKILL_TOOL_ENTRY: Dict[str, Any] = {"enabled": True, "instructions": "", "isCustomized": False, "required": True}
+
+
+def _skills_config(skills: Sequence[LibrarySkill], warnings: List[str]) -> Optional[Dict[str, Any]]:
+    """The Skills node's ``skills_config``: the Skill tool's entry, then each
+    library skill with its text. None when no skill qualifies (no node).
+
+    A skill named ``skill`` would take over the Skill tool's own entry, and a
+    ``*-personality`` skill would replace the whole system message (and with
+    it the rules prompt.py writes), so neither is given to a hire.
+    """
+    config: Dict[str, Any] = {"skill": dict(_SKILL_TOOL_ENTRY)}
+    for skill in skills:
+        name = skill.name.strip()
+        if not name or not skill.instructions.strip():
+            continue
+        if name in config or is_personality_skill(name):
+            warnings.append(f"The skill {name!r} can't be given to a hired employee")
+            continue
+        config[name] = {"enabled": True, "instructions": skill.instructions, "isCustomized": False, "description": skill.description}
+    return config if len(config) > 1 else None
+
+
 @dataclass
 class BuildInputs:
     workflow_id: str
@@ -113,6 +153,8 @@ class BuildInputs:
     timezone: str = "UTC"
     llm: Optional[LLMChoice] = None
     memory: bool = True
+    #: Settings > Skills: the library skills that are on.
+    skills: Sequence[LibrarySkill] = ()
     #: Hire allowlist (services.node_allowlist.is_hire_allowed).
     allowed: Callable[[str], bool] = lambda _node_type: True
     now: Optional[datetime] = None
@@ -529,6 +571,7 @@ def build_employee_graph(inputs: BuildInputs) -> BuiltEmployee:
             delivery_app=delivery.app.name if delivery is not None else None,
             unsupported_apps=list(inputs.unsupported_apps),
             has_memory=inputs.memory,
+            has_canvas=True,
         )
     )
     if trigger.kind == "schedule" and request.trigger is not None and request.trigger.every == "weekday":
@@ -573,6 +616,7 @@ def build_employee_graph(inputs: BuildInputs) -> BuiltEmployee:
     add_tool(CLOCK_TYPE, "Clock", {"timezone": inputs.timezone or "UTC"})
     if inputs.memory:
         add_tool(MEMORY_TYPE, "Memory", {}, role="memory")
+    add_tool(CANVAS_TYPE, "Canvas", {}, role="canvas")
     for app in inputs.apps:
         for tool in app.tools:
             if request.rules.ask_first and not allowed_when_asking_first(tool.side_effects):
@@ -592,6 +636,14 @@ def build_employee_graph(inputs: BuildInputs) -> BuiltEmployee:
             CONTEXT_TYPE, labels.take("Context"), {}, (360, 20), data={"systemManaged": True, "agentNodeId": roles["agent"]}
         )
         graph.connect(roles["context"], "output-context", roles["agent"], "input-context")
+
+    # Skills from the owner's library.
+    skills_config = _skills_config(inputs.skills, warnings)
+    if skills_config is not None:
+        roles["skills"] = graph.add(
+            SKILLS_TYPE, labels.take("Skills"), {"skill_folder": "assistant", "skills_config": skills_config}, (-60, 440)
+        )
+        graph.connect(roles["skills"], "output-tool", roles["agent"], "input-skill")
 
     # Delivery.
     if delivery is not None:
@@ -639,6 +691,7 @@ __all__ = [
     "BuildError",
     "BuildInputs",
     "BuiltEmployee",
+    "LibrarySkill",
     "SEND_CONDITION",
     "build_employee_graph",
     "label_key",

@@ -15,7 +15,7 @@ import {
   type CanvasListResponse,
   canvasBoardQueryKey,
 } from '../lib/canvasBoard';
-import { useWebSocket } from '../contexts/WebSocketContext';
+import { useWebSocketActions } from '../contexts/WebSocketContext';
 
 export interface CanvasBoard {
   items: CanvasItem[];
@@ -26,7 +26,7 @@ export function useCanvasBoardQuery(
   workflowId: string | null | undefined,
   nodeId: string | null | undefined,
 ) {
-  const { sendRequest, isReady } = useWebSocket();
+  const { sendRequest, isReady } = useWebSocketActions();
   return useQuery<CanvasBoard, Error>({
     queryKey: nodeId
       ? canvasBoardQueryKey(workflowId, nodeId)
@@ -52,7 +52,7 @@ export function useCanvasRemove(
   workflowId: string | null | undefined,
   nodeId: string | null | undefined,
 ) {
-  const { sendRequest } = useWebSocket();
+  const { sendRequest } = useWebSocketActions();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (itemId: string) => {
@@ -80,7 +80,7 @@ export function useCanvasClear(
   workflowId: string | null | undefined,
   nodeId: string | null | undefined,
 ) {
-  const { sendRequest } = useWebSocket();
+  const { sendRequest } = useWebSocketActions();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () => {

@@ -1,35 +1,32 @@
 /**
- * Starter jobs for the hire composer (design handoff "Template chips"): a
- * label, the role colour it wears, and the plain-English job it sends.
+ * Starter jobs (design handoff "Template chips" and Settings > Plugins).
+ * One list, in starters.json, serves both: the chips under the composer
+ * send a starter's job, and Plugins installs a starter (its skills into the
+ * library, then its job to the setup model).
+ *
+ * Each starter names the apps its job needs; the job text names them too,
+ * since it is all the setup model reads. The skills are built-ins from the
+ * employee folder. server/tests/test_home_catalog_contract.py checks both.
  */
 
-import type { ColorRole } from '../data/schemas';
+import { z } from 'zod';
+import { COLOR_ROLES } from '../data/schemas';
+import starters from './starters.json';
 
-export interface HireTemplate {
-  label: string;
-  role: ColorRole;
-  job: string;
-}
+const starterSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  role: z.enum(COLOR_ROLES),
+  summary: z.string().min(1),
+  job: z.string().min(1),
+  apps: z.array(z.string().min(1)),
+  skills: z.array(z.string().min(1)).min(1),
+});
 
-export const HIRE_TEMPLATES: readonly HireTemplate[] = [
-  {
-    label: 'Receptionist',
-    role: 'agent',
-    job: 'A receptionist who answers customer messages on WhatsApp, handles common questions and books appointments in my calendar.',
-  },
-  {
-    label: 'Inbox assistant',
-    role: 'model',
-    job: 'An inbox assistant who sorts my email every morning, flags anything urgent and drafts replies for me to approve.',
-  },
-  {
-    label: 'Bookkeeper',
-    role: 'workflow',
-    job: 'A bookkeeper who tracks payments in Stripe, politely chases unpaid invoices and sends me a weekly summary.',
-  },
-  {
-    label: 'Social media helper',
-    role: 'trigger',
-    job: 'A social media helper who drafts three posts a week about my business and sends them to me for approval.',
-  },
-];
+export type Starter = z.infer<typeof starterSchema>;
+
+export const STARTERS: readonly Starter[] = z.array(starterSchema).parse(starters);
+
+/** The composer's chips read the same list. */
+export type HireTemplate = Starter;
+export const HIRE_TEMPLATES = STARTERS;

@@ -2,7 +2,8 @@
  * Settings > Connectors: Disconnect removes what the provider's own panel
  * would (an API key, a sign-in), and hands QR and email accounts to their
  * panel; a card glows and confirms only when a provider flips to connected
- * while the tab is open.
+ * while the page is open; the page opens on the category it was asked for,
+ * and search also matches who makes the app.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -24,8 +25,7 @@ vi.mock('../data/connectors', async (importOriginal) => {
     useConnectors: () => ({
       providers,
       categories: [{ key: 'ai', label: 'AI' }, { key: 'messages', label: 'Messages' }],
-      connectedCount: providers.filter(actual.isConnected).length,
-      connectedApps: [],
+      connectedApps: providers.filter(actual.isConnected).filter((p) => p.consumer_category !== 'ai'),
       hasAi: true,
       isLoading: false,
     }),
@@ -37,10 +37,10 @@ vi.mock('../ui/pillToast', () => ({ pillToast: vi.fn() }));
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { ConnectorsTab } from '../settings/ConnectorsTab';
 
-function ui(onConnect = vi.fn()) {
+function ui(onConnect = vi.fn(), initialCategory?: string) {
   return (
     <ThemeProvider>
-      <ConnectorsTab onConnect={onConnect} />
+      <ConnectorsTab onConnect={onConnect} initialCategory={initialCategory} />
     </ThemeProvider>
   );
 }
@@ -58,7 +58,7 @@ function provider(patch: Partial<ServerProviderConfig> & { id: string; kind: Ser
 }
 
 async function disconnect(name: string) {
-  const card = screen.getByText(name).closest('[data-connector]') as HTMLElement;
+  const card = screen.getByText(name).closest('[data-catalog-item]') as HTMLElement;
   fireEvent.click(card.querySelector('button')!);
   fireEvent.click(await screen.findByRole('button', { name: 'Disconnect' }));
 }
@@ -120,6 +120,26 @@ describe('ConnectorsTab', () => {
     render(ui());
     fireEvent.change(screen.getByRole('textbox', { name: 'Search connectors' }), { target: { value: 'goo' } });
     expect(screen.getByText('Google')).toBeInTheDocument();
+    expect(screen.queryByText('OpenAI')).not.toBeInTheDocument();
+  });
+
+  it('opens on the category it was asked for, with the filter showing', () => {
+    render(ui(vi.fn(), 'messages'));
+    expect(screen.getByText('Messages').closest('button')).toHaveAttribute('data-state', 'on');
+    expect(screen.getByText('WhatsApp')).toBeInTheDocument();
+    expect(screen.queryByText('OpenAI')).not.toBeInTheDocument();
+  });
+
+  it('searches who makes the app', () => {
+    providers = [
+      provider({ id: 'gemini', name: 'Gemini', kind: 'apiKey', publisher: 'Google', verified: true }),
+      provider({ id: 'openai', name: 'OpenAI', kind: 'apiKey', publisher: 'OpenAI' }),
+    ];
+    render(ui());
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search connectors' }), { target: { value: 'google' } });
+    expect(screen.getByText('Gemini')).toBeInTheDocument();
+    expect(screen.getByText('by Google')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Verified' })).toBeInTheDocument();
     expect(screen.queryByText('OpenAI')).not.toBeInTheDocument();
   });
 });

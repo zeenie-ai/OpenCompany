@@ -16,6 +16,7 @@ from services.employees.builder import (
     SEND_CONDITION,
     BuildError,
     BuildInputs,
+    LibrarySkill,
     build_employee_graph,
     label_key,
     schedule_params,
@@ -202,3 +203,91 @@ def test_schedule_mapping():
     # Sydney matches nothing listed: expressed in UTC (09:00 AEST = 23:00 UTC the day before).
     sydney = schedule_params(HireTrigger(kind="schedule", every="day", at="09:00"), "Australia/Sydney", NOW)
     assert sydney == {"frequency": "days", "daily_time": "22:00", "timezone": "UTC"}
+
+
+# ----- the owner's skill library -----
+
+LIBRARY = (
+    LibrarySkill(name="book-appointments", description="Offers free times.", instructions="# Book\nOffer real times."),
+    LibrarySkill(name="my-tone", description="How I write.", instructions="Write warmly."),
+)
+
+
+async def test_library_skills_ride_one_skills_node():
+    built = build_employee_graph(inputs(hire(), "whatsapp", connected={"whatsapp"}, skills=LIBRARY))
+    skills = node(built, "skills")
+    assert skills["type"] == "masterSkill"
+    params = built.parameters[skills["id"]]
+    assert params["skill_folder"] == "assistant"
+    config = params["skills_config"]
+    assert list(config) == ["skill", "book-appointments", "my-tone"]
+    assert config["skill"] == {"enabled": True, "instructions": "", "isCustomized": False, "required": True}
+    # The text is copied in: the agent reads a library skill only from here.
+    assert config["book-appointments"] == {
+        "enabled": True,
+        "instructions": "# Book\nOffer real times.",
+        "isCustomized": False,
+        "description": "Offers free times.",
+    }
+    [edge] = edges_between(built, "skills", "agent")
+    assert (edge["sourceHandle"], edge["targetHandle"]) == ("output-tool", "input-skill")
+    await assert_valid(built)
+
+
+async def test_the_skills_node_expands_into_the_skill_tool():
+    from nodes.skill._expander import expand_master_skill
+    from services.skill_runtime import skill_tool_info
+
+    built = build_employee_graph(inputs(hire(), "whatsapp", connected={"whatsapp"}, skills=LIBRARY))
+    config = built.parameters[built.node_roles["skills"]]["skills_config"]
+    entries = await expand_master_skill(built.node_roles["skills"], config)
+    catalogue = skill_tool_info(entries, built.node_roles["agent"])["parameters"]["tool_description"]
+    assert "- book-appointments: Offers free times." in catalogue
+    assert "- my-tone: How I write." in catalogue
+
+
+def test_an_empty_library_adds_no_skills_node():
+    built = build_employee_graph(inputs(hire(), "whatsapp", connected={"whatsapp"}))
+    assert "skills" not in built.node_roles
+    assert not any(n["type"] == "masterSkill" for n in built.nodes)
+    blank = (LibrarySkill(name="blank", description="Nothing", instructions="  "),)
+    assert "skills" not in build_employee_graph(inputs(hire(), "whatsapp", connected={"whatsapp"}, skills=blank)).node_roles
+
+
+def test_reserved_skill_names_never_reach_a_hire():
+    skills = (
+        LibrarySkill(name="skill", description="Takes over the Skill tool", instructions="x"),
+        LibrarySkill(name="pirate-personality", description="Replaces the system message", instructions="x"),
+        LibrarySkill(name="ok-skill", description="Fine", instructions="y"),
+    )
+    built = build_employee_graph(inputs(hire(), "whatsapp", connected={"whatsapp"}, skills=skills))
+    config = built.parameters[built.node_roles["skills"]]["skills_config"]
+    assert set(config) == {"skill", "ok-skill"}
+    assert config["skill"]["instructions"] == ""
+    assert sum("can't be given" in warning for warning in built.warnings) == 2
+
+
+def test_the_skills_node_needs_the_allowlist():
+    with pytest.raises(BuildError) as raised:
+        build_employee_graph(
+            inputs(hire(), "whatsapp", connected={"whatsapp"}, skills=LIBRARY, allowed=lambda node_type: node_type != "masterSkill")
+        )
+    assert raised.value.code == "not_allowed"
+
+
+# ----- the canvas the Workspace shows -----
+
+
+async def test_every_hire_gets_a_canvas():
+    built = build_employee_graph(inputs(hire(), "whatsapp", connected={"whatsapp"}))
+    assert node(built, "canvas")["type"] == "canvas"
+    [edge] = edges_between(built, "canvas", "agent")
+    assert (edge["sourceHandle"], edge["targetHandle"]) == ("output-tool", "input-tools")
+    assert "canvas tool" in built.parameters[built.node_roles["agent"]]["system_message"]
+    await assert_valid(built)
+
+
+def test_the_canvas_needs_the_allowlist():
+    with pytest.raises(BuildError) as raised:
+        build_employee_graph(inputs(hire(), "whatsapp", connected={"whatsapp"}, allowed=lambda node_type: node_type != "canvas"))
+    assert raised.value.code == "not_allowed"

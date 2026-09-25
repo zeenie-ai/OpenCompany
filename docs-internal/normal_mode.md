@@ -57,17 +57,18 @@ out of git). Where its token values differ from the repo's, the repo wins.
 
 | Folder | Contents |
 |---|---|
-| `HomeShell.tsx` | Sidebar, header, the current view (hire or one employee), Settings, the connect dialog, the orb's stage |
-| `sidebar/`, `header/` | The team list, New employee, the profile row; the view title, mode toggle and theme button |
+| `HomeShell.tsx` | Sidebar, header, the current view (hire or one employee), the Workspace dock, Settings, the connect dialog, the orb's stage |
+| `sidebar/`, `header/` | The team list, New employee, the profile row; the view title, the Workspace pill, mode toggle and theme button |
 | `hire/` | The hero, the composer, starter jobs |
 | `genui/` | The setup draft under the composer (below) |
-| `employee/` | One employee's card: status, the current task, apps, "done today", Start / Pause / Resume, the drafts waiting for the owner |
-| `settings/` | Profile and Connectors, and `ConnectDialog` (the editor's credential panel for one provider, in its compact variant) |
+| `employee/` | One employee's card: status, the current task, apps, "done today", Start / Pause / Resume, Watch live, the drafts waiting for the owner |
+| `workspace/` | The Workspace dock (below), its header pill, and its Canvas tab, which loads in its own chunk |
+| `settings/` | The Settings pages (Profile, Billing, Skills, Connectors, Plugins), the shared catalog page the last three build on, and `ConnectDialog` (the editor's credential panel for one provider, in its compact variant) |
 | `approvals/` | The drafts query, the decide mutation (optimistic), the approval broadcast listener |
 | `data/` | zod-parsed queries for employees, connectors and the profile; `presentation.ts` maps server state to pills and actions without deriving new rules |
 | `orb/` | The 3D orb (below) |
 | `ui/` | Small shared pieces (avatar, status dot and pill, app mark) and the pill toast |
-| `state/homeStore.ts` | UI state only: the view, the sidebar, Settings, one-shot glow and pulse signals |
+| `state/homeStore.ts` | UI state only: the view, the sidebar, Settings, the Workspace dock, one-shot glow and pulse signals |
 
 Status comes from the server: an employee summary is `working`, `ready`,
 `paused` or `attention` (an automatic pause, see below), and a pending draft
@@ -87,9 +88,42 @@ what the engine reads each frame (the slot to fill, an energy target, a spike)
 and its lifecycle: leaving Home keeps the renderer, the app shell disposes it.
 `OrbStage` is the canvas host below the header; each view's `OrbSlot` reserves
 the square the orb glides into. The composer sets the energy target (focused,
-holding text, a setup being written); a hire, a theme or mode switch, a connect
-and a task change spike it. Without WebGL, under reduced motion, or after a
-lost WebGL context, the slot shows the static mark.
+holding text, a setup being written). These spike it: a hire, a theme or mode
+switch, a connect, a task change, opening Settings or the Workspace, a setup
+arriving or failing, and saving the profile (`SPIKE` in orb.ts). In dark the orb keeps the
+logo's colours with white particles and packets; in light it is glossy
+piano-black under a white rim light. Its glows and particles blend additively
+in dark and normally in light (additive glow vanishes on white), fading through
+zero at the midpoint of a theme change. Without WebGL, under reduced motion, or
+after a lost WebGL context, the slot shows the static mark.
+
+## The Workspace
+
+A dock on the right of Home ([workspace/WorkspaceDock.tsx](../client/src/features/home/workspace/WorkspaceDock.tsx))
+that shows what one employee is working on. The header's Workspace pill
+opens and closes it, and carries a blinking dot while it is closed and
+someone is working. Watch live on an employee's card opens it on that
+employee. It shows the employee last opened or watched, else the first on
+the team.
+
+- **Header**: the avatar, "{Name}’s workspace", the live task line
+  (`useLiveTask`, else the summary's task), and a pill: Live while the
+  employee works, otherwise the card's own pill. Expand and Close.
+- **Canvas**: the board named by the summary's `canvas_node_id`, drawn by
+  the editor's Canvas renderer (`CanvasContent`, see [Canvas Node](./canvas_node.md)).
+  It loads in its own chunk, which keeps the board's markdown, code and
+  JSON viewers out of Home's, and refreshes on `canvas_updated` like the
+  editor's hosts. An employee without a Canvas gets a note and Open
+  workflow.
+- **Browser** and **Android** say that their live views are not built yet.
+- **Size and motion**: 460px wide by default. The left edge drags from
+  360px to the window less 420px, and Expand gives a bigger dock without
+  a drag. At 1100px and wider the dock pushes the page aside; narrower, it
+  lies over it with `--shadow-dock`. Like the sidebar it stays mounted and
+  transitions its width (`--dur-dock-in` to open, `--dur-sidebar-out` to
+  close), so a reload with it open does not animate, and its contents
+  mount on the first open. Open, width and tab persist under
+  `home_workspace_v1`; Expand and the employee last only for the session.
 
 ## Hiring
 
@@ -151,8 +185,15 @@ the client's `HIRE_PAYLOAD_KEYS` must match, locked by
    pure): one trigger (an app event, a schedule on `cronScheduler`, or manual
    chat), one `aiAgent` whose system message comes from
    [prompt.py](../server/services/employees/prompt.py), always-on tools (web
-   search, todos, clock, plus memory when the owner allows it) and the apps'
-   tools, delivery, and an "Activity log" console node. With "Ask me before
+   search, todos, clock, a Canvas, plus memory when the owner allows it) and
+   the apps' tools, the owner's skill library, delivery, and an "Activity
+   log" console node. The instructions ask the employee to put finished
+   work the owner will want to look at later on its Canvas, and to leave
+   routine replies off it. The library is every skill that is on in Settings > Skills. It goes
+   on one Skills node (`masterSkill`) with each skill's text copied in, so a
+   later change to the library never alters an employee already hired. A
+   skill named `skill`, or one ending in `-personality`, is left out: it would
+   take over the Skill tool, or replace the whole system message. With "Ask me before
    sending anything" on, a reply goes through `approvalGate`, and tools that
    send or spend money are left off. Every node type must pass
    `node_allowlist.is_hire_allowed` ([Node Allowlist](./node_allowlist.md));
@@ -195,20 +236,73 @@ Every trigger-spawned run that finishes writes a `workflow_run_records` row
 `workflow_runs.record_completion` activity, scheduled at the end of
 `MachinaWorkflow.run` behind the `machina-run-record-v1` patch; in-process
 from `DeploymentManager`. The count starts at local midnight in the owner's
-timezone, and rows are pruned after 35 days.
+timezone, and rows are pruned after 35 days, which is longer than a month, so
+Billing's count of this month's tasks (from the 1st, in the owner's timezone,
+across the whole team) is always complete.
 
 ## Settings
+
+A 1040x760 dialog ([settings/HomeSettings.tsx](../client/src/features/home/settings/HomeSettings.tsx))
+with a 224px nav. One `PAGES` list drives the nav and the panels. The pages
+are grouped under *Settings* (Profile, Billing) and *Customize* (Skills,
+Connectors, Plugins), and the nav's search matches each page's label and
+keywords, dropping a group with no match. Opening Settings on a category
+(`openSettings('connectors', 'ai')`) only sets where the page starts:
+changing page clears it.
 
 - **Profile**: `profile_full_name`, `profile_call_name`, `profile_role`,
   `profile_preferences`, `profile_timezone` (written from `Intl` on save),
   `memory_across_chats` and `prefer_local_ai` on `UserSettings`, normalised on
   save by [services/settings/profile.py](../server/services/settings/profile.py).
   Every hire reads them into its instructions.
+- **Billing**: usage only. It shows the tasks done this month
+  (`get_employee_usage`) and the number of employees in the sidebar. A count
+  that can't be read shows a dash, never a zero.
+- **Skills**: the owner's library, which is the user-skills table. Each row is
+  on (`is_active`) or off for employees hired from now on.
+  - *Discover* lists the built-in `server/skills/employee/` folder. These are
+    short skills written for AI employees, with no tools to connect, and their
+    cards read the SKILL.md `metadata.title` and `metadata.summary`.
+  - *Adding* a built-in copies its text into the library under the same name.
+  - *Create* writes a new skill in plain words. Its name is the title's slug,
+    never a taken, built-in or reserved one.
+
+  The Dev editor's Master Skill panel reads the same library. It no longer
+  switches a skill back on when saving it, and it keeps the extra keys a hired
+  employee's Skills node carries. `DISCOVER_SKILL_FOLDER` in
+  `features/home/data/skills.ts` names the folder.
+- **Plugins**: starter bundles, from `features/home/hire/starters.json`, the
+  same list the composer's template chips send. A bundle is a job, the apps it
+  needs (named in the job, since the job is all the setup model reads), and
+  its skills.
+  - *Install* adds the bundle's skills to the library, switching on any that
+    are off. It then starts a hire from the job on the hire view.
+  - A bundle counts as installed when all its skills are in the library;
+    nothing else is stored.
+
+  `tests/test_home_catalog_contract.py` holds the bundles and the Discover
+  folder to each other and to the app registry.
 - **Connectors**: the providers in `config/credential_providers.json` that
-  declare a `consumer_category` (`messages`, `organize`, `business`, `ai`) and a
-  short `description`. The catalogue adds `connected`, which differs from
-  `stored` for providers with a `connected_check` (WhatsApp's live pairing, the
-  IMAP/SMTP account's keys).
+  declare a `consumer_category` (`messages`, `organize`, `business`, `ai`), a
+  short `description`, a `publisher` (the card's "by …" line) and `verified`.
+  They are listed in category order, so apps come before AI models. The
+  catalogue adds `connected`, which differs from `stored` for providers with a
+  `connected_check` (WhatsApp's live pairing, the IMAP/SMTP account's keys).
+
+**The catalog page** ([settings/CatalogLayout.tsx](../client/src/features/home/settings/CatalogLayout.tsx)).
+Skills, Connectors and Plugins are built on a shared page:
+- a title with Yours / Discover, search, and a category filter behind a
+  button;
+- an optional primary action that opens an inline form;
+- a grid of cards.
+
+The page supplies both lists, so the layout never needs to know which page it
+is on:
+- Discover shows eight cards until Show all.
+- A card's "+" turns into a check, which removes on hover only when the page
+  can remove.
+- Yours shows a switch only when the page can toggle.
+- A card glows when its item turns added while it is on screen.
 
 ## Wire contract
 
@@ -217,8 +311,9 @@ WebSocket requests (snake_case; failures come back as `success: false` with an
 
 | Type | Payload | Response |
 |---|---|---|
-| `list_employees` | `{}` | `{employees}` |
+| `list_employees` | `{}` | `{employees}`; each summary's `canvas_node_id` is its Canvas board: the one it was hired with, else the graph's first Canvas node, else null |
 | `get_employee` | `{workflow_id}` | the summary plus `description`, `job`, `plan`, `rules`, `choices`, `trigger_text`, `last_run`, `latest_report` |
+| `get_employee_usage` | `{}` | `{tasks_this_month}` (successful runs since the 1st, owner's timezone, whole team) |
 | `generate_employee_setup` | `{job, refine?, history?, draft_token}` | `{draft_token, reply, provider, model, usage, retried, finish_reason, apps}` |
 | `cancel_employee_setup` | `{draft_token}` | `{cancelled}` |
 | `hire_employee` | `HireEmployeeRequest` | `{employee, started, missing_apps, needs_ai, unsupported_apps, warnings, idempotent}` |
@@ -255,5 +350,23 @@ history). Client: `features/home/**/__tests__`, `app/__tests__`,
 - OAuth sign-in is not opened ahead of the request, so a browser may block
   the popup.
 - Each waiting draft holds one `triggers-event` worker slot.
+- Billing has no plans, payment method or invoices: no billing account sits
+  behind OpenCompany. A deleted employee's runs leave the month's count,
+  because deleting a workflow deletes its run records.
+- Connectors has no custom (MCP) connector.
+- Skill library changes reach only new hires: an employee keeps the skills it
+  was hired with, and one hired before the library existed has none. The
+  library is shared across users in multi-user mode, like the team list.
+- An employee hired before Canvas has no Canvas node, so its
+  `canvas_node_id` is null. Adding one in Dev mode fills it in.
+- The Workspace's Browser and Android tabs have no live view yet, and it
+  has no timeline, replay or Take over.
+- With login on, an agent's Canvas writes land under the default owner:
+  its tool call carries no user id
+  ([agent_workflow.py](../server/services/temporal/agent_workflow.py)).
+  The Workspace reads the signed-in owner's board, so it shows nothing
+  there. This predates the Workspace and applies to the editor's Memory
+  and Data Source tools as well. Fixing it moves existing memories to a
+  different owner, so it needs its own change.
 - A manual-chat employee cannot be given work from Home yet; the setup prompt
   steers towards app and schedule triggers.

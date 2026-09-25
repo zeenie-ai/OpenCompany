@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useHomeStore } from '../state/homeStore';
 import { useDraftActions, useDraftStore } from './draftStore';
+import { useStartHire } from './useStartHire';
 
 export function useHireComposer() {
   const value = useDraftStore((s) => s.input);
@@ -20,6 +21,7 @@ export function useHireComposer() {
   const hiring = useDraftStore((s) => s.hiring);
   const failure = useDraftStore((s) => s.failure);
   const actions = useDraftActions();
+  const { start } = useStartHire();
 
   // Open Connectors > AI once per "no AI model" answer.
   const handled = useRef<unknown>(null);
@@ -40,6 +42,6 @@ export function useHireComposer() {
     onStopRefining: useCallback(() => actions.setRefining(false), [actions]),
     working: status === 'working' || hiring,
     /** A template: its job replaces whatever is in the box and is sent. */
-    pick: useCallback((job: string) => send(job, { refine: false }), [send]),
+    pick: useCallback((job: string) => void start(job), [start]),
   };
 }

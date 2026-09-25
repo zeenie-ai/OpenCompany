@@ -261,6 +261,7 @@
   --shadow-float:   var(--shadow-float);
   --shadow-popover: var(--shadow-popover);
   --shadow-dialog:  var(--shadow-dialog);
+  --shadow-dock:    var(--shadow-dock);
 
   --blur-scrim: var(--blur-scrim);
 
@@ -452,7 +453,7 @@ html {
 
 @keyframes home-pip-ring {
   0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-working-dot) var(--tint-pip-ring), transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-working-ink) var(--tint-pip-ring), transparent);
   }
   100% {
     box-shadow: 0 0 0 6px transparent;

@@ -2,8 +2,9 @@
 
 ``list_employees`` -> ``{employees: EmployeeSummary[]}``: the whole team for
 the Home sidebar. ``get_employee {workflow_id}`` -> ``{employee}``: one
-summary plus what the employee card and its setup screen show. Shapes are
-documented in services/employees/summaries.py.
+summary plus what the employee card and its setup screen show.
+``get_employee_usage {}`` -> ``{tasks_this_month}``: Settings > Billing.
+Shapes are documented in services/employees/summaries.py.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from typing import Any, Dict
 
 from fastapi import WebSocket
 
-from services.employees.summaries import get_employee_detail, list_employee_summaries
+from services.employees.summaries import employee_usage, get_employee_detail, list_employee_summaries
 from services.plugin.base import NodeUserError
 from services.plugin.ws import ws_response
 
@@ -38,15 +39,23 @@ async def handle_get_employee(data: Dict[str, Any], websocket: WebSocket) -> Dic
     return {"success": True, "employee": employee}
 
 
+@ws_response
+async def handle_get_employee_usage(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    from core.container import container
+
+    return {"success": True, **await employee_usage(container.database())}
+
+
 from services.employees.hire import handle_hire_employee  # noqa: E402
 from services.employees.start import handle_start_employee  # noqa: E402
 
 WS_HANDLERS: Dict[str, Any] = {
     "list_employees": handle_list_employees,
     "get_employee": handle_get_employee,
+    "get_employee_usage": handle_get_employee_usage,
     "hire_employee": handle_hire_employee,
     "start_employee": handle_start_employee,
 }
 
 
-__all__ = ["WS_HANDLERS", "handle_get_employee", "handle_list_employees"]
+__all__ = ["WS_HANDLERS", "handle_get_employee", "handle_get_employee_usage", "handle_list_employees"]

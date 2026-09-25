@@ -18,7 +18,8 @@
 import type { AppRef, ColorRole, EmployeeSummary } from './schemas';
 import type { WorkflowControlPendingMutation } from '@/contexts/WebSocketContext';
 
-export type StatusTone = 'working' | 'ready' | 'paused' | 'attention' | 'waiting';
+/** `live` is the Workspace's "watching now" pill, not an employee state. */
+export type StatusTone = 'working' | 'ready' | 'paused' | 'attention' | 'waiting' | 'live';
 
 export type PrimaryAction =
   | { kind: 'pause' }
@@ -113,6 +114,7 @@ export const STATUS_PILL_CLASS: Record<StatusTone, string> = {
   paused: 'bg-status-paused-fill border-status-paused-border text-status-paused-ink',
   attention: 'bg-status-attention-fill border-status-attention-border text-status-attention-ink',
   waiting: 'bg-status-waiting-fill border-status-waiting-border text-status-waiting-ink',
+  live: 'bg-node-trigger-fill border-node-trigger-edge text-node-trigger-ink',
 };
 
 /** Status dot (the sidebar pip, the pill's dot). */
@@ -122,6 +124,9 @@ export const STATUS_DOT_CLASS: Record<StatusTone, string> = {
   paused: 'bg-status-paused-dot',
   attention: 'bg-status-attention-dot',
   waiting: 'bg-status-waiting-dot',
+  // Blinks rather than rings (design handoff "Live"); animations.css
+  // stops it under reduced motion.
+  live: 'bg-node-trigger opencompany-pip-pulse',
 };
 
 /** Avatar: the employee's role colour at the soft-button tint. */

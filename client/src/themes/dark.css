@@ -133,6 +133,17 @@
   --shadow-float:   0 12px 40px rgb(0 0 0 / 0.5);
   --shadow-popover: 0 12px 32px rgb(0 0 0 / 0.5);
   --shadow-dialog:  0 24px 80px rgb(0 0 0 / 0.6);
+  --shadow-dock:    -24px 0 60px rgb(0 0 0 / 0.5);
+
+  /* Home glows and the working pip's ring, in the neon (light.css has the
+   * ink versions for white surfaces). */
+  --glow-connect:     0 0 0 1px var(--action-run-border), 0 0 28px var(--status-working-border);
+  --glow-hire:        0 0 0 2px var(--action-run-border), 0 0 40px var(--status-working-border);
+  --glow-hire-settle: 0 0 0 2px var(--status-working-border), 0 0 24px var(--status-working-fill);
+  --glow-refine:      0 0 0 0 var(--node-agent-edge);
+  --glow-refine-out:  0 0 0 6px transparent;
+  --glow-task:        var(--status-working-border);
+  --tint-pip-ring:    55%;
 
   color-scheme: dark;
 }

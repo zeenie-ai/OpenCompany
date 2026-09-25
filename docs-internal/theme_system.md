@@ -130,12 +130,14 @@ Consumed as `var(--code-*)` in [index.css](../client/src/index.css) (`.code-edit
 
 Normal mode ([normal_mode.md](./normal_mode.md)) adds its own steps, all in
 [base.css](../client/src/themes/base.css) unless noted, and bridged in
-`index.css` like the rest:
+`index.css` where a Tailwind utility needs them (the layout and duration
+tokens are used directly, as `w-(--w-home-sidebar)` or `duration-(--dur-slow)`):
 
 - **Motion**: `--ease-spring | overshoot | reveal` and the choreography
   durations (`--dur-intro`, `--dur-view-swap`, `--dur-panel-in/-out`,
   `--dur-toast-in/-hold/-out`, `--dur-mode-in/-out`, `--dur-theme-reveal`,
-  `--dur-glow`, `--dur-pip-loop`, …). Read only through
+  `--dur-glow`, `--dur-pip-loop`, `--dur-dock-in` for the Workspace dock,
+  …). Web Animations read them through
   [lib/motion.ts](../client/src/lib/motion.ts), whose fallbacks mirror
   base.css.
 - **Radii**: `--radius-row | card | panel | draft | composer`, multiples of each
@@ -147,9 +149,16 @@ Normal mode ([normal_mode.md](./normal_mode.md)) adds its own steps, all in
 - **Status**: `--status-{working,ready,paused,attention,waiting}-{dot,fill,border,ink}`
   for the employee pills and dots. The dot is the raw role colour; light.css
   keeps the paused dot at the design's mid grey.
-- **Per family** (light.css / dark.css): `--shadow-float | popover | dialog`,
-  the logo palette `--lg-*`, and the node-role `-fill / -edge / -hover / -ink`
-  variants.
+- **Per family** (light.css / dark.css): `--shadow-float | popover | dialog |
+  dock` (`dock` is the Workspace's left shadow when it lies over the page),
+  the logo palette `--lg-*`, the node-role `-fill / -edge / -hover / -ink`
+  variants, and Home's glows: `--glow-connect | hire | hire-settle | refine |
+  refine-out | task` plus the working pip's `--tint-pip-ring`. Dark keeps the
+  neon; light swaps each neon for its ink at .75 of the alpha and .6 of the
+  blur, the design's rule for white surfaces. The Web Animations that play
+  them name the token (`boxShadow: 'var(--glow-hire)'`), so the colour follows
+  the theme with no script. dark.css restates each one, because light.css's
+  bare `:root` also matches the dark family.
 
 Home shows only the two base themes: `ThemeProvider`'s `baseOnly` (set by
 `app/ShellThemeProvider.tsx` while Home is showing) renders a chosen stylized

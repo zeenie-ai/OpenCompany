@@ -110,10 +110,11 @@ async def test_a_hire_saves_a_valid_workflow_and_starts_it(harness):
 
     workflow = await harness.database.get_workflow(workflow_id)
     types = {node["type"] for node in workflow.data["nodes"]}
-    assert {"chatTrigger", "aiAgent", "context", "console", "writeTodos"} <= types
+    assert {"chatTrigger", "aiAgent", "context", "console", "writeTodos", "canvas"} <= types
     assert workflow.data["owner_id"] == "owner"
     row = await store.get_by_workflow(harness.database, workflow_id)
     assert row.hire_state == "ready" and row.node_roles["agent"].startswith(f"{workflow_id}:aiAgent:")
+    assert employee["canvas_node_id"] == row.node_roles["canvas"]
     agent_params = await harness.database.get_node_parameters(row.node_roles["agent"])
     assert agent_params["provider"] == "openai" and "You are Ada" in agent_params["system_message"]
     kinds = [frame.get("stage") or frame["data"]["type"] for frame in harness.frames]
@@ -154,3 +155,27 @@ async def test_bad_requests_are_refused(harness):
     assert (await hire.handle_hire_employee(payload(name=""), SOCKET))["error"] == "invalid_request"
     assert (await hire.handle_hire_employee(payload(steps=[]), SOCKET))["error"] == "invalid_request"
     assert (await hire.handle_hire_employee(payload(job="x" * 40000), SOCKET))["error"] == "too_large"
+
+
+async def test_new_hires_get_the_library_skills_that_are_on(harness):
+    database = harness.database
+    await database.create_user_skill(name="short-reports", display_name="Short reports", description="Short reports.", instructions="Keep it short.")
+    await database.create_user_skill(name="old-habit", display_name="Old habit", description="Switched off.", instructions="Nope.")
+    await database.update_user_skill(name="old-habit", is_active=False)
+
+    result = await hire.handle_hire_employee(payload(idempotency_key="hire-skills"), SOCKET)
+    assert result["success"] is True, result
+    row = await store.get_by_workflow(database, result["employee"]["workflow_id"])
+    params = await database.get_node_parameters(row.node_roles["skills"])
+    assert set(params["skills_config"]) == {"skill", "short-reports"}
+
+    # A later edit to the library leaves this employee as it was hired.
+    await database.update_user_skill(name="short-reports", instructions="Changed.")
+    params = await database.get_node_parameters(row.node_roles["skills"])
+    assert params["skills_config"]["short-reports"]["instructions"] == "Keep it short."
+
+
+async def test_an_empty_library_gives_no_skills_node(harness):
+    result = await hire.handle_hire_employee(payload(idempotency_key="hire-no-skills"), SOCKET)
+    row = await store.get_by_workflow(harness.database, result["employee"]["workflow_id"])
+    assert "skills" not in row.node_roles
