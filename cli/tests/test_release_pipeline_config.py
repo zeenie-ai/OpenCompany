@@ -775,3 +775,42 @@ def test_desktop_release_refuses_a_version_that_does_not_match_the_tag(
     assert guard["if"] == "github.event_name == 'push'"
     assert guard["shell"] == "bash"
     assert "exit 1" in guard["run"]
+
+
+# ---------------------------------------------------------------------------
+# Docker image — toolchain pins shared with CI and the desktop bundle
+# ---------------------------------------------------------------------------
+
+
+def test_docker_image_pins_match_the_bun_and_uv_pins(root: Path, root_pkg: dict):
+    """``docker/Dockerfile`` copies bun and uv out of their official images.
+    Those tags repeat pins that live elsewhere: bun in the root
+    ``packageManager`` (what CI's setup-bun reads) and uv in
+    ``desktop/runtimes.json`` (the desktop bundle). A bump in one place must
+    move the other, or the image builds with a different toolchain than CI
+    and the desktop app.
+    """
+    dockerfile = (root / "docker" / "Dockerfile").read_text(encoding="utf-8")
+    bun = re.search(r"^FROM oven/bun:(\d+\.\d+\.\d+)\S* AS bun$", dockerfile, re.MULTILINE)
+    uv = re.search(r"^FROM ghcr\.io/astral-sh/uv:(\d+\.\d+\.\d+) AS uv$", dockerfile, re.MULTILINE)
+    assert bun and uv, "docker/Dockerfile must copy bun and uv from pinned official images"
+
+    assert f"bun@{bun.group(1)}" == root_pkg["packageManager"]
+    runtimes = json.loads((root / "desktop" / "runtimes.json").read_text(encoding="utf-8"))
+    assert uv.group(1) == runtimes["uv"]["version"]
+
+
+def test_docker_port_matches_the_template_port(root: Path):
+    """``EXPOSE`` and the compose mapping repeat ``PORT`` from
+    ``.env.template`` (the image resolves the real bind at start). A template
+    change that left them behind would publish a port nothing listens on.
+    """
+    from cli.config import _load_env_file
+
+    port = _load_env_file(root / ".env.template")["PORT"]
+    dockerfile = (root / "docker" / "Dockerfile").read_text(encoding="utf-8")
+    assert re.findall(r"^EXPOSE (\d+)$", dockerfile, re.MULTILINE) == [port]
+
+    compose = yaml.safe_load((root / "docker-compose.yml").read_text(encoding="utf-8"))
+    ports = compose["services"]["opencompany"]["ports"]
+    assert [mapping.rsplit(":", 1)[1] for mapping in ports] == [port]

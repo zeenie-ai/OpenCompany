@@ -2,9 +2,10 @@
 
 This doc is the single home for OpenCompany deployment topology. The **current** path is the
 `company deploy` self-deploy CLI (top section). The **Docker Compose** path below it is a
-**legacy reference only** — the compose files, `docker/` directory, and `scripts/docker.js`
-wrapper have all been removed from the repo. It is retained solely as documentation of the
-historical container topology.
+**legacy reference only** — that topology's compose files, `docker/` directory, and
+`scripts/docker.js` wrapper were removed from the repo. It is retained solely as documentation
+of the historical container topology. The current container path is a single self-hosting
+image built from source: see [docker.md](./docker.md).
 
 ---
 
@@ -58,10 +59,12 @@ The legacy `deploy.sh` (docker-compose images over SCP to a GCE box) was removed
 
 ## Docker Deployment (LEGACY REFERENCE — removed from repo)
 
-> **Legacy reference only.** The compose files (`docker-compose.yml`, `docker-compose.prod.yml`),
-> the `docker/` directory (incl. `docker/Dockerfile.whatsapp`), `client/Dockerfile`,
-> `server/Dockerfile`, and `scripts/docker.js` are **no longer in the repository**. This section
-> documents the historical 4-container topology for reference; it is not a runnable path today.
+> **Legacy reference only.** The 4-container stack's files (its `docker-compose.yml` and
+> `docker-compose.prod.yml`, `docker/Dockerfile.whatsapp`, `client/Dockerfile`,
+> `server/Dockerfile`, and `scripts/docker.js`) are **no longer in the repository**. This section
+> documents that historical topology for reference; it is not a runnable path today. The
+> `docker-compose.yml` and `docker/` in the repo now are the one-container self-hosting image
+> described in [docker.md](./docker.md).
 
 The project previously deployed using Docker Compose with an nginx reverse proxy.
 
@@ -111,7 +114,7 @@ serial port block once in `.env.template` (`PYTHON_BACKEND_PORT`, `NODEJS_EXECUT
 - Persistent volume: `redis_data`
 - No authentication (internal network only)
 
-**Development Compose (`docker-compose.yml`):**
+**Development Compose (the legacy `docker-compose.yml`):**
 ```yaml
 services:
   # Redis uses profiles - only starts when REDIS_ENABLED=true

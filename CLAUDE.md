@@ -82,6 +82,7 @@ This is a React Flow-based workflow automation platform implementing n8n-inspire
 | **[Memory Lifecycle](./docs-internal/ARCHIVE/memory_lifecycle.md)** | *Archived — pre-RFC-0002.* Documented the retired `input-memory` markdown model. See "Context and Memory (RFC-0002)" below, [Agent Context Flow](./docs-internal/agent_context_flow.md) and [Memory Compaction](./docs-internal/memory_compaction.md). |
 | **[Node Parameter Panel](./docs-internal/node_panels.md)** | Three-section node config UI (Input / Parameters / Output) logic-flow reference. |
 | **[Deployment (legacy reference)](./docs-internal/deployment_legacy.md)** | `company deploy` CLI summary + the historical Docker Compose topology. |
+| **[Docker (self-hosting)](./docs-internal/docker.md)** | One-container image built from source (`docker/Dockerfile`, `docker-compose.yml`). The build stage runs the canonical `bun install --frozen-lockfile` + `bun run build` (then `uv sync --no-dev`); the runtime stage keeps only what `core/approot.py` reads. uvicorn runs directly, the way the desktop shell runs it (never `company serve`, whose supervisor kills the backend 5 s after SIGTERM and can skip the clean-shutdown record). All state on one `/data` volume; secrets minted on first start into `OPENCOMPANY_ENV_FILE=/data/opencompany.env`; Temporal embedded (CLI pre-seeded through named-volume copy-up); no Redis; no Node (`/usr/local/bin/node` links to bun). Optional system tools come only through the `EXTRAS` build arg (`browser`: Chromium + Xvfb + uv; `git`). Compose publishes the port on `127.0.0.1` only, because `/ws/internal` runs nodes without a login. |
 | **[GCP VM Deploy Runbook](./docs-internal/gcp_vm_deploy_runbook.md)** | Manual gcloud + Cloudflare runbook for deploying the released `@zeenie-ai/opencompany` tarball with `bun add -g` (non-Terraform path). |
 
 ## Design Principles & Standards
@@ -805,7 +806,7 @@ See **[Scripts Reference](./docs-internal/SCRIPTS.md)** for full documentation.
 ✅ **Node Rename System**: n8n-style node renaming via F2 keyboard shortcut, double-click on label, or right-click context menu with inline editing
 ✅ **UI State Persistence**: localStorage persistence for sidebar visibility, component palette visibility, dev mode, and collapsed sections
 ✅ **Normal/Dev Mode**: Normal mode (Home: hire and supervise AI employees) is the landing screen; the Normal/Dev switch in the editor toolbar and the Home header (or Ctrl/Cmd+Shift+D) moves to Dev mode, the workflow editor. `VITE_NORMAL_MODE=false` restores the old palette-filter toggle
-✅ **Production Deployment**: `company deploy` provisions a login-gated VM via Terraform + cloud-init running `company serve` under systemd; the Docker Compose topology was removed (see [deployment_legacy.md](./docs-internal/deployment_legacy.md))
+✅ **Production Deployment**: `company deploy` provisions a login-gated VM via Terraform + cloud-init running `company serve` under systemd; `docker compose up -d --build` runs a one-container self-hosting image built from source (see [docker.md](./docs-internal/docker.md)); the old 4-container Docker Compose topology was removed (see [deployment_legacy.md](./docs-internal/deployment_legacy.md))
 ✅ **Authentication System**: n8n-style JWT authentication with HttpOnly cookies, single-owner and multi-user modes, rate-limited login. Note `AUTH_MODE=multi` authenticates but does NOT isolate data — see Known Limitations in [authentication.md](./docs-internal/authentication.md)
 ✅ **Cache System**: n8n-pattern cache with Redis (production) / SQLite (local dev) / Memory fallback hierarchy
 ✅ **AI Thinking/Reasoning**: Extended thinking for Claude, Gemini 2.5/3, OpenAI GPT-5/GPT-6/o-series, Groq Qwen3 with output available in Input Data & Variables for downstream nodes
@@ -1214,8 +1215,11 @@ Terraform replacement or strand live state. Fresh deployments use `opencompany`.
 The `machina` executable remains only as a deprecated legacy alias; use `company`
 for all new commands and automation.
 
-The legacy `deploy.sh` (docker-compose images over SCP to a GCE box) was removed. The Docker
-Compose notes below are retained for reference for the historical container topology.
+The legacy `deploy.sh` (docker-compose images over SCP to a GCE box) was removed.
+
+### Docker (self-hosting)
+
+`docker compose up -d --build` builds a single image from source and runs it with all state on one named volume. The image runs the backend the way the desktop shell does (uvicorn directly, env file on the data volume, readiness on `/health/ready`), not through `company serve`. Full guide: **[docker.md](./docs-internal/docker.md)**.
 
 ### Docker Deployment (legacy reference)
 
@@ -2712,9 +2716,7 @@ This function:
   - Supports TTL expiration and automatic cleanup of expired entries
 - **Conditional Redis (historical)**: the Docker Compose topology (Redis profiles, `scripts/docker.js` wrapper) is historical — see [docs-internal/deployment_legacy.md](./docs-internal/deployment_legacy.md)
 - **WebSocket Reconnect via PartySocket** (`partysocket/ws` from Cloudflare): native-WS-compatible class handles jittered exponential backoff, message replay (`maxEnqueuedMessages: 200`), and intentional-close (RFC 6455 §7.4.1 code 1000) automatically. Replaces the previous flat 3 s `setTimeout(connect, 3000)` loop. Reconnect envelope (`MIN_DELAY_MS: 250`, `MAX_DELAY_MS: 8000`, `GROW_FACTOR: 1.3`) lives in `client/src/lib/connectionConfig.ts`. The +12 s WS-drop-and-reconnect cycle observed under React Strict Mode is gone — verified across two consecutive cold launches with zero `Client disconnected` events through 130+ s of activity. See `docs-internal/performance.md` for measurements.
-- **Docker Backend Fix**: Backend container uses Python uvicorn directly
-  - Changed from `npm run start` (failed - npm not in Python image) to `python -m uvicorn`
-  - CMD: `["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3010"]`
+- **Docker image runs uvicorn, not `company serve`**: `docker/entrypoint.sh` writes the three secrets into `/data/opencompany.env` once (the container env's value when set there, else a random one), then execs the desktop shell's uvicorn argv (`--timeout-graceful-shutdown 5`, port resolved through `core.env_defaults`). `company serve` would need root `node_modules` + the CLI venv, ignores `OPENCOMPANY_ENV_FILE`, and its supervisor tree-kills the backend 5 s after SIGTERM. `HOST` stays `127.0.0.1` (the backend dials itself at `ws://HOST:PORT/ws/internal`); the external bind is the `--host 0.0.0.0` argument. The image has no Node: `/usr/local/bin/node` links to bun, so the `#!/usr/bin/env node` bin scripts (agent-browser, vercel, cf) run. With the `browser` extra, Debian's `/usr/bin/chromium` launcher resets `CHROMIUM_FLAGS` from the environment and reads flags only from `/etc/chromium.d/` (hence the `no-sandbox` drop-in; Chrome refuses to run as root otherwise), and `AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium` points agent-browser at it. The compose project is named `opencompany-selfhost` so it never merges with another compose project called `opencompany`. See [docker.md](./docs-internal/docker.md).
 - **Configurable Authentication**: `VITE_AUTH_ENABLED` environment variable
   - Set to `false` to bypass login entirely (useful for local development)
   - Frontend creates anonymous user with owner privileges when disabled

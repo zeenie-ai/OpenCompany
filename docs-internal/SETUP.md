@@ -202,9 +202,10 @@ When `VITE_AUTH_ENABLED=false` (the default):
 - API keys can be saved/retrieved without user authentication
 - Useful for local development and testing
 
-**Redis (optional):** Set `REDIS_ENABLED=true` in `.env`
-(Docker Compose tooling was removed; the historical topology is in
-[deployment_legacy.md](./deployment_legacy.md).)
+**Redis (optional):** Set `REDIS_ENABLED=true` in `.env`.
+
+**Docker:** `docker compose up -d --build` runs a self-hosting image
+built from source; see [docker.md](./docker.md).
 
 ## Local Commands
 

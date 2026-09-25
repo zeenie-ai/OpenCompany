@@ -138,9 +138,11 @@ The Temporal dev server is backend-owned: the FastAPI lifespan starts it via `Te
 (`serve-client.js` was retired July 2026: `company start` is single-port —
 the backend serves the built SPA itself via `SERVE_STATIC_CLIENT`.)
 
-There is no Docker tooling: Docker Compose support was removed
-(historical topology preserved in
-[deployment_legacy.md](./deployment_legacy.md)); deployment is
+Docker: `docker compose up -d --build` builds a one-container
+self-hosting image from source (`docker/Dockerfile`,
+`docker-compose.yml`); see [docker.md](./docker.md). No script or CLI
+verb wraps it. The old multi-container topology is preserved in
+[deployment_legacy.md](./deployment_legacy.md). Cloud VM deployment is
 `company deploy` (Terraform → GCP VM → systemd).
 
 ---
