@@ -177,12 +177,9 @@
   --w-employee-card: 620px;
   --size-orb-hire: min(230px, 26vh);
   --size-orb-employee: min(150px, 20vh);
-  --w-settings: 920px;
-  --h-settings: 680px;
-  --w-settings-nav: 200px;
-
-  /* Working-status pip ring (the pulsing halo around a working employee). */
-  --tint-pip-ring: 55%;
+  --w-settings: 1040px;
+  --h-settings: 760px;
+  --w-settings-nav: 224px;
 
   /* ── Employee status (Normal mode). The dot is the raw role colour; the
    * pill tints it (fill 12%, border 45%) and reads in the role's ink, which

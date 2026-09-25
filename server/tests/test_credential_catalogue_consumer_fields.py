@@ -2,7 +2,8 @@
 state (``services.credential_registry.provider_connection_state``).
 
 Normal mode's Connectors grid lists only providers that declare a
-``consumer_category`` and shows their short ``description``. ``connected``
+``consumer_category`` and shows their short ``description``, a "by
+{publisher}" line and a verified mark. ``connected``
 answers "is this app usable right now": the same as ``stored`` unless a
 provider declares a ``connected_check`` (WhatsApp's live pairing, the
 IMAP/SMTP account's keys).
@@ -66,6 +67,9 @@ class TestCatalogueFields:
             assert provider["consumer_category"] in known, provider["id"]
             description = provider.get("description")
             assert isinstance(description, str) and 0 < len(description) <= MAX_DESCRIPTION, provider["id"]
+            publisher = provider.get("publisher")
+            assert isinstance(publisher, str) and publisher.strip(), provider["id"]
+            assert isinstance(provider.get("verified"), bool), provider["id"]
 
     def test_llm_providers_inherit_the_ai_category_and_deepl_opts_out(self, registry):
         assert registry.get_provider("openai")["consumer_category"] == "ai"

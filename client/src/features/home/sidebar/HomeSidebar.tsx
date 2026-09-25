@@ -36,12 +36,12 @@ function EmployeeRow({ employee, selected }: { employee: EmployeeSummary; select
         {
           opacity: 0,
           transform: 'translateY(-24px) scale(.9)',
-          boxShadow: '0 0 0 2px var(--action-run-border), 0 0 40px var(--status-working-border)',
+          boxShadow: 'var(--glow-hire)',
         },
         {
           opacity: 1,
           transform: 'none',
-          boxShadow: '0 0 0 2px var(--status-working-border), 0 0 24px var(--status-working-fill)',
+          boxShadow: 'var(--glow-hire-settle)',
           offset: 0.6,
         },
         { opacity: 1, transform: 'none', boxShadow: '0 0 0 0 transparent' },

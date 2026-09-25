@@ -2492,7 +2492,7 @@ Updated `client_left` and presence handlers use `has_real_android_devices()` ins
 | **Usage/Compaction** | `get_api_usage_summary`, `get_compaction_stats`, `configure_compaction`, `get_provider_usage_summary` |
 | **Agent Teams** | `create_team`, `get_team`, `get_team_status`, `dissolve_team`, `add_team_task`, `claim_team_task`, `complete_team_task`, `get_team_tasks`, `send_team_message`, `get_team_messages` |
 | **Model Registry** | `get_model_constraints`, `refresh_model_registry` |
-| **Employees (Normal mode)** | `list_employees`, `get_employee`, `generate_employee_setup`, `cancel_employee_setup`, `hire_employee`, `start_employee` (see [normal_mode.md](./docs-internal/normal_mode.md)) |
+| **Employees (Normal mode)** | `list_employees`, `get_employee`, `get_employee_usage`, `generate_employee_setup`, `cancel_employee_setup`, `hire_employee`, `start_employee` (see [normal_mode.md](./docs-internal/normal_mode.md)) |
 | **Approvals** | `list_approvals`, `decide_approval` (the `approvalGate` node's drafts) |
 
 #### Broadcast Messages (Server -> All Clients)

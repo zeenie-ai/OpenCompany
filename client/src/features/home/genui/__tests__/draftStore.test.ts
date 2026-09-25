@@ -6,6 +6,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { SPIKE, orbState } from '../../orb/orb';
 import corpus from '../__fixtures__/replies.json';
 import {
   HISTORY_TURNS,
@@ -133,6 +134,18 @@ describe('submitDraft', () => {
   it('only edits a draft that exists', () => {
     setRefining(true);
     expect(useDraftStore.getState().refining).toBe(false);
+  });
+
+  it('spikes the orb when a setup is ready, and less when it fails', async () => {
+    orbState.spike = 0;
+    const send = vi.fn<Send>().mockResolvedValue({ success: true, reply: GOOD_REPLY });
+    await submitDraft(send, 'job');
+    expect(orbState.spike).toBe(SPIKE.draftReady);
+    orbState.spike = 0;
+    send.mockResolvedValueOnce({ success: false, error: 'timeout' });
+    await submitDraft(send, 'job');
+    expect(orbState.spike).toBe(SPIKE.draftFailed);
+    orbState.spike = 0;
   });
 });
 

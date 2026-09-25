@@ -6,9 +6,10 @@
  */
 
 import { create } from 'zustand';
+import { SPIKE, spikeOrb } from '../orb/orb';
 
 export type HomeView = { kind: 'hire' } | { kind: 'employee'; workflowId: string };
-export type SettingsTab = 'profile' | 'connectors';
+export type SettingsTab = 'profile' | 'billing' | 'skills' | 'connectors' | 'plugins';
 
 const SIDEBAR_KEY = 'home_sidebar_open';
 
@@ -25,7 +26,8 @@ interface HomeState {
   sidebarOpen: boolean;
   settingsOpen: boolean;
   settingsTab: SettingsTab;
-  /** Connectors category to open on ('all' when unset). */
+  /** The category a catalog page opens on ('all' when unset). Only the way
+   *  in: switching tabs clears it, and the page owns its filter after. */
   settingsCategory: string;
   /** The sidebar row to glow, and a nonce so repeating it replays. */
   glow: { workflowId: string; nonce: number } | null;
@@ -40,7 +42,6 @@ interface HomeState {
   openSettings: (tab?: SettingsTab, category?: string) => void;
   closeSettings: () => void;
   setSettingsTab: (tab: SettingsTab) => void;
-  setSettingsCategory: (category: string) => void;
   glowRow: (workflowId: string) => void;
   pulseLogo: () => void;
   /** The composer took the focus it was asked for; a remount must not
@@ -48,7 +49,7 @@ interface HomeState {
   consumeComposerFocus: () => void;
 }
 
-export const useHomeStore = create<HomeState>((set) => ({
+export const useHomeStore = create<HomeState>((set, get) => ({
   view: { kind: 'hire' },
   sidebarOpen: loadSidebarOpen(),
   settingsOpen: false,
@@ -74,11 +75,12 @@ export const useHomeStore = create<HomeState>((set) => ({
       }
       return { sidebarOpen: next };
     }),
-  openSettings: (tab = 'profile', category = 'all') =>
-    set({ settingsOpen: true, settingsTab: tab, settingsCategory: category }),
+  openSettings: (tab = 'profile', category = 'all') => {
+    if (!get().settingsOpen) spikeOrb(SPIKE.settings);
+    set({ settingsOpen: true, settingsTab: tab, settingsCategory: category });
+  },
   closeSettings: () => set({ settingsOpen: false }),
-  setSettingsTab: (tab) => set({ settingsTab: tab }),
-  setSettingsCategory: (category) => set({ settingsCategory: category }),
+  setSettingsTab: (tab) => set({ settingsTab: tab, settingsCategory: 'all' }),
   glowRow: (workflowId) =>
     set((state) => ({ glow: { workflowId, nonce: (state.glow?.nonce ?? 0) + 1 } })),
   pulseLogo: () => set((state) => ({ logoPulse: state.logoPulse + 1 })),

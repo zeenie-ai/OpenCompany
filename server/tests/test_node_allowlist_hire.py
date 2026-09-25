@@ -59,6 +59,8 @@ def test_the_shipped_config_allows_the_v1_employee_building_blocks():
         "cronScheduler",
         "console",
         "context",
+        "canvas",
+        "masterSkill",
         "simpleMemory",
         "writeTodos",
         "currentTimeTool",

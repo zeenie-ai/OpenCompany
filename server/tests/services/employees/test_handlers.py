@@ -36,7 +36,7 @@ def container(monkeypatch, real_database):
 
 def test_handlers_are_registered_and_not_internal():
     registered = get_ws_handlers()
-    for name in ("list_employees", "get_employee"):
+    for name in ("list_employees", "get_employee", "get_employee_usage"):
         assert name in registered
         assert name not in INTERNAL_SOCKET_HANDLERS
 
@@ -53,6 +53,20 @@ async def test_list_and_get(container, real_database):
     assert got["success"] is True
     assert got["employee"]["name"] == "Maya"
     assert "trigger_text" in got["employee"]
+
+
+async def test_usage_counts_this_months_successes(container, real_database, monkeypatch):
+    from services.employees import events, runs
+
+    monkeypatch.setattr(events, "employee_changed", lambda _workflow_id: None)
+
+    async def no_prune(_database):
+        return None
+
+    monkeypatch.setattr(runs, "_maybe_prune", no_prune)
+    await runs.record_run(real_database, workflow_id="1", run_id="r1", status="success", runtime="local")
+    await runs.record_run(real_database, workflow_id="1", run_id="r2", status="failed", runtime="local")
+    assert await handlers.handle_get_employee_usage({}, None) == {"success": True, "tasks_this_month": 1}
 
 
 async def test_get_errors(container):

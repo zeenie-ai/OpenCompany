@@ -44,9 +44,15 @@ def validate_connected_skills(skills: Iterable[Dict[str, Any]]) -> None:
         )
 
 
+def is_personality_skill(name: Any) -> bool:
+    """A personality skill defines the agent itself: its full text replaces
+    the agent's system message instead of joining the Skill tool."""
+    return str(name or "").endswith("-personality")
+
+
 def standard_skill_descriptors(skills: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     validate_connected_skills(skills)
-    return [item for item in skills if not str(item.get("skill_name") or "").endswith("-personality")]
+    return [item for item in skills if not is_personality_skill(item.get("skill_name"))]
 
 
 def skill_tool_info(skills: Iterable[Dict[str, Any]], agent_node_id: str) -> Dict[str, Any] | None:

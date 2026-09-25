@@ -7,3 +7,4 @@
 export { HireDraftPanel } from './HireDraftPanel';
 export { MessagePreview as DraftMessagePreview } from './render';
 export { useHireComposer } from './useHireComposer';
+export { useStartHire } from './useStartHire';

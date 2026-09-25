@@ -91,7 +91,7 @@ export function Composer({
     boxRef.current?.focus();
     animate(
       surfaceRef.current,
-      [{ boxShadow: '0 0 0 0 var(--node-agent-edge)' }, { boxShadow: '0 0 0 6px transparent' }],
+      [{ boxShadow: 'var(--glow-refine)' }, { boxShadow: 'var(--glow-refine-out)' }],
       { duration: 900, fill: 'none' },
     );
   }, [refining]);

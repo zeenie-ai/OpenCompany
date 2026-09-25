@@ -4,8 +4,9 @@ Normal mode lists every workflow as an employee. A hired one has a row in
 ``employees`` that names its parts (``node_roles``); one built in the
 editor does not, so its summary is read off the graph: which nodes are
 agents (whose activity the card follows live), which are triggers (what
-starts it), which apps its nodes belong to, and whether it waits for the
-owner's approval before sending.
+starts it), which apps its nodes belong to, whether it waits for the
+owner's approval before sending, and which canvas board the Workspace
+shows.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from constants import AI_AGENT_TYPES, WORKFLOW_TRIGGER_TYPES
 from services.employees.apps import AppSpec, app_for_node_type
 
 TODO_NODE_TYPE = "writeTodos"
+CANVAS_NODE_TYPE = "canvas"
 APPROVAL_GATE_TYPE = "approvalGate"
 SCHEDULE_TRIGGER_TYPE = "cronScheduler"
 CHAT_TRIGGER_TYPE = "chatTrigger"
@@ -31,6 +33,7 @@ class GraphIndex:
     agent_ids: Tuple[str, ...] = ()
     trigger_ids: Tuple[str, ...] = ()
     todo_ids: Tuple[str, ...] = ()
+    canvas_ids: Tuple[str, ...] = ()
     gate_ids: Tuple[str, ...] = ()
     #: Apps the graph's nodes belong to, in first-seen order.
     app_ids: Tuple[str, ...] = ()
@@ -60,6 +63,7 @@ def index_graph(graph: Optional[Mapping[str, Any]]) -> GraphIndex:
     agents: List[str] = []
     triggers: List[str] = []
     todos: List[str] = []
+    canvases: List[str] = []
     gates: List[str] = []
     app_ids: List[str] = []
     for node in nodes:
@@ -82,6 +86,8 @@ def index_graph(graph: Optional[Mapping[str, Any]]) -> GraphIndex:
             triggers.append(node_id)
         if node_type == TODO_NODE_TYPE:
             todos.append(node_id)
+        if node_type == CANVAS_NODE_TYPE:
+            canvases.append(node_id)
         if node_type == APPROVAL_GATE_TYPE:
             gates.append(node_id)
         app = app_for_node_type(node_type)
@@ -93,6 +99,7 @@ def index_graph(graph: Optional[Mapping[str, Any]]) -> GraphIndex:
         agent_ids=tuple(agents),
         trigger_ids=tuple(triggers),
         todo_ids=tuple(todos),
+        canvas_ids=tuple(canvases),
         gate_ids=tuple(gates),
         app_ids=tuple(app_ids),
     )
@@ -100,6 +107,7 @@ def index_graph(graph: Optional[Mapping[str, Any]]) -> GraphIndex:
 
 __all__ = [
     "APPROVAL_GATE_TYPE",
+    "CANVAS_NODE_TYPE",
     "CHAT_TRIGGER_TYPE",
     "GraphIndex",
     "SCHEDULE_TRIGGER_TYPE",

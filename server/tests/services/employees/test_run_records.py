@@ -63,3 +63,25 @@ def test_midnight_is_computed_in_the_zone():
     now = datetime(2026, 9, 25, 3, 0, tzinfo=timezone.utc)
     assert runs.start_of_day(now, ZoneInfo("America/New_York")) == datetime(2026, 9, 24, 4, 0, tzinfo=timezone.utc)
     assert runs.owner_zone("Not/AZone").key == "UTC"
+
+
+async def test_done_this_month_counts_successes_across_the_team(real_database):
+    zone = ZoneInfo("Asia/Kolkata")  # UTC+5:30
+    now = datetime(2026, 9, 25, 3, 0, tzinfo=timezone.utc)
+    month_start = datetime(2026, 8, 31, 18, 30, tzinfo=timezone.utc)  # 1 September, 00:00 in Kolkata
+    rows = [
+        ("w", "before", month_start - timedelta(minutes=1), "success"),
+        ("w", "after", month_start + timedelta(minutes=1), "success"),
+        ("other", "o1", now - timedelta(days=2), "success"),
+        ("w", "broken", now - timedelta(hours=1), "failed"),
+    ]
+    for workflow_id, run_id, finished, status in rows:
+        await runs.record_run(real_database, workflow_id=workflow_id, run_id=run_id, status=status, runtime="temporal", finished_at=finished)
+    assert await runs.done_this_month(real_database, zone=zone, now=now) == 2
+
+
+def test_the_month_starts_in_the_owner_zone():
+    now = datetime(2026, 9, 1, 2, 0, tzinfo=timezone.utc)  # still 31 August in New York
+    assert runs.start_of_month(now, ZoneInfo("America/New_York")) == datetime(2026, 8, 1, 4, 0, tzinfo=timezone.utc)
+    # The month's count reads run records, so they must outlive a month.
+    assert runs.RETENTION_DAYS > 31

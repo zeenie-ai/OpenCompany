@@ -12,7 +12,18 @@ import { prefersReducedMotion } from '@/lib/useReducedMotion';
 
 /** The prototype's energy levels and event bursts. */
 export const ENERGY = { idle: 0.15, focus: 0.35, typing: 0.55, generating: 1 } as const;
-export const SPIKE = { hire: 1, connect: 0.7, theme: 1, mode: 0.9, task: 0.35 } as const;
+export const SPIKE = {
+  hire: 1,
+  connect: 0.7,
+  theme: 1,
+  mode: 0.9,
+  task: 0.35,
+  settings: 0.5,
+  workspace: 0.5,
+  draftReady: 0.8,
+  draftFailed: 0.4,
+  profileSaved: 0.7,
+} as const;
 
 /** Read by the engine every frame; the engine decays `spike` itself. */
 export const orbState = {

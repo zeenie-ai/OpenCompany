@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Mapping, Optional
+from zoneinfo import ZoneInfo
 
 from core.logging import get_logger
 from services.deployment.control import serialize_control
@@ -201,6 +202,10 @@ async def _summary(
     watch = [roles[key] for key in ("agent", "todos") if roles.get(key)] if roles else []
     if not watch:
         watch = list(graph.agent_ids) + list(graph.todo_ids)
+    # The board Home's Workspace shows: the one the hire made, while it is
+    # still in the graph, else the first canvas the owner added.
+    canvas = roles.get("canvas") if roles else None
+    canvas_node_id = canvas if canvas in graph.canvas_ids else next(iter(graph.canvas_ids), None)
     return {
         "workflow_id": workflow.id,
         "name": workflow.name,
@@ -217,6 +222,7 @@ async def _summary(
         "needs_ai": needs_ai,
         "control": control,
         "watch_node_ids": watch,
+        "canvas_node_id": canvas_node_id,
         "revision": _millis(
             getattr(workflow, "updated_at", None),
             getattr(employee, "updated_at", None),
@@ -237,17 +243,33 @@ async def _pending_counts(database: Any, workflow_ids: Iterable[str]) -> Dict[st
         return {}
 
 
-async def _done_today(database: Any, workflow_ids: Iterable[str]) -> Dict[str, int]:
-    """Successful runs since the start of the owner's day, per workflow."""
+async def _owner_zone(database: Any) -> ZoneInfo:
+    """The owner's time zone (Settings > Profile), UTC when unset or unreadable."""
     try:
         settings = await database.get_user_settings(SETTINGS_USER_ID) or {}
     except Exception:
         settings = {}
+    return runs.owner_zone(settings.get("profile_timezone"))
+
+
+async def _done_today(database: Any, workflow_ids: Iterable[str]) -> Dict[str, int]:
+    """Successful runs since the start of the owner's day, per workflow."""
+    zone = await _owner_zone(database)
     try:
-        return await runs.done_today(database, workflow_ids, zone=runs.owner_zone(settings.get("profile_timezone")))
+        return await runs.done_today(database, workflow_ids, zone=zone)
     except Exception:
         logger.warning("Could not count today's runs", exc_info=True)
         return {}
+
+
+async def employee_usage(database: Any) -> Dict[str, int]:
+    """Settings > Billing: the team's successful runs so far this month.
+
+    Errors propagate, so the page shows that the count is unavailable
+    rather than a zero.
+    """
+    zone = await _owner_zone(database)
+    return {"tasks_this_month": await runs.done_this_month(database, zone=zone)}
 
 
 async def _latest_run(database: Any, workflow_id: str) -> Optional[Dict[str, Any]]:
@@ -335,6 +357,7 @@ async def get_employee_detail(database: Any, workflow_id: str, *, auth_service: 
 
 
 __all__ = [
+    "employee_usage",
     "get_employee_detail",
     "get_employee_summary",
     "list_employee_summaries",

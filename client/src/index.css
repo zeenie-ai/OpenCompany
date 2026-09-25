@@ -452,7 +452,7 @@ html {
 
 @keyframes home-pip-ring {
   0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-working-dot) var(--tint-pip-ring), transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-working-ink) var(--tint-pip-ring), transparent);
   }
   100% {
     box-shadow: 0 0 0 6px transparent;

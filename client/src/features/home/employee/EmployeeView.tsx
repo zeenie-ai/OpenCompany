@@ -70,7 +70,7 @@ function TaskBox({ employee }: { employee: EmployeeSummary }) {
       ],
       { duration: 520, easing: 'spring', fill: 'backwards' },
     );
-    animate(text?.closest('[data-employee]'), [{ borderColor: 'var(--status-working-border)' }, { borderColor: 'var(--border-default)' }], {
+    animate(text?.closest('[data-employee]'), [{ borderColor: 'var(--glow-task)' }, { borderColor: 'var(--border-default)' }], {
       duration: 'glow',
       fill: 'none',
     });

@@ -162,6 +162,26 @@ To create a new skill group (appears as a new option in the folder dropdown):
 
 3. The folder will automatically appear in the Master Skill node dropdown.
 
+## The `employee` folder (Normal mode)
+
+`server/skills/employee/` is what Home's Settings > Skills offers under
+Discover: skills an owner can add to their library, which every employee
+hired afterwards gets. They differ from the other folders in three ways:
+
+- **No `allowed-tools`.** A hired employee may not have the tool a skill
+  would teach, so these are plain instructions. With no node to take visuals
+  from, each sets `icon` (a `lucide:` reference) and `color` in `metadata`.
+- **Owner-facing card copy.** `metadata.title` and `metadata.summary` are what
+  the card shows. `description` stays written for the model: it says when to
+  load the skill.
+- **Unique, non-reserved names.** The name must not appear in another
+  folder, and must not be `skill` or end in `-personality`.
+
+`server/tests/test_home_catalog_contract.py` holds the folder to these rules,
+and holds the starter bundles (`client/src/features/home/hire/starters.json`)
+to the skills in it. Adding a skill here needs no code change: it appears in
+Discover.
+
 ## How Skills Are Used
 
 1. **Master Skill Node**: Select a folder from the dropdown. Enable/disable individual skills with checkboxes. Edit instructions inline.

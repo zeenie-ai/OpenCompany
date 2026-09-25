@@ -24,7 +24,6 @@ vi.mock('../../data/connectors', () => ({
   useConnectors: () => ({
     providers: [{ id: 'whatsapp', name: 'WhatsApp', consumer_category: 'messages', connected: false }],
     categories: [],
-    connectedCount: 0,
     connectedApps: [],
     hasAi: true,
     isLoading: false,

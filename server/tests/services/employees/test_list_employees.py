@@ -233,3 +233,42 @@ async def test_deleting_the_workflow_removes_the_employee(real_database, monkeyp
     assert result["success"] is True
     assert await store.get_by_workflow(real_database, "9") is None
     assert ("removed", "9") in frames
+
+
+async def _hired(database, workflow_id, node_roles):
+    row, _ = await store.reserve(database, owner_id="owner", idempotency_key=f"k{workflow_id}", payload_hash="h", fields={"role": "Receptionist"})
+    await store.mark_ready(database, row.id, workflow_id=workflow_id, node_roles=node_roles)
+
+
+async def test_the_workspace_board_is_the_hires_canvas(real_database):
+    await save(
+        real_database,
+        "5",
+        "Maya",
+        graph(node("5:aiAgent:1", "aiAgent", "Maya"), node("5:canvas:1", "canvas", "Board"), node("5:canvas:2", "canvas", "Canvas")),
+    )
+    await _hired(real_database, "5", {"agent": "5:aiAgent:1", "canvas": "5:canvas:2"})
+    summary = await get_employee_summary(real_database, "5", auth_service=FakeAuth(keys={"openai"}))
+    assert summary["canvas_node_id"] == "5:canvas:2"
+    assert "5:canvas:2" not in summary["watch_node_ids"]
+
+
+async def test_a_removed_canvas_falls_back_to_one_the_owner_added(real_database):
+    await save(
+        real_database,
+        "6",
+        "Maya",
+        graph(node("6:aiAgent:1", "aiAgent", "Maya"), node("6:canvas:9", "canvas", "Off", disabled=True), node("6:canvas:3", "canvas", "Canvas")),
+    )
+    # The hire's canvas was deleted in the editor; a disabled one is skipped.
+    await _hired(real_database, "6", {"agent": "6:aiAgent:1", "canvas": "6:canvas:1"})
+    summary = await get_employee_summary(real_database, "6", auth_service=FakeAuth(keys={"openai"}))
+    assert summary["canvas_node_id"] == "6:canvas:3"
+
+
+async def test_an_editor_workflow_shows_its_canvas_and_none_means_no_board(real_database):
+    await save(real_database, "7", "Support bot", graph(node("7:aiAgent:1", "aiAgent", "Support"), node("7:canvas:1", "canvas")))
+    await save(real_database, "8", "Plain bot", graph(node("8:aiAgent:1", "aiAgent", "Plain")))
+    summaries = {s["workflow_id"]: s for s in await list_employee_summaries(real_database, auth_service=FakeAuth(keys={"openai"}))}
+    assert summaries["7"]["canvas_node_id"] == "7:canvas:1"
+    assert summaries["8"]["canvas_node_id"] is None

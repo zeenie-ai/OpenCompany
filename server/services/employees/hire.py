@@ -6,7 +6,8 @@
    response); the same key with a different payload is refused.
 3. Resolve the named apps against the registry (unknown ones are kept as
    unsupported, never blocking), pick the AI model, look up the owner's
-   own addresses for reports, and build the graph (builder.py).
+   own addresses for reports and the skills that are on in their library,
+   and build the graph (builder.py).
 4. Validate it exactly as a Start would (errors refuse the hire), save it
    as a new workflow, attach it to the row, and announce the hire.
 5. Start it in the background when nothing is missing (every app it uses
@@ -32,7 +33,7 @@ from core.logging import get_logger
 from services.authz.ws_surface import execution_principal
 from services.employees import store
 from services.employees.apps import AppSpec, resolve_app
-from services.employees.builder import BUILDER_VERSION, BuildError, BuildInputs, build_employee_graph
+from services.employees.builder import BUILDER_VERSION, BuildError, BuildInputs, LibrarySkill, build_employee_graph
 from services.employees.connections import Connections
 from services.employees.context import SETTINGS_USER_ID
 from services.employees.events import broadcast_employee_event
@@ -95,6 +96,19 @@ async def _owner_values(connections: Connections, auth_service: Any) -> Dict[str
         if stored:
             values[key] = str(stored)
     return values
+
+
+async def _library_skills(database: Any) -> List[LibrarySkill]:
+    """Settings > Skills: the skills that are on, which every new hire gets."""
+    rows = await database.get_all_user_skills(active_only=True)
+    return [
+        LibrarySkill(
+            name=str(row.get("name") or ""),
+            description=str(row.get("description") or ""),
+            instructions=str(row.get("instructions") or ""),
+        )
+        for row in rows
+    ]
 
 
 def _owner_profile(settings: Dict[str, Any]) -> OwnerProfile:
@@ -216,6 +230,7 @@ async def handle_hire_employee(data: Dict[str, Any], websocket: WebSocket) -> Di
                 timezone=str(settings.get("profile_timezone") or "UTC"),
                 llm=llm,
                 memory=settings.get("memory_across_chats") is not False,
+                skills=await _library_skills(database),
                 allowed=is_hire_allowed,
             )
         )

@@ -1,0 +1,38 @@
+[
+  {
+    "id": "receptionist",
+    "label": "Receptionist",
+    "role": "agent",
+    "summary": "Answers customer messages and books appointments for you.",
+    "job": "A receptionist who answers customer messages on WhatsApp, handles common questions and books appointments in my calendar.",
+    "apps": ["WhatsApp", "Google Calendar"],
+    "skills": ["write-like-a-person", "reply-in-their-language", "book-appointments"]
+  },
+  {
+    "id": "inbox-assistant",
+    "label": "Inbox assistant",
+    "role": "model",
+    "summary": "Sorts your email, flags what's urgent and drafts replies.",
+    "job": "An inbox assistant who sorts my email every morning, flags anything urgent and drafts replies for me to approve.",
+    "apps": ["Gmail"],
+    "skills": ["write-like-a-person", "short-reports"]
+  },
+  {
+    "id": "bookkeeper",
+    "label": "Bookkeeper",
+    "role": "workflow",
+    "summary": "Tracks payments, chases unpaid invoices and reports weekly.",
+    "job": "A bookkeeper who tracks payments in Stripe, politely chases unpaid invoices and sends me a weekly summary.",
+    "apps": ["Stripe"],
+    "skills": ["chase-late-payments", "short-reports"]
+  },
+  {
+    "id": "social-media-helper",
+    "label": "Social media helper",
+    "role": "trigger",
+    "summary": "Drafts posts about your business for you to approve.",
+    "job": "A social media helper who drafts three posts a week about my business and sends them to me for approval.",
+    "apps": [],
+    "skills": ["social-posts", "write-like-a-person"]
+  }
+]
