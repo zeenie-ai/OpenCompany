@@ -213,6 +213,14 @@ that Resume relies on.
   every knob is evaluated on the activity side so flipping config never
   touches recorded workflow commands.
 
+**Why an automatic pause happened.** Each of the three records it on the
+control row: `pause_reason` is `failures` (the circuit breaker),
+`recovery` (crash recovery) or `controller_missing`, with a readable
+`pause_detail`. `serialize_control` emits both; a transition back to
+`running` (Resume, reconcile, restore) clears them. Only server-side calls
+can set a reason; a `pause_workflow` from a socket cannot. Normal mode shows
+such an employee as "Needs attention" ([normal_mode.md](./normal_mode.md)).
+
 ## Canvas editability (`can_edit` capability)
 
 Whether a workflow's canvas may be edited is a **server-owned capability**,

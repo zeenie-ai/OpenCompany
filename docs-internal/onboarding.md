@@ -2,7 +2,7 @@
 
 ## Overview
 
-The onboarding service provides a four-step welcome wizard that appears after a user's first launch: what OpenCompany is, how the canvas works, connecting an AI provider, and trying the shipped AI Assistant example. It is database-backed, skippable, resumable, and replayable from Settings. A separate, dismissable **Get Started checklist** (`GetStartedChecklist.tsx`) sits in the corner of the canvas after the wizard and tracks five first-session milestones.
+The onboarding service provides a four-step welcome wizard that appears after a user's first launch: what OpenCompany is, how the canvas works, connecting an AI provider, and trying the shipped AI Assistant example. It is database-backed, skippable, resumable, and replayable from Settings. The wizard is part of the workflow editor (`Dashboard.tsx`), so with Normal mode on it first appears when Dev mode opens; Normal mode's first screen is Home itself ([normal_mode.md](./normal_mode.md)). A separate, dismissable **Get Started checklist** (`GetStartedChecklist.tsx`) sits in the corner of the canvas after the wizard and tracks five first-session milestones.
 
 The frontend is **fully shadcn/ui + Tailwind** — antd was removed from `client/src/`. The wizard composes the project's `Modal` primitive, shadcn `Button` / `ActionButton` / `Card` / `Badge` / `Alert` / `Skeleton`, and `lucide-react` icons. The step progress indicator is a hand-rolled `<ol>` driven by node-role tokens (no antd `Steps`).
 

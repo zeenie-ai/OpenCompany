@@ -75,10 +75,10 @@ https://github.com/user-attachments/assets/3d25e9a3-f7b9-4760-8b9a-6de1e5a19cad
 
 [![How OpenCompany Works](docs/diagrams/how-it-works.svg)](https://raw.githubusercontent.com/zeenie-ai/OpenCompany/main/docs/diagrams/how-it-works.svg)
 
-1. **Hire.** Drop an AI Employee onto the canvas. That is the lead.
-2. **Build the team.** Connect a few specialist agents to it and give each one the tools for its part of the job: email, browser, code, messaging, payments, and so on.
-3. **Start.** The team runs in the background and wakes up when something happens: a new email, a customer message, a scheduled time.
-4. **Review.** Watch it work on the canvas, read what it remembers, and change how it does things by editing its skills in plain text.
+1. **Hire.** Describe the job in plain words on the Home screen. OpenCompany drafts the new employee's setup (the apps it uses, when it works, what it checks with you first); adjust it and press Hire. Or switch to Dev mode and drop an AI Employee onto the canvas.
+2. **Build the team.** In Dev mode, connect a few specialist agents to it and give each one the tools for its part of the job: email, browser, code, messaging, payments, and so on.
+3. **Start.** The team runs in the background and wakes up when something happens: a new email, a customer message, a scheduled time. If you ask it to, it shows you each reply to approve before it goes out.
+4. **Review.** Watch it work from its card on Home or on the canvas, read what it remembers, and change how it does things by editing its skills in plain text.
 
 [![Default workflows that ship with OpenCompany](docs/diagrams/default-workflows.svg)](https://raw.githubusercontent.com/zeenie-ai/OpenCompany/main/docs/diagrams/default-workflows.svg)
 
@@ -120,7 +120,7 @@ Nothing here is a black box. What an employee learns lives in its memory, its no
 - **Models** from OpenAI, Anthropic, Google, xAI, DeepSeek, Kimi, Mistral, Groq, Cerebras, Sarvam, and OpenRouter, or run local models with Ollama and LM Studio for free.
 - **Speech and translation**, so employees can listen, talk, and work in other languages.
 - **78 skills** that ship ready to use, and a place to drop your own.
-- **Built to keep running.** Employees survive restarts, pause and resume from the canvas, and catch up on missed schedules. Your API keys are stored encrypted on your machine. Add a login for shared or cloud use; one command deploys to Google Cloud.
+- **Built to keep running.** Employees survive restarts, pause and resume from Home or the canvas, and catch up on missed schedules. Your API keys are stored encrypted on your machine. Add a login for shared or cloud use; one command deploys to Google Cloud.
 - **A canvas you will want to look at**, with 12 visual themes.
 
 ## For Developers

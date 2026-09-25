@@ -242,6 +242,7 @@ match its doc here, and each doc must still describe what the code does.
 
 ### workflow_triggers
 
+- [Approval (`approvalGate`)](./workflow_triggers/approvalGate.md)
 - [Chat Trigger (`chatTrigger`)](./workflow_triggers/chatTrigger.md)
 - [Cron Scheduler (`cronScheduler`)](./workflow_triggers/cronScheduler.md)
 - [Start (`start`)](./workflow_triggers/start.md)

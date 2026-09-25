@@ -126,6 +126,38 @@ Six tokens for canvas identity: `agent / model / skill / tool / trigger / workfl
 
 Consumed as `var(--code-*)` in [index.css](../client/src/index.css) (`.code-editor-container`, `.console-json-output`, the `.chat-markdown` dark overrides) and exposed as Tailwind utilities (`text-code-tag`, `bg-code-bg`, …) via the `@theme inline` bridge; the `OutputPanel` `@uiw/react-json-view` viewer reads the same vars. This **replaced the old global dracula-hardcoded `--prism-*` block and the dead `getPrismTokenCSS()` helper** — code/JSON now paints in each theme's palette instead of one dracula scheme everywhere. (`prismjs` is still the tokenizer; only the colours moved to `--code-*`.)
 
+### Home (Normal mode) tokens
+
+Normal mode ([normal_mode.md](./normal_mode.md)) adds its own steps, all in
+[base.css](../client/src/themes/base.css) unless noted, and bridged in
+`index.css` like the rest:
+
+- **Motion**: `--ease-spring | overshoot | reveal` and the choreography
+  durations (`--dur-intro`, `--dur-view-swap`, `--dur-panel-in/-out`,
+  `--dur-toast-in/-hold/-out`, `--dur-mode-in/-out`, `--dur-theme-reveal`,
+  `--dur-glow`, `--dur-pip-loop`, …). Read only through
+  [lib/motion.ts](../client/src/lib/motion.ts), whose fallbacks mirror
+  base.css.
+- **Radii**: `--radius-row | card | panel | draft | composer`, multiples of each
+  theme's `--radius-lg`, so square themes stay square.
+- **Type and layout**: `--text-meta | row | lead | title | hero` (with
+  `--tracking-hero`, `--leading-hero`), and the Home layout constants
+  (`--w-home-sidebar`, `--h-home-header`, `--w-composer`, the orb slot sizes,
+  the Settings dialog size).
+- **Status**: `--status-{working,ready,paused,attention,waiting}-{dot,fill,border,ink}`
+  for the employee pills and dots. The dot is the raw role colour; light.css
+  keeps the paused dot at the design's mid grey.
+- **Per family** (light.css / dark.css): `--shadow-float | popover | dialog`,
+  the logo palette `--lg-*`, and the node-role `-fill / -edge / -hover / -ink`
+  variants.
+
+Home shows only the two base themes: `ThemeProvider`'s `baseOnly` (set by
+`app/ShellThemeProvider.tsx` while Home is showing) renders a chosen stylized
+theme as its family's base, and the pre-paint script in `index.html` applies
+the same rule to the first frame. `setTheme(next, { reveal: true, origin })`
+grows the new theme as a circle from `origin` (View Transitions), falls back
+to a short colour fade, and is instant under reduced motion.
+
 ## Migration recipe
 
 The single most important rule from the design handoff:

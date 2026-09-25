@@ -101,7 +101,8 @@ Read via `services.node_allowlist.get_node_allowlist_service().get_config()` —
 
 | File | Filter |
 |---|---|
-| `client/src/components/ui/ComponentPalette.tsx` | `if (isBlocked(name, groups)) return false; if (!proMode && !isAllowed(name)) return false;` |
+| `client/src/components/ui/ComponentPalette.tsx` | `if (isBlocked(name, groups)) return false; if (!showAll && !isAllowed(name)) return false;` where `showAll = featureFlags.normalMode \|\| proMode` |
+| `server/services/employees/builder.py` | every node Hire builds must pass `is_hire_allowed(node_type)` |
 | `client/src/components/credentials/CredentialsModal.tsx` | `providers.filter(p => !isCredentialCategoryDisabled(p.category))` + same for `categories` |
 | `client/src/components/parameterPanel/MasterSkillEditor.tsx` | `(foldersQuery.data ?? []).filter(f => !isSkillFolderDisabled(f.name))` |
 

@@ -242,7 +242,11 @@ query is guaranteed to match nothing — once per save/mutation. They call
 `get_status_broadcaster().broadcast({...})` directly instead, which is the same
 pattern `nodes/telegram/_events.py` uses for status. The CloudEvents envelope,
 `source`, `type`, `subject` and `data` are identical either way, so the wire
-contract the frontend sees does not change.
+contract the frontend sees does not change. Normal mode's two events follow
+the same rule: `employee_lifecycle` (`com.opencompany.employee.*`, in
+`services/employees/events.py`) and `approval_lifecycle`
+(`com.opencompany.approval.*`, in `nodes/workflow/approval_gate/_events.py`,
+identity only). See [normal_mode.md](./normal_mode.md#wire-contract).
 
 Rule of thumb: **if no `register_canary_trigger_type` call names your event
 type, broadcast it directly.** Reach for `emit` only when a Temporal workflow
