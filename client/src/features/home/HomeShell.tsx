@@ -5,8 +5,9 @@
  * current view, either hiring a new employee or one employee's card.
  *
  * The shell owns what spans views: the employee broadcasts that keep the
- * team current, the Settings dialog, and the connect dialog any view can
- * open. Switching views scrolls to the top and plays the view swap.
+ * team current, the orb behind the content, the Settings dialog, and the
+ * connect dialog any view can open. Switching views scrolls to the top and
+ * plays the view swap.
  */
 
 import { useLayoutEffect, useRef, useState } from 'react';
@@ -16,6 +17,8 @@ import { useEmployeeLifecycle, useEmployeesQuery } from './data/employees';
 import { EmployeeView } from './employee/EmployeeView';
 import { HomeHeader } from './header/HomeHeader';
 import { HireView } from './hire/HireView';
+import { SPIKE, spikeOrb } from './orb/orb';
+import { OrbStage } from './orb/OrbStage';
 import { ConnectDialog } from './settings/ConnectDialog';
 import { HomeSettings } from './settings/HomeSettings';
 import { HomeSidebar } from './sidebar/HomeSidebar';
@@ -37,6 +40,10 @@ export default function HomeShell() {
   const view = useHomeStore((s) => s.view);
   const title = useViewTitle();
   const [connectId, setConnectId] = useState<string | null>(null);
+  const openConnect = (providerId: string) => {
+    spikeOrb(SPIKE.connect);
+    setConnectId(providerId);
+  };
   const [scrolled, setScrolled] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<HTMLDivElement>(null);
@@ -59,21 +66,22 @@ export default function HomeShell() {
   }, [viewKey]);
 
   return (
-    <div className="flex min-h-0 flex-1">
+    <div className="flex min-h-0 flex-1 antialiased">
       <HomeSidebar />
       <main className="relative flex min-w-0 flex-1 flex-col">
+        <OrbStage />
         <HomeHeader title={title} scrolled={scrolled} />
         <div
           ref={scrollRef}
           onScroll={(event) => setScrolled(event.currentTarget.scrollTop > HEADER_BORDER_AFTER_PX)}
-          className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
+          className="relative z-10 min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
         >
           <div className="mx-auto flex max-w-(--w-home-content) flex-col items-center px-6 pt-2 pb-10">
             <div ref={viewRef} key={viewKey} className="flex w-full flex-col items-center">
               {view.kind === 'employee' ? (
-                <EmployeeView workflowId={view.workflowId} onConnect={setConnectId} />
+                <EmployeeView workflowId={view.workflowId} onConnect={openConnect} />
               ) : (
-                <HireView onConnect={setConnectId} />
+                <HireView onConnect={openConnect} />
               )}
             </div>
             <p className="m-0 pt-7 text-center text-xs text-fg-muted">
@@ -82,7 +90,7 @@ export default function HomeShell() {
           </div>
         </div>
       </main>
-      <HomeSettings onConnect={setConnectId} />
+      <HomeSettings onConnect={openConnect} />
       <ConnectDialog providerId={connectId} onClose={() => setConnectId(null)} />
     </div>
   );

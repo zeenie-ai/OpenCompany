@@ -6,10 +6,12 @@
  */
 
 import { Plug, User, X } from 'lucide-react';
+import { useLayoutEffect, useRef } from 'react';
 import { Tabs as TabsPrimitive } from 'radix-ui';
 import { OcLogo } from '@/components/brand/Logo';
 import { Button } from '@/components/ui/button';
 import Modal from '@/components/ui/Modal';
+import { stagger } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useConnectors } from '../data/connectors';
 import { useHomeStore, type SettingsTab } from '../state/homeStore';
@@ -22,9 +24,24 @@ const NAV_ITEM =
 export function HomeSettings({ onConnect }: { onConnect: (providerId: string) => void }) {
   const open = useHomeStore((s) => s.settingsOpen);
   const tab = useHomeStore((s) => s.settingsTab);
+  const category = useHomeStore((s) => s.settingsCategory);
   const setTab = useHomeStore((s) => s.setSettingsTab);
   const close = useHomeStore((s) => s.closeSettings);
   const { connectedCount } = useConnectors();
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  // The tab's blocks rise in, 30ms apart (design handoff "Settings modal").
+  useLayoutEffect(() => {
+    if (!open || !bodyRef.current) return;
+    stagger(
+      bodyRef.current.querySelectorAll('[data-stagger]'),
+      [
+        { opacity: 0, transform: 'translateY(10px)' },
+        { opacity: 1, transform: 'none' },
+      ],
+      { base: 40, step: 30, cap: 14, duration: 420, easing: 'spring' },
+    );
+  }, [open, tab, category]);
 
   return (
     <Modal
@@ -62,7 +79,7 @@ export function HomeSettings({ onConnect }: { onConnect: (providerId: string) =>
           </TabsPrimitive.List>
           <p className="mt-auto px-2.5 font-mono text-2xs text-fg-faint">Stored on this device</p>
         </div>
-        <div className="relative min-w-0 flex-1 overflow-y-auto">
+        <div ref={bodyRef} className="relative min-w-0 flex-1 overflow-y-auto">
           <TabsPrimitive.Content value="profile" className="outline-none">
             <ProfileTab onDone={close} />
           </TabsPrimitive.Content>

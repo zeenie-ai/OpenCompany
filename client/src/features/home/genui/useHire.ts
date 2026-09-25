@@ -15,6 +15,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
 import { upsertEmployee } from '../data/employees';
 import { parseEmployee } from '../data/schemas';
+import { SPIKE, spikeOrb } from '../orb/orb';
 import { useHomeStore } from '../state/homeStore';
 import { pillToast } from '../ui/pillToast';
 import { beginHire, clearHiredDraft, endHire, useDraftStore } from './draftStore';
@@ -85,6 +86,7 @@ export function useHire(collapse: () => Promise<void>) {
         const home = useHomeStore.getState();
         home.glowRow(employee.workflow_id);
         home.pulseLogo();
+        spikeOrb(SPIKE.hire);
         pillToast(`${employee.name} joined your team`);
         if (response?.started === false) home.showEmployee(employee.workflow_id);
       } catch (error) {

@@ -6,12 +6,13 @@ Temporal, a Reset cancels it, and nothing about the message is broadcast."""
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
 
-from services.approvals import reconcile, store
+from services.approvals import reconcile, store, waiter
 from services.plugin.context import NodeContext
 
 pytestmark = pytest.mark.asyncio
@@ -54,6 +55,15 @@ async def pending(harness, *, count=1):
             return rows
         await asyncio.sleep(0.01)
     raise AssertionError("no pending draft appeared")
+
+
+async def until_waiting(approval_id):
+    """Until a gate is parked on the draft (between reads, not inside one)."""
+    for _ in range(400):
+        if waiter.waiting(approval_id):
+            return
+        await asyncio.sleep(0.005)
+    raise AssertionError("no gate started waiting on the draft")
 
 
 async def decide(harness, approval_id, decision, key="d1", **extra):
@@ -117,11 +127,18 @@ async def test_edits_must_fit_and_not_be_empty(harness):
 async def test_a_retry_finds_the_same_draft(harness):
     first = asyncio.ensure_future(run_gate(harness))
     (row,) = await pending(harness)
+    # Interrupt the first attempt while it waits, as a worker restart does,
+    # and let it unwind. Cancelled in the middle of a read instead, SQLite
+    # can hold the file long enough for the decision below to miss it.
+    await until_waiting(row.id)
     first.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await first
     retry = asyncio.ensure_future(run_gate(harness))
-    await asyncio.sleep(0.05)
+    await until_waiting(row.id)
     assert [r.id for r in await store.list_approvals(harness.database)] == [row.id]
-    await decide(harness, row.id, "send")
+    decided = await decide(harness, row.id, "send")
+    assert decided["success"] is True, decided
     assert (await asyncio.wait_for(retry, 5))["result"]["approved"] is True
     # After the decision, another attempt returns the same outcome at once.
     assert (await run_gate(harness))["result"]["approval_id"] == row.id

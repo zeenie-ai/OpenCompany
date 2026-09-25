@@ -73,8 +73,7 @@ function ConnectorCard({
       animate(
         ref.current,
         [
-          { boxShadow: '0 0 0 0 transparent' },
-          { boxShadow: '0 0 0 1px var(--status-working-border), 0 0 28px var(--status-working-fill)', offset: 0.3 },
+          { boxShadow: '0 0 0 1px var(--action-run-border), 0 0 28px var(--status-working-border)' },
           { boxShadow: '0 0 0 0 transparent' },
         ],
         { duration: 1200, easing: 'default', fill: 'none' },
@@ -88,6 +87,7 @@ function ConnectorCard({
     <div
       ref={ref}
       data-connector={provider.id}
+      data-stagger
       className={cn(
         'flex gap-3 rounded-card border bg-bg-elevated p-3.5 transition-[border-color,translate] duration-(--dur-slow) hover:-translate-y-px motion-reduce:hover:translate-y-0',
         connected ? 'border-status-working-border' : 'border-border-default',
@@ -98,7 +98,7 @@ function ConnectorCard({
         <div className="flex items-center gap-2">
           <span className="truncate text-base font-semibold text-fg-default">{provider.name}</span>
           {provider.runs_locally && (
-            <span className="rounded-sm border border-node-workflow-edge px-1.25 font-mono text-2xs font-medium tracking-label text-node-workflow-ink">
+            <span className="rounded-sm border border-node-workflow-edge px-1.25 font-mono text-[10px] font-medium tracking-label text-node-workflow-ink">
               LOCAL
             </span>
           )}
@@ -107,7 +107,7 @@ function ConnectorCard({
         <div className="mt-1.5 flex min-h-7 items-center gap-2">
           {connected ? (
             <>
-              <StatusDot tone="working" />
+              <StatusDot tone="working" className="size-1.5 shadow-[0_0_6px_var(--status-working-dot)]" />
               <span className="truncate text-xs font-medium text-status-working-ink">
                 Connected{provider.account_label ? ` as ${provider.account_label}` : ''}
               </span>
@@ -115,7 +115,7 @@ function ConnectorCard({
                 variant="quiet"
                 size="xs"
                 onClick={onDisconnect}
-                className="ml-auto hover:border-status-attention-border hover:bg-status-attention-fill hover:text-status-attention-ink"
+                className="ml-auto h-6.5 rounded-lg px-2.5 hover:border-action-stop-border hover:bg-action-stop-soft hover:text-action-stop-ink"
               >
                 Disconnect
               </Button>
@@ -125,7 +125,7 @@ function ConnectorCard({
               variant="quiet"
               size="xs"
               onClick={onConnect}
-              className="border-border-strong text-fg-default hover:border-action-run-border hover:bg-action-run-soft hover:text-action-run-ink"
+              className="h-7 rounded-lg border-border-strong px-3 font-semibold text-fg-default hover:border-action-run-border hover:bg-action-run-soft hover:text-action-run-ink"
             >
               Connect
             </Button>
@@ -151,7 +151,8 @@ export function ConnectorsTab({ onConnect }: { onConnect: (providerId: string) =
     if (!provider) return;
     try {
       const done = await disconnect(provider, sendRequest);
-      if (!done) onConnect(provider.id);
+      if (done) pillToast(`${provider.name} disconnected`, { tone: 'info' });
+      else onConnect(provider.id);
     } catch (error) {
       pillToast(error instanceof Error ? error.message : `Couldn't disconnect ${provider.name}`, { tone: 'error' });
     }
@@ -159,19 +160,19 @@ export function ConnectorsTab({ onConnect }: { onConnect: (providerId: string) =
 
   return (
     <div className="flex flex-col gap-4.5 px-8 pt-7 pb-8">
-      <div className="flex items-start gap-4 pr-9">
+      <div data-stagger className="flex items-start gap-4 pr-9">
         <div className="flex flex-1 flex-col gap-1">
           <h2 className="text-lg font-semibold text-fg-default">Connectors</h2>
           <p className="text-sm text-pretty text-fg-muted">
             Give your agents access to the apps you use. Credentials stay on this device.
           </p>
         </div>
-        <span className="shrink-0 rounded-pill border border-status-working-border bg-status-working-fill px-2.5 py-1 font-mono text-2xs font-medium tracking-label text-status-working-ink uppercase">
+        <span className="shrink-0 rounded-pill border border-action-run-border bg-action-run-soft px-2.5 py-1 font-mono text-2xs font-medium tracking-label text-action-run-ink uppercase">
           {connectedCount} connected
         </span>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div data-stagger className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-0 flex-[1_1_220px]">
           <Search aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-fg-faint" />
           <Input
@@ -179,13 +180,14 @@ export function ConnectorsTab({ onConnect }: { onConnect: (providerId: string) =
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search connectors"
             aria-label="Search connectors"
-            className="h-9.5 pl-8.5"
+            className="h-9.5 bg-bg-app pl-8.5 text-base md:text-base dark:bg-bg-app"
           />
         </div>
         <ToggleGroup
           type="single"
           variant="chips"
           size="lg"
+          className="gap-2"
           aria-label="Category"
           value={category}
           onValueChange={(next) => next && setCategory(next)}

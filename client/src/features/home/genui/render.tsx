@@ -41,11 +41,11 @@ function useSpec(): SpecContextValue {
 // ----- token maps (Tailwind scans these literals) -----
 
 const TONE_CARD: Record<Tone, string> = {
-  agent: 'border-node-agent-border bg-linear-135 from-node-agent-soft to-bg-elevated to-60%',
-  model: 'border-node-model-border bg-linear-135 from-node-model-soft to-bg-elevated to-60%',
-  tool: 'border-node-tool-border bg-linear-135 from-node-tool-soft to-bg-elevated to-60%',
-  trigger: 'border-node-trigger-border bg-linear-135 from-node-trigger-soft to-bg-elevated to-60%',
-  workflow: 'border-node-workflow-border bg-linear-135 from-node-workflow-soft to-bg-elevated to-60%',
+  agent: 'border-node-agent-border bg-linear-135/srgb from-node-agent-soft to-bg-elevated to-60%',
+  model: 'border-node-model-border bg-linear-135/srgb from-node-model-soft to-bg-elevated to-60%',
+  tool: 'border-node-tool-border bg-linear-135/srgb from-node-tool-soft to-bg-elevated to-60%',
+  trigger: 'border-node-trigger-border bg-linear-135/srgb from-node-trigger-soft to-bg-elevated to-60%',
+  workflow: 'border-node-workflow-border bg-linear-135/srgb from-node-workflow-soft to-bg-elevated to-60%',
   neutral: 'border-border-default bg-bg-elevated',
 };
 
@@ -77,10 +77,12 @@ const TONE_BADGE: Record<Tone, string> = {
 };
 
 const STEP_TONE: Record<StepRole, string> = {
-  trigger: 'border-node-trigger-edge bg-linear-135 from-node-trigger-fill to-bg-elevated',
-  agent: 'border-node-agent-edge bg-linear-135 from-node-agent-fill to-bg-elevated',
-  tool: 'border-node-tool-edge bg-linear-135 from-node-tool-fill to-bg-elevated',
-  workflow: 'border-node-workflow-edge bg-linear-135 from-node-workflow-fill to-bg-elevated',
+  trigger:
+    'border-node-trigger-edge bg-linear-135/srgb from-node-trigger-fill to-bg-elevated shadow-[0_0_18px_var(--node-trigger-soft)]',
+  agent: 'border-node-agent-edge bg-linear-135/srgb from-node-agent-fill to-bg-elevated shadow-[0_0_18px_var(--node-agent-soft)]',
+  tool: 'border-node-tool-edge bg-linear-135/srgb from-node-tool-fill to-bg-elevated shadow-[0_0_18px_var(--node-tool-soft)]',
+  workflow:
+    'border-node-workflow-edge bg-linear-135/srgb from-node-workflow-fill to-bg-elevated shadow-[0_0_18px_var(--node-workflow-soft)]',
 };
 
 const STEP_LABEL: Record<StepRole, string> = { trigger: 'When', agent: 'Agent', tool: 'Uses', workflow: 'Then' };
@@ -88,8 +90,16 @@ const STEP_LABEL: Record<StepRole, string> = { trigger: 'When', agent: 'Agent', 
 const STACK_GAP = { sm: 'gap-2', md: 'gap-3', lg: 'gap-4.5' } as const;
 
 const AGENT_STATUS = {
-  ready: { label: 'Ready', dot: 'bg-status-working-dot', ink: 'text-status-working-ink' },
-  working: { label: 'Working', dot: 'bg-status-ready-dot', ink: 'text-status-ready-ink' },
+  ready: {
+    label: 'Ready',
+    dot: 'bg-status-working-dot shadow-[0_0_8px_var(--status-working-dot)]',
+    ink: 'text-status-working-ink',
+  },
+  working: {
+    label: 'Working',
+    dot: 'bg-status-ready-dot shadow-[0_0_8px_var(--status-ready-dot)]',
+    ink: 'text-status-ready-ink',
+  },
   paused: { label: 'Paused', dot: 'bg-status-paused-dot', ink: 'text-status-paused-ink' },
 } as const;
 
@@ -162,7 +172,7 @@ function CardView({ props, children }: { props: PropsOf<'Card'>; children: React
 function HeadingView({ props }: { props: PropsOf<'Heading'> }) {
   const enter = useEnter<HTMLHeadingElement>();
   return (
-    <h3 ref={enter} className="m-0 text-md font-semibold tracking-tight text-fg-default">
+    <h3 ref={enter} className="m-0 text-md font-semibold tracking-[-0.01em] text-fg-default">
       {props.text}
     </h3>
   );
@@ -182,7 +192,7 @@ function MetricView({ props }: { props: PropsOf<'Metric'> }) {
   return (
     <div ref={enter} className="flex flex-col gap-1 rounded-card border border-border-default bg-bg-elevated p-3.5">
       <span className="text-xs text-fg-muted">{props.label}</span>
-      <span className={cn('text-2xl font-semibold tracking-tight', TONE_INK[props.tone ?? 'neutral'])}>{props.value}</span>
+      <span className={cn('text-xl font-semibold tracking-[-0.02em]', TONE_INK[props.tone ?? 'neutral'])}>{props.value}</span>
       {props.hint && <span className="text-xs text-fg-faint">{props.hint}</span>}
     </div>
   );
@@ -231,7 +241,7 @@ function PlanView({ props }: { props: PropsOf<'Plan'> }) {
   return (
     <div ref={enter} className="flex min-w-0 flex-col gap-3.5 rounded-card border border-border-default bg-bg-elevated p-4">
       <div className="flex items-center gap-2">
-        <span className="text-lead font-semibold text-fg-default">{props.title || 'Their routine'}</span>
+        <span className="text-lead font-semibold text-fg-default">{props.title || 'Automation'}</span>
         <span className="ml-auto font-mono text-2xs text-fg-faint">
           {props.steps.length} {props.steps.length === 1 ? 'step' : 'steps'}
         </span>
@@ -361,7 +371,11 @@ function ProgressView({ props }: { props: PropsOf<'Progress'> }) {
       </div>
       <div className="h-1.5 overflow-hidden rounded-pill bg-border-default">
         {/* Width is the runtime value. */}
-        <div ref={barRef} className={cn('h-full rounded-pill', TONE_DOT[props.tone ?? 'model'])} style={{ width: `${props.value}%` }} />
+        <div
+          ref={barRef}
+          className={cn('h-full rounded-pill', TONE_DOT[!props.tone || props.tone === 'neutral' ? 'model' : props.tone])}
+          style={{ width: `${props.value}%` }}
+        />
       </div>
     </div>
   );
@@ -382,7 +396,6 @@ function ToggleView({ props, raw }: { props: PropsOf<'Toggle'>; raw: SpecElement
         tone="run"
         aria-label={props.label}
         checked={props.value}
-        disabled={!path}
         onCheckedChange={(next) => path && onValue(path, next)}
       />
     </div>
@@ -406,7 +419,7 @@ function ChoiceView({ props, raw }: { props: PropsOf<'Choice'>; raw: SpecElement
         className="flex-wrap self-start"
       >
         {props.options.map((option) => (
-          <ToggleGroupItem key={option} value={option}>
+          <ToggleGroupItem key={option} value={option} className="border-0">
             {option}
           </ToggleGroupItem>
         ))}
@@ -428,7 +441,7 @@ function InputView({ props, raw }: { props: PropsOf<'Input'>; raw: SpecElement['
         maxLength={200}
         disabled={!path}
         onChange={(event) => path && onValue(path, event.target.value)}
-        className="h-9.5 bg-bg-app text-base text-fg-default"
+        className="h-9.5 rounded-lg bg-bg-app px-3 text-base font-normal text-fg-default md:text-base dark:bg-bg-app"
       />
     </label>
   );
@@ -440,7 +453,12 @@ function ButtonView({ props, raw }: { props: PropsOf<'Button'>; raw: SpecElement
   const run = () => onAction(props.action, raw.actionParams);
   if (props.variant === 'primary') {
     return (
-      <ActionButton ref={enter} intent="run" onClick={run} className="h-8.5 self-start px-4">
+      <ActionButton
+        ref={enter}
+        intent="run"
+        onClick={run}
+        className="h-8.5 self-start rounded-lg px-4 whitespace-nowrap active:translate-y-px"
+      >
         {props.label}
       </ActionButton>
     );
@@ -450,7 +468,7 @@ function ButtonView({ props, raw }: { props: PropsOf<'Button'>; raw: SpecElement
       ref={enter}
       variant="quiet"
       onClick={run}
-      className="h-8.5 self-start rounded-md border-border-strong px-3.5 font-semibold text-fg-default"
+      className="h-8.5 self-start rounded-lg border-border-strong px-3.5 font-semibold text-fg-default"
     >
       {props.label}
     </Button>

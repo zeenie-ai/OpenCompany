@@ -14,6 +14,7 @@ vi.mock('../ShellModeSwitch', () => ({
   preloadEditor: vi.fn(async () => {
     events.push('preload');
   }),
+  preloadHome: vi.fn(async () => {}),
 }));
 
 vi.mock('../shellTransition', () => ({

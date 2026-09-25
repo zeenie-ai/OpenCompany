@@ -36,6 +36,13 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 
+  /* Tailwind v4 leaves buttons on the arrow; the designs point at them,
+   * with each theme's own pointer (--cursor-pointer). */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: var(--cursor-pointer, pointer);
+  }
+
   #root {
     height: 100vh;
     width: 100vw;
@@ -438,16 +445,15 @@ html {
 
 /* ============================================================================
  * Normal mode: a working employee's status pip breathes a ring (design
- * handoff "pulsing ring"). A CSS keyframe rather than a Web Animation so the
- * page-hidden pause in base.css covers it. The pip's panel-coloured ring is
- * an outline, which this box-shadow never overwrites.
+ * handoff "pulsing ring": 0 to 6px over the whole loop). A CSS keyframe
+ * rather than a Web Animation so the page-hidden pause in base.css covers
+ * it. The ring grows from the pip's border box, outside its panel ring.
  * ============================================================================ */
 
 @keyframes home-pip-ring {
   0% {
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-working-dot) var(--tint-pip-ring), transparent);
   }
-  70%,
   100% {
     box-shadow: 0 0 0 6px transparent;
   }

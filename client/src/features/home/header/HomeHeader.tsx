@@ -27,8 +27,8 @@ export function HomeHeader({ title, scrolled }: { title: string; scrolled: boole
     >
       {!sidebarOpen && (
         <>
-          <Button variant="quiet" size="icon" onClick={toggleSidebar} aria-label="Open sidebar" title="Open sidebar">
-            <PanelLeft />
+          <Button variant="quiet" size="icon" onClick={toggleSidebar} aria-label="Open sidebar" title="Open sidebar" className="rounded-lg">
+            <PanelLeft className="size-4.25" strokeWidth={1.75} />
           </Button>
           <OcLogo size="header" pulseNonce={logoPulse} className="pr-1.5 pl-0.5" />
           <span aria-hidden className="h-5 w-px bg-border-default" />

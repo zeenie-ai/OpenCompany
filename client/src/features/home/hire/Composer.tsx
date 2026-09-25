@@ -15,6 +15,7 @@ import { useEffect, useLayoutEffect, useRef, type KeyboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { animate } from '@/lib/motion';
+import { prefersReducedMotion } from '@/lib/useReducedMotion';
 import { cn } from '@/lib/utils';
 import { AppMark } from '../ui/primitives';
 import { createLabel, isSendKey } from './composerKeys';
@@ -38,6 +39,10 @@ export interface ComposerProps {
   onOpenApps: () => void;
   /** Change this number to move focus into the box. */
   focusNonce?: number;
+  /** Called once the box has taken the focus `focusNonce` asked for. */
+  onFocusTaken?: () => void;
+  /** Told when the box gains or loses focus. */
+  onFocusChange?: (focused: boolean) => void;
   maxLength?: number;
 }
 
@@ -53,6 +58,8 @@ export function Composer({
   apps,
   onOpenApps,
   focusNonce = 0,
+  onFocusTaken,
+  onFocusChange,
   maxLength,
 }: ComposerProps) {
   const boxRef = useRef<HTMLTextAreaElement>(null);
@@ -75,7 +82,8 @@ export function Composer({
     const box = boxRef.current;
     box?.focus();
     if (box) box.setSelectionRange(box.value.length, box.value.length);
-  }, [focusNonce]);
+    onFocusTaken?.();
+  }, [focusNonce, onFocusTaken]);
 
   // Starting to edit the draft pulls focus here with a soft ring.
   useEffect(() => {
@@ -96,6 +104,8 @@ export function Composer({
     });
     boxRef.current?.blur();
     onSubmit();
+    // Keep the composer, and the draft appearing under it, in view.
+    surfaceRef.current?.scrollIntoView?.({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -114,7 +124,7 @@ export function Composer({
       ref={surfaceRef}
       data-intro
       className={cn(
-        'relative flex w-full max-w-(--w-composer) shrink-0 flex-col gap-2 rounded-composer border bg-bg-panel pt-3 pr-3 pb-2.5 pl-4 shadow-float transition-colors duration-(--dur-slow)',
+        'relative flex w-full max-w-(--w-composer) shrink-0 scroll-mt-4 flex-col gap-2 rounded-composer border bg-bg-panel pt-3 pr-3 pb-2.5 pl-4 shadow-float transition-colors duration-(--dur-slow)',
         refining ? 'border-node-agent-edge' : 'border-border-default focus-within:border-border-strong',
       )}
     >
@@ -126,13 +136,15 @@ export function Composer({
         maxLength={maxLength}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={onKeyDown}
+        onFocus={() => onFocusChange?.(true)}
+        onBlur={() => onFocusChange?.(false)}
         aria-label={refining ? 'What should change?' : 'Describe the job'}
         placeholder={
           refining
             ? 'What should change? e.g. Only reply during business hours'
             : 'e.g. Answer customer messages on WhatsApp and book appointments'
         }
-        className="max-h-(--h-composer-max) overflow-hidden py-1.5 text-lead leading-normal text-fg-default"
+        className="max-h-(--h-composer-max) overflow-hidden py-1.5 text-lead leading-normal text-fg-default field-sizing-fixed"
       />
       <div className="flex items-center gap-2">
         <Button
@@ -149,7 +161,7 @@ export function Composer({
                   name={app.name}
                   iconRef={app.icon_ref}
                   size="sm"
-                  className="-mr-1.5 ring-2 ring-bg-panel"
+                  className="-mr-1.5 border-0 ring-2 ring-bg-panel"
                 />
               ))}
             </span>

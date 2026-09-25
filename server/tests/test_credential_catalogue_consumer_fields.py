@@ -107,6 +107,25 @@ class TestCatalogueFields:
     def test_catalogue_payload_carries_consumer_categories(self, registry):
         assert registry.get_catalogue()["consumer_categories"] == registry.get_consumer_categories()
 
+    def test_every_backend_icon_url_resolves(self, registry):
+        """An ``icon_ref`` on a backend icon route must name something that
+        route can serve, or the Connectors card shows a broken image (the
+        IMAP/SMTP account once pointed at a credential class that does not
+        exist)."""
+        import re
+
+        import nodes  # noqa: F401 - registers every node type and credential class
+        from nodes._visuals import get_plugin_icon_path
+        from services.plugin.credential import CREDENTIAL_REGISTRY
+
+        for provider in registry.get_all_providers():
+            ref = provider.get("icon_ref") or ""
+            if match := re.fullmatch(r"/api/schemas/credentials/(\w+)/icon", ref):
+                credential = CREDENTIAL_REGISTRY.get(match.group(1))
+                assert credential is not None and credential.get_icon_path() is not None, provider["id"]
+            elif match := re.fullmatch(r"/api/schemas/nodes/(\w+)/icon", ref):
+                assert get_plugin_icon_path(match.group(1)) is not None, provider["id"]
+
 
 class TestProviderConnectionState:
     async def test_api_key_provider(self, registry):

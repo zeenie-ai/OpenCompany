@@ -50,7 +50,13 @@ export function Avatar({
       )}
     >
       {initialOf(name)}
-      {status && <StatusDot tone={status} pulse={pulse} className="absolute -right-px -bottom-px size-2.25 outline-2 outline-bg-panel" />}
+      {status && (
+        <StatusDot
+          tone={status}
+          pulse={pulse}
+          className="absolute -right-px -bottom-px box-content size-2.25 border-2 border-bg-panel"
+        />
+      )}
     </span>
   );
 }
@@ -69,7 +75,7 @@ export function StatusPill({ tone, label, pulse = false }: { tone: StatusTone; l
   return (
     <span
       className={cn(
-        'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-pill border px-3 text-sm font-medium transition-colors',
+        'inline-flex h-7.5 shrink-0 items-center gap-1.5 rounded-pill border px-3 text-sm font-medium transition-colors',
         STATUS_PILL_CLASS[tone],
       )}
     >

@@ -14,7 +14,7 @@ dist-ssr
 test-temp*/
 
 # External design handoff bundle (reference-only; merged copy lives in docs-internal/design-system/)
-design_handoff_theme_system/
+design_handoff_opencompany_home/
 
 # npm-generated lock file. This project uses bun (canonical lock:
 # ``bun.lock``, tracked). Source checkouts are gated to bun

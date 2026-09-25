@@ -12,10 +12,11 @@
 
 import { useMemo } from 'react';
 import { toast } from 'sonner';
+import { SPIKE, spikeOrb } from '../features/home/orb/orb';
 import { featureFlags } from '../lib/featureFlags';
 import { useAppStore } from '../store/useAppStore';
 import { useWorkflowSettingsStore } from '../stores/workflowSettingsStore';
-import { preloadEditor } from './ShellModeSwitch';
+import { preloadEditor, preloadHome } from './ShellModeSwitch';
 import { transitionShell } from './shellTransition';
 
 export interface EnterDevOptions {
@@ -64,7 +65,15 @@ export async function enterDev(options: EnterDevOptions = {}): Promise<void> {
 
 export async function enterNormal(): Promise<void> {
   if (!featureFlags.normalMode) return;
+  // Loaded before the swap, so Home's entrance never plays on a placeholder.
+  try {
+    await preloadHome();
+  } catch (error) {
+    console.error('[Shell] Could not load Home:', error);
+  }
   await transitionShell('normal');
+  // Home's orb flares as it arrives (it fades out within a second).
+  spikeOrb(SPIKE.mode);
 }
 
 export function toggleShellMode(): Promise<void> {

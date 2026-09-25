@@ -26,7 +26,13 @@ export function preloadEditor(): Promise<unknown> {
 }
 
 // Home is its own chunk too, so a Dev-mode session never loads it.
-const LazyHome = lazy(() => import('../features/home/HomeShell'));
+const loadHome = () => import('../features/home/HomeShell');
+const LazyHome = lazy(loadHome);
+
+/** Start fetching the Home chunk. Safe to call repeatedly. */
+export function preloadHome(): Promise<unknown> {
+  return loadHome();
+}
 
 /** The screen the shell shows. Always `dev` while the flag is off. */
 export function useShellMode(): ShellMode {

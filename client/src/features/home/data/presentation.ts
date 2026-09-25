@@ -75,7 +75,8 @@ export function presentEmployee(
   const pill = employee.pending_approvals > 0 ? { label: 'Needs you', tone: 'waiting' as const } : PILL[employee.status];
   return {
     pill,
-    pulse: employee.status === 'working',
+    // Only a green working dot pulses (its ring is green).
+    pulse: pill.tone === 'working',
     primary: primaryAction(employee),
     busyLabel: pending ? BUSY[pending.action] : null,
   };

@@ -6,12 +6,13 @@
  * The hero rises in on arrival (every `[data-intro]` element, staggered).
  */
 
-import { useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { stagger } from '@/lib/motion';
 import { useConnectors } from '../data/connectors';
 import { useEmployeesQuery } from '../data/employees';
 import { callName, useOwnerSettings } from '../data/profile';
 import { HireDraftPanel, useHireComposer } from '../genui';
+import { ENERGY, setEnergyTarget } from '../orb/orb';
 import { OrbSlot } from '../orb/OrbSlot';
 import { useHomeStore } from '../state/homeStore';
 import { Composer } from './Composer';
@@ -24,7 +25,9 @@ export function HireView({ onConnect }: { onConnect: (providerId: string) => voi
   const { data: employees } = useEmployeesQuery();
   const { data: settings } = useOwnerSettings();
   const focusNonce = useHomeStore((s) => s.composerFocus);
+  const consumeComposerFocus = useHomeStore((s) => s.consumeComposerFocus);
   const openSettings = useHomeStore((s) => s.openSettings);
+  const [focused, setFocused] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
@@ -39,6 +42,13 @@ export function HireView({ onConnect }: { onConnect: (providerId: string) => voi
       { base: 120, step: 80, duration: 'intro', easing: 'spring' },
     );
   }, []);
+
+  // The orb livens up with the composer (design handoff "Orb reactivity").
+  const hasText = composer.value.trim().length > 0;
+  useEffect(() => {
+    setEnergyTarget(composer.working ? ENERGY.generating : hasText ? ENERGY.typing : focused ? ENERGY.focus : ENERGY.idle);
+  }, [composer.working, hasText, focused]);
+  useEffect(() => () => setEnergyTarget(ENERGY.idle), []);
 
   const working = employees?.filter((employee) => employee.status === 'working').length ?? 0;
   const name = callName(settings);
@@ -77,6 +87,8 @@ export function HireView({ onConnect }: { onConnect: (providerId: string) => voi
         apps={apps}
         onOpenApps={() => openSettings('connectors')}
         focusNonce={focusNonce}
+        onFocusTaken={consumeComposerFocus}
+        onFocusChange={setFocused}
         maxLength={2000}
       />
       <TemplateChips onPick={(template) => composer.pick(template.job)} disabled={composer.working} />

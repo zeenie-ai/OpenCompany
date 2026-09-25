@@ -4,7 +4,7 @@
  * (width + opacity); the header then shows the logo and an open button.
  */
 
-import { useEffect, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { PanelLeft, Plus, Settings } from 'lucide-react';
 import { OcLogo } from '@/components/brand/Logo';
 import { ActionButton } from '@/components/ui/action-button';
@@ -14,7 +14,7 @@ import { animate } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useEmployeesQuery } from '../data/employees';
 import { presentEmployee } from '../data/presentation';
-import { callName, useOwnerSettings } from '../data/profile';
+import { useOwnerSettings } from '../data/profile';
 import type { EmployeeSummary } from '../data/schemas';
 import { useHomeStore } from '../state/homeStore';
 import { Avatar, MicroLabel } from '../ui/primitives';
@@ -27,16 +27,26 @@ function EmployeeRow({ employee, selected }: { employee: EmployeeSummary; select
   const ref = useRef<HTMLButtonElement>(null);
   const view = presentEmployee(employee, pending);
 
-  useEffect(() => {
+  // A new hire drops into the list with a green glow (design handoff "Hire").
+  useLayoutEffect(() => {
     if (!glow) return;
     animate(
       ref.current,
       [
-        { boxShadow: '0 0 0 0 transparent' },
-        { boxShadow: '0 0 0 1px var(--status-working-border), 0 0 24px var(--status-working-fill)', offset: 0.25 },
-        { boxShadow: '0 0 0 0 transparent' },
+        {
+          opacity: 0,
+          transform: 'translateY(-24px) scale(.9)',
+          boxShadow: '0 0 0 2px var(--action-run-border), 0 0 40px var(--status-working-border)',
+        },
+        {
+          opacity: 1,
+          transform: 'none',
+          boxShadow: '0 0 0 2px var(--status-working-border), 0 0 24px var(--status-working-fill)',
+          offset: 0.6,
+        },
+        { opacity: 1, transform: 'none', boxShadow: '0 0 0 0 transparent' },
       ],
-      { duration: 'glow', easing: 'default', fill: 'none' },
+      { duration: 'glow', easing: 'spring', fill: 'backwards' },
     );
   }, [glow]);
 
@@ -78,7 +88,7 @@ function TeamList() {
     <>
       <div className="flex items-center px-2.5 pt-4.5 pb-1.5">
         <MicroLabel>AI employees</MicroLabel>
-        <span className="ml-auto font-mono text-2xs text-fg-faint">{employees?.length ?? ''}</span>
+        <span className="ml-auto font-mono text-2xs font-medium tracking-label text-fg-faint">{employees?.length ?? ''}</span>
       </div>
       <nav aria-label="AI employees" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-x-hidden overflow-y-auto">
         {isLoading &&
@@ -93,7 +103,7 @@ function TeamList() {
           ))}
         {isError && (
           <button type="button" onClick={() => void refetch()} className="px-2.5 py-2 text-left text-xs text-fg-muted hover:text-fg-default">
-            Couldn't load your team. Try again
+            Couldn’t load your team. Try again
           </button>
         )}
         {employees?.length === 0 && (
@@ -110,7 +120,7 @@ function TeamList() {
 function ProfileRow() {
   const openSettings = useHomeStore((s) => s.openSettings);
   const { data: settings } = useOwnerSettings();
-  const name = callName(settings) || String(settings?.profile_full_name ?? '').trim();
+  const name = String(settings?.profile_full_name ?? '').trim();
   return (
     <div className="border-t border-border-default pt-2">
       <button
@@ -142,7 +152,7 @@ export function HomeSidebar() {
         'flex shrink-0 flex-col gap-1 overflow-hidden border-border-default bg-bg-panel whitespace-nowrap transition-[width,opacity,padding] motion-reduce:transition-none',
         open
           ? 'w-(--w-home-sidebar) border-r p-3 opacity-100 duration-(--dur-sidebar-in) ease-spring'
-          : 'w-0 border-r-0 p-0 opacity-0 duration-(--dur-sidebar-out)',
+          : 'w-0 border-r-0 p-0 opacity-0 duration-(--dur-sidebar-out) ease-(--ease-default)',
       )}
     >
       <div className="flex items-center px-1 pt-1 pb-3.5">
@@ -153,9 +163,9 @@ export function HomeSidebar() {
           onClick={toggleSidebar}
           aria-label="Close sidebar"
           title="Close sidebar"
-          className="ml-auto size-7.5"
+          className="ml-auto size-7.5 rounded-lg"
         >
-          <PanelLeft />
+          <PanelLeft className="size-4.25" strokeWidth={1.75} />
         </Button>
       </div>
       <ActionButton

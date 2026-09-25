@@ -223,6 +223,10 @@
   --shadow-float:   0 12px 40px rgb(15 23 42 / 0.10);
   --shadow-popover: 0 12px 32px rgb(15 23 42 / 0.12);
   --shadow-dialog:  0 24px 80px rgb(15 23 42 / 0.16);
+
+  /* A paused employee's dot stays the design's mid grey; only its pill
+   * text takes the darker muted ink (base.css). */
+  --status-paused-dot: #9aa1ac;
 }
 
 /* Code & syntax tokens (code editor / JSON output / variable tree) */

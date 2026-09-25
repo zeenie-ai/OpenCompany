@@ -34,6 +34,11 @@ async def wait_for_change(approval_id: str, timeout: float) -> bool:
             future.cancel()
 
 
+def waiting(approval_id: str) -> int:
+    """How many gates in this process are waiting on ``approval_id``."""
+    return len(_waiters.get(approval_id, ()))
+
+
 def notify(approval_id: str) -> int:
     """Wake everything waiting on ``approval_id``. Returns how many."""
     woken = 0
@@ -52,4 +57,4 @@ def reset_for_tests() -> None:
     _waiters.clear()
 
 
-__all__ = ["notify", "reset_for_tests", "wait_for_change"]
+__all__ = ["notify", "reset_for_tests", "wait_for_change", "waiting"]

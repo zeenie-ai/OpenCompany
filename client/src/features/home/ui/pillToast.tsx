@@ -25,16 +25,19 @@ const TONE: Record<PillTone, { border: string; dot: string }> = {
 };
 
 function PillToast({ message, tone }: { message: string; tone: PillTone }) {
+  // Centred in sonner's toast column, on one line however long the message.
   return (
-    <div
-      role="status"
-      className={cn(
-        'flex items-center gap-2.5 rounded-pill border bg-bg-elevated px-4 py-2.5 font-body text-sm font-medium text-fg-default shadow-float',
-        TONE[tone].border,
-      )}
-    >
-      <span aria-hidden className={cn('size-1.75 shrink-0 rounded-full', TONE[tone].dot)} />
-      {message}
+    <div className="flex w-full justify-center">
+      <div
+        role="status"
+        className={cn(
+          'flex h-10 items-center gap-2.5 rounded-pill border bg-bg-elevated px-4 font-body text-sm font-medium whitespace-nowrap text-fg-default shadow-popover',
+          TONE[tone].border,
+        )}
+      >
+        <span aria-hidden className={cn('size-1.5 shrink-0 rounded-full', TONE[tone].dot)} />
+        {message}
+      </div>
     </div>
   );
 }
@@ -50,5 +53,6 @@ export function pillToast(message: string, options: { tone?: PillTone } = {}): s
 }
 
 export function PillToaster() {
-  return <Toaster id={PILL_TOASTER_ID} position="bottom-center" toastOptions={{ unstyled: true }} />;
+  // One pill at a time, 44px up from the bottom (design handoff "Toast").
+  return <Toaster id={PILL_TOASTER_ID} position="bottom-center" offset={44} visibleToasts={1} toastOptions={{ unstyled: true }} />;
 }

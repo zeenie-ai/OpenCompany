@@ -5,7 +5,7 @@
  * trims and bounds them again on save.
  */
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ActionButton } from '@/components/ui/action-button';
@@ -16,6 +16,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { isDarkTheme, useTheme } from '@/contexts/ThemeContext';
+import { animate } from '@/lib/motion';
 import {
   browserTimezone,
   profileFromSettings,
@@ -27,7 +28,9 @@ import {
 import { Avatar } from '../ui/primitives';
 import { pillToast } from '../ui/pillToast';
 
-const FIELD_INPUT = 'h-9.5 bg-bg-app';
+// The fields sit on the app surface at the design's size (the primitives
+// would tint them in dark and shrink the text to 13px from md up).
+const FIELD_INPUT = 'h-9.5 rounded-lg bg-bg-app px-3 text-base font-normal md:text-base dark:bg-bg-app';
 
 function SettingRow({
   title,
@@ -56,6 +59,8 @@ export function ProfileTab({ onDone }: { onDone: () => void }) {
   const { saveProfile, isPending } = useSaveProfile();
   const { theme, setTheme } = useTheme();
   const [saved, setSaved] = useState(false);
+  const saveRef = useRef<HTMLButtonElement>(null);
+  const revealFrom = useRef<{ x: number; y: number } | undefined>(undefined);
   const zone = browserTimezone() ?? String(settings?.profile_timezone ?? '');
 
   const form = useForm<ProfileForm>({
@@ -70,13 +75,17 @@ export function ProfileTab({ onDone }: { onDone: () => void }) {
   }, [settings, form]);
 
   const fullName = useWatch({ control: form.control, name: 'profile_full_name' });
-  const role = useWatch({ control: form.control, name: 'profile_role' });
+  const calledAs = (useWatch({ control: form.control, name: 'profile_call_name' }) || fullName || '').trim();
 
   const onSubmit = async (values: ProfileForm) => {
     try {
       await saveProfile(values);
       form.reset(values);
       setSaved(true);
+      animate(saveRef.current, [{ transform: 'scale(1)' }, { transform: 'scale(1.06)', offset: 0.4 }, { transform: 'scale(1)' }], {
+        duration: 380,
+        fill: 'none',
+      });
       pillToast('Profile saved');
     } catch (error) {
       pillToast(error instanceof Error ? error.message : "Couldn't save your profile", { tone: 'error' });
@@ -91,20 +100,22 @@ export function ProfileTab({ onDone }: { onDone: () => void }) {
         className="flex max-w-160 flex-col gap-5.5 px-8 pt-7 pb-8"
         onChange={() => setSaved(false)}
       >
-        <div className="flex flex-col gap-1">
+        <div data-stagger className="flex flex-col gap-1">
           <h2 className="text-lg font-semibold text-fg-default">Profile</h2>
           <p className="text-sm text-fg-muted">How your agents address you, and what they should know before they start.</p>
         </div>
 
-        <div className="flex items-center gap-4 rounded-card border border-border-default bg-bg-elevated p-4">
-          <Avatar name={fullName || 'You'} colorRole="agent" size="lg" />
+        <div data-stagger className="flex items-center gap-4 rounded-card border border-border-default bg-bg-elevated p-4">
+          <Avatar name={fullName || 'You'} colorRole="agent" size="lg" className="shadow-[0_0_24px_var(--node-agent-fill)]" />
           <div className="flex min-w-0 flex-col gap-0.75">
             <span className="truncate text-lead font-semibold text-fg-default">{fullName || 'Your name'}</span>
-            <span className="truncate font-mono text-xs text-fg-faint">{role || 'Owner'}</span>
+            <span className="truncate font-mono text-xs text-fg-faint">
+              {calledAs ? `Employees will call you ${calledAs}` : 'Add your name so employees know you'}
+            </span>
           </div>
         </div>
 
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3.5">
+        <div data-stagger className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3.5">
           <FormField
             control={form.control}
             name="profile_full_name"
@@ -148,7 +159,7 @@ export function ProfileTab({ onDone }: { onDone: () => void }) {
             <FormLabel className="text-xs text-fg-muted" htmlFor="profile-timezone">
               Timezone
             </FormLabel>
-            <Input id="profile-timezone" value={zone} readOnly className={`${FIELD_INPUT} font-mono text-sm text-fg-muted`} />
+            <Input id="profile-timezone" value={zone} readOnly className={`${FIELD_INPUT} font-mono text-sm text-fg-muted md:text-sm`} />
           </FormItem>
         </div>
 
@@ -156,7 +167,7 @@ export function ProfileTab({ onDone }: { onDone: () => void }) {
           control={form.control}
           name="profile_preferences"
           render={({ field }) => (
-            <FormItem>
+            <FormItem data-stagger>
               <FormLabel className="flex flex-col items-start gap-0.5 text-xs text-fg-muted">
                 Personal preferences
                 <span className="font-normal text-fg-faint">Applied to every chat and agent run.</span>
@@ -165,7 +176,7 @@ export function ProfileTab({ onDone }: { onDone: () => void }) {
                 <Textarea
                   rows={4}
                   placeholder="Keep replies short. Draft emails in my voice, never send without asking."
-                  className="min-h-24 resize-y bg-bg-app"
+                  className="min-h-24 resize-y bg-bg-app px-3 py-2.5 text-base md:text-base dark:bg-bg-app"
                   {...field}
                 />
               </FormControl>
@@ -174,19 +185,28 @@ export function ProfileTab({ onDone }: { onDone: () => void }) {
           )}
         />
 
-        <div className="flex flex-col">
+        <div data-stagger className="flex flex-col">
           <SettingRow title="Appearance" detail="Choose light or dark.">
             <ToggleGroup
               type="single"
               variant="segmented"
               aria-label="Appearance"
               value={isDarkTheme(theme) ? 'dark' : 'light'}
+              // The new theme grows from where it was clicked.
+              onPointerDown={(event) => {
+                revealFrom.current = { x: event.clientX, y: event.clientY };
+              }}
               onValueChange={(next) => {
-                if (next === 'light' || next === 'dark') setTheme(next, { reveal: true });
+                if (next === 'light' || next === 'dark') setTheme(next, { reveal: true, origin: revealFrom.current });
+                revealFrom.current = undefined;
               }}
             >
-              <ToggleGroupItem value="light">Light</ToggleGroupItem>
-              <ToggleGroupItem value="dark">Dark</ToggleGroupItem>
+              <ToggleGroupItem value="light" className="px-3.5 text-xs">
+                Light
+              </ToggleGroupItem>
+              <ToggleGroupItem value="dark" className="px-3.5 text-xs">
+                Dark
+              </ToggleGroupItem>
             </ToggleGroup>
           </SettingRow>
           <FormField
@@ -215,11 +235,11 @@ export function ProfileTab({ onDone }: { onDone: () => void }) {
           />
         </div>
 
-        <div className="flex justify-end gap-2">
+        <div data-stagger className="flex justify-end gap-2">
           <Button type="button" variant="quiet" className="h-8.5 border-border-default px-3.5 font-semibold text-fg-default" onClick={onDone}>
             Cancel
           </Button>
-          <ActionButton type="submit" intent="run" disabled={isPending} className="h-8.5 px-4">
+          <ActionButton ref={saveRef} type="submit" intent="run" disabled={isPending} className="h-8.5 px-4">
             {isPending ? 'Saving…' : saved ? 'Saved' : 'Save changes'}
           </ActionButton>
         </div>

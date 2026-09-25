@@ -73,7 +73,7 @@ function WorkingSteps({ token }: { token: string | null }) {
             {active && (
               <span
                 aria-hidden
-                className="mx-0.5 size-3.5 shrink-0 animate-spin rounded-full border-2 border-node-agent-border border-t-node-agent motion-reduce:animate-none"
+                className="mx-0.5 size-3.5 shrink-0 animate-[spin_700ms_linear_infinite] rounded-full border-2 border-node-agent-border border-t-node-agent motion-reduce:animate-none"
               />
             )}
             {!done && !active && (
@@ -92,9 +92,9 @@ function FailureNotice({ failure, onRetry, onConnectAi }: { failure: DraftFailur
   return (
     <div
       role="alert"
-      className="flex flex-wrap items-center gap-3 rounded-card border border-status-attention-border bg-status-attention-fill px-3.5 py-3"
+      className="flex flex-wrap items-center gap-3 rounded-card border border-node-trigger-border bg-node-trigger-soft px-3.5 py-3"
     >
-      <span aria-hidden className="size-2 shrink-0 rounded-full bg-status-attention-dot" />
+      <span aria-hidden className="size-2 shrink-0 rounded-full bg-node-trigger" />
       <div className="flex min-w-50 flex-1 flex-col gap-0.5">
         <span className="text-base font-semibold text-fg-default">
           {failure.refine ? 'Couldn’t make that change' : 'Couldn’t finish setting this up'}
@@ -112,12 +112,12 @@ function FailureNotice({ failure, onRetry, onConnectAi }: { failure: DraftFailur
         <Button
           variant="quiet"
           onClick={onRetry}
-          className="h-8 rounded-md border-border-strong px-3.5 font-semibold text-fg-default"
+          className="h-8 rounded-lg border-border-strong px-3.5 font-semibold text-fg-default"
         >
           Try again
         </Button>
       ) : (
-        <ActionButton intent="run" onClick={onRetry}>
+        <ActionButton intent="stop" onClick={onRetry} className="rounded-lg">
           Try again
         </ActionButton>
       )}
@@ -240,8 +240,15 @@ export function HireDraftPanel({ onConnect }: { onConnect: (providerId: string) 
         <div className="flex items-center gap-2.5">
           <MicroLabel className="shrink-0 text-node-agent-ink">New employee</MicroLabel>
           <span className="min-w-0 flex-1 truncate text-sm text-fg-muted">{job}</span>
-          <Button variant="quiet" size="icon-sm" onClick={() => void discard()} title="Discard draft" aria-label="Discard draft">
-            <X />
+          <Button
+            variant="quiet"
+            size="icon-sm"
+            onClick={() => void discard()}
+            title="Discard draft"
+            aria-label="Discard draft"
+            className="rounded-lg"
+          >
+            <X className="size-3.5" />
           </Button>
         </div>
 
@@ -269,7 +276,7 @@ export function HireDraftPanel({ onConnect }: { onConnect: (providerId: string) 
               onClick={() => setShowJson((on) => !on)}
               title="See the layout the assistant generated"
               aria-expanded={showJson}
-              className="self-start font-mono text-2xs font-normal text-fg-faint hover:border-border-default"
+              className="gap-1.5 self-start font-mono text-2xs font-normal text-fg-faint hover:border-border-default hover:bg-transparent hover:text-fg-muted"
             >
               <Code aria-hidden />
               {showJson ? 'Hide layout JSON' : 'Layout JSON'}

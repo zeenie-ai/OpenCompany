@@ -10,8 +10,9 @@
  * changes on every console, chat and terminal line.
  */
 
-import { Suspense, lazy, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { disposeOrb } from '../features/home/orb/orb';
 import { useSoundSync } from '../hooks/useSound';
 import { useSaveUserSettingsMutation } from '../hooks/useUserSettingsQuery';
 import { useShellDialogsStore } from '../stores/shellDialogsStore';
@@ -33,6 +34,8 @@ function ShellEffects() {
   useCurrentWorkflowSync();
   useUIDefaultsOnce();
   useModeShortcut();
+  // Home's orb keeps its renderer across mode switches; free it with the app.
+  useEffect(() => disposeOrb, []);
   return null;
 }
 

@@ -43,6 +43,9 @@ interface HomeState {
   setSettingsCategory: (category: string) => void;
   glowRow: (workflowId: string) => void;
   pulseLogo: () => void;
+  /** The composer took the focus it was asked for; a remount must not
+   *  take it again. */
+  consumeComposerFocus: () => void;
 }
 
 export const useHomeStore = create<HomeState>((set) => ({
@@ -79,4 +82,5 @@ export const useHomeStore = create<HomeState>((set) => ({
   glowRow: (workflowId) =>
     set((state) => ({ glow: { workflowId, nonce: (state.glow?.nonce ?? 0) + 1 } })),
   pulseLogo: () => set((state) => ({ logoPulse: state.logoPulse + 1 })),
+  consumeComposerFocus: () => set((state) => (state.composerFocus === 0 ? state : { composerFocus: 0 })),
 }));
