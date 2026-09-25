@@ -37,6 +37,11 @@ with workflow.unsafe.imports_passed_through():
 # histories recorded while every node was scheduled unconditionally.
 CONDITIONAL_EDGES_PATCH = "machina-conditional-edges-v1"
 
+# Each finished trigger-spawned run schedules a record activity so Normal mode
+# can say how much an employee did today. Gated so histories recorded before
+# it (which end without that activity) still replay.
+RUN_RECORD_PATCH = "machina-run-record-v1"
+
 # Config handles - nodes connecting via these are config nodes (not executed)
 # AI Agent handles: input-context, input-tools, input-model, input-task, input-teammates
 # Zeenie handles: input-skill, input-tools
@@ -253,6 +258,42 @@ class MachinaWorkflow:
             )
         except Exception as exc:  # noqa: BLE001 — cosmetic relative to the run result
             workflow.logger.warning(f"pause-on-failure activity failed (non-fatal): {exc}")
+
+    async def _record_run_completion(
+        self,
+        workflow_data: Dict[str, Any],
+        nodes: List[Dict[str, Any]],
+        success: bool,
+    ) -> None:
+        """Record a finished trigger-spawned run (services/employees/runs.py).
+
+        Same eligibility as the circuit breaker: deployment-spawned runs
+        carry a ``_pre_executed`` firing trigger, manual canvas runs never
+        do. Behind RUN_RECORD_PATCH; the patch check comes after the
+        eligibility test, which depends only on the workflow input, so it
+        is deterministic. Non-fatal: a missed record only undercounts.
+        """
+        workflow_id = workflow_data.get("workflow_id")
+        spawned_by_trigger = any(node.get("_pre_executed") for node in nodes)
+        if not workflow_id or not spawned_by_trigger:
+            return
+        if not workflow.patched(RUN_RECORD_PATCH):
+            return
+        try:
+            info = workflow.info()
+            await workflow.execute_activity(
+                "workflow_runs.record_completion",
+                {
+                    "workflow_id": workflow_id,
+                    "run_id": f"{info.workflow_id}:{info.run_id}",
+                    "generation": int(workflow_data.get("generation") or 0),
+                    "status": "success" if success else "failed",
+                },
+                start_to_close_timeout=timedelta(seconds=30),
+                retry_policy=QUICK_ACTIVITY_RETRY,
+            )
+        except Exception as exc:  # noqa: BLE001 — cosmetic relative to the run result
+            workflow.logger.warning(f"run-record activity failed (non-fatal): {exc}")
 
     @workflow.signal
     async def on_event(self, event_payload: Dict[str, Any]) -> None:
@@ -666,6 +707,7 @@ class MachinaWorkflow:
 
         if errors:
             await self._pause_deployment_on_failure(workflow_data, nodes, errors)
+        await self._record_run_completion(workflow_data, nodes, success)
 
         workflow.logger.info(f"Workflow complete: success={success}, " f"executed={len(execution_trace)}/{len(node_map)}")
 

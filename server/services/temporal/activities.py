@@ -601,3 +601,38 @@ async def pause_workflow_on_failure_activity(payload: Dict[str, Any]) -> Dict[st
     except Exception as exc:  # noqa: BLE001 — non-fatal
         activity.logger.warning(f"pause_workflow_on_failure_activity failed for " f"workflow={payload.get('workflow_id')!r}: {exc}")
         return {"paused": False, "error": str(exc)}
+
+
+@activity.defn(name="workflow_runs.record_completion")
+async def record_run_completion_activity(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Record a finished trigger-spawned run (Normal mode's "N done today").
+
+    Scheduled at the end of MachinaWorkflow.run behind the
+    ``machina-run-record-v1`` patch. Idempotent: ``run_id`` is the Temporal
+    workflow id plus run id, unique per run, so a retry records nothing new.
+    Never raises; a missed record only undercounts the day.
+
+    Payload shape:
+        {
+            "workflow_id": str,   # OpenCompany workflow id
+            "run_id": str,        # "<temporal workflow id>:<temporal run id>"
+            "generation": int,
+            "status": "success" | "failed",
+        }
+    """
+    from core.container import container
+    from services.employees.runs import record_run
+
+    try:
+        recorded = await record_run(
+            container.database(),
+            workflow_id=str(payload.get("workflow_id") or ""),
+            run_id=str(payload.get("run_id") or ""),
+            status=str(payload.get("status") or "failed"),
+            runtime="temporal",
+            generation=int(payload.get("generation") or 0),
+        )
+        return {"recorded": recorded}
+    except Exception as exc:  # noqa: BLE001 — non-fatal
+        activity.logger.warning(f"record_run_completion_activity failed for workflow={payload.get('workflow_id')!r}: {exc}")
+        return {"recorded": False, "error": str(exc)}

@@ -113,6 +113,29 @@ class NodeAllowlistService:
         }
 
 
+    def is_hire_allowed(self, node_type: str) -> bool:
+        """Whether Normal mode's Hire may build a graph containing ``node_type``.
+
+        With Normal mode, ``enabled_nodes`` no longer filters the editor
+        palette (Dev mode lists every node); it governs what Hire may
+        assemble instead. The blocklists still win, matched the same way
+        the palette matches them (the exact type, or any of its groups). An
+        empty ``enabled_nodes`` (show_all) allows everything not blocked.
+
+        The graph builder checks every node it emits, and node types never
+        come from the hire payload.
+        """
+        from services.node_registry import NODE_METADATA
+
+        config = self.get_config()
+        if node_type in config["disabled_nodes"]:
+            return False
+        groups = (NODE_METADATA.get(node_type) or {}).get("group") or []
+        if any(group in config["disabled_groups"] for group in groups):
+            return False
+        return config["show_all"] or node_type in config["enabled_nodes"]
+
+
 _instance: NodeAllowlistService | None = None
 
 
@@ -122,3 +145,8 @@ def get_node_allowlist_service() -> NodeAllowlistService:
     if _instance is None:
         _instance = NodeAllowlistService()
     return _instance
+
+
+def is_hire_allowed(node_type: str) -> bool:
+    """Shortcut for :meth:`NodeAllowlistService.is_hire_allowed`."""
+    return get_node_allowlist_service().is_hire_allowed(node_type)

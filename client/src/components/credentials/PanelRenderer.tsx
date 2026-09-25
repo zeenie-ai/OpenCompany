@@ -36,14 +36,21 @@ const LAZY_PANELS: Record<PanelKind, React.LazyExoticComponent<React.ComponentTy
   email: React.lazy(PANEL_LOADERS.email),
 };
 
+/** `full`: the editor's Credentials modal (usage, provider defaults, rate
+ *  limits). `compact`: only what it takes to connect, for Normal mode's
+ *  Connect dialog. */
+export type PanelVariant = 'full' | 'compact';
+
 interface PanelProps {
   config: ProviderConfig;
   visible: boolean;
+  variant?: PanelVariant;
 }
 
 interface Props {
   config: ProviderConfig | null;
   visible: boolean;
+  variant?: PanelVariant;
 }
 
 const PanelFallback: React.FC = () => (
@@ -59,7 +66,7 @@ const EmptyState: React.FC<{ icon: React.ReactNode; message: string }> = ({ icon
   </div>
 );
 
-const PanelRenderer: React.FC<Props> = ({ config, visible }) => {
+const PanelRenderer: React.FC<Props> = ({ config, visible, variant = 'full' }) => {
   const Lazy = useMemo(() => {
     if (!config) return null;
     return LAZY_PANELS[config.kind] ?? null;
@@ -84,7 +91,7 @@ const PanelRenderer: React.FC<Props> = ({ config, visible }) => {
 
   return (
     <Suspense fallback={<PanelFallback />}>
-      <Lazy config={config} visible={visible} />
+      <Lazy config={config} visible={visible} variant={variant} />
     </Suspense>
   );
 };

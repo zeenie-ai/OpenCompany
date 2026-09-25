@@ -24,9 +24,12 @@ pytestmark = pytest.mark.credentials
 SERVER_DIR = Path(__file__).resolve().parents[2]
 CONFIG_PATH = SERVER_DIR / "config" / "credential_providers.json"
 
-# The only keys the file may carry at its root. Metadata + the two
-# sections the registry actually reads (``categories`` / ``providers``).
-EXPECTED_TOP_LEVEL_KEYS = frozenset({"version", "last_updated", "_description", "categories", "providers"})
+# The only keys the file may carry at its root. Metadata + the sections the
+# registry actually reads (``categories`` / ``consumer_categories`` /
+# ``providers``).
+EXPECTED_TOP_LEVEL_KEYS = frozenset(
+    {"version", "last_updated", "_description", "categories", "consumer_categories", "providers"}
+)
 
 
 def _load_raw() -> dict:

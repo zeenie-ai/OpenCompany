@@ -81,4 +81,25 @@ export default tseslint.config(
       ],
     },
   },
+  // Normal mode's setup-screen pipeline (catalogue, parser, normalizer,
+  // renderer, draft store) is private to its folder: everything else
+  // imports it through features/home/genui/index.ts.
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/features/home/genui/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/genui/*'],
+              message:
+                'Import the setup-screen pipeline from features/home/genui (its index) only; its modules are private to that folder.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 )

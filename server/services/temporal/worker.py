@@ -225,6 +225,7 @@ class TemporalWorkerManager:
             evaluate_trigger_filter_activity,
             load_persisted_workflow_graph_activity,
             pause_workflow_on_failure_activity,
+            record_run_completion_activity,
             store_node_output_activity,
         )
 
@@ -273,6 +274,7 @@ class TemporalWorkerManager:
                 evaluate_trigger_filter_activity,
                 load_persisted_workflow_graph_activity,
                 pause_workflow_on_failure_activity,
+                record_run_completion_activity,
                 store_node_output_activity,
                 *per_type,
                 *agent_activities,
@@ -727,6 +729,7 @@ async def run_standalone_worker(
         evaluate_trigger_filter_activity,
         load_persisted_workflow_graph_activity,
         pause_workflow_on_failure_activity,
+        record_run_completion_activity,
         store_node_output_activity,
     )
     from services.temporal.agent_activities import collect_agent_activities
@@ -754,6 +757,7 @@ async def run_standalone_worker(
                 evaluate_trigger_filter_activity,
                 load_persisted_workflow_graph_activity,
                 pause_workflow_on_failure_activity,
+                record_run_completion_activity,
                 store_node_output_activity,
                 *registered_plugin_activities,
                 *registered_agent_activities,
@@ -806,6 +810,7 @@ async def create_worker(
         evaluate_trigger_filter_activity,
         load_persisted_workflow_graph_activity,
         pause_workflow_on_failure_activity,
+        record_run_completion_activity,
         store_node_output_activity,
     )
     from services.temporal.agent_activities import collect_agent_activities
@@ -832,6 +837,7 @@ async def create_worker(
             evaluate_trigger_filter_activity,
             load_persisted_workflow_graph_activity,
             pause_workflow_on_failure_activity,
+            record_run_completion_activity,
             store_node_output_activity,
             *registered_plugin_activities,
             *registered_agent_activities,

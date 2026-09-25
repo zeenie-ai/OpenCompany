@@ -5,10 +5,13 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
+from core.logging import get_logger
 from models.database import WORKFLOW_CONTROL_ACTIVE_STATES, WorkflowControlExecution
 from sqlalchemy.exc import IntegrityError
+
+logger = get_logger(__name__)
 
 
 # Re-exported name kept for existing importers; the canonical definition
@@ -57,7 +60,42 @@ def serialize_control(control: Optional[WorkflowControlExecution]) -> Dict[str, 
         "created_at": control.created_at.isoformat() if control.created_at else None,
         "updated_at": control.updated_at.isoformat() if control.updated_at else None,
         "terminal_reason": control.terminal_reason,
+        # Set when the generation paused on its own (see the model); getattr
+        # because tests build controls without the newer columns.
+        "pause_reason": getattr(control, "pause_reason", None),
+        "pause_detail": getattr(control, "pause_detail", None),
     }
+
+
+#: Automatic pause reasons (``WorkflowControlExecution.pause_reason``).
+PAUSE_REASON_FAILURES = "failures"
+PAUSE_REASON_RECOVERY = "recovery"
+PAUSE_REASON_CONTROLLER_MISSING = "controller_missing"
+
+#: What running again clears.
+CLEAR_PAUSE_REASON: Dict[str, Any] = {"pause_reason": None, "pause_detail": None}
+
+
+ControlListener = Callable[[str], None]
+_CONTROL_LISTENERS: List[ControlListener] = []
+
+
+def register_control_listener(listener: ControlListener) -> None:
+    """Call ``listener(workflow_id)`` after every control-status broadcast
+    (start, pause, resume, reset, recovery). For state derived from the
+    control plane that must not go stale, such as Normal mode's employee
+    summaries. Listeners are synchronous and must not block: schedule any
+    I/O. Registering the same listener twice is a no-op."""
+    if listener not in _CONTROL_LISTENERS:
+        _CONTROL_LISTENERS.append(listener)
+
+
+def notify_control_changed(workflow_id: str) -> None:
+    for listener in list(_CONTROL_LISTENERS):
+        try:
+            listener(workflow_id)
+        except Exception:
+            logger.warning("Control listener failed", workflow_id=workflow_id, exc_info=True)
 
 
 class WorkflowControlService:

@@ -61,6 +61,27 @@ class NodeUserError(Exception):
     """
 
 
+NODE_WAIT_INTERRUPTED = "NodeWaitInterrupted"
+
+
+class NodeWaitInterrupted(Exception):
+    """Raised by an operation whose wait was cut short by the process, not
+    by the work: the worker is shutting down, or the activity was cancelled
+    because its heartbeat stopped arriving.
+
+    Nothing failed, so this must not end the run. :meth:`BaseNode._execute_body`
+    turns it into an error envelope with ``error_type == NODE_WAIT_INTERRUPTED``,
+    and the Temporal activity wrapper (:meth:`BaseNode.as_activity`) re-raises
+    that as a *retryable* ``ApplicationError``. The next attempt then
+    re-attaches to whatever durable state the wait was keyed on. Returning
+    normally instead would record the attempt as completed and fail the run.
+
+    Only raise it from a body that is idempotent across attempts. On the
+    in-process path there is no retry, and the run fails as it would for any
+    other error.
+    """
+
+
 # Sentinel used by Params-less nodes so .model_validate({}) works.
 class _EmptyParams(BaseModel):
     pass
@@ -608,6 +629,15 @@ class BaseNode:
             # retry with corrected input.
             logger.warning("[%s] %s op %s: %s", self.type, op_name, type(e).__name__, e)
             return self._wrap_error(start_time=start_time, error=str(e), error_type="NodeUserError")
+        except NodeWaitInterrupted as e:
+            # Not a failure: the process is going away mid-wait. The activity
+            # wrapper turns this envelope into a retryable error.
+            logger.info("[%s] %s op wait interrupted: %s", self.type, op_name, e)
+            return self._wrap_error(
+                start_time=start_time,
+                error=str(e) or "Wait interrupted",
+                error_type=NODE_WAIT_INTERRUPTED,
+            )
         except Exception as e:
             logger.exception("[%s] operation %s failed", self.type, op_name)
             return self._wrap_error(start_time=start_time, error=str(e), error_type=type(e).__name__)
@@ -943,6 +973,7 @@ class BaseNode:
         into ``activities=[...]``.
         """
         from temporalio import activity
+        from temporalio.exceptions import ApplicationError
 
         activity_name = f"node.{cls.type}.v{cls.version}"
 
@@ -1090,6 +1121,18 @@ class BaseNode:
                 # cls.interpret_result() normalizes both into (success,
                 # payload, error_message).
                 success, payload, error = cls.interpret_result(result)
+                if not success and result.get("error_type") == NODE_WAIT_INTERRUPTED:
+                    # The body stopped waiting because this worker is going
+                    # away, not because the work failed. Fail the attempt
+                    # retryably so Temporal runs another one, which resumes the
+                    # same wait. No error status is broadcast: the node is
+                    # still waiting as far as the user is concerned.
+                    activity.logger.info(f"Node {node_id} wait interrupted; the attempt will be retried")
+                    raise ApplicationError(
+                        error or "Wait interrupted",
+                        type=NODE_WAIT_INTERRUPTED,
+                        non_retryable=False,
+                    )
                 if success:
                     correlated_payload = (
                         {**payload, "execution_id": execution_id}
@@ -1121,6 +1164,8 @@ class BaseNode:
                 return result
 
             except Exception as e:
+                if isinstance(e, ApplicationError) and e.type == NODE_WAIT_INTERRUPTED:
+                    raise
                 error_msg = f"{type(e).__name__}: {e}"
                 activity.logger.error(f"Node {node_id} crashed: {error_msg}")
                 await broadcaster.update_node_status(

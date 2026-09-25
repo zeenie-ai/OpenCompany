@@ -36,6 +36,13 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 
+  /* Tailwind v4 leaves buttons on the arrow; the designs point at them,
+   * with each theme's own pointer (--cursor-pointer). */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: var(--cursor-pointer, pointer);
+  }
+
   #root {
     height: 100vh;
     width: 100vw;
@@ -152,7 +159,11 @@
   --radius-xl: calc(var(--radius) + 4px);
 
   --font-sans: 'Geist Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  /* Self-bridge, like --font-display / --font-body below: every theme file
+   * declares --font-mono unlayered, so `font-mono` now follows the theme
+   * (light / dark keep the same system stack; skins get their own mono).
+   * A literal stack here compiled `font-mono` to a fixed value. */
+  --font-mono: var(--font-mono);
 
   /* ── New-contract tokens (design_handoff_machinaos_themes) ──────────
    * Surface / foreground / semantic / typography / radius tokens
@@ -189,13 +200,100 @@
   --color-border-strong:  var(--border-strong);
   --color-border-focus:   var(--border-focus);
 
-  /* Typography family aliases — `font-display`, `font-body` (font-mono
-   * is already exposed above; we re-declare it here so it tracks the
-   * per-theme `--font-mono` instead of the static fallback). */
+  /* Typography family aliases — `font-display`, `font-body` (and
+   * `font-mono` above) track the per-theme family tokens. */
   --font-display: var(--font-display);
   --font-body:    var(--font-body);
 
   --radius-pill: var(--radius-pill);
+
+  /* ── Home (Normal mode) tokens. Each is a self-bridge onto an unlayered
+   * declaration in base.css / light.css / dark.css (the proven
+   * --radius-pill pattern), so the utilities follow the active theme. ── */
+  --color-node-agent-fill:     var(--node-agent-fill);
+  --color-node-agent-hover:    var(--node-agent-hover);
+  --color-node-agent-edge:     var(--node-agent-edge);
+  --color-node-agent-ink:      var(--node-agent-ink);
+  --color-node-model-fill:     var(--node-model-fill);
+  --color-node-model-hover:    var(--node-model-hover);
+  --color-node-model-edge:     var(--node-model-edge);
+  --color-node-model-ink:      var(--node-model-ink);
+  --color-node-skill-fill:     var(--node-skill-fill);
+  --color-node-skill-hover:    var(--node-skill-hover);
+  --color-node-skill-edge:     var(--node-skill-edge);
+  --color-node-skill-ink:      var(--node-skill-ink);
+  --color-node-tool-fill:      var(--node-tool-fill);
+  --color-node-tool-hover:     var(--node-tool-hover);
+  --color-node-tool-edge:      var(--node-tool-edge);
+  --color-node-tool-ink:       var(--node-tool-ink);
+  --color-node-trigger-fill:   var(--node-trigger-fill);
+  --color-node-trigger-hover:  var(--node-trigger-hover);
+  --color-node-trigger-edge:   var(--node-trigger-edge);
+  --color-node-trigger-ink:    var(--node-trigger-ink);
+  --color-node-workflow-fill:  var(--node-workflow-fill);
+  --color-node-workflow-hover: var(--node-workflow-hover);
+  --color-node-workflow-edge:  var(--node-workflow-edge);
+  --color-node-workflow-ink:   var(--node-workflow-ink);
+
+  --color-lg-ring-a: var(--lg-ring-a);
+  --color-lg-ring-b: var(--lg-ring-b);
+  --color-lg-green:  var(--lg-green);
+  --color-lg-orange: var(--lg-orange);
+  --color-lg-pink:   var(--lg-pink);
+  --color-lg-yellow: var(--lg-yellow);
+  --color-lg-link:   var(--lg-link);
+  --color-lg-core:   var(--lg-core);
+
+  --text-2xs:   var(--text-2xs);
+  --text-md:    var(--text-md);
+  --text-meta:  var(--text-meta);
+  --text-row:   var(--text-row);
+  --text-lead:  var(--text-lead);
+  --text-title: var(--text-title);
+  --text-hero:  var(--text-hero);
+
+  --radius-row:      var(--radius-row);
+  --radius-card:     var(--radius-card);
+  --radius-panel:    var(--radius-panel);
+  --radius-draft:    var(--radius-draft);
+  --radius-composer: var(--radius-composer);
+
+  --shadow-float:   var(--shadow-float);
+  --shadow-popover: var(--shadow-popover);
+  --shadow-dialog:  var(--shadow-dialog);
+
+  --blur-scrim: var(--blur-scrim);
+
+  /* Employee status tokens (themes/base.css) -> bg-status-working-fill, … */
+  --color-status-working-dot: var(--status-working-dot);
+  --color-status-working-ink: var(--status-working-ink);
+  --color-status-working-fill: var(--status-working-fill);
+  --color-status-working-border: var(--status-working-border);
+  --color-status-ready-dot: var(--status-ready-dot);
+  --color-status-ready-ink: var(--status-ready-ink);
+  --color-status-ready-fill: var(--status-ready-fill);
+  --color-status-ready-border: var(--status-ready-border);
+  --color-status-paused-dot: var(--status-paused-dot);
+  --color-status-paused-ink: var(--status-paused-ink);
+  --color-status-paused-fill: var(--status-paused-fill);
+  --color-status-paused-border: var(--status-paused-border);
+  --color-status-attention-dot: var(--status-attention-dot);
+  --color-status-attention-ink: var(--status-attention-ink);
+  --color-status-attention-fill: var(--status-attention-fill);
+  --color-status-attention-border: var(--status-attention-border);
+  --color-status-waiting-dot: var(--status-waiting-dot);
+  --color-status-waiting-ink: var(--status-waiting-ink);
+  --color-status-waiting-fill: var(--status-waiting-fill);
+  --color-status-waiting-border: var(--status-waiting-border);
+
+  --ease-spring:    var(--ease-spring);
+  --ease-overshoot: var(--ease-overshoot);
+  --ease-reveal:    var(--ease-reveal);
+
+  --tracking-label:    var(--tracking-label);
+  --tracking-hero:     var(--tracking-hero);
+  --tracking-wordmark: var(--tracking-wordmark);
+  --leading-hero:      var(--leading-hero);
 
   /* Code & syntax tokens -> Tailwind utilities (text-code-tag, bg-code-bg, …).
    * Defined per-theme in client/src/themes/<theme>.css. */
@@ -343,6 +441,74 @@ html {
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* ============================================================================
+ * Normal mode: a working employee's status pip breathes a ring (design
+ * handoff "pulsing ring": 0 to 6px over the whole loop). A CSS keyframe
+ * rather than a Web Animation so the page-hidden pause in base.css covers
+ * it. The ring grows from the pip's border box, outside its panel ring.
+ * ============================================================================ */
+
+@keyframes home-pip-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-working-dot) var(--tint-pip-ring), transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+
+.home-pip[data-pip="on"] {
+  animation: home-pip-ring var(--dur-pip-loop) ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-pip[data-pip="on"] {
+    animation: none;
+  }
+}
+
+/* ============================================================================
+ * Theme switch (ThemeContext.setTheme with `reveal`).
+ *
+ * The circular reveal is a View Transition whose new root is clipped open
+ * from the button by a Web Animation (lib/motion + ThemeContext). The UA's
+ * default cross-fade is turned off so only that animation runs, and element
+ * transitions are suspended while the snapshot swaps so colours don't smear
+ * inside the circle. Without View Transitions support the fallback fades
+ * colours for --dur-theme-fade instead.
+ * ============================================================================ */
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+html.oc-theme-swapping *,
+html.oc-theme-swapping *::before,
+html.oc-theme-swapping *::after {
+  transition: none !important;
+}
+
+html.oc-theme-fade *,
+html.oc-theme-fade *::before,
+html.oc-theme-fade *::after {
+  transition:
+    background-color var(--dur-theme-fade) ease,
+    color var(--dur-theme-fade) ease,
+    border-color var(--dur-theme-fade) ease,
+    fill var(--dur-theme-fade) ease,
+    box-shadow var(--dur-theme-fade) ease !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.oc-theme-fade *,
+  html.oc-theme-fade *::before,
+  html.oc-theme-fade *::after {
+    transition: none !important;
+  }
 }
 
 /* ============================================================================

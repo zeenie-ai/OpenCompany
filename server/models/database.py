@@ -321,6 +321,16 @@ class UserSettings(SQLModel, table=True):
     auto_rebind_tools_after_canvas_change: bool = Field(
         default=True
     )  # After agentBuilder mutates the canvas mid-run, refresh the LLM's bound tools so the new wiring is callable in the same execution
+    # Owner profile (Normal mode, Settings > Profile). Hired employees read it
+    # into their instructions and the Home greeting uses the call name.
+    # Normalized on save by services.settings.profile.normalize_profile_patch.
+    profile_full_name: Optional[str] = Field(default=None, max_length=100)
+    profile_call_name: Optional[str] = Field(default=None, max_length=60)
+    profile_role: Optional[str] = Field(default=None, max_length=100)
+    profile_preferences: Optional[str] = Field(default=None, max_length=2000)
+    profile_timezone: Optional[str] = Field(default=None, max_length=64)  # IANA name, sent from the browser's Intl on save
+    memory_across_chats: bool = Field(default=True)  # New hires get the Context + Memory nodes
+    prefer_local_ai: bool = Field(default=True)  # Employee setup prefers a configured local model
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
@@ -521,6 +531,12 @@ class WorkflowControlExecution(SQLModel, table=True):
     revision: int = Field(default=0)
     idempotency_key: str = Field(index=True, max_length=255)
     terminal_reason: Optional[str] = Field(default=None, max_length=2000)
+    # Why the generation paused when nobody pressed Pause: "failures" (the
+    # circuit breaker), "recovery" (an unclean shutdown), or
+    # "controller_missing". ``pause_detail`` says it in words for the owner.
+    # Cleared when the generation runs again; None for a manual pause.
+    pause_reason: Optional[str] = Field(default=None, max_length=50)
+    pause_detail: Optional[str] = Field(default=None, max_length=500)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: Optional[datetime] = Field(default=None)

@@ -20,9 +20,14 @@ import { theme } from '../../../styles/theme';
 import { CREDENTIAL_PROBE_REQUEST_TIMEOUT } from '@/contexts/WebSocketContext';
 import type { ServerEndpointSummary } from '@/hooks/useCatalogueQuery';
 import type { ProviderConfig } from '../types';
+import type { PanelVariant } from '../PanelRenderer';
 import EndpointList from './EndpointList';
 
-const ApiKeyPanel: React.FC<{ config: ProviderConfig; visible: boolean }> = ({ config, visible }) => {
+const ApiKeyPanel: React.FC<{ config: ProviderConfig; visible: boolean; variant?: PanelVariant }> = ({
+  config,
+  visible,
+  variant = 'full',
+}) => {
   const panel = useCredentialPanel(config, visible);
   // Primary credential field (validate / connect target — bot token,
   // api key, etc.). Secondary fields (telegram_owner_chat_id,
@@ -181,9 +186,9 @@ const ApiKeyPanel: React.FC<{ config: ProviderConfig; visible: boolean }> = ({ c
         </>
       )}
 
-      {config.hasDefaults && <ProviderDefaultsSection providerId={config.id} />}
-      {config.hasDefaults && <LlmUsageSection providerId={config.id} providerName={config.name} />}
-      {config.usageService && <ApiUsageSection service={config.usageService} serviceName={config.name} />}
+      {variant === 'full' && config.hasDefaults && <ProviderDefaultsSection providerId={config.id} />}
+      {variant === 'full' && config.hasDefaults && <LlmUsageSection providerId={config.id} providerName={config.name} />}
+      {variant === 'full' && config.usageService && <ApiUsageSection service={config.usageService} serviceName={config.name} />}
     </div>
   );
 };

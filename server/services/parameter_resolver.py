@@ -6,6 +6,7 @@ Resolves {{node.field}} template variables in parameters using connected node ou
 import re
 from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING
 
+from constants import ANDROID_SERVICE_NODE_TYPES
 from core.logging import get_logger
 
 if TYPE_CHECKING:
@@ -15,6 +16,22 @@ logger = get_logger(__name__)
 
 # Compiled regex for template matching
 TEMPLATE_PATTERN = re.compile(r"\{\{([^}]+)\}\}")
+
+
+def template_view(node_type: str, data: Any) -> Any:
+    """The shape a node's output takes when a ``{{node.field}}`` template reads it.
+
+    Android service nodes promote their nested ``data`` payload to the top
+    level, so ``{{batterymonitor.battery_level}}`` works instead of
+    ``{{batterymonitor.data.battery_level}}``. Every other output is used
+    as-is. NodeExecutor applies this before storing an output, and the
+    resolver applies it to per-run outputs, so both sources look the same.
+    """
+    if node_type in ANDROID_SERVICE_NODE_TYPES and isinstance(data, dict):
+        nested = data.get("data", {})
+        if isinstance(nested, dict):
+            return {**data, **nested}
+    return data
 
 
 class ParameterResolver:
@@ -31,24 +48,49 @@ class ParameterResolver:
         self.get_output = get_output_fn
 
     async def resolve(
-        self, parameters: Dict[str, Any], node_id: str, nodes: List[Dict], edges: List[Dict], session_id: str
+        self,
+        parameters: Dict[str, Any],
+        node_id: str,
+        nodes: List[Dict],
+        edges: List[Dict],
+        session_id: str,
+        run_outputs: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Resolve all template variables in parameters."""
+        """Resolve all template variables in parameters.
+
+        ``run_outputs`` maps node ids to the outputs *this run* produced (the
+        inner results). Every firing of a deployment shares one output store
+        (``session_id`` is the generation's data scope), so without it two
+        concurrent firings could each resolve ``{{trigger.sender}}`` from the
+        other's message. A node present in ``run_outputs`` is read from there;
+        any other node falls back to the shared store, as before.
+        """
         # Build connected data map from upstream nodes
-        connected_data = await self._gather_connected_outputs(node_id, nodes, edges, session_id)
+        connected_data = await self._gather_connected_outputs(node_id, nodes, edges, session_id, run_outputs)
 
         # Resolve templates
         return self._resolve_templates(parameters, connected_data)
 
-    async def _gather_connected_outputs(self, node_id: str, nodes: List[Dict], edges: List[Dict], session_id: str) -> Dict[str, Any]:
+    async def _gather_connected_outputs(
+        self,
+        node_id: str,
+        nodes: List[Dict],
+        edges: List[Dict],
+        session_id: str,
+        run_outputs: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """Gather outputs from all nodes in the workflow that have executed.
 
         n8n pattern: Template variables can reference ANY node's output in the workflow,
         not just directly connected nodes. This allows flexible data flow patterns like:
         - A -> B -> C where C references A's output directly
         - Parallel branches where downstream nodes reference any upstream node
+
+        Outputs from the current run (``run_outputs``) win over the shared
+        session store for the nodes they cover.
         """
         connected = {}
+        run_outputs = run_outputs if isinstance(run_outputs, dict) else {}
 
         logger.debug(f"[ParameterResolver] Gathering outputs for node {node_id}, session_id={session_id}, total nodes: {len(nodes)}")
 
@@ -68,6 +110,9 @@ class ParameterResolver:
             # Special handling for start nodes
             if node_type == "start":
                 data = await self._get_start_node_data(source_id)
+            elif source_id in run_outputs:
+                data = template_view(node_type, run_outputs[source_id])
+                logger.debug(f"[ParameterResolver] Output from this run: node={source_id}")
             else:
                 data = await self.get_output(session_id, source_id, "output_0")
                 logger.debug(

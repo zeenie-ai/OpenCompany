@@ -19,8 +19,16 @@ export type UserSettings = Record<string, any>;
 
 export const USER_SETTINGS_QUERY_KEY = ['userSettings'] as const;
 
+type SendRequest = <T = any>(type: string, data?: Record<string, any>, timeoutMs?: number) => Promise<T>;
+
 export function useUserSettingsQuery(): UseQueryResult<UserSettings, Error> {
   const { sendRequest, isReady } = useWebSocket();
+  return useUserSettingsQueryCore(sendRequest, isReady);
+}
+
+/** The settings query without a context read, for callers holding the
+ *  stable `useWebSocketActions()` (Normal mode). Same cache. */
+export function useUserSettingsQueryCore(sendRequest: SendRequest, isReady: boolean): UseQueryResult<UserSettings, Error> {
   return useQuery<UserSettings, Error>({
     queryKey: USER_SETTINGS_QUERY_KEY,
     queryFn: async () => {
@@ -37,6 +45,11 @@ export function useUserSettingsQuery(): UseQueryResult<UserSettings, Error> {
 
 export function useSaveUserSettingsMutation() {
   const { sendRequest } = useWebSocket();
+  return useSaveUserSettingsMutationCore(sendRequest);
+}
+
+/** The save mutation without a context read (see useUserSettingsQueryCore). */
+export function useSaveUserSettingsMutationCore(sendRequest: SendRequest) {
   const qc = useQueryClient();
   return useMutation<UserSettings, Error, UserSettings>({
     mutationFn: async (patch) => {

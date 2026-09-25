@@ -57,6 +57,8 @@ import {
 } from '../../contexts/WebSocketContext';
 import { ThemeSwitcher } from '@/components/ui/ThemeSwitcher';
 import { cn } from '@/lib/utils';
+import { featureFlags } from '@/lib/featureFlags';
+import { ModeToggle } from '@/components/shell/ModeToggle';
 import { useCanvasDockStore } from '../../stores/canvasDockStore';
 import { useAuth } from '../../contexts/AuthContext';
 import { useApiKeys, GlobalModelState } from '../../hooks/useApiKeys';
@@ -356,10 +358,11 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
 
       {/* ---------- Right Section (pinned: mode toggle + actions + save state) ---------- */}
       <div className="flex shrink-0 items-center gap-1.5">
-        {/* Mode Toggle - segmented control */}
+        {/* Mode Toggle - segmented control. With Normal mode on it switches
+            screens (Home / this editor); otherwise it filters the palette. */}
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-node-model">Mode:</span>
-          <div
+          {featureFlags.normalMode ? <ModeToggle /> : <div
             className="flex items-center rounded-md border border-border bg-card p-0.5"
             title={proMode ? 'Dev mode: All components visible' : 'Normal mode: Only AI components'}
           >
@@ -387,7 +390,7 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
               <Zap className="h-3 w-3" />
               Dev
             </button>
-          </div>
+          </div>}
         </div>
 
         <Divider />

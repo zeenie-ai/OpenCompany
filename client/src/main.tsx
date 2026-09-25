@@ -28,7 +28,7 @@ import './themes/surveillance.css'
 import './themes/animations.css'
 import './index.css'
 import App from './App'
-import { ThemeProvider } from './contexts/ThemeContext'
+import { ShellThemeProvider } from './app/ShellThemeProvider'
 import { AuthProvider } from './contexts/AuthContext'
 import { WebSocketProvider } from './contexts/WebSocketContext'
 import { queryClient } from './lib/queryClient'
@@ -50,13 +50,13 @@ createRoot(document.getElementById('root')!).render(
         dehydrateOptions: { shouldDehydrateQuery: shouldPersistQuery },
       }}
     >
-      <ThemeProvider>
+      <ShellThemeProvider>
         <AuthProvider>
           <WebSocketProvider>
             <App />
           </WebSocketProvider>
         </AuthProvider>
-      </ThemeProvider>
+      </ShellThemeProvider>
       {import.meta.env.DEV && (
         <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-right" />
       )}

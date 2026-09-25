@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNodeAllowlist } from '../../hooks/useNodeAllowlist';
+import { featureFlags } from '../../lib/featureFlags';
 import { ComponentPaletteProps } from '../../types/ComponentTypes';
 import { INodeTypeDescription } from '../../types/INodeProperties';
 import ComponentItem from './ComponentItem';
@@ -27,6 +28,9 @@ const ComponentPalette: React.FC<ComponentPaletteProps> = ({
   specsKey = '',
 }) => {
   const { isBlocked, isAllowed } = useNodeAllowlist();
+  // With Normal mode on, this palette belongs to Dev mode and lists every
+  // node the blocklist allows; `proMode` only matters with the flag off.
+  const showAll = featureFlags.normalMode || proMode;
 
   // Backend-driven group metadata via the shared WS-in-queryFn hook.
   // `useNodeGroups` returns the full query result so we can render a
@@ -59,15 +63,16 @@ const ComponentPalette: React.FC<ComponentPaletteProps> = ({
       if (definition.uiHints?.systemManaged) return false;
 
       // Backend allowlist (server/config/node_allowlist.json). Two-tier:
-      //   1. `disabled_groups` + `disabled_nodes` — absolute blocklist
-      //      enforced in BOTH normal and dev mode. The node's group
-      //      array is passed so `disabled_groups` fires on every plugin
-      //      in the group (e.g. all 16 android service nodes hidden by
-      //      one entry).
-      //   2. `enabled_nodes` — positive allowlist applied only in
-      //      normal mode; dev/pro mode bypasses it.
+      //   1. `disabled_groups` + `disabled_nodes` — absolute blocklist,
+      //      always enforced. The node's group array is passed so
+      //      `disabled_groups` fires on every plugin in the group (e.g.
+      //      all 16 android service nodes hidden by one entry).
+      //   2. `enabled_nodes` — positive allowlist. With Normal mode on
+      //      (featureFlags.normalMode) it governs what Hire may build and
+      //      the editor shows every node; otherwise the palette's own
+      //      Normal filter applies it and Dev bypasses it.
       if (isBlocked(definition.name, definition.group)) return false;
-      if (!proMode && !isAllowed(definition.name)) return false;
+      if (!showAll && !isAllowed(definition.name)) return false;
 
       // Filter by search query
       if (searchQuery.trim()) {
@@ -87,7 +92,7 @@ const ComponentPalette: React.FC<ComponentPaletteProps> = ({
       // Wave 10.B: simple-mode visibility comes from backend
       // GroupMetadata.visibility ('normal' shown, 'dev' hidden in simple
       // mode). No frontend SIMPLE_MODE_CATEGORIES table.
-      if (!proMode) {
+      if (!showAll) {
         const firstGroup = (definition.group?.[0] || '').toLowerCase();
         const groupVisibility = groupIndex?.[firstGroup]?.visibility;
         if (groupVisibility !== 'normal' && groupVisibility !== 'all') {
@@ -110,7 +115,7 @@ const ComponentPalette: React.FC<ComponentPaletteProps> = ({
 
     return categories;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- specsKey gates memo recomputation when the spec catalogue hydrates or changes set.
-  }, [searchQuery, proMode, groupIndex, isBlocked, isAllowed, specsKey]);
+  }, [searchQuery, showAll, groupIndex, isBlocked, isAllowed, specsKey]);
 
   const totalComponents = Object.values(categorizedComponents).reduce(
     (acc, components) => acc + components.length, 

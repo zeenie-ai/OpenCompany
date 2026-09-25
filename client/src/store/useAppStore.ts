@@ -43,6 +43,10 @@ export interface WorkflowUIState {
   viewport?: { x: number; y: number; zoom: number };
 }
 
+/** Which screen the app shell shows: `normal` is Home (hire and supervise
+ *  AI employees), `dev` is the workflow editor. */
+export type ShellMode = 'normal' | 'dev';
+
 interface AppStore {
   // Core state - SINGLE source of truth
   currentWorkflow: WorkflowData | null;
@@ -57,6 +61,12 @@ interface AppStore {
   componentPaletteVisible: boolean;
   consolePanelVisible: boolean;
   proMode: boolean;  // false = noob mode (only AI categories), true = pro mode (all categories)
+  /** The shell's current screen. Persisted as `ui_shell_mode` and only read
+   *  when `featureFlags.normalMode` is on (with the flag off the shell always
+   *  shows the editor and `proMode` keeps filtering the palette). The first
+   *  read migrates `ui_pro_mode`: someone who had switched the palette to
+   *  Dev starts in Dev. */
+  shellMode: ShellMode;
   /** WebAudio sound effects toggle (per-theme pack picked from
    *  --sound-pack CSS token by `useSoundSync()`). Persisted to
    *  localStorage as `opencompany-sound`; default ON (user disables in
@@ -83,6 +93,9 @@ interface AppStore {
   toggleSidebar: () => void;
   toggleComponentPalette: () => void;
   toggleProMode: () => void;
+  /** Switch screens without animation. UI code goes through
+   *  app/useShellActions (unsaved-changes guard, preload, transition). */
+  setShellMode: (mode: ShellMode) => void;
   setSoundEnabled: (enabled: boolean) => void;
   toggleSoundEnabled: () => void;
   setRenamingNodeId: (nodeId: string | null) => void;
@@ -156,6 +169,7 @@ const STORAGE_KEYS = {
   componentPaletteVisible: 'ui_component_palette_visible',
   consolePanelVisible: 'ui_console_panel_visible',
   proMode: 'ui_pro_mode',
+  shellMode: 'ui_shell_mode',
   /** Canonical OpenCompany sound preference. The pre-rebrand key is read
    *  once during initialization so a returning user's choice survives. */
   soundEnabled: BRAND_STORAGE_KEYS.sound.canonical,
@@ -180,6 +194,19 @@ const loadBooleanFromStorage = (
   return defaultValue;
 };
 
+/** The saved screen: `ui_shell_mode`, else the old palette choice
+ *  (`ui_pro_mode === 'true'` means Dev). index.html's pre-paint theme
+ *  script repeats this rule. */
+export const readStoredShellMode = (): ShellMode => {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEYS.shellMode);
+    if (saved === 'normal' || saved === 'dev') return saved;
+    return localStorage.getItem(STORAGE_KEYS.proMode) === 'true' ? 'dev' : 'normal';
+  } catch {
+    return 'normal';
+  }
+};
+
 // Helper to save boolean to localStorage
 const saveBooleanToStorage = (key: string, value: boolean): void => {
   try {
@@ -198,6 +225,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   componentPaletteVisible: loadBooleanFromStorage(STORAGE_KEYS.componentPaletteVisible, true),
   consolePanelVisible: loadBooleanFromStorage(STORAGE_KEYS.consolePanelVisible, false),
   proMode: loadBooleanFromStorage(STORAGE_KEYS.proMode, false),  // Default to noob mode
+  shellMode: readStoredShellMode(),
   soundEnabled: loadBooleanFromStorage(
     STORAGE_KEYS.soundEnabled,
     true,
@@ -423,6 +451,15 @@ export const useAppStore = create<AppStore>((set, get) => ({
       saveBooleanToStorage(STORAGE_KEYS.proMode, newValue);
       return { proMode: newValue };
     });
+  },
+
+  setShellMode: (mode) => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.shellMode, mode);
+    } catch {
+      // Ignore storage errors
+    }
+    set((state) => (state.shellMode === mode ? state : { shellMode: mode }));
   },
 
   setSoundEnabled: (enabled) => {

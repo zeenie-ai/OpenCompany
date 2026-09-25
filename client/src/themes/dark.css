@@ -108,10 +108,31 @@
   --action-secret-ink: var(--dracula-yellow);
   --action-tools-ink:  var(--dracula-purple);
 
+  /* Node role inks follow the same rule as the action inks above. */
+  --node-agent-ink:    var(--dracula-purple);
+  --node-model-ink:    var(--dracula-cyan);
+  --node-skill-ink:    var(--dracula-green);
+  --node-tool-ink:     var(--dracula-green);
+  --node-trigger-ink:  var(--dracula-pink);
+  --node-workflow-ink: var(--dracula-orange);
+
+  /* Logo palette (OC mark), dark values from the design handoff. */
+  --lg-ring-a: var(--dracula-purple);
+  --lg-ring-b: var(--dracula-cyan);
+  --lg-green:  var(--dracula-green);
+  --lg-orange: var(--dracula-orange);
+  --lg-pink:   var(--dracula-pink);
+  --lg-yellow: var(--dracula-yellow);
+  --lg-link:   var(--dracula-comment);
+  --lg-core:   #f8f8f2;
+
   /* Shadows — deeper on dark surfaces (overrides base.css). */
   --shadow-card: 0 4px 12px rgb(0 0 0 / 0.3);
   --shadow-card-hover: 0 6px 18px rgb(0 0 0 / 0.4);
   --shadow-modal: 0 16px 48px rgb(0 0 0 / 0.55);
+  --shadow-float:   0 12px 40px rgb(0 0 0 / 0.5);
+  --shadow-popover: 0 12px 32px rgb(0 0 0 / 0.5);
+  --shadow-dialog:  0 24px 80px rgb(0 0 0 / 0.6);
 
   color-scheme: dark;
 }

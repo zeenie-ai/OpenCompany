@@ -36,9 +36,18 @@ client/src/contexts/ThemeContext.tsx
 ├── ThemeName = 'light' | 'dark' | 'renaissance' | 'greek' | 'edo' | 'steampunk'
 │             | 'atomic' | 'cyber' | 'wasteland' | 'rot' | 'plague' | 'surveillance'
 ├── DARK_FAMILY = {dark, cyber, wasteland, rot, surveillance, steampunk}
-├── persists to localStorage['opencompany-theme']
+├── persists the CHOSEN theme to localStorage['opencompany-theme']
 ├── migrates legacy 'darkMode' boolean on first load
-└── sets <html data-theme="..."> + .dark class (only for DARK_FAMILY themes)
+├── sets <html data-theme="..."> + .dark class (only for DARK_FAMILY themes)
+└── baseOnly prop: a chosen stylized theme shows as its family's base
+    (familyBaseTheme: dark family -> dark, else light); `theme` is what is on
+    the page, `chosenTheme` what the user picked
+
+client/src/app/ShellThemeProvider.tsx — sets baseOnly while Home (Normal mode)
+                                        is showing: Home is designed for light and
+                                        dark only, so the stylized themes apply in
+                                        Dev mode (the editor). index.html's
+                                        pre-paint script applies the same rule.
 
 client/src/hooks/useAppTheme.ts        — 10-way Colors overlay (canvas + maps)
 client/src/lib/sound.ts                — WebAudio engine, 10 packs × 9 events
