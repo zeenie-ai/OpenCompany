@@ -161,6 +161,11 @@ async def lifespan(app: FastAPI):
     # get_workflow / get_all_workflows / delete_workflow).
     import services.workflow_storage  # noqa: F401
 
+    # Normal mode: services/employees/__init__.py self-registers the
+    # employee handlers (list_employees / get_employee), the cleanup that
+    # runs on workflow delete, and the employee_lifecycle summary builder.
+    import services.employees  # noqa: F401
+
     # Wave 13.8: services/pricing_handlers.py self-registers the 3
     # pricing handlers (get_pricing_config / save_pricing_config /
     # get_api_usage_summary). Flat module (sibling to services/pricing.py)

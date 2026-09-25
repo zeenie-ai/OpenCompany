@@ -22,13 +22,27 @@ Five independent lists, two tiers of enforcement:
 
 | Field | Enforced in | Mode-gated? |
 |---|---|---|
-| `enabled_nodes` | ComponentPalette only | Yes — normal mode applies it; dev/pro mode bypasses |
-| `disabled_groups` | ComponentPalette | **No — always enforced** |
-| `disabled_nodes` | ComponentPalette | **No — always enforced** |
+| `enabled_nodes` | Normal-mode Hire (server, `is_hire_allowed`) while `featureFlags.normalMode` is on (the default); the ComponentPalette's Normal filter when it is off | Flag on: the editor palette ignores it. Flag off: normal mode applies it, dev/pro mode bypasses |
+| `disabled_groups` | ComponentPalette, Hire | **No — always enforced** |
+| `disabled_nodes` | ComponentPalette, Hire | **No — always enforced** |
 | `disabled_credential_categories` | CredentialsModal (filters category headers + their providers) | **No — always enforced** |
 | `disabled_skill_folders` | MasterSkillEditor folder dropdown | **No — always enforced** |
 
 `show_all` is auto-derived: `enabled_nodes` empty → `show_all: true` (positive list inactive, everything visible in normal mode). The four disable lists are absolute blocklists that win over both `show_all` and dev mode.
+
+## Normal mode: what Hire may build
+
+With the Normal-mode screen on (client `featureFlags.normalMode`, on by
+default; `VITE_NORMAL_MODE=false` turns it off), the editor is Dev mode and its palette lists every
+node the blocklists allow; `enabled_nodes` no longer filters it. The list
+governs what Normal mode's Hire may assemble into an employee instead:
+`services.node_allowlist.is_hire_allowed(node_type)` returns true when the
+type is not blocked (exact type, or any of its groups, the same matching
+the palette uses) and either `enabled_nodes` is empty or lists it. The graph
+builder checks every node it emits, and node types never come from the hire
+payload. The node types the v1 app registry (`server/config/employee_apps.json`)
+can emit are locked in by `server/tests/test_node_allowlist_hire.py`, so a
+missing entry fails CI rather than a hire.
 
 ## Frontend hook API
 
@@ -60,7 +74,7 @@ Re-enable: drop the entries. The hook + filters are forward-compatible with empt
 
 ## What's currently disabled
 
-Nothing is blocklisted. All four disable lists (`disabled_groups`, `disabled_nodes`, `disabled_credential_categories`, `disabled_skill_folders`) are empty in the shipped `server/config/node_allowlist.json`; the `email` group + credential category that this section once listed as disabled are no longer blocked. The only active list is `enabled_nodes` — the positive allowlist that decides what normal mode shows (dev/pro mode bypasses it). Read the live entry count from the JSON rather than from this doc.
+Nothing is blocklisted. All four disable lists (`disabled_groups`, `disabled_nodes`, `disabled_credential_categories`, `disabled_skill_folders`) are empty in the shipped `server/config/node_allowlist.json`; the `email` group + credential category that this section once listed as disabled are no longer blocked. The only active list is `enabled_nodes` — the positive allowlist (see the table above for where it applies). Read the live entry count from the JSON rather than from this doc.
 
 Android service nodes are enabled and connect directly to an agent's
 `input-tools` handle. The Android Agent, Android credential category, and

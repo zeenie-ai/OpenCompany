@@ -23,6 +23,7 @@ from services.node_executor import NodeExecutor
 from services.parameter_resolver import ParameterResolver
 from services.deployment import DeploymentManager
 from services.execution import WorkflowExecutor, ExecutionCache
+from services.execution.conditions import evaluate_edge_condition
 
 if TYPE_CHECKING:
     from core.config import Settings
@@ -509,9 +510,14 @@ class WorkflowService:
         execution_id = uuid4().hex
         start_node = self._find_start_node(nodes)
         execution_order = self._build_execution_order(start_node, nodes, edges)
+        conditional_edges = self._incoming_conditional_edges(edges)
 
         results = {}
         executed = []
+        # What each finished node looks like to an edge condition, in the
+        # envelope shape Temporal evaluates against. Skipped and failed nodes
+        # are absent, so a condition that reads them does not match.
+        envelopes: Dict[str, Dict[str, Any]] = {}
 
         for node in execution_order:
             node_id = node["id"]
@@ -519,6 +525,7 @@ class WorkflowService:
 
             # Skip pre-executed trigger nodes
             if node.get("_pre_executed"):
+                envelopes[node_id] = {"success": True, "result": node.get("_trigger_output") or {}}
                 executed.append(node_id)
                 continue
 
@@ -529,6 +536,20 @@ class WorkflowService:
                 if status_callback:
                     try:
                         await status_callback(node_id, "skipped", {"disabled": True})
+                    except Exception:
+                        pass
+                continue
+
+            # Edge conditions: OR-any across the node's conditional incoming
+            # edges, and skipping is not transitive, the same rules as the
+            # in-process executor and MachinaWorkflow.
+            incoming = conditional_edges.get(node_id)
+            if incoming and not self._incoming_conditions_met(incoming, envelopes):
+                logger.info("Skipping node: no incoming edge condition matched", node_id=node_id)
+                executed.append(node_id)
+                if status_callback:
+                    try:
+                        await status_callback(node_id, "skipped", {"reason": "condition"})
                     except Exception:
                         pass
                 continue
@@ -555,6 +576,8 @@ class WorkflowService:
 
             results[node_id] = result
             executed.append(node_id)
+            if result.get("success"):
+                envelopes[node_id] = result
 
             # Notify completed
             if status_callback:
@@ -789,13 +812,21 @@ class WorkflowService:
         return None
 
     def _build_execution_order(self, start: Dict, nodes: List[Dict], edges: List[Dict]) -> List[Dict]:
-        """Build BFS execution order from start node."""
-        visited = set()
-        order = []
-        queue = [start["id"]]
+        """Order the nodes reachable from ``start`` so each runs after its parents.
 
-        # Build adjacency map
-        adj = {}
+        Reachability is a BFS from the start node. The order is then a
+        topological sort of that subgraph, ties broken by BFS discovery order,
+        so it matches the old BFS order whenever that order already respected
+        dependencies. A plain BFS could run a node before one of its parents
+        (reached by a shorter path first), which matters once edge conditions
+        read those parents. Edges from unreachable nodes (tools, memory and
+        other config nodes wired into an agent) are ignored, as before. A
+        cycle cannot be ordered, so its remaining nodes keep BFS order.
+        """
+        if not start:
+            return []
+
+        adj: Dict[str, List[str]] = {}
         for e in edges:
             src = e.get("source")
             if src:
@@ -803,17 +834,62 @@ class WorkflowService:
 
         node_map = {n["id"]: n for n in nodes}
 
+        # BFS reachability, recording discovery order for tie-breaking.
+        discovery: List[str] = []
+        seen = set()
+        queue = [start["id"]]
         while queue:
             nid = queue.pop(0)
-            if nid in visited:
+            if nid in seen or nid not in node_map:
                 continue
-            visited.add(nid)
-            node = node_map.get(nid)
-            if node:
-                order.append(node)
-                queue.extend(t for t in adj.get(nid, []) if t not in visited)
+            seen.add(nid)
+            discovery.append(nid)
+            queue.extend(t for t in adj.get(nid, []) if t not in seen)
 
-        return order
+        rank = {nid: i for i, nid in enumerate(discovery)}
+        pending_parents: Dict[str, int] = {nid: 0 for nid in discovery}
+        children: Dict[str, List[str]] = {}
+        for e in edges:
+            src, tgt = e.get("source"), e.get("target")
+            if src in rank and tgt in rank and src != tgt:
+                pending_parents[tgt] += 1
+                children.setdefault(src, []).append(tgt)
+
+        ready = sorted((nid for nid in discovery if pending_parents[nid] == 0), key=rank.__getitem__)
+        order_ids: List[str] = []
+        placed = set()
+        while ready:
+            nid = ready.pop(0)
+            order_ids.append(nid)
+            placed.add(nid)
+            for child in children.get(nid, []):
+                pending_parents[child] -= 1
+                if pending_parents[child] == 0:
+                    ready.append(child)
+            ready.sort(key=rank.__getitem__)
+
+        order_ids.extend(nid for nid in discovery if nid not in placed)
+        return [node_map[nid] for nid in order_ids]
+
+    @staticmethod
+    def _incoming_conditional_edges(edges: List[Dict]) -> Dict[str, List[Dict]]:
+        """Edges that carry a condition, grouped by their target node."""
+        incoming: Dict[str, List[Dict]] = {}
+        for edge in edges or []:
+            target = edge.get("target")
+            if target and (edge.get("data") or {}).get("condition"):
+                incoming.setdefault(target, []).append(edge)
+        return incoming
+
+    @staticmethod
+    def _incoming_conditions_met(incoming: List[Dict], envelopes: Dict[str, Dict[str, Any]]) -> bool:
+        """OR-any across a node's conditional incoming edges."""
+        for edge in incoming:
+            envelope = envelopes.get(edge.get("source")) or {}
+            inner = envelope.get("result", {}) if envelope else {}
+            if evaluate_edge_condition(edge["data"]["condition"], envelope=envelope, inner=inner):
+                return True
+        return False
 
     def _error_result(self, error: str, start_time: float) -> Dict:
         """Build error result."""

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
 
@@ -141,6 +141,16 @@ class TelegramSendParams(BaseModel):
     )
 
     model_config = ConfigDict(extra="ignore")
+
+    @field_validator("chat_id", mode="before")
+    @classmethod
+    def _coerce_chat_id(cls, value: Any) -> Any:
+        # The trigger emits chat_id as an int, and a whole-string template
+        # ({{telegramreceive.chat_id}}) keeps that type. Pydantic v2 will
+        # not turn an int into a str on its own.
+        if isinstance(value, int) and not isinstance(value, bool):
+            return str(value)
+        return value
 
 
 class TelegramSendOutput(BaseModel):

@@ -151,10 +151,16 @@ async def test_save_existing_workflow_same_name_keeps_slug(patched_handler_deps)
     """Re-saving with the same name must NOT bump the slug counter."""
     from services.workflow_storage.handlers import handle_save_workflow
 
-    await handle_save_workflow(
+    created = await handle_save_workflow(
         {"workflow_id": "new", "name": "AI Assistant", "data": {"nodes": []}},
         websocket=None,
     )
+    lifecycle = patched_handler_deps.broadcaster.broadcast_workflow_lifecycle
+    # A brand-new workflow announces itself so every workflow list refreshes.
+    lifecycle.assert_called_once_with(
+        "created", workflow_id=created["workflow_id"], name="AI Assistant", slug="AI_Assistant_1"
+    )
+    lifecycle.reset_mock()
     # Second save with same name — slug stays as _1.
     result = await handle_save_workflow(
         {"workflow_id": "1", "name": "AI Assistant", "data": {"nodes": [], "marker": "a"}},
@@ -163,7 +169,7 @@ async def test_save_existing_workflow_same_name_keeps_slug(patched_handler_deps)
 
     assert result["slug"] == "AI_Assistant_1"
     # And no broadcast since nothing changed visibly.
-    patched_handler_deps.broadcaster.broadcast_workflow_lifecycle.assert_not_called()
+    lifecycle.assert_not_called()
 
 
 @pytest.mark.asyncio

@@ -186,6 +186,8 @@ export default defineConfig(({ mode }) => {
         'prismjs',
         'react-simple-code-editor',
         '@uiw/react-json-view',
+        // Normal mode's orb loads three lazily on first view.
+        'three',
       ],
     },
     build: {
@@ -214,6 +216,7 @@ export default defineConfig(({ mode }) => {
           //   vendor-icons    — lucide + lobehub brand icons
           //   vendor-query    — TanStack Query + persistence
           //   vendor-markdown — markdown rendering stack (chat / docs panels)
+          //   vendor-three    — WebGL for Normal mode's orb, loaded on demand
           //   vendor-misc     — small but heavyweight utilities
           // Anything not listed falls into the default route/entry chunks.
           manualChunks: {
@@ -240,6 +243,7 @@ export default defineConfig(({ mode }) => {
               'react-simple-code-editor',
               '@uiw/react-json-view',
             ],
+            'vendor-three': ['three'],
             'vendor-misc': [
               'idb-keyval',
               'fuzzysort',

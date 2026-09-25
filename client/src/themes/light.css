@@ -173,6 +173,56 @@
   --action-tools-hover:   color-mix(in srgb, var(--dracula-purple) var(--tint-action-hover), transparent);
   --action-tools-border:  color-mix(in srgb, var(--dracula-purple) var(--tint-action-border), transparent);
   --action-tools-ink:     #7c3aed;
+
+  /* ── Node role variants for identity surfaces (Home: employee avatars,
+   * status pills, template chips, tinted cards). Same alphas as the action
+   * triplet (--tint-action-*), so a role colour reads like a soft-tinted
+   * button: -fill 15%, -hover 25%, -edge 60%. -ink is the readable text
+   * colour: a darkened accent in light (identical to the matching action
+   * ink), the raw accent in dark (dark.css). Global like the node roles
+   * above; skins inherit the light or .dark values by family. ─────────── */
+  --node-agent-fill:      color-mix(in srgb, var(--dracula-purple) var(--tint-action-soft), transparent);
+  --node-agent-hover:     color-mix(in srgb, var(--dracula-purple) var(--tint-action-hover), transparent);
+  --node-agent-edge:      color-mix(in srgb, var(--dracula-purple) var(--tint-action-border), transparent);
+  --node-agent-ink:       #7c3aed;
+  --node-model-fill:      color-mix(in srgb, var(--dracula-cyan) var(--tint-action-soft), transparent);
+  --node-model-hover:     color-mix(in srgb, var(--dracula-cyan) var(--tint-action-hover), transparent);
+  --node-model-edge:      color-mix(in srgb, var(--dracula-cyan) var(--tint-action-border), transparent);
+  --node-model-ink:       #0e7490;
+  --node-skill-fill:      color-mix(in srgb, var(--dracula-green) var(--tint-action-soft), transparent);
+  --node-skill-hover:     color-mix(in srgb, var(--dracula-green) var(--tint-action-hover), transparent);
+  --node-skill-edge:      color-mix(in srgb, var(--dracula-green) var(--tint-action-border), transparent);
+  --node-skill-ink:       #15803d;
+  --node-tool-fill:       color-mix(in srgb, var(--dracula-green) var(--tint-action-soft), transparent);
+  --node-tool-hover:      color-mix(in srgb, var(--dracula-green) var(--tint-action-hover), transparent);
+  --node-tool-edge:       color-mix(in srgb, var(--dracula-green) var(--tint-action-border), transparent);
+  --node-tool-ink:        #15803d;
+  --node-trigger-fill:    color-mix(in srgb, var(--dracula-pink) var(--tint-action-soft), transparent);
+  --node-trigger-hover:   color-mix(in srgb, var(--dracula-pink) var(--tint-action-hover), transparent);
+  --node-trigger-edge:    color-mix(in srgb, var(--dracula-pink) var(--tint-action-border), transparent);
+  --node-trigger-ink:     #be185d;
+  --node-workflow-fill:   color-mix(in srgb, var(--dracula-orange) var(--tint-action-soft), transparent);
+  --node-workflow-hover:  color-mix(in srgb, var(--dracula-orange) var(--tint-action-hover), transparent);
+  --node-workflow-edge:   color-mix(in srgb, var(--dracula-orange) var(--tint-action-border), transparent);
+  --node-workflow-ink:    #c2410c;
+
+  /* ── Logo palette (OC mark) — the mark is inline SVG that reads these, so
+   * it switches with the theme family. Values from the design handoff. ── */
+  --lg-ring-a: #8b5cf6;
+  --lg-ring-b: #06b6d4;
+  --lg-green:  #22c55e;
+  --lg-orange: #f59e0b;
+  --lg-pink:   #ec4899;
+  --lg-yellow: #eab308;
+  --lg-link:   #a3aab5;
+  --lg-core:   #1a1d21;
+
+  /* ── Floating-surface shadows (composer, employee card, popovers, the
+   * Settings dialog). The colour differs per family, so they live here
+   * rather than in base.css; dark.css overrides them. ────────────────── */
+  --shadow-float:   0 12px 40px rgb(15 23 42 / 0.10);
+  --shadow-popover: 0 12px 32px rgb(15 23 42 / 0.12);
+  --shadow-dialog:  0 24px 80px rgb(15 23 42 / 0.16);
 }
 
 /* Code & syntax tokens (code editor / JSON output / variable tree) */

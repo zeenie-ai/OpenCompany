@@ -18,8 +18,13 @@ import { NodeIcon } from '../../../assets/icons';
 import { theme } from '../../../styles/theme';
 import type { ActionDef } from '../primitives/ActionBar';
 import type { ProviderConfig } from '../types';
+import type { PanelVariant } from '../PanelRenderer';
 
-const QrPairingPanel: React.FC<{ config: ProviderConfig; visible: boolean }> = ({ config, visible }) => {
+const QrPairingPanel: React.FC<{ config: ProviderConfig; visible: boolean; variant?: PanelVariant }> = ({
+  config,
+  visible,
+  variant = 'full',
+}) => {
   const panel = useCredentialPanel(config, visible);
   const status = useProviderStatus(config.statusHook);
   const { startConnection, restartConnection, getStatus: refreshWa } = useWhatsApp();
@@ -76,7 +81,7 @@ const QrPairingPanel: React.FC<{ config: ProviderConfig; visible: boolean }> = (
           loading={qr.isLoading(status)} emptyText={qr.emptyText(status, panel.stored)} />
         {!connected && qrData && <div className="mt-3 text-sm text-muted-foreground">{qr.scanText}</div>}
       </div>
-      {config.hasRateLimits && connected && <RateLimitSection />}
+      {variant === 'full' && config.hasRateLimits && connected && <RateLimitSection />}
       {panel.error && (
         <Alert variant="destructive">
           <AlertDescription>{panel.error}</AlertDescription>

@@ -152,20 +152,20 @@ def _move_workspace(old_slug: str, new_slug: str) -> None:
         logger.warning("[workflow] workspace rename failed: %s", exc)
 
 
-async def _broadcast_renamed(workflow_id: str, name: str, slug: str, old_slug: str) -> None:
-    """CloudEvents ``workflow.renamed`` — sidebar + open workflow refresh."""
+async def _broadcast_lifecycle(stage: str, workflow_id: str, **data: Any) -> None:
+    """CloudEvents ``workflow.{stage}``: every client's workflow list (the
+    editor sidebar, Normal mode's team) refreshes. Best-effort."""
     try:
         from services.status_broadcaster import get_status_broadcaster
 
-        await get_status_broadcaster().broadcast_workflow_lifecycle(
-            "renamed",
-            workflow_id=workflow_id,
-            name=name,
-            slug=slug,
-            old_slug=old_slug,
-        )
+        await get_status_broadcaster().broadcast_workflow_lifecycle(stage, workflow_id=workflow_id, **data)
     except Exception:
-        logger.debug("[workflow] rename broadcast failed", exc_info=True)
+        logger.debug("[workflow] %s broadcast failed", stage, exc_info=True)
+
+
+async def _broadcast_renamed(workflow_id: str, name: str, slug: str, old_slug: str) -> None:
+    """CloudEvents ``workflow.renamed`` — sidebar + open workflow refresh."""
+    await _broadcast_lifecycle("renamed", workflow_id, name=name, slug=slug, old_slug=old_slug)
 
 
 async def handle_save_workflow(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
@@ -291,6 +291,8 @@ async def handle_save_workflow(data: Dict[str, Any], websocket: WebSocket) -> Di
     if existing and existing.slug and existing.slug != slug:
         _move_workspace(existing.slug, slug)
         await _broadcast_renamed(workflow_id, name, slug, existing.slug)
+    elif success and existing is None:
+        await _broadcast_lifecycle("created", workflow_id, name=name, slug=slug)
 
     return {
         "success": success,
@@ -509,6 +511,12 @@ async def delete_workflow_with_context_archival(
         )
         success = await database.delete_workflow(workflow_id)
         pending = 0
+    if success:
+        from services.workflow_storage.hooks import run_workflow_deleted_hooks
+
+        # Employee and approval rows keyed by this workflow.
+        await run_workflow_deleted_hooks(database, workflow_id)
+        await _broadcast_lifecycle("deleted", workflow_id)
     return {
         "success": success,
         "workflow_id": workflow_id,

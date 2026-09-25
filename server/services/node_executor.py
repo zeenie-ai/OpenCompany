@@ -12,13 +12,13 @@ from typing import Dict, Any, Optional, Callable, TYPE_CHECKING
 
 from core.logging import get_logger
 from constants import (
-    ANDROID_SERVICE_NODE_TYPES,
     AI_MODEL_TYPES,
     GOOGLE_MAPS_TYPES,
     detect_ai_provider,
 )
 from pydantic import ValidationError
 from services.node_registry import get_node_class
+from services.parameter_resolver import template_view
 # Wave 11.D.13 sunset: every handler that was imported here is now
 # either (a) called lazily from a plugin's execute_op / execute method,
 # or (b) retired entirely. The dispatcher itself only needs the
@@ -151,7 +151,18 @@ class NodeExecutor:
 
             if resolve_params_fn and nodes is not None and edges is not None:
                 logger.debug(f"[NodeExecutor] Before resolution: params={list(params.keys())}")
-                params = await resolve_params_fn(params, node_id, nodes, edges, session_id)
+                # ``context["outputs"]`` holds what this run's upstream nodes
+                # produced. Resolving from it rather than only from the shared
+                # session store keeps concurrent firings from reading each
+                # other's trigger data.
+                params = await resolve_params_fn(
+                    params,
+                    node_id,
+                    nodes,
+                    edges,
+                    session_id,
+                    run_outputs=context.get("outputs") or None,
+                )
                 logger.debug(f"[NodeExecutor] After resolution: params keys={list(params.keys())}")
 
             # Build handler context
@@ -170,15 +181,9 @@ class NodeExecutor:
             if result.get("success") and self._output_store:
                 output_data = result.get("result", {})
 
-                # For Android service nodes, extract the nested 'data' field for cleaner template access
-                # This allows {{batterymonitor.battery_level}} instead of {{batterymonitor.data.battery_level}}
-                if node_type in ANDROID_SERVICE_NODE_TYPES and isinstance(output_data, dict):
-                    # Flatten: promote 'data' contents to top level while preserving metadata
-                    nested_data = output_data.get("data", {})
-                    if isinstance(nested_data, dict):
-                        # Merge nested data with metadata (service_id, action, timestamp, etc.)
-                        output_data = {**output_data, **nested_data}
-                        logger.debug(f"[NodeExecutor] Flattened Android output for {node_id}: keys={list(output_data.keys())}")
+                # Android service outputs promote their nested 'data' field so
+                # {{batterymonitor.battery_level}} works (template_view owns the rule).
+                output_data = template_view(node_type, output_data)
 
                 # For socialReceive, store 4 outputs for different handle connections
                 # - output_message: Text for LLM input

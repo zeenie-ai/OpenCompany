@@ -392,73 +392,28 @@ async def handle_get_credential_catalogue(data: Dict[str, Any], websocket: WebSo
     encrypted credentials database. The frontend renders this directly — no
     client-side credential checks needed.
     """
-    from services.credential_registry import get_credential_registry
-    from services.plugin.credential import CREDENTIAL_REGISTRY
+    from services.credential_registry import get_credential_registry, provider_connection_state
 
     registry = get_credential_registry()
     since = data.get("since")
-    version = registry.get_version()
+    # Includes live pairing state, which changes without a credential
+    # mutation (see CredentialRegistry.get_live_version).
+    version = registry.get_live_version()
     if since and since == version:
         return {"unchanged": True, "version": version}
 
     catalogue = registry.get_catalogue()
+    catalogue["version"] = version
 
-    # Enrich each provider with live stored-key status from AuthService.
-    # This keeps credential state as a backend concern — the frontend is
-    # purely a renderer with zero business logic about key existence.
+    # Enrich each provider with live credential state from AuthService
+    # (``stored`` / ``connected`` / ``account_label`` plus any plugin
+    # extras). Credential state stays a backend concern: the frontend
+    # renders these flags and never checks key existence itself. The rules
+    # live in services.credential_registry.provider_connection_state, which
+    # the Normal-mode employee summaries share.
     auth_service = container.auth_service()
     for provider in catalogue.get("providers", []):
-        pid = provider.get("id", "")
-        kind = provider.get("kind", "")
-        status_hook = provider.get("status_hook")
-
-        tokens = None
-        # Declarative per-provider override for the "stored" check.
-        # Lets Telegram (kind=oauth + status_hook but actual storage
-        # is api_key for the bot token) signal that "stored" should
-        # be ``has_valid_key("telegram")`` rather than the default
-        # ``get_oauth_tokens(status_hook)`` lookup. Other providers
-        # don't declare ``stored_check`` and keep the original
-        # kind/status_hook-based logic untouched -- so Google's saved
-        # client_secret (password field) does NOT flip the connected
-        # dot before the user actually completes the OAuth flow.
-        stored_check = provider.get("stored_check")
-        if stored_check and stored_check.get("type") == "api_key":
-            provider["stored"] = await auth_service.has_valid_key(stored_check.get("key", pid))
-        elif status_hook:
-            # Status-hook providers (whatsapp, android, twitter, google,
-            # claude_code, codex_cli) use OAuth tokens for the runtime
-            # connection state.
-            tokens = await auth_service.get_oauth_tokens(status_hook)
-            provider["stored"] = tokens is not None
-        elif kind == "apiKey":
-            # API key providers — check encrypted credentials DB.
-            provider["stored"] = await auth_service.has_valid_key(pid)
-        elif kind == "oauth":
-            # OAuth providers without a status_hook — check token storage.
-            tokens = await auth_service.get_oauth_tokens(pid)
-            provider["stored"] = tokens is not None
-        else:
-            provider["stored"] = False
-
-        # Surface the connected account identifier (email > display name)
-        # so the modal can render "Connected as foo@bar.com" without a
-        # per-provider status hook. Twitter / Google / Stripe / Claude
-        # all populate `email` / `name` via `auth_service.store_oauth_tokens`.
-        if tokens:
-            provider["account_label"] = tokens.get("email") or tokens.get("name")
-        else:
-            provider["account_label"] = None
-
-        # A credential whose state is not one row per provider id (e.g.
-        # several named OpenAI-compatible endpoints) contributes its own
-        # fields, and may replace ``stored``. Declared on the plugin's
-        # Credential class, so this handler names no provider.
-        cred_cls = CREDENTIAL_REGISTRY.get(pid)
-        if cred_cls is not None:
-            extras = await cred_cls.catalogue_extras()
-            if extras:
-                provider.update(extras)
+        provider.update(await provider_connection_state(provider, auth_service))
 
     return catalogue
 

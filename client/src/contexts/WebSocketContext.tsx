@@ -41,6 +41,7 @@ import {
   useNodeStatusForId,
   useCurrentWorkflowStatuses,
 } from '../stores/nodeStatusStore';
+import { useWorkflowControlStore } from '../stores/workflowControlStore';
 
 // Generate unique request ID
 const generateRequestId = (): string => {
@@ -682,6 +683,7 @@ export const shouldRetryResetWorkflowAfterConflict = (
 
 type WorkflowControlMutationRequest =
   | 'start_workflow'
+  | 'start_employee'
   | 'pause_workflow'
   | 'resume_workflow'
   | 'reset_workflow';
@@ -691,6 +693,9 @@ const WORKFLOW_CONTROL_PENDING_BY_REQUEST: Record<
   WorkflowControlPendingMutation
 > = {
   start_workflow: { action: 'start', state: 'starting' },
+  // Normal mode: start a hired employee from its saved graph (the server
+  // loads the graph; the editor's canvas is not involved).
+  start_employee: { action: 'start', state: 'starting' },
   pause_workflow: { action: 'pause', state: 'pausing' },
   resume_workflow: { action: 'resume', state: 'resuming' },
   reset_workflow: { action: 'reset', state: 'resetting' },
@@ -730,6 +735,24 @@ const defaultTelegramStatus: TelegramStatus = {
 };
 
 const WebSocketContext = createContext<WebSocketContextValue | null>(null);
+
+export interface WebSocketActions {
+  isConnected: boolean;
+  isReady: boolean;
+  sendRequest: WebSocketContextValue['sendRequest'];
+  addEventListener: WebSocketContextValue['addEventListener'];
+  startWorkflow: WebSocketContextValue['startWorkflow'];
+  /** Start a saved employee (Normal mode). The server loads the graph and
+   *  refuses while an app it needs is not connected. */
+  startEmployee: (workflowId: string, expectedRevision: number) => Promise<WorkflowControlStatus>;
+  pauseWorkflow: WebSocketContextValue['pauseWorkflow'];
+  resumeWorkflow: WebSocketContextValue['resumeWorkflow'];
+  resetWorkflow: WebSocketContextValue['resetWorkflow'];
+  getWorkflowControlStatus: WebSocketContextValue['getWorkflowControlStatus'];
+  getWorkflowStatus: WebSocketContextValue['getWorkflowStatus'];
+}
+
+const WebSocketActionsContext = createContext<WebSocketActions | null>(null);
 
 // WebSocket URL (convert http to ws)
 const getWebSocketUrl = () => {
@@ -839,6 +862,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     // in one React batch still compare against the latest accepted version.
     workflowControlStatusesRef.current = next;
     setWorkflowControlStatuses(next);
+    useWorkflowControlStore.getState().replaceStatuses(next);
     return merged;
   }, []);
 
@@ -915,6 +939,18 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [currentWorkflowId]);
 
   // Handle incoming messages
+  /** Hand a broadcast to every addEventListener(type) subscriber. A case
+   *  that handles a type itself calls this too when listeners may want it. */
+  const dispatchToListeners = (type: string, data: any) => {
+    const listeners = eventListenersRef.current.get(type);
+    if (!listeners || listeners.size === 0) return;
+    for (const handler of listeners) {
+      try { handler(data); } catch (err) {
+        console.error(`[WebSocket] Listener for '${type}' threw:`, err);
+      }
+    }
+  };
+
   const handleMessage = useCallback((event: MessageEvent) => {
     try {
       const message = JSON.parse(event.data);
@@ -1026,11 +1062,12 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
 
         case 'workflow_lifecycle': {
-          // CloudEvents-typed workflow lifecycle. ``.imported`` and
-          // ``.renamed`` both invalidate the workflows query so every
-          // connected client refreshes the sidebar. The renaming tab
-          // already updated its in-memory store from the save response
-          // — this broadcast covers other open tabs of the same user.
+          // CloudEvents-typed workflow lifecycle. ``.imported``,
+          // ``.renamed``, ``.created`` and ``.deleted`` invalidate the
+          // workflows query so every connected client refreshes the
+          // sidebar (Normal mode's team listens for the same events). The
+          // initiating tab already updated its store from the response;
+          // this broadcast covers other open tabs of the same user.
           const event = data as WorkflowEvent<{
             name?: string;
             slug?: string;
@@ -1039,9 +1076,11 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             edge_count?: number;
           }>;
           const eventType = event?.type ?? '';
-          if (eventType.endsWith('.imported') || eventType.endsWith('.renamed')) {
+          if (['.imported', '.renamed', '.created', '.deleted'].some((stage) => eventType.endsWith(stage))) {
             void queryClient.invalidateQueries({ queryKey: WORKFLOWS_QUERY_KEY });
           }
+          // Normal mode's team list follows the same lifecycle.
+          dispatchToListeners(type, data);
           break;
         }
 
@@ -1953,14 +1992,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           // addEventListener(type, handler) gets the message data. Lets
           // backend-only features (e.g. workflow_ops_apply) ship without
           // adding a switch case + state slice every time.
-          const listeners = eventListenersRef.current.get(type);
-          if (listeners && listeners.size > 0) {
-            for (const handler of listeners) {
-              try { handler(data); } catch (err) {
-                console.error(`[WebSocket] Listener for '${type}' threw:`, err);
-              }
-            }
-          }
+          dispatchToListeners(type, data);
           break;
         }
       }
@@ -2866,6 +2898,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const pending = WORKFLOW_CONTROL_PENDING_BY_REQUEST[type];
     workflowControlPendingRef.current.set(workflowId, pending);
     setWorkflowControlPending((previous) => ({ ...previous, [workflowId]: pending }));
+    useWorkflowControlStore.getState().setPending(workflowId, pending);
 
     const sendMutationAttempt = async (
       attemptData: Record<string, any>,
@@ -2947,6 +2980,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       throw error;
     } finally {
       workflowControlPendingRef.current.delete(workflowId);
+      useWorkflowControlStore.getState().setPending(workflowId, null);
       setWorkflowControlPending((previous) => {
         if (!(workflowId in previous)) return previous;
         const next = { ...previous };
@@ -2980,6 +3014,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     controlMutation('start_workflow', workflowId, {
       ...graphEnvelope(nodes, edges), session_id: sessionId || 'default', expected_revision: expectedRevision,
     }), [controlMutation]);
+
+  const startEmployeeAsync = useCallback((workflowId: string, expectedRevision: number) =>
+    controlMutation('start_employee', workflowId, { expected_revision: expectedRevision }), [controlMutation]);
 
   const pauseWorkflowAsync = useCallback((workflowId: string, expectedRevision: number) =>
     controlMutation('pause_workflow', workflowId, { expected_revision: expectedRevision }), [controlMutation]);
@@ -3622,6 +3659,46 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // unrelated slices change. Async methods are useCallback-wrapped
   // upstream, so their identities are stable across renders.
   // Reference: https://overreacted.io/before-you-memo/
+  // Stable for the provider's lifetime, so effects that subscribe with it
+  // never re-subscribe on unrelated context changes.
+  const addEventListener = useCallback((type: string, handler: (data: any) => void) => {
+    let set = eventListenersRef.current.get(type);
+    if (!set) {
+      set = new Set();
+      eventListenersRef.current.set(type, set);
+    }
+    set.add(handler);
+    return () => {
+      const current = eventListenersRef.current.get(type);
+      if (current) {
+        current.delete(handler);
+        if (current.size === 0) eventListenersRef.current.delete(type);
+      }
+    };
+  }, []);
+
+  // The subset of the context Normal mode needs, without the data slices
+  // that change on every console / chat / terminal line: only connection
+  // flips re-render its consumers.
+  const actions: WebSocketActions = useMemo(() => ({
+    isConnected,
+    isReady,
+    sendRequest,
+    addEventListener,
+    startWorkflow: startWorkflowAsync,
+    startEmployee: startEmployeeAsync,
+    pauseWorkflow: pauseWorkflowAsync,
+    resumeWorkflow: resumeWorkflowAsync,
+    resetWorkflow: resetWorkflowAsync,
+    getWorkflowControlStatus: getWorkflowControlStatusAsync,
+    getWorkflowStatus: getWorkflowStatusAsync,
+  }), [
+    isConnected, isReady, sendRequest, addEventListener,
+    startWorkflowAsync, startEmployeeAsync, pauseWorkflowAsync,
+    resumeWorkflowAsync, resetWorkflowAsync, getWorkflowControlStatusAsync,
+    getWorkflowStatusAsync,
+  ]);
+
   const value: WebSocketContextValue = useMemo(() => ({
     // Connection state
     isConnected,
@@ -3670,21 +3747,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     sendRequest,
 
     // Generic broadcast subscription
-    addEventListener: (type: string, handler: (data: any) => void) => {
-      let set = eventListenersRef.current.get(type);
-      if (!set) {
-        set = new Set();
-        eventListenersRef.current.set(type, set);
-      }
-      set.add(handler);
-      return () => {
-        const current = eventListenersRef.current.get(type);
-        if (current) {
-          current.delete(handler);
-          if (current.size === 0) eventListenersRef.current.delete(type);
-        }
-      };
-    },
+    addEventListener,
 
     // Node Parameters
     getNodeParameters: getNodeParametersAsync,
@@ -3762,7 +3825,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     getNodeStatus, getApiKeyStatus, getVariable,
     requestStatus, clearNodeStatus,
     clearWhatsAppMessages, clearConsoleLogs, clearTerminalLogs, clearChatMessages,
-    sendChatMessageAsync, sendRequest,
+    sendChatMessageAsync, sendRequest, addEventListener,
     getNodeParametersAsync, getAllNodeParametersAsync,
     saveNodeParametersAsync, deleteNodeParametersAsync,
     executeNodeAsync, executeWorkflowAsync, getNodeOutputAsync,
@@ -3784,10 +3847,23 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   ]);
 
   return (
-    <WebSocketContext.Provider value={value}>
-      {children}
-    </WebSocketContext.Provider>
+    <WebSocketActionsContext.Provider value={actions}>
+      <WebSocketContext.Provider value={value}>
+        {children}
+      </WebSocketContext.Provider>
+    </WebSocketActionsContext.Provider>
   );
+};
+
+/** Connection state and the stable operations of the WebSocket layer, for
+ *  consumers that must not re-render on every broadcast (Normal mode).
+ *  Control-plane status itself is read from stores/workflowControlStore. */
+export const useWebSocketActions = (): WebSocketActions => {
+  const context = useContext(WebSocketActionsContext);
+  if (!context) {
+    throw new Error('useWebSocketActions must be used within a WebSocketProvider');
+  }
+  return context;
 };
 
 // Hook to use WebSocket context

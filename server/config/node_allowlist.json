@@ -1,5 +1,5 @@
 {
-  "_comment": "Node visibility config. `enabled_nodes`: positive list shown in normal mode (empty = show all). `disabled_groups` / `disabled_nodes`: ABSOLUTE blocklist enforced in BOTH normal and dev mode — wins over enabled_nodes and over the show_all default. Node type identifiers must match the 'type' class attribute on the plugin in server/nodes/<category>/<file>.py verbatim.",
+  "_comment": "Node visibility config. `enabled_nodes`: positive list (empty = allow all). With the Normal-mode screen on (client featureFlags.normalMode) it governs which node types Hire may build into an employee (services.node_allowlist.is_hire_allowed) and the editor palette lists every node; with the flag off it is the palette's Normal-mode filter. `disabled_groups` / `disabled_nodes`: ABSOLUTE blocklist enforced everywhere, in the palette and for Hire — wins over enabled_nodes and over the show_all default. Node type identifiers must match the 'type' class attribute on the plugin in server/nodes/<category>/<file>.py verbatim.",
   "enabled_nodes": [
     "start",
     "chatTrigger",
@@ -27,6 +27,28 @@
     "currentTimeTool",
     "writeTodos",
     "canvas",
+
+    "context",
+    "approvalGate",
+    "duckduckgoSearch",
+
+    "whatsappReceive",
+    "whatsappSend",
+
+    "googleGmail",
+    "googleGmailReceive",
+    "googleCalendar",
+    "googleDrive",
+    "googleSheets",
+
+    "emailReceive",
+    "emailSend",
+
+    "msMail",
+    "msMailReceive",
+    "msCalendar",
+
+    "stripeAction",
 
     "httpRequest",
     "timer",

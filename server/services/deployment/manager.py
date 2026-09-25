@@ -1131,11 +1131,13 @@ class DeploymentManager:
                     },
                     workflow_id,
                 )
+                await self._record_local_run(workflow_id, run_id, bool(result.get("success")), result)
             except asyncio.CancelledError:
                 logger.debug("Run cancelled", run_id=run_id, workflow_id=workflow_id)
             except Exception as e:
                 logger.error("Run failed", run_id=run_id, workflow_id=workflow_id, error=str(e))
                 await self._notify("run_failed", {"run_id": run_id, "error": str(e)}, workflow_id)
+                await self._record_local_run(workflow_id, run_id, False, {})
             finally:
                 if workflow_id in self._active_runs:
                     self._active_runs[workflow_id].pop(run_id, None)
@@ -1153,6 +1155,26 @@ class DeploymentManager:
             return None
 
         return task
+
+    async def _record_local_run(self, workflow_id: str, run_id: str, success: bool, result: Dict[str, Any]) -> None:
+        """Record a finished run for Normal mode's "done today", unless it ran
+        on Temporal, whose workflow records its own. Best effort."""
+        if result.get("temporal_execution"):
+            return
+        try:
+            from services.employees.runs import record_run
+
+            state = self._deployments.get(workflow_id)
+            await record_run(
+                self.database,
+                workflow_id=workflow_id,
+                run_id=f"local:{run_id}",
+                status="success" if success else "failed",
+                runtime="local",
+                generation=int(getattr(state, "generation", 0) or 0),
+            )
+        except Exception:
+            logger.debug("Could not record a local run", workflow_id=workflow_id, run_id=run_id, exc_info=True)
 
     async def _execute_from_trigger(
         self, run_id: str, trigger_node_id: str, trigger_data: Dict[str, Any], workflow_id: str

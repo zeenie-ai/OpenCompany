@@ -838,11 +838,20 @@ class TestCloudEventsBroadcastShape:
         import inspect
 
         from services import workflow_import
+        from services.workflow_storage import persist
 
-        src = inspect.getsource(workflow_import.import_workflow)
-        assert "broadcast_workflow_lifecycle" in src, (
-            "import_workflow save path must broadcast via " "broadcast_workflow_lifecycle so connected clients refresh."
+        # The import saves through the shared helper, which broadcasts the
+        # stage its caller names (test_save_path_broadcasts_workflow_imported
+        # checks the stage arrives).
+        import_src = inspect.getsource(workflow_import.import_workflow)
+        assert "persist_new_workflow(" in import_src, (
+            "import_workflow must save through persist_new_workflow, which broadcasts "
+            "workflow_lifecycle so connected clients refresh."
         )
-        assert '"imported"' in src, (
-            "import_workflow must use the 'imported' lifecycle stage " "(matches WorkflowEvent.workflow_lifecycle Literal)."
+        assert 'lifecycle_stage="imported"' in import_src, (
+            "import_workflow must use the 'imported' lifecycle stage (matches WorkflowEvent.workflow_lifecycle Literal)."
+        )
+        persist_src = inspect.getsource(persist.persist_new_workflow)
+        assert "broadcast_workflow_lifecycle(" in persist_src, (
+            "persist_new_workflow must broadcast via broadcast_workflow_lifecycle so connected clients refresh."
         )

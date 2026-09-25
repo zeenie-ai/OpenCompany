@@ -25,7 +25,7 @@ from .models import (
     get_retry_policy,
 )
 from .cache import ExecutionCache
-from .conditions import evaluate_condition
+from .conditions import evaluate_edge_condition
 from .dlq import create_dlq_handler
 
 logger = get_logger(__name__)
@@ -950,11 +950,17 @@ class WorkflowExecutor:
             if not condition:
                 continue
 
-            # Get output from source node
-            source_output = ctx.outputs.get(source_id, {})
+            # ctx.outputs holds only the inner result of a completed node.
+            # Rebuild the envelope Temporal evaluates against so a condition
+            # reads the same value on both paths; a source that did not
+            # complete has neither.
+            if source_id in ctx.outputs:
+                inner = ctx.outputs[source_id]
+                envelope = {"success": True, "result": inner}
+            else:
+                inner, envelope = {}, {}
 
-            # Evaluate condition
-            if evaluate_condition(condition, source_output):
+            if evaluate_edge_condition(condition, envelope=envelope, inner=inner):
                 logger.debug("Conditional edge matched", source=source_id, target=target_node_id, condition=condition)
                 return True
 

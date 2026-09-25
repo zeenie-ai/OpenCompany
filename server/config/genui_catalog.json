@@ -1,0 +1,112 @@
+{
+  "_comment": "Normal mode's setup-screen vocabulary: what a model may use when it writes a new employee's setup screen. The prompt (services/employees/setup_prompt.py) is generated from this file; the client's renderer (client/src/features/home/genui/catalog.ts) must list the same components, actions, tones, roles, state paths and limits, which tests/test_genui_catalog_sync.py checks.",
+  "spec_version": 1,
+  "components": {
+    "Stack": {
+      "props": "{direction:\"vertical\"|\"horizontal\", gap:\"sm\"|\"md\"|\"lg\"}",
+      "description": "Layout container. Has children."
+    },
+    "Grid": {
+      "props": "{columns:2|3}",
+      "description": "Responsive grid. Has children."
+    },
+    "Card": {
+      "props": "{title?, subtitle?, tone?}",
+      "description": "Surface grouping related content. Has children."
+    },
+    "Heading": {
+      "props": "{text}",
+      "description": "Short section heading."
+    },
+    "Text": {
+      "props": "{text, muted?:boolean}",
+      "description": "A sentence or short paragraph."
+    },
+    "Metric": {
+      "props": "{label, value, hint?, tone?}",
+      "description": "A single number or fact to highlight."
+    },
+    "Badge": {
+      "props": "{label, tone?}",
+      "description": "Small status label."
+    },
+    "Plan": {
+      "props": "{title, steps:[{title, detail, role:\"trigger\"|\"agent\"|\"tool\"|\"workflow\", app?}]}",
+      "description": "An automation shown as a chain of steps: trigger first (\"When…\"), then agent/tool steps. A step that uses an app names it in \"app\"."
+    },
+    "AgentCard": {
+      "props": "{name, role, description, apps:[string], status:\"ready\"|\"working\"|\"paused\"}",
+      "description": "An AI employee and what it does."
+    },
+    "List": {
+      "props": "{items:[{title, detail?, meta?, tone?}]}",
+      "description": "A list of emails, events, tasks or results."
+    },
+    "Draft": {
+      "props": "{channel:\"Email\"|\"WhatsApp\"|\"Slack\", to, subject?, body}",
+      "description": "A message ready for the user to approve."
+    },
+    "Progress": {
+      "props": "{label, value:0-100, tone?}",
+      "description": "Progress or usage bar."
+    },
+    "Toggle": {
+      "props": "{label, description?, value:{\"$bindState\":\"/rules/<key>\"}}",
+      "description": "On/off ground rule, bound to state under /rules."
+    },
+    "Choice": {
+      "props": "{label, options:[string], value:{\"$bindState\":\"/choices/<key>\"}}",
+      "description": "Pick one of 2-4 options, bound to state under /choices."
+    },
+    "Input": {
+      "props": "{label, placeholder?, value:{\"$bindState\":\"/inputs/<key>\"}}",
+      "description": "Short text field, bound to state under /inputs."
+    },
+    "Button": {
+      "props": "{label, variant:\"primary\"|\"secondary\", action, actionParams?}",
+      "description": "Runs an action."
+    },
+    "Divider": {
+      "props": "{}",
+      "description": "Thin separator."
+    }
+  },
+  "container_types": ["Stack", "Grid", "Card"],
+  "control_types": ["Toggle", "Choice", "Input"],
+  "actions": {
+    "setState": "{statePath, value} — update UI state",
+    "hire_employee": "{name, role, apps:[string], trigger, sendsVia} — add this employee to the team and start them working",
+    "refine": "{} — let the owner describe a change to this setup",
+    "connect_app": "{app} — connect an app by name",
+    "open_connectors": "{} — open the apps panel"
+  },
+  "action_aliases": {
+    "ask": "refine"
+  },
+  "tones": ["agent", "model", "tool", "trigger", "workflow", "neutral"],
+  "step_roles": ["trigger", "agent", "tool", "workflow"],
+  "state_paths": {
+    "rules": "/rules",
+    "askFirst": "/rules/askFirst",
+    "choices": "/choices",
+    "inputs": "/inputs"
+  },
+  "ask_first_label": "Ask me before sending anything",
+  "trigger": {
+    "kinds": ["app_event", "schedule", "manual"],
+    "every": ["hour", "day", "weekday", "week", "month"]
+  },
+  "limits": {
+    "maxElements": 16,
+    "maxReplyChars": 65536,
+    "maxLine": 120,
+    "maxText": 400,
+    "maxBody": 2000,
+    "maxSteps": 6,
+    "maxItems": 8,
+    "maxOptions": 4,
+    "maxApps": 6,
+    "maxInput": 200,
+    "maxIdLength": 40
+  }
+}

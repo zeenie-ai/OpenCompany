@@ -1,33 +1,23 @@
-import React, { useEffect } from 'react';
-import Dashboard from './Dashboard';
+import React from 'react';
+import AppShell from './app/AppShell';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import SvgFilterDefs from './components/SvgFilterDefs';
-import { useTheme } from './contexts/ThemeContext';
 import { Toaster } from '@/components/ui/sonner';
+import { PillToaster } from './features/home/ui/pillToast';
 
-const App: React.FC = () => {
-  const { isDarkMode } = useTheme();
-
-  // Sync the theme flag onto <html> so Tailwind `dark:` variants and the
-  // [data-theme=dark] tokens in tokens.css both resolve correctly. Replaces
-  // the antd ConfigProvider algorithm switch.
-  useEffect(() => {
-    const root = document.documentElement;
-    root.classList.toggle('dark', isDarkMode);
-    root.dataset.theme = isDarkMode ? 'dark' : 'light';
-  }, [isDarkMode]);
-
-  return (
-    <>
-      <SvgFilterDefs />
-      <ProtectedRoute>
-        <div className="flex h-screen w-screen">
-          <Dashboard />
-        </div>
-      </ProtectedRoute>
-      <Toaster position="top-right" richColors closeButton />
-    </>
-  );
-};
+// `<html data-theme>` and the `.dark` flag are written by ThemeProvider
+// (contexts/ThemeContext.tsx) and, before the first paint, by the script in
+// index.html. Nothing else may write them.
+const App: React.FC = () => (
+  <>
+    <SvgFilterDefs />
+    <ProtectedRoute>
+      <AppShell />
+    </ProtectedRoute>
+    <Toaster position="top-right" richColors closeButton />
+    {/* Normal mode's bottom-centre pill toasts; see features/home/ui/pillToast. */}
+    <PillToaster />
+  </>
+);
 
 export default App;

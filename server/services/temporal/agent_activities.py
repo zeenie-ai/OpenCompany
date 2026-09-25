@@ -809,12 +809,17 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     nodes = context.get("nodes") or []
     edges = context.get("edges") or []
     if nodes and edges:
+        # ``inputs`` holds this run's direct upstream outputs (the firing
+        # trigger, for a deployed agent). Resolving from it keeps two
+        # concurrent firings from reading each other's message out of the
+        # shared session store.
         parameters = await workflow_service._param_resolver.resolve(
             parameters,
             node_id,
             nodes,
             edges,
             session_id,
+            run_outputs=context.get("inputs") or None,
         )
 
     options = parameters.get("options") or {}

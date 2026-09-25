@@ -803,7 +803,7 @@ See **[Scripts Reference](./docs-internal/SCRIPTS.md)** for full documentation.
 ✅ **Modular Backend Architecture**: workflow.py refactored from 2068 lines into a facade (~840 lines today) over NodeExecutor, ParameterResolver, and DeploymentManager modules
 ✅ **Node Rename System**: n8n-style node renaming via F2 keyboard shortcut, double-click on label, or right-click context menu with inline editing
 ✅ **UI State Persistence**: localStorage persistence for sidebar visibility, component palette visibility, dev mode, and collapsed sections
-✅ **Normal/Dev Mode**: Toggle in toolbar to filter Component Palette - Normal mode shows only AI Agents, Models, and Skills; Dev mode shows all categories
+✅ **Normal/Dev Mode**: Normal mode (Home: hire and supervise AI employees) is the landing screen; the Normal/Dev switch in the editor toolbar and the Home header (or Ctrl/Cmd+Shift+D) moves to Dev mode, the workflow editor. `VITE_NORMAL_MODE=false` restores the old palette-filter toggle
 ✅ **Production Deployment**: `company deploy` provisions a login-gated VM via Terraform + cloud-init running `company serve` under systemd; the Docker Compose topology was removed (see [deployment_legacy.md](./docs-internal/deployment_legacy.md))
 ✅ **Authentication System**: n8n-style JWT authentication with HttpOnly cookies, single-owner and multi-user modes, rate-limited login. Note `AUTH_MODE=multi` authenticates but does NOT isolate data — see Known Limitations in [authentication.md](./docs-internal/authentication.md)
 ✅ **Cache System**: n8n-pattern cache with Redis (production) / SQLite (local dev) / Memory fallback hierarchy
@@ -889,7 +889,8 @@ The application persists UI state to localStorage for a consistent user experien
 |---------|-------------|---------|----------|
 | Sidebar visibility | `ui_sidebar_visible` | `true` | `useAppStore.ts` |
 | Component palette visibility | `ui_component_palette_visible` | `true` | `useAppStore.ts` |
-| Pro mode | `ui_pro_mode` | `false` | `useAppStore.ts` |
+| Shell mode (Normal / Dev screen) | `ui_shell_mode` | `normal` (`dev` when `ui_pro_mode` is `'true'`) | `useAppStore.ts` |
+| Palette filter (only with `VITE_NORMAL_MODE=false`) | `ui_pro_mode` | `false` | `useAppStore.ts` |
 | Collapsed palette sections | `component_palette_collapsed_sections` | All collapsed | `useComponentPalette.ts` |
 
 #### Implementation Pattern
@@ -922,31 +923,19 @@ toggleSidebar: () => {
 ```
 
 ### Normal/Dev Mode Toggle
-The toolbar includes a mode toggle that filters the Component Palette for different user experience levels:
+The app has two screens, and a Normal / Dev switch moves between them:
 
-| Mode | Description | Visible Categories |
-|------|-------------|-------------------|
-| **Normal** (default) | Simplified view for AI-focused workflows | AI Agents, AI Models, AI Skills, AI Tools, Android, WhatsApp Business (every group whose `groups.py` `visibility` is `normal` or `all`) |
-| **Dev** | Full access to all node types | All categories |
+| Mode | Screen |
+|------|--------|
+| **Normal** (default) | Home: hire AI employees by describing a job, and supervise them ([client/src/features/home/](./client/src/features/home/)) |
+| **Dev** | The workflow editor (`Dashboard.tsx`); its palette lists every node the blocklists allow |
 
 #### Implementation
-- **State**: `proMode` boolean in `useAppStore.ts` with localStorage persistence (internal name unchanged for compatibility)
-- **Toggle UI**: Segmented control in toolbar with "Normal" and "Dev" labels
-- **Filtering**: `ComponentPalette.tsx` reads `GroupMetadata.visibility` from the backend node-groups index; in Normal mode a node is hidden unless its first group's `visibility` is `'normal'` or `'all'`. There is no frontend category table (`SIMPLE_MODE_CATEGORIES` / `SOCIAL_CATEGORIES` were removed in Wave 10.B).
-
-```typescript
-// In ComponentPalette.tsx
-// Wave 10.B: simple-mode visibility comes from backend
-// GroupMetadata.visibility ('normal' shown, 'dev' hidden in simple
-// mode). No frontend SIMPLE_MODE_CATEGORIES table.
-if (!proMode) {
-  const firstGroup = (definition.group?.[0] || '').toLowerCase();
-  const groupVisibility = groupIndex?.[firstGroup]?.visibility;
-  if (groupVisibility !== 'normal' && groupVisibility !== 'all') {
-    return false;
-  }
-}
-```
+- **State**: `shellMode` (`'normal' | 'dev'`) in `useAppStore.ts`, persisted as `ui_shell_mode`. While that key is unset it comes from the old palette choice: `ui_pro_mode === 'true'` starts in Dev, anything else in Normal.
+- **Switching**: [`components/shell/ModeToggle.tsx`](./client/src/components/shell/ModeToggle.tsx) (editor toolbar and Home header) and Ctrl/Cmd+Shift+D (`app/useModeShortcut.ts`) call `enterNormal` / `enterDev` from [`app/useShellActions.ts`](./client/src/app/useShellActions.ts), never `setShellMode` directly: those guard unsaved editor work, preload the editor chunk, and run the transition (`app/shellTransition.ts`). [`app/ShellModeSwitch.tsx`](./client/src/app/ShellModeSwitch.tsx) renders the current screen; both screens are lazy chunks, so ReactFlow stays out of a Normal-mode session. Locked end to end by `app/__tests__/modeSwitch.test.tsx`.
+- **Kill switch**: `VITE_NORMAL_MODE=false` ([`lib/featureFlags.ts`](./client/src/lib/featureFlags.ts)) turns Normal mode off. The app then opens straight into the editor and the toolbar switch goes back to filtering the palette with `proMode` (`ui_pro_mode`): in its Normal setting a node is hidden unless its first group's `groups.py` `visibility` is `'normal'` or `'all'`, and `enabled_nodes` applies.
+- **Allowlist**: with Normal mode on, `node_allowlist.json` `enabled_nodes` governs what Hire may build instead of filtering the editor palette (see [Node Allowlist](./docs-internal/node_allowlist.md)).
+- **Themes**: Home shows only the two base themes. [`app/ShellThemeProvider.tsx`](./client/src/app/ShellThemeProvider.tsx) passes `baseOnly` to `ThemeProvider` while Home is showing, so a chosen stylized theme appears as its family's base (Atomic as light, Cyber as dark) and applies again in Dev mode; the choice itself is never overwritten. `useTheme().theme` is the theme on the page, `chosenTheme` the user's pick. index.html's pre-paint script applies the same rule so Home's first frame is not stylized.
 
 ### Console Panel
 The Console Panel provides a resizable bottom panel with three sections: Chat (AI conversation), Console (node execution logs), and Terminal (server logs). **Hybrid layout (design-handoff)**: split view (default) docks Chat as a resizable pane beside the Console/Terminal tabs so chat and logs stay simultaneously visible during agent runs; tab mode makes Chat the first of three tabs. Toggled via the Columns2 button in the tab row; persisted in `consolePrefs.splitView` (default `true` — existing users see no change). One shared `chatSection` JSX serves both layouts so the per-theme `chat-msg*` decoration co-classes survive.

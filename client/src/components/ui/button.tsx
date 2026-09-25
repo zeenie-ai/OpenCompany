@@ -27,6 +27,20 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 hover:underline",
+        // Normal-mode primary action (design handoff "Create employee"):
+        // the foreground colour as the fill, so it reads as the one strong
+        // control on a calm screen; a neutral fill when disabled.
+        invert:
+          "bg-fg-default text-bg-app hover:opacity-88 disabled:bg-border-default disabled:text-fg-faint disabled:opacity-100",
+        // Quiet icon/text buttons on Normal-mode surfaces (sidebar collapse,
+        // theme switch). Token-only, with no `dark:` rules that would
+        // out-specify a caller's tone classes.
+        quiet:
+          "text-fg-muted hover:bg-bg-hover hover:text-fg-default aria-expanded:bg-bg-hover aria-expanded:text-fg-default",
+        // Chips (templates, categories, app chips): neutral by default;
+        // role tints arrive through className and replace these colours.
+        chip:
+          "border-border-default bg-transparent text-fg-default hover:-translate-y-px hover:bg-bg-hover motion-reduce:hover:translate-y-0",
       },
       size: {
         default:
@@ -40,6 +54,8 @@ const buttonVariants = cva(
         "icon-sm":
           "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
         "icon-lg": "size-9",
+        pill: "h-9 gap-2 rounded-pill pr-3.5 pl-4 text-sm font-semibold",
+        chip: "h-8.5 gap-2 rounded-pill px-3.5 text-sm",
       },
     },
     defaultVariants: {

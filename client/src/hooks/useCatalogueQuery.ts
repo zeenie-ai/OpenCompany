@@ -26,6 +26,7 @@ import { useQuery, useQueryClient, type QueryClient, type UseQueryResult } from 
 import { get as idbGet, set as idbSet } from 'idb-keyval';
 
 import { useWebSocket } from '../contexts/WebSocketContext';
+import { makeDebouncedInvalidator } from '../lib/debouncedInvalidate';
 
 // ============================================================================
 // Server-side shape (what the registry JSON actually contains)
@@ -131,11 +132,23 @@ export interface ServerProviderConfig {
   account_label?: string | null;
   /** Saved rows, for a provider that holds several (server-resolved). */
   endpoints?: ServerEndpointSummary[];
+  /** Server-resolved: the provider is usable right now. Equal to `stored`
+   *  unless the provider declares a live check (WhatsApp's pairing, the
+   *  IMAP/SMTP account's keys). */
+  connected?: boolean;
+  /** Normal-mode Connectors category; providers without one are editor-only. */
+  consumer_category?: string | null;
+  /** One short line for the Normal-mode Connectors card. */
+  description?: string;
+  /** The provider runs on this computer (Ollama, LM Studio). */
+  runs_locally?: boolean;
 }
 
 export interface CatalogueResponse {
   providers: ServerProviderConfig[];
   categories: ServerCategory[];
+  /** Normal-mode Connectors categories (Messages, Organize, Business, AI). */
+  consumer_categories?: ServerCategory[];
   version: string;
 }
 
@@ -174,19 +187,15 @@ export const CATALOGUE_QUERY_KEY = ['credentialCatalogue'] as const;
 // ============================================================================
 
 const CATALOGUE_INVALIDATE_DEBOUNCE_MS = 300;
-let _catalogueInvalidateTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * Request a catalogue refetch, coalesced across rapid bursts of broadcasts.
  * Replaces direct `queryClient.invalidateQueries({ queryKey: CATALOGUE_QUERY_KEY })`.
  */
-export function invalidateCatalogue(queryClient: QueryClient): void {
-  if (_catalogueInvalidateTimer) clearTimeout(_catalogueInvalidateTimer);
-  _catalogueInvalidateTimer = setTimeout(() => {
-    _catalogueInvalidateTimer = null;
-    void queryClient.invalidateQueries({ queryKey: CATALOGUE_QUERY_KEY });
-  }, CATALOGUE_INVALIDATE_DEBOUNCE_MS);
-}
+export const invalidateCatalogue: (queryClient: QueryClient) => void = makeDebouncedInvalidator(
+  CATALOGUE_QUERY_KEY,
+  CATALOGUE_INVALIDATE_DEBOUNCE_MS,
+);
 
 /** IDB key — we only store the current version, overwritten on each update. */
 const IDB_STORAGE_KEY = 'credentials:catalogue:current';
@@ -287,8 +296,20 @@ export type UseCatalogueQueryResult = UseQueryResult<CatalogueResponse, Error> &
  * - Returns the standard TanStack Query shape plus a `refresh()` helper.
  */
 export function useCatalogueQuery(): UseCatalogueQueryResult {
-  const queryClient = useQueryClient();
   const { sendRequest, isReady } = useWebSocket();
+  return useCatalogueQueryCore(sendRequest, isReady);
+}
+
+type SendRequest = <T = any>(type: string, data?: Record<string, any>, timeoutMs?: number) => Promise<T>;
+
+/**
+ * The catalogue query without a context read, for callers that already
+ * hold `sendRequest` / `isReady` from the stable `useWebSocketActions()`
+ * (Normal mode), so they do not re-render on every broadcast the way a
+ * `useWebSocket()` consumer does. Same cache, same persistence.
+ */
+export function useCatalogueQueryCore(sendRequest: SendRequest, isReady: boolean): UseCatalogueQueryResult {
+  const queryClient = useQueryClient();
   const hydratedFromIdbRef = useRef(false);
 
   // Warm start: on first mount, hydrate the TanStack Query cache from IDB.

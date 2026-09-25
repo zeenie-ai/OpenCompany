@@ -47,7 +47,39 @@ interface ModalProps {
   scrollableBody?: boolean;
   /** Optional extra classes for the content panel. */
   className?: string;
+  /**
+   * Render no title bar. `title` still labels the dialog for assistive
+   * tech; the content supplies its own close control (Esc and the scrim
+   * close it either way).
+   */
+  hideHeader?: boolean;
+  /** Icon before the title. Default: the settings gear. `null` shows none. */
+  titleIcon?: React.ReactNode | null;
+  /**
+   * Entrance. `default`: the quick zoom used across the editor. `spring`:
+   * the Normal-mode entrance — the scrim fades in over --dur-scrim-in while
+   * the card rises and scales in over --dur-panel-in on the spring curve,
+   * closing over --dur-panel-out. Under prefers-reduced-motion both are
+   * instant (`!` because the `data-[state]` animation classes are more
+   * specific than a bare `motion-reduce:` utility).
+   */
+  motion?: 'default' | 'spring';
 }
+
+const DEFAULT_TITLE_ICON = <Settings className="h-4 w-4 opacity-70" />;
+
+const OVERLAY_MOTION = {
+  default: '',
+  spring:
+    'data-[state=open]:duration-(--dur-scrim-in) data-[state=closed]:duration-(--dur-panel-out) supports-backdrop-filter:backdrop-blur-scrim motion-reduce:animate-none!',
+} as const;
+
+const CONTENT_MOTION = {
+  default:
+    'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 duration-100',
+  spring:
+    'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-96 data-[state=open]:slide-in-from-bottom-[22px] data-[state=open]:duration-(--dur-panel-in) data-[state=open]:ease-spring data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-96 data-[state=closed]:duration-(--dur-panel-out) motion-reduce:animate-none!',
+} as const;
 
 const Modal: React.FC<ModalProps> = ({
   isOpen,
@@ -60,8 +92,11 @@ const Modal: React.FC<ModalProps> = ({
   autoHeight = false,
   scrollableBody = true,
   className,
+  hideHeader = false,
+  titleIcon = DEFAULT_TITLE_ICON,
+  motion = 'default',
 }) => {
-  const showHeader = Boolean(title || headerActions);
+  const showHeader = !hideHeader && Boolean(title || headerActions);
 
   // Fire per-theme open/close sounds on isOpen transitions only — not
   // on first mount (use a previous-value ref to detect the actual
@@ -81,7 +116,7 @@ const Modal: React.FC<ModalProps> = ({
         {/* bg-bg-overlay reads --bg-overlay (each theme owns its own
             scrim alpha + tone — Renaissance uses ink-brown, Cyber uses
             void-near-black, light/dark use plain blacks). */}
-        <DialogOverlay className="bg-bg-overlay supports-backdrop-filter:backdrop-blur-xs" />
+        <DialogOverlay className={cn('bg-bg-overlay supports-backdrop-filter:backdrop-blur-xs', OVERLAY_MOTION[motion])} />
         <DialogPrimitive.Content
           data-slot="dialog-content"
           className={cn(
@@ -95,9 +130,12 @@ const Modal: React.FC<ModalProps> = ({
             // borders (Plague), gilded corners (Renaissance), neon
             // scanlines (Cyber), double-rule frames (Greek), parchment
             // textures (Renaissance) on the modal content.
+            //
+            // `font-body`: the dialog is portalled to <body>, outside
+            // `.app-frame`, so it would otherwise miss the theme's body face.
             'modal modal-frame',
-            'fixed top-1/2 left-1/2 z-50 flex -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-border-default bg-bg-app shadow-2xl outline-none',
-            'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 duration-100',
+            'fixed top-1/2 left-1/2 z-50 flex -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-border-default bg-bg-app font-body shadow-2xl outline-none',
+            CONTENT_MOTION[motion],
             className
           )}
           style={{
@@ -115,12 +153,13 @@ const Modal: React.FC<ModalProps> = ({
             // Cyber, while staying clean sans-serif under light/dark.
             <div className="modal-head relative flex w-full items-center border-b border-border-default bg-bg-panel px-5 py-3">
               <DialogTitle className="absolute left-5 flex items-center gap-2 font-display text-base font-semibold tracking-[var(--type-tracking-display)] text-fg-default [text-transform:var(--type-uppercase)]">
-                <Settings className="h-4 w-4 opacity-70" />
+                {titleIcon}
                 {title}
               </DialogTitle>
               <div className="flex flex-1 items-center justify-center">{headerActions}</div>
+              {/* No onClick: DialogClose already routes through onOpenChange,
+                  so an explicit onClose here ran the close twice. */}
               <DialogClose
-                onClick={onClose}
                 className="absolute right-5 inline-flex h-8 w-8 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-bg-hover hover:text-fg-default"
                 aria-label="Close"
               >

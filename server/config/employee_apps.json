@@ -1,0 +1,462 @@
+{
+  "_description": "The apps a Normal-mode employee can use, and how each maps onto workflow nodes. Loaded by server/services/employees/apps.py. `provider_id` is the credential catalogue id (config/credential_providers.json) that decides whether the app is connected. `trigger` starts the employee (audience `public`: strangers write in, so replies go back to them; `owner`: only the owner talks to it); `reply` answers whoever wrote in; `notify_owner` reports to the owner; `tools` are handed to the agent, each with the most dangerous thing it can do (`side_effects`: read < write < send < money), because a tool call lets the model choose any operation the node has. Under the `ask first` ground rule no `send` or `money` tool is attached. Parameter strings may use placeholders the graph builder resolves: ${trigger.<field>} (the trigger node's output), ${reply_text} / ${reply_subject} (the approved draft when the approval gate is on, otherwise the agent's response), and ${owner.<field>} (the owner's own address for the app, looked up when the employee is built). Node types, parameter names and trigger output fields are verified against the plugins; see tests/services/employees/test_app_registry.py.",
+  "version": 1,
+  "apps": {
+    "whatsapp": {
+      "name": "WhatsApp",
+      "provider_id": "whatsapp",
+      "aliases": [
+        "whatsapp",
+        "whats app",
+        "wa",
+        "whatsapp personal"
+      ],
+      "trigger": {
+        "type": "whatsappReceive",
+        "audience": "public",
+        "params": {
+          "message_type_filter": "all",
+          "filter": "any_contact",
+          "ignore_own_messages": true,
+          "forwarded_filter": "all"
+        },
+        "prompt": "New WhatsApp message (${trigger.message_type}) from +${trigger.sender_phone}:\n${trigger.text}"
+      },
+      "reply": {
+        "type": "whatsappSend",
+        "params": {
+          "recipient_type": "phone",
+          "phone": "${trigger.sender_phone}",
+          "message_type": "text",
+          "message": "${reply_text}",
+          "format_markdown": true
+        }
+      },
+      "notify_owner": {
+        "type": "whatsappSend",
+        "params": {
+          "recipient_type": "self",
+          "message_type": "text",
+          "message": "${reply_text}",
+          "format_markdown": true
+        }
+      },
+      "tools": [],
+      "side_effects": "send",
+      "phrases": {
+        "when": "When a WhatsApp message arrives",
+        "waiting": "Waiting for new WhatsApp messages",
+        "working": "Answering a WhatsApp message",
+        "reporting": "Sending you an update on WhatsApp"
+      }
+    },
+    "whatsapp_business": {
+      "name": "WhatsApp Business",
+      "provider_id": "whatsapp_business",
+      "aliases": [
+        "whatsapp business",
+        "whatsapp for business",
+        "wa business",
+        "whatsapp cloud"
+      ],
+      "trigger": {
+        "type": "whatsappBusinessReceive",
+        "audience": "public",
+        "params": {},
+        "prompt": "New WhatsApp message from ${trigger.profile_name} (${trigger.from}):\n${trigger.text}"
+      },
+      "reply": {
+        "type": "whatsappBusinessSend",
+        "params": {
+          "operation": "send_text",
+          "to": "${trigger.from}",
+          "text": "${reply_text}",
+          "format_markdown": true
+        }
+      },
+      "notify_owner": null,
+      "tools": [],
+      "side_effects": "send",
+      "phrases": {
+        "when": "When a WhatsApp Business message arrives",
+        "waiting": "Waiting for new WhatsApp Business messages",
+        "working": "Answering a WhatsApp Business message",
+        "reporting": "Sending an update on WhatsApp Business"
+      }
+    },
+    "telegram": {
+      "name": "Telegram",
+      "provider_id": "telegram",
+      "aliases": [
+        "telegram",
+        "telegram bot",
+        "tg"
+      ],
+      "trigger": {
+        "type": "telegramReceive",
+        "audience": "public",
+        "params": {
+          "content_type_filter": "all",
+          "sender_filter": "private",
+          "ignore_bots": true
+        },
+        "prompt": "New Telegram message from ${trigger.from_first_name} (@${trigger.from_username}):\n${trigger.text}"
+      },
+      "reply": {
+        "type": "telegramSend",
+        "params": {
+          "recipient_type": "user",
+          "chat_id": "${trigger.chat_id}",
+          "message_type": "text",
+          "text": "${reply_text}",
+          "parse_mode": "Auto"
+        }
+      },
+      "notify_owner": {
+        "type": "telegramSend",
+        "params": {
+          "recipient_type": "self",
+          "message_type": "text",
+          "text": "${reply_text}",
+          "parse_mode": "Auto"
+        }
+      },
+      "tools": [],
+      "side_effects": "send",
+      "phrases": {
+        "when": "When someone messages your Telegram bot",
+        "waiting": "Waiting for new Telegram messages",
+        "working": "Answering a Telegram message",
+        "reporting": "Sending you an update on Telegram"
+      }
+    },
+    "discord": {
+      "name": "Discord",
+      "provider_id": "discord",
+      "aliases": [
+        "discord",
+        "discord bot",
+        "discord server"
+      ],
+      "trigger": {
+        "type": "discordReceive",
+        "audience": "public",
+        "params": {
+          "scope": "all",
+          "require_mention": false,
+          "require_attachment": false,
+          "ignore_bots": true
+        },
+        "prompt": "New Discord message from ${trigger.author_display_name} in #${trigger.channel_name}:\n${trigger.content}"
+      },
+      "reply": {
+        "type": "discordSend",
+        "params": {
+          "target_type": "channel",
+          "channel_id": "${trigger.channel_id}",
+          "message": "${reply_text}",
+          "reply_to_message_id": "${trigger.message_id}"
+        }
+      },
+      "notify_owner": null,
+      "tools": [],
+      "side_effects": "send",
+      "phrases": {
+        "when": "When a Discord message arrives",
+        "waiting": "Waiting for new Discord messages",
+        "working": "Answering a Discord message",
+        "reporting": "Posting an update on Discord"
+      }
+    },
+    "gmail": {
+      "name": "Gmail",
+      "provider_id": "google",
+      "aliases": [
+        "gmail",
+        "google mail",
+        "email",
+        "e-mail",
+        "mail",
+        "inbox"
+      ],
+      "trigger": {
+        "type": "googleGmailReceive",
+        "audience": "public",
+        "params": {
+          "filter_query": "is:unread",
+          "label_filter": "INBOX",
+          "mark_as_read": false,
+          "poll_interval": 60
+        },
+        "prompt": "New email from ${trigger.from}\nSubject: ${trigger.subject}\n\n${trigger.body}"
+      },
+      "reply": {
+        "type": "googleGmail",
+        "params": {
+          "operation": "send",
+          "to": "${trigger.from}",
+          "subject": "${reply_subject}",
+          "body": "${reply_text}",
+          "body_type": "text"
+        }
+      },
+      "notify_owner": {
+        "type": "googleGmail",
+        "params": {
+          "operation": "send",
+          "to": "${owner.google_email}",
+          "subject": "${reply_subject}",
+          "body": "${reply_text}",
+          "body_type": "text"
+        }
+      },
+      "tools": [],
+      "side_effects": "send",
+      "phrases": {
+        "when": "When a new email arrives in Gmail",
+        "waiting": "Checking your inbox for new email",
+        "working": "Reading a new email",
+        "reporting": "Emailing you an update"
+      }
+    },
+    "outlook": {
+      "name": "Outlook",
+      "provider_id": "microsoft",
+      "aliases": [
+        "outlook",
+        "outlook mail",
+        "microsoft mail",
+        "office 365",
+        "microsoft 365",
+        "hotmail",
+        "email",
+        "mail"
+      ],
+      "trigger": {
+        "type": "msMailReceive",
+        "audience": "public",
+        "params": {
+          "only_unread": true,
+          "folder": "inbox",
+          "mark_as_read": false,
+          "poll_interval": 60
+        },
+        "prompt": "New email from ${trigger.from_name} <${trigger.from}>\nSubject: ${trigger.subject}\n\n${trigger.body}"
+      },
+      "reply": {
+        "type": "msMail",
+        "params": {
+          "operation": "reply",
+          "reply_message_id": "${trigger.message_id}",
+          "comment": "${reply_text}"
+        }
+      },
+      "notify_owner": {
+        "type": "msMail",
+        "params": {
+          "operation": "send",
+          "to": "${owner.microsoft_email}",
+          "subject": "${reply_subject}",
+          "body": "${reply_text}",
+          "body_type": "text"
+        }
+      },
+      "tools": [],
+      "side_effects": "send",
+      "phrases": {
+        "when": "When a new email arrives in Outlook",
+        "waiting": "Checking your Outlook inbox",
+        "working": "Reading a new email",
+        "reporting": "Emailing you an update"
+      }
+    },
+    "email": {
+      "name": "Email",
+      "provider_id": "email_himalaya",
+      "aliases": [
+        "email",
+        "e-mail",
+        "mail",
+        "imap",
+        "smtp",
+        "email account"
+      ],
+      "_trigger_note": "Himalaya's `message read` returns the message as one JSON string, so an item carries `raw` (headers + body) and no parsed sender: an IMAP employee cannot reply to whoever wrote in, and reports to the owner instead (reply is null).",
+      "trigger": {
+        "type": "emailReceive",
+        "audience": "public",
+        "params": {
+          "provider": "${owner.email_provider}",
+          "folder": "INBOX",
+          "mark_as_read": false,
+          "poll_interval": 60
+        },
+        "prompt": "New email:\n${trigger.raw}"
+      },
+      "reply": null,
+      "notify_owner": {
+        "type": "emailSend",
+        "params": {
+          "provider": "${owner.email_provider}",
+          "to": "${owner.email_address}",
+          "subject": "${reply_subject}",
+          "body": "${reply_text}",
+          "body_type": "text"
+        }
+      },
+      "tools": [],
+      "side_effects": "send",
+      "phrases": {
+        "when": "When a new email arrives",
+        "waiting": "Checking your inbox for new email",
+        "working": "Reading a new email",
+        "reporting": "Emailing you an update"
+      }
+    },
+    "google_calendar": {
+      "name": "Google Calendar",
+      "provider_id": "google",
+      "aliases": [
+        "google calendar",
+        "gcal",
+        "calendar",
+        "appointments",
+        "bookings"
+      ],
+      "trigger": null,
+      "reply": null,
+      "notify_owner": null,
+      "tools": [
+        {
+          "type": "googleCalendar",
+          "label": "Calendar",
+          "params": {
+            "operation": "list",
+            "calendar_id": "primary",
+            "send_updates": "none"
+          },
+          "side_effects": "send",
+          "_side_effects_note": "create/update pass send_updates, which the model may set to email invites to attendees."
+        }
+      ],
+      "side_effects": "send",
+      "phrases": {
+        "working": "Checking your calendar"
+      }
+    },
+    "google_drive": {
+      "name": "Google Drive",
+      "provider_id": "google",
+      "aliases": [
+        "google drive",
+        "drive",
+        "gdrive",
+        "documents",
+        "files"
+      ],
+      "trigger": null,
+      "reply": null,
+      "notify_owner": null,
+      "tools": [
+        {
+          "type": "googleDrive",
+          "label": "Drive",
+          "params": {
+            "operation": "list"
+          },
+          "side_effects": "send",
+          "_side_effects_note": "share grants an outside address access and can notify it."
+        }
+      ],
+      "side_effects": "send",
+      "phrases": {
+        "working": "Looking through your Drive"
+      }
+    },
+    "google_sheets": {
+      "name": "Google Sheets",
+      "provider_id": "google",
+      "aliases": [
+        "google sheets",
+        "sheets",
+        "spreadsheet",
+        "spreadsheets"
+      ],
+      "trigger": null,
+      "reply": null,
+      "notify_owner": null,
+      "tools": [
+        {
+          "type": "googleSheets",
+          "label": "Sheets",
+          "params": {
+            "operation": "read"
+          },
+          "side_effects": "write"
+        }
+      ],
+      "side_effects": "write",
+      "phrases": {
+        "working": "Updating your spreadsheet"
+      }
+    },
+    "outlook_calendar": {
+      "name": "Outlook Calendar",
+      "provider_id": "microsoft",
+      "aliases": [
+        "outlook calendar",
+        "microsoft calendar",
+        "office calendar",
+        "calendar"
+      ],
+      "trigger": null,
+      "reply": null,
+      "notify_owner": null,
+      "tools": [
+        {
+          "type": "msCalendar",
+          "label": "Outlook Calendar",
+          "params": {
+            "operation": "list"
+          },
+          "side_effects": "send",
+          "_side_effects_note": "an event created with attendees sends them invitations."
+        }
+      ],
+      "side_effects": "send",
+      "phrases": {
+        "working": "Checking your calendar"
+      }
+    },
+    "stripe": {
+      "name": "Stripe",
+      "provider_id": "stripe",
+      "aliases": [
+        "stripe",
+        "payments",
+        "payment",
+        "invoices",
+        "refunds"
+      ],
+      "_trigger_note": "stripeReceive is not a deployable trigger (constants.WORKFLOW_TRIGGER_TYPES), so Stripe is a tool only.",
+      "trigger": null,
+      "reply": null,
+      "notify_owner": null,
+      "tools": [
+        {
+          "type": "stripeAction",
+          "label": "Stripe",
+          "params": {
+            "command": ""
+          },
+          "side_effects": "money",
+          "_side_effects_note": "one free-form CLI command: charges, refunds and payouts are all reachable."
+        }
+      ],
+      "side_effects": "money",
+      "phrases": {
+        "working": "Looking up payments in Stripe"
+      }
+    }
+  }
+}

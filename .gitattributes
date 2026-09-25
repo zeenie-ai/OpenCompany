@@ -6,3 +6,8 @@ bin/cli.js   text eol=lf
 *.sh         text eol=lf
 *.tftpl      text eol=lf
 *.service    text eol=lf
+
+# Signed brand assets (C2PA manifest over the exact bytes): never normalise
+# line endings, or the signature and the pinned sha256 in
+# client/src/components/brand/__tests__/favicon.test.ts break on checkout.
+client/public/opencompany-icon.svg -text

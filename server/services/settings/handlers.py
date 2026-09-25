@@ -52,9 +52,13 @@ async def handle_save_user_settings(data: Dict[str, Any], websocket: WebSocket) 
     """Save user settings to database."""
     from core.container import container
 
+    from services.settings.profile import normalize_profile_patch
+
     database = container.database()
     user_id = data.get("user_id", "default")
-    settings_data = data.get("settings", {})
+    # Profile text reaches every hired employee's instructions: clean it here.
+    raw = data.get("settings")
+    settings_data = normalize_profile_patch(raw if isinstance(raw, dict) else {})
 
     success = await database.save_user_settings(settings_data, user_id)
 

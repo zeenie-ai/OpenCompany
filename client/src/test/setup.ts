@@ -53,6 +53,21 @@ if (typeof globalThis.IntersectionObserver === 'undefined') {
   globalThis.IntersectionObserver = IntersectionObserverStub;
 }
 
+// jsdom has no canvas backend and logs "Not implemented" on every
+// getContext call. Returning null is what a browser without the requested
+// context does, which is the path the Home orb's WebGL probe falls back from.
+if (typeof HTMLCanvasElement !== 'undefined') {
+  Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+    configurable: true,
+    writable: true,
+    value: () => null,
+  });
+}
+
+// jsdom has no Web Animations either: `Element.animate` is undefined, and
+// lib/motion.ts treats that as "no animation" and returns null. Tests that
+// assert on animations opt in with installWaapiStub() from ./waapi.
+
 // Auto-cleanup React Testing Library between tests
 import { afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';

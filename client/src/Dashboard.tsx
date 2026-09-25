@@ -33,18 +33,16 @@ import { useAppStore } from './store/useAppStore';
 import ComponentPalette from './components/ui/ComponentPalette';
 import TopToolbar from './components/ui/TopToolbar';
 import WorkflowSidebar from './components/ui/WorkflowSidebar';
-import SettingsPanel, { WorkflowSettings, defaultSettings } from './components/ui/SettingsPanel';
 import AIResultModal from './components/ui/AIResultModal';
-import CredentialsModal from './components/CredentialsModal';
 import OnboardingWizard from './components/onboarding/OnboardingWizard';
 import GetStartedChecklist from './components/onboarding/GetStartedChecklist';
-import { useSaveUserSettingsMutation } from './hooks/useUserSettingsQuery';
+import { useShellDialogsStore } from './stores/shellDialogsStore';
 import ErrorBoundary from './components/ui/ErrorBoundary';
 import ConsolePanel from './components/ui/ConsolePanel';
 import CanvasDock from './components/ui/CanvasDock';
 import StatusBar from './components/ui/StatusBar';
 import CommandPaletteHost from './components/ui/CommandPaletteHost';
-import { useSoundSync, withSound } from './hooks/useSound';
+import { withSound } from './hooks/useSound';
 import { useAppTheme } from './hooks/useAppTheme';
 import { useWorkflowManagement } from './hooks/useWorkflowManagement';
 import { useWorkflowsQuery, WORKFLOWS_QUERY_KEY } from './hooks/useWorkflowsQuery';
@@ -60,7 +58,6 @@ import {
   useWebSocket,
   type WorkflowStartResult,
 } from './contexts/WebSocketContext';
-import { useNodeStatusStore } from './stores/nodeStatusStore';
 import {
   sanitizeNodesForComparison,
   sanitizeEdgesForComparison,
@@ -191,21 +188,20 @@ const DashboardContent: React.FC = () => {
   const renamingNodeId = useAppStore((s) => s.renamingNodeId);
   const setRenamingNodeId = useAppStore((s) => s.setRenamingNodeId);
   const openExampleAndChat = useAppStore((s) => s.openExampleAndChat);
-  const saveUserSettings = useSaveUserSettingsMutation();
+  // App-level dialogs live in the shell (app/AppShell) so either screen can
+  // open them.
+  const openSettings = useShellDialogsStore((s) => s.openSettings);
+  const openCredentials = useShellDialogsStore((s) => s.openCredentials);
+  const onboardingReplay = useShellDialogsStore((s) => s.onboardingReplay);
   // Per-workflow UI state (n8n pattern)
   const setWorkflowExecuting = useAppStore((s) => s.setWorkflowExecuting);
   const setWorkflowExecutionOrder = useAppStore((s) => s.setWorkflowExecutionOrder);
   const setWorkflowViewport = useAppStore((s) => s.setWorkflowViewport);
   const clearWorkflowExecutionState = useAppStore((s) => s.clearWorkflowExecutionState);
-  
-  // Single source-to-store sync: push currentWorkflow.id into the
-  // node-status Zustand store from the canonical app store. Previously
-  // this was mirrored from inside WebSocketProvider; consolidating here
-  // removes the multi-mirror gap that left broadcasts landing in the
-  // wrong workflow bucket during workflow switches.
-  useEffect(() => {
-    useNodeStatusStore.getState().setCurrentWorkflowId(currentWorkflow?.id);
-  }, [currentWorkflow?.id]);
+
+  // The node-status store's current-workflow sync, the status resync on
+  // reconnect, sound sync, page-activity tracking and the UI-defaults load
+  // run in the app shell (app/AppShell), so they hold on either screen.
 
   // ReactFlow state management (local state for performance)
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -238,8 +234,7 @@ const DashboardContent: React.FC = () => {
   } = useWorkflowManagement();
 
   const { collapsedSections, searchQuery, setSearchQuery, toggleSection } = useComponentPalette();
-  const { saveNodeParameters, getAllNodeParameters, executeWorkflow, getWorkflowStatus, nodeStatuses, deploymentStatus, workflowControlStatuses, workflowControlPending, startWorkflow, pauseWorkflow, resumeWorkflow, resetWorkflow, getWorkflowControlStatus, workflowLock, isConnected, isReady, sendRequest, clearNodeStatus } = useWebSocket();
-  const applyUIDefaults = useAppStore((state) => state.applyUIDefaults);
+  const { saveNodeParameters, getAllNodeParameters, executeWorkflow, nodeStatuses, deploymentStatus, workflowControlStatuses, workflowControlPending, startWorkflow, pauseWorkflow, resumeWorkflow, resetWorkflow, getWorkflowControlStatus, workflowLock, isReady, sendRequest, clearNodeStatus } = useWebSocket();
 
   // Workflows list: server-owned data, cached by TanStack Query.
   const queryClient = useQueryClient();
@@ -392,87 +387,11 @@ const DashboardContent: React.FC = () => {
 
   // Note: executedNodes and executionOrder are now derived from per-workflow state above
 
-  // Settings state with localStorage persistence
-  const [settings, setSettings] = React.useState<WorkflowSettings>(() => {
-    try {
-      const saved = localStorage.getItem('workflow_settings');
-      return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings;
-    } catch {
-      return defaultSettings;
-    }
-  });
-  const [settingsOpen, setSettingsOpen] = React.useState(false);
-  const [credentialsOpen, setCredentialsOpen] = React.useState(false);
-  const [onboardingReopenTrigger, setOnboardingReopenTrigger] = React.useState(0);
   const [commandPaletteOpen, setCommandPaletteOpen] = React.useState(false);
 
   // Console panel visibility from store (database-backed)
   const consolePanelVisible = useAppStore((state) => state.consolePanelVisible);
   const toggleConsolePanelVisible = useAppStore((state) => state.toggleConsolePanelVisible);
-
-  // Sound effects: mirror the soundEnabled slice into the WebAudio
-  // engine and re-read --sound-pack from :root on every theme change.
-  // Mounting once here keeps every event handler that calls useSound()
-  // in lockstep with the active theme + user preference.
-  useSoundSync();
-
-  // Wave 33: pause CSS animations while the tab is in the background.
-  //
-  // Without this, browsers continue advancing CSS animation timing on
-  // hidden tabs (RAF is throttled to ~1Hz but `animation` keyframes
-  // accumulate paused frames in the compositor's queue). When the user
-  // returns, all 50+ executing nodes' three-layer box-shadow `node-pulse`
-  // animations resume simultaneously and the GPU compositor stalls for
-  // 100-200ms blending the paused frames + Cyber theme's full-viewport
-  // `cyber-flicker` / `cyber-roll` decorations. During the stall, input
-  // events queue but don't dispatch — first click on tab return appears
-  // unresponsive until the composite pass finishes (then the second
-  // click works, hence the "wakes up on interaction" pattern).
-  //
-  // Setting `animation-play-state: paused` on every element via a CSS
-  // rule keyed off `<html data-page-hidden>` flushes the queue. The
-  // requestAnimationFrame on resume defers the unpause until after the
-  // first input is ready to dispatch (one frame's delay, imperceptible).
-  useEffect(() => {
-    const root = document.documentElement;
-    // Wave 33+: visibilitychange alone misses window-minimize on Windows
-    // and "switch app" on macOS — neither always fires the Page
-    // Visibility API event. window.blur / window.focus do fire in those
-    // cases, so we drive the same flag off both signals. The flag
-    // toggles based on whichever signal indicates "not interactive":
-    // either the tab is hidden OR the window has lost focus.
-    let blurred = false;
-    const setHidden = (hidden: boolean) => {
-      if (hidden) {
-        root.setAttribute('data-page-hidden', '');
-      } else {
-        // Double rAF so the browser has two frames to clear the input
-        // dispatch queue before composite resumes — first click after
-        // return is then guaranteed to land before paused-frame flush.
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            // Only remove if the page is genuinely active again — a fast
-            // tab switch could fire blur+focus in tight succession and
-            // we'd otherwise race the second rAF.
-            if (!document.hidden && !blurred) {
-              root.removeAttribute('data-page-hidden');
-            }
-          });
-        });
-      }
-    };
-    const onVisibility = () => setHidden(document.hidden || blurred);
-    const onBlur = () => { blurred = true; setHidden(true); };
-    const onFocus = () => { blurred = false; setHidden(document.hidden); };
-    document.addEventListener('visibilitychange', onVisibility);
-    window.addEventListener('blur', onBlur);
-    window.addEventListener('focus', onFocus);
-    return () => {
-      document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('blur', onBlur);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, []);
 
   // Context menu state for node right-click
   const [contextMenu, setContextMenu] = React.useState<{
@@ -480,68 +399,6 @@ const DashboardContent: React.FC = () => {
     x: number;
     y: number;
   } | null>(null);
-
-  // Persist settings to localStorage
-  React.useEffect(() => {
-    localStorage.setItem('workflow_settings', JSON.stringify(settings));
-  }, [settings]);
-
-  // Resync per-workflow execution status whenever the WS connection becomes
-  // ready or the current workflow changes.  Closes the gap where a mid-run
-  // reconnect or a workflow switch left the toolbar Start/Stop button stale
-  // because broadcasts only fire on transitions, not on join.
-  React.useEffect(() => {
-    if (!isReady || !currentWorkflow?.id) return;
-    const wfId = currentWorkflow.id;
-    let cancelled = false;
-    (async () => {
-      try {
-        const [{ executing }] = await Promise.all([
-          getWorkflowStatus(wfId),
-          getWorkflowControlStatus(wfId),
-        ]);
-        if (cancelled) return;
-        useAppStore.getState().setWorkflowExecuting(wfId, executing);
-      } catch {
-        // Silent: the next broadcast will resync; this is opportunistic.
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [isReady, currentWorkflow?.id, getWorkflowStatus, getWorkflowControlStatus]);
-
-  // Load UI defaults from database on initial WebSocket connection
-  const hasLoadedUIDefaults = React.useRef(false);
-  React.useEffect(() => {
-    if (!isConnected || hasLoadedUIDefaults.current) return;
-    hasLoadedUIDefaults.current = true;
-
-    const loadUIDefaults = async () => {
-      try {
-        const response = await sendRequest<{ settings: any }>('get_user_settings', {});
-        if (response?.settings) {
-          applyUIDefaults({
-            sidebarDefaultOpen: response.settings.sidebar_default_open,
-            componentPaletteDefaultOpen: response.settings.component_palette_default_open,
-            consolePanelDefaultOpen: response.settings.console_panel_default_open,
-          });
-          // Also update local settings state for auto-save preferences
-          setSettings(prev => ({
-            ...prev,
-            autoSave: response.settings.auto_save ?? prev.autoSave,
-            autoSaveInterval: response.settings.auto_save_interval ?? prev.autoSaveInterval,
-            sidebarDefaultOpen: response.settings.sidebar_default_open ?? prev.sidebarDefaultOpen,
-            componentPaletteDefaultOpen: response.settings.component_palette_default_open ?? prev.componentPaletteDefaultOpen,
-            consolePanelDefaultOpen: response.settings.console_panel_default_open ?? prev.consolePanelDefaultOpen,
-          }));
-          console.log('[Dashboard] UI defaults loaded from database');
-        }
-      } catch (error) {
-        console.error('[Dashboard] Failed to load UI defaults:', error);
-      }
-    };
-
-    loadUIDefaults();
-  }, [isConnected, sendRequest, applyUIDefaults]);
 
   // Wave 6 Phase 2: warm the NodeSpec cache in the background once the
   // WS is up. No-op when VITE_NODESPEC_BACKEND is off. After prefetch
@@ -1191,6 +1048,33 @@ const DashboardContent: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [nodes, edges, currentWorkflow?.id, updateWorkflow]);
 
+  // Leaving the editor (switching to Normal mode) unmounts it. The last
+  // canvas edits may still be inside the debounce window above, so flush
+  // them into the store, and keep the viewport for the next visit.
+  const latestCanvasRef = React.useRef({ nodes, edges });
+  useEffect(() => {
+    latestCanvasRef.current = { nodes, edges };
+  }, [nodes, edges]);
+  useEffect(() => () => {
+    const store = useAppStore.getState();
+    const workflow = store.currentWorkflow;
+    if (!workflow?.id) return;
+    const latest = latestCanvasRef.current;
+    try {
+      const changed =
+        JSON.stringify(sanitizeNodesForComparison(latest.nodes)) !== JSON.stringify(sanitizeNodesForComparison(workflow.nodes || []))
+        || JSON.stringify(sanitizeEdgesForComparison(latest.edges)) !== JSON.stringify(sanitizeEdgesForComparison(workflow.edges || []));
+      if (changed) store.updateWorkflow({ nodes: latest.nodes, edges: latest.edges });
+    } catch (error) {
+      console.warn('Failed to flush canvas state on unmount:', error);
+    }
+    try {
+      store.setWorkflowViewport(workflow.id, reactFlowInstance.getViewport());
+    } catch {
+      // The viewport is a convenience; a failed read keeps the last one.
+    }
+  }, []);
+
   // Track previous workflow ID for viewport save/restore (n8n pattern)
   const prevWorkflowIdRef = React.useRef<string | null>(null);
   // Track if we've already restored viewport for current workflow (prevent duplicate restores)
@@ -1368,19 +1252,9 @@ const DashboardContent: React.FC = () => {
   return (
     <>
       <style>{canvasCss}</style>
-      {/* `app-frame` is the decorative-layer hook from the design handoff —
-          per-theme CSS files target this class for outer ornaments
-          (gilded corners under Renaissance, scanline overlay + corner
-          brackets under Cyber, riveted ridged frame under Steampunk,
-          REC dot under Surveillance, etc.). Decorations declare
-          pointer-events: none so they don't intercept clicks. */}
-      <div className="app-frame bg-bg-app" style={{
-        width: '100%',
-        height: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        fontFamily: 'var(--font-body)',
-      }}>
+      {/* The shell (app/AppShell) owns the `.app-frame` decorative layer
+          around both screens; the editor fills it. */}
+      <div className="flex min-h-0 w-full flex-1 flex-col">
         {/* Top Toolbar */}
         <TopToolbar
           workflowName={currentWorkflow?.name || 'Untitled Workflow'}
@@ -1406,8 +1280,8 @@ const DashboardContent: React.FC = () => {
           onToggleComponentPalette={toggleComponentPalette}
           proMode={proMode}
           onToggleProMode={toggleProMode}
-          onOpenSettings={() => setSettingsOpen(true)}
-          onOpenCredentials={() => setCredentialsOpen(true)}
+          onOpenSettings={openSettings}
+          onOpenCredentials={openCredentials}
           onExportJSON={handleExportJSON}
           onExportFile={handleExportFile}
           onImportJSON={handleImportJSON}
@@ -1570,8 +1444,8 @@ const DashboardContent: React.FC = () => {
             workflowControlPending: workflowControlPendingMutation,
             exportFile: handleExportFile,
             importJSON: handleImportJSON,
-            openSettings: () => setSettingsOpen(true),
-            openCredentials: () => setCredentialsOpen(true),
+            openSettings,
+            openCredentials,
             toggleSidebar,
             toggleComponentPalette,
             toggleConsolePanel: toggleConsolePanelVisible,
@@ -1592,39 +1466,18 @@ const DashboardContent: React.FC = () => {
           result={executionResult}
         />
 
-        {/* Settings Panel Modal */}
-        <SettingsPanel
-          isOpen={settingsOpen}
-          onClose={() => setSettingsOpen(false)}
-          settings={settings}
-          onSettingsChange={setSettings}
-          onReplayOnboarding={() => {
-            setSettingsOpen(false);
-            setOnboardingReopenTrigger(prev => prev + 1);
-          }}
-          onShowGetStarted={() => {
-            saveUserSettings.mutate({ getting_started_dismissed: false });
-            setSettingsOpen(false);
-          }}
-        />
-
-        {/* Credentials Modal */}
-        <CredentialsModal
-          visible={credentialsOpen}
-          onClose={() => setCredentialsOpen(false)}
-        />
-
-        {/* Onboarding Wizard */}
+        {/* Onboarding Wizard (editor only; Settings and Credentials are
+            shell dialogs, see app/AppShell). */}
         <OnboardingWizard
-          onOpenCredentials={() => setCredentialsOpen(true)}
-          reopenTrigger={onboardingReopenTrigger}
+          onOpenCredentials={openCredentials}
+          reopenTrigger={onboardingReplay}
           onFinish={() => void handleRunExample()}
         />
 
         {/* Get Started checklist (appears after onboarding completes) */}
         <GetStartedChecklist
           actions={{
-            'add-key': () => setCredentialsOpen(true),
+            'add-key': openCredentials,
             'chat-example': () => void handleRunExample(),
             'build-workflow': handleNew,
           }}

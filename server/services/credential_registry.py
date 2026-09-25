@@ -155,6 +155,17 @@ class CredentialRegistry:
         out.sort(key=lambda c: (c["order"], c["key"]))
         return out
 
+    def get_consumer_categories(self) -> List[Dict[str, Any]]:
+        """Ordered Normal-mode Connectors categories (Messages, Organize,
+        Business, AI). Only providers with a matching ``consumer_category``
+        appear in Normal mode; the rest stay editor-only."""
+        categories = self._load_raw().get("consumer_categories", {})
+        if not isinstance(categories, dict):
+            return []
+        out = [{"key": key, "label": cfg.get("label", key), "order": cfg.get("order", 0)} for key, cfg in categories.items()]
+        out.sort(key=lambda c: (c["order"], c["key"]))
+        return out
+
     def get_version(self) -> str:
         """Content-sha256 of the resolved catalogue (providers + categories +
         mutation counter).
@@ -176,11 +187,22 @@ class CredentialRegistry:
             payload = {
                 "providers": self.get_all_providers(),
                 "categories": self.get_categories(),
+                "consumer_categories": self.get_consumer_categories(),
                 "mutation_seq": self._mutation_seq,
             }
             encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
             self._version = hashlib.sha256(encoded).hexdigest()
         return self._version
+
+    def get_live_version(self) -> str:
+        """``get_version()`` plus the live state behind status-backed
+        ``connected_check``s (WhatsApp pairing), which changes with no
+        credential mutation. This is the version the catalogue handler
+        serves and compares ``since`` against, so a revalidating client
+        refetches when a pairing comes or goes."""
+        base = self.get_version()
+        live = _status_fingerprint(self.get_all_providers())
+        return f"{base}+{live}" if live else base
 
     def invalidate_version(self) -> None:
         """Bump the mutation counter so the next ``get_version()`` returns a
@@ -197,6 +219,7 @@ class CredentialRegistry:
         return {
             "providers": self.get_all_providers(),
             "categories": self.get_categories(),
+            "consumer_categories": self.get_consumer_categories(),
             "version": self.get_version(),
         }
 
@@ -280,3 +303,117 @@ def _merge_array_by_key(parent: List[Any], child: List[Any]) -> List[Any]:
 def get_credential_registry() -> CredentialRegistry:
     """Return the process-wide CredentialRegistry singleton."""
     return CredentialRegistry.get_instance()
+
+
+# ----- live connection state -----
+
+
+def _status_slot_on(check: Dict[str, Any]) -> bool:
+    from services.status_broadcaster import get_status_broadcaster
+
+    slot = get_status_broadcaster().get_status().get(str(check.get("key", "")))
+    return isinstance(slot, dict) and bool(slot.get(str(check.get("field", "connected"))))
+
+
+def _status_fingerprint(providers: List[Dict[str, Any]]) -> str:
+    """``id=0|1`` for every provider whose ``connected_check`` reads a live
+    status slot; empty when there are none."""
+    parts = []
+    for provider in providers:
+        check = provider.get("connected_check") or {}
+        if check.get("type") == "status":
+            parts.append(f"{provider.get('id', '')}={int(_status_slot_on(check))}")
+    return ",".join(sorted(parts))
+
+
+async def _connected_check(check: Dict[str, Any], auth_service: Any) -> bool:
+    """Evaluate a provider's declarative ``connected_check``.
+
+    ``{"type": "status", "key": K, "field": F}``: the live status slot the
+    provider's plugin keeps on the status broadcaster (WhatsApp's pairing).
+    ``{"type": "api_keys", "keys": [...]}``: every listed key is stored
+    (the IMAP/SMTP account, which is several keys and no OAuth token).
+    """
+    kind = check.get("type")
+    if kind == "status":
+        return _status_slot_on(check)
+    if kind == "api_keys":
+        keys = check.get("keys") or []
+        if not keys:
+            return False
+        for key in keys:
+            if not await auth_service.has_valid_key(str(key)):
+                return False
+        return True
+    logger.warning("Unknown connected_check type in credential_providers.json", check_type=kind)
+    return False
+
+
+async def provider_connection_state(provider: Dict[str, Any], auth_service: Any) -> Dict[str, Any]:
+    """Live credential state for one resolved catalogue provider.
+
+    Returns ``{"stored", "connected", "account_label"}`` plus whatever the
+    plugin's Credential class adds through ``catalogue_extras`` (which may
+    replace ``stored``, e.g. several named OpenAI-compatible endpoints).
+
+    ``stored``: a key or token is saved. ``connected``: the provider is
+    usable right now. They are the same unless the provider declares a
+    ``connected_check``; a provider with no stored credential of its own
+    (the IMAP/SMTP account) takes ``stored`` from that check too.
+
+    Shared by the ``get_credential_catalogue`` handler and the Normal-mode
+    employee summaries, so both answer "is this app connected" the same way.
+    """
+    from services.plugin.credential import CREDENTIAL_REGISTRY
+
+    pid = provider.get("id", "")
+    kind = provider.get("kind", "")
+    status_hook = provider.get("status_hook")
+    check = provider.get("connected_check")
+
+    state: Dict[str, Any] = {}
+    tokens = None
+    checked: Dict[str, bool] = {}
+
+    async def check_passes() -> bool:
+        if "result" not in checked:
+            checked["result"] = await _connected_check(check, auth_service)
+        return checked["result"]
+
+    # Declarative per-provider override for the "stored" check. Lets Telegram
+    # (kind=oauth + status_hook, but the bot token is stored as an api key)
+    # report key presence instead of the default get_oauth_tokens(status_hook)
+    # lookup. Providers without it keep the kind/status_hook logic, so
+    # Google's saved client secret does NOT read as connected before the
+    # OAuth flow completes.
+    stored_check = provider.get("stored_check")
+    if stored_check and stored_check.get("type") == "api_key":
+        state["stored"] = await auth_service.has_valid_key(stored_check.get("key", pid))
+    elif status_hook:
+        # Status-hook providers (whatsapp, android, twitter, google,
+        # claude_code, codex_cli) use OAuth tokens for the connection state.
+        tokens = await auth_service.get_oauth_tokens(status_hook)
+        state["stored"] = tokens is not None
+    elif kind == "apiKey":
+        state["stored"] = await auth_service.has_valid_key(pid)
+    elif kind == "oauth":
+        tokens = await auth_service.get_oauth_tokens(pid)
+        state["stored"] = tokens is not None
+    elif check:
+        state["stored"] = await check_passes()
+    else:
+        state["stored"] = False
+
+    # "Connected as foo@bar.com" without a per-provider status hook: Twitter,
+    # Google, Stripe and Claude all populate email / name via
+    # auth_service.store_oauth_tokens.
+    state["account_label"] = (tokens.get("email") or tokens.get("name")) if tokens else None
+
+    cred_cls = CREDENTIAL_REGISTRY.get(pid)
+    if cred_cls is not None:
+        extras = await cred_cls.catalogue_extras()
+        if extras:
+            state.update(extras)
+
+    state["connected"] = await check_passes() if check else bool(state.get("stored"))
+    return state

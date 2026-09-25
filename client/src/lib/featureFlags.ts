@@ -31,6 +31,14 @@ export const featureFlags = {
    *  the legacy `client/src/nodeDefinitions/*.ts` read path (useful
    *  as a kill-switch if you hit an adapter regression). */
   nodeSpecBackend: !isFalsy(readEnv('VITE_NODESPEC_BACKEND')),
+  /** Normal mode ("Home"): the owner-facing landing screen where AI
+   *  employees are hired and supervised, with the workflow editor as Dev
+   *  mode; the Normal/Dev switch (editor toolbar, Home header, Ctrl/Cmd +
+   *  Shift + D) moves between the two. On by default. Set
+   *  `VITE_NORMAL_MODE=false` in `.env.local` to turn it off: the app then
+   *  opens straight into the editor and the switch only filters the
+   *  component palette, as it did before Home existed. */
+  normalMode: !isFalsy(readEnv('VITE_NORMAL_MODE')),
 } as const;
 
 export type FeatureFlags = typeof featureFlags;

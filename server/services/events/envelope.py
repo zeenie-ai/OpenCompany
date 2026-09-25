@@ -207,6 +207,8 @@ class WorkflowEvent(BaseModel):
             "execution.stopped",
             "imported",
             "renamed",
+            "created",
+            "deleted",
         ],
         *,
         workflow_id: str,
@@ -221,6 +223,11 @@ class WorkflowEvent(BaseModel):
         after the new workflow is persisted. Frontend listeners invalidate
         the workflows query so the sidebar picks up the new entry across
         all connected clients (browser tabs).
+
+        ``created`` / ``deleted`` fire from the workflow storage handlers
+        (a brand-new save, a delete through either surface) so every
+        client's workflow list refreshes: the editor sidebar and Normal
+        mode's team, where each workflow is an employee.
 
         ``renamed`` fires from the ``rename_workflow`` WebSocket
         handler. ``data`` carries ``{name, slug, old_slug}`` so the

@@ -118,6 +118,99 @@
   /* Declared per-theme as motion metadata; currently unread by any rule. */
   --motion-style: smooth;
 
+  /* ── Home (Normal mode) motion — design handoff
+   * (design_handoff_opencompany_home/tokens/tokens.css). Named curves and
+   * choreography durations, read by client/src/lib/motion.ts so every
+   * Web Animations call goes through a token. Themes may retune any of
+   * them in their own scope. ─────────────────────────────────────────── */
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);      /* entrances, panels */
+  --ease-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1); /* pops (logo, nodes) */
+  --ease-reveal: cubic-bezier(0.65, 0, 0.35, 1);    /* theme wipe */
+  --dur-intro: 720ms;
+  --dur-card-in: 700ms;
+  --dur-view-swap: 520ms;
+  --dur-panel-in: 520ms;
+  --dur-panel-out: 200ms;
+  --dur-scrim-in: 280ms;
+  --dur-sidebar-in: 380ms;
+  --dur-sidebar-out: 300ms;
+  --dur-toast-in: 420ms;
+  --dur-toast-hold: 2600ms;
+  --dur-toast-out: 240ms;
+  --dur-mode-out: 240ms;
+  --dur-mode-in: 420ms;
+  --dur-theme-reveal: 760ms;
+  --dur-theme-icon: 700ms;
+  --dur-theme-fade: 460ms;
+  --dur-glow: 1400ms;
+  --dur-pip-loop: 1600ms;
+  --dur-switch: 280ms;       /* switch knob travel */
+  --stagger-intro: 80ms;
+  --stagger-settings: 30ms;
+  --blur-scrim: 6px;         /* backdrop blur behind Home dialogs */
+
+  /* ── Home radii — multiples of the per-theme --radius-lg (8px in light and
+   * dark), so the themes that square their corners off (edo 0, greek 2px)
+   * stay square instead of growing pills. ─────────────────────────────── */
+  --radius-row: calc(var(--radius-lg, 8px) * 1.25);      /* 10 — rows, tiles */
+  --radius-card: calc(var(--radius-lg, 8px) * 1.5);      /* 12 — cards */
+  --radius-panel: calc(var(--radius-lg, 8px) * 2);       /* 16 — settings */
+  --radius-draft: calc(var(--radius-lg, 8px) * 2.25);    /* 18 — draft, employee card */
+  --radius-composer: calc(var(--radius-lg, 8px) * 2.75); /* 22 — composer */
+
+  /* ── Home type steps (the base scale above covers 11/12/13/14/16/18). */
+  --text-meta: 12.5px;
+  --text-row: 13.5px;
+  --text-lead: 15px;
+  --text-title: 22px;
+  --text-hero: 36px;
+  --tracking-hero: -0.025em;
+  --tracking-wordmark: -0.025em;
+  --leading-hero: 1.15;
+
+  /* ── Home layout constants ─────────────────────────────────────────── */
+  --w-home-sidebar: 260px;
+  --h-home-header: 52px;
+  --w-home-content: 1000px;
+  --w-composer: 740px;
+  --h-composer-max: 200px;   /* the job box grows with its text up to this */
+  --w-employee-card: 620px;
+  --size-orb-hire: min(230px, 26vh);
+  --size-orb-employee: min(150px, 20vh);
+  --w-settings: 920px;
+  --h-settings: 680px;
+  --w-settings-nav: 200px;
+
+  /* Working-status pip ring (the pulsing halo around a working employee). */
+  --tint-pip-ring: 55%;
+
+  /* ── Employee status (Normal mode). The dot is the raw role colour; the
+   * pill tints it (fill 12%, border 45%) and reads in the role's ink, which
+   * the light family darkens. working=tool, ready=model, attention=trigger,
+   * waiting (a draft needs the owner)=workflow; paused is neutral. ───── */
+  --tint-status-fill: 12%;
+  --tint-status-border: 45%;
+  --status-working-dot: var(--dracula-green);
+  --status-working-ink: var(--node-tool-ink);
+  --status-working-fill: color-mix(in srgb, var(--status-working-dot) var(--tint-status-fill), transparent);
+  --status-working-border: color-mix(in srgb, var(--status-working-dot) var(--tint-status-border), transparent);
+  --status-ready-dot: var(--dracula-cyan);
+  --status-ready-ink: var(--node-model-ink);
+  --status-ready-fill: color-mix(in srgb, var(--status-ready-dot) var(--tint-status-fill), transparent);
+  --status-ready-border: color-mix(in srgb, var(--status-ready-dot) var(--tint-status-border), transparent);
+  --status-paused-dot: var(--fg-muted);
+  --status-paused-ink: var(--fg-muted);
+  --status-paused-fill: color-mix(in srgb, var(--status-paused-dot) var(--tint-status-fill), transparent);
+  --status-paused-border: color-mix(in srgb, var(--status-paused-dot) var(--tint-status-border), transparent);
+  --status-attention-dot: var(--dracula-pink);
+  --status-attention-ink: var(--node-trigger-ink);
+  --status-attention-fill: color-mix(in srgb, var(--status-attention-dot) var(--tint-status-fill), transparent);
+  --status-attention-border: color-mix(in srgb, var(--status-attention-dot) var(--tint-status-border), transparent);
+  --status-waiting-dot: var(--dracula-orange);
+  --status-waiting-ink: var(--node-workflow-ink);
+  --status-waiting-fill: color-mix(in srgb, var(--status-waiting-dot) var(--tint-status-fill), transparent);
+  --status-waiting-border: color-mix(in srgb, var(--status-waiting-dot) var(--tint-status-border), transparent);
+
   /* Sound (read by JS in a future phase) */
   --sound-pack: none;
 

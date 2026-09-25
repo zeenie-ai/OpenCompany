@@ -38,13 +38,14 @@ interface NodeAllowlistResponse {
  *     fire — without groups, only exact-type matches catch.
  *
  *   `isAllowed(nodeType)` — positive allowlist. Driven by `enabled_nodes`.
- *     `show_all=true` (empty list) returns true for everything. Call
- *     sites typically gate this on `!proMode` so dev mode bypasses
- *     the allowlist.
+ *     `show_all=true` (empty list) returns true for everything. With
+ *     Normal mode on (featureFlags.normalMode) the list governs what
+ *     Hire may build (the server enforces it) and the editor palette
+ *     ignores it; with the flag off the palette applies it in its Normal
+ *     filter and Dev bypasses it.
  *
  *   `isVisible(nodeType, groups?)` — convenience: `!isBlocked && isAllowed`.
- *     Use when proMode doesn't matter (every surface SHOULD respect
- *     both layers).
+ *     Use where both layers apply.
  *
  * While the response is loading, all checks return permissively (no
  * palette flash). Both blocklists default to empty when the backend
@@ -111,9 +112,8 @@ export const useNodeAllowlist = () => {
   );
 
   /** Convenience: hidden if blocked OR not allowed. Honors both layers
-   *  unconditionally — call sites that want to bypass the allowlist
-   *  in dev mode should call isBlocked directly and short-circuit
-   *  the allowlist when proMode is true. */
+   *  unconditionally — call sites that bypass the allowlist (the editor
+   *  palette) call isBlocked directly instead. */
   const isVisible = useCallback(
     (nodeType: string, groups?: string[] | readonly string[]): boolean => {
       if (isBlocked(nodeType, groups)) return false;

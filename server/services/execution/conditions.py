@@ -114,6 +114,42 @@ def evaluate_condition(condition: ConditionDict, output: Dict[str, Any]) -> bool
         return False
 
 
+# Fields that name the node-result envelope rather than the node's own data.
+# Temporal keeps each node's whole activity result (``{success, result, ...}``)
+# and evaluates edge conditions against it, so a condition written for the
+# shipped path reads ``result.<field>`` (tests/temporal/test_conditional_edges.py
+# locks that). The in-process executor and the sequential fallback keep only
+# the inner result, so the same condition used to miss there.
+ENVELOPE_FIELDS = frozenset({"success", "result"})
+
+
+def evaluate_edge_condition(
+    condition: ConditionDict,
+    *,
+    envelope: Dict[str, Any],
+    inner: Any,
+) -> bool:
+    """Evaluate an edge condition the same way on every execution path.
+
+    ``success``, ``result`` and ``result.*`` are read from the envelope, which
+    is what Temporal evaluates against; every other field is read from the
+    node's own result. The rule is decided by the field alone, never by trying
+    both, so a path cannot silently change which value a condition sees.
+
+    Args:
+        condition: Condition dict with field, operator, value.
+        envelope: The ``{success, result}`` envelope of the source node, or an
+            empty dict when the source did not complete (skipped or failed).
+        inner: The source node's own result.
+    """
+    if not condition:
+        return True
+    field = str(condition.get("field") or "")
+    head = field.split(".", 1)[0]
+    source = envelope if head in ENVELOPE_FIELDS else inner
+    return evaluate_condition(condition, source)
+
+
 def _evaluate_operator(operator: str, actual: Any, target: Any) -> bool:
     """Evaluate a single operator.
 

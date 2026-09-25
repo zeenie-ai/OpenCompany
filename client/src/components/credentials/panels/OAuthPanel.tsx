@@ -11,8 +11,13 @@ import { ApiUsageSection } from '../sections';
 import { NodeIcon } from '../../../assets/icons';
 import { theme } from '../../../styles/theme';
 import type { ProviderConfig } from '../types';
+import type { PanelVariant } from '../PanelRenderer';
 
-const OAuthPanel: React.FC<{ config: ProviderConfig; visible: boolean }> = ({ config, visible }) => {
+const OAuthPanel: React.FC<{ config: ProviderConfig; visible: boolean; variant?: PanelVariant }> = ({
+  config,
+  visible,
+  variant = 'full',
+}) => {
   const panel = useCredentialPanel(config, visible);
   const status = useProviderStatus(config.statusHook);
   // Providers without a registered status hook (e.g. CLI-managed auth
@@ -54,7 +59,9 @@ const OAuthPanel: React.FC<{ config: ProviderConfig; visible: boolean }> = ({ co
         onLogin={() => panel.actions.oauthLogin()}
         onLogout={() => panel.actions.oauthLogout()}
         onRefresh={() => panel.actions.oauthRefresh()}
-        extraSection={config.usageService && <ApiUsageSection service={config.usageService} serviceName={config.name} />}
+        extraSection={
+          variant === 'full' && config.usageService && <ApiUsageSection service={config.usageService} serviceName={config.name} />
+        }
       />
     </div>
   );

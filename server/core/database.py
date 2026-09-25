@@ -51,6 +51,13 @@ from models.database import (
 from models.agent_context import (  # noqa: F401 - registers SQLModel tables
     AgentConversation,
 )
+from models.employees import (  # noqa: F401 - registers SQLModel tables
+    Employee,
+    WorkflowRunRecord,
+)
+from models.approvals import (  # noqa: F401 - registers SQLModel tables
+    ApprovalRequest,
+)
 from models.cache import CacheEntry  # SQLite-backed cache for Redis alternative
 from core.logging import get_logger
 
@@ -259,6 +266,24 @@ class Database:
                         await conn.execute(text(f"ALTER TABLE user_settings ADD COLUMN {col} BOOLEAN DEFAULT 0"))
                         logger.info(f"Added {col} column to user_settings")
 
+                # Owner profile (Normal mode). Text columns start empty; the
+                # two switches take the model default for existing rows.
+                for col, length in [
+                    ("profile_full_name", 100),
+                    ("profile_call_name", 60),
+                    ("profile_role", 100),
+                    ("profile_preferences", 2000),
+                    ("profile_timezone", 64),
+                ]:
+                    if col not in columns:
+                        await conn.execute(text(f"ALTER TABLE user_settings ADD COLUMN {col} VARCHAR({length})"))
+                        logger.info(f"Added {col} column to user_settings")
+                for col in ["memory_across_chats", "prefer_local_ai"]:
+                    if col not in columns:
+                        default_on = 1 if UserSettings.model_fields[col].default else 0
+                        await conn.execute(text(f"ALTER TABLE user_settings ADD COLUMN {col} BOOLEAN DEFAULT {default_on}"))
+                        logger.info(f"Added {col} column to user_settings")
+
                 # Migrate token_usage_metrics table - add cost columns
                 result = await conn.execute(text("PRAGMA table_info(token_usage_metrics)"))
                 columns = {row[1] for row in result.fetchall()}
@@ -424,6 +449,8 @@ class Database:
                     "resource_manifest": "JSON DEFAULT '{}'",
                     "terminal_reason": "VARCHAR(2000)",
                     "completed_at": "DATETIME",
+                    "pause_reason": "VARCHAR(50)",
+                    "pause_detail": "VARCHAR(500)",
                 }
                 for column, definition in additions.items():
                     if column not in columns:
@@ -2125,6 +2152,13 @@ class Database:
                     "tool_result_max_chars": settings.tool_result_max_chars,
                     "max_concurrent_subagents": settings.max_concurrent_subagents,
                     "max_delegation_depth": settings.max_delegation_depth,
+                    "profile_full_name": settings.profile_full_name,
+                    "profile_call_name": settings.profile_call_name,
+                    "profile_role": settings.profile_role,
+                    "profile_preferences": settings.profile_preferences,
+                    "profile_timezone": settings.profile_timezone,
+                    "memory_across_chats": settings.memory_across_chats,
+                    "prefer_local_ai": settings.prefer_local_ai,
                     "created_at": settings.created_at.isoformat() if settings.created_at else None,
                     "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
                 }
@@ -2672,6 +2706,35 @@ class Database:
                 .limit(1)
             )
             return result.scalar_one_or_none()
+
+    async def list_latest_workflow_controls(
+        self, workflow_ids: List[str]
+    ) -> Dict[str, WorkflowControlExecution]:
+        """The latest control generation for each of ``workflow_ids``, in one
+        query. Workflows that were never started are absent. For summaries
+        that list many workflows at once (Normal mode's team list); the
+        single-workflow status handler still reconciles against Temporal."""
+        ids = [str(workflow_id) for workflow_id in workflow_ids if workflow_id]
+        if not ids:
+            return {}
+        latest = (
+            select(
+                WorkflowControlExecution.workflow_id.label("workflow_id"),
+                func.max(WorkflowControlExecution.generation).label("generation"),
+            )
+            .where(WorkflowControlExecution.workflow_id.in_(ids))
+            .group_by(WorkflowControlExecution.workflow_id)
+            .subquery()
+        )
+        async with self.get_session() as session:
+            result = await session.execute(
+                select(WorkflowControlExecution).join(
+                    latest,
+                    (WorkflowControlExecution.workflow_id == latest.c.workflow_id)
+                    & (WorkflowControlExecution.generation == latest.c.generation),
+                )
+            )
+            return {row.workflow_id: row for row in result.scalars().all()}
 
     async def has_active_workflow_controls(self) -> bool:
         from models.database import WORKFLOW_CONTROL_ACTIVE_STATES

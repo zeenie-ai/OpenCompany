@@ -25,7 +25,7 @@ Temporal integration (11.F): every subclass exposes
 
 from __future__ import annotations
 
-from services.plugin.base import BaseNode, NodeUserError
+from services.plugin.base import BaseNode, NodeUserError, NodeWaitInterrupted
 from services.plugin.action import ActionNode
 from services.plugin.trigger import TriggerNode
 from services.plugin.polling import PollingTriggerNode
@@ -55,6 +55,7 @@ __all__ = [
     "coerce_json_object",
     "BaseNode",
     "NodeUserError",
+    "NodeWaitInterrupted",
     "ActionNode",
     "TriggerNode",
     "PollingTriggerNode",

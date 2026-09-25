@@ -33,6 +33,10 @@ from core.logging import get_logger
 from services.ws_handler_registry import ws_handler
 from services.deployment.control import (
     ACTIVE_STATES,
+    CLEAR_PAUSE_REASON,
+    PAUSE_REASON_CONTROLLER_MISSING,
+    PAUSE_REASON_FAILURES,
+    PAUSE_REASON_RECOVERY,
     WorkflowControlService,
     serialize_control,
 )
@@ -703,6 +707,10 @@ async def _fail_missing_controller(service: WorkflowControlService, control):
                 expected_revision=control.revision,
                 from_statuses={control.status},
                 status="paused",
+                values={
+                    "pause_reason": PAUSE_REASON_CONTROLLER_MISSING,
+                    "pause_detail": "Paused because its background process stopped. Resume to restart it.",
+                },
             )
         except ValueError:
             # Lost the CAS to a concurrent writer; their transition wins.
@@ -910,6 +918,34 @@ def _expected_revision(data: Dict[str, Any], control) -> int:
     return int(supplied)
 
 
+_AUTOMATIC_PAUSE_REASONS = frozenset({PAUSE_REASON_FAILURES, PAUSE_REASON_RECOVERY, PAUSE_REASON_CONTROLLER_MISSING})
+
+
+def _automatic_pause_values(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """``pause_reason`` / ``pause_detail`` for a pause the server started on
+    its own (``_pause_reason`` in a server-side call), or None."""
+    reason = data.get("_pause_reason")
+    if reason not in _AUTOMATIC_PAUSE_REASONS:
+        return None
+    detail = str(data.get("_pause_detail") or "").strip()[:500] or None
+    return {"pause_reason": reason, "pause_detail": detail}
+
+
+def _clear_pause_reason_kwargs(control) -> Dict[str, Any]:
+    """Transition kwargs that clear an automatic pause's reason, when the
+    row has one (running again means the reason no longer applies)."""
+    if getattr(control, "pause_reason", None) or getattr(control, "pause_detail", None):
+        return {"values": dict(CLEAR_PAUSE_REASON)}
+    return {}
+
+
+def _failure_pause_detail(reason: str) -> str:
+    """What the owner reads on a deployment the circuit breaker paused."""
+    error = " ".join(str(reason or "").split())[:200]
+    base = "Paused after repeated errors. Resume when it's fixed."
+    return f"{base} Last error: {error}" if error else base
+
+
 async def _set_cron_pause(
     workflow_id: str,
     *,
@@ -1012,6 +1048,9 @@ async def _broadcast_control(
         "workflow_id": control.workflow_id,
         "data": payload,
     })
+    from services.deployment.control import notify_control_changed
+
+    notify_control_changed(control.workflow_id)
     return payload
 
 
@@ -1104,6 +1143,7 @@ async def _reconcile_control(service: WorkflowControlService, control):
             expected_revision=control.revision,
             from_statuses={control.status},
             status=stable_state,
+            **(_clear_pause_reason_kwargs(control) if stable_state == "running" else {}),
         )
         await _broadcast_control(
             control,
@@ -1211,6 +1251,8 @@ async def _pause_for_recovery(service: WorkflowControlService, control, *, reaso
                 "workflow_id": control.workflow_id,
                 "expected_revision": control.revision,
                 "idempotency_key": f"recovery:{control.id}:{control.revision}",
+                "_pause_reason": PAUSE_REASON_RECOVERY,
+                "_pause_detail": "Paused after OpenCompany stopped unexpectedly. Resume when you're ready.",
             },
             None,
         )
@@ -1466,6 +1508,8 @@ async def _restore_control_after_failed_update(
             expected_revision=control.revision,
             from_statuses={transitional_state},
             status=stable_state,
+            # A pause that did not happen leaves no reason behind.
+            **(_clear_pause_reason_kwargs(control) if stable_state == "running" else {}),
         )
     except ValueError:
         latest = await service.database.get_latest_workflow_control(control.workflow_id)
@@ -1578,8 +1622,10 @@ async def handle_get_workflow_control_status(data: Dict[str, Any], websocket: We
 async def handle_start_workflow(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Create generation one and retain deploy_workflow wire compatibility."""
     workflow_id = data["workflow_id"]
+    # A socket's identity wins; a server-side call (no socket, e.g.
+    # start_saved_workflow) names the owner in the payload.
     owner_id = str(
-        getattr(getattr(websocket, "state", None), "user_id", None)
+        (getattr(getattr(websocket, "state", None), "user_id", None) if websocket is not None else data.get("user_id"))
         or "owner"
     )
     key = data.get("idempotency_key") or f"start:{workflow_id}:{uuid.uuid4().hex}"
@@ -1764,6 +1810,57 @@ async def handle_start_workflow(data: Dict[str, Any], websocket: WebSocket) -> D
     }
 
 
+async def start_saved_workflow(
+    workflow_id: str,
+    *,
+    owner_id: str,
+    expected_revision: Optional[int] = None,
+    idempotency_key: Optional[str] = None,
+    reset_if_failed: bool = False,
+) -> Dict[str, Any]:
+    """Start a saved workflow from the server, without the editor.
+
+    Loads the saved graph and goes through ``handle_start_workflow`` exactly
+    as the editor's Start does (normalize, validate, admit a generation,
+    deploy), so both starts produce the same generation. With no
+    ``expected_revision`` the latest control revision is used. A generation
+    that failed must be Reset before it can start again; ``reset_if_failed``
+    does that first. Returns the start handler's envelope.
+    """
+    from core.container import container
+
+    workflow = await container.database().get_workflow(workflow_id)
+    if workflow is None:
+        return {"success": False, "error": "workflow_not_found"}
+    graph = workflow.data if isinstance(workflow.data, dict) else {}
+    service = _control_service()
+    latest = await service.database.get_latest_workflow_control(workflow_id)
+    if latest is not None and latest.status == "failed" and reset_if_failed:
+        reset = await handle_reset_workflow(
+            {
+                "workflow_id": workflow_id,
+                "expected_revision": latest.revision,
+                "idempotency_key": f"{idempotency_key or uuid.uuid4().hex}:reset",
+            },
+            None,
+        )
+        if not reset.get("success"):
+            return reset
+        latest = await service.database.get_latest_workflow_control(workflow_id)
+    revision = expected_revision if expected_revision is not None else (latest.revision if latest else 0)
+    return await handle_start_workflow(
+        {
+            "workflow_id": workflow_id,
+            "nodes": list(graph.get("nodes") or []),
+            "edges": list(graph.get("edges") or []),
+            "expected_revision": revision,
+            "idempotency_key": idempotency_key or f"start:{workflow_id}:{uuid.uuid4().hex}",
+            "user_id": owner_id,
+        },
+        None,
+    )
+
+
 @ws_handler("workflow_id")
 async def handle_pause_workflow(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     from core.container import container
@@ -1786,8 +1883,16 @@ async def handle_pause_workflow(data: Dict[str, Any], websocket: WebSocket) -> D
             "error": "workflow_control_transition_pending",
             **await _control_payload(control, controller_status=controller_status),
         }
+    # Only server-side callers (no socket) may say why a pause happened: a
+    # client must not be able to dress its own pause up as an automatic one.
+    reason_values = _automatic_pause_values(data) if websocket is None else None
+    transition_kwargs: Dict[str, Any] = {"values": reason_values} if reason_values else {}
     control = await service.transition(
-        control, expected_revision=_expected_revision(data, control), from_statuses={"running"}, status="pausing"
+        control,
+        expected_revision=_expected_revision(data, control),
+        from_statuses={"running"},
+        status="pausing",
+        **transition_kwargs,
     )
     await _broadcast_control(control)
     container.workflow_service().pause_deployment(workflow_id)
@@ -1928,7 +2033,13 @@ async def handle_resume_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
     )
     queued = await container.workflow_service().resume_deployment(workflow_id)
     resumed_triggers = await container.workflow_service().update_trigger_pause_status(workflow_id, paused=False)
-    control = await service.transition(control, expected_revision=control.revision, from_statuses={"resuming"}, status="running")
+    control = await service.transition(
+        control,
+        expected_revision=control.revision,
+        from_statuses={"resuming"},
+        status="running",
+        **_clear_pause_reason_kwargs(control),
+    )
     # Operator intervention resets the circuit-breaker streak — the next
     # failure after a resume starts a fresh count, not a near-tripped one.
     await _clear_failure_streak(service.database, control)
@@ -2215,6 +2326,8 @@ async def pause_generation_on_failure(*, workflow_id: str, reason: str) -> Dict[
                 "workflow_id": workflow_id,
                 "expected_revision": control.revision,
                 "idempotency_key": f"pause-on-failure:{control.id}:{control.revision}",
+                "_pause_reason": PAUSE_REASON_FAILURES,
+                "_pause_detail": _failure_pause_detail(reason),
             },
             None,
         )
