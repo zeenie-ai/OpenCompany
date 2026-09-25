@@ -5,8 +5,8 @@
  * current view, either hiring a new employee or one employee's card.
  *
  * The shell owns what spans views: the employee broadcasts that keep the
- * team current, the orb behind the content, the Settings dialog, and the
- * connect dialog any view can open. Switching views scrolls to the top and
+ * team current, the orb behind the content, the Workspace dock on the
+ * right, the Settings dialog, and the connect dialog any view can open. Switching views scrolls to the top and
  * plays the view swap.
  */
 
@@ -23,6 +23,7 @@ import { ConnectDialog } from './settings/ConnectDialog';
 import { HomeSettings } from './settings/HomeSettings';
 import { HomeSidebar } from './sidebar/HomeSidebar';
 import { useHomeStore } from './state/homeStore';
+import { WorkspaceDock } from './workspace/WorkspaceDock';
 
 /** Scrolled further than this, the header draws its bottom border. */
 const HEADER_BORDER_AFTER_PX = 6;
@@ -66,7 +67,7 @@ export default function HomeShell() {
   }, [viewKey]);
 
   return (
-    <div className="flex min-h-0 flex-1 antialiased">
+    <div className="relative flex min-h-0 flex-1 antialiased">
       <HomeSidebar />
       <main className="relative flex min-w-0 flex-1 flex-col">
         <OrbStage />
@@ -90,6 +91,7 @@ export default function HomeShell() {
           </div>
         </div>
       </main>
+      <WorkspaceDock />
       <HomeSettings onConnect={openConnect} />
       <ConnectDialog providerId={connectId} onClose={() => setConnectId(null)} />
     </div>

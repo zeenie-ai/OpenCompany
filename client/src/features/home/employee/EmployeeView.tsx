@@ -9,11 +9,11 @@
  * "Pausing…" label until the summary has caught up with the new state (or
  * a few seconds pass and the list is refetched), so it never flashes the
  * old label in between. "Open workflow" opens this employee's graph in Dev
- * mode.
+ * mode, and "Watch live" opens the Workspace on this employee.
  */
 
 import { useQueryClient } from '@tanstack/react-query';
-import { Code } from 'lucide-react';
+import { Code, Monitor } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
@@ -93,6 +93,7 @@ function EmployeeCard({ employee, onConnect }: { employee: EmployeeSummary; onCo
   const actions = useWebSocketActions();
   const queryClient = useQueryClient();
   const openSettings = useHomeStore((s) => s.openSettings);
+  const openWorkspace = useHomeStore((s) => s.openWorkspace);
   const [running, setRunning] = useState<ControlKind | null>(null);
   const [awaiting, setAwaiting] = useState<{ kind: ControlKind; target: WorkflowControlStatus } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -243,6 +244,10 @@ function EmployeeCard({ employee, onConnect }: { employee: EmployeeSummary; onCo
             Open workflow
           </Button>
         )}
+        <ActionButton intent="tools" onClick={() => openWorkspace(employee.workflow_id)} className="h-9 gap-2 rounded-row px-3.5">
+          <Monitor aria-hidden className="size-3.5" />
+          Watch live
+        </ActionButton>
       </div>
     </div>
   );

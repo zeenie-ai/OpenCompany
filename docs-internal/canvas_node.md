@@ -3,10 +3,11 @@
 The `canvas` node is the platform's viewing surface — the Claude/ChatGPT-Canvas
 analog. Agents and workflow runs push content onto a per-node **board**
 (workspace file references, external URLs, small markdown notes), and the
-board renders in two hosts that share one renderer: the node's full-height
-parameter panel, and a **docked, resizable right-side sidebar** that stays
+board renders in three hosts that share one renderer: the node's full-height
+parameter panel, a **docked, resizable right-side sidebar** that stays
 open while working on the graph, auto-opens when content is pushed, and
-doubles as the click-to-preview surface for workspace files.
+doubles as the click-to-preview surface for workspace files, and the Canvas
+tab of Home's Workspace dock.
 
 Everything here composes existing patterns; the doc records which one each
 piece copies and the few places where a *new* decision had to be made (the
@@ -229,7 +230,7 @@ Client-side types + query keys live in
 `canvasBoardQueryKey(workflowId ?? 'unsaved', nodeId)` (todoQuery shape),
 prefix `['canvasBoard']` for broadcast-driven invalidation.
 
-## Frontend — two hosts, one renderer
+## Frontend — three hosts, one renderer
 
 ### Hosts
 
@@ -253,6 +254,13 @@ prefix `['canvasBoard']` for broadcast-driven invalidation.
   string), ephemeral "Preview" badge + Back, close. TopToolbar carries the
   toggle button (Monitor icon, `aria-pressed`, action-tools tokens),
   reading the dock store directly — the state is not Dashboard's to thread.
+- **[`WorkspaceCanvas.tsx`](../client/src/features/home/workspace/WorkspaceCanvas.tsx)**
+  — the Canvas tab of Normal mode's Workspace dock
+  ([normal_mode.md](./normal_mode.md#the-workspace)). It shows one
+  employee's board, named by the employee summary's `canvas_node_id`,
+  loads lazily so the renderer's viewers stay out of Home's chunk, and
+  passes an owner-facing empty hint. Hires get a Canvas node from the
+  Hire builder.
 
 ### Dock state — [`stores/canvasDockStore.ts`](../client/src/stores/canvasDockStore.ts)
 

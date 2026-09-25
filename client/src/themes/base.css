@@ -134,6 +134,7 @@
   --dur-scrim-in: 280ms;
   --dur-sidebar-in: 380ms;
   --dur-sidebar-out: 300ms;
+  --dur-dock-in: 480ms;      /* Home Workspace dock: width + content slide */
   --dur-toast-in: 420ms;
   --dur-toast-hold: 2600ms;
   --dur-toast-out: 240ms;

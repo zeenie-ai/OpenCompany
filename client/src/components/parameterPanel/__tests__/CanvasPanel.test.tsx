@@ -9,6 +9,7 @@ const { wsMock } = vi.hoisted(() => ({
 }));
 vi.mock('../../../contexts/WebSocketContext', () => ({
   useWebSocket: () => wsMock,
+  useWebSocketActions: () => wsMock,
 }));
 
 import CanvasPanel from '../CanvasPanel';

@@ -73,11 +73,28 @@ export function StatusDot({ tone, pulse = false, className }: { tone: StatusTone
   );
 }
 
-export function StatusPill({ tone, label, pulse = false }: { tone: StatusTone; label: string; pulse?: boolean }) {
+const PILL_SIZE = {
+  md: 'h-7.5 px-3 text-sm',
+  /** The Workspace header's mono micro pill. */
+  sm: 'h-5.5 px-2 font-mono text-2xs tracking-label uppercase',
+} as const;
+
+export function StatusPill({
+  tone,
+  label,
+  pulse = false,
+  size = 'md',
+}: {
+  tone: StatusTone;
+  label: string;
+  pulse?: boolean;
+  size?: keyof typeof PILL_SIZE;
+}) {
   return (
     <span
       className={cn(
-        'inline-flex h-7.5 shrink-0 items-center gap-1.5 rounded-pill border px-3 text-sm font-medium transition-colors',
+        'inline-flex shrink-0 items-center gap-1.5 rounded-pill border font-medium transition-colors',
+        PILL_SIZE[size],
         STATUS_PILL_CLASS[tone],
       )}
     >

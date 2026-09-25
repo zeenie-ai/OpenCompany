@@ -261,6 +261,7 @@
   --shadow-float:   var(--shadow-float);
   --shadow-popover: var(--shadow-popover);
   --shadow-dialog:  var(--shadow-dialog);
+  --shadow-dock:    var(--shadow-dock);
 
   --blur-scrim: var(--blur-scrim);
 

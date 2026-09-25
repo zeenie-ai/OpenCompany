@@ -133,6 +133,7 @@
   --shadow-float:   0 12px 40px rgb(0 0 0 / 0.5);
   --shadow-popover: 0 12px 32px rgb(0 0 0 / 0.5);
   --shadow-dialog:  0 24px 80px rgb(0 0 0 / 0.6);
+  --shadow-dock:    -24px 0 60px rgb(0 0 0 / 0.5);
 
   /* Home glows and the working pip's ring, in the neon (light.css has the
    * ink versions for white surfaces). */

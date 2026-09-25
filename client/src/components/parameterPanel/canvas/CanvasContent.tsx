@@ -29,7 +29,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { buildApiUrl } from '../../../config/api';
-import { useWebSocket } from '../../../contexts/WebSocketContext';
+import { useWebSocketActions } from '../../../contexts/WebSocketContext';
 import type { CanvasItem } from '../../../lib/canvasBoard';
 import type {
   ListWorkspaceFilesResponse,
@@ -104,7 +104,7 @@ const CanvasContent: React.FC<Props> = ({
   followLatestDefault = false,
   onFollowLatestChange,
 }) => {
-  const { sendRequest, isReady } = useWebSocket();
+  const { sendRequest, isReady } = useWebSocketActions();
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const [followLatest, setFollowLatest] = useState(followLatestDefault);
   const [mediaFailed, setMediaFailed] = useState(false);

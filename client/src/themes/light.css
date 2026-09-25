@@ -223,6 +223,7 @@
   --shadow-float:   0 12px 40px rgb(15 23 42 / 0.10);
   --shadow-popover: 0 12px 32px rgb(15 23 42 / 0.12);
   --shadow-dialog:  0 24px 80px rgb(15 23 42 / 0.16);
+  --shadow-dock:    -24px 0 60px rgb(15 23 42 / 0.10);
 
   /* ── Home glows (a connect, a new hire's row, the refine ring, a new
    * task) and the working pip's ring. On white the design swaps each neon

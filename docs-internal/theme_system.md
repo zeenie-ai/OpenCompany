@@ -136,7 +136,8 @@ tokens are used directly, as `w-(--w-home-sidebar)` or `duration-(--dur-slow)`):
 - **Motion**: `--ease-spring | overshoot | reveal` and the choreography
   durations (`--dur-intro`, `--dur-view-swap`, `--dur-panel-in/-out`,
   `--dur-toast-in/-hold/-out`, `--dur-mode-in/-out`, `--dur-theme-reveal`,
-  `--dur-glow`, `--dur-pip-loop`, …). Web Animations read them through
+  `--dur-glow`, `--dur-pip-loop`, `--dur-dock-in` for the Workspace dock,
+  …). Web Animations read them through
   [lib/motion.ts](../client/src/lib/motion.ts), whose fallbacks mirror
   base.css.
 - **Radii**: `--radius-row | card | panel | draft | composer`, multiples of each
@@ -148,7 +149,8 @@ tokens are used directly, as `w-(--w-home-sidebar)` or `duration-(--dur-slow)`):
 - **Status**: `--status-{working,ready,paused,attention,waiting}-{dot,fill,border,ink}`
   for the employee pills and dots. The dot is the raw role colour; light.css
   keeps the paused dot at the design's mid grey.
-- **Per family** (light.css / dark.css): `--shadow-float | popover | dialog`,
+- **Per family** (light.css / dark.css): `--shadow-float | popover | dialog |
+  dock` (`dock` is the Workspace's left shadow when it lies over the page),
   the logo palette `--lg-*`, the node-role `-fill / -edge / -hover / -ink`
   variants, and Home's glows: `--glow-connect | hire | hire-settle | refine |
   refine-out | task` plus the working pip's `--tint-pip-ring`. Dark keeps the

@@ -57,17 +57,18 @@ out of git). Where its token values differ from the repo's, the repo wins.
 
 | Folder | Contents |
 |---|---|
-| `HomeShell.tsx` | Sidebar, header, the current view (hire or one employee), Settings, the connect dialog, the orb's stage |
-| `sidebar/`, `header/` | The team list, New employee, the profile row; the view title, mode toggle and theme button |
+| `HomeShell.tsx` | Sidebar, header, the current view (hire or one employee), the Workspace dock, Settings, the connect dialog, the orb's stage |
+| `sidebar/`, `header/` | The team list, New employee, the profile row; the view title, the Workspace pill, mode toggle and theme button |
 | `hire/` | The hero, the composer, starter jobs |
 | `genui/` | The setup draft under the composer (below) |
-| `employee/` | One employee's card: status, the current task, apps, "done today", Start / Pause / Resume, the drafts waiting for the owner |
+| `employee/` | One employee's card: status, the current task, apps, "done today", Start / Pause / Resume, Watch live, the drafts waiting for the owner |
+| `workspace/` | The Workspace dock (below), its header pill, and its Canvas tab, which loads in its own chunk |
 | `settings/` | The Settings pages (Profile, Billing, Skills, Connectors, Plugins), the shared catalog page the last three build on, and `ConnectDialog` (the editor's credential panel for one provider, in its compact variant) |
 | `approvals/` | The drafts query, the decide mutation (optimistic), the approval broadcast listener |
 | `data/` | zod-parsed queries for employees, connectors and the profile; `presentation.ts` maps server state to pills and actions without deriving new rules |
 | `orb/` | The 3D orb (below) |
 | `ui/` | Small shared pieces (avatar, status dot and pill, app mark) and the pill toast |
-| `state/homeStore.ts` | UI state only: the view, the sidebar, Settings, one-shot glow and pulse signals |
+| `state/homeStore.ts` | UI state only: the view, the sidebar, Settings, the Workspace dock, one-shot glow and pulse signals |
 
 Status comes from the server: an employee summary is `working`, `ready`,
 `paused` or `attention` (an automatic pause, see below), and a pending draft
@@ -88,13 +89,41 @@ and its lifecycle: leaving Home keeps the renderer, the app shell disposes it.
 `OrbStage` is the canvas host below the header; each view's `OrbSlot` reserves
 the square the orb glides into. The composer sets the energy target (focused,
 holding text, a setup being written). These spike it: a hire, a theme or mode
-switch, a connect, a task change, opening Settings, a setup arriving or
-failing, and saving the profile (`SPIKE` in orb.ts). In dark the orb keeps the
+switch, a connect, a task change, opening Settings or the Workspace, a setup
+arriving or failing, and saving the profile (`SPIKE` in orb.ts). In dark the orb keeps the
 logo's colours with white particles and packets; in light it is glossy
 piano-black under a white rim light. Its glows and particles blend additively
 in dark and normally in light (additive glow vanishes on white), fading through
 zero at the midpoint of a theme change. Without WebGL, under reduced motion, or
 after a lost WebGL context, the slot shows the static mark.
+
+## The Workspace
+
+A dock on the right of Home ([workspace/WorkspaceDock.tsx](../client/src/features/home/workspace/WorkspaceDock.tsx))
+that shows what one employee is working on. The header's Workspace pill
+opens and closes it, and carries a blinking dot while it is closed and
+someone is working. Watch live on an employee's card opens it on that
+employee. It shows the employee last opened or watched, else the first on
+the team.
+
+- **Header**: the avatar, "{Name}’s workspace", the live task line
+  (`useLiveTask`, else the summary's task), and a pill: Live while the
+  employee works, otherwise the card's own pill. Expand and Close.
+- **Canvas**: the board named by the summary's `canvas_node_id`, drawn by
+  the editor's Canvas renderer (`CanvasContent`, see [Canvas Node](./canvas_node.md)).
+  It loads in its own chunk, which keeps the board's markdown, code and
+  JSON viewers out of Home's, and refreshes on `canvas_updated` like the
+  editor's hosts. An employee without a Canvas gets a note and Open
+  workflow.
+- **Browser** and **Android** say that their live views are not built yet.
+- **Size and motion**: 460px wide by default. The left edge drags from
+  360px to the window less 420px, and Expand gives a bigger dock without
+  a drag. At 1100px and wider the dock pushes the page aside; narrower, it
+  lies over it with `--shadow-dock`. Like the sidebar it stays mounted and
+  transitions its width (`--dur-dock-in` to open, `--dur-sidebar-out` to
+  close), so a reload with it open does not animate, and its contents
+  mount on the first open. Open, width and tab persist under
+  `home_workspace_v1`; Expand and the employee last only for the session.
 
 ## Hiring
 
@@ -330,5 +359,14 @@ history). Client: `features/home/**/__tests__`, `app/__tests__`,
   library is shared across users in multi-user mode, like the team list.
 - An employee hired before Canvas has no Canvas node, so its
   `canvas_node_id` is null. Adding one in Dev mode fills it in.
+- The Workspace's Browser and Android tabs have no live view yet, and it
+  has no timeline, replay or Take over.
+- With login on, an agent's Canvas writes land under the default owner:
+  its tool call carries no user id
+  ([agent_workflow.py](../server/services/temporal/agent_workflow.py)).
+  The Workspace reads the signed-in owner's board, so it shows nothing
+  there. This predates the Workspace and applies to the editor's Memory
+  and Data Source tools as well. Fixing it moves existing memories to a
+  different owner, so it needs its own change.
 - A manual-chat employee cannot be given work from Home yet; the setup prompt
   steers towards app and schedule triggers.

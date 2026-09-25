@@ -2,7 +2,7 @@
  * The employee card's main button: Connect goes to the provider's connect
  * dialog, Pause sends the summary's revision, and the button says
  * "Pausing…" until the summary shows the pause (never flashing "Pause"
- * again in between).
+ * again in between). Watch live opens the Workspace on the employee.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -31,6 +31,7 @@ import { EMPLOYEES_QUERY_KEY } from '../data/employees';
 import { parseEmployee, type EmployeeSummary } from '../data/schemas';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { EmployeeView } from '../employee/EmployeeView';
+import { useHomeStore } from '../state/homeStore';
 
 function summary(patch: Record<string, unknown>, control: Record<string, unknown>): EmployeeSummary {
   return parseEmployee({
@@ -89,6 +90,13 @@ describe('EmployeeView', () => {
       client.setQueryData(EMPLOYEES_QUERY_KEY, [summary({ status: 'paused' }, { state: 'paused', revision: 8 })]);
     });
     expect(await screen.findByRole('button', { name: 'Resume' })).toBeEnabled();
+  });
+
+  it('opens the Workspace on this employee', () => {
+    useHomeStore.setState({ workspaceOpen: false, workspaceFor: null });
+    renderCard(summary({ status: 'working' }, { state: 'running' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Watch live' }));
+    expect(useHomeStore.getState()).toMatchObject({ workspaceOpen: true, workspaceFor: 'w1' });
   });
 
   it('opens the workflow in the editor', () => {
