@@ -76,7 +76,13 @@ is the reference.
 
 Status comes from the server: an employee summary is `working`, `ready`,
 `paused` or `attention` (an automatic pause, see below), and a pending draft
-shows as "Needs you". Motion goes through [lib/motion.ts](../client/src/lib/motion.ts),
+shows as "Needs you". So does a browser waiting for the owner: when an agent
+calls `request_user`, the summary's `browser_request` (`{node_id, reason,
+since}`, never the agent's message, since summaries reach every socket) takes
+over the task line, and the card's Watch live button becomes Help in browser,
+which opens the Workspace on its Browser tab. The Browser plugin publishes
+that state through `services/employees/node_signals.py` and re-sends the
+summary when it changes. Motion goes through [lib/motion.ts](../client/src/lib/motion.ts),
 which reads the `--dur-*` / `--ease-*` tokens, runs at 1 ms under reduced
 motion and while the page is hidden ([lib/pageActivity.ts](../client/src/lib/pageActivity.ts)),
 and never starts loops then. Toasts are a second sonner toaster
@@ -206,7 +212,12 @@ the client's `HIRE_PAYLOAD_KEYS` must match, locked by
    skill named `skill`, or one ending in `-personality`, is left out: it would
    take over the Skill tool, or replace the whole system message. With "Ask me before
    sending anything" on, a reply goes through `approvalGate`, and tools that
-   send or spend money are left off. Every node type must pass
+   send or spend money are left off, except one that declares
+   `ask_first_params`: the "Web browser" app's browser stays on with
+   `interaction: read_only`, so it can read pages and hands any change to the
+   owner through `request_user`. The Web browser app has nothing to connect
+   (its catalogue entry's `connected_check` is `builtin`); its Connectors
+   panel manages optional login profiles. Every node type must pass
    `node_allowlist.is_hire_allowed` ([Node Allowlist](./node_allowlist.md));
    node types never come from the payload;
 4. validates it with `validate_workflow` and saves it with

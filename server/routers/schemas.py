@@ -7,7 +7,7 @@ the design rationale and docs-internal/ARCHIVE/schema_source_of_truth_rfc.md
 for the frontend consumer (useNodeOutputSchemaQuery).
 """
 
-from fastapi import APIRouter, HTTPException, Path, Query, Response
+from fastapi import APIRouter, HTTPException, Path, Query, Request, Response
 from fastapi.responses import FileResponse
 
 from nodes._visuals import get_plugin_icon_path
@@ -156,18 +156,21 @@ async def list_specs():
 
 
 @router.post("/nodes/options/{method}")
-async def load_options(method: str, body: dict | None = None):
+async def load_options(method: str, request: Request, body: dict | None = None):
     """Wave 6 Phase 4: REST mirror of the load_options WS handler.
 
     Resolves a ``loadOptionsMethod`` string against the registry and
     returns the dynamic dropdown contents. Body is the per-method
     parameter map (e.g. ``{"group_id": "..."}`` for
-    whatsappGroupMembers).
+    whatsappGroupMembers). The caller is the one the auth middleware
+    resolved, never a ``user_id`` in the body.
     """
+    from constants import OWNER_PRINCIPAL_ID
     from services.ws_handler_registry import dispatch_load_options
 
     params = (body or {}).get("params", body or {}) if isinstance(body, dict) else {}
-    options = await dispatch_load_options(method, params)
+    principal = getattr(request.state, "user_id", None)
+    options = await dispatch_load_options(method, params, principal=str(principal or OWNER_PRINCIPAL_ID))
     return {"method": method, "options": options}
 
 

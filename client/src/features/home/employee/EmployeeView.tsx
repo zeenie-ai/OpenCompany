@@ -9,7 +9,8 @@
  * "Pausing…" label until the summary has caught up with the new state (or
  * a few seconds pass and the list is refetched), so it never flashes the
  * old label in between. "Open workflow" opens this employee's graph in Dev
- * mode, and "Watch live" opens the Workspace on this employee.
+ * mode, and "Watch live" opens the Workspace on this employee ("Help in
+ * browser", on its Browser tab, while the agent is waiting for the owner).
  */
 
 import { useQueryClient } from '@tanstack/react-query';
@@ -94,6 +95,8 @@ function EmployeeCard({ employee, onConnect }: { employee: EmployeeSummary; onCo
   const queryClient = useQueryClient();
   const openSettings = useHomeStore((s) => s.openSettings);
   const openWorkspace = useHomeStore((s) => s.openWorkspace);
+  const setWorkspaceTab = useHomeStore((s) => s.setWorkspaceTab);
+  const helpInBrowser = employee.browser_request !== null;
   const [running, setRunning] = useState<ControlKind | null>(null);
   const [awaiting, setAwaiting] = useState<{ kind: ControlKind; target: WorkflowControlStatus } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -244,9 +247,16 @@ function EmployeeCard({ employee, onConnect }: { employee: EmployeeSummary; onCo
             Open workflow
           </Button>
         )}
-        <ActionButton intent="tools" onClick={() => openWorkspace(employee.workflow_id)} className="h-9 gap-2 rounded-row px-3.5">
+        <ActionButton
+          intent="tools"
+          onClick={() => {
+            openWorkspace(employee.workflow_id);
+            if (helpInBrowser) setWorkspaceTab('browser');
+          }}
+          className="h-9 gap-2 rounded-row px-3.5"
+        >
           <Monitor aria-hidden className="size-3.5" />
-          Watch live
+          {helpInBrowser ? 'Help in browser' : 'Watch live'}
         </ActionButton>
       </div>
     </div>

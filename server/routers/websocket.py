@@ -352,10 +352,15 @@ async def handle_load_options(data: Dict[str, Any], websocket: WebSocket) -> Dic
 
     Body: ``{"method": "...", "params": {...}}``
     Response: ``{"options": [{"value": ..., "label": ...}]}``
+
+    The caller's identity comes from the socket (an empty payload goes to
+    ``execution_principal`` so a client-sent ``user_id`` is never trusted).
     """
     from services.ws_handler_registry import dispatch_load_options
 
-    options = await dispatch_load_options(data["method"], data.get("params", {}))
+    options = await dispatch_load_options(
+        data["method"], data.get("params", {}), principal=execution_principal({}, websocket)
+    )
     return {"method": data["method"], "options": options}
 
 

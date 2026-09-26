@@ -67,6 +67,13 @@ describe('canvasDockStore.notifyPushed', () => {
     useCanvasDockStore.getState().notifyPushed('canvas-2');
     expect(useCanvasDockStore.getState().tab).toBe('browser');
   });
+
+  it('opens on the Browser tab when an agent asks for help', () => {
+    useCanvasDockStore.getState().showBrowser();
+    const state = useCanvasDockStore.getState();
+    expect(state.open).toBe(true);
+    expect(state.tab).toBe('browser');
+  });
 });
 
 describe('canvasDockStore prefs', () => {

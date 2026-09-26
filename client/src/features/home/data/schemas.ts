@@ -55,6 +55,11 @@ export const employeeSummarySchema = z.object({
   canvas_node_id: z.string().nullable().catch(null),
   /** Saved Browser nodes available in this employee's workspace. */
   browser_nodes: z.array(z.object({ node_id: z.string().min(1), label: z.string() })).catch([]),
+  /** A browser waiting for the owner (the agent asked for help). The agent's message is in the live view only. */
+  browser_request: z
+    .object({ node_id: z.string().min(1), reason: z.string(), since: z.string().nullable().catch(null) })
+    .nullable()
+    .catch(null),
   revision: z.number().catch(0),
   hired_at: z.string().nullable().catch(null),
 });

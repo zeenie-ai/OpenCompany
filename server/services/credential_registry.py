@@ -334,8 +334,12 @@ async def _connected_check(check: Dict[str, Any], auth_service: Any) -> bool:
     provider's plugin keeps on the status broadcaster (WhatsApp's pairing).
     ``{"type": "api_keys", "keys": [...]}``: every listed key is stored
     (the IMAP/SMTP account, which is several keys and no OAuth token).
+    ``{"type": "builtin"}``: nothing to connect, always usable (the web
+    browser, whose panel manages optional login profiles).
     """
     kind = check.get("type")
+    if kind == "builtin":
+        return True
     if kind == "status":
         return _status_slot_on(check)
     if kind == "api_keys":

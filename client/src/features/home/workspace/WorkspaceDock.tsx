@@ -72,7 +72,8 @@ function DockButtons() {
 /** Who, what they are doing, and a Live pill while they work. */
 function Identity({ employee }: { employee: EmployeeSummary }) {
   const live = useLiveTask(employee);
-  const pill = employee.status === 'working' ? { tone: 'live' as const, label: 'Live' } : presentEmployee(employee).pill;
+  const pill =
+    employee.status === 'working' && !employee.browser_request ? { tone: 'live' as const, label: 'Live' } : presentEmployee(employee).pill;
   return (
     <>
       <Avatar name={employee.name} colorRole={employee.color_role} size="sm" />

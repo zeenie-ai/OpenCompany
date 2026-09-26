@@ -50,7 +50,9 @@ export function useLiveTask(employee: EmployeeSummary): { label: 'Now'; text: st
       [employee.workflow_id, watchKey],
     ),
   );
-  if (employee.status !== 'working') return null;
+  // While the agent waits for the owner in the browser its node is still
+  // executing; the server's "Needs you…" task is the one to show.
+  if (employee.status !== 'working' || employee.browser_request) return null;
   const todo = todoNodeId ? currentTodo(todos) : null;
   if (todo) return { label: 'Now', text: todo };
   if (running) return { label: 'Now', text: 'Working on it…' };

@@ -13,6 +13,7 @@
  * | paused                | Paused                    | Resume                          |
  * | attention             | Needs attention           | Resume when possible, else Open workflow |
  * | pending_approvals > 0 | Needs you (overrides pill) | (the drafts are the action)    |
+ * | browser_request       | Needs you (overrides pill) | (Help in browser opens the Workspace) |
  */
 
 import type { AppRef, ColorRole, EmployeeSummary } from './schemas';
@@ -73,7 +74,8 @@ export function presentEmployee(
   employee: EmployeeSummary,
   pending?: WorkflowControlPendingMutation,
 ): EmployeePresentation {
-  const pill = employee.pending_approvals > 0 ? { label: 'Needs you', tone: 'waiting' as const } : PILL[employee.status];
+  const needsYou = employee.pending_approvals > 0 || employee.browser_request !== null;
+  const pill = needsYou ? { label: 'Needs you', tone: 'waiting' as const } : PILL[employee.status];
   return {
     pill,
     // Only a green working dot pulses (its ring is green).

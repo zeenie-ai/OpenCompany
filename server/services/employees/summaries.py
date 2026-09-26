@@ -5,7 +5,9 @@ the hire screen captured; ones built in the editor are described from the
 graph (``derived: true``). Either way the live parts come from the same
 places the editor reads: the latest control generation (state and the
 capabilities Start / Pause / Resume need) and the credential store (which
-apps are connected).
+apps are connected). A browser that is waiting for the owner is live
+plugin state (``node_signals``); the plugin re-sends the summary when it
+changes.
 
 A team list costs one query per table, never one per workflow, and never
 calls Temporal: the list shows the last recorded control state, and the
@@ -136,6 +138,38 @@ def _attention_text(control: Mapping[str, Any]) -> str:
     return "Stopped after an error. Open the workflow to see what happened."
 
 
+#: Task text while the agent waits in ``request_user``, by its reason.
+_BROWSER_REQUEST_TEXT = {
+    "login": "Needs you to sign in to a site in the browser",
+    "captcha": "Needs you to solve a CAPTCHA in the browser",
+    "two_factor": "Needs a sign-in code from you in the browser",
+    "confirm": "Needs you to check something in the browser",
+}
+
+
+def _browser_request(workflow_id: str, graph: GraphIndex) -> Optional[Dict[str, Any]]:
+    """The first browser node waiting for the owner (the agent called
+    ``request_user``), read live from the Browser plugin.
+
+    Identity and reason only: summaries are broadcast to every connected
+    socket, so the agent's message stays behind the authorized live view.
+    """
+    from services.employees.node_signals import node_state
+
+    for node_id in graph.browser_ids:
+        state = node_state("browser", workflow_id, node_id)
+        if not state or state.get("state") != "awaiting_user":
+            continue
+        request = state.get("request") or {}
+        since = request.get("since")
+        return {
+            "node_id": node_id,
+            "reason": str(request.get("reason") or "other"),
+            "since": datetime.fromtimestamp(since, timezone.utc).isoformat() if isinstance(since, (int, float)) else None,
+        }
+    return None
+
+
 def _task(
     status: str,
     *,
@@ -145,7 +179,10 @@ def _task(
     needs_ai: bool,
     employee: Any,
     graph: GraphIndex,
+    browser_request: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, str]:
+    if browser_request is not None:
+        return {"label": "Waiting", "text": _BROWSER_REQUEST_TEXT.get(browser_request["reason"], "Needs your help in the browser")}
     if pending > 0:
         return {"label": "Waiting", "text": f"{pending} {_plural(pending, 'draft is', 'drafts are')} waiting for you to check"}
     if status == "working":
@@ -206,6 +243,7 @@ async def _summary(
     # still in the graph, else the first canvas the owner added.
     canvas = roles.get("canvas") if roles else None
     canvas_node_id = canvas if canvas in graph.canvas_ids else next(iter(graph.canvas_ids), None)
+    browser_request = _browser_request(workflow.id, graph)
     return {
         "workflow_id": workflow.id,
         "name": workflow.name,
@@ -213,7 +251,16 @@ async def _summary(
         "color_role": getattr(employee, "color_role", None) or "agent",
         "derived": employee is None,
         "status": status,
-        "task": _task(status, control=control, pending=pending, missing=missing, needs_ai=needs_ai, employee=employee, graph=graph),
+        "task": _task(
+            status,
+            control=control,
+            pending=pending,
+            missing=missing,
+            needs_ai=needs_ai,
+            employee=employee,
+            graph=graph,
+            browser_request=browser_request,
+        ),
         "done_today": done_today,
         "pending_approvals": pending,
         "apps": apps,
@@ -224,6 +271,9 @@ async def _summary(
         "watch_node_ids": watch,
         "canvas_node_id": canvas_node_id,
         "browser_nodes": [{"node_id": node_id, "label": graph.labels.get(node_id) or "Browser"} for node_id in graph.browser_ids],
+        #: A browser node waiting for the owner ({node_id, reason, since}),
+        #: else None. Read live, so it changes without a new revision.
+        "browser_request": browser_request,
         "revision": _millis(
             getattr(workflow, "updated_at", None),
             getattr(employee, "updated_at", None),

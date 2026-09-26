@@ -1156,6 +1156,28 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           break;
         }
 
+        case 'browser_updated': {
+          // CloudEvents-typed browser control change from
+          // server/nodes/browser/_events.py: identity + state only; the live
+          // view (/ws/browser) carries the details. When an agent in the
+          // open workflow asks for help, show its browser.
+          const identity = (data as WorkflowEvent<{ workflow_id?: string | null; state?: string }>)?.data;
+          if (
+            identity?.state === 'awaiting_user' &&
+            identity.workflow_id &&
+            identity.workflow_id === useAppStore.getState().currentWorkflow?.id
+          ) {
+            useCanvasDockStore.getState().showBrowser();
+          }
+          break;
+        }
+
+        case 'browser_profiles_updated': {
+          // Identity-only; the Browser profiles panel refetches.
+          void queryClient.invalidateQueries({ queryKey: ['browserProfiles'] });
+          break;
+        }
+
         case 'todos_updated': {
           // CloudEvents-typed todo-list change from
           // server/nodes/tool/write_todos/_events.py, emitted via the

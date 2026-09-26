@@ -56,6 +56,10 @@ class PromptInputs:
     has_todos: bool = True
     #: The canvas tool, whose board the owner sees in Home's Workspace.
     has_canvas: bool = False
+    #: The browser tool, whose Chrome the owner watches in the Workspace.
+    has_browser: bool = False
+    #: The browser may only read pages (ask-first employees).
+    browser_read_only: bool = False
 
 
 def _clean(text: str) -> str:
@@ -150,6 +154,22 @@ def _rules(inputs: PromptInputs, owner: str) -> List[str]:
             f"- Check your memory before answering anything about {owner} or the people you talk to, and remember "
             "what you will need next time (names, preferences, decisions)."
         )
+    if inputs.has_browser:
+        out.append(
+            "- Use the browser tool when the work needs a website: take a snapshot, then act on what it lists. If "
+            "a site offers its own tools, prefer them. When a site needs a login, a CAPTCHA or a code, call "
+            f"request_user and wait for {owner}; never ask for a password in a message."
+        )
+        if inputs.browser_read_only:
+            out.append(
+                "- Your browser can only read pages. To change anything on a site (submit a form, send, book, "
+                f"buy), call request_user and say exactly what {owner} should do there."
+            )
+        else:
+            out.append(
+                f"- Before anything on a site that spends money, sends something for {owner} or cannot be undone, "
+                f"call request_user so {owner} can check it, unless they already told you to go ahead."
+            )
     if inputs.unsupported_apps:
         names = ", ".join(_clean(name) for name in inputs.unsupported_apps)
         out.append(

@@ -27,6 +27,7 @@ register_group(key="model", metadata={"label": "AI Models", "icon": "🧬", "col
 register_group(key="skill", metadata={"label": "AI Skills", "icon": "🎯", "color": "#50fa7b", "visibility": "normal"})
 register_group(key="tool", metadata={"label": "AI Tools", "icon": "🛠️", "color": "#50fa7b", "visibility": "normal"})
 register_group(key="android", metadata={"label": "Android", "icon": "📱", "color": "#8be9fd", "visibility": "normal"})
+register_group(key="browser", metadata={"label": "Browser", "icon": "🌐", "color": "#ff79c6", "visibility": "normal"})
 
 
 # ---------------------------------------------------------------------------
@@ -63,7 +64,6 @@ register_group(key="email", metadata={"label": "Email", "icon": "✉️", "color
 register_group(key="payments", metadata={"label": "Payments", "icon": "asset:stripe", "color": "#635BFF", "visibility": "dev"})
 register_group(key="deployment", metadata={"label": "Deployment", "icon": "lobehub:Vercel", "color": "#666666", "visibility": "dev"})
 register_group(key="vcs", metadata={"label": "Version Control", "icon": "lobehub:Github", "color": "#F05133", "visibility": "dev"})
-register_group(key="browser", metadata={"label": "Browser", "icon": "🌐", "color": "#ff79c6", "visibility": "dev"})
 register_group(key="scraper", metadata={"label": "Scrapers", "icon": "🕸", "color": "#ff79c6", "visibility": "dev"})
 register_group(key="filesystem", metadata={"label": "Filesystem", "icon": "📁", "color": "#8be9fd", "visibility": "dev"})
 register_group(key="service", metadata={"label": "Services", "icon": "⚙️", "color": "#50fa7b", "visibility": "dev"})

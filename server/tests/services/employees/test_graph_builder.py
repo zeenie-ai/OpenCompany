@@ -151,6 +151,20 @@ async def test_money_tools_come_back_when_not_asking_first():
     await assert_valid(built)
 
 
+async def test_the_browser_stays_read_only_while_asking_first():
+    request = hire(apps=["Web browser"], steps=[{"title": "Check prices online", "role": "agent"}], trigger=None)
+    built = build_employee_graph(inputs(request, "web"))
+    assert built.parameters[built.node_roles["browser"]]["interaction"] == "read_only"
+    instructions = built.parameters[built.node_roles["agent"]]["system_message"]
+    assert "request_user" in instructions and "can only read pages" in instructions
+    await assert_valid(built)
+
+    request = hire(apps=["Web browser"], steps=[{"title": "Check prices online", "role": "agent"}], trigger=None, rules={"ask_first": False})
+    built = build_employee_graph(inputs(request, "web"))
+    assert built.parameters[built.node_roles["browser"]]["interaction"] == "full"
+    assert "can only read pages" not in built.parameters[built.node_roles["agent"]]["system_message"]
+
+
 async def test_no_apps_means_chat():
     request = hire(apps=[], steps=[{"title": "Help me write", "role": "agent"}], trigger=None)
     built = build_employee_graph(inputs(request))

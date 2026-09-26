@@ -161,6 +161,32 @@ def test_side_effects_and_the_ask_first_rule():
     assert get_apps()["google_sheets"].tools[0].side_effects == "write"
 
 
+@pytest.mark.parametrize(
+    ("app", "tool"),
+    [(app, tool) for app in get_apps().values() for tool in app.tools if tool.ask_first_params],
+    ids=lambda value: getattr(value, "id", None) or getattr(value, "type", ""),
+)
+def test_ask_first_params_are_real_fields_and_make_the_tool_safe(app, tool):
+    """The ask-first form of a tool is only offered for a send/money tool,
+    and must itself be a valid node."""
+    assert not allowed_when_asking_first(tool.side_effects), f"{app.id}: a read/write tool is never left out, so needs no ask-first form"
+    params_model = get_node_class(tool.type).Params
+    assert set(tool.ask_first_params) <= set(params_model.model_fields)
+    params_model.model_validate({**tool.params, **tool.ask_first_params})
+
+
+def test_the_web_browser_is_an_app_that_turns_read_only_under_ask_first():
+    web = get_apps()["web"]
+    assert web.provider_id == "browser" and web.trigger is None and web.reply is None
+    (tool,) = web.tools
+    assert (tool.type, tool.role, tool.side_effects) == ("browser", "browser", "money")
+    assert dict(tool.params) == {"interaction": "full"}
+    assert dict(tool.ask_first_params) == {"interaction": "read_only"}
+    assert app_for_node_type("browser").id == "web"
+    for name in ("Web browser", "browser", "Chrome", "our website", "the internet"):
+        assert resolve_app(name).id == "web", name
+
+
 def test_node_types_map_back_to_one_app():
     assert app_for_node_type("whatsappReceive").id == "whatsapp"
     assert app_for_node_type("whatsappSend").id == "whatsapp"
@@ -197,9 +223,21 @@ def test_resolve_app(name, connected, expected):
     assert (app.id if app else None) == expected
 
 
-def test_a_malformed_registry_fails_loudly(tmp_path, monkeypatch):
+_TOOL = '{"type": "browser", "side_effects": "money", %s}'
+
+
+@pytest.mark.parametrize(
+    "app_json",
+    [
+        '{"name": "X", "provider_id": "p", "side_effects": "dangerous"}',
+        '{"name": "X", "provider_id": "p", "side_effects": "money", "tools": [%s]}' % (_TOOL % '"ask_first_params": ["read_only"]'),
+        '{"name": "X", "provider_id": "p", "side_effects": "money", "tools": [%s]}' % (_TOOL % '"role": ""'),
+    ],
+    ids=["bad side effect", "ask_first_params not an object", "empty role"],
+)
+def test_a_malformed_registry_fails_loudly(tmp_path, monkeypatch, app_json):
     bad = tmp_path / "employee_apps.json"
-    bad.write_text('{"apps": {"x": {"name": "X", "provider_id": "p", "side_effects": "dangerous"}}}', encoding="utf-8")
+    bad.write_text('{"apps": {"x": %s}}' % app_json, encoding="utf-8")
     monkeypatch.setattr(apps_module, "CONFIG_PATH", bad)
     apps_module.reload_apps()
     try:
