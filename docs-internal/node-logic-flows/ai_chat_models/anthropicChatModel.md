@@ -105,7 +105,7 @@ flowchart TD
 - **Model ID format**: Anthropic API uses hyphens (`claude-sonnet-4-6`), NOT dots. Dotted IDs (as used by OpenRouter or Gemini) will 404. The frontend model list already uses the correct form, but template-substituted or hand-entered IDs with dots will fail.
 - **Thinking budget versus output**: when thinking is enabled and the requested `maxTokens` does not exceed `thinkingBudget`, the native provider raises `max_tokens` to `thinkingBudget + 1024` before calling Anthropic.
 - **Temperature forced to 1 when thinking enabled**: regardless of user input.
-- **1M context**: current Claude models (Fable 5, Opus 4.x, Sonnet 4.6) support a 1M context window; configured in `llm_defaults.json` rather than the node.
+- **1M context**: current Claude models (Opus 5.5 / 5, Fable 5.1 / 5, Sonnet 5, Opus 4.8 / 4.7, Sonnet 4.6) support a 1M context window; configured in `llm_defaults.json` rather than the node.
 - **Error boundary**: typed Anthropic SDK failures become user-safe `NodeUserError` values in `ChatUnifier` and are re-raised to `BaseNode.execute()`, which produces the standard failure envelope. Unexpected failures are logged and returned by `execute_chat`.
 - **No streaming** / **no pricing tracking** on standalone chat nodes.
 
