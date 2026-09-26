@@ -27,7 +27,7 @@ produced this feature. Short form:
   `uv.lock` / `pyproject.toml` / the bundled Python changes. OpenCompany
   already provisions at first run (`install.js` runs `uv sync`, Temporal and
   the plugin CLIs (`bun add` into `~/.opencompany/packages/`) download on
-  first use, `browser_harness` needs `uv` at runtime), so uv ships in every
+  first use, the Browser node installs the browser-use CLI with `uv tool install`), so uv ships in every
   design.
 
 ## Layout

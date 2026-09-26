@@ -109,6 +109,7 @@ client/src/
 │   │   │   ├── OAuthPanel.tsx            # Twitter / Google / Telegram
 │   │   │   ├── QrPairingPanel.tsx        # WhatsApp / Android
 │   │   │   ├── EmailPanel.tsx            # IMAP/SMTP (RHF + zod)
+│   │   │   ├── BrowserProfilesPanel.tsx  # Web browser login profiles: list / add / delete, session-file import
 │   │   │   └── schemas/email.ts          # Email zod schema w/ superRefine
 │   │   ├── sections/
 │   │   │   ├── ApiUsageSection.tsx       # Per-service usage/cost
@@ -382,7 +383,7 @@ components/credentials/catalogueAdapter.ts  (hydrate JSON -> ProviderConfig)
             ▼
 components/credentials/CredentialsModal.tsx
    ├─ CredentialsPalette.tsx   (cmdk + fuzzysort + GroupedVirtuoso)
-   └─ PanelRenderer.tsx        (lazy: ApiKey/OAuth/QrPairing/Email)
+   └─ PanelRenderer.tsx        (lazy: ApiKey/OAuth/QrPairing/Email/BrowserProfiles)
 ```
 
 **State rules:**
@@ -500,7 +501,7 @@ See [media_transport.md](./media_transport.md).
 
 ## Browser workspace live view
 
-Home and Dev share [WorkspaceTabs](../client/src/components/workspace/WorkspaceTabs.tsx) and [BrowserWorkspace](../client/src/components/browser/BrowserWorkspace.tsx). Browser nodes are discovered through the backend `isBrowserPanel` capability; viewing attaches to a saved workflow/node without launching Chrome. The runtime defaults to installed Chrome/Edge/Chromium with a dedicated profile rendered headless inside the workspace; a separate desktop window and testing-browser mode are explicit server settings. The Browser tab supports server-authorized Take control / Hand back for navigation, mouse, keyboard, paste and login. Canvas retains its renderer; Android remains an explanatory placeholder.
+Home and Dev share [WorkspaceTabs](../client/src/components/workspace/WorkspaceTabs.tsx) and [BrowserWorkspace](../client/src/components/browser/BrowserWorkspace.tsx). Browser nodes are discovered through the backend `isBrowserPanel` capability; viewing attaches to a saved workflow/node without launching Chrome. The runtime defaults to installed Chrome/Edge/Chromium with a dedicated profile rendered headless inside the workspace; a separate desktop window and testing-browser mode are explicit server settings. The Browser tab supports server-authorized Take control / Hand back for navigation, mouse, keyboard, paste and login. The Browser node's parameter panel shows the same viewer above its settings. When an agent in the open workflow calls `request_user`, the `browser_updated` case in `WebSocketContext` opens the Dev dock on its Browser tab (`canvasDockStore.showBrowser`); Home shows Needs you from the employee summary's `browser_request`. Canvas retains its renderer; Android remains an explanatory placeholder.
 
 The viewer uses a separate authenticated same-origin `/ws/browser` socket, not the general `WebSocketContext` frame stream. Binary JPEG envelopes are decoded sequentially with a two-frame local bound; consumed/skipped frames are acknowledged. Canvas dimensions change only when image dimensions change, and input coordinates use the metadata of the frame actually painted. Hidden, disposed or obsolete frames cannot restore a stale picture. Blur, pointer cancellation, hiding and unmount release user control; the server owns the release barrier and lease checks.
 
@@ -554,6 +555,7 @@ Defined on `INodeTypeDescription.uiHints` ([client/src/types/INodeProperties.ts]
 | `isProcessManagerPanel` | `MiddleSection` | Render live managed-process inspection and controls |
 | `isGalleryPanel` | `MiddleSection` | Render the workspace file browser (breadcrumbs, grid/list, search, preview, upload, drag-to-parameter) instead of the plain params list. Declared by `gallery`, which pairs it with `hideInputSection` but **keeps** the Output section — unlike `processManager` it produces output worth seeing and dragging. The panel writes back to the node's own `path` / `selection` params, so what you browse is what the node emits. |
 | `isCanvasPanel` | `MiddleSection`, `CanvasDock` | Render the pushed-content Canvas board instead of the plain params list. Declared by `canvas`. Double duty: the docked canvas sidebar also uses this flag to FIND Canvas nodes in the graph (`resolveNodeDescription(type)?.uiHints?.isCanvasPanel`) — never the type string. Pairs with an explicit `isConfigNode: False` because the `tool` group would auto-derive `True` while the node's `input-main` is real dataflow. See [canvas_node.md](./canvas_node.md). |
+| `isBrowserPanel` | `MiddleSection`, `CanvasDock` (also the server's `graph_index`) | Show the node's live browser (`BrowserWorkspace`) above its parameters. Declared by `browser`. The Dev dock and Home's employee summary also use it to FIND Browser nodes in a graph, never the type string. See [browser_workspace.md](./browser_workspace.md). |
 | `showLocationPanel` | `LocationParameterPanel` | Special-case panel for nodes with map preview |
 | `isChatTrigger` | `ConsolePanel` | This node is a chat-message target |
 | `isConsoleSink` | `ConsolePanel` | This node consumes console output (filter source) |

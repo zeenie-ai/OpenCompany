@@ -95,6 +95,20 @@ directory IDs rather than user-supplied names. A saved `profile_id` selects an
 owner-scoped profile; leaving it empty creates/reuses the workflow's profile.
 The CLI receives its own per-profile home, runtime and temporary directories.
 
+The node's profile dropdown (`browserProfiles` option loader) lists the
+caller's own profiles. It reads the caller from
+`services.ws_handler_registry.current_load_options_principal()`, which the
+load-options handlers set from the authenticated socket or HTTP request; a
+`user_id` in the request parameters is never trusted. The **Web browser**
+entry in Credentials and Normal-mode Connectors (panel kind
+`browserProfiles`, `components/credentials/panels/BrowserProfilesPanel.tsx`)
+lists the caller's profiles with their sites as domains and cookie counts,
+adds and deletes shared profiles, and imports logins from a session file:
+Playwright storage state, Cookie-Editor JSON or `cookies.txt`, uploaded to
+`POST /api/browser/profiles/{id}/session-file` and applied with
+`browser_import_commit`. To sign in by hand, use Take control in the
+workspace.
+
 The profile version guard checks the browser executable actually selected, not
 the testing pin. A browser older than the version that last wrote the profile
 is skipped during automatic discovery, or rejected with actionable guidance
@@ -121,6 +135,23 @@ The policy proxy in `_egress.py` enforces allowed destinations for browser
 traffic. `allow_private_network` does not permit OpenCompany's protected ports
 or cloud metadata endpoints. This network enforcement is separate from the
 control lease and from agent read-only behavior.
+
+## Normal mode
+
+Hire attaches a browser through the **Web browser** app (`web` in
+[`config/employee_apps.json`](../server/config/employee_apps.json)). Its
+catalogue entry, `browser`, has nothing to connect (`connected_check:
+builtin`), so it never blocks Start; a missing installed browser shows up at
+the first browser step instead. With "Ask me before sending anything" on,
+the tool is attached with its `ask_first_params`, `interaction: read_only`:
+the agent reads pages and hands any change to the owner through
+`request_user`. The employee's instructions say when to call it.
+
+While the agent waits in `request_user`, the plugin's node-state source
+(`services/employees/node_signals.py`) reports `awaiting_user`, and the
+employee summary carries `browser_request` (`{node_id, reason, since}`, never
+the agent's message). See [Normal mode](./normal_mode.md) and
+[Browser workspace](./browser_workspace.md#when-the-agent-asks-for-help).
 
 ## Node contract and compatibility
 

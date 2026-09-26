@@ -246,7 +246,10 @@ contract the frontend sees does not change. Normal mode's two events follow
 the same rule: `employee_lifecycle` (`com.opencompany.employee.*`, in
 `services/employees/events.py`) and `approval_lifecycle`
 (`com.opencompany.approval.*`, in `nodes/workflow/approval_gate/_events.py`,
-identity only). See [normal_mode.md](./normal_mode.md#wire-contract).
+identity only). See [normal_mode.md](./normal_mode.md#wire-contract). So do
+the Browser plugin's `browser_updated`, `browser_profiles_updated` and
+`browser_runtime` (`com.opencompany.browser.*`, in `nodes/browser/_events.py`;
+identity and state only, never a URL, a page title or cookie data).
 
 Rule of thumb: **if no `register_canary_trigger_type` call names your event
 type, broadcast it directly.** Reach for `emit` only when a Temporal workflow
