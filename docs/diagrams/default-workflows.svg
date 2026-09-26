@@ -58,7 +58,7 @@
   <!-- toolbox cluster -->
   <path class="conn-dot" d="M 480 255 L 480 305"/>
   <rect class="box p-purple" x="380" y="305" width="560" height="80" rx="8"/>
-  <text x="660" y="329" text-anchor="middle" class="h2 accent-purple">Toolbox (11 tools)</text>
+  <text x="660" y="329" text-anchor="middle" class="h2 accent-purple">Toolbox (10+ tools)</text>
   <text x="660" y="351" text-anchor="middle" class="small">web search &#183; Perplexity &#183; browser &#183; file read/write &#183; fs search</text>
   <text x="660" y="369" text-anchor="middle" class="small">shell &#183; Python &#183; processes &#183; todos &#183; Vercel</text>
 

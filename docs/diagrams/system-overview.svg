@@ -73,14 +73,14 @@
   <text class="small" x="952" y="428" text-anchor="middle">DeploymentManager + WorkflowControlWorkflow (Start/Pause/Resume/Reset)</text>
 
   <rect class="box p-purple" x="250" y="458" width="435" height="86" rx="8"/>
-  <text class="h2" x="467" y="483" text-anchor="middle">Node plugins (148, 34 palette groups)</text>
+  <text class="h2" x="467" y="483" text-anchor="middle">Node plugins (140+, 30+ palette groups)</text>
   <text class="small" x="467" y="503" text-anchor="middle">server/nodes/&lt;group&gt;/&lt;plugin&gt;/ - one folder per node</text>
   <text class="small" x="467" y="519" text-anchor="middle">Pydantic Params / Output = SSOT, served as NodeSpec</text>
-  <text class="small" x="467" y="535" text-anchor="middle">78 skills in server/skills/ (SKILL.md playbooks)</text>
+  <text class="small" x="467" y="535" text-anchor="middle">80+ skills in server/skills/ (SKILL.md playbooks)</text>
 
   <rect class="box p-purple" x="735" y="458" width="435" height="86" rx="8"/>
   <text class="h2" x="952" y="483" text-anchor="middle">AuthService + credentials</text>
-  <text class="small" x="952" y="503" text-anchor="middle">35 Credential classes (API keys, OAuth, CLI-managed logins)</text>
+  <text class="small" x="952" y="503" text-anchor="middle">35+ Credential classes (API keys, OAuth, CLI-managed logins)</text>
   <text class="small" x="952" y="519" text-anchor="middle">Fernet + PBKDF2 encrypted credentials.db</text>
   <text class="small" x="952" y="535" text-anchor="middle">optional JWT login (VITE_AUTH_ENABLED, AUTH_MODE single / multi)</text>
 
@@ -148,10 +148,10 @@
   <text class="h1" x="1540" y="134" text-anchor="middle">External services</text>
 
   <rect class="box p-green" x="1340" y="150" width="400" height="116" rx="8"/>
-  <text class="h2" x="1540" y="175" text-anchor="middle">LLM providers (13)</text>
+  <text class="h2" x="1540" y="175" text-anchor="middle">LLM providers</text>
   <text class="sub" x="1540" y="195" text-anchor="middle">OpenAI, Anthropic, Gemini, OpenRouter, xAI, DeepSeek,</text>
   <text class="sub" x="1540" y="213" text-anchor="middle">Kimi, Mistral, Groq, Cerebras, Sarvam</text>
-  <text class="sub" x="1540" y="231" text-anchor="middle">local and free: Ollama, LM Studio</text>
+  <text class="sub" x="1540" y="231" text-anchor="middle">local and free: Ollama, LM Studio, named endpoints</text>
   <text class="small" x="1540" y="251" text-anchor="middle">image input: native image blocks + visionAnalyze delegate</text>
 
   <rect class="box p-green" x="1340" y="282" width="400" height="62" rx="8"/>

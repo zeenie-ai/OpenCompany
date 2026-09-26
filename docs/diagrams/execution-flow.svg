@@ -43,7 +43,7 @@
   <rect class="panel p-purple" x="780" y="100" width="420" height="96" rx="8"/>
   <text x="990" y="130" class="h1" text-anchor="middle">Toolbar "Start"</text>
   <text x="990" y="156" class="sub" text-anchor="middle">deploy_workflow WS msg -&gt; DeploymentManager.deploy</text>
-  <text x="990" y="178" class="sub" text-anchor="middle">graph snapshot persisted &#183; button toggles to Stop</text>
+  <text x="990" y="178" class="sub" text-anchor="middle">graph snapshot persisted &#183; button becomes Pause</text>
 
   <!-- Canvas lane: straight down to convergence -->
   <path class="conn" d="M 250 196 L 250 1068" marker-end="url(#arrow)"/>

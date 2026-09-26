@@ -30,7 +30,7 @@ own plugin folder; there is no `functools.partial` wiring anymore.
 |--------|-----------------|----------|---------|
 | `input-main` | main | no | Upstream data. Auto-prompt fallback when `prompt` is empty. |
 | `input-skill` | main | no | Skill nodes (including `masterSkill` aggregation). |
-| `input-memory` | main | no | `simpleMemory` node for conversation history. |
+| `input-context` | main | no | Context node: the stored conversation, loaded at run start and saved after every turn of a started workflow. Legacy `simpleMemory` -> `input-memory` edges are rewritten on load into a Context node plus a Memory tool edge. |
 | `input-tools` | main | no | Tool nodes compiled into provider-neutral `AgentToolSpec` / `ToolDef` values for each native LLM step. |
 | `input-task` | main | no | `taskTrigger` output - formatted and prepended to the prompt. |
 | `input-teammates` | main | no | **Team-lead only** (`orchestrator_agent`, `ai_employee`). Agents on this handle become authorized Task Manager assignees. |
@@ -71,7 +71,7 @@ flowchart TD
   H --> I{node_type in<br/>TEAM_LEAD_TYPES?}
   I -- yes --> J[collect_teammate_connections<br/>-> append each teammate to tool_data]
   I -- no --> K
-  J --> K[await ai_service.execute_chat_agent<br/>memory/skill/tool/broadcaster/context/db]
+  J --> K[await ai_service.execute_chat_agent<br/>context/skill/tool/broadcaster/db]
   K --> L[Return envelope]
 ```
 
@@ -79,7 +79,7 @@ flowchart TD
 
 - **Connection collection** is delegated to
   `edge_walker.collect_agent_connections`; same rules as `aiAgent` (see that doc
-  for memory session derivation, `masterSkill` expansion, Android toolkit,
+  for the Context descriptor, `masterSkill` expansion, Android service tools,
   child-agent tool discovery).
 - **Native agent loop**: current executions call the shared
   `run_native_agent_loop` / `run_native_llm_step` service through
@@ -100,10 +100,11 @@ flowchart TD
 
 ## Side Effects
 
-- **Database writes**: none directly. In-process execution can update a
-  connected `simpleMemory` node and record compaction usage for that memory
-  session; the Temporal workflow accumulates normalized usage in its result
-  envelope. Standalone executions without connected memory do not persist a
+- **Database writes**: none directly. With a Context node connected, the
+  conversation is saved to `agent_conversations` after every turn of a started
+  workflow (a manual node Run saves nothing), and in-process execution records
+  compaction usage; the Temporal workflow accumulates normalized usage in its
+  result envelope. Executions without a connected Context do not persist a
   token metric here.
 - **Broadcasts**: `StatusBroadcaster` is fetched and passed down, enabling
   `update_node_status` events (`thinking`, `executing_tool`, `success`), plus
@@ -146,7 +147,7 @@ flowchart TD
 
 - **Twin node**: [`aiAgent`](./aiAgent.md) (same collection helper,
   different service method).
-- **Memory node**: [`simpleMemory`](./simpleMemory.md)
+- **Context node**: [`context`](./context.md); **Memory tool**: [`simpleMemory`](./simpleMemory.md)
 - **Architecture docs**: [Agent Architecture](../../agent_architecture.md),
   [Agent Delegation](../../agent_delegation.md),
   [Agent Teams](../../agent_teams.md),

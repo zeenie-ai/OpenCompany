@@ -205,7 +205,7 @@ plugins that don't declare any group render flat exactly like today.
 ```python
 class AIAgentParams(BaseModel):
     # Top-level fields (always visible)
-    provider: Literal[...] = "openai"
+    provider: ProviderRef = "openai"   # loader-driven (aiProviders), nodes/agent/_provider.py
     model: str = Field(default="")
     prompt: str = Field(default="", json_schema_extra={"rows": 4})
     system_message: Optional[str] = Field(default="")
@@ -397,10 +397,10 @@ on a plugin resolves to a registered class.
 | `nodes/twitter/_credentials.py` | `TwitterCredential` | oauth2 | twitterSend / twitterSearch / twitterUser / twitterReceive |
 | `nodes/telegram/_credentials.py` | `TelegramCredential` | api_key | telegramSend / telegramReceive |
 | `nodes/scraper/_credentials.py` | `ApifyCredential` / `TikHubCredential` | api_key (bearer) | apifyActor / tikhubAction (TikHub probes `tikhub/user/get_user_info` declaratively — see [tikhub_service.md](./tikhub_service.md)) |
-| `nodes/model/_credentials.py` | `OpenAI / Anthropic / Gemini / OpenRouter / Groq / Cerebras / DeepSeek / Kimi / Mistral / Xai / Sarvam / Ollama / LMStudio` | api_key | 13 credential classes covering the 13 agent-selectable providers and the 12 standalone chat-model nodes (`ls server/nodes/model/*_chat_model`). Ollama / LM Studio store a local server URL; xAI is agent-selectable but has no standalone node; `SarvamCredential` also serves the speech / translate plugins. |
+| `nodes/model/_credentials.py` | `OpenAI / Anthropic / Gemini / OpenRouter / Groq / Cerebras / DeepSeek / Kimi / Mistral / Xai / Sarvam / Ollama / LMStudio / OpenAICompatible` | api_key | One credential class per LLM provider, covering every agent-selectable provider and every standalone chat-model node (`ls server/nodes/model/*_chat_model`). Ollama / LM Studio store a local server URL; `OpenAICompatibleCredential` stores any number of named endpoints, each under its own `openai_compatible:<slug>` reference (RFC-0003); xAI is agent-selectable but has no standalone node; `SarvamCredential` also serves the speech / translate plugins. |
 | `nodes/search/<name>/__init__.py` (inline) | `BraveSearch / Serper / Perplexity` | api_key | single-use search nodes |
 
-This table is the Wave 11.E snapshot, not an inventory — later plugins (Stripe, Vercel, GitHub, Cloudflare, gcloud, WhatsApp, WhatsApp Business, Discord, Microsoft, ElevenLabs, Deepgram, DeepL, ...) each ship their own `_credentials.py`. Read the live set from `len(services.plugin.credential.CREDENTIAL_REGISTRY)` (34 at the time of writing).
+This table is the Wave 11.E snapshot, not an inventory — later plugins (Stripe, Vercel, GitHub, Cloudflare, gcloud, WhatsApp, WhatsApp Business, Discord, Microsoft, ElevenLabs, Deepgram, DeepL, ...) each ship their own `_credentials.py`. Read the live set from `len(services.plugin.credential.CREDENTIAL_REGISTRY)`.
 
 `GoogleCredential` exposes a `build_credentials()` classmethod that
 returns a `google.oauth2.credentials.Credentials` — hand-off to
@@ -700,10 +700,11 @@ server/
 │   │   │                        # subclasses, rlm / claude_code / codex, vertex_* variants)
 │   │   ├── _handles.py          # Shared handle topology helpers
 │   │   ├── _inline.py           # prepare_agent_call()
+│   │   ├── _provider.py         # ProviderRef: the loader-driven provider field every agent shares
 │   │   ├── _specialized.py      # SpecializedAgentBase
 │   │   ├── _vertex.py           # Shared Vertex Agent Engine helpers
 │   │   └── <agent>/__init__.py  # one folder per agent
-│   ├── model/                   # AI chat models (12 providers; all agent-capable)
+│   ├── model/                   # AI chat models (one per provider except xAI, plus openaiCompatibleChatModel for named endpoints)
 │   │   ├── _base.py             # ChatModelBase + ChatModelParams/Output
 │   │   └── <provider>_chat_model/__init__.py
 │   ├── android/                 # 16 Android service nodes
@@ -846,8 +847,8 @@ All Wave 10 invariants in `test_node_spec.py` still run; Wave 11 invariants in `
   TelegramCredential + ApifyCredential + 12 LLM providers + 3 inline
   search credentials + Stripe / Vercel / GitHub / Cloudflare /
   WhatsApp); 29 plugins declared `credentials = (...)`. Today the live
-  numbers are `len(CREDENTIAL_REGISTRY)` (35) and 55 node types with a
-  non-empty `credentials` tuple (September 2026). Agents stay poly-provider (empty tuple).
+  numbers are `len(CREDENTIAL_REGISTRY)` (36) and 56 node types with a
+  non-empty `credentials` tuple (late September 2026). Agents stay poly-provider (empty tuple).
 - Wave 11.E.1 — Modularised credentials into per-domain
   `nodes/<group>/_credentials.py` files. `server/credentials/`
   directory deleted; auto-discovery rides on node-package import.

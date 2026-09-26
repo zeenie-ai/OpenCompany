@@ -52,7 +52,7 @@ All 13 agents share these input handles.
 |--------|-----------------|----------|---------|
 | `input-main` | input/main | no | Upstream data; auto-prompt fallback when `prompt` param is empty |
 | `input-skill` | input/skill | no | Skill node(s) providing SKILL.md context |
-| `input-memory` | input/memory | no | `simpleMemory` node for conversation history |
+| `input-context` | input/context | no | Context node: the stored conversation, loaded at run start and saved after every turn of a started workflow |
 | `input-tools` | input/tools | no | Tool nodes compiled into provider-neutral `AgentToolSpec` definitions |
 | `input-task` | input/task | no | `taskTrigger` events from delegated child agents |
 | `input-teammates` | input/teammates | no | **Only on `orchestrator_agent` and `ai_employee`** (via `team_lead_agent_handles()`) -- connected agents become Task Manager-authorized assignees |
@@ -106,7 +106,7 @@ Wrapped in the standard envelope:
 flowchart TD
   A[BaseNode.execute -> execute_op] --> P[prepare_agent_call]
   P --> B[collect_agent_connections]
-  B --> B1[memory_data from input-memory]
+  B --> B1[context_data from input-context]
   B --> B2[skill_data from input-skill<br/>masterSkill expanded to N skills]
   B --> B3[tool_data from directly connected input-tools]
   B --> B4[input_data from input-main]

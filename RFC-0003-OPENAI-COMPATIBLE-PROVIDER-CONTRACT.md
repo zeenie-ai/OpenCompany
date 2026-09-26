@@ -18,27 +18,33 @@ Files this RFC changes:
 | File | Change |
 |---|---|
 | `services/llm/config.py` | provider references (`split_provider_ref`, `endpoint_ref`); `resolve_credential()`; every `llm_defaults` lookup resolves a reference to its base block; `open_world_models` replaces a hardcoded tuple |
-| `services/llm/protocol.py` | `LLMErrorCategory.PROTOCOL`; `LLMError.public_message` |
-| `services/llm/endpoints.py` | **new** — save-time base-URL resolver; `redact_url`; endpoint listing |
-| `services/llm/unifier.py` | provider lookup by reference; URL row read by reference; empty-key and missing-endpoint guards; `except LLMError`; failure logs carry `url` + `url_source` |
+| `services/llm/protocol.py` | `LLMErrorCategory.PROTOCOL`; `LLMError.public_message`; model-scoped messages that read correctly for a named endpoint |
+| `services/llm/endpoints.py` | **new** — save-time base-URL resolver; `redact_url`; endpoint listing; `unconfigured_endpoint_message`, the one "not configured" wording (§8.3) |
+| `services/llm/unifier.py` | provider lookup by reference; URL row read by reference; empty-key and missing-endpoint guards; `except LLMError`; failure logs carry `url` + `url_source`, written before the error is translated (§10.3) |
 | `services/llm/providers/openai.py` | drop `api_key="ollama"`; `url_source`; 2xx-with-error-body guard |
 | `services/llm/providers/anthropic.py` | drop the duplicate placeholder hardcode |
 | `services/llm/providers/_compat.py` | one `openai_compatible` registration with no `base_url` |
-| `nodes/model/_local_validator.py` | one save path for Ollama, LM Studio and every named endpoint |
-| `nodes/model/_credentials.py` | `OpenAICompatibleCredential`; `_LocalLLM.resolve` uses `resolve_credential` |
+| `nodes/model/_local_validator.py` | one save path for Ollama, LM Studio and every named endpoint; a write the store rejects fails the save (§6.4); every step bounded (§6.5) |
+| `nodes/model/_credentials.py` | `OpenAICompatibleCredential` (slug rule, §8.1; `is_configured`); `_LocalLLM.resolve` uses `resolve_credential` |
 | `nodes/model/_option_loaders.py`, `nodes/model/__init__.py` | **new** — `aiProviders`, `openaiCompatibleEndpoints`, `openaiCompatibleModels` loaders |
 | `nodes/model/openai_compatible_chat_model/` | **new** — chat-model node for a named endpoint |
 | `nodes/agent/_provider.py` + three agent Params | one loader-driven `ProviderRef` field replaces three `Literal` lists |
-| `services/plugin/credential.py`, `routers/websocket.py` | optional `Credential.catalogue_extras()` hook, merged into the catalogue |
+| `services/plugin/credential.py`, `routers/websocket.py` | optional `Credential.catalogue_extras()` hook, merged into the catalogue; `Credential.is_configured()`, defaulting to "anything stored under my id" |
+| `services/workflow_validator.py` | MISSING_CREDENTIAL asks `is_configured` with the node's parameters (§8.3) |
 | `services/credentials/handlers.py` | `delete_api_key` also clears `{provider}_proxy` and registered models |
-| `services/model_registry.py` | local models kept apart and persisted under DATA_DIR; LiteLLM table |
+| `services/model_registry.py` | local models kept apart and persisted under DATA_DIR; LiteLLM table, whose on-demand fetch is time-boxed and backs off after a failure |
 | `services/pricing.py` | reference-aware lookup; a named endpoint's recorded price |
 | `services/settings/handlers.py` | each endpoint is a row in the global default-model picker |
-| `services/rlm/service.py` | refuse a provider RLM cannot route |
+| `services/ai.py`, `services/temporal/agent_activities.py` | an unsaved endpoint is reported as not configured, not as a missing key: a `NodeUserError` in process, a non-retryable `MissingAgentProviderCredential` on Temporal (§8.3) |
+| `services/rlm/service.py`, `services/rlm/adapters.py` | refuse a provider RLM cannot route, as the agent's own or a connected chat model's (routed by `detect_ai_provider`) |
 | `constants.py` | new chat-model type; `detect_ai_provider` reads the node's endpoint |
 | `config/llm_defaults.json` | `auth.placeholder_key`, `open_world_models`, the `openai_compatible` block |
 | `config/credential_providers.json`, `config/pricing.json` | `openai_compatible` entries |
 | `client/.../credentials/panels/ApiKeyPanel.tsx`, `EndpointList.tsx` | add / refresh / remove endpoints |
+| `client/.../contexts/WebSocketContext.tsx`, `credentials/useCredentialPanel.ts` | `CREDENTIAL_PROBE_REQUEST_TIMEOUT`: an endpoint save waits 60 s (§6.5) |
+| `client/.../SquareNode.tsx`, `lib/credentialProviderId.ts` | a node's status dot reads the credential the node actually declares |
+| `client/.../ParameterRenderer.tsx`, `lib/dynamicOptions.ts` | a dependent field (the endpoint's model) moves when its parent changes |
+| `client/.../ui/TopToolbar.tsx`, `hooks/useCatalogueQuery.ts` | the global model picker re-fetches when endpoints change (`useStoredCredentialSignature`) |
 
 ## 1. Summary
 
@@ -133,7 +139,7 @@ code.
 | D1 | A configured provider's `base_url` is copied verbatim from vendor docs. The runtime never appends, strips, or rewrites a path segment. | AG1, AG2 |
 | D2 | A user-supplied base URL is **resolved by probing at save time**, once, and the resolved value is persisted. The runtime consumes it verbatim. | AG3, AG4 |
 | D3 | The probe is the call execution makes (`models.list()` through the openai SDK), against `{base}` then `{base}/v1`. A candidate counts only when the **body is an OpenAI list** (a `data` array): a status code alone proves nothing (§2.1). A connection-level failure stops at the first candidate. | AG3 |
-| D4 | Two outcomes: adopted, or failed with a reason in words the user can act on. A 401/403 is a failure reason ("server found at X, key rejected"), not a stored third state. | AG3 |
+| D4 | Two outcomes: adopted, or failed with a reason in words the user can act on. A 401/403 is a failure reason ("Found an OpenAI-compatible server at X, but it rejected the API key."), not a stored third state. | AG3 |
 | D5 | A failed save **writes nothing and broadcasts nothing**. The previous working configuration stays in force. A save that yields no models is a failed save. | AG6 |
 | D6 | The credential is resolved by one function. No provider hardcodes a placeholder key. | AG7, AG8 |
 | D7 | No code path hands the SDK an unresolved credential — `api_key=None` makes the SDK read `OPENAI_API_KEY` and ship the operator's OpenAI key to a third party. | AG8 |
@@ -237,7 +243,7 @@ and each is accepted **by body shape**:
 | `ollama` | loaded models, official SDK `ps()` | the live `context_length` the server loaded | 0 |
 | `lmstudio` | loaded models, official SDK `list_loaded()` + `get_info()` | live `context_length` | 0 |
 | `llamacpp` | `/models` ids from §6.1 | `/props` `default_generation_settings.n_ctx` | 0 |
-| `generic` | `/models` ids from §6.1 | vLLM `max_model_len` on the entry; else LiteLLM `max_input_tokens` / `max_output_tokens`; else the declared `_default` | LiteLLM per-token cost × 10⁶; else 0 |
+| `generic` | `/models` ids from §6.1 | context: vLLM `max_model_len` on the entry, else LiteLLM `max_input_tokens`. Output: LiteLLM `max_output_tokens` when it is below the context, else derived from the context. Else the declared `_default`s | LiteLLM per-token cost × 10⁶; else 0 |
 
 LiteLLM never feeds a local kind: the bound that matters there is the context
 the server was started with (Ollama silently truncates past it), not the
@@ -249,8 +255,8 @@ hand-rolled probes, and `ollama` also serves embeddings.
 
 Only after rooting and describing succeed: write `{ref}_proxy` (the resolved
 URL), then `{ref}` (key or placeholder, model ids, per-model params, and a
-reserved `_endpoint` entry holding the label, the **redacted** URL and the
-kind — that JSON column is not encrypted), then register the models, then
+reserved `_endpoint` entry holding the label, the **redacted** URL, the kind
+and when it was probed — that JSON column is not encrypted), then register the models, then
 broadcast. Otherwise nothing (D5). A write the credential store rejects fails
 the save too, and a rejected `{ref}` write puts the `{ref}_proxy` row back as it
 was.
@@ -260,9 +266,13 @@ was.
 A save runs inside one WebSocket request, so every step after rooting is
 bounded: the native routes 3 s (asked at once), the Ollama and LM Studio SDK
 probes 10 s, and an on-demand LiteLLM fetch 8 s in total, not retried for 10
-minutes after a failure. The worst case is about 33 s; the client waits 60 s
-(`CREDENTIAL_PROBE_REQUEST_TIMEOUT`) for `validate_api_key`, so a slow save is
-not cut off and then completed behind the user's back.
+minutes after a failure. The nominal worst case is about 33 s (two 10 s
+rooting candidates, the 3 s kind probes, a 10 s SDK probe). The rooting and
+kind timeouts are httpx per-phase timeouts, so a server that trickles its
+answer can stretch them; the SDK probe and the LiteLLM fetch are hard caps.
+The client waits 60 s (`CREDENTIAL_PROBE_REQUEST_TIMEOUT`) for
+`validate_api_key`, so a slow save is not cut off and then completed behind
+the user's back.
 
 ## 7. Credential resolution
 
@@ -438,19 +448,22 @@ without `/v1`), an optional label and key, Add endpoint. No code.
 
 ## 12. Phases
 
-Each a revertible commit; no feature flag. Save-time probing is idempotent and
-records nothing in Temporal history, so there is nothing to replay-protect.
+Planned as eight phases (0 this RFC, 1 contract primitives, 2 runtime guards,
+3 save-time rooting, 4 registry caches and the LiteLLM table, 5 the
+`openai_compatible` provider, 6 the credentials panel, 7 docs). No feature flag.
+Save-time probing is idempotent and records nothing in Temporal history, so
+there is nothing to replay-protect.
 
-| Phase | Change |
-|---|---|
-| 0 | this RFC |
-| 1 | contract primitives: provider references, `resolve_credential`, `PROTOCOL`, JSON declarations |
-| 2 | runtime: unifier guards, constructors, 2xx guard, reference-aware fallbacks and pricing |
-| 3 | save-time rooting and the shared save path for Ollama and LM Studio |
-| 4 | registry caches and the LiteLLM table |
-| 5 | the `openai_compatible` provider: registration, credential, catalogue hook, loaders, node, agent field, settings, RLM guard |
-| 6 | the credentials panel |
-| 7 | docs |
+It landed on 2026-09-24 as four revertible commits and eleven fixes from
+review, merged to `main` as `261cf939`:
+
+| Commit | Phases | Change |
+|---|---|---|
+| `fdc3b59b` | 1–4 | contract primitives, runtime guards and the 2xx guard, save-time rooting and the shared save path (kind detection and metadata included), registry caches and the LiteLLM table |
+| `316d90cf` | 5 | the `openai_compatible` provider: registration, credential, catalogue hook, loaders, node, agent field, settings, pricing, RLM guard |
+| `a305d896` | 6 | the credentials panel |
+| `9283ada1` | 0, 7 | this RFC accepted; docs |
+| `41b85f9c` … `f1375b21` | review | error wording for a named endpoint; the slug from host and port (§8.1); a rejected store write fails the save (§6.4); the time budget (§6.5); failure logs on agent paths (§10.3); one "not configured" wording and `Credential.is_configured` (§8.3); RLM's connected chat models (§15); a dependent model field that follows its endpoint; the global picker's refresh; docs |
 
 No data migration. An existing Ollama or LM Studio row keeps working as
 stored; the next Fetch re-roots it through §6 and replaces the old `"ollama"`
@@ -464,24 +477,26 @@ key on the LM Studio row with LM Studio's own placeholder.
 | AG2 | The allowlist is exactly `endpoints.py` and `_local_validator._strip_v1_path` | same |
 | AG3 | Rooting adopts only an OpenAI list; order, rewrite, rejected-key and connection-failure outcomes | `tests/llm/test_endpoint_resolution.py` (respx, real SDK) |
 | AG4 | Client construction does no IO; only the save path calls `resolve_base_url` | `test_rfc0003_source_contract.py` |
-| AG6 | A failed save writes no row and broadcasts nothing | `tests/nodes/test_local_llm_save.py` |
+| AG6 | A failed save writes no row and broadcasts nothing; a rejected key-row write puts the URL row back as it was | `tests/nodes/test_local_llm_save.py` |
 | AG7 | No placeholder literal in any provider `__init__` | `test_rfc0003_source_contract.py` |
 | AG8 | With `OPENAI_API_KEY` set and no key, keyed providers raise `NodeUserError` and issue zero requests | `tests/llm/test_provider_refs.py` |
 | AG9 | Every `llm_defaults.json` provider key has a reader; the known-dead keys are an explicit list | `test_rfc0003_source_contract.py` |
 | AG10 | 2xx with no `choices` and an error body raises `PROTOCOL` naming the redacted URL | `tests/llm/test_protocol_guard.py` |
-| AG11 | No public message carries userinfo, a query string or `Bearer`; `redact_url` cases | `test_protocol_guard.py`, `test_endpoint_resolution.py` |
+| AG11 | No public message carries userinfo, a query string or `Bearer`; `redact_url` cases; a failure the unifier does not translate still logs `url` and `url_source` under the call's reference | `test_protocol_guard.py`, `test_endpoint_resolution.py` |
 | AG12 | `ProviderSpec`'s field set is unchanged | `test_rfc0003_source_contract.py` |
-| AG13 | Kind detection by body shape, including an LM Studio 200-with-error that is not Ollama | `test_local_llm_save.py` |
-| AG14 | Metadata per kind; LiteLLM never consulted for a local kind; the SDK probes still called | `test_local_llm_save.py` |
-| AG15 | Endpoint add / refresh / remove / catalogue, against the real encrypted store | `tests/credentials/test_openai_compatible_credential.py` |
-| AG16 | A reference resolves config, registry and pricing fallbacks to its block and is open-world; the unifier reads its URL row and refuses a missing one | `test_provider_refs.py` |
+| AG13 | Kind detection by body shape, including an LM Studio 200-with-error that is not Ollama; the three routes asked at once | `test_local_llm_save.py` |
+| AG14 | Metadata per kind; LiteLLM never consulted for a local kind; the SDK probes still called, and a hung one fails the save within its bound | `test_local_llm_save.py` |
+| AG15 | Endpoint add / refresh / remove / catalogue, against the real encrypted store; the slug never from userinfo; `is_configured` checks the endpoint a node names | `tests/credentials/test_openai_compatible_credential.py` |
+| AG16 | A reference resolves config, registry and pricing fallbacks to its block and is open-world; the unifier reads its URL row and refuses a missing one; an unsaved endpoint is reported as not configured on every path: the same words from the in-process agents, the chat model and the Temporal step, and MISSING_CREDENTIAL from the workflow validator | `test_provider_refs.py`, `test_endpoint_resolution.py`, `tests/services/test_native_agent_runtime.py`, `tests/temporal/test_agent_llm_contract.py`, `tests/test_workflow_validator.py` |
 | AG17 | `openai_compatible` is registered once, `OpenAIProvider`, no `base_url` | `tests/llm/test_provider_self_registration.py` |
-| AG18 | Refresh keeps local models; caches under DATA_DIR only; LiteLLM trimming and matching | `tests/services/test_model_registry_caches.py` |
+| AG18 | Refresh keeps local models; caches under DATA_DIR only; LiteLLM trimming and matching; the on-demand fetch is time-boxed and not retried at once after a failure | `tests/services/test_model_registry_caches.py` |
 | AG19 | Every agent `provider` field is loader-driven and offers every registered provider except the bare endpoint id | `tests/llm/test_plugin_shape.py` |
 | AG20 | RLM refuses a provider it cannot route, as its own or a connected chat model's; the node, loaders and `ProviderRef` validation | `tests/nodes/test_openai_compatible_node.py` |
-| FE | The endpoint list renders rows and hands the clicked row back; the panel's add, refresh and remove payloads and the probe budget | `client/.../panels/__tests__/EndpointList.test.tsx`, `ApiKeyPanel.test.tsx` |
+| FE | The endpoint list renders rows and hands the clicked row back; the panel's add, refresh and remove payloads and the probe budget; a node's status dot reads its own credential; a dependent field moves when its parent changes; the global picker re-fetches when endpoints change | `client/.../panels/__tests__/EndpointList.test.tsx`, `ApiKeyPanel.test.tsx`, `lib/__tests__/credentialProviderId.test.ts`, `lib/__tests__/dynamicOptions.test.ts`, `hooks/__tests__/storedCredentialSignature.test.ts` |
 
-AG5 (three verdict states rendered) is retired with D4.
+AG5 (three verdict states rendered) is retired with D4. The wording of the
+model-scoped errors for a named endpoint is locked by
+`tests/llm/test_protocol_codec.py`.
 
 ## 14. What this RFC does not change
 
@@ -511,7 +526,7 @@ Servers the user runs:
 | Ollama | `/v1` | `ollama` | placeholder key `ollama`; only loaded models are listed, with their live context |
 | LM Studio | `/v1` | `lmstudio` | answers 200 to unknown routes (§2.1); its optional API tokens cannot be used yet, because its panel has no key field |
 | llama.cpp | root and `/v1` | `llamacpp` | tool calling needs the server started with `--jinja` (stated in the panel instructions) |
-| vLLM | `/v1` | `generic` | `--api-key` protects `/v1`, so a wrong key reads "key rejected at …/v1"; `max_model_len` sizes each model |
+| vLLM | `/v1` | `generic` | `--api-key` protects `/v1`, so a wrong key reads "Found an OpenAI-compatible server at …/v1, but it rejected the API key."; `max_model_len` sizes each model |
 | LiteLLM proxy | root and `/v1` | `generic` | a virtual key goes in the API key field; bare model names (`gpt-4o`) are sized and priced from LiteLLM's own table |
 
 **RLM** builds its own clients from `services/rlm/constants.py` for six

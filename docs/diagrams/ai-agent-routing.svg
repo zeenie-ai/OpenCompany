@@ -46,7 +46,7 @@
 
   <rect class="box p-cyan" x="60" y="200" width="470" height="58" rx="6"/>
   <text class="h2" x="295" y="224" text-anchor="middle">execute_chat(...)</text>
-  <text class="sub" x="295" y="244" text-anchor="middle">12 chat-model nodes: openaiChatModel, anthropicChatModel, ...</text>
+  <text class="sub" x="295" y="244" text-anchor="middle">Chat-model nodes: openaiChatModel, anthropicChatModel, ...</text>
 
   <path class="conn" d="M 295 258 L 295 306" marker-end="url(#arrow)"/>
   <text class="label" x="305" y="286">delegates (every provider)</text>
@@ -69,10 +69,10 @@
   <text class="label" x="305" y="544">spec.factory()</text>
 
   <rect class="box p-cyan" x="60" y="556" width="470" height="100" rx="6"/>
-  <text class="h2" x="295" y="580" text-anchor="middle">Native providers (13)</text>
+  <text class="h2" x="295" y="580" text-anchor="middle">Native providers</text>
   <text class="sub" x="295" y="600" text-anchor="middle">own SDK: Anthropic &#183; OpenAI &#183; Gemini &#183; OpenRouter</text>
   <text class="sub" x="295" y="618" text-anchor="middle">OpenAI-compatible via base_url: xAI, DeepSeek, Kimi, Mistral,</text>
-  <text class="sub" x="295" y="636" text-anchor="middle">Groq, Cerebras, Sarvam &#183; local: Ollama, LM Studio</text>
+  <text class="sub" x="295" y="636" text-anchor="middle">Groq, Cerebras, Sarvam &#183; Ollama, LM Studio &#183; named endpoints</text>
   <text class="small" x="295" y="652" text-anchor="middle">config-driven (llm_defaults.json): base_url, context, thinking, model listing</text>
 
   <!-- Agent panel (purple) -->

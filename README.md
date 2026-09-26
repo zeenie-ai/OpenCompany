@@ -26,7 +26,7 @@ Download the app for your computer and install it (these links always point at t
 - **macOS, Intel**: [OpenCompany-macos-x64.dmg](https://github.com/zeenie-ai/OpenCompany/releases/latest/download/OpenCompany-macos-x64.dmg)
 - **Linux**: [OpenCompany-linux-x86_64.AppImage](https://github.com/zeenie-ai/OpenCompany/releases/latest/download/OpenCompany-linux-x86_64.AppImage), or [OpenCompany-linux-amd64.deb](https://github.com/zeenie-ai/OpenCompany/releases/latest/download/OpenCompany-linux-amd64.deb) on Debian and Ubuntu
 
-Nothing else to install. On first launch the app sets itself up (a one-time download, a minute or two) and opens Home. Describe a job to hire your first employee; if no AI provider is connected yet, Home asks you to connect one, or you can add it yourself in Settings > Connectors. Switch to Dev mode for the workflow editor, where three example employees are already on the canvas; open one to see how it is put together.
+Nothing else to install. On first launch the app sets itself up (a one-time download, a minute or two) and opens Home. Describe a job to hire your first employee; if no AI provider is connected yet, Home asks you to connect one, or you can add it yourself in Settings > Connectors. Switch to Dev mode for the workflow editor, where three example employees are listed in the workflow sidebar; open one to see how it is put together.
 
 The builds are not code-signed yet, so macOS asks you to allow the app under System Settings > Privacy & Security, and Windows SmartScreen needs "More info > Run anyway".
 
@@ -129,8 +129,8 @@ Nothing here is a black box. What an employee learns lives in its memory, its no
 
 ## What Is in the Box
 
-- **Connections** to Gmail, Google Calendar, Drive, Sheets, Tasks, Contacts, Microsoft 365, any email account, WhatsApp, WhatsApp Business, Telegram, Discord, X, Stripe, GitHub, Vercel, Cloudflare, Google Cloud, your Android phone, a browser, web search, scrapers, and a knowledge base: 148 tools in all.
-- **Models** from OpenAI, Anthropic, Google, xAI, DeepSeek, Kimi, Mistral, Groq, Cerebras, Sarvam, and OpenRouter, or run local models with Ollama and LM Studio for free.
+- **Connections** to Gmail, Google Calendar, Drive, Sheets, Tasks, Contacts, Microsoft 365, any email account, WhatsApp, WhatsApp Business, Telegram, Discord, X, Stripe, GitHub, Vercel, Cloudflare, Google Cloud, your Android phone, a browser, web search, scrapers, and a knowledge base: 140+ tools in all.
+- **Models** from OpenAI, Anthropic, Google, xAI, DeepSeek, Kimi, Mistral, Groq, Cerebras, Sarvam, and OpenRouter, or run local models for free with Ollama, LM Studio, or any OpenAI-compatible server such as llama.cpp or vLLM.
 - **Speech and translation**, so employees can listen, talk, and work in other languages.
 - **78 skills** that ship ready to use, and a place to drop your own.
 - **Built to keep running.** Employees survive restarts, pause and resume from Home or the canvas, and catch up on missed schedules. Your API keys are stored encrypted on your machine. Add a login for shared or cloud use; one command deploys to Google Cloud.
@@ -151,7 +151,7 @@ Adding a tool, a model provider, a skill, or an integration is one plugin folder
 
 Issues and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has the fork/branch/PR workflow, the repository map, and recipes for adding a node, LLM provider, or skill.
 
-One note on scope: connector and provider lists are kept deliberately narrow. The Apify node runs any actor through its `custom` option, the TikHub node calls any of its endpoints through `call`, and agents reach any OpenAI-compatible endpoint through the existing provider path — so a new first-class preset needs a reason beyond "my service could be in the dropdown too."
+One note on scope: connector and provider lists are kept deliberately narrow. The Apify node runs any actor through its `custom` option, the TikHub node calls any of its endpoints through `call`, and agents reach any OpenAI-compatible server once it is saved as a named endpoint under Credentials — so a new first-class preset needs a reason beyond "my service could be in the dropdown too."
 
 ## Community
 

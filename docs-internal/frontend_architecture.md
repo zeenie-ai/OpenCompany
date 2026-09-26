@@ -104,7 +104,8 @@ client/src/
 │   │   ├── types.ts                # ProviderConfig, FieldDef, PanelKind, etc.
 │   │   ├── useCredentialPanel.ts   # State hook (useState + form shim)
 │   │   ├── panels/
-│   │   │   ├── ApiKeyPanel.tsx           # Generic api-key providers
+│   │   │   ├── ApiKeyPanel.tsx           # Generic api-key providers (+ the add form for a provider that holds several endpoints)
+│   │   │   ├── EndpointList.tsx          # Saved named OpenAI-compatible endpoints: rows + Refresh / Remove (stateless)
 │   │   │   ├── OAuthPanel.tsx            # Twitter / Google / Telegram
 │   │   │   ├── QrPairingPanel.tsx        # WhatsApp / Android
 │   │   │   ├── EmailPanel.tsx            # IMAP/SMTP (RHF + zod)
@@ -200,6 +201,8 @@ client/src/
 │   ├── connectionConfig.ts         # WS reconnect + auth-bootstrap backoff constants
 │   ├── workflowOps.ts              # applyOperations for backend workflow-ops batches
 │   ├── canvasLock.ts               # Server-owned can_edit capability -> canvas lock
+│   ├── credentialProviderId.ts     # Which catalogue provider a canvas node's status dot reads (plugin credential ids pass through; legacy names mapped)
+│   ├── dynamicOptions.ts           # nextDynamicOptionValue: move a loadOptionsDependsOn field when its parent changes
 │   ├── sound.ts                    # WebAudio sound engine (10 packs)
 │   ├── motion.ts                   # The one place Web Animations start: --dur-* / --ease-* tokens,
 │   │                               # 1 ms under reduced motion or a hidden page, no loops then

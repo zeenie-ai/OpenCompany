@@ -25,7 +25,7 @@ Run local LLMs (llama, mistral, qwen, deepseek-r1, ...) through a locally-runnin
 |------|------|---------|----------|---------------------|-------------|
 | `prompt` | string | `""` | yes | - | User message |
 | `system_prompt` | string | `""` | no | - | System prompt |
-| `model` | string | `""` (injected) | no | - | Whatever the user has pulled, e.g. `qwen2.5`, `llama3.x`, `deepseek-r1`. Open-world: name not pattern-checked by `is_model_valid_for_provider` |
+| `model` | string | `""` (injected) | no | - | A model Ollama had loaded when the server was last fetched (`ps()` lists loaded models only), e.g. `qwen2.5`, `llama3.x`, `deepseek-r1`. Open-world: name not pattern-checked by `is_model_valid_for_provider` |
 | `temperature` | number\|null | `null` | no | - | 0-2 |
 | `max_tokens` | number\|null | `null` | no | - | 1-200000; default per-loaded-model ctx ÷ 4 (capped 4096) |
 | `top_p` | number\|null | `1.0` | no | - | |

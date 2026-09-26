@@ -145,7 +145,7 @@ one-token chat completion instead. An invalid key still raises the typed SDK
 error the unifier knows how to translate, so it remains a real credential
 check.
 
-The flag **defaults to `true`**, so the other twelve providers are untouched —
+The flag **defaults to `true`**, so every other provider is untouched —
 `tests/llm/test_model_listing_fallback.py` asserts exactly that, and that
 Sarvam is the only opt-out.
 
@@ -274,7 +274,7 @@ Everything Sarvam touches, for reference when adding the next provider:
 | [`node_allowlist.json`](../server/config/node_allowlist.json) | `sarvamChatModel` in `enabled_nodes` (normal-mode visible) |
 | [`groups.py`](../server/nodes/groups.py) | `language` palette group |
 | [`pricing.json`](../server/config/pricing.json) | `llm.sarvam` + `api.sarvam` + `operation_map.sarvam` |
-| 3× agent `Literal` | [ai_agent](../server/nodes/agent/ai_agent/__init__.py), [chat_agent](../server/nodes/agent/chat_agent/__init__.py), [_specialized](../server/nodes/agent/_specialized.py) — `test_plugin_shape.py` asserts **exact set equality** with the registry; miss one and CI fails |
+| Agent dropdowns | nothing to edit today: every agent's `provider` field is the loader-driven `ProviderRef` ([_provider.py](../server/nodes/agent/_provider.py), `aiProviders` loader), which lists every registered provider. When Sarvam landed these were three `Literal` lists; `test_plugin_shape.py::test_all_registered_providers_are_agent_selectable` now locks the loader instead |
 | Frontend | [`aiModelProviders.ts`](../client/src/lib/aiModelProviders.ts), [`AIProviderIcons.tsx`](../client/src/components/icons/AIProviderIcons.tsx) |
 
 ## Tests

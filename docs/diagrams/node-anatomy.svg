@@ -26,7 +26,7 @@
 
   <!-- Title -->
   <text x="880" y="42" class="title" text-anchor="middle">Anatomy of a Plugin Node</text>
-  <text x="880" y="68" class="sub" text-anchor="middle">One Python folder = one node. Backend is the single source of truth - the frontend renders itself with zero TypeScript edits. 148 nodes ship this way.</text>
+  <text x="880" y="68" class="sub" text-anchor="middle">One Python folder = one node. Backend is the single source of truth - the frontend renders itself with zero TypeScript edits. 140+ nodes ship this way.</text>
 
   <!-- ================= GROUP 1 (cyan): What you write ================= -->
   <rect class="panel p-cyan" x="40" y="100" width="460" height="545" rx="10"/>

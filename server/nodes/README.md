@@ -447,7 +447,7 @@ Full reference: [docs-internal/plugin_system.md → "Self-contained plugin folde
   types to `Output` instead.
 - **Never name a Params field `model` or `api_key` on a node that also has
   a `provider` field.** An effect in
-  [`ParameterRenderer.tsx:866`](../../client/src/components/ParameterRenderer.tsx#L866)
+  [`ParameterRenderer.tsx:898`](../../client/src/components/ParameterRenderer.tsx#L898)
   keys on those two literal names: when a sibling `provider` field is
   present it overwrites `model` with the *chat-model* list and clears
   `api_key`. It never checks that the provider is an LLM provider, so
