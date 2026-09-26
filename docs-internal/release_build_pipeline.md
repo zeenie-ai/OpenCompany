@@ -196,7 +196,7 @@ Idempotent on re-runs (compileall only rewrites stale pyc; `bun build` is determ
 
 ## Desktop installers
 
-The Electron shell has its own pipeline (`.github/workflows/desktop-release.yml`) that consumes this one's outputs (`client/dist`, the sidecar bundle) and adds the bundled runtimes; it is documented in [desktop_app.md](./desktop_app.md). Nuitka / PyOxidizer freezing was evaluated and rejected there: `temporalio`'s PyO3 bridge, `dependency-injector` wiring by string, `pkgutil.walk_packages` plugin discovery and `uv tool install browser-harness` at runtime all need a real interpreter on disk.
+The Electron shell has its own pipeline (`.github/workflows/desktop-release.yml`) that consumes this one's outputs (`client/dist`, the sidecar bundle) and adds the bundled runtimes; it is documented in [desktop_app.md](./desktop_app.md). Nuitka / PyOxidizer freezing was evaluated and rejected there: `temporalio`'s PyO3 bridge, `dependency-injector` wiring by string, `pkgutil.walk_packages` plugin discovery and the Browser node's `uv tool install` of the browser-use CLI at runtime all need a real interpreter on disk.
 
 ## Out of scope (future work)
 

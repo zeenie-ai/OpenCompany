@@ -130,7 +130,9 @@ the team.
   summary. Multiple nodes get a selector. Running sessions appear automatically;
   Start browser opens an idle session. The view supports navigation, tabs,
   Take control / Hand back, and browser dialogs. Frames use `/ws/browser`,
-  not a URL iframe. See [Browser workspace](./browser_workspace.md).
+  not a URL iframe. The card's Help in browser opens the Workspace on this
+  tab while the agent waits for the owner. See
+  [Browser workspace](./browser_workspace.md).
 - **Android**: a shared panel explains that live mirroring is not yet available.
   Dev mode uses the same three workspace tabs and browser viewer.
 - **Size and motion**: 460px wide by default. The left edge drags from
@@ -314,7 +316,8 @@ changing page clears it.
   cannot silently miss the page. They are listed in category order, so apps
   come before AI models. The catalogue adds `connected`, which differs from
   `stored` for providers with a `connected_check` (WhatsApp's live pairing,
-  the IMAP/SMTP account's keys).
+  the IMAP/SMTP account's keys; `builtin`, always connected, for the Web
+  browser, whose panel manages optional login profiles).
 
 **The catalog page** ([settings/CatalogLayout.tsx](../client/src/features/home/settings/CatalogLayout.tsx)).
 Skills, Connectors and Plugins are built on a shared page:
@@ -338,7 +341,7 @@ WebSocket requests (snake_case; failures come back as `success: false` with an
 
 | Type | Payload | Response |
 |---|---|---|
-| `list_employees` | `{}` | `{employees}`; each summary's `canvas_node_id` is its Canvas board: the one it was hired with, else the graph's first Canvas node, else null |
+| `list_employees` | `{}` | `{employees}`; each summary's `canvas_node_id` is its Canvas board: the one it was hired with, else the graph's first Canvas node, else null. `browser_request` is a browser waiting for the owner (`{node_id, reason, since}`), else null |
 | `get_employee` | `{workflow_id}` | the summary plus `description`, `job`, `plan`, `rules`, `choices`, `trigger_text`, `last_run`, `latest_report` |
 | `get_employee_usage` | `{}` | `{tasks_this_month}` (successful runs since the 1st, owner's timezone, whole team) |
 | `generate_employee_setup` | `{job, refine?, history?, draft_token}` | `{draft_token, reply, provider, model, usage, retried, finish_reason, apps}` |
@@ -353,7 +356,7 @@ consumer; see [Event Framework](./event_framework.md#ui-only-lifecycle-events-br
 
 | Wire key | Type | Notes |
 |---|---|---|
-| `employee_lifecycle` | `com.opencompany.employee.{hired,updated,removed}` | Subject is the workflow id; `updated` is coalesced to one per second per employee, except control changes, which go out at once |
+| `employee_lifecycle` | `com.opencompany.employee.{hired,updated,removed}` | Subject is the workflow id; `updated` is coalesced to one per second per employee, except control changes and browser control changes (each agent step, and the wait for the owner), which go out at once |
 | `approval_lifecycle` | `com.opencompany.approval.{requested,decided,expired,cancelled}` | Identity only, never the message or the recipient |
 | `workflow_lifecycle` | gains `created` and `deleted` stages | So open editors refresh their workflow lists |
 
@@ -390,6 +393,10 @@ history). Client: `features/home/**/__tests__`, `app/__tests__`,
   `canvas_node_id` is null. Adding one in Dev mode fills it in.
 - The Workspace's Android tab has no live mirror yet. Browser now uses the
   shared live viewer described above; timeline and replay are not available.
+- The Web browser app counts as connected even on a machine with no
+  installed Chrome, Edge or Chromium; the employee's first browser step
+  reports it. An employee hired before the app existed has no browser;
+  adding a Browser node in Dev mode gives it one.
 - With login on, an agent's Canvas writes land under the default owner:
   its tool call carries no user id
   ([agent_workflow.py](../server/services/temporal/agent_workflow.py)).

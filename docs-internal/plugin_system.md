@@ -574,7 +574,7 @@ per node type) — same pattern as every other folder.
 |---|---|---|
 | Credentials-modal WebSocket commands (Connect / Disconnect / Send / Status / etc.) | `services.ws_handler_registry` | `register_ws_handlers({type: handler, ...})` |
 | FastAPI HTTP router (OAuth callbacks, webhook receivers, etc.) | `services.ws_handler_registry` | `register_router(router, name='<plugin>')` — Wave 11.I; declare a `_router.py` exposing an `APIRouter` and call from `__init__.py`. Discovered at startup via `services.ws_handler_registry.get_routers()`. |
-| `loadOptionsMethod` async loader for a dynamic dropdown (`json_schema_extra={"loadOptionsMethod": "..."}`) | `services.ws_handler_registry` | `register_option_loader(method_name, fn)` |
+| `loadOptionsMethod` async loader for a dynamic dropdown (`json_schema_extra={"loadOptionsMethod": "..."}`). A loader that lists one user's things reads the caller from `current_load_options_principal()`, never a `user_id` in its params (the client writes those) | `services.ws_handler_registry` | `register_option_loader(method_name, fn)` |
 | OAuth callback path (`/api/<provider>/callback`) so `services.oauth_utils.get_redirect_uri` never cross-imports `nodes/<plugin>/_oauth.py` | `services.ws_handler_registry` | `register_oauth_callback_path(provider, path)` |
 | Trigger event-filter builder | `services.event_waiter` | `register_filter_builder(node_type, fn)` |
 | Trigger pre-execution check (e.g. "bot not connected") | `services.event_waiter` | `register_trigger_precheck(node_type, fn)` |

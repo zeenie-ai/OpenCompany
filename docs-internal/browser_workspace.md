@@ -17,6 +17,8 @@ Canvas boards, push notifications and temporary file previews still use
 `canvasDockStore`. Its selected tab is persisted. A Canvas push does not
 switch an already-open Browser tab; explicitly opening a file preview does
 switch to Canvas. Android currently has an explanatory panel, not a live mirror.
+The Browser node's parameter panel (`MiddleSection`, `isBrowserPanel`) shows
+the same viewer above the node's settings.
 
 ## Discovery and identity
 
@@ -29,6 +31,22 @@ Viewing a saved node attaches a session but does not launch Chrome; Start
 browser calls the authorized `browser_session_open` handler. Unsaved workflows
 must be saved first. Adding a node to an existing workflow must also be saved
 before the server can authorize it.
+
+## When the agent asks for help
+
+`request_user` puts the profile's controller in `awaiting_user`. The viewer
+shows the agent's message, which arrives on the live socket's `state`
+message. Elsewhere only identity and the reason travel, because broadcasts
+and employee summaries reach every connected socket:
+
+- **Home:** the employee summary's `browser_request` (`{node_id, reason,
+  since}`) turns the pill to Needs you, the server's task line names the
+  reason, and Watch live becomes Help in browser, which opens the workspace on
+  its Browser tab. The live task overlay stands back meanwhile, since the
+  agent's node is still executing while it waits.
+- **Dev:** a `browser_updated` broadcast for the open workflow in
+  `awaiting_user` opens the dock on its Browser tab
+  (`canvasDockStore.showBrowser`).
 
 ## Transport and display
 
@@ -196,6 +214,10 @@ benchmark script:   283e28a5afa86c16370e39b989b8d800462b940d1e81f6755f29bded129a
   browser discovery integration, tab changes and hidden dock state.
 - `client/src/components/ui/__tests__/WorkspaceDock.test.tsx`: Dev tabs, schema
   hydration and viewer unmount on close.
+- `client/src/features/home/__tests__/presentation.test.ts`: Needs you while the
+  agent waits in the browser.
+- `client/src/stores/__tests__/canvasDockStore.test.ts`: a Canvas push never
+  leaves a live browser; `showBrowser` opens the Browser tab.
 - `server/tests/nodes/browser/test_browser_stream.py`: fake-CDP startup failure
   recovery and cancellation.
 - `server/tests/nodes/browser/test_browser_frame_delivery.py`: trailing frames,
@@ -203,4 +225,5 @@ benchmark script:   283e28a5afa86c16370e39b989b8d800462b940d1e81f6755f29bded129a
 - `server/tests/nodes/browser/test_browser_live_control.py`: bounded input queues,
   responsive receive loop, takeover/release races, held-input cleanup and teardown.
 - `server/tests/services/employees/test_list_employees.py`: capability-based
-  browser discovery in employee summaries.
+  browser discovery in employee summaries, and the browser request (never the
+  agent's message).

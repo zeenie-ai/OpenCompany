@@ -55,7 +55,7 @@ The profile is persistent across executions; it is not the old execution-ID-name
 
 ## Policy and control
 
-Operator settings include `profile_id`, `interaction` (`full` or `read_only`), `webmcp_mode` (`disabled`, `read_only`, `all`), `allowed_domains`, `allow_private_network`, `op_timeout_s` (default 45, range 5–300), and `request_user_timeout_s` (default 600, range 60–1800). They are server-controlled for tool calls.
+Operator settings include `profile_id`, `interaction` (`full` or `read_only`), `webmcp_mode` (`disabled`, `read_only`, `all`), `allowed_domains`, `allow_private_network`, `op_timeout_s` (default 45, range 5–300), and `request_user_timeout_s` (default 600, range 60–1800). They are server-controlled for tool calls. The `profile_id` dropdown (`browserProfiles` loader) lists only the caller's own profiles; the loader takes the caller from the authenticated request, never from its parameters.
 
 The current `MUTATING` set is exactly `click`, `type`, `press`, `select`, `back`, `forward`, `reload`, `webmcp_call`, `evaluate`, and `run_python`. `read_only` rejects this set. It does not prohibit navigation, scrolling, hovering or tab operations. In particular, `webmcp_call` is rejected by `interaction=read_only` before its tool-level read-only metadata is considered; `webmcp_mode=read_only` with full interaction is the setting that admits advertised read-only WebMCP tools.
 
@@ -64,6 +64,10 @@ Empty `allowed_domains` allows public destinations. The managed egress proxy che
 Control states are `idle`, `agent`, `awaiting_user`, and `user`. `request_user` includes instructions for login, CAPTCHA, two-factor authentication, confirmation or another manual step. Agent calls wait at most 480 seconds per handoff call; a longer configured pending request can return `still_waiting` and be awaited by another call. Workflow steps can wait for the configured deadline.
 
 The authenticated live viewer attaches through `/ws/browser` to a saved workflow/node or a profile-login session. Watching does not grant control. Takeover, handback, visibility and disconnect are coordinated with the profile controller. Live mouse/keyboard/navigation commands use a bounded ordered queue and direct CDP, independently of the subprocess CLI path used by node operations. Frame acknowledgements and visibility messages remain responsive while commands run. Handback settles dispatched input and releases held keys/buttons before agent work resumes. See [browser workspace](../../browser_workspace.md) for frame delivery and frontend lifecycle.
+
+## Normal mode
+
+Hire adds this node through the **Web browser** app (`web` in `config/employee_apps.json`, recorded under the employee's `browser` role). With "Ask me before sending anything" on, it is attached with `interaction=read_only`, so the agent reads pages and hands any change to the owner through `request_user`. While the agent waits there, the employee summary's `browser_request` (`{node_id, reason, since}`) makes Home show Needs you and Help in browser; the agent's message itself stays in the live viewer.
 
 ## Output and failures
 
