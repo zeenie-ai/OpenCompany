@@ -12,10 +12,15 @@ import { renderHook } from '@testing-library/react';
 import { readStoredShellMode } from '../../store/useAppStore';
 import { AVAILABLE_THEMES, DARK_FAMILY, ThemeProvider, useTheme } from '../ThemeContext';
 
-const INDEX_HTML = readFileSync(join(__dirname, '..', '..', '..', 'index.html'), 'utf-8');
+// LF line endings, as the HTML parser produces, so a script's text can be
+// found in the source on a CRLF checkout too.
+const INDEX_HTML = readFileSync(join(__dirname, '..', '..', '..', 'index.html'), 'utf-8').replace(/\r\n/g, '\n');
 
 function prePaintScript(): string {
-  const scripts = Array.from(INDEX_HTML.matchAll(/<script>([\s\S]*?)<\/script>/g), (m) => m[1]);
+  // Parsed, not matched with a tag regex, which would miss `</script >`,
+  // attributes and case variants (CodeQL js/bad-tag-filter).
+  const doc = new DOMParser().parseFromString(INDEX_HTML, 'text/html');
+  const scripts = Array.from(doc.querySelectorAll('script:not([src])'), (el) => el.textContent ?? '');
   const script = scripts.find((s) => s.includes('data-theme'));
   if (!script) throw new Error('index.html has no inline pre-paint theme script');
   return script;

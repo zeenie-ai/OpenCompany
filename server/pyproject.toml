@@ -107,6 +107,11 @@ dependencies = [
 
     # Crawlee Web Scraping
     "crawlee[beautifulsoup]>=1.4.0",
+    # Security floor for beautifulsoup4's selector engine (pulled in by
+    # crawlee): <2.9.0 carries two polynomial-time ReDoS advisories,
+    # GHSA-j934-xhv5-fg8f (CVE-2026-85999) and GHSA-gjv8-xp57-g29c
+    # (CVE-2026-86000). Do not lower without checking them.
+    "soupsieve>=2.9.0",
     "html2text>=2024.2.26",
 
     # Telegram Bot API

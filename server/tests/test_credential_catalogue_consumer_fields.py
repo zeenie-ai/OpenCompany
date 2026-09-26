@@ -96,9 +96,14 @@ class TestCatalogueFields:
             # fields on the Discord entry.
             "discord_oauth",
         }
+        # Plugin credentials only: test modules register stubs in the same
+        # registry (test_connection_multipart's `multipart_stub`), and which
+        # of them are loaded depends on what else the run collected.
+        plugin_ids = {cid for cid, cls in CREDENTIAL_REGISTRY.items() if cls.__module__.startswith("nodes.")}
+        assert plugin_ids, "no plugin credential registered"
         listed = {provider["id"] for provider in registry.get_all_providers()}
-        assert set(CREDENTIAL_REGISTRY) - listed - not_listed == set()
-        assert not_listed <= set(CREDENTIAL_REGISTRY), "an exemption outlived its credential"
+        assert plugin_ids - listed - not_listed == set()
+        assert not_listed <= plugin_ids, "an exemption outlived its credential"
 
     def test_llm_providers_inherit_the_ai_category_and_deepl_is_a_language_service(self, registry):
         assert registry.get_provider("openai")["consumer_category"] == "ai"
