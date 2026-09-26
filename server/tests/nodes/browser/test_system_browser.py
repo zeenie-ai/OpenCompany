@@ -71,7 +71,7 @@ async def test_posix_version_timeout_kills_and_reaps(monkeypatch):
 async def test_system_provider_reports_actual_version_and_never_installs(monkeypatch):
     settings(monkeypatch)
     installer = ChromeInstaller()
-    monkeypatch.setattr(system, "discover_browser", lambda raw: (Path("edge"), "edge"))
+    monkeypatch.setattr(system, "discover_browsers", lambda raw: [(Path("edge"), "edge")])
     monkeypatch.setattr(system, "browser_version", AsyncMock(return_value="151.2.3.4"))
     monkeypatch.setattr(installer, "_start", AsyncMock(side_effect=AssertionError("no download")))
     assert installer.status()["version"] == ""
@@ -83,7 +83,7 @@ async def test_system_provider_reports_actual_version_and_never_installs(monkeyp
 async def test_missing_system_browser_does_not_download(monkeypatch):
     settings(monkeypatch)
     installer = ChromeInstaller()
-    monkeypatch.setattr(system, "discover_browser", Mock(side_effect=NodeUserError("install a browser")))
+    monkeypatch.setattr(system, "discover_browsers", Mock(side_effect=NodeUserError("install a browser")))
     download = AsyncMock(side_effect=AssertionError("no fallback"))
     monkeypatch.setattr(installer, "_start", download)
     with pytest.raises(NodeUserError, match="install a browser"):
@@ -96,10 +96,53 @@ async def test_missing_system_browser_does_not_download(monkeypatch):
 async def test_minimum_browser_gate(monkeypatch):
     settings(monkeypatch)
     installer = ChromeInstaller()
-    monkeypatch.setattr(system, "discover_browser", lambda raw: (Path("chrome"), "chrome"))
+    monkeypatch.setattr(system, "discover_browsers", lambda raw: [(Path("chrome"), "chrome")])
     monkeypatch.setattr(system, "browser_version", AsyncMock(return_value="100.0.0.0"))
     with pytest.raises(NodeUserError, match="requires version"):
         await installer.ensure(wait=10)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("required,expected", [(0, "chrome"), (154, "edge")])
+async def test_selection_uses_first_browser_compatible_with_profile(monkeypatch, required, expected):
+    settings(monkeypatch)
+    monkeypatch.setattr(system, "discover_browsers", lambda raw: [(Path("chrome"), "chrome"), (Path("edge"), "edge")])
+    versions = {"chrome": "153.0.0.0", "edge": "154.0.0.0"}
+    monkeypatch.setattr(system, "browser_version", AsyncMock(side_effect=lambda path: versions[path.name]))
+    installer = ChromeInstaller()
+    monkeypatch.setattr(installer, "_start", AsyncMock(side_effect=AssertionError("no download")))
+    assert await installer.ensure(wait=10, min_major=required) == Path(expected)
+    assert installer.state.version == versions[expected]
+    assert installer.state.source == expected
+
+
+@pytest.mark.asyncio
+async def test_all_installed_browsers_too_old_preserves_profile(monkeypatch):
+    settings(monkeypatch)
+    monkeypatch.setattr(system, "discover_browsers", lambda raw: [(Path("chrome"), "chrome"), (Path("edge"), "edge")])
+    monkeypatch.setattr(system, "browser_version", AsyncMock(return_value="153.0.0.0"))
+    installer = ChromeInstaller()
+    with pytest.raises(NodeUserError, match="requires version 154.*profile has been preserved"):
+        await installer.ensure(wait=10, min_major=154)
+    assert installer.state.phase == "failed"
+    assert installer.state.exe is None
+
+
+@pytest.mark.asyncio
+async def test_old_explicit_browser_never_switches_to_another_browser(monkeypatch):
+    settings(monkeypatch, browser_chrome_path="chosen.exe")
+    monkeypatch.setattr(Path, "is_file", lambda path: path.name == "chosen.exe")
+    monkeypatch.setattr(system, "_candidates", Mock(side_effect=AssertionError("override is exclusive")))
+    monkeypatch.setattr(system, "browser_version", AsyncMock(return_value="153.0.0.0"))
+    with pytest.raises(NodeUserError, match="BROWSER_CHROME_PATH.*requires version 154"):
+        await ChromeInstaller().ensure(wait=10, min_major=154)
+
+
+@pytest.mark.asyncio
+async def test_unreadable_candidate_does_not_hide_compatible_browser(monkeypatch):
+    monkeypatch.setattr(system, "discover_browsers", lambda raw: [(Path("chrome"), "chrome"), (Path("edge"), "edge")])
+    monkeypatch.setattr(system, "browser_version", AsyncMock(side_effect=[OSError("unreadable"), "154.0.0.0"]))
+    assert await system.select_browser(min_major=154) == (Path("edge"), "edge", "154.0.0.0")
 
 
 @pytest.mark.asyncio
@@ -111,7 +154,7 @@ async def test_testing_provider_is_explicit_and_override_still_wins(monkeypatch)
     assert await installer.ensure(wait=10) == Path("testing")
     assert installer.status()["source"] == "testing"
     config.browser_chrome_path = "custom"
-    monkeypatch.setattr(system, "discover_browser", lambda raw: (Path(raw), "override"))
+    monkeypatch.setattr(system, "discover_browsers", lambda raw: [(Path(raw), "override")])
     assert await installer.ensure(wait=10) == Path("custom")
     assert installer.status()["source"] == "override"
 
@@ -130,6 +173,7 @@ async def test_downgrade_guard_uses_selected_browser_before_launch(monkeypatch):
     profile = Profile("id", "owner", "saved", "custom", None, 152)
     with pytest.raises(NodeUserError, match="browser 151"):
         await runtime._start(profile)
+    installer.ensure.assert_awaited_once_with(wait=10.0, min_major=152)
 
 
 @pytest.mark.asyncio

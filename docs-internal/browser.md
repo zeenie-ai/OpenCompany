@@ -24,8 +24,11 @@ session. Normal and Dev modes use the same viewer component.
 
 ## Installation and configuration
 
-The default `BROWSER_RUNTIME=system` discovers installed Chrome first, then
-Edge/Chromium. `BROWSER_CHROME_PATH` selects an explicit executable. If none
+The default `BROWSER_RUNTIME=system` checks installed Chrome first, then
+Edge/Chromium, selecting the first browser new enough for the requested profile
+and runtime minimum. For example, a profile last opened by version 154 skips
+Chrome 153 and can use installed Edge 154. `BROWSER_CHROME_PATH` selects an
+exclusive executable override; an incompatible override fails instead of switching browsers. If none
 is available, startup fails with setup guidance: there is no automatic Chrome
 for Testing download or fallback. System mode preserves the browser's native
 user agent. An installed browser is not a guarantee that a website will accept
@@ -71,7 +74,8 @@ The CLI receives its own per-profile home, runtime and temporary directories.
 
 The profile version guard checks the browser executable actually selected, not
 the testing pin. A browser older than the version that last wrote the profile
-is rejected with actionable guidance. OpenCompany neither deletes that profile
+is skipped during automatic discovery, or rejected with actionable guidance
+when explicitly selected or no compatible browser is installed. OpenCompany neither deletes that profile
 nor silently creates a replacement; select a compatible browser or explicitly
 choose a different profile. This protects saved sessions during runtime changes.
 

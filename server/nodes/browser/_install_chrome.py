@@ -173,19 +173,20 @@ class ChromeInstaller:
             raise NodeUserError("BROWSER_RUNTIME must be system or testing.")
         return provider
 
-    async def _selected(self, exe: Path, source: str) -> Path:
+    async def _selected(self, exe: Path, source: str, *, min_major: int = 0, version: Optional[str] = None) -> Path:
         from ._system_browser import browser_version, version_major
 
-        version = await browser_version(exe)
-        if version_major(version) < self.pin.min_major:
-            raise NodeUserError(f"The selected browser is version {version}; OpenCompany requires version {self.pin.min_major} or newer. Update your browser or select another BROWSER_CHROME_PATH.")
+        version = version or await browser_version(exe)
+        required_major = max(min_major, self.pin.min_major)
+        if version_major(version) < required_major:
+            raise NodeUserError(f"The selected browser is version {version}; this profile requires version {required_major} or newer. Update your browser or select another BROWSER_CHROME_PATH.")
         self.state.phase, self.state.exe, self.state.version = "ready", str(exe), version
         self.state.source, self.state.error = source, None
         return exe
 
     # -- install ----------------------------------------------------------
 
-    async def ensure(self, *, wait: float) -> Path:
+    async def ensure(self, *, wait: float, min_major: int = 0) -> Path:
         """Path to a supported browser; only testing mode may download it.
 
         Testing downloads wait at most ``wait`` seconds and keep running in
@@ -193,21 +194,21 @@ class ChromeInstaller:
         """
         from core.container import container
 
-        from ._system_browser import discover_browser
+        from ._system_browser import select_browser
 
         provider = self.provider()
         raw = str(getattr(container.settings(), "browser_chrome_path", "") or "").strip()
         if raw or provider == "system":
             try:
-                exe, source = discover_browser(raw)
-                return await self._selected(exe, source)
+                exe, source, version = await select_browser(min_major=max(min_major, self.pin.min_major), override=raw)
+                return await self._selected(exe, source, min_major=min_major, version=version)
             except Exception as exc:
                 self.state.phase, self.state.error = "failed", str(exc)
                 self.state.version, self.state.exe, self.state.source = "", None, ""
                 raise
         exe = self.installed_exe()
         if exe is not None:
-            return await self._selected(exe, "testing")
+            return await self._selected(exe, "testing", min_major=min_major)
 
         task = await self._start()
         try:
@@ -216,7 +217,7 @@ class ChromeInstaller:
             pct = self.state.percent
             progress = f" ({pct}%)" if pct is not None else ""
             raise NodeUserError(f"Installing the browser{progress}. This happens once; try again in a minute.") from None
-        return await self._selected(exe, "testing")
+        return await self._selected(exe, "testing", min_major=min_major)
 
     async def _start(self) -> asyncio.Task:
         async with self._lock:

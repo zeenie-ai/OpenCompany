@@ -39,7 +39,8 @@ def _candidates():
                     yield Path(found), name
 
 
-def discover_browser(override: str = "") -> tuple[Path, str]:
+def discover_browsers(override: str = "") -> list[tuple[Path, str]]:
+    """Installed candidates in preference order; an explicit path is exclusive."""
     if override.strip():
         path = Path(override).expanduser()
         if not path.is_file():
@@ -47,6 +48,7 @@ def discover_browser(override: str = "") -> tuple[Path, str]:
         candidates = [(path, "override")]
     else:
         candidates = _candidates()
+    found = []
     for path, source in candidates:
         if not path.is_file():
             continue
@@ -54,8 +56,34 @@ def discover_browser(override: str = "") -> tuple[Path, str]:
             if override:
                 raise NodeUserError("BROWSER_CHROME_PATH points at a snap browser. Install Chrome/Chromium outside snap so it can access OpenCompany's profile.")
             continue
-        return path, source
+        if not any(existing == path for existing, _ in found):
+            found.append((path, source))
+    if found:
+        return found
     raise NodeUserError("No installed Chrome, Edge or Chromium was found. Install one or set BROWSER_CHROME_PATH to its executable. To download the managed test browser instead, explicitly set BROWSER_RUNTIME=testing.")
+
+
+def discover_browser(override: str = "") -> tuple[Path, str]:
+    return discover_browsers(override)[0]
+
+
+async def select_browser(*, min_major: int, override: str = "") -> tuple[Path, str, str]:
+    """Prefer Chrome, but skip browsers too old to open the requested profile."""
+    rejected = []
+    for path, source in discover_browsers(override):
+        try:
+            version = await browser_version(path)
+            if version_major(version) >= min_major:
+                return path, source, version
+            rejected.append(f"{source}: {version}")
+        except (NodeUserError, OSError, TimeoutError) as exc:
+            rejected.append(f"{source}: {exc}")
+    selection = "BROWSER_CHROME_PATH" if override else "The installed browsers"
+    raise NodeUserError(
+        f"{selection} cannot open this profile: it requires version {min_major} or newer. "
+        f"Found: {'; '.join(rejected)}. Update your browser or select a compatible BROWSER_CHROME_PATH. "
+        "The existing profile has been preserved."
+    )
 
 
 def _windows_version(path: Path) -> str:

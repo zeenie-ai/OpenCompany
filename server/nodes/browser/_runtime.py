@@ -227,7 +227,7 @@ class BrowserRuntime:
         settings = self._settings()
         pin = get_config().chrome
         installer = get_chrome_installer()
-        exe = await installer.ensure(wait=float(settings.browser_install_timeout_seconds))
+        exe = await installer.ensure(wait=float(settings.browser_install_timeout_seconds), min_major=profile.chrome_major or 0)
         selected_version = installer.state.version
         selected_major = version_major(selected_version)
         if profile.chrome_major and profile.chrome_major > selected_major:
