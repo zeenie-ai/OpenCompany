@@ -11,14 +11,14 @@
 ## Purpose
 
 `aiAgent` is the general-purpose tool-calling agent node. It reads a prompt
-and system message, optionally merges conversation history from a connected
-`simpleMemory`, loads instructions from connected skill nodes, binds tool nodes
-as provider-neutral `AgentToolSpec` values, and runs
-`run_native_agent_loop` until the LLM produces a final answer. All of the
-heavy lifting (native SDK invocation, tool execution, memory persistence)
-lives behind `AIService.execute_agent`; the handler's job is purely to gather
-the connected-node payloads via
-`edge_walker.collect_agent_connections` (a 5-tuple: memory, skill, tool,
+and system message, continues its stored conversation when a Context node is
+connected on `input-context` (RFC-0002), loads instructions from connected
+skill nodes, binds tool nodes as provider-neutral `AgentToolSpec` values, and
+runs `run_native_agent_loop` until the LLM produces a final answer. All of the
+heavy lifting (native SDK invocation, tool execution, conversation
+persistence) lives behind `AIService.execute_agent`; the handler's job is
+purely to gather the connected-node payloads via
+`edge_walker.collect_agent_connections` (a 5-tuple: context, skill, tool,
 input, task) and forward them.
 
 ## Inputs (handles)
@@ -27,8 +27,8 @@ input, task) and forward them.
 |--------|-----------------|----------|---------|
 | `input-main` | main | no | Upstream data. Used as auto-prompt when `prompt` is empty. |
 | `input-skill` | main | no | Skill nodes (`masterSkill` is expanded into individual skills). |
-| `input-memory` | main | no | A `simpleMemory` node whose `memory_content` markdown is parsed into native `Message` values. |
-| `input-tools` | main | no | Tool nodes (search, calculator, HTTP, Android toolkit, child agents, etc.). |
+| `input-context` | main | no | A Context node. The agent loads its stored conversation at run start and saves it after every turn, only in a started workflow. Legacy `simpleMemory` -> `input-memory` edges are rewritten on load into a Context node plus a Memory tool edge. |
+| `input-tools` | main | no | Tool nodes (search, calculator, HTTP, Android service nodes, the Memory tool, child agents, etc.). |
 | `input-task` | main | no | `taskTrigger` output - completed delegated-task payload. |
 
 ## Parameters
@@ -82,7 +82,7 @@ flowchart TD
   G -- yes --> H[Extract message/text/content<br/>from input_data<br/>-> parameters.prompt]
   G -- no --> I
   H --> I[Get status broadcaster]
-  I --> J[await ai_service.execute_agent<br/>with memory/skill/tool/broadcaster]
+  I --> J[await ai_service.execute_agent<br/>with context/skill/tool/broadcaster]
   J --> K[Return envelope]
 ```
 
@@ -90,9 +90,10 @@ flowchart TD
 
 - **`edge_walker.collect_agent_connections`** scans `context.edges` for edges whose target
   is this node, then routes each by `targetHandle`:
-  - `input-memory` + source type `simpleMemory` -> build `memory_data` dict.
-    `session_id` is auto-set to the agent's `node_id` unless the memory node
-    explicitly sets `sessionId` to a non-empty, non-`default` value.
+  - `input-context` -> the agent-context builder registered by the Context
+    plugin returns the conversation descriptor (`context_data`). Legacy
+    `input-memory` + `simpleMemory` edges in old graphs still yield their
+    recorded Memory descriptor.
   - `input-skill` -> append to `skill_data`. `masterSkill` is expanded into
     one entry per **enabled** skill in `skillsConfig`; instructions come from
     the DB-stored `instructions` first, with a skill-folder fallback.
@@ -125,9 +126,9 @@ flowchart TD
 ## Side Effects
 
 - **Database writes**: none directly in `execute_op`. `AIService.execute_agent`
-  writes `token_usage_metrics` rows (via `CompactionService.track`), and
-  `memory_content` markdown changes persist back through the
-  `simpleMemory` node's `save_node_parameters` path owned by the service.
+  writes `token_usage_metrics` rows (via `CompactionService.track`). With a
+  Context node connected, the conversation is saved to `agent_conversations`
+  after every turn of a started workflow; a manual node Run saves nothing.
 - **Broadcasts**: `prepare_agent_call` resolves `StatusBroadcaster` and passes
   it into `execute_agent`. The service then emits `update_node_status`
   (`thinking`, `executing_tool`, `success`, ...) plus `token_usage_update`
@@ -159,9 +160,10 @@ flowchart TD
 
 ## Edge cases & known limits
 
-- **Memory session auto-derivation**: two agents sharing the same `simpleMemory`
-  will each get a **different** session (each uses its own `node_id`) unless
-  the memory node's `sessionId` is set to a non-empty, non-`default` value.
+- **One conversation per agent**: the stored conversation is keyed by
+  `(workflow_id, generation, agent_node_id)`, so every caller of a started
+  workflow continues the same conversation. Reset admits a new generation and
+  clears the stored conversations.
 - **`masterSkill` expansion swallows missing skills**: if a skill key has no
   `instructions` in DB and the skill loader raises, the skill entry is still
   appended with an empty instruction body (logged as a warning, not an error).
@@ -187,7 +189,7 @@ flowchart TD
   (android_agent, coding_agent, web_agent, ...). See
   [`chatAgent.md`](./chatAgent.md) for the same contract with a different
   system prompt.
-- **Memory node**: [`simpleMemory.md`](./simpleMemory.md)
+- **Context node**: [`context.md`](./context.md); **Memory tool**: [`simpleMemory.md`](./simpleMemory.md)
 - **Architecture docs**: [Agent Architecture](../../agent_architecture.md),
   [Agent Delegation](../../agent_delegation.md),
   [Native LLM SDK](../../native_llm_sdk.md),

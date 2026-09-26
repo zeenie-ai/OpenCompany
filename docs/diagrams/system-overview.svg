@@ -73,14 +73,14 @@
   <text class="small" x="952" y="428" text-anchor="middle">DeploymentManager + WorkflowControlWorkflow (Start/Pause/Resume/Reset)</text>
 
   <rect class="box p-purple" x="250" y="458" width="435" height="86" rx="8"/>
-  <text class="h2" x="467" y="483" text-anchor="middle">Node plugins (140+, 34 palette groups)</text>
+  <text class="h2" x="467" y="483" text-anchor="middle">Node plugins (140+, 30+ palette groups)</text>
   <text class="small" x="467" y="503" text-anchor="middle">server/nodes/&lt;group&gt;/&lt;plugin&gt;/ - one folder per node</text>
   <text class="small" x="467" y="519" text-anchor="middle">Pydantic Params / Output = SSOT, served as NodeSpec</text>
-  <text class="small" x="467" y="535" text-anchor="middle">78 skills in server/skills/ (SKILL.md playbooks)</text>
+  <text class="small" x="467" y="535" text-anchor="middle">80+ skills in server/skills/ (SKILL.md playbooks)</text>
 
   <rect class="box p-purple" x="735" y="458" width="435" height="86" rx="8"/>
   <text class="h2" x="952" y="483" text-anchor="middle">AuthService + credentials</text>
-  <text class="small" x="952" y="503" text-anchor="middle">35 Credential classes (API keys, OAuth, CLI-managed logins)</text>
+  <text class="small" x="952" y="503" text-anchor="middle">35+ Credential classes (API keys, OAuth, CLI-managed logins)</text>
   <text class="small" x="952" y="519" text-anchor="middle">Fernet + PBKDF2 encrypted credentials.db</text>
   <text class="small" x="952" y="535" text-anchor="middle">optional JWT login (VITE_AUTH_ENABLED, AUTH_MODE single / multi)</text>
 

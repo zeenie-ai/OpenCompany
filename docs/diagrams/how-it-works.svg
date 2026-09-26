@@ -74,7 +74,7 @@
   <text class="h2" x="1262" y="172" text-anchor="middle">Test it, then start it</text>
   <text class="sub" x="1262" y="196" text-anchor="middle">Run tests one node in place.</text>
   <text class="sub" x="1262" y="214" text-anchor="middle">Start deploys the whole workflow</text>
-  <text class="sub" x="1262" y="232" text-anchor="middle">(the button flips to Stop)</text>
+  <text class="sub" x="1262" y="232" text-anchor="middle">(the button becomes Pause)</text>
   <text class="label" x="1262" y="272" text-anchor="middle">runs on a schedule, on an event, or in real time</text>
 
   <!-- Arrow 4 -> 5 -->

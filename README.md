@@ -26,7 +26,7 @@ Download the app for your computer and install it (these links always point at t
 - **macOS, Intel**: [OpenCompany-macos-x64.dmg](https://github.com/zeenie-ai/OpenCompany/releases/latest/download/OpenCompany-macos-x64.dmg)
 - **Linux**: [OpenCompany-linux-x86_64.AppImage](https://github.com/zeenie-ai/OpenCompany/releases/latest/download/OpenCompany-linux-x86_64.AppImage), or [OpenCompany-linux-amd64.deb](https://github.com/zeenie-ai/OpenCompany/releases/latest/download/OpenCompany-linux-amd64.deb) on Debian and Ubuntu
 
-Nothing else to install. On first launch the app sets itself up (a one-time download, a minute or two) and opens Home. Describe a job to hire your first employee; if no AI provider is connected yet, Home asks you to connect one, or you can add it yourself in Settings > Connectors. Switch to Dev mode for the workflow editor, where three example employees are already on the canvas; open one to see how it is put together.
+Nothing else to install. On first launch the app sets itself up (a one-time download, a minute or two) and opens Home. Describe a job to hire your first employee; if no AI provider is connected yet, Home asks you to connect one, or you can add it yourself in Settings > Connectors. Switch to Dev mode for the workflow editor, where three example employees are listed in the workflow sidebar; open one to see how it is put together.
 
 The builds are not code-signed yet, so macOS asks you to allow the app under System Settings > Privacy & Security, and Windows SmartScreen needs "More info > Run anyway".
 
