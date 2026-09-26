@@ -300,11 +300,13 @@ back; navigating onto the last item resumes following). Arrow/Home/End keys
 work on the focused `role="group"` only — no document-level listeners,
 which would fight React Flow node nudging.
 
-**Follow-latest** (the browser-automation live view): when the active item
+**Follow-latest** (workspace image polling): when the active item
 is a workspace image, a Switch enables a visibility-gated 5 s poll of the
 existing `list_workspace_files` handler on the image's folder, rendering the
 newest image entry in place — zero new backend. Persisted as the dock's
-`followMode` pref.
+`followMode` pref. This is separate from the native Chrome stream in the
+[Browser workspace](./browser_workspace.md), which supports live input and
+explicit takeover without polling screenshot files.
 
 Renderer dispatch is a pure function
 ([`canvasKinds.ts`](../client/src/components/parameterPanel/canvas/canvasKinds.ts)),
@@ -369,14 +371,14 @@ truncation), `browserHarness` an absolute path under
 The shared helper lands the bytes in the workflow workspace via
 `write_media(kind="image")` so a screenshot becomes a ~400 B `FileRef`:
 
-- `persist_screenshot_from_payload(data, ctx, fmt)` (the `browser` node's
-  `screenshot` op): probes the known inline-base64 keys (only `"base64"` is
-  evidenced in-repo; the rest are tolerated probes) then saved-file-path
-  keys, returns `(ref, consumed_key)` so the caller drops exactly the bulky
-  field from the payload.
-- `persist_screenshot_file(path, ctx, contained_under)` (the harness
-  `screenshot` op): reads **only** files contained under the harness runtime
-  dir — printed process output is not a licence to read arbitrary files.
+- `persist_screenshot_file(path, ctx, contained_under)` is the current native
+  `browser` screenshot path. The CLI writes a temporary PNG in its profile's
+  temporary directory; the node copies it into the workspace, returns it in
+  `BrowserOutput.screenshot`, then removes the temporary file. Reads must stay
+  within that supplied directory.
+- `persist_screenshot_from_payload(data, ctx, fmt)` remains a legacy payload
+  helper with tests for inline-base64 and saved-file-path shapes. It is not
+  the current native node's screenshot dispatch path.
 
 **Tolerance is the contract**: an unrecognized payload shape, a missing
 workspace, or a write failure logs one warning and returns `None`; the
@@ -392,7 +394,7 @@ browser operation itself never breaks over persistence. Sanity bounds
 | `server/config/node_allowlist.json` | `"canvas"` in `enabled_nodes` | Normal-mode palette visibility (positive list) |
 | `server/tests/test_node_spec.py` | `"isCanvasPanel"` in the uiHints `known` set | The test's own failure message instructs this |
 | `server/services/media/preview.py` + `server/tests/routers/test_workspace.py` | `INLINE_EXACT` / `"pdf"` | The PDF surface; `NEVER_INLINE` untouched |
-| `server/nodes/browser/{browser,browser_harness}/__init__.py` | screenshot post-process | Plugin-folder edits of the browser plugins |
+| `server/nodes/browser/browser/__init__.py` | screenshot post-process | Current native Browser plugin; the separate harness plugin is retired |
 | `client/src/{types/INodeProperties.ts, types/workspaceFiles.ts, components/parameterPanel/MiddleSection.tsx, contexts/WebSocketContext.tsx, Dashboard.tsx, components/ui/TopToolbar.tsx, components/ui/ConsolePanel.tsx, components/parameterPanel/gallery/FilePreviewDialog.tsx}` | hint type, `'pdf'` PreviewKind, panel dispatch, `canvas_updated` case, dock mount, toggle, `usePanelResize` extraction, click-to-preview | The standard new-panel checklist + the dock integration |
 
 Notably **not** edited: `routers/websocket.py`, `main.py`,

@@ -519,7 +519,9 @@ Queue distribution (live count via
 | `triggers-event` | Push-based triggers | 100 |
 | `triggers-poll` | Polling triggers (Gmail, etc.) | 100 |
 | `code-exec` | Python / JS / TS sandboxes | 10 |
-| `browser` | Playwright / agent-browser | 4 |
+| `browser` | Managed Chrome / browser-use / CDP | 4 |
+
+The current Browser plugin owns managed Chrome profiles, browser-use tool execution and the CDP live view. See [browser.md](./browser.md) and [browser_workspace.md](./browser_workspace.md); the retired `browserHarness` node is not a second active plugin.
 
 Env overrides: `TEMPORAL_<QUEUE>_CONCURRENCY` (e.g.
 `TEMPORAL_AI_HEAVY_CONCURRENCY=8`).
@@ -734,7 +736,7 @@ server/
 │   ├── email/                   # emailSend / emailRead / emailReceive
 │   ├── chat/                    # chatSend / chatHistory
 │   ├── social/                  # socialSend / socialReceive
-│   ├── browser/                 # browser (agent-browser CLI) / browser_harness (browser-use CDP)
+│   ├── browser/                 # browser (managed Chrome, browser-use CLI, live CDP view)
 │   ├── utility/                 # httpRequest / webhookResponse / console / team_monitor / process_manager
 │   ├── text/                    # textGenerator / fileHandler
 │   ├── location/                # gmaps_create / gmaps_locations / gmaps_nearby_places

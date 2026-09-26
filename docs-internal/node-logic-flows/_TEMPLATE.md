@@ -85,7 +85,7 @@ flowchart TD
 ## External Dependencies
 
 - **Credentials**: <provider key looked up via `auth_service.get_api_key('<provider>')`>
-- **Services**: <e.g. WhatsApp RPC at `localhost:${WHATSAPP_RPC_PORT}`, agent-browser CLI>
+- **Services**: <e.g. WhatsApp RPC at `localhost:${WHATSAPP_RPC_PORT}`, managed Browser runtime / browser-use CLI>
 - **Python packages**: <e.g. `httpx`, `xdk`, `apify-client`>
 - **Environment variables**: <if any>
 

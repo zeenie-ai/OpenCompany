@@ -1,5 +1,9 @@
 # Browser workspace
 
+For installation, profiles, policy and agent execution, see the
+[native browser runtime](./browser.md). This document describes the shared
+workspace surface and its live-stream contract.
+
 Normal mode and Dev mode share `components/workspace/WorkspaceTabs.tsx`
 (Browser, Canvas, Android) and `components/browser/BrowserWorkspace.tsx`.
 The Dev toolbar's Workspace button opens the existing resizable dock;
@@ -49,15 +53,30 @@ visibility changes or reconnecting can attempt attachment again.
 ## Live-view latency and diagnostics
 
 The browser socket's receive loop handles frame ACKs without awaiting page
-commands. Input commands use a bounded scheduler; pointer moves and wheel
-updates coalesce, while click/key transitions retain ordering. Control release,
+commands. Each profile's ordered scheduler holds at most 64 commands and
+64 KiB of serialized queued messages. Only adjacent pointer moves or compatible
+wheel events coalesce; wheel coordinates, button state and modifiers must match.
+Click/key transitions retain ordering. Overflow reports an error and starts a
+safe release instead of silently dropping a key-up or click. Control release,
 disconnect and page changes invalidate pending input. Input has its own CDP
 session so resizing the screencast does not detach an active input command.
+
+Release immediately blocks additional input. It then settles the dispatched
+command and releases held keys/buttons before handing control back. A cancelled
+takeover cannot later authorize a hidden viewer. Unknown CDP outcomes require
+retiring the managed browser before agent work resumes; failure to retire keeps
+control held. Pointer cancellation, window blur and hidden documents also
+request release. The server is authoritative for these barriers.
 
 Each viewer retains the newest unsent frame when its FPS limit is reached,
 then sends it when the limit allows. The final update must be delivered even
 when the page stops producing frames. Viewer ACKs identify an outstanding
 sequence number; duplicate or unknown ACKs do not open additional credit.
+Sequences remain unique across replacement hubs on a surviving viewer socket.
+The client bounds decoding to two frames, acknowledges skipped frames and
+updates canvas backing dimensions only when the image size changes. Frames
+being decoded during disconnect, hiding or stream invalidation cannot repaint
+an obsolete live view.
 Chrome screencast ACKs are tracked per event and per capture session, rather
 than replacing an earlier unacknowledged event with the newest one. The hub
 acknowledges each capture after admitting it to bounded viewer slots; it does
@@ -172,5 +191,9 @@ benchmark script:   283e28a5afa86c16370e39b989b8d800462b940d1e81f6755f29bded129a
   hydration and viewer unmount on close.
 - `server/tests/nodes/browser/test_browser_stream.py`: fake-CDP startup failure
   recovery and cancellation.
+- `server/tests/nodes/browser/test_browser_frame_delivery.py`: trailing frames,
+  independent viewer credit, duplicate ACKs, capture replacement and diagnostics.
+- `server/tests/nodes/browser/test_browser_live_control.py`: bounded input queues,
+  responsive receive loop, takeover/release races, held-input cleanup and teardown.
 - `server/tests/services/employees/test_list_employees.py`: capability-based
   browser discovery in employee summaries.

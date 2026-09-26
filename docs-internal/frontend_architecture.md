@@ -67,7 +67,7 @@ client/src/
 ├── features/home/           # Normal mode (see docs-internal/normal_mode.md)
 │   ├── HomeShell.tsx        # Sidebar + header + current view + Workspace dock + Settings + orb stage
 │   ├── sidebar/ header/ hire/ employee/ settings/ approvals/ data/ state/ ui/
-│   ├── workspace/           # The Workspace dock; its Canvas tab loads in its own chunk
+│   ├── workspace/           # Home Workspace dock; shared live Browser tab, lazy Canvas tab
 │   ├── genui/               # Setup-screen pipeline; only its index.ts is importable (ESLint)
 │   └── orb/                 # orb.ts (state + lifecycle), orbEngine.ts (three.js, own chunk)
 │
@@ -497,6 +497,14 @@ See [media_transport.md](./media_transport.md).
   [Memory Lifecycle](ARCHIVE/memory_lifecycle.md#workflow-reset-archives-then-clears-memory)
   (archived; it describes the retired pre-RFC-0002 markdown memory model).
 - **`currentWorkflowId` lives in `useAppStore` only.** Non-React listeners (WS handlers) read it via `useAppStore.getState().currentWorkflow?.id` -- the documented Zustand escape hatch (https://github.com/pmndrs/zustand#read-state-without-subscription). The previous `currentWorkflowIdRef` mirror inside WebSocketContext was a one-render-late copy that misrouted broadcasts during workflow switches. The push to `nodeStatusStore.setCurrentWorkflowId` is driven from a single `useEffect` in `Dashboard.tsx`.
+
+## Browser workspace live view
+
+Home and Dev share [WorkspaceTabs](../client/src/components/workspace/WorkspaceTabs.tsx) and [BrowserWorkspace](../client/src/components/browser/BrowserWorkspace.tsx). Browser nodes are discovered through the backend `isBrowserPanel` capability; viewing attaches to a saved workflow/node without launching Chrome. The Browser tab supports server-authorized Take control / Hand back for navigation, mouse, keyboard, paste and login. Canvas retains its renderer; Android remains an explanatory placeholder.
+
+The viewer uses a separate authenticated same-origin `/ws/browser` socket, not the general `WebSocketContext` frame stream. Binary JPEG envelopes are decoded sequentially with a two-frame local bound; consumed/skipped frames are acknowledged. Canvas dimensions change only when image dimensions change, and input coordinates use the metadata of the frame actually painted. Hidden, disposed or obsolete frames cannot restore a stale picture. Blur, pointer cancellation, hiding and unmount release user control; the server owns the release barrier and lease checks.
+
+`?browserStreamDebug=1` enables numeric first-frame/decode/draw summaries without recording page or input payloads. The [Browser workspace contract](./browser_workspace.md) describes identity, visibility and interaction; [Browser](./browser.md) owns runtime installation, profiles, security and capture/control internals. Tests live under `components/browser/__tests__`, with Home and Dev dock integration tests beside their hosts.
 
 ## Ownership boundary: TanStack Query vs Zustand vs WebSocketContext
 

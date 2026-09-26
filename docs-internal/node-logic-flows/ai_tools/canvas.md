@@ -108,5 +108,5 @@ flowchart TD
 ## Related
 
 - **Skills using this as a tool**: none yet (a paired skill would need a `visuals.json` alias for tool name `canvas`).
-- **Other nodes that consume this output**: none — the board is a sink; browser/browserHarness screenshot ops now persist workspace `FileRef`s (`nodes/browser/_screenshots.py`) precisely so this node can display them.
-- **Architecture docs**: [media_transport.md](../../media_transport.md), [plugin_system.md](../../plugin_system.md), [status_broadcaster.md](../../status_broadcaster.md).
+- **Other nodes that consume this output**: none — the board is a sink; the Browser node's screenshot operation persists workspace `FileRef`s (`nodes/browser/_screenshots.py`) so this node can display them. Live browser viewing and control use the separate Browser tab, not Canvas screenshot items.
+- **Architecture docs**: [browser.md](../../browser.md), [browser_workspace.md](../../browser_workspace.md), [media_transport.md](../../media_transport.md), [plugin_system.md](../../plugin_system.md), [status_broadcaster.md](../../status_broadcaster.md).

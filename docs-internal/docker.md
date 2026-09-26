@@ -26,10 +26,12 @@ The default image has no browser, git or uv. Add them through the `EXTRAS` build
 
 | Extra | Installs | Needed by |
 |---|---|---|
-| `browser` | Chromium, fonts, Xvfb, uv | The browser node; the browser-harness node, which installs itself with uv |
+| `browser` | Chromium, fonts, Xvfb, uv | The current Browser node needs uv to install its pinned browser-use CLI; Chromium can be selected explicitly as described below |
 | `git` | git | The Claude Code and Codex agent nodes, which work in git worktrees |
 
-Without its extra, the browser node fails because the Chromium the image names (`AGENT_BROWSER_EXECUTABLE_PATH`) is not there, browser-harness reports that uv is missing, and Claude Code and Codex tasks fail with `working_directory_not_git_repo`.
+Without the `browser` extra, the runtime image has no uv for the Browser node's tool installer or system Chromium and its libraries. The current node normally downloads its pinned Chrome for Testing; the image's legacy browser setting does not select system Chromium. Without the `git` extra, Claude Code and Codex tasks can fail with `working_directory_not_git_repo`.
+
+The current runtime is documented in [browser.md](./browser.md), with live viewing and control in [browser_workspace.md](./browser_workspace.md). `browserHarness` is retired; browser-use is a dependency of the single `browser` node, not a second workflow node.
 
 ## Where state lives
 
@@ -65,12 +67,16 @@ The image sets these on top of the template:
 | `VITE_AUTH_ENABLED` | `true` | Login required |
 | `NODEJS_EXECUTOR_HOST` | `127.0.0.1` | The code sidecar binds IPv4 loopback, which exists even where container IPv6 is off |
 | `NODEJS_USER_PACKAGES_DIR` | `/data/nodejs-user-packages` | Packages installed for code nodes persist |
-| `AGENT_BROWSER_EXECUTABLE_PATH` | `/usr/bin/chromium` | The browser node drives the `browser` extra's Chromium |
+| `AGENT_BROWSER_EXECUTABLE_PATH` | `/usr/bin/chromium` | Legacy value still present in the Dockerfile; the current Browser runtime does not read it |
 | `PYTHONUNBUFFERED` | `1` | Log lines reach `docker compose logs` as they are written |
 
-The image has no Node. It links `/usr/local/bin/node` to bun, so the plugin CLIs whose entry scripts start `#!/usr/bin/env node` (agent-browser, vercel, cf) run on bun, as in the official oven/bun images.
+**Browser configuration mismatch:** `docker/Dockerfile` still sets `AGENT_BROWSER_EXECUTABLE_PATH`, while `nodes/browser/_install_chrome.py` reads `BROWSER_CHROME_PATH`. To use the `browser` extra's Chromium, explicitly set `BROWSER_CHROME_PATH=/usr/bin/chromium` under compose `environment:`. Otherwise the runtime downloads its pinned Chrome for Testing. This documents the current image; it does not mean the Dockerfile has been migrated or the current browser runtime has been validated in that image.
+
+The image has no Node. It links `/usr/local/bin/node` to bun, so the plugin CLIs whose entry scripts start `#!/usr/bin/env node` (vercel, cf) run on bun, as in the official oven/bun images. Browser automation installs browser-use through uv instead.
 
 With the `browser` extra: Chrome refuses to run as root with its sandbox on, so the image adds `--no-sandbox` through a drop-in, `/etc/chromium.d/no-sandbox`. Debian's launcher reads flags only from that directory and ignores a `CHROMIUM_FLAGS` environment variable. Debian's own `dev-shm` drop-in already adds `--disable-dev-shm-usage` when Docker's `/dev/shm` is small.
+
+Those drop-ins apply to Debian's Chromium launcher. The current runtime launches headless Chrome itself, detects sandbox/shared-memory constraints, and supplies its own launch flags; it does not use the former agent-browser/Xvfb startup path.
 
 Leave `HOST` and `PORT` at their template values. The backend uses `HOST` to reach itself; the published bind comes from the entrypoint's `--host 0.0.0.0`. `PORT` is repeated in the Dockerfile's `EXPOSE` and the compose mapping, which do not follow a change made in `/data/opencompany.env`. Publish only the app port: the code sidecar, the WhatsApp bridge and Temporal listen on internal ports without authentication.
 
@@ -100,7 +106,7 @@ With plain `docker run`, pass `--init` and `--stop-timeout 120` to get the same 
 - **Temporal Web UI.** The dev server binds loopback inside the container, so its UI is not reachable from outside.
 - **Claude Code login.** The login button in the credentials panel waits for a browser callback on the container's own localhost, so it cannot finish. Log in from an interactive shell in the container (`docker compose exec opencompany sh`) with `CLAUDE_CONFIG_DIR=/data/claude` set, or supply `ANTHROPIC_API_KEY` through `environment:`. Codex has no login button at all; run its login from the same shell.
 - **Owner-checked panels under login.** The image always requires a login, and the editor saves workflows through a REST route that records the placeholder owner `owner` rather than the logged-in account. The Canvas, Memory, Context and dataSource panels check that owner, so they can refuse the logged-in user for such a workflow. `company deploy` VMs, which also require a login, behave the same.
-- **A second browser download.** With the `browser` extra, the browser node's first run still downloads agent-browser's own Chrome for Testing (a few hundred MB) into the volume, though agent-browser then drives the system Chromium.
+- **Browser image integration.** The image still carries the legacy executable setting and Xvfb. Unless `BROWSER_CHROME_PATH` is supplied, the current node downloads and runs its pinned Chrome for Testing despite system Chromium being installed. The pinned browser-use CLI is installed separately with uv. Validate the current runtime and its required Linux libraries in the built image; adding the extra alone is not evidence of an end-to-end browser check.
 - **Agent nodes need the `git` extra and a git repository.** Claude Code and Codex agents work in git worktrees, and the image contains no `.git`. Run `git init` in a workflow's workspace and make a first commit before pointing an agent at it. Set a commit identity once from a shell in the container (`git config --global user.name ...` and `user.email ...`); it is stored in `/data/home` and survives upgrades.
 - **Bind mounts.** A bind mount works in place of the named volume, but the Temporal CLI is then downloaded on first start (a new named volume receives the copy baked into the image), and the directory must allow executables, symlinks and Unix sockets. Prefer the named volume on Windows and macOS hosts.
 - **Memory.** Give the container at least 1 GB. At idle the backend holds about 180 MB of process memory and the Temporal dev server about 115 MB; `docker stats` shows up to about 450 MiB because it also counts the page cache of the code they run.

@@ -30,6 +30,12 @@ match its doc here, and each doc must still describe what the code does.
 
 ## Index
 
+For the current browser architecture, see [Browser runtime](../browser.md)
+and [Browser workspace](../browser_workspace.md). The registered node is
+`browser`; the `browserHarness` card is retained only as historical migration
+documentation. Inclusion in this generated document index does not establish
+that a retired node remains registered.
+
 <!-- AUTO-GENERATED-INDEX-START -->
 
 ### ai_agents
@@ -223,7 +229,7 @@ match its doc here, and each doc must still describe what the code does.
 
 - [Apify Actor (`apifyActor`)](./web_automation/apifyActor.md)
 - [Browser (`browser`)](./web_automation/browser.md)
-- [Browser Harness (`browserHarness`)](./web_automation/browserHarness.md)
+- [Browser Harness (`browserHarness`) — retired](./web_automation/browserHarness.md)
 - [Crawlee Scraper (`crawleeScraper`)](./web_automation/crawleeScraper.md)
 - [TikHub (`tikhubAction`)](./web_automation/tikhubAction.md)
 

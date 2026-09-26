@@ -1,244 +1,92 @@
 # Browser (`browser`)
 
-| Field | Value |
-|------|-------|
-| **Category** | web_automation / tool (dual-purpose) |
-| **Backend handler** | [`server/nodes/browser/browser/__init__.py::BrowserNode`](../../../server/nodes/browser/browser/__init__.py) — dispatch via `BaseNode.execute()` -> `@Operation("dispatch")` |
-| **Service** | [`server/nodes/browser/_service.py::BrowserService`](../../../server/nodes/browser/_service.py) |
-| **Tests** | [`server/tests/nodes/test_web_automation.py`](../../../server/tests/nodes/test_web_automation.py) |
-| **Skill (if any)** | [`server/skills/web_agent/browser-skill/SKILL.md`](../../../server/skills/web_agent/browser-skill/SKILL.md) |
-| **Dual-purpose tool** | yes - tool name `browser` |
+The Browser node drives OpenCompany-managed Chrome and exposes the same profile to the live browser workspace. It runs as a workflow step or as the agent tool named `browser`. The old `agent-browser` integration and separate `browserHarness` node have been replaced.
 
-## Purpose
+See [native browser architecture](../../browser.md) for runtime installation, profile storage, networking and lifecycle, and [browser workspace](../../browser_workspace.md) for the viewer and UI protocol.
 
-Interactive browser automation via the `agent-browser` CLI. The binary is a
-OpenCompany-managed local install resolved by
-[`nodes/browser/_install.py::agent_browser_binary_path`](../../../server/nodes/browser/_install.py)
-(installed on first use with `bun add --trust` into the shared
-`<DATA_DIR>/packages/` tree via `core.js_runtime.add_package`, the same pattern
-as Claude Code's project-local CLI — NOT a workspace `package.json` dependency
-and NOT invoked through `bun x`; the shim runs on the bun runtime). Exposes 14
-discrete operations (navigate,
-click, type, fill, screenshot, snapshot, get_text, get_html, eval, wait, scroll,
-select, console, errors) plus a `batch` meta-op. The preferred workflow for an
-AI agent is `navigate` -> `snapshot` -> `click`/`fill` using the stable `@eN`
-element refs returned by snapshot -> `snapshot` again to verify.
+## Implementation map
 
-Session state (cookies, open tabs, auth) persists across sequential operations
-that share the same `session` value. If no session is provided the handler
-derives `opencompany_<execution_id>` from the current execution context. The
-execution_id is stable for the whole run — threaded through MachinaWorkflow
-node contexts, AgentWorkflow tool payloads (deterministic
-`workflow.info().run_id` fallback), the legacy in-process tool dispatch, and
-delegated child agents — so every browser call in one workflow/agent run
-(including delegated sub-agents) reuses ONE browser instance, while separate
-runs stay isolated.
+| Responsibility | Source |
+| --- | --- |
+| Node schema, dispatch and output mapping | [`BrowserNode`](../../../server/nodes/browser/browser/__init__.py) |
+| Plugin registration and shutdown | [`nodes/browser/__init__.py`](../../../server/nodes/browser/__init__.py) |
+| Profile runtime and managed Chrome | [`_runtime.py`](../../../server/nodes/browser/_runtime.py), [`_chrome.py`](../../../server/nodes/browser/_chrome.py) |
+| Agent/workflow CLI calls and generated scripts | [`_cli.py`](../../../server/nodes/browser/_cli.py), [`_scripts.py`](../../../server/nodes/browser/_scripts.py) |
+| Leases and control state | [`_session.py`](../../../server/nodes/browser/_session.py) |
+| Direct live viewer capture and input | [`_stream.py`](../../../server/nodes/browser/_stream.py), [`_live_control.py`](../../../server/nodes/browser/_live_control.py) |
+| Saved-workflow compatibility | [`workflow_migrations.py`](../../../server/services/workflow_migrations.py) |
 
-Concurrent instances are capped: each distinct `--session` name maps to one
-browser instance, and `BrowserService` gates new sessions against
-agent-browser's own registry (`session list --json`), closing the oldest
-listed session via per-session `close` when `BROWSER_MAX_INSTANCES`
-(default 3) would be exceeded. Idle browsers self-reap via
-`AGENT_BROWSER_IDLE_TIMEOUT_MS`, injected into every spawn from
-`BROWSER_IDLE_TIMEOUT_MS` (default 600000 ms; 0 disables). Canonical values
-for both knobs live in `.env.template`.
+The node has main input/output handles and a tool output handle. Its `ui_hints.isBrowserPanel` flag makes it discoverable as a browser panel. Activities use the `BROWSER` task queue, at most three Temporal attempts, and a 35-minute start-to-close timeout to accommodate human handoff.
 
-## Inputs (handles)
+## Operations
 
-| Handle | Connection type | Required | Purpose |
-|--------|-----------------|----------|---------|
-| `input-main` | main | no | Upstream trigger; not consumed directly |
+The agent schema defaults to `snapshot`; saved workflow parameters default to `navigate`.
 
-## Parameters
+| Operations | Important inputs and behavior |
+| --- | --- |
+| `navigate` | Requires `url`; validates destination policy before opening. |
+| `snapshot` | Accessibility-tree text with `[eN]` references; `interactive_only` and `max_chars` limit output. Refresh after page changes. |
+| `click`, `hover`, `type`, `select` | Target by `ref`, CSS `selector`, or supported coordinates. `type` uses `text`, `clear` (default true), and optional `submit`; `select` uses `values`. |
+| `press` | `key` plus CDP modifier bitmask: Alt 1, Ctrl 2, Meta 4, Shift 8. |
+| `scroll` | `direction` and `amount` (default 600). |
+| `screenshot` | Optional `full_page`; persists an image to the workspace and returns a FileRef. |
+| `tabs` | `tab_action`: `list`, `new`, `switch`, or `close`; `url`/`tab_id` as appropriate. |
+| `back`, `forward`, `reload` | History/reload operations on the active tab. |
+| `page_text`, `page_info` | Extract bounded page text or page information. |
+| `wait` | `wait_for`: `load`, `network_idle`, `selector`, `text`, or `time`; optional `wait_value`. |
+| `webmcp_list`, `webmcp_call` | Discover page-provided tools or invoke `webmcp_tool` with `webmcp_input` and optional `frame_id`. |
+| `request_user` | Human handoff using `reason` and `message`. |
+| `diagnose` | Runtime, host and profile diagnostics without starting Chrome. |
+| `evaluate`, `run_python`, `close` | **Workflow-only**: saved `expression`, saved `code`, or stop the profile. Excluded from the agent tool schema and rejected on tool calls. |
 
-Params model is `BrowserParams` (field names are snake_case). `tool_name` /
-`tool_description` are class attributes (not Params fields).
+Refs resolve against a backend-node-ID map held per target, not against model-provided executable code. The legacy selector spelling `@eN` is accepted as a ref. A missing ref raises an error asking for a fresh snapshot.
 
-| Name | Type | Default | Required | displayOptions.show | Description |
-|------|------|---------|----------|---------------------|-------------|
-| `operation` | options (Literal) | `navigate` | no | - | One of `navigate`, `click`, `type`, `fill`, `screenshot`, `snapshot`, `get_text`, `get_html`, `eval`, `wait`, `scroll`, `select`, `console`, `errors`, `batch` |
-| `url` | string | `""` | yes (op=navigate) | `operation=navigate` | Target URL |
-| `selector` | string | `""` | yes (ops that act on an element) | `operation in [click,type,fill,get_text,get_html,wait,select]` | CSS selector or `@eN` ref from snapshot |
-| `text` | string | `""` | no | `operation=type` | Text to type keystroke-by-keystroke |
-| `value` | string | `""` | no | `operation in [fill, select]` | Value to fill / dropdown option value |
-| `expression` | string | `""` | yes (op=eval) | `operation=eval` | JS expression to evaluate |
-| `direction` | options (Literal: up/down/left/right) | `down` | no | `operation=scroll` | Scroll direction |
-| `amount` | int (1-20000) | `500` | no | `operation=scroll` | Pixels to scroll |
-| `commands` | string (JSON array) | `"[]"` | yes (op=batch) | `operation=batch` | JSON array of batch command dicts piped to stdin |
-| `full_page` | boolean | `false` | no | `operation=screenshot` | Passes `--full` |
-| `annotate` | boolean | `false` | no | `operation=screenshot` | Passes `--annotate` |
-| `screenshot_format` | options (Literal: png/jpeg) | `png` | no | `operation=screenshot` | Forwarded as `--screenshot-format` when not png |
-| `screenshot_quality` | int (1-100) | `85` | no | `operation=screenshot, screenshot_format=jpeg` | Forwarded as `--screenshot-quality`, only for jpeg |
-| `session` | string | `""` | no | - | Session id; if empty, handler uses `opencompany_<execution_id>` |
-| `browser` | options (Literal) | `chrome` | no | - | `chrome` / `edge` / `chromium` / `bundled_explicit` / `custom`. Legacy/empty `bundled` silently upgraded to `chrome` at dispatch |
-| `executable_path` | string | `""` | no | `browser=custom` | Explicit browser path when `browser=custom` |
-| `headed` | boolean | `true` | no | - | Show browser window (false = headless `--headed` omitted) |
-| `new_window` | boolean | `true` | no | - | Appended as `--args --new-window`; only honoured when an explicit `executable_path` resolved |
-| `auto_connect` | boolean | `false` | no | - | Reuse an already-running CDP browser (`--auto-connect`) |
-| `chrome_profile` | string | `""` | no | - | Chrome user-profile name |
-| `user_agent` | string | `""` | no | - | Custom UA string |
-| `proxy` | string | `""` | no | - | Proxy URL (e.g. `http://user:pass@host:port`) |
-| `action_delay` | int (0-60000) | `0` | no | - | Milliseconds to wait before the real op (a pre-command `wait` is issued first) |
-| `timeout` | int (1-600) | `30` | no | - | Per-action timeout in seconds |
+## Execution flow
 
-Operations that **require** `selector`: `click`, `type`, `fill`, `get_text`,
-`get_html`, `wait`, `select`.
+1. Read operator configuration. For agent calls, reread the saved node settings so tool arguments cannot override the profile, policy, timeouts or executable code.
+2. Reject workflow-only operations from agent calls and operations prohibited by `interaction`. Refuse automatic retries of operations in the node's `MUTATING` set when Temporal reports attempt greater than one; the previous action may already have occurred.
+3. Resolve the owner's profile: explicit `profile_id`, otherwise the workflow's persistent default profile. Unsaved runs have a separate fallback. Register a session identified by owner, workflow and node, associated with that profile.
+4. Handle `close` and `diagnose` without opening a new runtime. Other operations open or reuse the profile runtime, installing managed dependencies on first use if needed.
+5. `request_user` enters the human-handoff flow. Other operations acquire the profile's agent-operation lease/lock; human control blocks agent work.
+6. `webmcp_list` reads the native tracker's tool cache; `webmcp_call` invokes through the native CDP integration. Remaining operations use a generated Python script sent to the isolated browser-use CLI, whose daemon persists across calls and connects to managed Chrome.
+7. Update active target, URL/title and snapshot refs from the result. Map output to the node schema and emit page/session changes. CLI daemon failure permits one retry for operations outside `MUTATING`; operations inside that set are not retried by this wrapper.
 
-## Outputs (handles)
+The profile is persistent across executions; it is not the old execution-ID-named CLI session. Closing it stops the shared profile runtime, so other views of that profile observe the closure.
 
-| Handle | Shape | Description |
-|--------|-------|-------------|
-| `output-main` | object | Standard envelope payload |
-| `output-tool` | object | Same payload when wired to an AI agent's `input-tools` (`usable_as_tool=True`, tool name `browser`) |
+## Policy and control
 
-### Output payload
+Operator settings include `profile_id`, `interaction` (`full` or `read_only`), `webmcp_mode` (`disabled`, `read_only`, `all`), `allowed_domains`, `allow_private_network`, `op_timeout_s` (default 45, range 5–300), and `request_user_timeout_s` (default 600, range 60–1800). They are server-controlled for tool calls.
 
-```ts
-{
-  operation: string;  // echoes the requested op
-  data: any;          // Parsed JSON from agent-browser's first stdout line
-  session: string;    // Resolved session id
-}
-```
+The current `MUTATING` set is exactly `click`, `type`, `press`, `select`, `back`, `forward`, `reload`, `webmcp_call`, `evaluate`, and `run_python`. `read_only` rejects this set. It does not prohibit navigation, scrolling, hovering or tab operations. In particular, `webmcp_call` is rejected by `interaction=read_only` before its tool-level read-only metadata is considered; `webmcp_mode=read_only` with full interaction is the setting that admits advertised read-only WebMCP tools.
 
-Wrapped in the standard envelope: `{ success: true, result: <payload>, execution_time: number }`.
-On failure: `{ success: false, error: <string>, execution_time: number }`.
+Empty `allowed_domains` allows public destinations. The managed egress proxy checks destinations and resolved addresses for browser traffic; private-network access is disabled by default. Enabling it does not allow cloud metadata or OpenCompany's own protected ports. See the canonical runtime document for policy details.
 
-## Logic Flow
+Control states are `idle`, `agent`, `awaiting_user`, and `user`. `request_user` includes instructions for login, CAPTCHA, two-factor authentication, confirmation or another manual step. Agent calls wait at most 480 seconds per handoff call; a longer configured pending request can return `still_waiting` and be awaited by another call. Workflow steps can wait for the configured deadline.
 
-```mermaid
-flowchart TD
-  A[BaseNode.execute -> BrowserNode.dispatch] --> B{BrowserService<br/>available?}
-  B -- no --> Einst[Return error:<br/>agent-browser not installed]
-  B -- yes --> C[Resolve session, timeout, headed, browser,<br/>executable_path, proxy, userAgent,<br/>newWindow, chromeProfile, actionDelay]
-  C --> C1[Upgrade legacy 'bundled' -> 'chrome'<br/>_resolve_browser looks up shutil.which or Win registry]
-  C1 --> D{actionDelay > 0?}
-  D -- yes --> D1[svc.run wait actionDelay first]
-  D -- no --> E{op == batch?}
-  D1 --> E
-  E -- batch --> E1[json.loads commands -> stdin]
-  E1 --> F[svc.run batch --json + stdin=json]
-  E -- other --> G[_build_args op, params]
-  G --> Gsw{operation switch}
-  Gsw -- navigate --> Gn[args: open URL<br/>URL required]
-  Gsw -- click / wait --> Gc[args: op SELECTOR<br/>selector required]
-  Gsw -- type --> Gt[args: type SELECTOR TEXT]
-  Gsw -- fill / select --> Gf[args: op SELECTOR VALUE]
-  Gsw -- screenshot --> Gs[args: screenshot + --full/--annotate/--screenshot-format/--screenshot-quality]
-  Gsw -- snapshot --> Gsn[args: snapshot -i]
-  Gsw -- get_text / get_html --> Gg[args: get text-or-html SELECTOR]
-  Gsw -- eval --> Gev[args: eval EXPRESSION<br/>expression required]
-  Gsw -- scroll --> Gsc[args: scroll DIR AMOUNT]
-  Gsw -- console / errors --> Gco[args: op]
-  Gsw -- unknown --> Gx[raise ValueError<br/>Unknown operation]
-  Gn & Gc & Gt & Gf & Gs & Gsn & Gg & Gev & Gsc & Gco --> H[svc.run args, session, timeout, run_kw]
-  F --> H
-  H --> H1[Popen argv via resolved agent-browser binary<br/>shell=False, reads first JSON line of stdout]
-  H1 --> H2{first line<br/>parseable JSON?}
-  H2 -- yes --> H3[data = parsed JSON]
-  H2 -- no --> H4[data = output: raw string]
-  H3 & H4 --> I{length > 100KB?}
-  I -- yes --> I1[truncate + append '...truncated']
-  I -- no --> J[finally: psutil kill process tree]
-  I1 --> J
-  J --> K[Return BaseNode success envelope<br/>operation, data, session]
-  Gx --> Eval[ValueError -> BaseNode generic envelope]
-  H --> Eother[RuntimeError / NodeUserError -> BaseNode envelope]
-```
+The authenticated live viewer attaches through `/ws/browser` to a saved workflow/node or a profile-login session. Watching does not grant control. Takeover, handback, visibility and disconnect are coordinated with the profile controller. Live mouse/keyboard/navigation commands use a bounded ordered queue and direct CDP, independently of the subprocess CLI path used by node operations. Frame acknowledgements and visibility messages remain responsive while commands run. Handback settles dispatched input and releases held keys/buttons before agent work resumes. See [browser workspace](../../browser_workspace.md) for frame delivery and frontend lifecycle.
 
-## Decision Logic
+## Output and failures
 
-- **Service missing**: `get_browser_service()` returns `None` when the
-  agent-browser binary cannot be resolved (bun unavailable, or the install failed)
-  -> `RuntimeError("agent-browser not installed...")` -> error envelope.
-- **Session resolution**: empty `session` -> `opencompany_<execution_id>` via the
-  typed `ctx.execution_id` accessor (handles present-but-None on the agent
-  tool-dispatch path). Only the stripped value is considered empty; whitespace
-  triggers the fallback. The resolved session is logged in the `[Browser]`
-  info line.
-- **Instance cap**: before each command, `_enforce_instance_cap` admits the
-  session (once per process, `_gated_sessions` fast-path). Unknown sessions
-  trigger one `session list --json` probe; if admitting would exceed
-  `BROWSER_MAX_INSTANCES`, the oldest listed sessions are closed first
-  (`close --session <name>`). The probe fails open — gating never blocks an
-  actual browser operation.
-- **Browser upgrade**: `""` or `bundled` both normalised to `chrome`. Users who
-  specifically want the bundled Chromium must pick `bundled_explicit`.
-- **Executable resolution**: `shutil.which()` against Linux/macOS PATH names,
-  then Windows `HKLM/HKCU\\SOFTWARE\\...\\App Paths\\<exe>` registry. If neither
-  resolves, `executable_path=None` and agent-browser uses its own bundled Chrome.
-- **`newWindow`**: gated on `executable_path` actually resolving - if a user
-  requests new-window while `browser=bundled_explicit`, the flag is silently
-  dropped.
-- **`action_delay > 0`**: issues a `wait <action_delay>` command (milliseconds)
-  to agent-browser BEFORE the real operation. Failures in the delay call
-  propagate as errors.
-- **`batch`**: reads `commands` JSON string (defaults to `"[]"`) and pipes
-  `json.dumps(cmds).encode()` to the subprocess' stdin with flags `batch --json`.
-- **Required params**: `_req(p, "url")` and `_req(p, "expression")` raise
-  `NodeUserError` on empty strings; `_req_sel(s)` does the same for `selector`.
-  `BaseNode.execute()` catches `NodeUserError` into a single-WARN error envelope.
-- **Unknown operation**: `_build_args` raises `ValueError("Unknown operation: <op>")`.
+Outputs can include `operation`, `session_id`, profile name, `url`, `title`, `tab_id`, `snapshot`, `text`, `truncated`, screenshot FileRef, tabs, WebMCP tools/results, handoff result, `data`, and `notice`. Screenshot bytes are not embedded in node output; saving failure produces a notice. `run_python` may return the final 20,000 characters of captured script output.
 
-## Side Effects
+Policy rejection, stale refs, missing required fields, disallowed operations and failed CLI results surface as node errors. An uncertain mutating attempt asks the caller to inspect a snapshot before trying again. Installation/runtime errors and control contention are distinct from an empty page snapshot.
 
-- **Database writes**: none.
-- **Broadcasts**: none.
-- **External API calls**: none (all work happens via subprocess).
-- **File I/O**: agent-browser itself may write screenshots or a profile dir to
-  its own cache - not under this handler's control.
-- **Subprocess**: spawns the resolved `agent-browser` binary directly via
-  `subprocess.Popen` with `shell=False`. Reads only the FIRST stdout line
-  (daemon holds stdout open), caps at 100 KB, then force-kills the entire
-  process tree via `kill_tree(proc.pid)` (`services._supervisor.util`, psutil-backed).
-  Always calls `proc.wait()` in a finally block.
-  `AGENT_BROWSER_IDLE_TIMEOUT_MS` is injected into the spawn env when the idle
-  timeout is > 0.
-- **Long-lived daemon**: agent-browser spawns a persistent daemon between
-  calls. `shutdown_browser_service()` (registered in FastAPI lifespan) runs
-  `agent-browser close --all` to stop it.
+## Legacy workflows
 
-## External Dependencies
+Saved-workflow normalization and the parameter model's compatibility validator cover older representations, including deployed snapshots. The retired node type `browserHarness` becomes `browser`; if this creates two same-named browser tools attached to one agent, migration keeps the original browser tool edge and drops the duplicate migrated edge with a warning.
 
-- **Credentials**: none.
-- **Services**: `BrowserService` singleton; bun (`OPENCOMPANY_BUN_BIN` or PATH)
-  for the first-use install and as the shim's runtime; `agent-browser`
-  installed into the shared `<DATA_DIR>/packages/` tree by
-  `nodes/browser/_install.py` (OpenCompany-managed, not a workspace dep).
-- **Python packages**: `psutil` (via `kill_tree` for process-tree kill).
-- **Environment variables**: `BROWSER_MAX_INSTANCES` (concurrent session cap,
-  default 3), `BROWSER_IDLE_TIMEOUT_MS` (daemon idle auto-shutdown in ms,
-  default 600000, 0 disables) — canonical values in `.env.template`, mirrored
-  by `Settings` defaults. `AGENT_BROWSER_IDLE_TIMEOUT_MS` is injected into
-  every agent-browser spawn from the latter.
+| Legacy input | Current mapping |
+| --- | --- |
+| `browserHarness`: `goto`, `js`, `doctor` | `navigate`, `evaluate`, `diagnose` |
+| `browserHarness`: `tabs` | `tabs` with `tab_action=list` |
+| `browserHarness`: `run_python` | Code retained with a warning to check changed helper names. |
+| `fill` | `type`, `clear=true`, text from legacy `value` or `text`. |
+| Legacy `type` | Defaults `clear=false` when unspecified. |
+| `get_text`, `get_html`, `eval` | `page_text`, `evaluate` with an HTML expression, `evaluate`. |
+| `wait` with selector | `wait_for=selector`, `wait_value` from selector when mode was absent. |
+| `select` with `value` | Single-item `values` when absent. |
+| `console`, `errors` | `page_info`, with a warning. |
+| `batch` | `run_python` containing the original commands as comments and an explicit error requiring a rewrite. |
+| Numeric `timeout` | `op_timeout_s`, clamped to 5–300 when no replacement exists. |
 
-## Edge cases & known limits
-
-- **Output truncation**: responses > 100 KB are truncated with a literal
-  `...(truncated)` suffix appended BEFORE `json.loads`, so a truncated JSON
-  payload falls through the `JSONDecodeError` path and returns
-  `{"output": "<raw truncated string>"}` instead of structured data.
-- **Empty first line**: if agent-browser writes nothing to stdout the service
-  reads stderr and raises `RuntimeError` with the stderr content (or the
-  literal fallback `agent-browser returned empty output`).
-- **Silent `bundled` -> `chrome` upgrade**: a user who saved a workflow when
-  `bundled` was the default will now actually use system Chrome on execution.
-- **`newWindow` silently disabled**: see Decision Logic.
-- **Exception handling is in `BaseNode.execute()`**: `NodeUserError` (empty
-  required field) -> single WARN + structured envelope; `ValueError` (unknown
-  op) / `RuntimeError` (service missing or empty stdout) / other exceptions ->
-  generic envelope with traceback. The plugin's `dispatch` itself does not
-  catch.
-- **Process tree kill race**: `psutil.NoSuchProcess` is swallowed for both the
-  parent and every child, so a fast-exiting daemon never leaks an exception
-  but may leave orphaned Chromium processes if the tree changed shape between
-  the `children()` call and the `kill()` call.
-- **`action_delay` (ms) is a separate call**: the preliminary `wait` runs as its
-  own subprocess invocation with its own `timeout` budget (each invocation
-  resets the timer).
-
-## Related
-
-- **Skills using this as a tool**: [`browser-skill/SKILL.md`](../../../server/skills/web_agent/browser-skill/SKILL.md)
-- **Companion nodes**: [`crawleeScraper`](./crawleeScraper.md), [`apifyActor`](./apifyActor.md)
-- **Architecture docs**: [Proxy Service](../../proxy_service.md)
+Old agent-browser runtime settings such as `session`, `headed`, `executable_path`, `chrome_profile`, `proxy`, `user_agent`, `auto_connect` and `action_delay` are removed by migration. Nonempty profile/proxy/executable/user-agent settings produce warnings. The harness-specific branch retains other fields but they do not restore the former external-Chrome attachment behavior. Review migrated executable operations: `evaluate` and `run_python` are now workflow-only.

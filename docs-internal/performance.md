@@ -6,6 +6,33 @@ measurements. Update this file when you ship a perf-affecting change
 or take a new measurement; numbers without timestamps and a commit
 reference rot fast.
 
+## Native browser live view (2026-09-26)
+
+Commit `87322eeb` separates frame acknowledgements from ordered browser input,
+retains trailing frames under FPS throttling, and returns every Chrome capture
+credit after bounded queue admission. Commit `681a340f` adds the shared Normal
+and Dev workspace viewer, bounded decoding and canvas backing-store reuse.
+
+The final isolated Chrome 153 benchmark used production stream/CDP code and
+a reference canvas renderer, with a 1,000 ms observation deadline:
+
+| FPS | Baseline missed updates | Updated missed updates | Updated input-to-paint p50 / p95 |
+| --- | --- | --- | --- |
+| 30 | 1 / 50 | 0 / 50 | 29.6 / 41.8 ms |
+| 10 | 10 / 20 | 0 / 20 | 80.8 / 129.9 ms |
+
+All injected clicks reached the target. The evidence supports more reliable
+frame delivery in this fixture, not a general speedup: baseline percentiles
+exclude missed updates, runs varied during development, and the full React
+renderer and pinned Chrome 154 were not measured. Agent CLI operation latency
+and cold installation are separate paths. See
+[Browser workspace](./browser_workspace.md#local-measurements-2026-09-26) for
+complete results, source hashes, limitations and repeatable commands.
+
+Use `OPENCOMPANY_BROWSER_DIAGNOSTICS=1` for server timing summaries and
+`?browserStreamDebug=1` for numeric client decode/draw summaries. No screenshot
+or input payloads are logged by these diagnostics.
+
 ## Headline numbers (current baseline)
 
 Measured on Windows, dev mode (`bun run dev` → `company dev`),

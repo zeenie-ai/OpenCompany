@@ -145,7 +145,7 @@ tool/        — calculatorTool / currentTimeTool / writeTodos / taskManager
 utility/     — console / httpRequest / webhookResponse / processManager / team_monitor
 workflow/    — start
 skill/       — simpleMemory / masterSkill
-browser/     — browser (agent-browser CLI)
+browser/     — browser (managed Chrome for Testing + browser-use CLI, profiles, live view and user takeover)
 stripe/      — Stripe (CLI passthrough action + signed-webhook trigger)
 vercel/      — Vercel (CLI deploy / inspect / list / custom passthrough)
 github/      — GitHub (gh CLI: clone / PRs / issues / custom; palette group "vcs")
@@ -162,6 +162,8 @@ translate/   — Provider-abstracted translate / transliterate / detect_language
 ```
 
 ---
+
+For Browser plugin runtime, profile and takeover contracts, see [Browser](../../docs-internal/browser.md). The shared Home/Dev interface is documented in [Browser workspace](../../docs-internal/browser_workspace.md).
 
 ## Shared helpers (one per domain)
 
