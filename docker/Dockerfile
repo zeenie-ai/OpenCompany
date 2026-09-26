@@ -123,7 +123,7 @@ ENV DATA_DIR=/data \
     NODEJS_EXECUTOR_HOST=127.0.0.1 \
     NODEJS_USER_PACKAGES_DIR=/data/nodejs-user-packages \
     BROWSER_RUNTIME=system \
-    BROWSER_CHROME_PATH=/usr/bin/chromium \
+    BROWSER_FAMILY=chromium \
     BROWSER_HEADLESS=true \
     PYTHONUNBUFFERED=1
 

@@ -25,11 +25,18 @@ session. Normal and Dev modes use the same viewer component.
 
 ## Installation and configuration
 
-The default `BROWSER_RUNTIME=system` checks installed Chrome first, then
-Edge/Chromium, selecting the first browser new enough for the requested profile
-and runtime minimum. For example, a profile last opened by version 154 skips
-Chrome 153 and can use installed Edge 154. `BROWSER_CHROME_PATH` selects an
-exclusive executable override; an incompatible override fails instead of switching browsers. If none
+The defaults `BROWSER_RUNTIME=system` and `BROWSER_FAMILY=chrome` discover
+installed Chrome without storing its executable path in `.env`. Windows discovery
+reads per-user and machine App Paths registrations (both registry views), then
+PATH and standard installation locations. macOS checks PATH and application
+folders; Linux checks PATH. Discovery runs again at profile startup, so a moved
+installation is not cached indefinitely.
+
+`BROWSER_FAMILY=edge` or `chromium` chooses another installed browser by name.
+`auto` explicitly allows Chrome → Edge → Chromium fallback when checking profile
+version compatibility. Selecting `chrome` never silently switches to Edge.
+`BROWSER_CHROME_PATH` remains an optional exclusive executable override for
+special deployments; normally leave it empty. If no compatible browser
 is available, startup fails with setup guidance: there is no automatic Chrome
 for Testing download or fallback. System mode preserves the browser's native
 user agent. An installed browser is not a guarantee that a website will accept
@@ -51,6 +58,7 @@ its opt-in flag directly from the process environment:
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `BROWSER_RUNTIME` | `system` | Installed browser discovery; `testing` explicitly enables pinned Chrome for Testing |
+| `BROWSER_FAMILY` | `chrome` | Discover `chrome`, `edge`, or `chromium`; `auto` allows cross-browser fallback |
 | `BROWSER_HEADLESS` | `true` | Render in the workspace without a desktop window; `false` additionally opens a separate window |
 | `BROWSER_CHROME_PATH` | Empty | Explicit Chrome/Edge/Chromium executable override |
 | `BROWSER_MAX_INSTANCES` | `3` | Bound simultaneously running browser profiles |

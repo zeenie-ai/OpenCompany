@@ -454,7 +454,8 @@ class Settings(BaseSettings):
     # the browser-use CLI install (and Chrome only in explicit testing mode). Sandbox:
     # auto disables Chrome's sandbox only as root on Linux, where it cannot
     # start. system discovers installed Chrome/Edge/Chromium; testing opts into
-    # the pinned download. chrome_path selects an explicit executable.
+    # the pinned download. browser_family selects the browser by name;
+    # chrome_path is an optional explicit executable override.
     # Render inside the workspace by default; a separate window is opt-in.
     # Downloads a page starts are
     # capped at download_max_mb each.
@@ -463,6 +464,7 @@ class Settings(BaseSettings):
     browser_install_timeout_seconds: int = Field(default=900, env="BROWSER_INSTALL_TIMEOUT_SECONDS", ge=60)
     browser_sandbox: str = Field(default="auto", env="BROWSER_SANDBOX", pattern="^(auto|on|off)$")
     browser_chrome_path: str = Field(default="", env="BROWSER_CHROME_PATH")
+    browser_family: str = Field(default="chrome", env="BROWSER_FAMILY", pattern="^(chrome|edge|chromium|auto)$")
     browser_runtime: str = Field(default="system", env="BROWSER_RUNTIME", pattern="^(system|testing)$")
     browser_headless: bool = Field(default=True, env="BROWSER_HEADLESS")
     browser_download_max_mb: int = Field(default=200, env="BROWSER_DOWNLOAD_MAX_MB", ge=1)

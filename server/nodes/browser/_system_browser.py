@@ -20,15 +20,40 @@ def version_major(version: str) -> int:
     return int(match.group(1))
 
 
+def _windows_app_paths(executable: str):
+    """Read OS-registered executable paths, including per-user/custom installs."""
+    import winreg
+
+    key_name = rf"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{executable}"
+    for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        for view in (winreg.KEY_WOW64_64KEY, winreg.KEY_WOW64_32KEY):
+            try:
+                with winreg.OpenKey(hive, key_name, 0, winreg.KEY_READ | view) as key:
+                    value, kind = winreg.QueryValueEx(key, "")
+                if kind in (winreg.REG_SZ, winreg.REG_EXPAND_SZ) and isinstance(value, str) and value.strip():
+                    yield Path(winreg.ExpandEnvironmentStrings(value.strip().strip('"')))
+            except OSError:
+                continue
+
+
 def _candidates():
     if sys.platform == "win32":
         roots = [os.environ.get(k, "") for k in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA")]
         for name, suffix in (("chrome", "Google/Chrome/Application/chrome.exe"), ("edge", "Microsoft/Edge/Application/msedge.exe"), ("chromium", "Chromium/Application/chrome.exe")):
+            command = {"chrome": "chrome.exe", "edge": "msedge.exe", "chromium": "chromium.exe"}[name]
+            for path in _windows_app_paths(command):
+                yield path, name
+            found = shutil.which(command)
+            if found:
+                yield Path(found), name
             for root in roots:
                 if root:
                     yield Path(root) / suffix, name
     elif sys.platform == "darwin":
         for name, app, binary in (("chrome", "Google Chrome", "Google Chrome"), ("edge", "Microsoft Edge", "Microsoft Edge"), ("chromium", "Chromium", "Chromium")):
+            found = shutil.which(binary)
+            if found:
+                yield Path(found), name
             for root in (Path("/Applications"), Path.home() / "Applications"):
                 yield root / f"{app}.app/Contents/MacOS/{binary}", name
     else:
@@ -67,10 +92,14 @@ def discover_browser(override: str = "") -> tuple[Path, str]:
     return discover_browsers(override)[0]
 
 
-async def select_browser(*, min_major: int, override: str = "") -> tuple[Path, str, str]:
-    """Prefer Chrome, but skip browsers too old to open the requested profile."""
+async def select_browser(*, min_major: int, override: str = "", family: str = "auto") -> tuple[Path, str, str]:
+    """Resolve the requested family afresh, checking profile version compatibility."""
+    if family not in {"chrome", "edge", "chromium", "auto"}:
+        raise NodeUserError("BROWSER_FAMILY must be chrome, edge, chromium or auto.")
     rejected = []
     for path, source in discover_browsers(override):
+        if not override and family != "auto" and source != family:
+            continue
         try:
             version = await browser_version(path)
             if version_major(version) >= min_major:
@@ -78,7 +107,9 @@ async def select_browser(*, min_major: int, override: str = "") -> tuple[Path, s
             rejected.append(f"{source}: {version}")
         except (NodeUserError, OSError, TimeoutError) as exc:
             rejected.append(f"{source}: {exc}")
-    selection = "BROWSER_CHROME_PATH" if override else "The installed browsers"
+    selection = "BROWSER_CHROME_PATH" if override else ("The installed browsers" if family == "auto" else f"Installed {family}")
+    if not rejected:
+        raise NodeUserError(f"No installed {family} was found. Install {family} or choose another BROWSER_FAMILY. The existing profile has been preserved.")
     raise NodeUserError(
         f"{selection} cannot open this profile: it requires version {min_major} or newer. "
         f"Found: {'; '.join(rejected)}. Update your browser or select a compatible BROWSER_CHROME_PATH. "

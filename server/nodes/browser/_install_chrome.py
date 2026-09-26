@@ -200,7 +200,8 @@ class ChromeInstaller:
         raw = str(getattr(container.settings(), "browser_chrome_path", "") or "").strip()
         if raw or provider == "system":
             try:
-                exe, source, version = await select_browser(min_major=max(min_major, self.pin.min_major), override=raw)
+                family = str(getattr(container.settings(), "browser_family", "chrome") or "chrome").lower()
+                exe, source, version = await select_browser(min_major=max(min_major, self.pin.min_major), override=raw, family=family)
                 return await self._selected(exe, source, min_major=min_major, version=version)
             except Exception as exc:
                 self.state.phase, self.state.error = "failed", str(exc)

@@ -6,8 +6,9 @@ workspace surface and its live-stream contract. By default the runtime launches
 installed Chrome/Edge/Chromium headless in a dedicated OpenCompany profile and
 renders it inside this workspace. It does not attach to your personal profile.
 `BROWSER_HEADLESS=false` additionally opens a desktop window; Chrome for Testing
-requires `BROWSER_RUNTIME=testing`. Set `BROWSER_CHROME_PATH` to installed Chrome
-to keep Chrome selected even when another installed browser has a newer version.
+requires `BROWSER_RUNTIME=testing`. `BROWSER_FAMILY=chrome` (the default) discovers
+installed Chrome dynamically and keeps it selected even when another browser
+has a newer version; no machine-specific executable path is needed.
 
 Normal mode and Dev mode share `components/workspace/WorkspaceTabs.tsx`
 (Browser, Canvas, Android) and `components/browser/BrowserWorkspace.tsx`.

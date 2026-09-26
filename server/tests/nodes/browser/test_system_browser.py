@@ -14,7 +14,7 @@ from services.plugin.base import NodeUserError
 def settings(monkeypatch, **values):
     from core.container import container
 
-    result = SimpleNamespace(browser_runtime="system", browser_chrome_path="", browser_install_timeout_seconds=10)
+    result = SimpleNamespace(browser_runtime="system", browser_family="auto", browser_chrome_path="", browser_install_timeout_seconds=10)
     result.__dict__.update(values)
     monkeypatch.setattr(container, "settings", lambda: result)
     return result
@@ -44,8 +44,73 @@ def test_platform_candidates_prefer_chrome_then_edge_then_chromium(monkeypatch, 
     monkeypatch.setenv("PROGRAMFILES(X86)", "Programs86")
     monkeypatch.setenv("LOCALAPPDATA", "Local")
     monkeypatch.setattr(system.shutil, "which", lambda command: command)
+    monkeypatch.setattr(system, "_windows_app_paths", lambda command: [])
     names = [name for _, name in system._candidates()]
     assert names and names == sorted(names, key={"chrome": 0, "edge": 1, "chromium": 2}.get)
+
+
+def test_windows_registry_custom_install_precedes_path_and_defaults(monkeypatch):
+    monkeypatch.setattr(system.sys, "platform", "win32")
+    monkeypatch.setattr(system, "_windows_app_paths", lambda command: [Path("relocated") / command])
+    monkeypatch.setattr(system.shutil, "which", lambda command: str(Path("on-path") / command))
+    monkeypatch.setattr(Path, "is_file", lambda path: "relocated" in path.parts or "on-path" in path.parts)
+    assert system.discover_browser() == (Path("relocated/chrome.exe"), "chrome")
+    monkeypatch.setattr(Path, "is_file", lambda path: "on-path" in path.parts)
+    assert system.discover_browser() == (Path("on-path/chrome.exe"), "chrome")
+
+
+def test_windows_registry_reads_both_scopes_and_views(monkeypatch):
+    import sys
+    from contextlib import nullcontext
+
+    calls = []
+
+    def open_key(hive, key, reserved, access):
+        calls.append((hive, key, access))
+        if hive == "machine" and access == 5:
+            return nullcontext("registered")
+        raise FileNotFoundError
+
+    registry = SimpleNamespace(
+        HKEY_CURRENT_USER="user", HKEY_LOCAL_MACHINE="machine", KEY_READ=1,
+        KEY_WOW64_64KEY=2, KEY_WOW64_32KEY=4, REG_SZ=1, REG_EXPAND_SZ=2,
+        OpenKey=open_key, QueryValueEx=lambda key, value: ('"%INSTALL_ROOT%/chrome.exe"', 2),
+        ExpandEnvironmentStrings=lambda value: value.replace("%INSTALL_ROOT%", "custom-location"),
+    )
+    monkeypatch.setitem(sys.modules, "winreg", registry)
+    assert list(system._windows_app_paths("chrome.exe")) == [Path("custom-location/chrome.exe")]
+    assert [(hive, access) for hive, _, access in calls] == [("user", 3), ("user", 5), ("machine", 3), ("machine", 5)]
+    assert all(key.endswith(r"App Paths\chrome.exe") for _, key, _ in calls)
+
+
+@pytest.mark.asyncio
+async def test_named_chrome_never_switches_to_edge(monkeypatch):
+    settings(monkeypatch, browser_family="chrome")
+    monkeypatch.setattr(system, "discover_browsers", lambda raw: [(Path("chrome"), "chrome"), (Path("edge"), "edge")])
+    probe = AsyncMock(side_effect=lambda path: "153.0.0.0" if path.name == "chrome" else "154.0.0.0")
+    monkeypatch.setattr(system, "browser_version", probe)
+    with pytest.raises(NodeUserError, match="Installed chrome.*requires version 154"):
+        await ChromeInstaller().ensure(wait=10, min_major=154)
+    probe.assert_awaited_once_with(Path("chrome"))
+
+
+@pytest.mark.asyncio
+async def test_named_browser_is_rediscovered_after_relocation(monkeypatch):
+    settings(monkeypatch, browser_family="chrome")
+    discover = Mock(side_effect=[[(Path("old/chrome.exe"), "chrome")], [(Path("new/chrome.exe"), "chrome")]])
+    monkeypatch.setattr(system, "discover_browsers", discover)
+    monkeypatch.setattr(system, "browser_version", AsyncMock(return_value="154.0.0.0"))
+    installer = ChromeInstaller()
+    assert await installer.ensure(wait=10) == Path("old/chrome.exe")
+    assert await installer.ensure(wait=10) == Path("new/chrome.exe")
+    assert discover.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_missing_named_browser_is_actionable(monkeypatch):
+    monkeypatch.setattr(system, "discover_browsers", lambda raw: [(Path("edge"), "edge")])
+    with pytest.raises(NodeUserError, match="No installed chrome was found"):
+        await system.select_browser(min_major=154, family="chrome")
 
 
 @pytest.mark.asyncio
