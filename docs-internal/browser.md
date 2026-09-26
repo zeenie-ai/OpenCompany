@@ -67,6 +67,20 @@ debugging endpoint.
 
 ## Profiles, ownership and control
 
+OpenCompany reuses the user's installed browser executable and its normal
+update mechanism. It launches a separate OpenCompany process with a dedicated
+data directory, then reuses that running process for agent actions and the
+workspace viewer. Opening the same profile again does not launch another browser;
+concurrent opens share one startup task. Cookies and local storage persist across
+restarts of that profile and remain separate from other profiles and personal
+browsing. Sessions intentionally assigned the same saved profile share its logins.
+
+This is installed-browser reuse, not attachment to the user's everyday running
+browser. Chrome's CDP debugging switches require a non-default data directory
+since Chrome 136 ([Chrome documentation](https://developer.chrome.com/blog/remote-debugging-port)).
+Using the existing executable with separate persistent profiles retains the
+workspace live view without an extension or personal-profile migration.
+
 Profile metadata is stored in the `browser_profiles` table. Chrome state is
 under `<DATA_DIR>/browser/profiles/<profile-id>/user-data/`, with generated
 directory IDs rather than user-supplied names. A saved `profile_id` selects an

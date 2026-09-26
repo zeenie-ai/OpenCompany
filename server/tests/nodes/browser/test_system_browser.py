@@ -191,6 +191,48 @@ async def test_runtime_preserves_system_user_agent(monkeypatch, provider, expect
 
 
 @pytest.mark.asyncio
+async def test_open_reuses_running_profile_for_agent_and_viewer(monkeypatch):
+    from nodes.browser import _runtime as module
+
+    runtime = module.BrowserRuntime()
+    existing = SimpleNamespace(running=True)
+    runtime._profiles["shared"] = existing
+    start = AsyncMock(side_effect=AssertionError("must reuse the profile's browser"))
+    monkeypatch.setattr(runtime, "_start", start)
+    profile = SimpleNamespace(id="shared")
+    assert await runtime.open(profile) is existing
+    assert await runtime.open(profile) is existing
+    start.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_opens_share_one_browser_start(monkeypatch):
+    import asyncio
+    from nodes.browser import _runtime as module
+
+    runtime = module.BrowserRuntime()
+    entered, release = asyncio.Event(), asyncio.Event()
+    existing = SimpleNamespace(running=True)
+
+    async def launch(profile):
+        entered.set()
+        await release.wait()
+        return existing
+
+    start = AsyncMock(side_effect=launch)
+    monkeypatch.setattr(runtime, "_start", start)
+    monkeypatch.setattr(runtime, "_ensure_reaper", Mock())
+    profile = SimpleNamespace(id="shared")
+    first = asyncio.create_task(runtime.open(profile))
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    second = asyncio.create_task(runtime.open(profile))
+    await asyncio.sleep(0)
+    release.set()
+    assert await asyncio.gather(first, second) == [existing, existing]
+    start.assert_awaited_once_with(profile)
+
+
+@pytest.mark.asyncio
 async def test_start_records_connected_version_and_passes_actual_major(monkeypatch):
     import asyncio
 
