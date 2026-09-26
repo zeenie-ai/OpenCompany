@@ -1,4 +1,9 @@
-"""Download and unpack the pinned Chrome for Testing build.
+"""Select installed Chrome/Edge/Chromium, or explicitly install a testing build.
+
+The default system provider never downloads Chrome. ``BROWSER_CHROME_PATH``
+overrides discovery in either provider, and the selected binary's actual
+version is checked before a profile is opened. ``BROWSER_RUNTIME=testing``
+opts into the downloader described below.
 
 The version and each platform's MD5 and size come from
 ``server/config/browser_runtime.json``. The build lands under
@@ -54,12 +59,13 @@ class InstallState:
     failures: int = 0
     failed_at: float = 0.0
     exe: Optional[str] = None
+    source: str = ""
     bytes_done: int = 0
     bytes_total: int = 0
     cancel: threading.Event = field(default_factory=threading.Event)
 
     def snapshot(self) -> dict:
-        return {"phase": self.phase, "percent": self.percent, "version": self.version, "error": self.error, "exe": self.exe}
+        return {"phase": self.phase, "percent": self.percent, "version": self.version, "error": self.error, "exe": self.exe, "source": self.source}
 
 
 class _Progress:
@@ -145,22 +151,6 @@ class ChromeInstaller:
             )
         return plat
 
-    def _override(self) -> Optional[Path]:
-        from core.container import container
-
-        raw = str(getattr(container.settings(), "browser_chrome_path", "") or "").strip()
-        if not raw:
-            return None
-        path = Path(raw).expanduser()
-        if "/snap/" in path.as_posix():
-            raise NodeUserError(
-                "BROWSER_CHROME_PATH points at a snap package; snap confinement hides OpenCompany's data folder from it. "
-                "Use a Chrome installed from a .deb or tarball."
-            )
-        if not path.is_file():
-            raise NodeUserError(f"BROWSER_CHROME_PATH does not exist: {path}")
-        return path
-
     def installed_exe(self) -> Optional[Path]:
         """The pinned build's executable if it is fully installed, without installing."""
         plat = self.platform()
@@ -172,32 +162,61 @@ class ChromeInstaller:
 
     def status(self) -> dict:
         snap = self.state.snapshot()
-        snap["version"] = snap.get("version") or self.pin.version
+        snap["provider"] = self.provider()
         return snap
+
+    def provider(self) -> str:
+        from core.container import container
+
+        provider = str(getattr(container.settings(), "browser_runtime", "system") or "system").lower()
+        if provider not in {"system", "testing"}:
+            raise NodeUserError("BROWSER_RUNTIME must be system or testing.")
+        return provider
+
+    async def _selected(self, exe: Path, source: str) -> Path:
+        from ._system_browser import browser_version, version_major
+
+        version = await browser_version(exe)
+        if version_major(version) < self.pin.min_major:
+            raise NodeUserError(f"The selected browser is version {version}; OpenCompany requires version {self.pin.min_major} or newer. Update your browser or select another BROWSER_CHROME_PATH.")
+        self.state.phase, self.state.exe, self.state.version = "ready", str(exe), version
+        self.state.source, self.state.error = source, None
+        return exe
 
     # -- install ----------------------------------------------------------
 
     async def ensure(self, *, wait: float) -> Path:
-        """Path to a runnable Chrome, installing it if needed.
+        """Path to a supported browser; only testing mode may download it.
 
-        Waits at most ``wait`` seconds; the install itself keeps running in
-        the background when the caller gives up.
+        Testing downloads wait at most ``wait`` seconds and keep running in
+        the background when the caller gives up. Version preflight is separate.
         """
-        override = self._override()
-        if override is not None:
-            return override
+        from core.container import container
+
+        from ._system_browser import discover_browser
+
+        provider = self.provider()
+        raw = str(getattr(container.settings(), "browser_chrome_path", "") or "").strip()
+        if raw or provider == "system":
+            try:
+                exe, source = discover_browser(raw)
+                return await self._selected(exe, source)
+            except Exception as exc:
+                self.state.phase, self.state.error = "failed", str(exc)
+                self.state.version, self.state.exe, self.state.source = "", None, ""
+                raise
         exe = self.installed_exe()
         if exe is not None:
-            self.state.phase, self.state.exe = "ready", str(exe)
-            return exe
+            return await self._selected(exe, "testing")
 
         task = await self._start()
         try:
-            return await asyncio.wait_for(asyncio.shield(task), timeout=max(0.0, wait))
+            exe = await asyncio.wait_for(asyncio.shield(task), timeout=max(0.0, wait))
         except asyncio.TimeoutError:
             pct = self.state.percent
             progress = f" ({pct}%)" if pct is not None else ""
             raise NodeUserError(f"Installing the browser{progress}. This happens once; try again in a minute.") from None
+        return await self._selected(exe, "testing")
 
     async def _start(self) -> asyncio.Task:
         async with self._lock:

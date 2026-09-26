@@ -11,7 +11,7 @@
 # The default image carries no optional tools. EXTRAS adds them, space
 # separated:
 #   browser  Chromium, fonts and Xvfb for the browser node, and uv, which
-#            the browser-harness node installs itself with
+#            installs the Browser node's browser-use CLI
 #   git      git, for the Claude Code and Codex agent nodes (they work in git
 #            worktrees)
 #
@@ -113,8 +113,8 @@ COPY --from=build /data /data
 
 # Runtime settings; everything else keeps its .env.template default.
 # HOME lives on the volume so CLI logins (gh, stripe, cf, codex) and caches
-# survive upgrades. AGENT_BROWSER_EXECUTABLE_PATH points agent-browser at the
-# system Chromium of the browser extra, which the browser node needs.
+# survive upgrades. Browser system mode selects the browser extra's Chromium;
+# this server image has no desktop display, so use explicit headless mode.
 ENV DATA_DIR=/data \
     HOME=/data/home \
     OPENCOMPANY_ENV_FILE=/data/opencompany.env \
@@ -122,7 +122,9 @@ ENV DATA_DIR=/data \
     VITE_AUTH_ENABLED=true \
     NODEJS_EXECUTOR_HOST=127.0.0.1 \
     NODEJS_USER_PACKAGES_DIR=/data/nodejs-user-packages \
-    AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium \
+    BROWSER_RUNTIME=system \
+    BROWSER_CHROME_PATH=/usr/bin/chromium \
+    BROWSER_HEADLESS=true \
     PYTHONUNBUFFERED=1
 
 WORKDIR /app/server

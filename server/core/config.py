@@ -451,16 +451,20 @@ class Settings(BaseSettings):
     # least recently used idle profile before another would exceed it; the
     # idle timeout (ms) stops a profile's Chrome after that long with no
     # agent step, viewer or login; 0 disables. The install timeout bounds
-    # the first-use download of Chrome and the browser-use CLI. Sandbox:
+    # the browser-use CLI install (and Chrome only in explicit testing mode). Sandbox:
     # auto disables Chrome's sandbox only as root on Linux, where it cannot
-    # start. chrome_path points at a Chrome of your own instead of the
-    # pinned download (musl hosts, mirrors). Downloads a page starts are
+    # start. system discovers installed Chrome/Edge/Chromium; testing opts into
+    # the pinned download. chrome_path selects an explicit executable.
+    # Desktop browsers are visible unless headless is explicitly enabled.
+    # Downloads a page starts are
     # capped at download_max_mb each.
     browser_max_instances: int = Field(default=3, env="BROWSER_MAX_INSTANCES", ge=1, le=50)
     browser_idle_timeout_ms: int = Field(default=600_000, env="BROWSER_IDLE_TIMEOUT_MS", ge=0)
     browser_install_timeout_seconds: int = Field(default=900, env="BROWSER_INSTALL_TIMEOUT_SECONDS", ge=60)
     browser_sandbox: str = Field(default="auto", env="BROWSER_SANDBOX", pattern="^(auto|on|off)$")
     browser_chrome_path: str = Field(default="", env="BROWSER_CHROME_PATH")
+    browser_runtime: str = Field(default="system", env="BROWSER_RUNTIME", pattern="^(system|testing)$")
+    browser_headless: bool = Field(default=False, env="BROWSER_HEADLESS")
     browser_download_max_mb: int = Field(default=200, env="BROWSER_DOWNLOAD_MAX_MB", ge=1)
 
     # Compaction Configuration. Threshold = model context_length ×

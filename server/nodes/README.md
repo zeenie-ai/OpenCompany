@@ -145,7 +145,7 @@ tool/        — calculatorTool / currentTimeTool / writeTodos / taskManager
 utility/     — console / httpRequest / webhookResponse / processManager / team_monitor
 workflow/    — start
 skill/       — simpleMemory / masterSkill
-browser/     — browser (managed Chrome for Testing + browser-use CLI, profiles, live view and user takeover)
+browser/     — browser (installed Chrome/Edge/Chromium + browser-use CLI; Chrome for Testing opt-in, profiles, live view and user takeover)
 stripe/      — Stripe (CLI passthrough action + signed-webhook trigger)
 vercel/      — Vercel (CLI deploy / inspect / list / custom passthrough)
 github/      — GitHub (gh CLI: clone / PRs / issues / custom; palette group "vcs")

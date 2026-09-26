@@ -1,9 +1,9 @@
 """Install the Browser node's runtime ahead of first use.
 
-Normally the pinned Chrome for Testing and the browser-use CLI are fetched
-the first time a Browser node runs (``_install_chrome.py``,
-``_install_bu.py``). This entry point fetches both now, for an image or a
-machine that should not download on first use::
+Normally the installed browser is selected and the browser-use CLI is fetched
+the first time a Browser node runs. This entry point validates that browser
+and installs the CLI ahead of time. With explicit ``BROWSER_RUNTIME=testing``,
+it also downloads the pinned Chrome for Testing build::
 
     uv run python -m nodes.browser._install        # from server/
 """

@@ -1,9 +1,10 @@
 """Typed access to ``server/config/browser_runtime.json``.
 
 The JSON is the single source of truth for what the Browser node downloads:
-the Chrome for Testing build (version, per-platform checksum, size and
+the opt-in Chrome for Testing build (version, per-platform checksum, size and
 executable path), the Linux libraries that build needs, and the pinned
-browser-use CLI. ``_pin.py`` rewrites it; nothing else hardcodes a version.
+browser-use CLI. Installed browsers are selected by default; their minimum
+supported major is also recorded here. ``_pin.py`` rewrites the download pins.
 """
 
 from __future__ import annotations

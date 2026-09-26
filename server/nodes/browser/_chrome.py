@@ -1,10 +1,10 @@
 """Launching and stopping one profile's Chrome.
 
-Chrome runs ``--headless=new`` (full Chrome, not the old headless shell)
-with its own ``--user-data-dir``, a debugging port chosen by the OS
+An installed browser opens a visible window by default, with explicit headless
+mode available for servers. It uses its own ``--user-data-dir`` and a debugging port chosen by the OS
 (``--remote-debugging-port=0``; the real port is read back from the
 ``DevToolsActivePort`` file), and every request routed through the egress
-proxy. The user sees it only through the in-app live view.
+proxy. The same browser is also available through the in-app live view.
 
 Never passed: ``--remote-allow-origins=*`` (it would let web pages talk to
 the debugging port), ``--enable-automation`` (the "controlled by automated
@@ -73,6 +73,9 @@ _ENV_ALLOWLIST = (
     "LC_ALL",
     "TZ",
     "DISPLAY",
+    "WAYLAND_DISPLAY",
+    "XAUTHORITY",
+    "DBUS_SESSION_BUS_ADDRESS",
     "XDG_RUNTIME_DIR",
     "FONTCONFIG_PATH",
     "FONTCONFIG_FILE",
@@ -105,6 +108,8 @@ def build_chrome_argv(
     small_shm: bool,
     platform: Optional[str] = None,
     downloads_dir: Optional[Path] = None,
+    headless: bool = False,
+    override_user_agent: bool = False,
 ) -> List[str]:
     platform = platform or sys.platform
     argv = [
@@ -112,18 +117,15 @@ def build_chrome_argv(
         f"--user-data-dir={user_data_dir}",
         "--remote-debugging-address=127.0.0.1",
         "--remote-debugging-port=0",
-        "--headless=new",
         "--no-first-run",
         "--no-default-browser-check",
         "--disable-sync",
-        "--disable-component-update",
         "--no-pings",
         "--hide-crash-restore-bubble",
         "--disable-renderer-backgrounding",
         "--disable-backgrounding-occluded-windows",
         "--disable-background-timer-throttling",
         f"--window-size={VIEWPORT_WIDTH},{VIEWPORT_HEIGHT}",
-        f"--user-agent={user_agent(major, platform)}",
         f"--proxy-server=http://127.0.0.1:{proxy_port}",
         # Chrome sends loopback requests direct by default; this removes that
         # rule so localhost goes through the egress proxy's policy too.
@@ -133,9 +135,13 @@ def build_chrome_argv(
         "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
         "--enable-features=" + ",".join(ENABLED_FEATURES),
     ]
-    if platform.startswith("linux"):
+    if headless:
+        argv.append("--headless=new")
+    if override_user_agent:
+        argv.extend([f"--user-agent={user_agent(major, platform)}", "--disable-component-update"])
+    if override_user_agent and platform.startswith("linux"):
         argv.append("--password-store=basic")
-    elif platform == "darwin":
+    elif override_user_agent and platform == "darwin":
         argv.append("--use-mock-keychain")
     if no_sandbox:
         argv.append("--no-sandbox")
@@ -255,6 +261,8 @@ class ChromeProcess(BaseProcessSupervisor):
         major: int,
         no_sandbox: bool,
         small_shm: bool,
+        headless: bool = False,
+        override_user_agent: bool = False,
     ) -> None:
         super().__init__()
         self.name = f"browser-chrome:{profile_id}"
@@ -266,6 +274,8 @@ class ChromeProcess(BaseProcessSupervisor):
         self._major = major
         self._no_sandbox = no_sandbox
         self._small_shm = small_shm
+        self._headless = headless
+        self._override_user_agent = override_user_agent
         self._profile_lock = ProfileLock(profile_root / "oc.lock")
         self._locked = False
         self.port: Optional[int] = None
@@ -289,6 +299,8 @@ class ChromeProcess(BaseProcessSupervisor):
             major=self._major,
             no_sandbox=self._no_sandbox,
             small_shm=self._small_shm,
+            headless=self._headless,
+            override_user_agent=self._override_user_agent,
         )
 
     def env(self) -> Dict[str, str]:
@@ -318,6 +330,8 @@ class ChromeProcess(BaseProcessSupervisor):
 
     async def launch(self) -> CDPConnection:
         """Start Chrome, wait for its debugging port, connect over CDP."""
+        if sys.platform.startswith("linux") and not self._headless and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+            raise NodeUserError("A visible browser needs a desktop display. Set BROWSER_HEADLESS=true for a server without a display.")
         register_supervisor(self)
         try:
             await self.start()

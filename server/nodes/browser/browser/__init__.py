@@ -1,6 +1,6 @@
 """Browser — a real Chrome the agent drives, and the owner can watch and take over.
 
-OpenCompany launches a pinned Chrome for Testing per browser profile and the
+OpenCompany launches installed Chrome/Edge/Chromium per dedicated browser profile and the
 agent drives it through the browser-use CLI: it reads pages through the
 accessibility tree (``snapshot`` returns ``[e12]``-style refs), acts on refs
 (``click``, ``type``, ``select``), calls the tools a page offers through

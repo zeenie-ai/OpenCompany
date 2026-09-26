@@ -56,15 +56,36 @@ def test_a_script_error_is_reported_not_raised():
 
 def test_chrome_flags(tmp_path):
     argv = build_chrome_argv(Path("chrome"), user_data_dir=tmp_path, proxy_port=4000, major=154, no_sandbox=False, small_shm=False, platform="linux")
-    assert "--headless=new" in argv and "--remote-debugging-port=0" in argv
+    assert "--headless=new" not in argv and "--remote-debugging-port=0" in argv
     assert "--proxy-server=http://127.0.0.1:4000" in argv and "--proxy-bypass-list=<-loopback>" in argv
-    assert "--password-store=basic" in argv and "--no-sandbox" not in argv
+    assert "--password-store=basic" not in argv and "--no-sandbox" not in argv
+    assert not any(a.startswith("--user-agent=") for a in argv)
+    assert "--disable-component-update" not in argv
     assert sum(a.startswith("--enable-features=") for a in argv) == 1
     assert not any(a.startswith("--remote-allow-origins") or a == "--enable-automation" for a in argv)
     assert "HeadlessChrome" not in " ".join(argv) and "Chrome/154.0.0.0" in user_agent(154, "win32")
     root = build_chrome_argv(Path("chrome"), user_data_dir=tmp_path, proxy_port=1, major=154, no_sandbox=True, small_shm=True, platform="linux")
     assert "--no-sandbox" in root and "--disable-dev-shm-usage" in root
-    assert "--use-mock-keychain" in build_chrome_argv(Path("c"), user_data_dir=tmp_path, proxy_port=1, major=1, no_sandbox=False, small_shm=False, platform="darwin")
+    mac = build_chrome_argv(Path("c"), user_data_dir=tmp_path, proxy_port=1, major=1, no_sandbox=False, small_shm=False, platform="darwin")
+    assert "--use-mock-keychain" not in mac
+
+
+def test_testing_browser_flags_are_explicit(tmp_path):
+    argv = build_chrome_argv(Path("chrome"), user_data_dir=tmp_path, proxy_port=4000, major=154, no_sandbox=False, small_shm=False, platform="linux", headless=True, override_user_agent=True)
+    assert "--headless=new" in argv and "--password-store=basic" in argv
+    assert any(a.startswith("--user-agent=") for a in argv)
+
+
+async def test_visible_browser_requires_linux_display(monkeypatch, tmp_path):
+    from nodes.browser._chrome import ChromeProcess
+    from services.plugin.base import NodeUserError
+
+    monkeypatch.setattr("nodes.browser._chrome.sys.platform", "linux")
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    chrome = ChromeProcess(profile_id="test", exe=Path("chrome"), profile_root=tmp_path, user_data_dir=tmp_path / "profile", proxy_port=1, major=154, no_sandbox=False, small_shm=False)
+    with pytest.raises(NodeUserError, match="BROWSER_HEADLESS=true"):
+        await chrome.launch()
 
 
 def test_the_cli_gets_no_secrets_and_no_telemetry(monkeypatch, tmp_path):

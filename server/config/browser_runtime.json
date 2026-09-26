@@ -1,5 +1,5 @@
 {
-  "_comment": "Pins for the Browser node's runtime: the Chrome for Testing build OpenCompany downloads and launches, and the browser-use CLI that drives it. Bump both with `uv run python -m nodes.browser._pin` from server/ (it rewrites this file); never edit a version by hand without its checksums.",
+  "_comment": "Browser runtime download pins: Chrome for Testing is used only with BROWSER_RUNTIME=testing; installed Chrome/Edge/Chromium is the default. min_major also gates installed browsers. The browser-use CLI drives either provider. Bump pins with `uv run python -m nodes.browser._pin` from server/; never edit a version by hand without its checksums.",
   "chrome_for_testing": {
     "version": "154.0.8037.57",
     "min_major": 150,

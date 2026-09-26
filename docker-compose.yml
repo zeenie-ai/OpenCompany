@@ -15,7 +15,7 @@ services:
       args:
         # Optional tools, space separated; the default image has none
         # (docs-internal/docker.md). Then rebuild: docker compose up -d --build
-        #   browser  Chromium for the browser node, uv for browser-harness
+        #   browser  Chromium and uv for the native Browser node
         #   git      git for the Claude Code and Codex agent nodes
         EXTRAS: ""
     image: opencompany:local

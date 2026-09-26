@@ -2,7 +2,10 @@
 
 For installation, profiles, policy and agent execution, see the
 [native browser runtime](./browser.md). This document describes the shared
-workspace surface and its live-stream contract.
+workspace surface and its live-stream contract. By default the runtime opens
+installed Chrome/Edge/Chromium in a dedicated OpenCompany profile and a visible
+window. It does not attach to your personal profile. Headless operation requires
+`BROWSER_HEADLESS=true`; Chrome for Testing requires `BROWSER_RUNTIME=testing`.
 
 Normal mode and Dev mode share `components/workspace/WorkspaceTabs.tsx`
 (Browser, Canvas, Android) and `components/browser/BrowserWorkspace.tsx`.
@@ -138,9 +141,10 @@ fixture does not validate WAN latency, large third-party pages, the browser-use
 CLI/agent path, production ownership checks or all human-control races. Those
 remain separate correctness and end-to-end checks.
 
-### Local measurements, 2026-09-26
+### Historical local measurements, 2026-09-26
 
-The final paired runs used installed **Chrome 153.0.8010.53**, not the runtime's
+These measurements predate the installed-browser/default-visible runtime change.
+The final paired runs used installed **Chrome 153.0.8010.53**, not the then-default
 pinned Chrome 154. Chrome 153's live `/json/protocol` did not advertise
 `Page.startScreencast.sendLastFrame`; the implementation requests that optional
 field, but these results do not establish its behavior on pinned Chrome 154.
@@ -169,7 +173,7 @@ one missed deadline at 30 fps, although that counter eventually appeared.
 Earlier pilot and intermediate runs also varied substantially. The table
 measures the completed capture-credit change; it does not justify a production
 latency guarantee. Repeat alternating comparisons and test the production
-React renderer and pinned browser before making that claim.
+React renderer and selected runtime before making that claim.
 
 The four raw JSON reports were emitted with labels `baseline-paired`,
 `current-paired`, `baseline-paired-fps10`, and `current-paired-fps10`. The

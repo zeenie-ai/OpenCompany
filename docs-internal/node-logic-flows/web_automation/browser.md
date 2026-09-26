@@ -1,6 +1,6 @@
 # Browser (`browser`)
 
-The Browser node drives OpenCompany-managed Chrome and exposes the same profile to the live browser workspace. It runs as a workflow step or as the agent tool named `browser`. The old `agent-browser` integration and separate `browserHarness` node have been replaced.
+The Browser node launches installed Chrome/Edge/Chromium in a dedicated OpenCompany profile, visible by default, and exposes that profile to the live browser workspace. `BROWSER_RUNTIME=testing` explicitly selects Chrome for Testing; `BROWSER_HEADLESS=true` explicitly hides the window. It never attaches to a personal browser profile. It runs as a workflow step or as the agent tool named `browser`. The old `agent-browser` integration and separate `browserHarness` node have been replaced.
 
 See [native browser architecture](../../browser.md) for runtime installation, profile storage, networking and lifecycle, and [browser workspace](../../browser_workspace.md) for the viewer and UI protocol.
 
@@ -46,7 +46,7 @@ Refs resolve against a backend-node-ID map held per target, not against model-pr
 1. Read operator configuration. For agent calls, reread the saved node settings so tool arguments cannot override the profile, policy, timeouts or executable code.
 2. Reject workflow-only operations from agent calls and operations prohibited by `interaction`. Refuse automatic retries of operations in the node's `MUTATING` set when Temporal reports attempt greater than one; the previous action may already have occurred.
 3. Resolve the owner's profile: explicit `profile_id`, otherwise the workflow's persistent default profile. Unsaved runs have a separate fallback. Register a session identified by owner, workflow and node, associated with that profile.
-4. Handle `close` and `diagnose` without opening a new runtime. Other operations open or reuse the profile runtime, installing managed dependencies on first use if needed.
+4. Handle `close` and `diagnose` without opening a new runtime. Other operations open or reuse the profile runtime, discovering the installed browser and installing the pinned CLI on first use if needed. Testing mode may also install pinned Chrome. The actual selected browser version must be compatible with the saved profile; downgrade errors never delete or replace the profile automatically.
 5. `request_user` enters the human-handoff flow. Other operations acquire the profile's agent-operation lease/lock; human control blocks agent work.
 6. `webmcp_list` reads the native tracker's tool cache; `webmcp_call` invokes through the native CDP integration. Remaining operations use a generated Python script sent to the isolated browser-use CLI, whose daemon persists across calls and connects to managed Chrome.
 7. Update active target, URL/title and snapshot refs from the result. Map output to the node schema and emit page/session changes. CLI daemon failure permits one retry for operations outside `MUTATING`; operations inside that set are not retried by this wrapper.

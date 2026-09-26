@@ -1,6 +1,8 @@
 # Native browser runtime
 
-The `browser` node runs a managed Chrome for Testing profile. Agents use the
+The `browser` node launches installed Chrome, Edge or Chromium in an
+OpenCompany-owned profile. The default opens a visible browser window; it
+does not attach to or copy your personal browser profile. Agents use the
 browser-use CLI for ordinary browser operations; people watch and control the
 same Chrome through the [Browser workspace](./browser_workspace.md). The old
 agent-browser driver and separate `browserHarness` node are retired.
@@ -22,16 +24,21 @@ session. Normal and Dev modes use the same viewer component.
 
 ## Installation and configuration
 
-[`server/config/browser_runtime.json`](../server/config/browser_runtime.json)
-is the version source of truth for Chrome for Testing, supported platforms,
-download checksums and the browser-use CLI. The runtime ensures both tools
-before launching a new Chrome process. Installation is shared and can outlive
-the finite open request; the workspace polls installation status while waiting.
+The default `BROWSER_RUNTIME=system` discovers installed Chrome first, then
+Edge/Chromium. `BROWSER_CHROME_PATH` selects an explicit executable. If none
+is available, startup fails with setup guidance: there is no automatic Chrome
+for Testing download or fallback. System mode preserves the browser's native
+user agent. An installed browser is not a guarantee that a website will accept
+automation or permit a login; Take control remains available for human steps.
 
-Chrome is installed under `<DATA_DIR>/packages/chrome-for-testing/`.
-The CLI uses an isolated uv tool installation under
-`<DATA_DIR>/packages/browser-use/`; it is not part of the shared Bun package
-tree. `uv` must be available on PATH or through `OPENCOMPANY_UV_BIN`.
+`BROWSER_RUNTIME=testing` explicitly selects pinned Chrome for Testing. Its
+version, platform checksums and the browser-use CLI pin live in
+[`server/config/browser_runtime.json`](../server/config/browser_runtime.json).
+Only testing mode installs Chrome under `<DATA_DIR>/packages/chrome-for-testing/`.
+Both modes install the pinned browser-use CLI through an isolated uv tool
+installation under `<DATA_DIR>/packages/browser-use/`, outside the shared Bun
+package tree. `uv` must be on PATH or selected by `OPENCOMPANY_UV_BIN`.
+Installation can outlive the open request; the workspace reports progress.
 
 Runtime settings are declared in
 [`server/core/config.py`](../server/core/config.py); stream diagnostics reads
@@ -39,7 +46,9 @@ its opt-in flag directly from the process environment:
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| `BROWSER_CHROME_PATH` | Empty | Use a supplied Chrome/Chromium executable instead of downloading the pinned browser |
+| `BROWSER_RUNTIME` | `system` | Installed browser discovery; `testing` explicitly enables pinned Chrome for Testing |
+| `BROWSER_HEADLESS` | `false` | Visible browser by default; set `true` explicitly for containers or unattended hosts |
+| `BROWSER_CHROME_PATH` | Empty | Explicit Chrome/Edge/Chromium executable override |
 | `BROWSER_MAX_INSTANCES` | `3` | Bound simultaneously running browser profiles |
 | `BROWSER_IDLE_TIMEOUT_MS` | `600000` | Reap idle profiles; attached viewers and pending user work count as busy |
 | `BROWSER_INSTALL_TIMEOUT_SECONDS` | `900` | Bound installer work |
@@ -59,6 +68,12 @@ under `<DATA_DIR>/browser/profiles/<profile-id>/user-data/`, with generated
 directory IDs rather than user-supplied names. A saved `profile_id` selects an
 owner-scoped profile; leaving it empty creates/reuses the workflow's profile.
 The CLI receives its own per-profile home, runtime and temporary directories.
+
+The profile version guard checks the browser executable actually selected, not
+the testing pin. A browser older than the version that last wrote the profile
+is rejected with actionable guidance. OpenCompany neither deletes that profile
+nor silently creates a replacement; select a compatible browser or explicitly
+choose a different profile. This protects saved sessions during runtime changes.
 
 The server derives identity from the authenticated caller and the saved
 workflow. Browser discovery uses the plugin's `isBrowserPanel` hint, not a
@@ -120,4 +135,5 @@ Backend regression tests live in `server/tests/nodes/browser/`; viewer and
 workspace tests live beside their client components. The
 [local benchmark](./browser_workspace.md#reproducible-local-benchmark) exercises
 real Chrome/CDP and production stream code with an isolated reference canvas.
-Its recorded Chrome 153 results are not a full React or pinned-Chrome benchmark.
+Its recorded Chrome 153 results describe the prior benchmark configuration,
+not a full React test or validation of the current default runtime selection.

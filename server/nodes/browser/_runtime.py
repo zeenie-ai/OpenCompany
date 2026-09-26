@@ -1,7 +1,8 @@
 """The fleet of running profile browsers.
 
-:class:`BrowserRuntime` (one per backend process) installs the pinned Chrome
-and browser-use CLI on first use, starts a profile's Chrome when a Browser
+:class:`BrowserRuntime` (one per backend process) selects an installed browser
+(or explicitly opted-in testing build), installs the browser-use CLI on first
+use, starts a profile's Chrome when a Browser
 node or a viewer needs it, stops it when it has been idle for
 ``BROWSER_IDLE_TIMEOUT_MS``, and keeps at most ``BROWSER_MAX_INSTANCES``
 running by stopping the least recently used idle one.
@@ -10,7 +11,7 @@ For each running profile a :class:`ProfileRuntime` holds the Chrome process,
 its egress proxy, the backend's CDP connection, the CLI bound to it, the
 WebMCP tracker and the :class:`~._session.ProfileController`. On the backend
 connection every page is auto-attached (paused until configured) so the
-user-agent override, WebMCP tracking and tab tracking are in place before a
+WebMCP tracking and tab tracking are in place before a
 page, or a popup, runs a line of script.
 """
 
@@ -21,7 +22,6 @@ import ipaddress
 import sys
 import time
 from dataclasses import dataclass, replace
-from pathlib import Path
 from typing import Any, Dict, FrozenSet, List, Optional
 
 from core.logging import get_logger
@@ -38,6 +38,7 @@ from ._install_chrome import get_chrome_installer
 from ._netpolicy import NetPolicy, own_ports_from_env
 from ._profiles import Profile, profile_dir, user_data_dir
 from ._session import BrowserSession, ControlState, ProfileController
+from ._system_browser import version_major
 from ._webmcp import WebMcpTracker
 
 logger = get_logger(__name__)
@@ -93,6 +94,7 @@ class ProfileRuntime:
     cli: BrowserUseCli
     webmcp: WebMcpTracker
     full_version: str = ""
+    provider: str = "system"
     started_at: float = 0.0
 
     @property
@@ -224,15 +226,17 @@ class BrowserRuntime:
     async def _start(self, profile: Profile) -> ProfileRuntime:
         settings = self._settings()
         pin = get_config().chrome
-        if profile.chrome_major and profile.chrome_major > pin.major:
+        installer = get_chrome_installer()
+        exe = await installer.ensure(wait=float(settings.browser_install_timeout_seconds))
+        selected_version = installer.state.version
+        selected_major = version_major(selected_version)
+        if profile.chrome_major and profile.chrome_major > selected_major:
             raise NodeUserError(
                 f"The profile {profile.name!r} was last opened by a newer Chrome ({profile.chrome_major}); this install "
-                f"has Chrome {pin.major}. Update OpenCompany, or use another profile."
+                f"has browser {selected_major}. Update your browser or select another profile."
             )
-        exe, bu_paths = await asyncio.gather(
-            get_chrome_installer().ensure(wait=float(settings.browser_install_timeout_seconds)),
-            get_browser_use_installer().ensure(wait=float(settings.browser_install_timeout_seconds)),
-        )
+        provider = installer.provider()
+        bu_paths = await get_browser_use_installer().ensure(wait=float(settings.browser_install_timeout_seconds))
         await self._make_room(exclude=profile.id)
 
         controller = self.controller_for(profile)
@@ -253,13 +257,18 @@ class BrowserRuntime:
                 profile_root=profile_dir(profile.id),
                 user_data_dir=user_data_dir(profile.id),
                 proxy_port=proxy_port,
-                major=pin.major,
+                major=selected_major,
                 no_sandbox=no_sandbox,
                 small_shm=shm_small(),
+                headless=bool(getattr(settings, "browser_headless", False)),
+                override_user_agent=provider == "testing",
             )
             self._chromes[profile.id] = chrome
         else:
             chrome._exe, chrome._proxy_port = exe, proxy_port
+            chrome._major = selected_major
+            chrome._headless = bool(getattr(settings, "browser_headless", False))
+            chrome._override_user_agent = provider == "testing"
 
         cli = BrowserUseCli(
             cli_path=bu_paths["cli"], python_path=bu_paths["python"], profile_id=profile.id, cdp_http_url="http://127.0.0.1:0"
@@ -270,11 +279,14 @@ class BrowserRuntime:
         cli.cdp_http_url = f"http://127.0.0.1:{chrome.port}"
         webmcp = WebMcpTracker()
         runtime = ProfileRuntime(
-            profile=profile, controller=controller, chrome=chrome, proxy=proxy, cdp=cdp, cli=cli, webmcp=webmcp, started_at=time.monotonic()
+            profile=profile, controller=controller, chrome=chrome, proxy=proxy, cdp=cdp, cli=cli, webmcp=webmcp, started_at=time.monotonic(), provider=provider
         )
         try:
             version = await cdp.send("Browser.getVersion")
-            runtime.full_version = str(version.get("product", "")).split("/", 1)[-1] or pin.version
+            runtime.full_version = str(version.get("product", "")).split("/", 1)[-1]
+            actual_major = version_major(runtime.full_version)
+            if actual_major < pin.min_major or (profile.chrome_major and actual_major < profile.chrome_major):
+                raise NodeUserError("The launched browser is older than this profile or the minimum supported browser version. Update the selected browser or use another profile.")
             await self._wire(runtime)
         except BaseException:
             await chrome.shutdown()
@@ -287,7 +299,8 @@ class BrowserRuntime:
 
             from ._profiles import ProfileStore
 
-            await ProfileStore(get_database()).record_chrome_major(profile.id, pin.major)
+            await ProfileStore(get_database()).record_chrome_major(profile.id, actual_major)
+            runtime.profile = replace(profile, chrome_major=actual_major)
         except Exception:  # noqa: BLE001 - the downgrade guard is advisory
             logger.debug("[browser] could not record the Chrome version on the profile", exc_info=True)
         logger.info("[browser] profile %s (%s) running Chrome %s on port %s", profile.id, profile.name, runtime.full_version, chrome.port)
@@ -295,14 +308,15 @@ class BrowserRuntime:
 
     async def _wire(self, runtime: ProfileRuntime) -> None:
         cdp, controller = runtime.cdp, runtime.controller
-        major = int(runtime.full_version.split(".", 1)[0]) if runtime.full_version[:1].isdigit() else get_config().chrome.major
+        major = version_major(runtime.full_version)
         ua = user_agent(major)
         metadata = _ua_metadata(major, runtime.full_version)
 
         async def configure(session: CDPSession, target: Dict[str, Any], waiting: bool) -> None:
             try:
                 if target.get("type") == "page":
-                    await session.send("Network.setUserAgentOverride", {"userAgent": ua, "userAgentMetadata": metadata}, timeout=10)
+                    if runtime.provider == "testing":
+                        await session.send("Network.setUserAgentOverride", {"userAgent": ua, "userAgentMetadata": metadata}, timeout=10)
                     await session.send("Page.enable", timeout=10)
                     await runtime.webmcp.attach(session.target_id, session)
             except (CDPError, CDPDisconnected, TimeoutError):
@@ -445,7 +459,7 @@ class BrowserRuntime:
             "chrome": get_chrome_installer().status(),
             "cli": get_browser_use_installer().status(),
             "running": [
-                {"profile_id": pid, "name": r.profile.name, "state": r.controller.state.value, "port": r.chrome.port}
+                {"profile_id": pid, "name": r.profile.name, "state": r.controller.state.value, "port": r.chrome.port, "version": r.full_version, "provider": r.provider}
                 for pid, r in self._profiles.items()
                 if r.running
             ],
