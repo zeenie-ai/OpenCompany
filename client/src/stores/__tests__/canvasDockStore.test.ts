@@ -21,6 +21,7 @@ const resetStore = () =>
     widthPx: 380,
     autoOpen: true,
     followMode: false,
+    tab: 'board',
     mode: 'node',
     selectedNodeId: null,
     ephemeralItem: null,
@@ -60,6 +61,12 @@ describe('canvasDockStore.notifyPushed', () => {
     expect(state.mode).toBe('ephemeral');
     expect(state.ephemeralItem).toEqual(ephemeral);
   });
+
+  it('does not switch away from a live browser on a Canvas push', () => {
+    useCanvasDockStore.setState({ open: true, tab: 'browser' });
+    useCanvasDockStore.getState().notifyPushed('canvas-2');
+    expect(useCanvasDockStore.getState().tab).toBe('browser');
+  });
 });
 
 describe('canvasDockStore prefs', () => {
@@ -97,9 +104,11 @@ describe('canvasDockStore prefs', () => {
   });
 
   it('showEphemeral opens the dock and backToNode returns to the board', () => {
+    useCanvasDockStore.getState().setTab('browser');
     useCanvasDockStore.getState().showEphemeral(ephemeral);
     expect(useCanvasDockStore.getState().open).toBe(true);
     expect(useCanvasDockStore.getState().mode).toBe('ephemeral');
+    expect(useCanvasDockStore.getState().tab).toBe('board');
 
     useCanvasDockStore.getState().backToNode();
     expect(useCanvasDockStore.getState().mode).toBe('node');

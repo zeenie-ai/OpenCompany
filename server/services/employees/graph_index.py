@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from constants import AI_AGENT_TYPES, WORKFLOW_TRIGGER_TYPES
 from services.employees.apps import AppSpec, app_for_node_type
+from services.node_registry import get_node_class
 
 TODO_NODE_TYPE = "writeTodos"
 CANVAS_NODE_TYPE = "canvas"
@@ -34,6 +35,7 @@ class GraphIndex:
     trigger_ids: Tuple[str, ...] = ()
     todo_ids: Tuple[str, ...] = ()
     canvas_ids: Tuple[str, ...] = ()
+    browser_ids: Tuple[str, ...] = ()
     gate_ids: Tuple[str, ...] = ()
     #: Apps the graph's nodes belong to, in first-seen order.
     app_ids: Tuple[str, ...] = ()
@@ -64,6 +66,7 @@ def index_graph(graph: Optional[Mapping[str, Any]]) -> GraphIndex:
     triggers: List[str] = []
     todos: List[str] = []
     canvases: List[str] = []
+    browsers: List[str] = []
     gates: List[str] = []
     app_ids: List[str] = []
     for node in nodes:
@@ -78,6 +81,11 @@ def index_graph(graph: Optional[Mapping[str, Any]]) -> GraphIndex:
         label = data.get("label") if isinstance(data, Mapping) else None
         if isinstance(label, str) and label.strip():
             labels[node_id] = label.strip()
+        # Browser viewing is available even when execution of the node is
+        # disabled. Discover capabilities from plugins, never type names.
+        cls = get_node_class(node_type)
+        if cls is not None and (getattr(cls, "ui_hints", {}) or {}).get("isBrowserPanel") and node_id not in browsers:
+            browsers.append(node_id)
         if isinstance(data, Mapping) and data.get("disabled"):
             continue
         if node_type in AI_AGENT_TYPES:
@@ -100,6 +108,7 @@ def index_graph(graph: Optional[Mapping[str, Any]]) -> GraphIndex:
         trigger_ids=tuple(triggers),
         todo_ids=tuple(todos),
         canvas_ids=tuple(canvases),
+        browser_ids=tuple(browsers),
         gate_ids=tuple(gates),
         app_ids=tuple(app_ids),
     )

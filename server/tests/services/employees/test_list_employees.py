@@ -101,6 +101,28 @@ def test_graph_index_reads_agents_triggers_and_apps():
     assert disabled.agent_ids == ()
 
 
+async def test_summary_discovers_all_browser_capabilities_including_disabled(real_database, monkeypatch):
+    from types import SimpleNamespace
+    import services.employees.graph_index as graph_index
+
+    # A third-party browser is discovered by capability; an unknown plugin
+    # called 'browser' is not trusted just because of its name.
+    monkeypatch.setattr(graph_index, "get_node_class", lambda kind: SimpleNamespace(ui_hints={"isBrowserPanel": True}) if kind == "customBrowser" else None)
+    await save(real_database, "91", "Research", graph(
+        node("first", "customBrowser", "Research browser"),
+        node("second", "customBrowser", "   ", disabled=True),
+        node("not-browser", "browser"),
+        node("first", "customBrowser", "Research browser"),
+    ))
+    summary = await get_employee_summary(real_database, "91", auth_service=FakeAuth())
+    assert summary["browser_nodes"] == [
+        {"node_id": "first", "label": "Research browser"},
+        {"node_id": "second", "label": "Browser"},
+    ]
+    [listed] = await list_employee_summaries(real_database, auth_service=FakeAuth())
+    assert listed["browser_nodes"] == summary["browser_nodes"]
+
+
 @pytest.mark.parametrize(
     ("trigger", "text"),
     [

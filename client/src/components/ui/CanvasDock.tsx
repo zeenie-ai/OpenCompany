@@ -1,5 +1,5 @@
 /**
- * Docked, resizable Canvas sidebar — the persistent right-hand viewing
+ * Docked, resizable workflow workspace — the persistent right-hand viewing
  * surface (Claude-sidebar posture): stays open while working on the graph,
  * auto-opens when content is pushed (canvas_updated -> notifyPushed), and
  * doubles as the ephemeral click-to-preview surface for workspace files.
@@ -9,8 +9,8 @@
  * - 'ephemeral': renders one transient item that lives in no board.
  */
 
-import React, { useMemo } from 'react';
-import { Monitor, PanelRightClose, Undo2 } from 'lucide-react';
+import React, { useMemo, useState, useSyncExternalStore } from 'react';
+import { Maximize2, Minimize2, Monitor, PanelRightClose, Undo2 } from 'lucide-react';
 import type { Node } from 'reactflow';
 import { toast } from 'sonner';
 
@@ -36,6 +36,9 @@ import {
   useCanvasDockStore,
 } from '../../stores/canvasDockStore';
 import CanvasContent from '../parameterPanel/canvas/CanvasContent';
+import BrowserWorkspace from '../browser/BrowserWorkspace';
+import { WorkspaceTabs } from '../workspace/WorkspaceTabs';
+import { queryClient } from '../../lib/queryClient';
 
 interface CanvasDockProps {
   nodes: Node[];
@@ -49,6 +52,9 @@ const nodeLabel = (node: Node): string =>
 
 const CanvasDock: React.FC<CanvasDockProps> = ({ nodes }) => {
   const open = useCanvasDockStore((s) => s.open);
+  const tab = useCanvasDockStore((s) => s.tab);
+  const setTab = useCanvasDockStore((s) => s.setTab);
+  const [wide, setWide] = useState(false);
   const widthPx = useCanvasDockStore((s) => s.widthPx);
   const mode = useCanvasDockStore((s) => s.mode);
   const selectedNodeId = useCanvasDockStore((s) => s.selectedNodeId);
@@ -62,7 +68,25 @@ const CanvasDock: React.FC<CanvasDockProps> = ({ nodes }) => {
 
   const workflowId = useAppStore((s) => s.currentWorkflow?.id);
 
-  const canvasNodes = useMemo(() => nodes.filter(isCanvasNode), [nodes]);
+  // Schema hydration can finish after the graph mounts. Subscribe to hints
+  // so newly available Browser/Canvas definitions appear without a graph edit.
+  const hintsVersion = useSyncExternalStore(
+    (notify) => queryClient.getQueryCache().subscribe((event) => {
+      if (event.query.queryKey[0] === 'nodeSpec') notify();
+    }),
+    () => nodes.map((node) => {
+      const hints = resolveNodeDescription(node.type || '')?.uiHints;
+      return `${node.id}:${!!hints?.isCanvasPanel}:${!!hints?.isBrowserPanel}`;
+    }).join('|'),
+  );
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- hintsVersion tracks external schema hydration.
+  const canvasNodes = useMemo(() => nodes.filter(isCanvasNode), [nodes, hintsVersion]);
+  const browserNodes = useMemo(() => nodes
+    .filter((node) => resolveNodeDescription(node.type || '')?.uiHints?.isBrowserPanel === true)
+    .map((node) => ({ node_id: node.id, label: nodeLabel(node) })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hintsVersion tracks external schema hydration.
+    [nodes, hintsVersion]);
+  const shownWidth = wide ? Math.min(1100, window.innerWidth - 160) : Math.min(widthPx, window.innerWidth - 40);
 
   // A stale selection (workflow switch, node deleted) falls back to the
   // first Canvas node rather than a dead board.
@@ -73,7 +97,7 @@ const CanvasDock: React.FC<CanvasDockProps> = ({ nodes }) => {
     return canvasNodes[0]?.id ?? null;
   }, [canvasNodes, selectedNodeId]);
 
-  const showBoard = open && mode === 'node';
+  const showBoard = open && tab === 'board' && mode === 'node';
   const board = useCanvasBoardQuery(
     showBoard ? workflowId : null,
     showBoard ? effectiveNodeId : null,
@@ -89,11 +113,12 @@ const CanvasDock: React.FC<CanvasDockProps> = ({ nodes }) => {
       // take nearly the whole window; the 160px remainder keeps the handle
       // and a sliver of canvas reachable to drag it back.
       const viewportCap = Math.min(DOCK_MAX_WIDTH, window.innerWidth - 160);
+      setWide(false);
       setWidth(
         Math.min(viewportCap, Math.max(DOCK_MIN_WIDTH, startValue - deltaPx)),
       );
     },
-    getStartValue: () => useCanvasDockStore.getState().widthPx,
+    getStartValue: () => shownWidth,
   });
 
   return (
@@ -101,8 +126,11 @@ const CanvasDock: React.FC<CanvasDockProps> = ({ nodes }) => {
       className={`relative flex h-full shrink-0 overflow-hidden bg-bg-panel ${
         open ? 'border-l border-border-default' : ''
       } ${resize.isResizing ? '[transition:none]' : 'transition-[width] duration-300'}`}
-      style={{ width: open ? widthPx : 0 }}
+      style={{ width: open ? shownWidth : 0 }}
       aria-hidden={!open}
+      inert={!open}
+      role="complementary"
+      aria-label="Workspace"
     >
       <div
         className={`h-full w-1.5 shrink-0 cursor-ew-resize transition-colors ${
@@ -113,7 +141,7 @@ const CanvasDock: React.FC<CanvasDockProps> = ({ nodes }) => {
         onMouseDown={resize.start}
         role="separator"
         aria-orientation="vertical"
-        aria-label="Resize canvas panel"
+        aria-label="Resize workspace"
       />
 
       {/* pointer-events-none while dragging: an embedded iframe (web/PDF
@@ -124,10 +152,20 @@ const CanvasDock: React.FC<CanvasDockProps> = ({ nodes }) => {
           resize.isResizing ? 'pointer-events-none' : ''
         }`}
       >
-        <div className="flex shrink-0 items-center gap-2 border-b border-border-default px-3 py-2">
+        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border-default px-3">
           <Monitor className="h-4 w-4 shrink-0 text-fg-muted" />
-          <span className="shrink-0 text-sm font-semibold text-fg-default">Canvas</span>
-
+          <span className="min-w-0 flex-1 text-sm font-semibold text-fg-default">Workspace</span>
+          <Button variant="ghost" size="icon-sm" onClick={() => setWide(!wide)} aria-label={wide ? 'Restore size' : 'Expand'}>
+            {wide ? <Minimize2 /> : <Maximize2 />}
+          </Button>
+          <Button variant="ghost" size="icon-sm" onClick={close} aria-label="Close workspace"><PanelRightClose /></Button>
+        </div>
+        {open && <WorkspaceTabs
+          tab={tab}
+          onTabChange={setTab}
+          browser={<BrowserWorkspace key={workflowId ?? 'unsaved'} workflowId={workflowId} nodes={browserNodes} visible={open && tab === 'browser'} />}
+          board={<>
+        <div className="mb-2 flex shrink-0 items-center gap-2">
           {mode === 'ephemeral' ? (
             <>
               <Badge variant="secondary" className="shrink-0">Preview</Badge>
@@ -169,18 +207,9 @@ const CanvasDock: React.FC<CanvasDockProps> = ({ nodes }) => {
             </span>
           )}
 
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={close}
-            aria-label="Close canvas panel"
-            className="shrink-0"
-          >
-            <PanelRightClose className="h-4 w-4" />
-          </Button>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col p-3">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {mode === 'ephemeral' && ephemeralItem ? (
             <CanvasContent items={[ephemeralItem]} workflowId={workflowId} />
           ) : !effectiveNodeId ? (
@@ -204,6 +233,8 @@ const CanvasDock: React.FC<CanvasDockProps> = ({ nodes }) => {
             />
           )}
         </div>
+          </>}
+        />}
       </div>
     </div>
   );

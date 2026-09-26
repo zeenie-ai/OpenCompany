@@ -9,6 +9,11 @@ open while working on the graph, auto-opens when content is pushed, and
 doubles as the click-to-preview surface for workspace files, and the Canvas
 tab of Home's Workspace dock.
 
+The Dev dock now shares Home's Browser / Canvas / Android workspace tabs.
+Canvas retains its board and file-preview behavior; live Chrome sessions use
+the separate [Browser workspace](./browser_workspace.md) surface. URL items
+on a Canvas still render as sandboxed iframe previews, not browser sessions.
+
 Everything here composes existing patterns; the doc records which one each
 piece copies and the few places where a *new* decision had to be made (the
 iframe sandbox matrix, the PDF inline exception, the first client-side

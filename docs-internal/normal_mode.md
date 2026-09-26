@@ -119,7 +119,14 @@ the team.
   JSON viewers out of Home's, and refreshes on `canvas_updated` like the
   editor's hosts. An employee without a Canvas gets a note and Open
   workflow.
-- **Browser** and **Android** say that their live views are not built yet.
+- **Browser**: the shared `components/browser/BrowserWorkspace` attaches to
+  the employee's saved Browser nodes, supplied by `browser_nodes` in its
+  summary. Multiple nodes get a selector. Running sessions appear automatically;
+  Start browser opens an idle session. The view supports navigation, tabs,
+  Take control / Hand back, and browser dialogs. Frames use `/ws/browser`,
+  not a URL iframe. See [Browser workspace](./browser_workspace.md).
+- **Android**: a shared panel explains that live mirroring is not yet available.
+  Dev mode uses the same three workspace tabs and browser viewer.
 - **Size and motion**: 460px wide by default. The left edge drags from
   360px to the window less 420px, and Expand gives a bigger dock without
   a drag. At 1100px and wider the dock pushes the page aside; narrower, it
@@ -370,8 +377,8 @@ history). Client: `features/home/**/__tests__`, `app/__tests__`,
   library is shared across users in multi-user mode, like the team list.
 - An employee hired before Canvas has no Canvas node, so its
   `canvas_node_id` is null. Adding one in Dev mode fills it in.
-- The Workspace's Browser and Android tabs have no live view yet, and it
-  has no timeline, replay or Take over.
+- The Workspace's Android tab has no live mirror yet. Browser now uses the
+  shared live viewer described above; timeline and replay are not available.
 - With login on, an agent's Canvas writes land under the default owner:
   its tool call carries no user id
   ([agent_workflow.py](../server/services/temporal/agent_workflow.py)).

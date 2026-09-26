@@ -223,6 +223,7 @@ async def _summary(
         "control": control,
         "watch_node_ids": watch,
         "canvas_node_id": canvas_node_id,
+        "browser_nodes": [{"node_id": node_id, "label": graph.labels.get(node_id) or "Browser"} for node_id in graph.browser_ids],
         "revision": _millis(
             getattr(workflow, "updated_at", None),
             getattr(employee, "updated_at", None),

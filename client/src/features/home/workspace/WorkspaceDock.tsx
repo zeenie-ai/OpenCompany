@@ -1,9 +1,8 @@
 /**
  * The Workspace (design handoff "Workspace panel"): a dock on the right of
  * Home showing what one employee is working on. Canvas shows the
- * employee's Canvas board through the renderer the editor's Canvas panel
- * uses; Browser and Android say plainly that their live views are not
- * built yet.
+ * employee's board; Browser attaches to their saved browser nodes. The
+ * editor shares the same tabs and live browser surface.
  *
  * At 1100px and wider the dock pushes the page aside; narrower, it lies
  * over the page with a shadow. The left edge drags from 360px to the
@@ -15,8 +14,9 @@
  */
 
 import type { LucideIcon } from 'lucide-react';
-import { Code, Globe, Maximize2, Minimize2, Monitor, PanelsTopLeft, Smartphone, X } from 'lucide-react';
-import { Tabs as TabsPrimitive } from 'radix-ui';
+import { Code, Maximize2, Minimize2, Monitor, PanelsTopLeft, X } from 'lucide-react';
+import BrowserWorkspace from '@/components/browser/BrowserWorkspace';
+import { WorkspaceTabs } from '@/components/workspace/WorkspaceTabs';
 import { Suspense, lazy, useCallback, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -28,7 +28,7 @@ import { useEmployeesQuery } from '../data/employees';
 import { useLiveTask } from '../data/liveTask';
 import { presentEmployee } from '../data/presentation';
 import type { EmployeeSummary } from '../data/schemas';
-import { useHomeStore, type WorkspaceTab } from '../state/homeStore';
+import { useHomeStore } from '../state/homeStore';
 import { Avatar, StatusPill } from '../ui/primitives';
 
 // Its own chunk: the board's viewers (markdown, code, JSON) stay out of Home's.
@@ -38,15 +38,6 @@ const WorkspaceCanvas = lazy(() => import('./WorkspaceCanvas'));
 function dockWidth(widthPx: number, wide: boolean): string {
   return wide ? 'max(420px, min(1100px, 100vw - 420px))' : `min(${widthPx}px, max(340px, 100vw - 40px))`;
 }
-
-const TABS: { tab: WorkspaceTab; label: string; icon: LucideIcon }[] = [
-  { tab: 'browser', label: 'Browser', icon: Globe },
-  { tab: 'board', label: 'Canvas', icon: PanelsTopLeft },
-  { tab: 'android', label: 'Android', icon: Smartphone },
-];
-
-const TAB_TRIGGER =
-  'flex h-10 items-center gap-1.75 border-b-2 border-transparent px-2.5 text-sm font-medium whitespace-nowrap text-fg-muted outline-none transition-colors hover:text-fg-default focus-visible:ring-3 focus-visible:ring-ring/50 data-[state=active]:border-node-agent data-[state=active]:text-fg-default';
 
 const PANEL = 'flex min-h-0 flex-1 flex-col bg-bg-app p-3 outline-none';
 
@@ -120,54 +111,16 @@ function CanvasTab({ employee }: { employee: EmployeeSummary }) {
   );
 }
 
-function DockTabs({ employee }: { employee: EmployeeSummary }) {
+function DockTabs({ employee, visible }: { employee: EmployeeSummary; visible: boolean }) {
   const tab = useHomeStore((s) => s.workspaceTab);
   const setTab = useHomeStore((s) => s.setWorkspaceTab);
-  // Only the active panel is mounted, so the shared ref is always it.
-  const panelRef = useRef<HTMLDivElement>(null);
-  const shownTab = useRef(tab);
-  // A new tab's panel rises out of a blur (design handoff "Tabs").
-  useLayoutEffect(() => {
-    if (shownTab.current === tab) return;
-    shownTab.current = tab;
-    animate(
-      panelRef.current,
-      [
-        { opacity: 0, transform: 'translateY(6px)', filter: 'blur(3px)' },
-        { opacity: 1, transform: 'none', filter: 'blur(0)' },
-      ],
-      { duration: 'slow', easing: 'spring' },
-    );
-  }, [tab]);
-
   return (
-    <TabsPrimitive.Root value={tab} onValueChange={(next) => setTab(next as WorkspaceTab)} className="flex min-h-0 flex-1 flex-col">
-      <TabsPrimitive.List aria-label="Views" className="flex h-10 shrink-0 gap-0.5 overflow-x-auto border-b border-border-default px-2">
-        {TABS.map(({ tab: value, label, icon: Icon }) => (
-          <TabsPrimitive.Trigger key={value} value={value} className={TAB_TRIGGER}>
-            <Icon aria-hidden className="size-3.75" strokeWidth={1.75} />
-            {label}
-          </TabsPrimitive.Trigger>
-        ))}
-      </TabsPrimitive.List>
-      <TabsPrimitive.Content ref={panelRef} value="browser" className={PANEL}>
-        <Note
-          icon={Globe}
-          title="The live browser view isn’t available yet"
-          detail={`When ${employee.name} works in a browser, you’ll be able to watch here.`}
-        />
-      </TabsPrimitive.Content>
-      <TabsPrimitive.Content ref={panelRef} value="board" className={PANEL}>
-        <CanvasTab employee={employee} />
-      </TabsPrimitive.Content>
-      <TabsPrimitive.Content ref={panelRef} value="android" className={PANEL}>
-        <Note
-          icon={Smartphone}
-          title="The Android mirror isn’t available yet"
-          detail={`When ${employee.name} uses your phone, you’ll be able to watch here.`}
-        />
-      </TabsPrimitive.Content>
-    </TabsPrimitive.Root>
+    <WorkspaceTabs
+      tab={tab}
+      onTabChange={setTab}
+      browser={<BrowserWorkspace key={employee.workflow_id} workflowId={employee.workflow_id} nodes={employee.browser_nodes} visible={visible && tab === 'browser'} />}
+      board={<CanvasTab employee={employee} />}
+    />
   );
 }
 
@@ -277,7 +230,7 @@ export function WorkspaceDock() {
             )}
             <DockButtons />
           </header>
-          {employee ? <DockTabs employee={employee} /> : <NoEmployee status={team.status} />}
+          {employee ? <DockTabs employee={employee} visible={open} /> : <NoEmployee status={team.status} />}
         </div>
       )}
     </aside>

@@ -19,6 +19,13 @@ vi.mock('@/contexts/WebSocketContext', async (importOriginal) => ({
 }));
 
 vi.mock('../../../app/useShellActions', () => ({ enterDev: vi.fn() }));
+vi.mock('@/components/browser/BrowserWorkspace', () => ({
+  default: ({ workflowId, nodes, visible }: { workflowId: string; nodes: { node_id: string; label: string }[]; visible: boolean }) => (
+    <div data-testid="browser-workspace" data-workflow={workflowId} data-visible={String(visible)}>
+      {nodes.length ? nodes.map((node) => <span key={node.node_id}>{node.label}</span>) : 'No Browser node in this workflow'}
+    </div>
+  ),
+}));
 
 import { normalizeWorkflowControlStatus } from '@/contexts/WebSocketContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
@@ -154,13 +161,24 @@ describe('WorkspaceDock', () => {
     expect(screen.getByText('Leo’s workspace')).toBeInTheDocument();
   });
 
-  it('says plainly that Browser and Android are not built yet', async () => {
+  it('mounts the selected employee’s browser nodes and keeps the Android panel available', async () => {
     useHomeStore.setState({ workspaceOpen: true, workspaceTab: 'browser' });
-    renderWith([employee()]);
-    expect(screen.getByText('The live browser view isn’t available yet')).toBeInTheDocument();
+    renderWith([employee({ browser_nodes: [{ node_id: 'w1:browser:1', label: 'Research browser' }] })]);
+    expect(screen.getByText('Research browser')).toBeInTheDocument();
+    expect(screen.getByTestId('browser-workspace')).toHaveAttribute('data-workflow', 'w1');
+    expect(screen.getByTestId('browser-workspace')).toHaveAttribute('data-visible', 'true');
     await userEvent.click(screen.getByRole('tab', { name: 'Android' }));
     expect(screen.getByText('The Android mirror isn’t available yet')).toBeInTheDocument();
     expect(useHomeStore.getState().workspaceTab).toBe('android');
+    expect(screen.queryByTestId('browser-workspace')).toBeNull();
+  });
+
+  it('hides the live viewer when the workspace closes without changing its employee', () => {
+    useHomeStore.setState({ workspaceOpen: true, workspaceTab: 'browser' });
+    renderWith([employee()]);
+    act(() => useHomeStore.getState().closeWorkspace());
+    expect(screen.getByTestId('browser-workspace')).toHaveAttribute('data-visible', 'false');
+    expect(screen.getByTestId('browser-workspace')).toHaveAttribute('data-workflow', 'w1');
   });
 
   it('asks for no board when the employee has no Canvas', () => {

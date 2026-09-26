@@ -562,7 +562,8 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
           size="icon-sm"
           onClick={toggleCanvasDock}
           aria-pressed={canvasDockOpen}
-          title={canvasDockOpen ? 'Hide canvas' : 'Show canvas'}
+          title={canvasDockOpen ? 'Hide workspace' : 'Show workspace'}
+          aria-label="Workspace"
           className="border-action-tools-border bg-action-tools-soft text-action-tools-ink hover:bg-action-tools-hover aria-pressed:bg-action-tools-hover"
         >
           <Monitor />

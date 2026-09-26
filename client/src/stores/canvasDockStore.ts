@@ -16,12 +16,14 @@ import { z } from 'zod';
 import { create } from 'zustand';
 
 import type { CanvasItem } from '../lib/canvasBoard';
+import type { WorkspaceTab } from '../components/workspace/WorkspaceTabs';
 
 const dockPrefsSchema = z.object({
   open: z.boolean().default(false),
   widthPx: z.number().min(280).max(4000).default(380),
   autoOpen: z.boolean().default(true),
   followMode: z.boolean().default(false),
+  tab: z.enum(['browser', 'board', 'android']).catch('board'),
 });
 type CanvasDockPrefs = z.infer<typeof dockPrefsSchema>;
 const DOCK_PREFS_KEY = 'canvas_dock_prefs_v1';
@@ -54,6 +56,8 @@ interface CanvasDockState {
   widthPx: number;
   autoOpen: boolean;
   followMode: boolean;
+  tab: WorkspaceTab;
+  setTab: (tab: WorkspaceTab) => void;
   /** 'node' renders a Canvas node's board; 'ephemeral' a transient preview. */
   mode: 'node' | 'ephemeral';
   selectedNodeId: string | null;
@@ -87,6 +91,7 @@ const persist = (state: CanvasDockState) =>
     widthPx: state.widthPx,
     autoOpen: state.autoOpen,
     followMode: state.followMode,
+    tab: state.tab,
   });
 
 export const useCanvasDockStore = create<CanvasDockState>((set, get) => ({
@@ -94,6 +99,11 @@ export const useCanvasDockStore = create<CanvasDockState>((set, get) => ({
   widthPx: persisted.widthPx,
   autoOpen: persisted.autoOpen,
   followMode: persisted.followMode,
+  tab: persisted.tab,
+  setTab: (tab) => {
+    set({ tab });
+    persist(get());
+  },
   mode: 'node',
   selectedNodeId: null,
   ephemeralItem: null,
@@ -120,9 +130,9 @@ export const useCanvasDockStore = create<CanvasDockState>((set, get) => ({
     persist(get());
   },
   selectNode: (nodeId) =>
-    set({ mode: 'node', selectedNodeId: nodeId, ephemeralItem: null }),
+    set({ mode: 'node', selectedNodeId: nodeId, ephemeralItem: null, tab: 'board' }),
   showEphemeral: (item) => {
-    set({ mode: 'ephemeral', ephemeralItem: item, open: true });
+    set({ mode: 'ephemeral', ephemeralItem: item, open: true, tab: 'board' });
     persist(get());
   },
   backToNode: () => set({ mode: 'node', ephemeralItem: null }),
@@ -132,7 +142,7 @@ export const useCanvasDockStore = create<CanvasDockState>((set, get) => ({
     if (state.mode === 'ephemeral') return;
     if (!state.open) {
       if (!state.autoOpen) return;
-      set({ open: true, mode: 'node', selectedNodeId: nodeId });
+      set({ open: true, mode: 'node', selectedNodeId: nodeId, tab: 'board' });
       persist(get());
       return;
     }
