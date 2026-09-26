@@ -2,10 +2,12 @@
 
 For installation, profiles, policy and agent execution, see the
 [native browser runtime](./browser.md). This document describes the shared
-workspace surface and its live-stream contract. By default the runtime opens
-installed Chrome/Edge/Chromium in a dedicated OpenCompany profile and a visible
-window. It does not attach to your personal profile. Headless operation requires
-`BROWSER_HEADLESS=true`; Chrome for Testing requires `BROWSER_RUNTIME=testing`.
+workspace surface and its live-stream contract. By default the runtime launches
+installed Chrome/Edge/Chromium headless in a dedicated OpenCompany profile and
+renders it inside this workspace. It does not attach to your personal profile.
+`BROWSER_HEADLESS=false` additionally opens a desktop window; Chrome for Testing
+requires `BROWSER_RUNTIME=testing`. Set `BROWSER_CHROME_PATH` to installed Chrome
+to keep Chrome selected even when another installed browser has a newer version.
 
 Normal mode and Dev mode share `components/workspace/WorkspaceTabs.tsx`
 (Browser, Canvas, Android) and `components/browser/BrowserWorkspace.tsx`.

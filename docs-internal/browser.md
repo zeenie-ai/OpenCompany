@@ -1,8 +1,9 @@
 # Native browser runtime
 
 The `browser` node launches installed Chrome, Edge or Chromium in an
-OpenCompany-owned profile. The default opens a visible browser window; it
-does not attach to or copy your personal browser profile. Agents use the
+OpenCompany-owned profile. By default it runs headless and is displayed inside
+the workspace, without a separate desktop window. It does not attach to or copy
+your personal browser profile. Agents use the
 browser-use CLI for ordinary browser operations; people watch and control the
 same Chrome through the [Browser workspace](./browser_workspace.md). The old
 agent-browser driver and separate `browserHarness` node are retired.
@@ -50,7 +51,7 @@ its opt-in flag directly from the process environment:
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `BROWSER_RUNTIME` | `system` | Installed browser discovery; `testing` explicitly enables pinned Chrome for Testing |
-| `BROWSER_HEADLESS` | `false` | Visible browser by default; set `true` explicitly for containers or unattended hosts |
+| `BROWSER_HEADLESS` | `true` | Render in the workspace without a desktop window; `false` additionally opens a separate window |
 | `BROWSER_CHROME_PATH` | Empty | Explicit Chrome/Edge/Chromium executable override |
 | `BROWSER_MAX_INSTANCES` | `3` | Bound simultaneously running browser profiles |
 | `BROWSER_IDLE_TIMEOUT_MS` | `600000` | Reap idle profiles; attached viewers and pending user work count as busy |

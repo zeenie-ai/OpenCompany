@@ -521,7 +521,7 @@ Queue distribution (live count via
 | `code-exec` | Python / JS / TS sandboxes | 10 |
 | `browser` | Installed Chrome/Edge/Chromium / browser-use / CDP | 4 |
 
-The current Browser plugin launches installed Chrome/Edge/Chromium in dedicated profiles with visible windows by default, owns browser-use tool execution and the CDP live view, and offers Chrome for Testing only through explicit testing mode. See [browser.md](./browser.md) and [browser_workspace.md](./browser_workspace.md); the retired `browserHarness` node is not a second active plugin.
+The current Browser plugin launches installed Chrome/Edge/Chromium in dedicated profiles rendered headless in the workspace UI by default, owns browser-use tool execution and the CDP live view, and offers Chrome for Testing only through explicit testing mode. See [browser.md](./browser.md) and [browser_workspace.md](./browser_workspace.md); the retired `browserHarness` node is not a second active plugin.
 
 Env overrides: `TEMPORAL_<QUEUE>_CONCURRENCY` (e.g.
 `TEMPORAL_AI_HEAVY_CONCURRENCY=8`).

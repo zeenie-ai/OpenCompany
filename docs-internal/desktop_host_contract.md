@@ -179,8 +179,8 @@ the codex provider (`bun x @openai/codex` when no system `codex` exists), and
 the Browser runtime's pinned `uv tool install browser-use==<pin>` installation.
 The Browser installer respects `UV_TOOL_DIR` / `UV_TOOL_BIN_DIR`; otherwise it
 uses `<DATA_DIR>/packages/browser-use/{tools,bin}`. OpenCompany supervises installed Chrome/Edge/Chromium in a dedicated profile,
-opening a visible window by default. `BROWSER_CHROME_PATH` overrides discovery;
-`BROWSER_HEADLESS=true` is explicit. Chrome for Testing is downloaded only with
+rendering headless inside the workspace by default. `BROWSER_CHROME_PATH` overrides discovery;
+`BROWSER_HEADLESS=false` additionally opens a desktop window. Chrome for Testing is downloaded only with
 `BROWSER_RUNTIME=testing`, never as a fallback when no installed browser exists. See [browser.md](./browser.md) and
 [browser_workspace.md](./browser_workspace.md). `BUN_INSTALL` / `BUN_INSTALL_CACHE_DIR`
 keep bun's own cache and global state under the app's data dir rather than a

@@ -56,7 +56,7 @@ def test_a_script_error_is_reported_not_raised():
 
 def test_chrome_flags(tmp_path):
     argv = build_chrome_argv(Path("chrome"), user_data_dir=tmp_path, proxy_port=4000, major=154, no_sandbox=False, small_shm=False, platform="linux")
-    assert "--headless=new" not in argv and "--remote-debugging-port=0" in argv
+    assert "--headless=new" in argv and "--remote-debugging-port=0" in argv
     assert "--proxy-server=http://127.0.0.1:4000" in argv and "--proxy-bypass-list=<-loopback>" in argv
     assert "--password-store=basic" not in argv and "--no-sandbox" not in argv
     assert not any(a.startswith("--user-agent=") for a in argv)
@@ -83,7 +83,8 @@ async def test_visible_browser_requires_linux_display(monkeypatch, tmp_path):
     monkeypatch.setattr("nodes.browser._chrome.sys.platform", "linux")
     monkeypatch.delenv("DISPLAY", raising=False)
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
-    chrome = ChromeProcess(profile_id="test", exe=Path("chrome"), profile_root=tmp_path, user_data_dir=tmp_path / "profile", proxy_port=1, major=154, no_sandbox=False, small_shm=False)
+    chrome = ChromeProcess(profile_id="test", exe=Path("chrome"), profile_root=tmp_path, user_data_dir=tmp_path / "profile", proxy_port=1, major=154, no_sandbox=False, small_shm=False, headless=False)
+    assert "--headless=new" not in chrome.argv()
     with pytest.raises(NodeUserError, match="BROWSER_HEADLESS=true"):
         await chrome.launch()
 

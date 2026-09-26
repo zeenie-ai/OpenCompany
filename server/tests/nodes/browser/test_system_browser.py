@@ -222,7 +222,7 @@ async def test_start_records_connected_version_and_passes_actual_major(monkeypat
     running = await runtime._start(profile)
     await asyncio.sleep(0)
     assert constructor.call_args.kwargs["major"] == 151
-    assert constructor.call_args.kwargs["headless"] is False
+    assert constructor.call_args.kwargs["headless"] is True
     assert constructor.call_args.kwargs["override_user_agent"] is False
     assert running.full_version == "152.1.2.3"
     assert running.profile.chrome_major == 152

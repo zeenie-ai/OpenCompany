@@ -1,7 +1,7 @@
 """Launching and stopping one profile's Chrome.
 
-An installed browser opens a visible window by default, with explicit headless
-mode available for servers. It uses its own ``--user-data-dir`` and a debugging port chosen by the OS
+An installed browser runs headless by default and is displayed in the workspace
+live view. A separate window is opt-in. It uses its own ``--user-data-dir`` and a debugging port chosen by the OS
 (``--remote-debugging-port=0``; the real port is read back from the
 ``DevToolsActivePort`` file), and every request routed through the egress
 proxy. The same browser is also available through the in-app live view.
@@ -108,7 +108,7 @@ def build_chrome_argv(
     small_shm: bool,
     platform: Optional[str] = None,
     downloads_dir: Optional[Path] = None,
-    headless: bool = False,
+    headless: bool = True,
     override_user_agent: bool = False,
 ) -> List[str]:
     platform = platform or sys.platform
@@ -261,7 +261,7 @@ class ChromeProcess(BaseProcessSupervisor):
         major: int,
         no_sandbox: bool,
         small_shm: bool,
-        headless: bool = False,
+        headless: bool = True,
         override_user_agent: bool = False,
     ) -> None:
         super().__init__()

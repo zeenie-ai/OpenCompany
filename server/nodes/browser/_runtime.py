@@ -260,14 +260,14 @@ class BrowserRuntime:
                 major=selected_major,
                 no_sandbox=no_sandbox,
                 small_shm=shm_small(),
-                headless=bool(getattr(settings, "browser_headless", False)),
+                headless=bool(getattr(settings, "browser_headless", True)),
                 override_user_agent=provider == "testing",
             )
             self._chromes[profile.id] = chrome
         else:
             chrome._exe, chrome._proxy_port = exe, proxy_port
             chrome._major = selected_major
-            chrome._headless = bool(getattr(settings, "browser_headless", False))
+            chrome._headless = bool(getattr(settings, "browser_headless", True))
             chrome._override_user_agent = provider == "testing"
 
         cli = BrowserUseCli(

@@ -69,10 +69,10 @@ The image sets these on top of the template:
 | `NODEJS_USER_PACKAGES_DIR` | `/data/nodejs-user-packages` | Packages installed for code nodes persist |
 | `BROWSER_RUNTIME` | `system` | Use the image's installed browser; no testing-browser fallback |
 | `BROWSER_CHROME_PATH` | `/usr/bin/chromium` | Select Chromium supplied by the browser extra |
-| `BROWSER_HEADLESS` | `true` | Explicit container override of the desktop-visible default |
+| `BROWSER_HEADLESS` | `true` | Render inside the workspace without a desktop window |
 | `PYTHONUNBUFFERED` | `1` | Log lines reach `docker compose logs` as they are written |
 
-**Browser runtime configuration:** the Dockerfile sets `BROWSER_RUNTIME=system`, `BROWSER_CHROME_PATH=/usr/bin/chromium` and `BROWSER_HEADLESS=true` for the browser extra. These are already the image defaults; compose `environment:` can override them. The headless image setting explicitly overrides the application's desktop-visible default, which requires a display. Discovery can find installed Chromium, but the explicit path makes image selection deterministic. The former `AGENT_BROWSER_EXECUTABLE_PATH` has been removed from the Dockerfile and is not read by this runtime. `BROWSER_RUNTIME=testing` is the only mode that downloads pinned Chrome for Testing; it is never a missing-browser fallback. Validate the built image and Linux libraries before deployment.
+**Browser runtime configuration:** the Dockerfile sets `BROWSER_RUNTIME=system`, `BROWSER_CHROME_PATH=/usr/bin/chromium` and `BROWSER_HEADLESS=true` for the browser extra. These are already the image defaults; compose `environment:` can override them. The headless image setting matches the application default: render in the workspace without a desktop window. Discovery can find installed Chromium, but the explicit path makes image selection deterministic. The former `AGENT_BROWSER_EXECUTABLE_PATH` has been removed from the Dockerfile and is not read by this runtime. `BROWSER_RUNTIME=testing` is the only mode that downloads pinned Chrome for Testing; it is never a missing-browser fallback. Validate the built image and Linux libraries before deployment.
 
 The image has no Node. It links `/usr/local/bin/node` to bun, so the plugin CLIs whose entry scripts start `#!/usr/bin/env node` (vercel, cf) run on bun, as in the official oven/bun images. Browser automation installs browser-use through uv instead.
 

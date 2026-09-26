@@ -1,6 +1,6 @@
 # Browser (`browser`)
 
-The Browser node launches installed Chrome/Edge/Chromium in a dedicated OpenCompany profile, visible by default, and exposes that profile to the live browser workspace. `BROWSER_RUNTIME=testing` explicitly selects Chrome for Testing; `BROWSER_HEADLESS=true` explicitly hides the window. It never attaches to a personal browser profile. It runs as a workflow step or as the agent tool named `browser`. The old `agent-browser` integration and separate `browserHarness` node have been replaced.
+The Browser node launches installed Chrome/Edge/Chromium in a dedicated OpenCompany profile, rendered headless in the workspace UI by default, and exposes that profile to the live browser workspace. `BROWSER_RUNTIME=testing` explicitly selects Chrome for Testing; `BROWSER_HEADLESS=false` additionally opens a desktop window. It never attaches to a personal browser profile. It runs as a workflow step or as the agent tool named `browser`. The old `agent-browser` integration and separate `browserHarness` node have been replaced.
 
 See [native browser architecture](../../browser.md) for runtime installation, profile storage, networking and lifecycle, and [browser workspace](../../browser_workspace.md) for the viewer and UI protocol.
 

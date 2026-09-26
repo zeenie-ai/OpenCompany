@@ -455,7 +455,7 @@ class Settings(BaseSettings):
     # auto disables Chrome's sandbox only as root on Linux, where it cannot
     # start. system discovers installed Chrome/Edge/Chromium; testing opts into
     # the pinned download. chrome_path selects an explicit executable.
-    # Desktop browsers are visible unless headless is explicitly enabled.
+    # Render inside the workspace by default; a separate window is opt-in.
     # Downloads a page starts are
     # capped at download_max_mb each.
     browser_max_instances: int = Field(default=3, env="BROWSER_MAX_INSTANCES", ge=1, le=50)
@@ -464,7 +464,7 @@ class Settings(BaseSettings):
     browser_sandbox: str = Field(default="auto", env="BROWSER_SANDBOX", pattern="^(auto|on|off)$")
     browser_chrome_path: str = Field(default="", env="BROWSER_CHROME_PATH")
     browser_runtime: str = Field(default="system", env="BROWSER_RUNTIME", pattern="^(system|testing)$")
-    browser_headless: bool = Field(default=False, env="BROWSER_HEADLESS")
+    browser_headless: bool = Field(default=True, env="BROWSER_HEADLESS")
     browser_download_max_mb: int = Field(default=200, env="BROWSER_DOWNLOAD_MAX_MB", ge=1)
 
     # Compaction Configuration. Threshold = model context_length ×
