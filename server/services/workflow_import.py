@@ -37,6 +37,7 @@ from core.logging import get_logger
 from services.node_registry import get_node_class
 from services.workflow_migrations import (
     normalize_legacy_android_toolkit,
+    normalize_legacy_browser_nodes,
     normalize_workflow_graph,
 )
 from services.workflow_validator import validate_workflow
@@ -264,6 +265,8 @@ async def import_workflow(
     nodes, edges, node_parameters, migration_warnings = normalize_legacy_android_toolkit(
         nodes, edges, node_parameters
     )
+    nodes, edges, node_parameters, browser_warnings = normalize_legacy_browser_nodes(nodes, edges, node_parameters)
+    migration_warnings = [*migration_warnings, *browser_warnings]
     # Validation sees the exact V2 topology, but preview does not allocate a
     # workflow identity or write state. Keep the pre-Context source so the
     # commit pass can generate canonical import receipts after ID allocation.

@@ -471,12 +471,6 @@ class ApifyOutput(_OutputBase):
     finished_at: Optional[str] = None
 
 
-class BrowserOutput(_OutputBase):
-    operation: Optional[str] = None
-    data: Optional[Any] = None
-    session: Optional[str] = None
-
-
 class CrawleeOutput(_OutputBase):
     pages: Optional[list] = None
     page_count: Optional[int] = None
@@ -744,7 +738,7 @@ NODE_OUTPUT_SCHEMAS: dict[str, type[BaseModel]] = {
     "vectorStore": VectorStoreOutput,
     # web scrapers / browser
     "apifyActor": ApifyOutput,
-    "browser": BrowserOutput,
+    # "browser" registers its own Output from nodes/browser/__init__.py.
     "crawleeScraper": CrawleeOutput,
     # proxy
     "proxyRequest": ProxyRequestOutput,

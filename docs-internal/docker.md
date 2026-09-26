@@ -78,7 +78,7 @@ Leave `HOST` and `PORT` at their template values. The backend uses `HOST` to rea
 
 Compose publishes the app on `127.0.0.1` only, so only this machine reaches it. To serve other machines, drop the `127.0.0.1:` prefix from the `ports:` mapping, put a TLS proxy in front, and set `JWT_COOKIE_SECURE=true`. Until you do, the log warns at every start that the session cookie travels over plain HTTP.
 
-The proxy must also refuse `/ws/internal`. That is where the backend's Temporal workers call back in; it skips the login check and runs any node a message names, `shell` included. The workers reach it inside the container, so blocking it at the proxy costs nothing. Without such a proxy, anyone who can reach the port can run commands in the container, which is why compose keeps the `127.0.0.1` mapping by default.
+The proxy should also refuse `/ws/internal`. That is where the backend's Temporal workers call back in; it skips the login check and runs any node a message names, `shell` included. The handshake requires a token derived from `SECRET_KEY` (see [authentication.md](./authentication.md)), and the workers reach it inside the container, so blocking it at the proxy costs nothing and adds a second layer. Keep `Host` intact through the proxy, or list the public origin in `CORS_ORIGINS`: every WebSocket handshake refuses an `Origin` that is neither the request's own host nor listed there. Compose keeps the `127.0.0.1` mapping by default because login is off until you turn it on.
 
 ## Upgrading
 

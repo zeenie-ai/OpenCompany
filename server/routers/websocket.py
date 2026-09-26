@@ -1419,7 +1419,12 @@ async def handle_refresh_model_registry(data: Dict[str, Any], websocket: WebSock
 from services.ws_handler_registry import get_ws_handlers
 
 
-from services.authz import execution_principal, resolve_internal_handler  # noqa: E402
+from services.authz import (  # noqa: E402
+    admit_internal_ws,
+    authenticate_ws,
+    execution_principal,
+    resolve_internal_handler,
+)
 
 
 def _resolve_handler(msg_type: str):
@@ -1582,34 +1587,14 @@ async def websocket_status_endpoint(websocket: WebSocket):
     The server responds with the same request_id for request/response matching.
     Broadcasts (without request_id) are sent to all connected clients.
     """
-    # Authenticate via cookie before accepting connection
-    settings = container.settings()
-
-    # Check if auth is disabled (VITE_AUTH_ENABLED=false)
-    auth_disabled = settings.vite_auth_enabled and settings.vite_auth_enabled.lower() == "false"
-
-    authenticated_user_id = "owner"
-    if not auth_disabled:
-        # Auth enabled - verify token
-        from core.auth_cookies import get_session_token
-
-        token = get_session_token(websocket.cookies, settings)
-
-        if not token:
-            await websocket.close(code=4001, reason="Not authenticated")
-            return
-
-        user_auth = container.user_auth_service()
-        payload = user_auth.verify_token(token)
-
-        if not payload:
-            await websocket.close(code=4001, reason="Invalid or expired session")
-            return
-
-        authenticated_user_id = str(payload.get("sub") or "")
-        if not authenticated_user_id:
-            await websocket.close(code=4001, reason="Invalid session subject")
-            return
+    # Origin, then the session cookie (unless login is off), before accepting.
+    authenticated_user_id = await authenticate_ws(
+        websocket,
+        settings=container.settings(),
+        user_auth_service=container.user_auth_service,
+    )
+    if authenticated_user_id is None:
+        return
 
     # Plugin-owned handlers resolve namespace ownership from trusted
     # connection state. Client payloads cannot choose a Memory/Context owner.
@@ -1708,11 +1693,14 @@ async def websocket_status_endpoint(websocket: WebSocket):
 async def websocket_internal_endpoint(websocket: WebSocket):
     """Internal WebSocket endpoint for Temporal workers.
 
-    This endpoint bypasses authentication and is intended for internal
-    service-to-service communication (e.g., Temporal activity -> OpenCompany).
-
-    Security: Should only be exposed on localhost/internal network.
+    Service-to-service only (Temporal activity -> OpenCompany). It bypasses
+    the cookie gate, so the worker must present the ``SECRET_KEY``-derived
+    token (``services.authz.internal_socket_token``) before the handshake is
+    accepted, and even then it reaches only ``INTERNAL_SOCKET_HANDLERS``.
     """
+    if not await admit_internal_ws(websocket, settings=container.settings()):
+        return
+
     get_status_broadcaster()
     await websocket.accept()
 

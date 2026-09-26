@@ -49,6 +49,10 @@ _SANCTIONED: List[Tuple[str, str]] = [
     # BEFORE the structlog pipeline is configured (same role as
     # ``_startup_log`` / ``_clog`` for the main process).
     ("services/temporal/_install.py", "_main"),
+    # The Browser node's one-shot CLIs: pre-fetching its runtime and bumping
+    # its pins. Same role as the Temporal installer above.
+    ("nodes/browser/_install.py", "_main"),
+    ("nodes/browser/_pin.py", "main"),
 ]
 
 

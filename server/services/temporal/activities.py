@@ -14,7 +14,7 @@ Architecture:
 """
 
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import aiohttp
 from temporalio import activity
@@ -61,6 +61,7 @@ class NodeExecutionActivities:
         self.session = session
         http_base, ws_url = _resolve_urls()
         self.ws_url = ws_url
+        self.ws_headers: Optional[Dict[str, str]] = None
         self.http_url = f"{http_base}/api/workflow/node/execute"
         self.broadcast_url = f"{http_base}/api/workflow/broadcast-status"
 
@@ -242,6 +243,7 @@ class NodeExecutionActivities:
             # Each activity gets its own WebSocket connection from the pool
             async with self.session.ws_connect(
                 self.ws_url,
+                headers=self._internal_socket_headers(),
                 heartbeat=30,
                 receive_timeout=None,  # No receive timeout — we handle liveness via heartbeats
             ) as ws:
@@ -273,6 +275,19 @@ class NodeExecutionActivities:
 
         except aiohttp.ClientError as e:
             raise Exception(f"WebSocket connection error: {e}")
+
+    def _internal_socket_headers(self) -> Dict[str, str]:
+        """The token ``/ws/internal`` requires in the handshake.
+
+        Resolved on first connect rather than in ``__init__``, for the same
+        reason as ``_resolve_urls``: building the activities must not need
+        the full env surface.
+        """
+        if self.ws_headers is None:
+            from services.authz import internal_socket_headers
+
+            self.ws_headers = internal_socket_headers(Settings().secret_key)
+        return self.ws_headers
 
     async def _broadcast_status(
         self,
@@ -430,6 +445,7 @@ async def load_persisted_workflow_graph_activity(payload: Dict[str, Any]) -> Dic
     from services.workflow_migrations import (
         normalize_edge_handles,
         normalize_legacy_android_toolkit,
+        normalize_legacy_browser_nodes,
     )
 
     workflow_id = str(payload.get("workflow_id") or "")
@@ -442,6 +458,7 @@ async def load_persisted_workflow_graph_activity(payload: Dict[str, Any]) -> Dic
     nodes, edges, _params, _warnings = normalize_legacy_android_toolkit(
         data.get("nodes") or [], data.get("edges") or []
     )
+    nodes, edges, _params, _warnings = normalize_legacy_browser_nodes(nodes, edges)
     return {
         "found": True,
         "graphVersion": int(data.get("graphVersion") or 0),

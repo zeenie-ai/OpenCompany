@@ -78,6 +78,7 @@ _MIGRATED_PLUGINS = (
 # ``register_ws_handlers`` from its package ``__init__.py``.
 _PLUGINS_WITH_HANDLERS = (
     "android",
+    "browser",
     "cloudflare",
     "discord",
     "gcloud",
@@ -95,6 +96,7 @@ _PLUGINS_WITH_HANDLERS = (
 # from its package ``__init__.py``.
 _PLUGINS_WITH_ROUTERS = (
     "android",
+    "browser",
     "discord",
     "google",
     "microsoft",

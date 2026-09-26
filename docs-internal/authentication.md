@@ -219,14 +219,37 @@ Recorded explicitly because each of these is easy to assume is handled.
   `get_all_workflows` returns every tenant's rows unfiltered. `is_owner` is
   still decorative. Until ownership moves to an indexed column with scoped
   accessors, treat `multi` as "several people who fully trust each other".
-- **`/ws/internal` is unauthenticated by design and must stay narrow.** It is in
-  `PUBLIC_PATHS` and performs no handshake, yet it dispatched through the same
-  registry as the authenticated socket — which made `save_workflow`,
-  `delete_workflow` and all six Memory handlers reachable without credentials.
-  `services/authz/ws_surface.py` now holds a deny-by-default allowlist
-  (`INTERNAL_SOCKET_HANDLERS`); refusal is deliberately indistinguishable from
-  an unknown message type so the socket cannot be probed. Its test is generated
-  from the live registry, so a newly added handler is closed by default.
+- **`/ws/internal` skips the cookie gate and must stay narrow.** It is in
+  `PUBLIC_PATHS` because a Temporal worker has no session cookie. It used to
+  accept any peer, and its `execute_node` runs whatever node type and parameters
+  the message names, so anyone who could reach the app port (published by
+  Docker and by `company deploy`), or any web page open on the same machine,
+  could run a `shell` node. The handshake now requires the
+  `X-OpenCompany-Internal-Token` header, an HMAC of `SECRET_KEY`
+  (`internal_socket_token` in `services/authz/ws_surface.py`); both worker
+  clients (`services/temporal/activities.py`, `ws_client.py`) send it, and any
+  new internal client must too. A loopback-address check would not do: a
+  reverse proxy on the same host makes public traffic arrive from 127.0.0.1,
+  and a page's socket to `localhost` is itself loopback. Even with the token
+  the socket reaches only the deny-by-default allowlist
+  (`INTERNAL_SOCKET_HANDLERS`), which exists because the socket once
+  dispatched through the same registry as the authenticated one —
+  `save_workflow`, `delete_workflow` and all six Memory handlers were
+  reachable. Refusal is deliberately indistinguishable from an unknown message
+  type so the socket cannot be probed, and the allowlist test is generated from
+  the live registry, so a newly added handler is closed by default.
+- **Every WebSocket handshake checks `Origin`.** A browser lets any page open a
+  socket to any host, `localhost` included, and with login off (the local
+  default) there is no cookie to check, so any page open on the machine could
+  drive `/ws/status`. `services/authz/ws_session.py` admits a handshake only
+  when `Origin` is absent (not a browser), matches the request's `Host`, or is
+  listed in `CORS_ORIGINS` (`*` there allows every origin, as it already does
+  for HTTP CORS); anything else closes with `4003` before `accept()`.
+  `authenticate_ws` (Origin, then the session cookie) serves every
+  browser-facing socket; `admit_internal_ws` (Origin, then the worker token)
+  serves `/ws/internal`. A reverse proxy that rewrites `Host` must list the
+  public origin in `CORS_ORIGINS`. Locked by `tests/test_internal_socket_surface.py`,
+  which runs real handshakes.
 - **No CSRF token.** The API is cookie-authenticated and `SameSite` is the only
   defence. Mitigated by every mutating endpoint being `POST` under `/api/` and
   by `SameSite=none` + insecure being rejected at startup. A real double-submit

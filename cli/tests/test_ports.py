@@ -55,3 +55,45 @@ def test_kill_port_excludes_self():
         result = ports.kill_port(9999)
     assert result.killed_pids == []
     assert result.port_free is True
+
+
+def test_orphan_reaper_kills_only_this_checkouts_processes():
+    """A substring match on the root also caught sibling folders sharing the
+    prefix and the worktrees nested under ``.claude/worktrees/`` -- so a
+    ``company stop`` in the main checkout killed dev servers and test runs in
+    every worktree."""
+    from types import SimpleNamespace as NS
+
+    root = "D:\\startup\\projects\\opencompany"
+    procs = [
+        NS(pid=11, info={"name": "python.exe", "cmdline": [f"{root}\\server\\.venv\\Scripts\\python.exe", "-m", "uvicorn"]}),
+        NS(pid=12, info={"name": "bun.exe", "cmdline": ["bun", f"{root}/server/nodejs/dist/index.js"]}),
+        NS(pid=21, info={"name": "python.exe", "cmdline": [f"{root}-worktrees\\feature\\server\\.venv\\Scripts\\python.exe"]}),
+        NS(
+            pid=22,
+            info={
+                "name": "python.exe",
+                "cmdline": [f"{root}\\.claude\\worktrees\\native-browser\\server\\.venv\\Scripts\\python.exe", "-m", "pytest"],
+            },
+        ),
+        NS(pid=23, info={"name": "python.exe", "cmdline": ["python", "-c", "print('opencompanyx')"]}),
+        NS(pid=24, info={"name": "chrome.exe", "cmdline": [f"{root}\\server\\whatever"]}),
+    ]
+    killed = []
+    with (
+        patch.object(psutil, "process_iter", return_value=procs),
+        patch.object(ports, "_ancestor_pids", return_value=set()),
+        patch.object(ports, "kill_pid", side_effect=lambda pid, **_kw: killed.append(pid) or True),
+    ):
+        assert ports.kill_orphaned_opencompany_processes(root) == [11, 12]
+    assert killed == [11, 12]
+
+
+def test_checkout_match_needs_a_path_boundary():
+    root = "d:/startup/projects/opencompany"
+    assert ports._names_this_checkout(f"python {root}/server/main.py", root)
+    assert ports._names_this_checkout(f"python -m cli dev --root {root}", root)
+    assert not ports._names_this_checkout(f"python {root}-worktrees/a/main.py", root)
+    assert not ports._names_this_checkout(f"python {root}/.claude/worktrees/a/server/main.py", root)
+    # Both a worktree path and a main-checkout path: the main one counts.
+    assert ports._names_this_checkout(f"python {root}/.claude/worktrees/a/x.py {root}/server/y.py", root)

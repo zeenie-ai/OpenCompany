@@ -351,6 +351,7 @@ class TestLegacyActivityTransportIdentity:
         activities = NodeExecutionActivities.__new__(NodeExecutionActivities)
         activities.session = FakeSession(websocket)
         activities.ws_url = "ws://example.invalid/ws/internal"
+        activities.ws_headers = {}  # the /ws/internal token, not under test here
 
         response = await activities._execute_via_websocket(
             {

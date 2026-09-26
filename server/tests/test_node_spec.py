@@ -941,6 +941,9 @@ class TestNodeSpecContractInvariants:
             # canvas: pushed-content display board (parameter panel host;
             # the docked canvas sidebar reads the same flag to find nodes).
             "isCanvasPanel",
+            # browser: live view + take-over above the node's parameters (the
+            # Dev side panel and the Home Workspace find browser nodes by it).
+            "isBrowserPanel",
             # Auto-derived on every node from BaseNode.start_to_close_timeout:
             # how long it may legitimately run. Lets the client size its
             # request budget instead of keeping its own list of slow types.
