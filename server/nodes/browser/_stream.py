@@ -18,7 +18,7 @@ the page the agent is on and runs ``Page.startScreencast`` only while some
 viewer is visible. Each viewer has a window of two unacknowledged frames and
 one "latest frame" slot that newer frames overwrite, so a slow viewer drops
 frames instead of stalling Chrome or the others; Chrome's own acknowledgement
-goes out after the first viewer's send completes (or 250 ms). Input reaches
+goes out as soon as the frame enters those bounded slots. Input reaches
 the page only from the viewer that holds control, in the USER state.
 """
 
@@ -27,6 +27,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import itertools
 import struct
 import time
 import uuid
@@ -38,13 +39,13 @@ from core.logging import get_logger
 
 from ._cdp import CDPDisconnected, CDPError, CDPSession
 from ._chrome import VIEWPORT_HEIGHT, VIEWPORT_WIDTH
+from ._stream_metrics import StreamMetrics
 
 logger = get_logger(__name__)
 
 FRAME_VERSION = 1
 FRAME_KIND_JPEG = 1
 _WINDOW = 2
-_ACK_AFTER = 0.25
 _MAX_FRAME_EDGE = 1920
 _CONTROL_QUEUE = 256
 _INPUT_RATE = 200.0  # messages per second
@@ -53,6 +54,10 @@ _TEXT_LIMIT = 10_000
 _CLIPBOARD_LIMIT = 100_000
 _ATTACH_TIMEOUT = 5.0
 _IDLE_POLL = 2.0
+_SCREENCAST_RETRY_DELAYS = (1.0, 2.0, 4.0)
+# Viewers can outlive a stopped profile and attach to a replacement hub on the
+# same socket. Never reuse sequence IDs while old frame ACKs are in transit.
+_FRAME_SEQUENCES = itertools.count(1)
 
 CLOSE_UNAUTHENTICATED = 4001
 CLOSE_ATTACH = 4002
@@ -101,6 +106,11 @@ class Viewer:
         self.wakeup = asyncio.Event()
         self.bucket = _Bucket(_INPUT_RATE, _INPUT_BURST)
         self.closed = False
+        self.metrics = StreamMetrics()
+        self._pending_at = 0.0
+        self._outstanding: Dict[int, float] = {}
+        self._started_at = time.monotonic()
+        self._first_frame = True
 
     def send_json(self, message: Dict[str, Any]) -> None:
         if self.closed:
@@ -112,27 +122,65 @@ class Viewer:
         self.wakeup.set()
 
     def offer_frame(self, frame: bytes) -> bool:
-        """Queue a frame; ``False`` when it was dropped (throttled)."""
+        """Keep the latest frame, including the final update inside an FPS interval."""
         if self.closed or not self.visible:
             return False
-        if self.max_fps and time.monotonic() - self.last_frame_at < 1.0 / self.max_fps:
-            return False
+        if self.pending is not None:
+            self.metrics.count("replaced")
         self.pending = frame
+        self._pending_at = time.monotonic()
         self.wakeup.set()
         return True
 
+    def acknowledge(self, seq: Any = None) -> None:
+        # A corrupt envelope cannot yield a sequence. Its ACK consumes the oldest
+        # outstanding frame; well-formed duplicate/stale ACKs never grant credit.
+        if seq is None:
+            seq = next(iter(self._outstanding), None)
+        if not isinstance(seq, int):
+            return
+        sent = self._outstanding.pop(seq, None)
+        if sent is not None:
+            self.inflight = len(self._outstanding)
+            self.metrics.observe("viewer_ack", time.monotonic() - sent)
+            self.wakeup.set()
+
     async def writer(self, on_sent: Any) -> None:
         while not self.closed:
-            await self.wakeup.wait()
             self.wakeup.clear()
             while not self.control.empty():
                 await self.websocket.send_text(json.dumps(self.control.get_nowait(), default=str))
-            if self.pending is not None and self.inflight < _WINDOW:
-                frame, self.pending = self.pending, None
-                self.inflight += 1
-                self.last_frame_at = time.monotonic()
-                await self.websocket.send_bytes(frame)
-                on_sent(self)
+            delay = None
+            if self.visible and self.pending is not None and self.inflight < _WINDOW:
+                delay = max(0.0, self.last_frame_at + (1.0 / self.max_fps if self.max_fps else 0) - time.monotonic())
+                if delay == 0:
+                    frame, self.pending = self.pending, None
+                    head_end = 4 + struct.unpack_from(">H", frame, 2)[0]
+                    header = json.loads(frame[4:head_end])
+                    seq = header["seq"]
+                    self.last_frame_at = time.monotonic()
+                    self._outstanding[seq] = self.last_frame_at
+                    self.inflight = len(self._outstanding)
+                    self.metrics.observe("frame_queue", self.last_frame_at - self._pending_at)
+                    captured_at = header.get("ts")
+                    if isinstance(captured_at, (int, float)):
+                        self.metrics.observe("capture_to_send", time.time() - captured_at)
+                    await self.websocket.send_bytes(frame)
+                    self.metrics.observe("socket_send", time.monotonic() - self.last_frame_at)
+                    if self._first_frame:
+                        self._first_frame = False
+                        self.metrics.observe("first_frame", time.monotonic() - self._started_at)
+                    on_sent(self)
+                    continue
+            if not self.visible:
+                self.pending = None
+            if delay is None:
+                await self.wakeup.wait()
+            else:
+                try:
+                    await asyncio.wait_for(self.wakeup.wait(), timeout=delay)
+                except asyncio.TimeoutError:
+                    pass
 
 
 class ScreencastHub:
@@ -148,12 +196,18 @@ class ScreencastHub:
         self._active = False
         self._size = (0, 0)
         self._resize_task: Optional[asyncio.Task] = None
-        self._pending_ack: Optional[int] = None
-        self._ack_timer: Optional[asyncio.TimerHandle] = None
+        self._retry_task: Optional[asyncio.Task] = None
+        self._pending_acks: List[tuple[CDPSession, int]] = []
+        self._ack_tasks: set[asyncio.Task] = set()
+        self._capture_generation = 0
+        self.metrics = StreamMetrics()
         self._unsubscribers: List[Any] = []
         self._lock = asyncio.Lock()
         self.dead = False
         self._unlisten = self.controller.add_listener(self._on_controller)
+        from ._live_control import LiveControlQueue
+
+        self.commands = LiveControlQueue(self)
 
     # -- viewers -------------------------------------------------------------------
 
@@ -163,8 +217,15 @@ class ScreencastHub:
         await self._refresh()
 
     async def remove(self, viewer: Viewer) -> None:
+        self.commands.release(viewer, note="the owner closed the live view")
         self.viewers.pop(viewer.id, None)
         self.controller.viewer_detached(viewer.id)
+        if not self.viewers:
+            await self.commands.idle_without_viewers()
+            pending = [task for task in (self._resize_task, self._retry_task) if task is not None and task is not asyncio.current_task()]
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
         await self._refresh()
 
     def visible_viewers(self) -> List[Viewer]:
@@ -192,6 +253,8 @@ class ScreencastHub:
         return {"type": "tabs", "tabs": [dict(t, active=t.get("target_id") == active) for t in self.controller.tabs.values()]}
 
     async def _on_controller(self, kind: str, payload: Dict[str, Any]) -> None:
+        if kind in ("tabs", "page"):
+            self.commands.target_changed()
         if kind in ("state", "request", "control_moved"):
             for viewer in list(self.viewers.values()):
                 viewer.send_json(self.state_message(viewer))
@@ -207,6 +270,7 @@ class ScreencastHub:
             await self._follow_target()
         elif kind == "closed":
             self.dead = True
+            await self.commands.close()
             self._unlisten()
             self.broadcast({"type": "idle", "reason": payload.get("reason")})
             await self._stop_screencast()
@@ -224,11 +288,38 @@ class ScreencastHub:
     async def _refresh(self) -> None:
         async with self._lock:
             size = self._wanted_size()
-            if size == (0, 0):
+            if self.dead or size == (0, 0):
+                self._cancel_retry()
                 await self._stop_screencast_locked()
                 return
             if not self._active or size != self._size or self.target_id != self.controller.active_target_id:
                 await self._start_screencast_locked(size)
+                if not self._active and self.runtime.running:
+                    self._schedule_retry()
+
+    def _cancel_retry(self) -> None:
+        if self._retry_task is not None and self._retry_task is not asyncio.current_task():
+            self._retry_task.cancel()
+            self._retry_task = None
+
+    def _schedule_retry(self) -> None:
+        if self._retry_task is not None and not self._retry_task.done():
+            return
+
+        async def retry() -> None:
+            for delay in _SCREENCAST_RETRY_DELAYS:
+                await asyncio.sleep(delay)
+                if self.dead or not self.visible_viewers() or not self.runtime.running or self._active:
+                    return
+                await self._refresh()
+                if self._active:
+                    return
+            self.broadcast({"type": "error", "code": "screencast", "message": "The browser live view could not start. Reconnect the view to try again.", "retrying": False})
+
+        self._retry_task = asyncio.create_task(retry(), name="browser-screencast-retry")
+
+    def _stream_error(self, exc: Exception) -> None:
+        self.broadcast({"type": "error", "code": "screencast", "message": f"The browser live view could not start: {str(exc)[:200]}", "retrying": True})
 
     def schedule_resize(self) -> None:
         if self._resize_task is not None and not self._resize_task.done():
@@ -252,10 +343,12 @@ class ScreencastHub:
             session = await self.runtime.page_session(self.controller.active_target_id)
         except (CDPError, CDPDisconnected, TimeoutError) as exc:
             logger.debug("[browser] live view could not attach: %s", exc)
+            self._stream_error(exc)
             return
         self.session, self.target_id = session, session.target_id
+        generation = self._capture_generation
         self._unsubscribers = [
-            session.on("Page.screencastFrame", self._on_frame),
+            session.on("Page.screencastFrame", lambda params: self._on_frame(params, session, generation)),
             session.on("Page.javascriptDialogOpening", self._on_dialog),
         ]
         try:
@@ -263,12 +356,13 @@ class ScreencastHub:
             await session.send("Emulation.setFocusEmulationEnabled", {"enabled": True}, timeout=10)
             await session.send(
                 "Page.startScreencast",
-                {"format": "jpeg", "quality": 60, "maxWidth": size[0], "maxHeight": size[1], "everyNthFrame": 1, "maxFramesInFlight": _WINDOW},
+                {"format": "jpeg", "quality": 60, "maxWidth": size[0], "maxHeight": size[1], "everyNthFrame": 1, "maxFramesInFlight": _WINDOW, "sendLastFrame": True},
                 timeout=10,
             )
         except (CDPError, CDPDisconnected, TimeoutError) as exc:
             logger.debug("[browser] startScreencast failed: %s", exc)
             await self._stop_screencast_locked()
+            self._stream_error(exc)
             return
         self._active, self._size = True, size
         self.broadcast({"type": "page", "target_id": self.target_id, **self._tab_facts(self.target_id)})
@@ -279,9 +373,19 @@ class ScreencastHub:
 
     async def _stop_screencast(self) -> None:
         async with self._lock:
+            self._cancel_retry()
             await self._stop_screencast_locked()
 
     async def _stop_screencast_locked(self) -> None:
+        self._capture_generation += 1
+        self._pending_acks.clear()
+        ack_tasks = list(self._ack_tasks)
+        for task in ack_tasks:
+            task.cancel()
+        if ack_tasks:
+            await asyncio.gather(*ack_tasks, return_exceptions=True)
+        for viewer in self.viewers.values():
+            viewer.pending = None
         for unsubscribe in self._unsubscribers:
             unsubscribe()
         self._unsubscribers = []
@@ -294,12 +398,24 @@ class ScreencastHub:
                 pass
             await session.detach()
 
-    def _on_frame(self, params: Dict[str, Any]) -> None:
-        self.seq += 1
+    def _on_frame(self, params: Dict[str, Any], source: Optional[CDPSession] = None, generation: Optional[int] = None) -> None:
+        if generation is not None and generation != self._capture_generation:
+            return
+        source = source or self.session
+        ack_id = params.get("sessionId")
+        if source is not None and isinstance(ack_id, int):
+            self._pending_acks.append((source, ack_id))
+        started = time.monotonic()
+        self.metrics.count("captured")
+        if not self.visible_viewers():
+            self._ack_now()
+            return
+        self.seq = next(_FRAME_SEQUENCES)
         meta = params.get("metadata") or {}
         try:
-            jpeg = base64.b64decode(params.get("data") or "")
-        except ValueError:
+            jpeg = base64.b64decode(params.get("data") or "", validate=True)
+        except (ValueError, TypeError):
+            self._ack_now()
             return
         header = {
             "seq": self.seq,
@@ -313,28 +429,38 @@ class ScreencastHub:
             "ts": meta.get("timestamp"),
         }
         frame = encode_frame(header, jpeg)
-        offered = False
+        self.metrics.observe("frame_pack", time.monotonic() - started)
         for viewer in self.visible_viewers():
-            offered = viewer.offer_frame(frame) or offered
-        self._pending_ack = params.get("sessionId")
-        if not offered:
-            self._ack_now()
-        elif self._ack_timer is None:
-            self._ack_timer = asyncio.get_running_loop().call_later(_ACK_AFTER, self._ack_now)
-
-    def frame_sent(self, viewer: Viewer) -> None:
+            viewer.offer_frame(frame)
+        # Viewer backpressure is already bounded independently. Holding Chrome's
+        # capture credit for a slow decoder causes it to skip the last update.
         self._ack_now()
 
+    def frame_sent(self, viewer: Viewer) -> None:
+        self.metrics.count("sent")
+
     def _ack_now(self) -> None:
-        if self._ack_timer is not None:
-            self._ack_timer.cancel()
-            self._ack_timer = None
-        session_id, self._pending_ack = self._pending_ack, None
-        session = self.session
-        if session_id is None or session is None:
+        debt, self._pending_acks = self._pending_acks, []
+        if not debt:
             return
-        task = asyncio.ensure_future(session.send("Page.screencastFrameAck", {"sessionId": session_id}, timeout=5))
-        task.add_done_callback(lambda t: t.cancelled() or t.exception())
+        generation = self._capture_generation
+
+        async def flush() -> None:
+            try:
+                for session, session_id in debt:
+                    if generation != self._capture_generation:
+                        return
+                    await session.send("Page.screencastFrameAck", {"sessionId": session_id}, timeout=5)
+            except (CDPError, CDPDisconnected, TimeoutError):
+                # Delivery may have succeeded. Never retry an ambiguous ACK and
+                # over-credit Chrome; recover with a fresh capture generation.
+                if generation == self._capture_generation and not self.dead:
+                    self._active = False
+                    self._schedule_retry()
+
+        task = asyncio.create_task(flush(), name="browser-frame-ack")
+        self._ack_tasks.add(task)
+        task.add_done_callback(self._ack_tasks.discard)
 
     def _on_dialog(self, params: Dict[str, Any]) -> None:
         self.broadcast({"type": "dialog", "kind": params.get("type"), "message": str(params.get("message") or "")[:2000]})
@@ -349,10 +475,11 @@ class ScreencastHub:
         return max(0.0, min(fx, float(VIEWPORT_WIDTH * 4))), max(0.0, min(fy, float(VIEWPORT_HEIGHT * 20)))
 
     async def input(self, viewer: Viewer, message: Dict[str, Any]) -> None:
-        if not self.controller.can_inject_input(viewer.id) or self.session is None:
+        session = self.commands.input_session(viewer)
+        if not self.controller.can_inject_input(viewer.id) or session is None:
             return
         self.controller.touch_user_input()
-        session, kind = self.session, message.get("type")
+        kind = message.get("type")
         modifiers = int(message.get("modifiers") or 0) & 15
         try:
             if kind == "mouse":
@@ -408,7 +535,8 @@ class ScreencastHub:
     async def navigate(self, viewer: Viewer, message: Dict[str, Any], policy: Any) -> None:
         from ._netpolicy import url_block_reason
 
-        if not self.controller.can_inject_input(viewer.id) or self.session is None:
+        session = self.commands.input_session(viewer)
+        if not self.controller.can_inject_input(viewer.id) or session is None:
             return
         action = str(message.get("action") or "")
         try:
@@ -420,15 +548,15 @@ class ScreencastHub:
                 if reason:
                     viewer.send_json({"type": "error", "code": "blocked", "message": f"Cannot open {url}: {reason}."})
                     return
-                await self.session.send("Page.navigate", {"url": url}, timeout=30)
+                await session.send("Page.navigate", {"url": url}, timeout=30)
             elif action == "reload":
-                await self.session.send("Page.reload", timeout=30)
+                await session.send("Page.reload", timeout=30)
             elif action in ("back", "forward"):
-                history = await self.session.send("Page.getNavigationHistory", timeout=10)
+                history = await session.send("Page.getNavigationHistory", timeout=10)
                 index = history["currentIndex"] + (-1 if action == "back" else 1)
                 entries = history.get("entries") or []
                 if 0 <= index < len(entries):
-                    await self.session.send("Page.navigateToHistoryEntry", {"entryId": entries[index]["id"]}, timeout=30)
+                    await session.send("Page.navigateToHistoryEntry", {"entryId": entries[index]["id"]}, timeout=30)
         except (CDPError, CDPDisconnected, TimeoutError) as exc:
             viewer.send_json({"type": "error", "code": "navigation", "message": str(exc)[:300]})
 
@@ -436,11 +564,12 @@ class ScreencastHub:
         if not self.controller.can_inject_input(viewer.id):
             return
         action, target = str(message.get("action") or ""), str(message.get("target_id") or "")
-        cdp = self.runtime.cdp
+        cdp = self.commands.guarded_session(viewer, self.runtime.cdp)
         try:
             if action == "activate" and target in self.controller.tabs:
                 await cdp.send("Target.activateTarget", {"targetId": target}, timeout=10)
                 self.controller.active_target_id = target
+                self.commands.target_changed()
                 await self._refresh()
                 self.broadcast(self.tabs_message())
             elif action == "close" and target in self.controller.tabs and len(self.controller.tabs) > 1:
@@ -448,26 +577,29 @@ class ScreencastHub:
             elif action == "new":
                 created = await cdp.send("Target.createTarget", {"url": "about:blank"}, timeout=10)
                 self.controller.active_target_id = created.get("targetId")
+                self.commands.target_changed()
                 await self._refresh()
         except (CDPError, CDPDisconnected, TimeoutError) as exc:
             viewer.send_json({"type": "error", "code": "tab", "message": str(exc)[:300]})
 
     async def dialog_reply(self, viewer: Viewer, message: Dict[str, Any]) -> None:
-        if not self.controller.can_inject_input(viewer.id) or self.session is None:
+        session = self.commands.input_session(viewer)
+        if not self.controller.can_inject_input(viewer.id) or session is None:
             return
         params: Dict[str, Any] = {"accept": bool(message.get("accept"))}
         if message.get("prompt_text") is not None:
             params["promptText"] = str(message["prompt_text"])[:_TEXT_LIMIT]
         try:
-            await self.session.send("Page.handleJavaScriptDialog", params, timeout=10)
+            await session.send("Page.handleJavaScriptDialog", params, timeout=10)
         except (CDPError, CDPDisconnected, TimeoutError):
             pass
 
     async def copy(self, viewer: Viewer) -> None:
-        if not self.controller.can_inject_input(viewer.id) or self.session is None:
+        session = self.commands.input_session(viewer)
+        if not self.controller.can_inject_input(viewer.id) or session is None:
             return
         try:
-            result = await self.session.send(
+            result = await session.send(
                 "Runtime.evaluate", {"expression": "String(window.getSelection ? window.getSelection() : '')", "returnByValue": True}, timeout=5
             )
         except (CDPError, CDPDisconnected, TimeoutError):
@@ -591,8 +723,7 @@ async def browser_live_view(websocket: WebSocket) -> None:
             if kind == "ping":
                 viewer.send_json({"type": "pong"})
             elif kind == "ack":
-                viewer.inflight = max(0, viewer.inflight - 1)
-                viewer.wakeup.set()
+                viewer.acknowledge(message.get("seq"))
             elif kind == "viewport":
                 _apply_viewport(viewer, message)
                 if hub is not None:
@@ -600,30 +731,18 @@ async def browser_live_view(websocket: WebSocket) -> None:
             elif kind == "visibility":
                 viewer.visible = bool(message.get("visible"))
                 if hub is not None:
-                    await hub._refresh()
+                    if not viewer.visible:
+                        hub.commands.release(viewer, note="the live view was hidden")
+                    hub.schedule_resize()
             elif hub is None:
                 viewer.send_json({"type": "idle", "reason": "not running"})
             elif kind == "control_request":
-                try:
-                    await hub.controller.acquire_lease(session, wait=2.0)
-                except NodeUserError as exc:
-                    viewer.send_json({"type": "control", "granted": False, "reason": "held_by_other", "message": str(exc)[:300]})
-                    continue
-                granted, reason = await hub.controller.take_over(viewer.id, force=bool(message.get("force")))
-                viewer.send_json({"type": "control", "granted": granted, "reason": reason})
+                hub.commands.enqueue(viewer, message, session)
             elif kind == "control_release":
                 outcome = "declined" if message.get("outcome") == "declined" else "handed_back"
-                await hub.controller.hand_back(viewer.id, outcome=outcome, note=str(message.get("note") or "")[:1000])
-            elif kind in ("mouse", "wheel", "key", "insert_text"):
-                await hub.input(viewer, message)
-            elif kind == "navigate":
-                await hub.navigate(viewer, message, session.policy)
-            elif kind == "tab":
-                await hub.tab(viewer, message, session.policy)
-            elif kind == "dialog_reply":
-                await hub.dialog_reply(viewer, message)
-            elif kind == "copy":
-                await hub.copy(viewer)
+                hub.commands.release(viewer, outcome=outcome, note=str(message.get("note") or "")[:1000])
+            elif kind in ("mouse", "wheel", "key", "insert_text", "navigate", "tab", "dialog_reply", "copy"):
+                hub.commands.enqueue(viewer, message, session)
 
     try:
         await reader()
@@ -635,6 +754,7 @@ async def browser_live_view(websocket: WebSocket) -> None:
         viewer.closed = True
         viewer.wakeup.set()
         writer.cancel()
+        await asyncio.gather(writer, return_exceptions=True)
         if hub is not None:
             await hub.remove(viewer)
         elif controller is not None:

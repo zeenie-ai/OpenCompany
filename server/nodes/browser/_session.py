@@ -268,10 +268,14 @@ class ProfileController:
 
     async def release_lease(self, session_id: Optional[str] = None) -> None:
         if session_id is None or (self.lease_session and self.lease_session.session_id == session_id):
+            barrier = getattr(self, "live_control_barrier", None)
+            if barrier is not None:
+                await barrier(self.controller_viewer)
             if self.pending is not None:
                 self._resolve_pending("cancelled", "")
             self.lease_session = None
             if self.state != ControlState.IDLE:
+                self._cancel_viewer_drop(self.controller_viewer)
                 self.controller_viewer = None
                 await self._set_state(ControlState.IDLE, reason="released")
             async with self._changed:
@@ -343,10 +347,10 @@ class ProfileController:
         if request.future.done():
             return request.future.result()
         if time.monotonic() >= request.deadline:
-            self._resolve_pending("timeout", "")
             if self.state in (ControlState.AWAITING_USER, ControlState.USER):
-                self.controller_viewer = None
-                await self._set_state(ControlState.IDLE, reason="request timed out")
+                await self.hand_back(self.controller_viewer, outcome="timeout", note="request timed out")
+            else:
+                self._resolve_pending("timeout", "")
             return {"status": "timeout", "note": ""}
         return {"status": "still_waiting", "note": ""}
 
@@ -360,11 +364,17 @@ class ProfileController:
     def _user_blocks_agent(self) -> bool:
         return self._user_claim or self.state in (ControlState.USER, ControlState.AWAITING_USER)
 
-    async def take_over(self, viewer_id: str, *, force: bool = False) -> tuple[bool, str]:
+    async def take_over(self, viewer_id: str, *, force: bool = False, valid: Optional[Callable[[], bool]] = None) -> tuple[bool, str]:
+        if valid is not None and not valid():
+            return False, "viewer_unavailable"
         if self.controller_viewer and self.controller_viewer != viewer_id and not force:
             return False, "held_by_other"
         if self.lease_session is None:
             return False, "no_session"
+        if self.controller_viewer and self.controller_viewer != viewer_id:
+            barrier = getattr(self, "live_control_barrier", None)
+            if barrier is not None:
+                await barrier(self.controller_viewer)
         # Claim first so no new agent step starts while we wait for this one.
         self._user_claim = True
         try:
@@ -380,6 +390,8 @@ class ProfileController:
             except asyncio.TimeoutError:
                 return False, "agent_busy"
             try:
+                if valid is not None and not valid():
+                    return False, "viewer_unavailable"
                 previous_controller = self.controller_viewer
                 self.controller_viewer = viewer_id
                 self.user_input_deadline = time.monotonic() + USER_IDLE_HANDBACK_SECONDS
@@ -400,7 +412,15 @@ class ProfileController:
             return False
         if self.state == ControlState.USER and viewer_id is not None and viewer_id != self.controller_viewer:
             return False
+        barrier = getattr(self, "live_control_barrier", None)
+        if barrier is not None:
+            await barrier(self.controller_viewer)
+        # Another transition may have completed while the dispatched command
+        # settled. Never release a newer viewer's control.
+        if self.state == ControlState.USER and viewer_id is not None and viewer_id != self.controller_viewer:
+            return False
         self._resolve_pending(outcome, note)
+        self._cancel_viewer_drop(self.controller_viewer)
         self.controller_viewer = None
         self.lease_renewed = self.last_activity = time.monotonic()
         await self._set_state(ControlState.IDLE, reason=outcome)
@@ -433,6 +453,11 @@ class ProfileController:
 
             self._viewer_drop_tasks[viewer_id] = asyncio.create_task(_drop())
 
+    def _cancel_viewer_drop(self, viewer_id: Optional[str]) -> None:
+        task = self._viewer_drop_tasks.pop(viewer_id, None)
+        if task is not None and task is not asyncio.current_task():
+            task.cancel()
+
     async def tick(self) -> None:
         """Periodic housekeeping (the fleet reaper calls this)."""
         now = time.monotonic()
@@ -440,10 +465,10 @@ class ProfileController:
             await self.hand_back(self.controller_viewer, outcome="handed_back", note="auto: no input for 10 minutes")
         request = self.pending
         if request is not None and now >= request.deadline and not request.future.done():
-            self._resolve_pending("timeout", "")
             if self.state in (ControlState.AWAITING_USER, ControlState.USER):
-                self.controller_viewer = None
-                await self._set_state(ControlState.IDLE, reason="request timed out")
+                await self.hand_back(self.controller_viewer, outcome="timeout", note="request timed out")
+            else:
+                self._resolve_pending("timeout", "")
 
     def idle_for(self) -> float:
         busy = self.state != ControlState.IDLE or self.viewers or self.pending is not None
