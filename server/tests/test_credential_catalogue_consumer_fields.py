@@ -132,6 +132,7 @@ class TestCatalogueFields:
             ("github", "developer"),
             ("claude_code", "developer"),
             ("android_remote", "devices"),
+            ("browser", "devices"),
             ("openai_compatible", "ai"),
         ],
     )
@@ -143,10 +144,10 @@ class TestCatalogueFields:
             check = provider.get("connected_check")
             if not check:
                 continue
-            assert check["type"] in {"status", "api_keys"}, provider["id"]
+            assert check["type"] in {"status", "api_keys", "builtin"}, provider["id"]
             if check["type"] == "status":
                 assert check.get("key") and check.get("field"), provider["id"]
-            else:
+            elif check["type"] == "api_keys":
                 assert check.get("keys"), provider["id"]
 
     def test_catalogue_payload_carries_consumer_categories(self, registry):
@@ -178,6 +179,12 @@ class TestProviderConnectionState:
         assert state["stored"] is True and state["connected"] is True
         state = await provider_connection_state(registry.get_provider("openai"), FakeAuth())
         assert state["stored"] is False and state["connected"] is False
+
+    async def test_the_web_browser_needs_nothing_connected(self, registry):
+        """Its panel manages optional login profiles; an employee that uses
+        the browser must never be blocked from starting for want of one."""
+        state = await provider_connection_state(registry.get_provider("browser"), FakeAuth())
+        assert state["stored"] is True and state["connected"] is True
 
     async def test_email_account_is_stored_and_connected_only_with_both_keys(self, registry):
         provider = registry.get_provider("email_himalaya")

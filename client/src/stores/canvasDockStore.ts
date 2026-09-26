@@ -81,6 +81,8 @@ interface CanvasDockState {
    * preview.
    */
   notifyPushed: (nodeId: string) => void;
+  /** An agent in the CURRENT workflow asked for help in its browser (caller verifies): show the Browser tab. */
+  showBrowser: () => void;
 }
 
 const persisted = loadDockPrefs();
@@ -149,5 +151,9 @@ export const useCanvasDockStore = create<CanvasDockState>((set, get) => ({
     if (state.selectedNodeId !== nodeId) {
       set({ mode: 'node', selectedNodeId: nodeId });
     }
+  },
+  showBrowser: () => {
+    set({ open: true, tab: 'browser' });
+    persist(get());
   },
 }));

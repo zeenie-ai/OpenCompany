@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Tuple
@@ -58,6 +58,14 @@ class TriggerTemplate(NodeTemplate):
 @dataclass(frozen=True)
 class ToolTemplate(NodeTemplate):
     side_effects: str = "read"
+    #: Params that make the tool safe under ``ask first``. A tool that
+    #: declares them stays attached for such an employee, with these
+    #: merged over ``params`` (the browser turns read-only and hands any
+    #: page change to the owner); a tool without them is left out.
+    ask_first_params: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
+    #: The key under which the builder records the tool's node id in the
+    #: employee's ``node_roles``.
+    role: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -119,6 +127,14 @@ def _template(app_id: str, role: str, raw: Any, cls: type = NodeTemplate) -> Any
         if effect not in SIDE_EFFECTS:
             raise AppRegistryError(f"{app_id}.tools[{raw['type']}].side_effects must be one of {SIDE_EFFECTS}")
         fields["side_effects"] = effect
+        ask_first = raw.get("ask_first_params") or {}
+        if not isinstance(ask_first, dict):
+            raise AppRegistryError(f"{app_id}.tools[{raw['type']}].ask_first_params must be an object")
+        fields["ask_first_params"] = MappingProxyType(dict(ask_first))
+        tool_role = raw.get("role")
+        if tool_role is not None and (not isinstance(tool_role, str) or not tool_role):
+            raise AppRegistryError(f"{app_id}.tools[{raw['type']}].role must be a non-empty string")
+        fields["role"] = tool_role
     return cls(**fields)
 
 

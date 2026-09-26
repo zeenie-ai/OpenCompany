@@ -112,7 +112,7 @@ export interface ServerProviderConfig {
   category: string;
   category_label: string;
   color: string;
-  kind: 'apiKey' | 'oauth' | 'qrPairing' | 'email';
+  kind: 'apiKey' | 'oauth' | 'qrPairing' | 'email' | 'browserProfiles';
   icon_ref?: string;
   fields?: ServerFieldDef[];
   ws?: { login: string; logout: string; status: string };

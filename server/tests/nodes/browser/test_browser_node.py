@@ -216,3 +216,22 @@ async def test_legacy_agent_browser_parameters_still_validate(runtime):
     op, args = runtime.cli.calls[-1]
     assert op == "type" and args["text"] == "hello" and args["clear"] is True and args["selector"] == "#q"
     assert result.get("success") is not False
+
+
+async def test_the_profile_dropdown_lists_the_callers_profiles_not_a_client_named_user():
+    import nodes.browser  # noqa: F401 - registers the browserProfiles loader
+    from services.ws_handler_registry import dispatch_load_options
+
+    listed: List[str] = []
+
+    class Store:
+        def __init__(self, database) -> None:
+            pass
+
+        async def list(self, owner: str):
+            listed.append(owner)
+            return []
+
+    with patch("nodes.browser._handlers.ProfileStore", Store), patch("nodes.browser._handlers.get_database", lambda: None):
+        await dispatch_load_options("browserProfiles", {"user_id": "someone-else"}, principal="alice")
+    assert listed == ["alice"]

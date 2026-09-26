@@ -18,7 +18,9 @@ Four sibling concerns share this file because they're the same pattern
    dynamic-options dropdowns wired through the
    ``loadOptionsMethod`` Pydantic field metadata. Read by
    :func:`dispatch_load_options` (here in this module) and the matching
-   WS handler in ``routers/websocket.py``.
+   WS handler in ``routers/websocket.py``. A loader whose options belong
+   to a user reads the caller from :func:`current_load_options_principal`,
+   never from ``params`` (the client writes those).
 
 4. **OAuth callback paths** — ``register_oauth_callback_path(provider,
    path)`` so :func:`services.oauth_utils.get_redirect_uri` can derive
@@ -33,7 +35,8 @@ from __future__ import annotations
 
 import functools
 import logging
-from typing import Any, Awaitable, Callable, Dict, List
+from contextvars import ContextVar
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from fastapi import APIRouter, WebSocket
 
@@ -165,17 +168,38 @@ def list_registered_option_methods() -> List[str]:
     return sorted(_OPTION_LOADER_REGISTRY.keys())
 
 
-async def dispatch_load_options(method: str, params: Dict[str, Any] | None = None) -> List[Dict[str, Any]]:
+_LOAD_OPTIONS_PRINCIPAL: ContextVar[Optional[str]] = ContextVar("load_options_principal", default=None)
+
+
+def current_load_options_principal() -> Optional[str]:
+    """The authenticated caller of the load-options request being served.
+
+    ``None`` outside a request or when the caller is unknown. Set by
+    :func:`dispatch_load_options` from the socket or HTTP identity, so a
+    loader that lists one user's things (browser profiles) never has to
+    trust a ``user_id`` inside ``params``.
+    """
+    return _LOAD_OPTIONS_PRINCIPAL.get()
+
+
+async def dispatch_load_options(
+    method: str, params: Dict[str, Any] | None = None, *, principal: Optional[str] = None
+) -> List[Dict[str, Any]]:
     """Look up and invoke a registered loader.
 
     Returns an empty list when the method isn't registered (matches
     n8n's tolerant fallback -- the dropdown stays empty rather than
-    erroring out).
+    erroring out). ``principal`` is the authenticated caller, exposed to
+    the loader through :func:`current_load_options_principal`.
     """
     loader = _OPTION_LOADER_REGISTRY.get(method)
     if loader is None:
         return []
-    return await loader(params or {})
+    token = _LOAD_OPTIONS_PRINCIPAL.set(principal)
+    try:
+        return await loader(params or {})
+    finally:
+        _LOAD_OPTIONS_PRINCIPAL.reset(token)
 
 
 def list_load_options_methods() -> List[str]:

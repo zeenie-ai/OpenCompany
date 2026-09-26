@@ -11,7 +11,8 @@ One employee is one workflow:
 - tools on the agent: web search, a checklist (writeTodos), a clock and a
   canvas (what the agent puts there shows in Home's Workspace), always; the
   apps' tools, minus anything that sends or spends while "ask me first" is
-  on; Memory when the owner keeps memory across chats;
+  on (a tool with ``ask_first_params``, the browser, stays in its read-only
+  form instead); Memory when the owner keeps memory across chats;
 - the owner's skill library (Settings > Skills): every skill that is on, on
   one Skills node (masterSkill), with its text copied in, so a later edit to
   the library never changes an employee already hired;
@@ -48,7 +49,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from services.employees.apps import AppSpec, NodeTemplate, allowed_when_asking_first, resolve_app
+from services.employees.apps import AppSpec, NodeTemplate, ToolTemplate, allowed_when_asking_first, resolve_app
 from services.employees.hire_request import HireEmployeeRequest, HireTrigger
 from services.employees.llm import LLMChoice
 from services.approvals.contract import APPROVAL_GATE_TYPE, NO_REPLY, approved_edge_condition, send_condition
@@ -548,6 +549,47 @@ def _plan_reply(
     )
 
 
+# ----- app tools -----
+
+
+@dataclass
+class _ToolPlan:
+    app: AppSpec
+    tool: ToolTemplate
+    params: Dict[str, Any]
+    #: Attached in its ask-first form (``ask_first_params`` applied).
+    read_only: bool = False
+
+
+def _plan_app_tools(inputs: BuildInputs, trigger: _TriggerPlan, warnings: List[str]) -> List[_ToolPlan]:
+    """The apps' tools the agent gets, decided before its instructions are
+    written so they can mention them.
+
+    Under ``ask first`` a tool that can send or spend is left out, unless
+    the app declares ``ask_first_params`` that make it safe: then it is
+    attached with those applied (the browser can read, and hands any page
+    change to the owner)."""
+    plans: List[_ToolPlan] = []
+    for app in inputs.apps:
+        for tool in app.tools:
+            params = dict(tool.params)
+            read_only = False
+            if inputs.request.rules.ask_first and not allowed_when_asking_first(tool.side_effects):
+                if not tool.ask_first_params:
+                    warnings.append(f"{app.name} is left out while they ask before sending anything")
+                    continue
+                params.update(tool.ask_first_params)
+                read_only = True
+                warnings.append(f"{app.name} can only read while they ask before sending anything; they hand changes to you")
+            try:
+                params = _substitute(params, {}, trigger.key, inputs.owner_values)
+            except _Unresolved:
+                warnings.append(f"{app.name} could not be set up as a tool")
+                continue
+            plans.append(_ToolPlan(app=app, tool=tool, params=params, read_only=read_only))
+    return plans
+
+
 # ----- the whole graph -----
 
 
@@ -562,6 +604,9 @@ def build_employee_graph(inputs: BuildInputs) -> BuiltEmployee:
     trigger = _plan_trigger(inputs, labels, now, warnings)
     delivery = _plan_delivery(inputs, trigger, agent_key, labels, warnings)
 
+    app_tools = _plan_app_tools(inputs, trigger, warnings)
+    browser_tools = [plan for plan in app_tools if plan.tool.role == "browser"]
+
     delivery_mode = "chat" if trigger.kind == "manual" else ("reply" if delivery is not None and delivery.role == "reply" else "report")
     system_message = build_system_message(
         PromptInputs(
@@ -572,6 +617,8 @@ def build_employee_graph(inputs: BuildInputs) -> BuiltEmployee:
             unsupported_apps=list(inputs.unsupported_apps),
             has_memory=inputs.memory,
             has_canvas=True,
+            has_browser=bool(browser_tools),
+            browser_read_only=bool(browser_tools) and all(plan.read_only for plan in browser_tools),
         )
     )
     if trigger.kind == "schedule" and request.trigger is not None and request.trigger.every == "weekday":
@@ -617,18 +664,9 @@ def build_employee_graph(inputs: BuildInputs) -> BuiltEmployee:
     if inputs.memory:
         add_tool(MEMORY_TYPE, "Memory", {}, role="memory")
     add_tool(CANVAS_TYPE, "Canvas", {}, role="canvas")
-    for app in inputs.apps:
-        for tool in app.tools:
-            if request.rules.ask_first and not allowed_when_asking_first(tool.side_effects):
-                warnings.append(f"{app.name} is left out while they ask before sending anything")
-                continue
-            try:
-                params = _substitute(dict(tool.params), {}, trigger.key, inputs.owner_values)
-            except _Unresolved:
-                warnings.append(f"{app.name} could not be set up as a tool")
-                continue
-            add_tool(tool.type, tool.label or app.name, params)
-            use(app)
+    for plan in app_tools:
+        add_tool(plan.tool.type, plan.tool.label or plan.app.name, plan.params, role=plan.tool.role)
+        use(plan.app)
 
     # Context, for owner-facing triggers only.
     if trigger.kind in ("schedule", "manual"):

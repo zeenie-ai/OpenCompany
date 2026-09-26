@@ -37,6 +37,7 @@ import CanvasPanel from './CanvasPanel';
 import ContextPanel from './ContextPanel';
 import MemoryToolPanel from './MemoryToolPanel';
 import DataPanel from './DataPanel';
+import BrowserWorkspace from '../browser/BrowserWorkspace';
 import { useAppStore } from '../../store/useAppStore';
 import { useNodeStatus, useWebSocket, CompactionStats } from '../../contexts/WebSocketContext';
 import { useUserSettingsQuery } from '../../hooks/useUserSettingsQuery';
@@ -213,6 +214,7 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
   const isProcessManagerNode = hints.isProcessManagerPanel === true;
   const isGalleryNode = hints.isGalleryPanel === true;
   const isCanvasNode = hints.isCanvasPanel === true;
+  const isBrowserNode = hints.isBrowserPanel === true;
   const isAgentWithSkills = hints.hasSkills === true;
 
   const { data: userSettings } = useUserSettingsQuery();
@@ -616,6 +618,12 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
               : 'block flex-1 overflow-y-auto',
           )}
         >
+          {/* The node's live browser, above its settings. */}
+          {isBrowserNode && (
+            <div className="mb-4 h-90 overflow-hidden rounded-md border border-border-default">
+              <BrowserWorkspace workflowId={currentWorkflow?.id} nodes={[{ node_id: nodeId, label: 'Browser' }]} />
+            </div>
+          )}
           {/* Parameters Container */}
           <div
             className={cn(

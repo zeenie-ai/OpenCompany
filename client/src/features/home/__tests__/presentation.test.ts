@@ -52,6 +52,15 @@ describe('presentEmployee', () => {
     });
   });
 
+  it('says Needs you while the agent waits in the browser', () => {
+    const request = { node_id: 'w:browser:1', reason: 'login', since: null };
+    expect(presentEmployee(employee({ status: 'working', browser_request: request }, { state: 'running' })).pill).toEqual({
+      label: 'Needs you',
+      tone: 'waiting',
+    });
+    expect(employee({ status: 'working' }).browser_request).toBeNull();
+  });
+
   it('labels the button while a change is in flight', () => {
     const view = presentEmployee(employee({ status: 'working' }, { state: 'running' }), { action: 'pause', state: 'pausing' });
     expect(view.busyLabel).toBe('Pausing…');

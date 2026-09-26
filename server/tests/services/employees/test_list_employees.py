@@ -123,6 +123,25 @@ async def test_summary_discovers_all_browser_capabilities_including_disabled(rea
     assert listed["browser_nodes"] == summary["browser_nodes"]
 
 
+async def test_a_browser_waiting_for_the_owner_is_the_task(real_database, monkeypatch):
+    import nodes  # noqa: F401 - registers the browser plugin (found by its isBrowserPanel hint)
+    import services.employees.node_signals as node_signals
+
+    states = {"b1": {"state": "awaiting_user", "request": {"reason": "login", "message": "text from the page", "since": 1.5}}}
+    monkeypatch.setattr(node_signals, "node_state", lambda kind, workflow_id, node_id: states.get(node_id))
+    await save(real_database, "92", "Shopper", graph(node("a1", "aiAgent", "Sam"), node("b1", "browser", "Browser")))
+
+    summary = await get_employee_summary(real_database, "92", auth_service=FakeAuth())
+    assert summary["browser_request"] == {"node_id": "b1", "reason": "login", "since": "1970-01-01T00:00:01.500000+00:00"}
+    assert summary["task"] == {"label": "Waiting", "text": "Needs you to sign in to a site in the browser"}
+    # Summaries reach every socket: the agent's message stays in the live view.
+    assert "text from the page" not in str(summary)
+
+    states.clear()
+    summary = await get_employee_summary(real_database, "92", auth_service=FakeAuth())
+    assert summary["browser_request"] is None
+
+
 @pytest.mark.parametrize(
     ("trigger", "text"),
     [

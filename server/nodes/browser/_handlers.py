@@ -486,8 +486,15 @@ WS_HANDLERS: Dict[str, WSHandler] = {
 
 
 async def load_browser_profiles(params: Dict[str, Any]) -> list:
-    """``loadOptionsMethod: browserProfiles`` for the node's profile field."""
-    owner = str(params.get("user_id") or "owner")
+    """``loadOptionsMethod: browserProfiles`` for the node's profile field.
+
+    Lists the caller's profiles. The caller comes from the authenticated
+    request, never from ``params``, which the client writes.
+    """
+    from constants import OWNER_PRINCIPAL_ID
+    from services.ws_handler_registry import current_load_options_principal
+
+    owner = current_load_options_principal() or OWNER_PRINCIPAL_ID
     profiles = await ProfileStore(get_database()).list(owner)
     options = [{"value": "", "label": "This workflow's own profile", "description": "Created the first time it runs"}]
     options.extend(

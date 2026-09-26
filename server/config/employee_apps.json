@@ -1,5 +1,5 @@
 {
-  "_description": "The apps a Normal-mode employee can use, and how each maps onto workflow nodes. Loaded by server/services/employees/apps.py. `provider_id` is the credential catalogue id (config/credential_providers.json) that decides whether the app is connected. `trigger` starts the employee (audience `public`: strangers write in, so replies go back to them; `owner`: only the owner talks to it); `reply` answers whoever wrote in; `notify_owner` reports to the owner; `tools` are handed to the agent, each with the most dangerous thing it can do (`side_effects`: read < write < send < money), because a tool call lets the model choose any operation the node has. Under the `ask first` ground rule no `send` or `money` tool is attached. Parameter strings may use placeholders the graph builder resolves: ${trigger.<field>} (the trigger node's output), ${reply_text} / ${reply_subject} (the approved draft when the approval gate is on, otherwise the agent's response), and ${owner.<field>} (the owner's own address for the app, looked up when the employee is built). Node types, parameter names and trigger output fields are verified against the plugins; see tests/services/employees/test_app_registry.py.",
+  "_description": "The apps a Normal-mode employee can use, and how each maps onto workflow nodes. Loaded by server/services/employees/apps.py. `provider_id` is the credential catalogue id (config/credential_providers.json) that decides whether the app is connected. `trigger` starts the employee (audience `public`: strangers write in, so replies go back to them; `owner`: only the owner talks to it); `reply` answers whoever wrote in; `notify_owner` reports to the owner; `tools` are handed to the agent, each with the most dangerous thing it can do (`side_effects`: read < write < send < money), because a tool call lets the model choose any operation the node has. Under the `ask first` ground rule no `send` or `money` tool is attached, unless it declares `ask_first_params` that make it safe: then it is attached with those merged over `params` (the browser turns read-only). A tool's optional `role` names its node in the employee's node roles. Parameter strings may use placeholders the graph builder resolves: ${trigger.<field>} (the trigger node's output), ${reply_text} / ${reply_subject} (the approved draft when the approval gate is on, otherwise the agent's response), and ${owner.<field>} (the owner's own address for the app, looked up when the employee is built). Node types, parameter names and trigger output fields are verified against the plugins; see tests/services/employees/test_app_registry.py.",
   "version": 1,
   "apps": {
     "whatsapp": {
@@ -456,6 +456,42 @@
       "side_effects": "money",
       "phrases": {
         "working": "Looking up payments in Stripe"
+      }
+    },
+    "web": {
+      "name": "Web browser",
+      "provider_id": "browser",
+      "aliases": [
+        "web browser",
+        "browser",
+        "chrome",
+        "website",
+        "websites",
+        "web page",
+        "internet"
+      ],
+      "_provider_note": "Nothing to connect (connected_check builtin); logins live in the optional profiles its Connectors panel manages.",
+      "trigger": null,
+      "reply": null,
+      "notify_owner": null,
+      "tools": [
+        {
+          "type": "browser",
+          "label": "Browser",
+          "role": "browser",
+          "params": {
+            "interaction": "full"
+          },
+          "ask_first_params": {
+            "interaction": "read_only"
+          },
+          "side_effects": "money",
+          "_side_effects_note": "a page can do anything the profile's logins allow, a checkout included. Under ask first it stays attached read-only: it can browse and read, and must hand any change to the owner (request_user)."
+        }
+      ],
+      "side_effects": "money",
+      "phrases": {
+        "working": "Using the web browser"
       }
     }
   }

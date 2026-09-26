@@ -23,6 +23,7 @@ const PANEL_LOADERS: Record<PanelKind, () => Promise<{ default: React.ComponentT
   oauth: () => import('./panels/OAuthPanel'),
   qrPairing: () => import('./panels/QrPairingPanel'),
   email: () => import('./panels/EmailPanel'),
+  browserProfiles: () => import('./panels/BrowserProfilesPanel'),
 };
 
 // Memoize the lazy wrappers at module scope so switching providers of
@@ -34,6 +35,7 @@ const LAZY_PANELS: Record<PanelKind, React.LazyExoticComponent<React.ComponentTy
   oauth: React.lazy(PANEL_LOADERS.oauth),
   qrPairing: React.lazy(PANEL_LOADERS.qrPairing),
   email: React.lazy(PANEL_LOADERS.email),
+  browserProfiles: React.lazy(PANEL_LOADERS.browserProfiles),
 };
 
 /** `full`: the editor's Credentials modal (usage, provider defaults, rate

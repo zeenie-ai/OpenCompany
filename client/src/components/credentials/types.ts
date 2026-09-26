@@ -12,7 +12,7 @@ export type { ActionButtonIntent };
 // Panel kinds — one renderer branch per kind
 // ============================================================================
 
-export type PanelKind = 'apiKey' | 'oauth' | 'qrPairing' | 'email';
+export type PanelKind = 'apiKey' | 'oauth' | 'qrPairing' | 'email' | 'browserProfiles';
 
 // ============================================================================
 // Field schema — drives antd Form.Item rendering via FieldRenderer
