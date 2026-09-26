@@ -25,7 +25,7 @@ class DeepseekChatModelNode(ChatModelBase):
     display_name = "DeepSeek"
     subtitle = "Chat Model"
     group = ("model",)
-    description = "DeepSeek V4.1 models (deepseek-flash, deepseek-v4-pro) with 1M context"
+    description = "DeepSeek V4 models (deepseek-v4.1-flash, deepseek-v4-pro) with 1M context"
 
     credentials = (DeepSeekCredential,)
     Params = DeepseekChatModelParams

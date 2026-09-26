@@ -1,8 +1,57 @@
 {
-  "_generated": "2026-09-24T07:52:57.403085+00:00",
+  "_generated": "2026-09-26T06:38:55.512843+00:00",
   "_source": "openrouter",
   "_model_count": 458,
   "models": {
+    "typesafe/jev-router": {
+      "id": "typesafe/jev-router",
+      "name": "TypeSafe: Jev Router",
+      "provider": "typesafe",
+      "local_id": "jev-router",
+      "context_length": 1000000,
+      "max_output_tokens": 0,
+      "input_price_per_mtok": -1000000.0,
+      "output_price_per_mtok": -1000000.0,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": []
+    },
+    "perceptron/perceptron-mk1.5": {
+      "id": "perceptron/perceptron-mk1.5",
+      "name": "Perceptron: Perceptron Mk1.5",
+      "provider": "perceptron",
+      "local_id": "perceptron-mk1.5",
+      "context_length": 36864,
+      "max_output_tokens": 8192,
+      "input_price_per_mtok": 0.15,
+      "output_price_per_mtok": 1.5,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "max_tokens",
+        "presence_penalty",
+        "reasoning",
+        "reasoning_effort",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_p"
+      ]
+    },
     "fireworks/ember-1": {
       "id": "fireworks/ember-1",
       "name": "Fireworks: Ember-1",
@@ -619,7 +668,7 @@
       "name": "Xiaomi: MiMo-V2.6-Pro",
       "provider": "xiaomi",
       "local_id": "mimo-v2.6-pro",
-      "context_length": 1048576,
+      "context_length": 1050000,
       "max_output_tokens": 131072,
       "input_price_per_mtok": 0.435,
       "output_price_per_mtok": 0.87,
@@ -814,8 +863,8 @@
       "local_id": "deepseek-pro-latest",
       "context_length": 1048576,
       "max_output_tokens": 943718,
-      "input_price_per_mtok": 0.39,
-      "output_price_per_mtok": 2.9,
+      "input_price_per_mtok": 0.25,
+      "output_price_per_mtok": 3.5,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -852,9 +901,9 @@
       "provider": "deepseek",
       "local_id": "deepseek-flash-latest",
       "context_length": 1048576,
-      "max_output_tokens": 943718,
-      "input_price_per_mtok": 0.04,
-      "output_price_per_mtok": 1.0,
+      "max_output_tokens": 384000,
+      "input_price_per_mtok": 0.035,
+      "output_price_per_mtok": 0.29,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -1122,8 +1171,8 @@
       "local_id": "ling-3.0-flash-vl",
       "context_length": 262144,
       "max_output_tokens": 32768,
-      "input_price_per_mtok": 0.06,
-      "output_price_per_mtok": 0.18,
+      "input_price_per_mtok": 0.021,
+      "output_price_per_mtok": 0.0616,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -1256,70 +1305,6 @@
         "temperature",
         "tool_choice",
         "tools"
-      ]
-    },
-    "nex-agi/nex-n2.5-mini:free": {
-      "id": "nex-agi/nex-n2.5-mini:free",
-      "name": "Nex AGI: Nex-N2.5-Mini (free)",
-      "provider": "nex-agi",
-      "local_id": "nex-n2.5-mini:free",
-      "context_length": 262144,
-      "max_output_tokens": 235929,
-      "input_price_per_mtok": 0.0,
-      "output_price_per_mtok": 0.0,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "include_reasoning",
-        "logprobs",
-        "max_tokens",
-        "reasoning",
-        "reasoning_effort",
-        "response_format",
-        "structured_outputs",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_k",
-        "top_logprobs",
-        "top_p"
-      ]
-    },
-    "nex-agi/nex-n2.5-pro:free": {
-      "id": "nex-agi/nex-n2.5-pro:free",
-      "name": "Nex AGI: Nex-N2.5-Pro (free)",
-      "provider": "nex-agi",
-      "local_id": "nex-n2.5-pro:free",
-      "context_length": 262144,
-      "max_output_tokens": 235929,
-      "input_price_per_mtok": 0.0,
-      "output_price_per_mtok": 0.0,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "include_reasoning",
-        "logprobs",
-        "max_tokens",
-        "reasoning",
-        "reasoning_effort",
-        "response_format",
-        "structured_outputs",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_k",
-        "top_logprobs",
-        "top_p"
       ]
     },
     "openai/gpt-6-astra": {
@@ -1837,9 +1822,9 @@
       "provider": "z-ai",
       "local_id": "glm-flash-latest",
       "context_length": 1310720,
-      "max_output_tokens": 128000,
-      "input_price_per_mtok": 0.045,
-      "output_price_per_mtok": 0.14,
+      "max_output_tokens": 131072,
+      "input_price_per_mtok": 0.04,
+      "output_price_per_mtok": 0.5,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -1912,8 +1897,8 @@
       "provider": "z-ai",
       "local_id": "glm-5.3-flash",
       "context_length": 1310720,
-      "max_output_tokens": 943718,
-      "input_price_per_mtok": 0.15,
+      "max_output_tokens": 131072,
+      "input_price_per_mtok": 0.04,
       "output_price_per_mtok": 0.5,
       "supports_thinking": false,
       "thinking_type": "none",
@@ -2108,8 +2093,8 @@
       "local_id": "glm-latest",
       "context_length": 1310720,
       "max_output_tokens": 131072,
-      "input_price_per_mtok": 0.5625,
-      "output_price_per_mtok": 2.5,
+      "input_price_per_mtok": 0.4746,
+      "output_price_per_mtok": 1.4916,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -2172,9 +2157,9 @@
       "provider": "z-ai",
       "local_id": "glm-5.3",
       "context_length": 1310720,
-      "max_output_tokens": 131072,
-      "input_price_per_mtok": 0.84,
-      "output_price_per_mtok": 2.64,
+      "max_output_tokens": 943717,
+      "input_price_per_mtok": 1.4,
+      "output_price_per_mtok": 4.4,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -2510,8 +2495,8 @@
       "local_id": "deepseek-v4-pro-0813",
       "context_length": 1048576,
       "max_output_tokens": 384000,
-      "input_price_per_mtok": 0.462,
-      "output_price_per_mtok": 1.386,
+      "input_price_per_mtok": 0.264,
+      "output_price_per_mtok": 0.792,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -2619,7 +2604,7 @@
       "name": "NVIDIA: Nemotron 3.5 Lightning",
       "provider": "nvidia",
       "local_id": "nemotron-3.5-lightning",
-      "context_length": 262144,
+      "context_length": 1000000,
       "max_output_tokens": 131072,
       "input_price_per_mtok": 0.08,
       "output_price_per_mtok": 0.2,
@@ -2814,7 +2799,7 @@
       "local_id": "deepseek-v4-flash-latest",
       "context_length": 1310720,
       "max_output_tokens": 943718,
-      "input_price_per_mtok": 0.03,
+      "input_price_per_mtok": 0.021,
       "output_price_per_mtok": 0.32,
       "supports_thinking": false,
       "thinking_type": "none",
@@ -2855,7 +2840,7 @@
       "local_id": "deepseek-v4-flash-0731",
       "context_length": 1310720,
       "max_output_tokens": 943718,
-      "input_price_per_mtok": 0.03,
+      "input_price_per_mtok": 0.021,
       "output_price_per_mtok": 0.32,
       "supports_thinking": false,
       "thinking_type": "none",
@@ -2894,7 +2879,7 @@
       "name": "Thinking Machines: Inkling Small",
       "provider": "thinkingmachines",
       "local_id": "inkling-small",
-      "context_length": 1048576,
+      "context_length": 524288,
       "max_output_tokens": 262144,
       "input_price_per_mtok": 0.45,
       "output_price_per_mtok": 1.2,
@@ -3291,7 +3276,7 @@
       "name": "Thinking Machines: Inkling",
       "provider": "thinkingmachines",
       "local_id": "inkling",
-      "context_length": 1048576,
+      "context_length": 524288,
       "max_output_tokens": 471859,
       "input_price_per_mtok": 1.0,
       "output_price_per_mtok": 4.05,
@@ -4323,38 +4308,6 @@
         "top_p"
       ]
     },
-    "z-ai/glm-5.2:free": {
-      "id": "z-ai/glm-5.2:free",
-      "name": "Z.ai: GLM 5.2 (free)",
-      "provider": "z-ai",
-      "local_id": "glm-5.2:free",
-      "context_length": 32768,
-      "max_output_tokens": 29491,
-      "input_price_per_mtok": 0.0,
-      "output_price_per_mtok": 0.0,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "include_reasoning",
-        "max_tokens",
-        "min_p",
-        "presence_penalty",
-        "reasoning",
-        "reasoning_effort",
-        "repetition_penalty",
-        "seed",
-        "stop",
-        "temperature",
-        "top_k",
-        "top_p"
-      ]
-    },
     "openrouter/fusion": {
       "id": "openrouter/fusion",
       "name": "OpenRouter: Fusion",
@@ -4380,7 +4333,7 @@
       "local_id": "kimi-k2.7-code",
       "context_length": 262144,
       "max_output_tokens": 235929,
-      "input_price_per_mtok": 0.7062,
+      "input_price_per_mtok": 0.6562,
       "output_price_per_mtok": 3.3,
       "supports_thinking": false,
       "thinking_type": "none",
@@ -5293,8 +5246,8 @@
       "local_id": "kimi-latest",
       "context_length": 1048576,
       "max_output_tokens": 943718,
-      "input_price_per_mtok": 1.4,
-      "output_price_per_mtok": 10.75,
+      "input_price_per_mtok": 1.0301,
+      "output_price_per_mtok": 9.043,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -5535,9 +5488,9 @@
       "provider": "qwen",
       "local_id": "qwen3.6-27b",
       "context_length": 262144,
-      "max_output_tokens": 262140,
+      "max_output_tokens": 81920,
       "input_price_per_mtok": 0.32,
-      "output_price_per_mtok": 2.7,
+      "output_price_per_mtok": 3.2,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -5687,8 +5640,8 @@
       "local_id": "deepseek-v4-pro",
       "context_length": 1048576,
       "max_output_tokens": 384000,
-      "input_price_per_mtok": 0.9396,
-      "output_price_per_mtok": 1.8792,
+      "input_price_per_mtok": 0.4188,
+      "output_price_per_mtok": 0.8376,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -5727,8 +5680,8 @@
       "local_id": "deepseek-v4-flash",
       "context_length": 1048576,
       "max_output_tokens": 384000,
-      "input_price_per_mtok": 0.0886,
-      "output_price_per_mtok": 0.1772,
+      "input_price_per_mtok": 0.047,
+      "output_price_per_mtok": 0.0941,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -6048,9 +6001,9 @@
       "provider": "z-ai",
       "local_id": "glm-5.1",
       "context_length": 204800,
-      "max_output_tokens": 128000,
-      "input_price_per_mtok": 0.966,
-      "output_price_per_mtok": 3.036,
+      "max_output_tokens": 131072,
+      "input_price_per_mtok": 0.9646,
+      "output_price_per_mtok": 3.0316,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -6087,8 +6040,8 @@
       "local_id": "gemma-4-26b-a4b-it",
       "context_length": 262144,
       "max_output_tokens": 235929,
-      "input_price_per_mtok": 0.09,
-      "output_price_per_mtok": 0.3,
+      "input_price_per_mtok": 0.0675,
+      "output_price_per_mtok": 0.225,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -8114,8 +8067,8 @@
       "local_id": "glm-4.7",
       "context_length": 204800,
       "max_output_tokens": 131072,
-      "input_price_per_mtok": 0.4,
-      "output_price_per_mtok": 1.75,
+      "input_price_per_mtok": 0.6,
+      "output_price_per_mtok": 2.2,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -8382,6 +8335,36 @@
         "tools"
       ]
     },
+    "mistralai/devstral-2512": {
+      "id": "mistralai/devstral-2512",
+      "name": "Mistral: Devstral 2 2512",
+      "provider": "mistralai",
+      "local_id": "devstral-2512",
+      "context_length": 262144,
+      "max_output_tokens": 209715,
+      "input_price_per_mtok": 0.4,
+      "output_price_per_mtok": 2.0,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "max_tokens",
+        "presence_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_p"
+      ]
+    },
     "relace/relace-search": {
       "id": "relace/relace-search",
       "name": "Relace: Relace Search",
@@ -8615,6 +8598,36 @@
       "max_output_tokens": 104857,
       "input_price_per_mtok": 0.1,
       "output_price_per_mtok": 0.1,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "max_tokens",
+        "presence_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_p"
+      ]
+    },
+    "mistralai/mistral-large-2512": {
+      "id": "mistralai/mistral-large-2512",
+      "name": "Mistral: Mistral Large 3 2512",
+      "provider": "mistralai",
+      "local_id": "mistral-large-2512",
+      "context_length": 262144,
+      "max_output_tokens": 209715,
+      "input_price_per_mtok": 0.5,
+      "output_price_per_mtok": 1.5,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -9421,9 +9434,9 @@
       "provider": "qwen",
       "local_id": "qwen3-vl-30b-a3b-instruct",
       "context_length": 262144,
-      "max_output_tokens": 32768,
-      "input_price_per_mtok": 0.13,
-      "output_price_per_mtok": 0.52,
+      "max_output_tokens": 16384,
+      "input_price_per_mtok": 0.15,
+      "output_price_per_mtok": 0.6,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -14052,32 +14065,6 @@
         "tool_choice",
         "tools",
         "top_logprobs",
-        "top_p"
-      ]
-    },
-    "anthropic/claude-3-haiku": {
-      "id": "anthropic/claude-3-haiku",
-      "name": "Anthropic: Claude 3 Haiku",
-      "provider": "anthropic",
-      "local_id": "claude-3-haiku",
-      "context_length": 200000,
-      "max_output_tokens": 4096,
-      "input_price_per_mtok": 0.25,
-      "output_price_per_mtok": 1.25,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        1.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "max_tokens",
-        "stop",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_k",
         "top_p"
       ]
     },

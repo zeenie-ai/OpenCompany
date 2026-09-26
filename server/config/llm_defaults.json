@@ -1,7 +1,7 @@
 {
-  "version": "2026.09.15",
-  "last_updated": "2026-09-15",
-  "_description": "LLM provider defaults. popular_models drives the ordered global selector and offline fallback independently of token constraints. POLICY (2026-07-23): popular_models lists only models with >= 1M-token context windows — providers whose models are all below 1M carry an empty list and contribute nothing to the global selector (their models stay reachable via the live per-provider fetch_models dropdown). base_url directly configures the nine OpenAI-compatible native providers; dedicated OpenAI, Anthropic, and Gemini providers use SDK defaults, while OpenRouter has its own gateway default. Runtime proxy credentials can override supported endpoints. Model specs are enriched by model_registry.json (OpenRouter cache).",
+  "version": "2026.09.26",
+  "last_updated": "2026-09-26",
+  "_description": "LLM provider defaults. popular_models drives the ordered global selector and offline fallback independently of token constraints. POLICY (2026-07-23): popular_models lists only models with >= 1M-token context windows — providers whose models are all below 1M carry an empty list and contribute nothing to the global selector (their models stay reachable via the live per-provider fetch_models dropdown). SOURCE (2026-09-26): model_registry.json, the OpenRouter snapshot, is the ground truth for the curated ids, context, max output and prices of every provider whose models it lists; an id it does not list is not curated (Mistral's -latest aliases excepted, see its note). It carries nothing for the hosts (groq, cerebras, sarvam), which keep their own documented values. base_url directly configures the nine OpenAI-compatible native providers; dedicated OpenAI, Anthropic, and Gemini providers use SDK defaults, while OpenRouter has its own gateway default. Runtime proxy credentials can override supported endpoints. Model specs are enriched by model_registry.json at runtime; kimi and mistral are the exception, because the registry files their models under moonshotai/ and mistralai/, so their maps here are what requests use.",
 
   "agent": {
     "_description": "Agent execution defaults. recursion_limit and compaction.ratio are sourced from the environment (AGENT_RECURSION_LIMIT, COMPACTION_RATIO via core.config.Settings) — these JSON values are last-resort fallbacks when the env vars aren't loaded (e.g. one-off CLI scripts that bypass Settings). default_temperature stays JSON-resident since it has no env override yet.",
@@ -15,8 +15,8 @@
   "providers": {
     "openai": {
       "display_name": "OpenAI",
-      "default_model": "gpt-5.6-sol",
-      "popular_models": ["gpt-5.6-sol", "gpt-6-astra", "gpt-6-astra-pro", "gpt-5.6-sol-pro", "gpt-5.6-terra", "gpt-5.6-terra-pro", "gpt-5.6-luna", "gpt-5.6-luna-pro", "gpt-5.5", "gpt-5.4", "gpt-4.1"],
+      "default_model": "gpt-6-sol",
+      "popular_models": ["gpt-6-sol", "gpt-6-astra", "gpt-6-astra-pro", "gpt-6-sol-pro", "gpt-6-luna", "gpt-6-luna-pro", "gpt-5.6-sol", "gpt-5.6-sol-pro", "gpt-5.6-terra", "gpt-5.6-terra-pro", "gpt-5.6-luna", "gpt-5.6-luna-pro", "gpt-5.5", "gpt-5.4", "gpt-4.1"],
       "detection_patterns": ["gpt", "openai", "o1", "o3", "o4"],
       "base_url": "https://api.openai.com/v1",
       "models_endpoint": "https://api.openai.com/v1/models",
@@ -26,11 +26,15 @@
         "enabled": false,
         "_note": "Native image input is emitted only when enabled is true; unknown/absent providers get a text placeholder instead (a rejected image block would poison journaled history). Read by services/llm/media.py provider_supports_vision. False here until the OpenAI request encoder renders image blocks (Responses input_image in function_call_output; Chat Completions hoist-to-user-turn) — flipping it early would hydrate bytes the encoder silently drops. Anthropic ships the first encoder; text-only providers keep the visionAnalyze delegate tool."
       },
-      "_models_note": "GPT-6 Astra (+ -pro) appear in the 2026-09-11 registry refresh ($10/$50 per MTok, 1.05M context, 128K max output, effort thinking) and are curated as the top tier; the default stays gpt-5.6-sol ($4/$20 per developers.openai.com/api/docs/pricing on 2026-09-15 — terra $2/$12, luna $0.20/$1.20; the router cache under-reports sol at $2/$10), the same price-over-flagship call as anthropic keeping claude-opus-5 over claude-fable-5-1. The rolling -latest aliases (gpt-astra-latest, gpt-sol-latest, gpt-terra-latest, gpt-luna-latest) and the gpt-5.6 alias for Sol are deliberately not curated: real model names only, like gemini. GPT-5.6 family (sol/terra/luna) GA 2026-07-09. gpt-5.5 / gpt-5.4 remain GA as legacy tiers. Dropped: gpt-5.2 (new requests blocked 2026-06-30), o3 (API shutdown 2026-12-11), o4-mini (API shutdown 2026-10-23) — they fall back to _default constraints if still selected before shutdown.",
+      "_models_note": "Ids, context, max output and prices follow the OpenRouter registry (2026-09-26). GPT-6 is the current generation: gpt-6-sol is the default ($2/$10 per MTok), gpt-6-luna the low tier ($0.10/$0.50) and gpt-6-astra the flagship ($10/$50); all have 1.05M context and 128K max output, and each -pro variant is priced like its base model. GPT-6 has no Terra model, so gpt-5.6-terra ($2/$12) stays the middle tier; the rest of the GPT-5.6 family, gpt-5.5, gpt-5.4 and gpt-4.1 stay curated as earlier tiers. The rolling -latest aliases (gpt-astra-latest, gpt-sol-latest, gpt-terra-latest, gpt-luna-latest) are deliberately not curated: real model names only, like gemini. gpt-5.2, o3 and o4-mini are not curated because OpenAI is retiring them; the registry still describes them, so their limits resolve from it.",
       "max_output_tokens": {
-        "gpt-5.6-sol": 128000,
+        "gpt-6-sol": 128000,
         "gpt-6-astra": 128000,
         "gpt-6-astra-pro": 128000,
+        "gpt-6-sol-pro": 128000,
+        "gpt-6-luna": 128000,
+        "gpt-6-luna-pro": 128000,
+        "gpt-5.6-sol": 128000,
         "gpt-5.6-sol-pro": 128000,
         "gpt-5.6-terra": 128000,
         "gpt-5.6-terra-pro": 128000,
@@ -42,9 +46,13 @@
         "_default": 16384
       },
       "context_length": {
-        "gpt-5.6-sol": 1050000,
+        "gpt-6-sol": 1050000,
         "gpt-6-astra": 1050000,
         "gpt-6-astra-pro": 1050000,
+        "gpt-6-sol-pro": 1050000,
+        "gpt-6-luna": 1050000,
+        "gpt-6-luna-pro": 1050000,
+        "gpt-5.6-sol": 1050000,
         "gpt-5.6-sol-pro": 1050000,
         "gpt-5.6-terra": 1050000,
         "gpt-5.6-terra-pro": 1050000,
@@ -62,9 +70,9 @@
     },
     "anthropic": {
       "display_name": "Anthropic",
-      "default_model": "claude-opus-5",
-      "popular_models": ["claude-opus-5", "claude-fable-5-1", "claude-fable-5", "claude-sonnet-5", "claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-4-6"],
-      "_models_note": "claude-opus-5 (released 2026-07-24) is the Opus flagship and default: near-Fable intelligence at Opus pricing ($5/$25), 1M context, 128K max output. claude-fable-5-1 (registry 2026-09-03: $10/$50, 1M context, 128K max output) is the most capable generally available model (platform.claude.com/docs/en/models/overview on 2026-09-15: cache reads are 2.5% of input on 5.1 versus 10% elsewhere; claude-sonnet-5 is $2/$10) and supersedes claude-fable-5, which stays curated as the same-priced prior tier. The adaptive-thinking / sampling-removed lists below match by prefix, so the existing claude-fable-5 entries cover 5.1. The claude-opus-5-fast variant (2x pricing) is deliberately not curated here; select it via the live dropdown if needed.",
+      "default_model": "claude-opus-5-5",
+      "popular_models": ["claude-opus-5-5", "claude-fable-5-1", "claude-fable-5", "claude-opus-5", "claude-sonnet-5", "claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-4-6"],
+      "_models_note": "Ids, context, max output and prices follow the OpenRouter registry (2026-09-26), which gives every curated Claude model 1,000,000 tokens of context and 128K max output (Haiku 4.5: 200K and 64K). claude-opus-5-5 is the default: the newest Opus, at $4/$20 per MTok, below claude-opus-5 ($5/$25), which stays curated. claude-fable-5-1 ($10/$50) is the top tier and supersedes claude-fable-5 (same price), also still curated; claude-sonnet-5 is $2/$10. Ids use Anthropic's hyphenated form; the registry's dotted ids (claude-opus-5.5) match them through ModelRegistryService's dot/hyphen variants. The adaptive-thinking / sampling-removed lists below match by prefix, so the claude-opus-5 and claude-fable-5 entries cover 5.5 and 5.1. claude-opus-5-fast is not a registry model and is not curated.",
       "detection_patterns": ["claude", "anthropic"],
       "base_url": "https://api.anthropic.com/v1",
       "models_endpoint": "https://api.anthropic.com/v1/models",
@@ -74,9 +82,10 @@
         "enabled": true
       },
       "max_output_tokens": {
-        "claude-opus-5": 128000,
+        "claude-opus-5-5": 128000,
         "claude-fable-5-1": 128000,
         "claude-fable-5": 128000,
+        "claude-opus-5": 128000,
         "claude-opus-4-8": 128000,
         "claude-opus-4-7": 128000,
         "claude-sonnet-5": 128000,
@@ -85,13 +94,14 @@
         "_default": 8192
       },
       "context_length": {
-        "claude-opus-5": 1048576,
-        "claude-fable-5-1": 1048576,
-        "claude-fable-5": 1048576,
-        "claude-opus-4-8": 1048576,
-        "claude-opus-4-7": 1048576,
-        "claude-sonnet-5": 1048576,
-        "claude-sonnet-4-6": 1048576,
+        "claude-opus-5-5": 1000000,
+        "claude-fable-5-1": 1000000,
+        "claude-fable-5": 1000000,
+        "claude-opus-5": 1000000,
+        "claude-opus-4-8": 1000000,
+        "claude-opus-4-7": 1000000,
+        "claude-sonnet-5": 1000000,
+        "claude-sonnet-4-6": 1000000,
         "claude-haiku-4-5": 200000,
         "_default": 200000
       },
@@ -129,7 +139,7 @@
         "enabled": false,
         "_note": "See openai.vision._note — off until the Gemini encoder renders inline_data parts beside function_response."
       },
-      "_models_note": "Real (concrete) model names only — no -latest rolling aliases. The curated list (max_output_tokens keys) serves BOTH the Gemini Developer API (AIza keys) and Vertex / Agent Platform (AQ. keys); gemini-* entries live-verified on both endpoints (2026-06-12). Vertex 404s on -latest aliases and its models.list rejects API keys, which is why the dropdown is curated instead of live-fetched. Gemma exception: gemma-4-31b-it + gemma-4-26b-a4b-it are served ONLY on the Developer API (free tier, ai.google.dev/gemma/docs/core/gemma_on_gemini_api, verified 2026-07-11) — Vertex keys must not see them, hence vertex_incompatible_models below. Gemma 4 supports systemInstruction and function calling natively (unlike the gemma-3 era); max output is undocumented, so the curated 8192 is a conservative fallback (registry cache wins when present).",
+      "_models_note": "Real (concrete) model names only — no -latest rolling aliases. The curated list (max_output_tokens keys) serves BOTH the Gemini Developer API (AIza keys) and Vertex / Agent Platform (AQ. keys); gemini-* entries live-verified on both endpoints (2026-06-12). Vertex 404s on -latest aliases and its models.list rejects API keys, which is why the dropdown is curated instead of live-fetched. Gemma exception: gemma-4-31b-it + gemma-4-26b-a4b-it are served ONLY on the Developer API (free tier, ai.google.dev/gemma/docs/core/gemma_on_gemini_api, verified 2026-07-11) — Vertex keys must not see them, hence vertex_incompatible_models below. Gemma 4 supports systemInstruction and function calling natively (unlike the gemma-3 era). Context and max output for every entry follow the OpenRouter registry (2026-09-26), including Gemma's 262K context and 16K / 236K max output.",
       "max_output_tokens": {
         "gemini-3.8-flash": 65536,
         "gemini-3.7-flash": 65536,
@@ -142,8 +152,8 @@
         "gemini-2.5-pro": 65536,
         "gemini-2.5-flash": 65535,
         "gemini-2.5-flash-lite": 65535,
-        "gemma-4-31b-it": 8192,
-        "gemma-4-26b-a4b-it": 8192,
+        "gemma-4-31b-it": 16384,
+        "gemma-4-26b-a4b-it": 235929,
         "_default": 8192
       },
       "context_length": {
@@ -165,7 +175,7 @@
       "_vertex_incompatible_models_note": "Curated models that only exist on the Gemini Developer API, filtered out of fetch_models when the key is a Vertex / Agent Platform key (GeminiProvider._vertex). Gemma is Model Garden self-deploy on Vertex (the 26B MaaS variant needs a different '-maas' id on a different surface), so the plain ids 404 there.",
       "vertex_incompatible_models": ["gemma-4-31b-it", "gemma-4-26b-a4b-it"],
       "thinking_models": ["gemini-2.5", "gemini-3"],
-      "_new_models_note": "gemini-3.8-flash (default) is stable on the Gemini API per ai.google.dev/gemini-api/docs/models/gemini-3.8-flash (2026-09-15: 1,048,576 in / 65,536 out, thinking levels low/medium/high, minimal rejected); gemini-3.7-flash shares the shape. 3.6/3.7/3.8 Flash are $0.75/$3.75 until 2027-01-01, then $1.50/$7.50 (Gemini pricing page); gemini-3.5-flash is $1.50/$9.00, Flash-Lite $0.30/$2.50. The 3.7/3.8 entries are NOT yet live-verified against Vertex / Agent Platform keys like the older entries — drop them into vertex_incompatible_models if a Vertex 404 shows up. gemini-3.8-live and the transcribe / TTS / image models are different endpoints and stay out of the chat list. gemini-3.5-pro is still not GA on the public API (enterprise Vertex preview only) so it stays out of the curated list.",
+      "_new_models_note": "gemini-3.8-flash is the default (registry 2026-09-26: 1,048,576 in / 65,536 out, $0.75/$3.75, the same as 3.7 and 3.6 Flash; gemini-3.5-flash is $1.50/$9.00, Flash-Lite $0.30/$2.50). It accepts thinking levels low/medium/high and rejects minimal. The 3.7/3.8 entries are NOT yet live-verified against Vertex / Agent Platform keys like the older entries — drop them into vertex_incompatible_models if a Vertex 404 shows up. The image, Lyria and -customtools models are different endpoints or variants and stay out of the chat list, as do the -preview ids of models that went GA (gemini-2.5-pro-preview, gemini-3.1-flash-lite-preview).",
       "thinking_type": "budget",
       "temperature_range": [0.0, 2.0],
       "_incompatible_models_note": "Models that the dropdown should hide because they need a different API endpoint than `generate_content`. antigravity-preview-05-2026 requires the Interactions API; selecting it currently surfaces a `google.genai.errors.APIError`. ChatUnifier reads this list in fetch_models and filters before returning. Drop entries here when the unifier gains routing support for the alternate endpoint.",
@@ -174,7 +184,8 @@
     "openrouter": {
       "display_name": "OpenRouter",
       "default_model": "anthropic/claude-sonnet-5",
-      "popular_models": ["anthropic/claude-sonnet-5", "anthropic/claude-opus-5", "openai/gpt-5.6-terra", "openai/gpt-5.6-sol", "openai/gpt-6-astra", "google/gemini-3.8-flash", "google/gemini-3.5-flash", "deepseek/deepseek-v4.1-flash", "moonshotai/kimi-k3", "x-ai/grok-4.20"],
+      "popular_models": ["anthropic/claude-sonnet-5", "anthropic/claude-opus-5.5", "openai/gpt-5.6-terra", "openai/gpt-6-sol", "openai/gpt-6-astra", "google/gemini-3.8-flash", "google/gemini-3.5-flash", "deepseek/deepseek-v4.1-flash", "moonshotai/kimi-k3", "x-ai/grok-4.20"],
+      "_popular_note": "Registry ids verbatim (OpenRouter registry, 2026-09-26), one or two current models per vendor; tests/llm/test_global_model_catalogue.py checks each is in model_registry.json.",
       "detection_patterns": ["openrouter"],
       "open_world_models": true,
       "base_url": "https://openrouter.ai/api/v1",
@@ -255,38 +266,39 @@
       "display_name": "xAI",
       "default_model": "grok-4.20",
       "popular_models": ["grok-4.20", "grok-4.20-multi-agent", "grok-4.3"],
-      "_popular_note": "grok-4.6 (registry 2026-09-03, 500K context, $2/$6), grok-4.5 (released 2026-07-08) and grok-3 excluded per the 1M-context policy (500K / 500K / 131072); reachable via live fetch_models. Default stays grok-4.20 (1M) so the default is selectable from the global list.",
+      "_popular_note": "grok-4.7, grok-4.6 and grok-4.5 are excluded per the 1M-context policy (500K each); reachable via live fetch_models. Default stays grok-4.20 (2M) so the default is selectable from the global list.",
       "detection_patterns": ["grok", "xai"],
       "base_url": "https://api.x.ai/v1",
       "models_endpoint": "https://api.x.ai/v1/models",
       "api_key_param": "api_key",
       "max_tokens_param": "max_tokens",
-      "_models_note": "grok-4.20 is documented at 1,000,000 context on docs.x.ai/docs/models/grok-4.20 (2026-09-15; the router cache says 2M, the vendor number wins) at $1.25/$2.50, tiered to $2.50/$5.00 once the prompt passes 200K tokens; the bare grok-4.20 id is accepted alongside the dated grok-4.20-0309-reasoning ids and grok-4.20-multi-agent-0309. grok-4.6 and grok-4.5: 500K context, reasoning effort low/medium/high/xhigh (default high), $2/$6 tiered to $4/$12. Output cap undocumented by xAI — curated 131072 matches the rest of the grok family; registry cache wins when present.",
+      "_models_note": "Ids, context, max output and prices follow the OpenRouter registry (2026-09-26): grok-4.20 and grok-4.20-multi-agent have 2M context and 1.8M max output at $1.25/$2.50 per MTok; grok-4.3 1M and 900K at $1.25/$2.50; grok-4.7 500K and 450K at $1.60/$4.80; grok-4.6 and grok-4.5 500K and 450K at $2/$6. grok-3 is not in the registry and is no longer curated. grok-4.6 and grok-4.5 take reasoning effort low/medium/high/xhigh (default high).",
       "max_output_tokens": {
-        "grok-4.6": 131072,
-        "grok-4.5": 131072,
-        "grok-4.20": 131072,
-        "grok-4.3": 131072,
-        "grok-3": 131072,
+        "grok-4.20": 1800000,
+        "grok-4.20-multi-agent": 1800000,
+        "grok-4.3": 900000,
+        "grok-4.7": 450000,
+        "grok-4.6": 450000,
+        "grok-4.5": 450000,
         "_default": 8192
       },
       "context_length": {
-        "grok-4.20": 1000000,
-        "grok-4.20-multi-agent": 1000000,
+        "grok-4.20": 2000000,
+        "grok-4.20-multi-agent": 2000000,
+        "grok-4.3": 1000000,
+        "grok-4.7": 500000,
         "grok-4.6": 500000,
         "grok-4.5": 500000,
-        "grok-4.3": 1000000,
-        "grok-3": 131072,
         "_default": 131072
       },
       "temperature_range": [0.0, 2.0]
     },
     "deepseek": {
       "display_name": "DeepSeek",
-      "default_model": "deepseek-flash",
-      "popular_models": ["deepseek-flash", "deepseek-v4.1-flash", "deepseek-v4-pro"],
-      "_popular_note": "All three curated ids are 1M-context; deepseek-v4-flash stays in the maps only as the retired alias DeepSeek still accepts.",
-      "_models_note": "Per api-docs.deepseek.com (updates + pricing, 2026-09-15): DeepSeek-V4.1-Flash shipped 2026-09-10 as deepseek-flash (native multimodal, 1M context, 384K max output, $0.15/$0.60 per MTok off-peak, cache hit $0.003; peak hours 01:00-04:00 and 06:00-10:00 UTC Mon-Fri double it). deepseek-v4-flash and deepseek-v4-flash-vision-exp are retired names that still resolve to V4.1-Flash at the Flash price, so the default moved to deepseek-flash. deepseek-v4-pro (GA 2026-08-13, kept past 2026-09-14) is 1M / 384K at $0.66/$1.98 off-peak. deepseek-chat and deepseek-reasoner were discontinued three months after the 2026-04-24 V4 launch and are no longer curated. Dated snapshots (-0731 / -0813) and the -latest aliases are deliberately not curated.",
+      "default_model": "deepseek-v4.1-flash",
+      "popular_models": ["deepseek-v4.1-flash", "deepseek-v4-pro"],
+      "_popular_note": "Both curated ids are 1M-context; deepseek-v4-flash, the earlier Flash model, stays in the maps but not in the global list.",
+      "_models_note": "Ids, context, max output and prices follow the OpenRouter registry (2026-09-26): deepseek-v4.1-flash (default) has 1M context and 131K max output at $0.14/$0.42 per MTok; deepseek-v4-pro 1M and 384K at $0.4188/$0.8376; deepseek-v4-flash 1M and 384K at $0.047/$0.0941. deepseek-flash, the other name DeepSeek's API accepts for V4.1-Flash, is not a registry model, so it is no longer curated or the default; a node that still names it is sized by the registry's deepseek-flash-latest alias. Dated snapshots (-0731 / -0813), the -latest aliases and deepseek-v4-flash-vision-exp are deliberately not curated.",
       "detection_patterns": ["deepseek"],
       "base_url": "https://api.deepseek.com",
       "models_endpoint": "https://api.deepseek.com/models",
@@ -294,14 +306,12 @@
       "max_tokens_param": "max_tokens",
       "supported_params": ["temperature", "max_tokens", "top_p", "frequency_penalty", "presence_penalty", "stop", "seed", "tools", "tool_choice", "response_format"],
       "max_output_tokens": {
-        "deepseek-flash": 384000,
-        "deepseek-v4.1-flash": 384000,
+        "deepseek-v4.1-flash": 131072,
         "deepseek-v4-pro": 384000,
         "deepseek-v4-flash": 384000,
         "_default": 8192
       },
       "context_length": {
-        "deepseek-flash": 1048576,
         "deepseek-v4.1-flash": 1048576,
         "deepseek-v4-pro": 1048576,
         "deepseek-v4-flash": 1048576,
@@ -315,7 +325,7 @@
       "default_model": "kimi-k3",
       "popular_models": ["kimi-k3"],
       "_popular_note": "Only kimi-k3 meets the 1M-context policy (k2.x are 262144); k2.x remain reachable via live fetch_models.",
-      "_models_note": "kimi-k3 GA (platform.kimi.ai): 2.8T params, 1M context, vision + tool calling + structured outputs, $3/$15 per MTok ($0.30 cache-hit). Default max_completion_tokens 131072 (configurable up to the full window). platform.kimi.ai/docs/pricing/chat (2026-09-15) lists kimi-k2.7-code ($0.95/$4.00, cache hit $0.19), kimi-k2.7-code-highspeed ($1.90/$8.00) and kimi-k2.6 ($0.95/$4.00, cache hit $0.16) as the remaining k2 tiers; kimi-k2.5 is no longer listed and was dropped from the curated maps.",
+      "_models_note": "Ids, context and prices follow the OpenRouter registry (2026-09-26), which files these models under moonshotai/: kimi-k3 has 1M context at $3/$15 per MTok; kimi-k2.6 ($0.95/$4.00) and kimi-k2.7-code ($0.6562/$3.30) have 262K. max_output_tokens deliberately stays below the registry's caps (943,718 for kimi-k3, 235,929 for the k2 models, about 90% of each window): the registry lookup never matches the kimi provider name, so these numbers are what resolve_max_tokens sends as max_tokens, and a cap that close to the window would leave the prompt a tenth of it. 131072 is Moonshot's own default for kimi-k3. kimi-k2.7-code-highspeed is not a registry model, so it has no limits or price of its own here (it matches kimi-k2.7-code by prefix); the thinking and temperature lists still name it because they describe how Moonshot's API treats it.",
       "detection_patterns": ["kimi", "moonshot"],
       "base_url": "https://api.moonshot.ai/v1",
       "models_endpoint": "https://api.moonshot.ai/v1/models",
@@ -328,14 +338,12 @@
         "kimi-k3": 131072,
         "kimi-k2.6": 32768,
         "kimi-k2.7-code": 98304,
-        "kimi-k2.7-code-highspeed": 98304,
         "_default": 8192
       },
       "context_length": {
         "kimi-k3": 1048576,
         "kimi-k2.6": 262144,
         "kimi-k2.7-code": 262144,
-        "kimi-k2.7-code-highspeed": 262144,
         "_default": 262144
       },
       "temperature_range": [0.0, 1.0]
@@ -345,7 +353,7 @@
       "default_model": "mistral-large-latest",
       "popular_models": [],
       "_popular_note": "Empty per the 1M-context policy — Mistral tops out at 262144 (large/medium/small). Models remain reachable via live fetch_models.",
-      "_models_note": "The -latest aliases resolve (docs.mistral.ai models overview, 2026-09-15) to mistral-medium-3504 (Medium 3.5, 256K), mistral-small-2603 (Small 4, 256K, $0.15/$0.60), mistral-large-2512 (Large 3, 256K, $0.50/$1.50) and codestral-2508 ($0.30/$0.90). Mistral does not publish max-output caps; the curated values are conservative and the registry cache wins when present.",
+      "_models_note": "The curated keys are Mistral's -latest aliases, because the node defaults to one and saved nodes hold them; each takes its context and price from the registry model it names (OpenRouter registry, 2026-09-26, under mistralai/): mistral-large-2512 (Large 3, 262K, $0.50/$1.50), mistral-medium-3-5 (Medium 3.5, 262K, $1.50/$7.50), mistral-small-2603 (Small 4, 262K, $0.15/$0.60) and codestral-2508 (256K, $0.30/$0.90). The registry lookup never matches the mistral provider name, so these maps are what requests use, and max_output_tokens keeps the current budgets rather than the registry's caps of about 80% of the window (209,715): resolve_max_tokens sends this number as max_tokens, and a cap that large would leave the prompt a fifth of the window.",
       "detection_patterns": ["mistral", "codestral"],
       "base_url": "https://api.mistral.ai/v1",
       "models_endpoint": "https://api.mistral.ai/v1/models",

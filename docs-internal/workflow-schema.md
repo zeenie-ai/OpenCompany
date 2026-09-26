@@ -91,8 +91,8 @@ A workflow JSON document contains:
 - `openrouterChatModel` - OpenRouter unified API (200+ models)
 - `groqChatModel` - Groq ultra-fast inference (Llama, Qwen3, GPT-OSS)
 - `cerebrasChatModel` - Cerebras custom AI hardware (Llama, Qwen)
-- `deepseekChatModel` - DeepSeek V4.1 (deepseek-flash / deepseek-v4.1-flash / deepseek-v4-pro; deepseek-v4-flash is a retired alias served by V4.1-Flash, chat/reasoner discontinued)
-- `kimiChatModel` - Moonshot Kimi K2.6 / K2.5 / K2.7-code
+- `deepseekChatModel` - DeepSeek V4 (deepseek-v4.1-flash, the default / deepseek-v4-pro / deepseek-v4-flash)
+- `kimiChatModel` - Moonshot Kimi K3 (the default) / K2.6 / K2.7-code
 - `mistralChatModel` - Mistral Large / Small / Codestral
 - `ollamaChatModel` - Local Ollama server (OpenAI-compat via `{provider}_proxy` URL)
 - `lmstudioChatModel` - Local LM Studio server (OpenAI-compat via `{provider}_proxy` URL)

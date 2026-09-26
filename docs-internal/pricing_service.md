@@ -68,16 +68,16 @@ Located at `server/config/pricing.json`. User-editable; picked up via `PricingSe
 ```json
 {
   "version": "2026.09",
-  "last_updated": "2026-09-15",
+  "last_updated": "2026-09-26",
 
   "llm": {
     "openai": {
-      "gpt-5.6-sol": {"input": 4.00, "output": 20.00, "cache_read": 0.40},
-      "gpt-5.6-luna": {"input": 0.20, "output": 1.20, "cache_read": 0.02},
+      "gpt-6-sol": {"input": 2.00, "output": 10.00, "cache_read": 0.20},
+      "gpt-6-luna": {"input": 0.10, "output": 0.50, "cache_read": 0.01},
       "_default": {"input": 2.50, "output": 15.00}
     },
     "anthropic": {
-      "claude-opus-5": {"input": 5.00, "output": 25.00, "cache_read": 0.50},
+      "claude-opus-5-5": {"input": 4.00, "output": 20.00, "cache_read": 0.40},
       "_default": {"input": 3.00, "output": 15.00, "cache_read": 0.30}
     }
   },
@@ -149,7 +149,7 @@ Located at `server/config/pricing.json`. User-editable; picked up via `PricingSe
 
 | Section | Purpose |
 |---------|---------|
-| `llm` | Per-model pricing in USD per million tokens (MTok). Supports `input`, `output`, `cache_read`, `reasoning` |
+| `llm` | Per-model pricing in USD per million tokens (MTok). Supports `input`, `output`, `cache_read`, `reasoning`. `input` and `output` follow the OpenRouter snapshot (`config/model_registry.json`) for every model it lists; it carries no cache price, so `cache_read` keeps each vendor's published cache discount applied to that input price. A lookup tries the exact id, then the first key the id starts with, then the first key it contains, so list a longer id (`gemini-3.5-flash-lite`) before its prefix (`gemini-3.5-flash`) |
 | `api` | Per-service pricing in USD per request/resource. Keys starting with `_` are metadata |
 | `operation_map` | Maps handler action names to pricing operation keys |
 | `url_patterns` | Regex patterns for automatic HTTPX tracking. `count_path` extracts resource count from response JSON |

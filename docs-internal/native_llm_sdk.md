@@ -99,19 +99,21 @@ Source of truth for this list: `server/config/llm_defaults.json` (the `providers
 
 ### Provider / model reference table
 
-`ModelRegistryService` (`server/services/model_registry.py`) manages the per-model constraints below — fetching from OpenRouter for cloud models and from the user's running local server (`ollama.AsyncClient.ps()` / `lmstudio.AsyncClient.llm.list_loaded()`) for Ollama / LM Studio, and — for a named endpoint — from the server itself or LiteLLM's model table at save time (see [Named OpenAI-compatible endpoints](#named-openai-compatible-endpoints)). Falls back to `llm_defaults.json` only when none of these has a figure.
+`ModelRegistryService` (`server/services/model_registry.py`) manages the per-model constraints below — fetching from OpenRouter for cloud models and from the user's running local server (`ollama.AsyncClient.ps()` / `lmstudio.AsyncClient.llm.list_loaded()`) for Ollama / LM Studio, and — for a named endpoint — from the server itself or LiteLLM's model table at save time (see [Named OpenAI-compatible endpoints](#named-openai-compatible-endpoints)). Falls back to `llm_defaults.json` only when none of these has a figure. Kimi and Mistral always use the fallback: the registry files their models under `moonshotai/` and `mistralai/`, which never match those provider names, so their `llm_defaults.json` maps are what requests are sized by.
+
+The curated lists and figures in `llm_defaults.json` and `pricing.json` take the OpenRouter snapshot (`config/model_registry.json`) as their ground truth for every provider it lists, with two exceptions noted in those files: Kimi and Mistral keep max-output budgets below the registry's caps, since those caps (about 80-90% of each window) are what `resolve_max_tokens` would send, and Mistral keeps its `-latest` aliases as keys. The hosts (Groq, Cerebras, Sarvam) are not in the snapshot.
 
 | Provider | Key Models | Context | Max Output | Thinking | Temp Range |
 |----------|-----------|---------|-----------|----------|------------|
-| **OpenAI** | GPT-6 Astra (+ `-pro`), GPT-5.6 Sol/Terra/Luna (+ `-pro`; default `gpt-5.6-sol`), GPT-5.5/5.4 | 1.05M | 128K | effort | omitted for reasoning models |
+| **OpenAI** | GPT-6 Sol/Luna/Astra (+ `-pro`; default `gpt-6-sol`), GPT-5.6 Sol/Terra/Luna (+ `-pro`), GPT-5.5/5.4 | 1.05M | 128K | effort | omitted for reasoning models |
 | **OpenAI** | GPT-4.1 | ~1.05M | 32K | none | 0-2 |
-| **Anthropic** | Claude Opus 5 (default `claude-opus-5`), Fable 5.1 / 5, Sonnet 5 | 1M | 128K | adaptive | omitted (`temperature` / `top_p` / `top_k` rejected — `sampling_params_removed`) |
+| **Anthropic** | Claude Opus 5.5 (default `claude-opus-5-5`), Opus 5, Fable 5.1 / 5, Sonnet 5 | 1M | 128K | adaptive | omitted (`temperature` / `top_p` / `top_k` rejected — `sampling_params_removed`) |
 | **Anthropic** | Claude Opus 4.8/4.7 | 1M | 128K | adaptive | omitted (`sampling_params_removed`) |
 | **Anthropic** | Claude Sonnet 4.6 | 1M | 128K | budget | 0-1 |
 | **Anthropic** | Claude Haiku 4.5 | 200K | 64K | budget | 0-1 |
 | **Google** | Gemini 3.8-flash (default), 3.7/3.6/3.5-flash, 3.5-flash-lite, 3.1-pro-preview/flash-lite, 3-flash-preview, 2.5-pro/flash/flash-lite | 1M | 64K | budget (`thinking_level` on 3.x when set explicitly) | 0-2 |
-| **xAI** | Grok 4.20/4.20-multi-agent, 4.6, 4.5, 4.3, 3 | 131K-1M | 131K | model/provider dependent | 0-2 |
-| **DeepSeek** | deepseek-flash (default; V4.1-Flash), deepseek-v4.1-flash, deepseek-v4-pro (deepseek-v4-flash is a retired alias served by V4.1-Flash; chat/reasoner discontinued) | 1M | 384K | thinking modes | 0-2 |
+| **xAI** | Grok 4.20/4.20-multi-agent, 4.3, 4.7, 4.6, 4.5 | 500K-2M | 450K-1.8M | model/provider dependent | 0-2 |
+| **DeepSeek** | deepseek-v4.1-flash (default), deepseek-v4-pro, deepseek-v4-flash | 1M | 131K (V4.1 Flash); 384K | thinking modes | 0-2 |
 | **Kimi** | kimi-k3 (default), kimi-k2.6, kimi-k2.7-code (+ `-highspeed`) | 1M (K3); 256K (K2) | 131K (K3); 32K/96K (K2) | K2 provider default explicitly disabled unless requested | K2 fixed 0.6; K3 0-1 |
 | **Mistral** | mistral-large/medium/small-latest (Large 3 / Medium 3.5 / Small 4), codestral-latest | 256K | 32K-131K | none | 0-1.5 |
 | **Groq** | GPT-OSS-120b/20b, Llama 3.x tiers, qwen3.8-27b + minimax-m2.7 (preview) | 131K-196K | 16K-131K | effort (GPT-OSS), format (Qwen3) | 0-2 |
@@ -285,7 +287,7 @@ Adding a new OpenAI-compatible provider requires a config entry:
 
 ```json
 "deepseek": {
-  "default_model": "deepseek-flash",
+  "default_model": "deepseek-v4.1-flash",
   "detection_patterns": ["deepseek"],
   "models_endpoint": "https://api.deepseek.com/models",
   "base_url": "https://api.deepseek.com",
@@ -352,11 +354,11 @@ Each provider's `chat()` method reads only the fields it supports. The extracted
 
 | Provider | Models | Parameter | Thinking Type | Notes |
 |----------|--------|-----------|---------------|-------|
-| **Claude** (adaptive) | `claude-opus-5`, `claude-fable-5*`, `claude-mythos-5`, `claude-sonnet-5`, `claude-opus-4-8`, `claude-opus-4-7` (`adaptive_thinking_models`, prefix-matched) | `thinkingEnabled` only — the budget is ignored | adaptive | Sends `{"type":"adaptive","display":"summarized"}` when enabled; when disabled the field is omitted (`disabled` is itself rejected on Fable/Mythos). `budget_tokens` is a 400 on these generations. No `temperature` / `top_p` / `top_k` is sent at all (`sampling_params_removed`). `anthropic.py:72-92`. |
+| **Claude** (adaptive) | `claude-opus-5*`, `claude-fable-5*`, `claude-mythos-5`, `claude-sonnet-5`, `claude-opus-4-8`, `claude-opus-4-7` (`adaptive_thinking_models`, prefix-matched) | `thinkingEnabled` only — the budget is ignored | adaptive | Sends `{"type":"adaptive","display":"summarized"}` when enabled; when disabled the field is omitted (`disabled` is itself rejected on Fable/Mythos). `budget_tokens` is a 400 on these generations. No `temperature` / `top_p` / `top_k` is sent at all (`sampling_params_removed`). `anthropic.py:72-92`. |
 | **Claude** (budget) | `claude-sonnet-4-6`, `claude-haiku-4-5` and older 4.x/3.5 | `thinkingBudget` (1024-16000 tokens) | budget | `{"type":"enabled","budget_tokens":N}`; provider bumps `max_tokens` to `budget + 1024` if it is not already larger. Temperature auto-set to 1. |
 | **Gemini** | gemini-3.x, gemini-2.5-pro/flash | `thinkingBudget` (token count); `thinkingLevel` on 3.x when set explicitly | budget | Uses `thinking_budget` API parameter (`thinking_level` only when the user set it — Vertex rejects an unsolicited level on 2.5-era models) |
 | **OpenAI** | `o3`, `o4-mini` (reasoning-only; both on the API-shutdown path per `_models_note`, `o1`/`o3`/`o4` prefixes still detected) | `reasoningEffort` (low/medium/high) | effort | Reasoning-only models. Temperature omitted. |
-| **OpenAI** | GPT-5.6 sol/terra/luna (+ `-pro`), GPT-5.5, GPT-5.4 (`thinking_models: ["gpt-5"]`) | `reasoningEffort` (low/medium/high/xhigh) | effort | Hybrid reasoning: can operate with or without thinking. |
+| **OpenAI** | GPT-6 sol/luna/astra and GPT-5.6 sol/terra/luna (+ `-pro`), GPT-5.5, GPT-5.4 (`thinking_models: ["gpt-5", "gpt-6"]`) | `reasoningEffort` (low/medium/high/xhigh) | effort | Hybrid reasoning: can operate with or without thinking. |
 | **Groq** | qwen/qwen3.8-27b (`thinking_models: ["qwen3"]`, prefix match) | `reasoningFormat` ('parsed' or 'hidden') | format | 'parsed' returns reasoning, 'hidden' returns only final answer. GPT-OSS models on Groq use `reasoning_effort` instead (`openai.py:671-675`). |
 | **Cerebras** | none — `thinking_models` is empty since zai-glm-4.7 left the public endpoints (2026-09) | `thinkingBudget` | budget | Would be sent as `extra_body.thinking_budget` (`openai.py:111-114`) if a thinking model were curated again. The qwen-3-235b variants are shut down upstream. |
 
