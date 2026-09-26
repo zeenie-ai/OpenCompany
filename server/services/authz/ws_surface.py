@@ -1,11 +1,20 @@
-"""Which handlers the unauthenticated internal socket may reach.
+"""Who may open the internal socket, and which handlers it may reach.
 
 ``/ws/internal`` exists so a Temporal activity worker can call back into
-the running backend. It is in ``PUBLIC_PATHS`` and performs no handshake,
-so it has no authenticated principal at all — yet it dispatched through
-the same registry as the authenticated socket, which meant every handler
-was reachable: ``save_workflow``, ``delete_workflow``, and all six Memory
-handlers among them.
+the running backend. It is in ``PUBLIC_PATHS`` because a worker has no
+session cookie, so it carries no user principal at all — yet it dispatched
+through the same registry as the authenticated socket, which meant every
+handler was reachable: ``save_workflow``, ``delete_workflow``, and all six
+Memory handlers among them.
+
+It also accepted any peer. ``execute_node`` runs whatever node type and
+parameters the message names, so anyone who could reach the app port — or
+any web page open in a browser on the same machine, including the agent's
+own browser — could run a ``shell`` node. A worker must therefore present
+the token from :func:`internal_socket_token` in the handshake. A
+loopback-address check would not do: a reverse proxy on the same host
+makes public traffic arrive from 127.0.0.1, and a web page's socket to
+``localhost`` is itself a loopback connection.
 
 This is a deny-by-default allowlist rather than a per-handler opt-out
 because per-handler opt-out has already failed here once: the Context
@@ -22,7 +31,34 @@ being a silent privilege grant.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 from typing import Any, Callable, Mapping, Optional
+
+#: Handshake header carrying :func:`internal_socket_token`.
+INTERNAL_SOCKET_TOKEN_HEADER = "X-OpenCompany-Internal-Token"
+
+
+def internal_socket_token(secret_key: str) -> str:
+    """The token a worker presents to open ``/ws/internal``.
+
+    Derived from ``SECRET_KEY`` so every process that shares the deployment's
+    env (the embedded worker, a standalone worker) computes the same value
+    with no new setting, and the secret itself never crosses the wire.
+    """
+    return hmac.new(secret_key.encode(), b"opencompany-ws-internal", hashlib.sha256).hexdigest()
+
+
+def internal_socket_headers(secret_key: str) -> dict[str, str]:
+    """Handshake headers for a worker connecting to ``/ws/internal``."""
+    return {INTERNAL_SOCKET_TOKEN_HEADER: internal_socket_token(secret_key)}
+
+
+def is_internal_caller(headers: Mapping[str, str], secret_key: str) -> bool:
+    """Whether a ``/ws/internal`` handshake presented the worker token."""
+    presented = headers.get(INTERNAL_SOCKET_TOKEN_HEADER) or ""
+    return hmac.compare_digest(presented.encode(), internal_socket_token(secret_key).encode())
+
 
 #: Everything the activity worker legitimately needs. Both execute
 #: handlers already carry their own ``/ws/internal`` identity branch.
@@ -77,6 +113,10 @@ def execution_principal(data: Mapping[str, Any], websocket: Any) -> str:
 
 __all__ = [
     "INTERNAL_SOCKET_HANDLERS",
+    "INTERNAL_SOCKET_TOKEN_HEADER",
     "execution_principal",
+    "internal_socket_headers",
+    "internal_socket_token",
+    "is_internal_caller",
     "resolve_internal_handler",
 ]

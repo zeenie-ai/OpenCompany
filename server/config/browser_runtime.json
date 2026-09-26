@@ -1,0 +1,85 @@
+{
+  "_comment": "Pins for the Browser node's runtime: the Chrome for Testing build OpenCompany downloads and launches, and the browser-use CLI that drives it. Bump both with `uv run python -m nodes.browser._pin` from server/ (it rewrites this file); never edit a version by hand without its checksums.",
+  "chrome_for_testing": {
+    "version": "154.0.8037.57",
+    "min_major": 150,
+    "keep_versions": 2,
+    "url_template": "https://storage.googleapis.com/chrome-for-testing-public/{version}/{platform}/chrome-{platform}.zip",
+    "platforms": {
+      "linux-arm64": {
+        "md5": "d28af0f6b7fb5e7df611c33700aa6ed2",
+        "bytes": 196514864,
+        "exe": "chrome-linux-arm64/chrome"
+      },
+      "linux64": {
+        "md5": "0feaa732dbd1c6b075afd6cc55e0c8af",
+        "bytes": 196223440,
+        "exe": "chrome-linux64/chrome"
+      },
+      "mac-arm64": {
+        "md5": "4ec2259a8fbd626ed7afc704bb0ebd4d",
+        "bytes": 191429663,
+        "exe": "chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+      },
+      "mac-x64": {
+        "md5": "af1131eb392269ea8f953cf2fdb52816",
+        "bytes": 201976957,
+        "exe": "chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+      },
+      "win32": {
+        "md5": "d3404a135d5a5807fe102311e510e099",
+        "bytes": 184475517,
+        "exe": "chrome-win32/chrome.exe"
+      },
+      "win64": {
+        "md5": "0691537399d407c23b4d9882acf8d6f9",
+        "bytes": 205808814,
+        "exe": "chrome-win64/chrome.exe"
+      }
+    },
+    "hosts": {
+      "darwin/arm64": "mac-arm64",
+      "darwin/x86_64": "mac-x64",
+      "linux/aarch64": "linux-arm64",
+      "linux/arm64": "linux-arm64",
+      "linux/x86_64": "linux64",
+      "linux/amd64": "linux64",
+      "win32/amd64": "win64",
+      "win32/arm64": "win64",
+      "win32/x86": "win32"
+    },
+    "linux_packages": [
+      "ca-certificates",
+      "fonts-liberation",
+      "fonts-noto-color-emoji",
+      "libasound2t64",
+      "libatk-bridge2.0-0t64",
+      "libatk1.0-0t64",
+      "libatspi2.0-0t64",
+      "libcairo2",
+      "libcups2t64",
+      "libdbus-1-3",
+      "libdrm2",
+      "libexpat1",
+      "libgbm1",
+      "libglib2.0-0t64",
+      "libnspr4",
+      "libnss3",
+      "libpango-1.0-0",
+      "libudev1",
+      "libuuid1",
+      "libx11-6",
+      "libxcb1",
+      "libxcomposite1",
+      "libxdamage1",
+      "libxext6",
+      "libxfixes3",
+      "libxkbcommon0",
+      "libxrandr2"
+    ]
+  },
+  "browser_use": {
+    "spec": "browser-use==0.13.10",
+    "python": "3.12"
+  }
+}

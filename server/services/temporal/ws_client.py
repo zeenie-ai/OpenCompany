@@ -50,6 +50,7 @@ class WSConnectionPool:
         self.pool_size = pool_size
         self._session: Optional[aiohttp.ClientSession] = None
         self._lock = asyncio.Lock()
+        self._headers: Optional[Dict[str, str]] = None
 
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create the aiohttp session with connection pooling."""
@@ -85,8 +86,14 @@ class WSConnectionPool:
                 response = await ws.receive_json()
         """
         session = await self._get_session()
+        if self._headers is None:
+            # /ws/internal refuses a handshake without the worker token.
+            from services.authz import internal_socket_headers
+
+            self._headers = internal_socket_headers(Settings().secret_key)
         async with session.ws_connect(
             self.url,
+            headers=self._headers,
             heartbeat=20,
             receive_timeout=120,
         ) as ws:

@@ -1,11 +1,12 @@
-"""Contract tests for web_automation nodes: browser, crawleeScraper, apifyActor.
+"""Contract tests for web_automation nodes: crawleeScraper, apifyActor.
+
+The Browser node has its own suite in ``tests/nodes/browser/``.
 
 These tests freeze the input -> output behaviour documented in
 `docs-internal/node-logic-flows/web_automation/`. A refactor that breaks any of
 these indicates the docs (and the user-visible contract) need to be updated too.
 
 All external side-effects are mocked:
-  - browser: patches `BrowserService._run_sync` so no subprocess is spawned.
   - crawleeScraper: patches the crawlee crawler classes the handler imports
     lazily (`BeautifulSoupCrawler`, `PlaywrightCrawler`).
   - apifyActor: patches the ApifyClientAsync singleton returned from
@@ -22,156 +23,6 @@ from tests.nodes._mocks import patched_container
 
 
 pytestmark = pytest.mark.node_contract
-
-
-# ============================================================================
-# Helpers
-# ============================================================================
-
-
-class _FakeBrowserService:
-    """Drop-in replacement for BrowserService exposing an async `run`.
-
-    Returns a pre-canned JSON-parsed dict on each call. The real service's
-    `run()` is also async, so tests can `await` it transparently.
-    """
-
-    def __init__(self, canned: dict | None = None, error: Exception | None = None):
-        self._canned = canned if canned is not None else {"success": True, "data": {}}
-        self._error = error
-        self.calls: list[tuple] = []
-
-    async def run(self, args, session, timeout, **kwargs):
-        self.calls.append((tuple(args), session, timeout, kwargs))
-        if self._error:
-            raise self._error
-        return self._canned
-
-
-def _patch_browser_service(svc):
-    """Patch get_browser_service to return the fake."""
-    return patch("nodes.browser._service.get_browser_service", return_value=svc)
-
-
-# ============================================================================
-# browser
-# ============================================================================
-
-
-class TestBrowser:
-    async def test_navigate_happy_path(self, harness):
-        fake = _FakeBrowserService(canned={"success": True, "url": "https://example.com"})
-
-        with _patch_browser_service(fake):
-            result = await harness.execute(
-                "browser",
-                {
-                    "operation": "navigate",
-                    "url": "https://example.com",
-                    "session": "test_sess",
-                },
-            )
-
-        harness.assert_envelope(result, success=True)
-        harness.assert_output_shape(result, ["operation", "data", "session"])
-        payload = result["result"]
-        assert payload["operation"] == "navigate"
-        assert payload["session"] == "test_sess"
-        assert payload["data"]["url"] == "https://example.com"
-
-        # Verify the handler mapped navigate -> [open, URL]
-        args, session, timeout, _ = fake.calls[-1]
-        assert args == ("open", "https://example.com")
-        assert session == "test_sess"
-
-    async def test_snapshot_uses_i_flag_and_session_fallback(self, harness):
-        # Empty session -> handler must derive opencompany_<execution_id>.
-        fake = _FakeBrowserService(canned={"success": True, "nodes": [{"ref": "@e1", "role": "button"}]})
-
-        with _patch_browser_service(fake):
-            result = await harness.execute(
-                "browser",
-                {"operation": "snapshot"},  # no session, no url
-            )
-
-        harness.assert_envelope(result, success=True)
-        args, session, _, _ = fake.calls[-1]
-        assert args == ("snapshot", "-i")
-        assert session.startswith("opencompany_")
-
-    async def test_session_stable_across_calls_in_one_run(self, harness):
-        # Two browser calls sharing one execution context (one agent run)
-        # must derive the SAME session -> same browser instance. Regression:
-        # the Temporal tool path minted a fresh execution_id per call, so
-        # every call spawned a new Chrome.
-        fake = _FakeBrowserService(canned={"success": True, "data": {}})
-        ctx = harness.build_context(execution_id="run1234")
-
-        with _patch_browser_service(fake):
-            r1 = await harness.execute(
-                "browser",
-                {"operation": "navigate", "url": "https://example.com"},
-                context=ctx,
-            )
-            r2 = await harness.execute("browser", {"operation": "snapshot"}, context=ctx)
-
-        harness.assert_envelope(r1, success=True)
-        harness.assert_envelope(r2, success=True)
-        sessions = [call[1] for call in fake.calls]
-        assert sessions == ["opencompany_run1234", "opencompany_run1234"]
-
-    async def test_screenshot_with_jpeg_and_quality(self, harness):
-        fake = _FakeBrowserService(canned={"success": True, "base64": "AAAA"})
-
-        with _patch_browser_service(fake):
-            result = await harness.execute(
-                "browser",
-                {
-                    "operation": "screenshot",
-                    "full_page": True,
-                    "annotate": True,
-                    "screenshot_format": "jpeg",
-                    "screenshot_quality": 80,
-                },
-            )
-
-        harness.assert_envelope(result, success=True)
-        args, _, _, _ = fake.calls[-1]
-        # Expect all flags to appear in order
-        assert args[0] == "screenshot"
-        assert "--full" in args
-        assert "--annotate" in args
-        assert "--screenshot-format" in args
-        assert "jpeg" in args
-        assert "--screenshot-quality" in args
-        assert "80" in args
-
-    async def test_missing_url_for_navigate_returns_error(self, harness):
-        fake = _FakeBrowserService()
-
-        with _patch_browser_service(fake):
-            result = await harness.execute("browser", {"operation": "navigate"})
-
-        harness.assert_envelope(result, success=False)
-        assert "url is required" in result["error"].lower()
-        # handler rejected before calling the service
-        assert fake.calls == []
-
-    async def test_service_not_installed(self, harness):
-        with patch("nodes.browser._service.get_browser_service", return_value=None):
-            result = await harness.execute("browser", {"operation": "navigate", "url": "https://x"})
-
-        harness.assert_envelope(result, success=False)
-        assert "agent-browser not installed" in result["error"].lower()
-
-    async def test_subprocess_runtime_error_wrapped_in_envelope(self, harness):
-        fake = _FakeBrowserService(error=RuntimeError("agent-browser returned empty output"))
-
-        with _patch_browser_service(fake):
-            result = await harness.execute("browser", {"operation": "navigate", "url": "https://x"})
-
-        harness.assert_envelope(result, success=False)
-        assert "empty output" in result["error"].lower()
 
 
 # ============================================================================

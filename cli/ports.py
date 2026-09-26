@@ -199,10 +199,38 @@ def kill_by_pattern(pattern: str, *, root_dir: str | None = None) -> list[int]:
     return killed
 
 
+def _names_this_checkout(cmd: str, root_norm: str) -> bool:
+    """Whether a normalized cmdline names a path inside the checkout at ``root_norm``.
+
+    A plain substring match also caught other checkouts: a sibling folder
+    that only shares the prefix (``opencompany-worktrees/...``) and the
+    worktrees nested in the checkout (``<root>/.claude/worktrees/...``), so a
+    ``company stop`` in one checkout killed a dev server or test run in another.
+    The root must be followed by a separator or the end of an argument, and a
+    path under the nested worktrees does not count.
+    """
+    root = root_norm.rstrip("/")
+    if not root:
+        return False
+    nested_worktrees = root + "/.claude/worktrees/"
+    start = 0
+    while True:
+        index = cmd.find(root, start)
+        if index < 0:
+            return False
+        following = cmd[index + len(root) : index + len(root) + 1]
+        if following in ("", "/", " ", '"', "'") and not cmd.startswith(nested_worktrees, index):
+            return True
+        start = index + 1
+
+
 def kill_orphaned_opencompany_processes(
     root_dir: str, *, exclude_substring: str | None = None
 ) -> list[int]:
-    """Kill stray python/bun processes whose cmdline references the project root."""
+    """Kill stray python/bun processes whose cmdline references the project root.
+
+    Only this checkout's processes: see :func:`_names_this_checkout`.
+    """
     root_norm = root_dir.lower().replace("\\", "/")
     # bun runs the JS executor sidecar and the company shim; node is kept
     # so a sidecar left over from a pre-bun install is still reaped.
@@ -216,7 +244,7 @@ def kill_orphaned_opencompany_processes(
             if name not in target_names:
                 continue
             cmd = " ".join(proc.info.get("cmdline") or []).lower().replace("\\", "/")
-            if root_norm not in cmd:
+            if not _names_this_checkout(cmd, root_norm):
                 continue
             if exclude_substring and exclude_substring.lower() in cmd:
                 continue

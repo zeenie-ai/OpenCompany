@@ -151,6 +151,157 @@ def normalize_legacy_android_toolkit(
     return migrated_nodes, migrated_edges, params, warnings
 
 
+#: Browser node types retired in favour of the single ``browser`` node.
+LEGACY_BROWSER_NODE_TYPES = frozenset({"browserHarness"})
+
+#: Runtime settings of the retired agent-browser node. The new node launches
+#: its own Chrome, so none of them has a meaning any more.
+_LEGACY_BROWSER_RUNTIME_KEYS = (
+    "session",
+    "browser",
+    "executable_path",
+    "headed",
+    "new_window",
+    "auto_connect",
+    "chrome_profile",
+    "user_agent",
+    "proxy",
+    "action_delay",
+    "annotate",
+    "commands",
+    "screenshot_quality",
+    "screenshot_format",
+    "value",
+    "timeout",
+)
+#: Dropped settings worth telling the user about when they held a value.
+_LEGACY_BROWSER_MEANINGFUL = ("chrome_profile", "proxy", "executable_path", "user_agent")
+
+
+def migrate_legacy_browser_params(
+    params: Mapping[str, Any], *, legacy_type: str = "browser"
+) -> Tuple[Dict[str, Any], List[str]]:
+    """Map one browser node's saved parameters onto the current ``browser`` node.
+
+    Pure and idempotent: parameters already in the current shape come back
+    unchanged. Covers the agent-browser ``browser`` node (operation names,
+    ``value``, ``timeout``, runtime settings) and ``browserHarness``.
+    """
+    out = dict(params or {})
+    warnings: List[str] = []
+    op = str(out.get("operation") or "")
+
+    if legacy_type == "browserHarness":
+        timeout = out.pop("timeout", None)
+        if op == "goto":
+            out["operation"] = "navigate"
+        elif op == "js":
+            out["operation"] = "evaluate"
+        elif op == "tabs":
+            out["operation"], out["tab_action"] = "tabs", "list"
+        elif op == "doctor":
+            out["operation"] = "diagnose"
+        elif op == "run_python":
+            warnings.append("browserHarness run_python code was kept, but helper names changed; check the script")
+        if isinstance(timeout, (int, float)) and "op_timeout_s" not in out:
+            out["op_timeout_s"] = max(5, min(300, int(timeout)))
+        return out, warnings
+
+    value = out.get("value")
+    selector = str(out.get("selector") or "")
+    if op == "fill":
+        out.update(operation="type", text=str(value or out.get("text") or ""), clear=True)
+    elif op == "type":
+        out.setdefault("clear", False)
+    elif op == "get_text":
+        out["operation"] = "page_text"
+    elif op == "get_html":
+        out.update(operation="evaluate", expression=f"document.querySelector({selector!r})?.outerHTML ?? null" if selector else "document.documentElement.outerHTML")
+    elif op == "eval":
+        out["operation"] = "evaluate"
+    elif op == "wait" and selector and "wait_for" not in out:
+        out.update(wait_for="selector", wait_value=selector)
+    elif op == "select" and value not in (None, "") and not out.get("values"):
+        out["values"] = [str(value)]
+    elif op in ("console", "errors"):
+        out["operation"] = "page_info"
+        warnings.append(f"the '{op}' browser operation no longer exists; it was changed to page_info")
+    elif op == "batch":
+        commands = str(out.get("commands") or "[]")
+        out.update(
+            operation="run_python",
+            code="# The agent-browser batch below does not run on the new browser.\n"
+            + "".join(f"# {line}\n" for line in commands.splitlines())
+            + 'raise RuntimeError("rewrite this batch as browser operations")\n',
+        )
+        warnings.append("an agent-browser batch cannot run on the new browser; it was kept as a comment in run_python")
+
+    timeout = out.get("timeout")
+    if isinstance(timeout, (int, float)) and "op_timeout_s" not in out:
+        out["op_timeout_s"] = max(5, min(300, int(timeout)))
+    for key in _LEGACY_BROWSER_MEANINGFUL:
+        if str(out.get(key) or "").strip():
+            warnings.append(f"the browser setting '{key}' no longer exists and was dropped")
+    for key in _LEGACY_BROWSER_RUNTIME_KEYS:
+        out.pop(key, None)
+    return out, warnings
+
+
+def normalize_legacy_browser_nodes(
+    nodes: List[Dict[str, Any]],
+    edges: List[Dict[str, Any]],
+    node_parameters: Optional[Mapping[str, Dict[str, Any]]] = None,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Dict[str, Any]], List[str]]:
+    """Rewrite retired browser nodes into the current ``browser`` node.
+
+    ``browserHarness`` becomes ``browser`` and every browser node's saved
+    parameters go through :func:`migrate_legacy_browser_params`. Both old
+    nodes could hang off one agent under different tool names; now they
+    would share the name ``browser``, so the migrated node's tool edge is
+    dropped (with a warning) when that agent already has a browser tool.
+    Pure and idempotent.
+    """
+    params = {str(k): dict(v or {}) for k, v in (node_parameters or {}).items()}
+    warnings: List[str] = []
+    migrated_ids: set = set()
+    out_nodes: List[Dict[str, Any]] = []
+    for node in nodes:
+        node_type = node.get("type")
+        if node_type not in LEGACY_BROWSER_NODE_TYPES and node_type != "browser":
+            out_nodes.append(node)
+            continue
+        node_id = str(node.get("id") or "")
+        new_params, notes = migrate_legacy_browser_params(params.get(node_id, {}), legacy_type=str(node_type))
+        if node_id in params or new_params:
+            params[node_id] = new_params
+        warnings.extend(f"{node_id}: {note}" for note in notes)
+        if node_type in LEGACY_BROWSER_NODE_TYPES:
+            migrated_ids.add(node_id)
+            node = {**node, "type": "browser"}
+            data = node.get("data")
+            if isinstance(data, dict) and data.get("type") in LEGACY_BROWSER_NODE_TYPES:
+                node["data"] = {**data, "type": "browser"}
+        out_nodes.append(node)
+
+    if not migrated_ids:
+        return out_nodes, list(edges), params, warnings
+
+    browser_ids = {str(n.get("id")) for n in out_nodes if n.get("type") == "browser"}
+    kept_by_agent: Dict[str, str] = {}
+    out_edges: List[Dict[str, Any]] = []
+    # Keep an agent's original browser edge first, then drop migrated duplicates.
+    ordered = sorted(edges, key=lambda e: str(e.get("source") or "") in migrated_ids)
+    for edge in ordered:
+        source, target = str(edge.get("source") or ""), str(edge.get("target") or "")
+        if source in browser_ids and _target_handle(edge) == "input-tools":
+            if target in kept_by_agent and kept_by_agent[target] != source:
+                warnings.append(f"{source}: removed its tool connection to {target}, which already has a browser tool")
+                continue
+            kept_by_agent.setdefault(target, source)
+        out_edges.append(edge)
+    return out_nodes, out_edges, params, warnings
+
+
 def normalize_workflow_graph(
     workflow_id: str,
     nodes: List[Dict[str, Any]],
@@ -186,6 +337,12 @@ def normalize_workflow_graph(
         normalized_edges,
         node_parameters,
     )
+    normalized_nodes, normalized_edges, params, browser_warnings = normalize_legacy_browser_nodes(
+        normalized_nodes,
+        normalized_edges,
+        params,
+    )
+    warnings = [*warnings, *browser_warnings]
     normalized_nodes = [dict(node) for node in normalized_nodes]
     normalized_edges = [dict(edge) for edge in normalized_edges]
     params = {str(node_id): dict(value or {}) for node_id, value in params.items()}
@@ -330,9 +487,12 @@ def normalize_workflow_graph(
 
 
 __all__ = [
+    "LEGACY_BROWSER_NODE_TYPES",
     "WORKFLOW_GRAPH_VERSION",
     "WorkflowGraphNormalization",
+    "migrate_legacy_browser_params",
     "normalize_edge_handles",
     "normalize_legacy_android_toolkit",
+    "normalize_legacy_browser_nodes",
     "normalize_workflow_graph",
 ]
