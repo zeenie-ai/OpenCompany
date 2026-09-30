@@ -326,7 +326,7 @@ pygments==2.20.0
     # via
     #   pytest
     #   rich
-pyjwt==2.13.0
+pyjwt==2.15.0
     # via
     #   mcp
     #   opencompany-server
