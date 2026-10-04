@@ -489,8 +489,10 @@ What an employee sends to someone waits for the owner's OK while its workflow as
   Restore while it can, Try again (asking first when it may have gone), and "Sends when you resume" for a gate's
   draft whose employee is paused. Countdowns use the server's clock (`server_time`). Ctrl/Cmd+Enter sends the newest
   waiting draft; in the edit box it sends that one.
-- **Ends.** Clearing or resetting the chat cancels the drafts its runs made that still wait; a Reset cancels the
-  waiting gates too (`approvalGate.reset_execution_state`); deleting the workflow deletes its drafts and its rule.
+- **Ends.** Clearing or resetting the chat cancels the drafts its runs made that still wait, and their failed sends,
+  whose Try again would send from a conversation that is gone; a Reset cancels the waiting gates too
+  (`approvalGate.reset_execution_state`); deleting the workflow deletes its drafts and its rule. Leaving a branch
+  cancels only the drafts that still wait (see [Branches](#branches)), so a failure shows again on the way back.
 - **Expiry.** A gate's draft expires after the node's `timeout_hours` (168 by default), and the waiting gate ends it
   `expired` and lets nothing through. A held call's draft expires 168 hours after it was made
   (`DEFAULT_TIMEOUT_HOURS`); the chat watchdog ends it on its next round (`reconcile.expire_due`), announces it and

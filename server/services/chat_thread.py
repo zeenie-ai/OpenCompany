@@ -173,7 +173,9 @@ async def clear_chat_thread(database: Any, session_id: str, *, reason: str = "re
 
 async def _cancel_drafts(database: Any, session_id: str) -> None:
     """Drafts the conversation's runs made that still wait go with it: a
-    send nobody can see any more must not go out later."""
+    send nobody can see any more must not go out later. So do its failed
+    sends: kept, their card stayed in the empty chat, and its Try again
+    would send from a conversation that is gone."""
     from services.chat import ledger
 
     try:
@@ -183,7 +185,7 @@ async def _cancel_drafts(database: Any, session_id: str) -> None:
         run_ids = await ledger.session_run_ids(database, session_id)
         if not run_ids:
             return
-        for row in await store.cancel_open(database, workflow_id=session_id, run_ids=run_ids):
+        for row in await store.cancel_open(database, workflow_id=session_id, run_ids=run_ids, failed=True):
             waiter.notify(row.id)
             await notify_approval_changed(change_of(row, "cancelled"))
     except Exception:

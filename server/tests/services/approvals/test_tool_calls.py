@@ -334,6 +334,35 @@ async def test_clearing_the_chat_cancels_its_drafts(harness, nodes_loaded, monke
     assert statuses == [("call_1", "cancelled"), ("call_2", "pending")]
 
 
+async def test_clearing_the_chat_ends_its_failed_sends_too(harness, nodes_loaded, monkeypatch):
+    # Kept, a failure's card stayed in the emptied chat, and its Try again
+    # would send from a conversation that is gone.
+    from services.chat import ledger, parts
+    from services.chat_thread import clear_chat_thread
+
+    async def show_approval(database, stream, **_):
+        return None
+
+    async def start_send(approved):
+        return None
+
+    monkeypatch.setattr(parts, "show_approval", show_approval)
+    monkeypatch.setattr(execution, "start_send", start_send)
+    monkeypatch.setattr(ledger, "session_run_ids", lambda database, session_id: _async(["r_1"]))
+    await rules.set_ask_first(harness.database, "wf", True)
+    await tool_calls.check(call(chat_stream={"run_id": "r_1", "session_id": "wf"}, chat_run_id="r_1"), get_node_class("whatsappSend"))
+    (row,) = await store.list_approvals(harness.database, status="pending")
+    await handle_decide_approval({"approval_id": row.id, "decision": "send", "decision_key": "k1"}, SOCKET)
+    approved = await store.get(harness.database, row.id)
+    await execution.claim_send(harness.database, row.id, approved.revision, "t-1")
+    failed = await execution.record_outcome(harness.database, row.id, "t-1", "not_sent", "Bad request")
+    assert failed.status == "failed"
+    # Leaving its branch keeps the failure, which shows again on the way back.
+    assert await store.cancel_open(harness.database, workflow_id="wf", run_ids=["r_1"]) == []
+    await clear_chat_thread(harness.database, "wf")
+    assert (await store.get(harness.database, row.id)).status == "cancelled"
+
+
 async def _async(value):
     return value
 

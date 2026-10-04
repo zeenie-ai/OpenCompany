@@ -200,10 +200,13 @@ def is_open(row: ApprovalRequest, now: Optional[datetime] = None) -> bool:
     return False
 
 
-def cancellable(row: ApprovalRequest, now: Optional[datetime] = None) -> bool:
+def cancellable(row: ApprovalRequest, now: Optional[datetime] = None, *, failed: bool = False) -> bool:
     """What a Reset, a branch or a deleted run cancels: everything open
-    except a send already under way and a failure (nothing left to stop)."""
-    return row.status not in ("sending", "failed") and is_open(row, now)
+    except a send already under way and a failure (nothing left to stop),
+    unless ``failed``: clearing a conversation ends its failures too."""
+    if row.status == "failed":
+        return failed
+    return row.status != "sending" and is_open(row, now)
 
 
 async def cancel_open(
@@ -212,14 +215,16 @@ async def cancel_open(
     workflow_id: str,
     generation: Optional[int] = None,
     run_ids: Optional[Iterable[str]] = None,
+    failed: bool = False,
 ) -> List[ApprovalRequest]:
     """Cancel a workflow's drafts that still wait (all generations, one, or
     those of some chat runs): waiting, approved but not handed on yet, or
-    discarded and restorable."""
+    discarded and restorable; with ``failed``, failed sends as well."""
+    statuses = ("pending", "approved", "discarded", "failed") if failed else ("pending", "approved", "discarded")
     async with database.get_session() as session:
         query = select(ApprovalRequest).where(
             ApprovalRequest.workflow_id == workflow_id,
-            ApprovalRequest.status.in_(("pending", "approved", "discarded")),
+            ApprovalRequest.status.in_(statuses),
         )
         if generation is not None:
             query = query.where(ApprovalRequest.generation == generation)
@@ -232,7 +237,7 @@ async def cancel_open(
     now = _utcnow()
     cancelled: List[ApprovalRequest] = []
     for row in rows:
-        if not cancellable(row, now):
+        if not cancellable(row, now, failed=failed):
             continue
         try:
             cancelled.append(
