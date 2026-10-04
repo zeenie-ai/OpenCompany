@@ -17,6 +17,12 @@ A call that comes back to run because the owner pressed Send carries
 ``approval_execution`` (services/approvals/execution.py): it runs only when
 its row is the one being sent, and is never held again.
 
+**Agents outside AgentWorkflow** (rlm, claude_code, vertex, or every agent
+with AgentWorkflow off) reach plugins through ``services/handlers/tools.py``,
+which calls :func:`check_in_process`. Such a call cannot wait as a draft, so
+while the workflow asks first a call that sends is refused (a restricted
+tool runs restricted); no row is written.
+
 **At most once.** Temporal runs a tool activity again only when an attempt
 broke off (the worker stopped, a timeout): a failure the node reports comes
 back as a result and is not retried. The attempt that broke off may have
@@ -142,6 +148,16 @@ async def _execution_allowed(database: Any, context: Mapping[str, Any]) -> bool:
     return bool(row is not None and row.status == "sending" and row.claim_token and row.claim_token == execution.get("claim_token"))
 
 
+async def _asks_first(database: Any, workflow_id: Any) -> Optional[bool]:
+    """The workflow's Ask first rule (None: no rule). True when it cannot be
+    read: hold or refuse the call rather than send it unasked."""
+    try:
+        return await rules.ask_first(database, workflow_id)
+    except Exception:
+        logger.warning("Could not read the Ask first rule; acting as if it is on", workflow_id=workflow_id, exc_info=True)
+        return True
+
+
 async def check(context: Mapping[str, Any], node_cls: Any) -> Checked:
     """What to do with a tool call before it runs (see the module docstring)."""
     from services.plugin.approval import approval_spec
@@ -166,12 +182,7 @@ async def check(context: Mapping[str, Any], node_cls: Any) -> Checked:
     if not spec.sends(node_data):
         return RUN
     database = _database()
-    try:
-        asking = await rules.ask_first(database, context.get("workflow_id"))
-    except Exception:
-        # The rule could not be read: hold it rather than send unasked.
-        logger.warning("Could not read the Ask first rule; holding the call", workflow_id=context.get("workflow_id"), exc_info=True)
-        asking = True
+    asking = await _asks_first(database, context.get("workflow_id"))
     if asking is None:
         return RUN
     if not asking:
@@ -194,6 +205,31 @@ async def check(context: Mapping[str, Any], node_cls: Any) -> Checked:
         return Checked(node_data=restricted, tool_args=tool_args)
     row = await hold(database, context, node_cls, spec, node_data)
     return Checked(result=_held(row, node_cls, context))
+
+
+async def check_in_process(
+    context: Mapping[str, Any],
+    node_cls: Any,
+    params: Mapping[str, Any],
+    tool_args: Mapping[str, Any],
+) -> Checked:
+    """:func:`check` for an agent's tool call that reaches the plugin in
+    process (see the module docstring). ``result`` is the flat answer the
+    model reads, as ``execute_as_tool`` gives one."""
+    from services.plugin.approval import approval_spec
+
+    spec = approval_spec(node_cls)
+    if spec is None or not context.get("parent_node_id"):
+        return RUN
+    if not spec.sends({**dict(params or {}), **dict(tool_args or {})}):
+        return RUN
+    if not await _asks_first(_database(), context.get("workflow_id")):
+        return RUN
+    if spec.restrict_while_asking:
+        restricted = {**dict(params or {}), **dict(spec.restrict_while_asking)}
+        args = {k: v for k, v in dict(tool_args or {}).items() if k not in spec.restrict_while_asking}
+        return Checked(node_data=restricted, tool_args=args)
+    return Checked(result={"status": "not_run", "message": REFUSED_MESSAGE.format(channel=spec.channel)})
 
 
 def _row_fields(context: Mapping[str, Any], node_cls: Any, spec: Any, node_data: Mapping[str, Any]) -> Dict[str, Any]:
@@ -335,6 +371,7 @@ __all__ = [
     "RUN",
     "call_key",
     "check",
+    "check_in_process",
     "claim_token",
     "hold",
     "is_agent_tool_call",

@@ -124,6 +124,78 @@ async def test_tools_that_cannot_wait_are_refused_or_restricted(harness, nodes_l
     assert await store.list_approvals(harness.database) == []
 
 
+class Ran:
+    """Stands in for a plugin's execute_as_tool: records what ran."""
+
+    def __init__(self) -> None:
+        self.calls = []
+
+    async def __call__(self, tool_args, node_params, ctx):
+        self.calls.append((dict(tool_args), dict(node_params)))
+        return {"sent": True}
+
+
+async def dispatch(node_type, tool_args, params=None, **config):
+    from services.handlers.tools import _dispatch_tool
+
+    return await _dispatch_tool(
+        node_type,
+        tool_args,
+        {
+            "node_type": node_type,
+            "node_id": f"wf:{node_type}:1",
+            "workflow_id": "wf",
+            "parent_node_id": "wf:claudeCodeAgent:1",
+            "parameters": dict(params or {}),
+            **config,
+        },
+    )
+
+
+async def test_an_agent_outside_agentworkflow_sends_only_when_it_need_not_ask(harness, nodes_loaded, monkeypatch):
+    whatsapp, gmail = get_node_class("whatsappSend"), get_node_class("googleGmail")
+    ran = Ran()
+    monkeypatch.setattr(whatsapp, "execute_as_tool", ran)
+    monkeypatch.setattr(gmail, "execute_as_tool", ran)
+    args = {"recipient_type": "phone", "phone": "447700900123", "message": "On my way."}
+
+    # No rule (a workflow built in the editor), then Ask first off: it runs.
+    assert await dispatch("whatsappSend", args, {"message_type": "text"}) == {"sent": True}
+    await rules.set_ask_first(harness.database, "wf", False)
+    assert await dispatch("whatsappSend", args, {"message_type": "text"}) == {"sent": True}
+    # Ask first on: refused, nothing kept, since nothing could send it later.
+    await rules.set_ask_first(harness.database, "wf", True)
+    refused = await dispatch("whatsappSend", args, {"message_type": "text"})
+    assert refused["status"] == "not_run" and "WhatsApp" in refused["message"]
+    assert len(ran.calls) == 2 and await store.list_approvals(harness.database) == []
+    # A call that doesn't send, and a call no agent made, run as before.
+    assert await dispatch("googleGmail", {"operation": "search", "query": "invoice"}) == {"sent": True}
+    assert await dispatch("whatsappSend", args, {"message_type": "text"}, parent_node_id=None) == {"sent": True}
+
+
+async def test_an_agent_outside_agentworkflow_browses_read_only_while_asking(harness, nodes_loaded, monkeypatch):
+    browser = get_node_class("browser")
+    ran = Ran()
+    monkeypatch.setattr(browser, "execute_as_tool", ran)
+    await rules.set_ask_first(harness.database, "wf", True)
+    await dispatch("browser", {"operation": "click", "ref": "e3", "interaction": "full"}, {"interaction": "full"})
+    [(args, params)] = ran.calls
+    assert params["interaction"] == "read_only" and "interaction" not in args
+
+
+async def test_an_unreadable_rule_refuses_rather_than_sends(harness, nodes_loaded, monkeypatch):
+    whatsapp = get_node_class("whatsappSend")
+    ran = Ran()
+    monkeypatch.setattr(whatsapp, "execute_as_tool", ran)
+
+    async def broken(*_args, **_kwargs):
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(rules, "ask_first", broken)
+    refused = await dispatch("whatsappSend", {"recipient_type": "phone", "phone": "447700900123", "message": "Hi"}, {"message_type": "text"})
+    assert refused["status"] == "not_run" and ran.calls == []
+
+
 async def test_send_starts_the_send_and_puts_it_back_when_nothing_can(harness, nodes_loaded, monkeypatch):
     await rules.set_ask_first(harness.database, "wf", True)
     await tool_calls.check(call(), get_node_class("whatsappSend"))

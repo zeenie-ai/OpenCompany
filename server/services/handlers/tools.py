@@ -207,7 +207,19 @@ async def _dispatch_tool(tool_name: str, tool_args: Dict[str, Any], config: Dict
 
     plugin_cls = None if is_registered_agent(node_type) else get_node_class(node_type)
     if plugin_cls is not None:
+        from services.approvals.tool_calls import check_in_process
         from services.plugin import NodeContext
+
+        # Ask first: a call that sends is refused while the workflow asks
+        # first (it cannot wait as a draft here); a restricted tool runs
+        # restricted. Temporal tool calls are checked in BaseNode.as_activity.
+        checked = await check_in_process(context, plugin_cls, node_params, tool_args)
+        if checked.result is not None:
+            return checked.result
+        if checked.node_data is not None:
+            node_params = checked.node_data
+        if checked.tool_args is not None:
+            tool_args = checked.tool_args
 
         instance = plugin_cls()
         ctx = NodeContext.from_legacy(

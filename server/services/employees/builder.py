@@ -12,11 +12,13 @@ One employee is one workflow:
   trigger's output;
 - tools on the agent: web search, a checklist (writeTodos), a clock and a
   canvas (what the agent puts there shows in Home's Workspace), always; the
-  apps' tools, minus anything that sends or spends while "ask me first" is
-  on (a tool with ``ask_first_params``, the browser, stays in its read-only
-  form instead); Memory when the owner keeps memory across chats. Which
-  tools and skills a hire may have is policy.py's rule, the same one that
-  governs what is added to an employee later;
+  apps' tools: one whose plugin declares an approval spec is attached as it
+  is (while "ask me first" is on, each call that sends waits as a draft and
+  the browser runs read-only); one without a spec that sends or spends is
+  left out while "ask me first" is on, unless the app declares
+  ``ask_first_params`` that make it safe; Memory when the owner keeps memory
+  across chats. Which tools and skills a hire may have is policy.py's rule,
+  the same one that governs what is added to an employee later;
 - the owner's skill library (Settings > Skills): every skill that is on, on
   one Skills node (masterSkill), with its text copied in, so a later edit to
   the library never changes an employee already hired;
@@ -645,11 +647,12 @@ def _plan_app_tools(inputs: BuildInputs, trigger: _TriggerPlan, warnings: List[s
     """The apps' tools the agent gets, decided before its instructions are
     written so they can mention them.
 
-    policy.check_tool decides: under ``ask first`` a tool that can send or
-    spend is left out, unless the app declares ``ask_first_params`` that
-    make it safe: then it is attached with those applied (the browser can
-    read, and hands any page change to the owner). An app the owner has
-    not connected yet keeps its tools; the card asks them to connect it."""
+    policy.check_tool decides: a tool whose plugin declares an approval
+    spec is attached as it is (each call that sends is decided when it is
+    made). Under ``ask first`` a tool without a spec that can send or spend
+    is left out, unless the app declares ``ask_first_params`` that make it
+    safe: then it is attached with those applied. An app the owner has not
+    connected yet keeps its tools; the card asks them to connect it."""
     plans: List[_ToolPlan] = []
     for app in inputs.apps:
         for tool in app.tools:
