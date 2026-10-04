@@ -20,9 +20,11 @@ async def start_chat_run_activity(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Claim the run for the calling workflow.
 
     Payload ``{run_id, temporal_workflow_id, temporal_run_id}``. Returns
-    ``{claimed}``: False when another workflow claimed it first (several
-    chat triggers in one graph) or it can no longer start (it was stopped,
-    or the watchdog ended it); that workflow then runs without tracking.
+    ``{claimed, session_id?}``: False when another workflow claimed it first
+    (several chat triggers in one graph) or it can no longer start (it was
+    stopped, or the watchdog ended it); that workflow then runs without
+    tracking. ``session_id`` is the chat's session, from the run's row: the
+    run's nodes carry it in ``run_scope``.
     """
     from core.container import container
     from services.chat import ledger
@@ -33,7 +35,9 @@ async def start_chat_run_activity(payload: Dict[str, Any]) -> Dict[str, Any]:
         temporal_workflow_id=str(payload.get("temporal_workflow_id") or ""),
         temporal_run_id=payload.get("temporal_run_id"),
     )
-    return {"claimed": run is not None}
+    if run is None:
+        return {"claimed": False}
+    return {"claimed": True, "session_id": run.session_id}
 
 
 @activity.defn(name="chat_run.finish")

@@ -356,7 +356,12 @@ class MachinaWorkflow:
             return None
         if not (isinstance(claimed, dict) and claimed.get("claimed")):
             return None
-        return {"run_id": run_id, "session_id": session_id}
+        # The chat's session comes from the run's row: this workflow's own
+        # session is its execution's ("<workflow>:execution:<n>" on a deployed
+        # run). A claim recorded before it carried the session keeps the old
+        # value; only activity inputs change, so histories replay as before.
+        chat_session = claimed.get("session_id")
+        return {"run_id": run_id, "session_id": chat_session if isinstance(chat_session, str) and chat_session else session_id}
 
     async def _finish_chat_run(self, run_scope: Dict[str, Any], success: bool, errors: List[Dict]) -> None:
         """End the claimed chat run with the run's outcome. Non-fatal: the

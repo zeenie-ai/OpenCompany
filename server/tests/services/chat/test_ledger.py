@@ -176,6 +176,21 @@ async def test_the_first_workflow_claims_the_run(database, hub):
     assert (await started(database, admission, workflow_id="tw-2")) is None
 
 
+async def test_the_claim_tells_the_workflow_the_chats_session(database, hub, monkeypatch):
+    """MachinaWorkflow's own session is its execution's; the run's nodes need
+    the chat's, so the claim answers with it (services/chat/activities.py)."""
+    from types import SimpleNamespace
+
+    import core.container as container_module
+    from services.chat.activities import start_chat_run_activity
+
+    monkeypatch.setattr(container_module, "container", SimpleNamespace(database=lambda: database))
+    admission = await admit(database)
+    claim = {"run_id": admission.run.run_id, "temporal_workflow_id": "tw-1", "temporal_run_id": "tr-1"}
+    assert await start_chat_run_activity(claim) == {"claimed": True, "session_id": "wf"}
+    assert await start_chat_run_activity({**claim, "temporal_workflow_id": "tw-2"}) == {"claimed": False}
+
+
 async def test_a_queued_run_starts_when_the_employee_resumes(database, hub):
     admission = await admit(database, state="queued")
     assert admission.run.state == "queued"

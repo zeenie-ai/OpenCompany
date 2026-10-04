@@ -2,7 +2,9 @@
  * The run store's ordering rules: frames fold in once per animation frame,
  * by each run's `seq`; a duplicate changes nothing; a gap, an unknown run
  * already under way or a new server epoch ask for a fresh snapshot and hold
- * what arrives meanwhile; a snapshot names the runs that ended unseen.
+ * what arrives meanwhile; a snapshot names the runs that ended unseen; a
+ * run's end folds in across a gap and wins over any live reading; and a
+ * resync never asks again for what its snapshot could not settle.
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -91,6 +93,37 @@ describe('chatRunStore', () => {
     receive(frame(1, 'started'));
     store.admit('w1', { runId: 'r1', userMessageId: 'm1', state: 'pending' });
     expect(session().runs.r1.state).toBe('running');
+  });
+
+  it('folds the end of a run in across a gap, and nothing after it', () => {
+    receive(frame(1, 'started'), frame(7, 'finished', { outcome: { type: 'success' } }));
+    expect(session().runs.r1).toMatchObject({ state: 'finished', seq: 7 });
+    expect(session().syncing).toBe(false);
+    receive(frame(8, 'text.content', { message_id: 's1', delta: 'late' }));
+    expect(session().runs.r1.segments).toEqual([]);
+    // A run never seen before that ends is recorded as ended.
+    receive(frame(4, 'failed', { message: 'Calendar said no', code: 'run_failed' }, 'r2'));
+    expect(session().runs.r2).toMatchObject({ state: 'error', seq: 4 });
+  });
+
+  it('takes an end the server stored over a live reading, whatever its seq', () => {
+    receive(frame(1, 'started'));
+    // The hub forgets a run's seq once it ends: its stored end reads 0.
+    useChatRunStore.getState().upsertRun(snapshot('r1', 'finished', 0));
+    expect(session().runs.r1.state).toBe('finished');
+    useChatRunStore.getState().applySubscription('w1', 'e1', [snapshot('r1', 'running', 3)]);
+    expect(session().runs.r1.state).toBe('finished');
+  });
+
+  it('drops a held frame its snapshot cannot settle instead of asking again', () => {
+    receive(frame(1, 'started'), frame(3, 'text.content', { message_id: 's1', delta: 'x' }));
+    const asked = session().resync;
+    // The run ended meanwhile, so the snapshot no longer lists it: it is read
+    // on its own (stale), and the held frame is not asked for again.
+    useChatRunStore.getState().applySubscription('w1', 'e1', []);
+    expect(session()).toMatchObject({ syncing: false, resync: asked, stale: ['r1'] });
+    receive(frame(4, 'text.content', { message_id: 's1', delta: 'y' }, 'r9'));
+    expect(session().resync).toBe(asked + 1);
   });
 
   it('asks for a snapshot when the hub dropped frames', () => {

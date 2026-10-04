@@ -12,7 +12,12 @@
  *   server restarted) or the hub's resync frame mark the session `syncing`
  *   and bump `resync`: the subscription takes a fresh snapshot, and the
  *   frames that arrived meanwhile are held and folded in after it, skipping
- *   what the snapshot already covers.
+ *   what the snapshot already covers. One that still cannot fold after it is
+ *   dropped, never asked for again: the snapshot was the server's best;
+ * - a run's end (`finished`, `failed`) folds in even across a gap or for a
+ *   run not seen before, since its saved reply holds what was missed, and an
+ *   ended run takes nothing more. An ended reading of a run beats a live one
+ *   whatever their `seq`: the hub forgets a run's `seq` once it ends.
  *
  * Nothing here talks to the socket.
  */
@@ -69,14 +74,19 @@ function requestResync(session: SessionRuns, held?: RunEvent): SessionRuns {
   };
 }
 
-function foldEvent(session: SessionRuns, event: RunEvent): SessionRuns {
+/** Fold one event in. `settling`: a frame held through a resync, folded in
+ *  after the fresh snapshot; if it still cannot fold it is dropped. */
+function foldEvent(session: SessionRuns, event: RunEvent, settling = false): SessionRuns {
   if (session.syncing) return { ...session, held: [...session.held, event] };
-  if (session.hubEpoch !== null && session.hubEpoch !== event.hubEpoch) return requestResync(session, event);
+  const ask = () => (settling ? session : requestResync(session, event));
+  if (session.hubEpoch !== null && session.hubEpoch !== event.hubEpoch) return ask();
   const known = session.runs[event.runId];
-  const base = known ?? (event.seq === 1 ? emptyRun(event.runId, event.sessionId) : null);
-  if (!base) return requestResync(session, event);
+  if (known && !isLiveRun(known)) return session;
+  const ends = event.type === 'finished' || event.type === 'failed';
+  const base = known ?? (event.seq === 1 || ends ? emptyRun(event.runId, event.sessionId) : null);
+  if (!base) return ask();
   if (event.seq <= base.seq) return session;
-  if (event.seq > base.seq + 1) return requestResync(session, event);
+  if (event.seq > base.seq + 1 && !ends) return ask();
   return {
     ...session,
     hubEpoch: session.hubEpoch ?? event.hubEpoch,
@@ -95,9 +105,12 @@ function foldFrame(sessions: Record<string, SessionRuns>, frame: RunFrame): Reco
   return next === session ? sessions : { ...sessions, [frame.sessionId]: next };
 }
 
-/** The newer of two readings of one run: a higher `seq` in the same epoch. */
+/** The newer of two readings of one run: an ended one over a live one (a
+ *  run never goes live again), else a higher `seq` in the same epoch. */
 function newer(local: RunSnapshot | undefined, incoming: RunSnapshot): RunSnapshot {
-  return local && local.hubEpoch === incoming.hubEpoch && local.seq > incoming.seq ? local : incoming;
+  if (!local) return incoming;
+  if (isLiveRun(local) !== isLiveRun(incoming)) return isLiveRun(incoming) ? local : incoming;
+  return local.hubEpoch === incoming.hubEpoch && local.seq > incoming.seq ? local : incoming;
 }
 
 // Frames wait here for the next animation frame (a hidden page gets a
@@ -154,7 +167,7 @@ export const useChatRunStore = create<ChatRunState>((set, get) => ({
         if (isLiveRun(local)) stale.push(runId);
       }
       let session: SessionRuns = { hubEpoch, runs, held: [], resync: previous.resync, syncing: false, subscribed: true, stale };
-      for (const event of previous.held) session = foldEvent(session, event);
+      for (const event of previous.held) session = foldEvent(session, event, true);
       return { sessions: { ...state.sessions, [sessionId]: session } };
     });
   },

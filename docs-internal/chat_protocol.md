@@ -312,7 +312,8 @@ newer version wins in place.
 - **Start and finish.** MachinaWorkflow, behind the `machina-chat-run-v1` patch, reads the run id only from an event
   with that source and type, claims the run (`chat_run.start`: `pending` or `queued` to `running`, recording the
   Temporal workflow and run ids) once the firing trigger's output is stored, passes `run_scope {run_id, session_id}`
-  to every node context, and finishes it at its single exit (`chat_run.finish`). With several chat triggers in one
+  to every node context (the chat's session, which the claim answers from the run's row; the workflow's own session
+  is its execution's), and finishes it at its single exit (`chat_run.finish`). With several chat triggers in one
   graph, the first to claim tracks the run and the others run untracked. Only the claimant may finish.
 - **The reply.** `chatReply` with a `run_scope` saves the answer through `ledger.post_reply`: the first reply takes
   the run's reply id `a_<run id>`, another reply node in the same run `a_<run id>.<n>`, and a retry from the same node
@@ -378,7 +379,10 @@ editor's console pane (`ConsoleChat`, compact, scope `live`) are the two hosts.
   `lib/agui/reduceRun.ts` folds it, the same way `services/chat/reducer.py` does. Frames are folded once per
   animation frame. Per run: a duplicate `seq` changes nothing; a gap, an unknown run already past `seq` 1, a new
   `hub_epoch` or the hub's resync frame mark the session `syncing`, hold what arrives meanwhile, and ask for a fresh
-  snapshot, after which the held frames fold in and the ones the snapshot covers drop out.
+  snapshot, after which the held frames fold in and the ones the snapshot covers drop out; one that still cannot fold
+  is dropped, never asked for again. A run's end folds in even across a gap or for a run not seen before (its saved
+  reply holds what was missed), an ended run takes nothing more, and an ended reading of a run beats a live one
+  whatever their `seq` (the hub forgets a run's `seq` once it ends).
 - **Subscribing** (`data/runs.ts`): a mounted chat subscribes its session whenever the socket is ready (so again
   after every reconnect) and whenever the store asks for a snapshot, retrying a failed subscribe after 1, 3, then
   every 10 seconds; the last chat following a session unsubscribes it. Runs the store held as live that a snapshot

@@ -48,7 +48,8 @@ def _graph(*, source: str = SOURCE, event_type: str = TYPE, run_id: Any = "r_1",
         "nodes": [trigger, {"id": "wf-cr:console:1", "type": "console", "data": {"label": "Log"}}],
         "edges": [{"id": "e1", "source": trigger["id"], "target": "wf-cr:console:1", "targetHandle": "input-main"}],
         "workflow_id": "wf-cr",
-        "session_id": "wf-cr",
+        # A deployed run's own session is its execution's, never the chat's.
+        "session_id": "wf-cr:execution:1",
         "execution_id": "wf-cr:execution:1",
         "generation": 2,
         "_temporal_routing_v1": ROUTING,
@@ -69,6 +70,7 @@ def fakes(monkeypatch):
         contexts=[],
         node_success=True,
         claimed=True,
+        claim_session="wf-cr",
         open_patches={CHAT_RUN_PATCH, "machina-conditional-edges-v1", "machina-run-record-v1"},
         asked=[],
     )
@@ -91,7 +93,9 @@ def fakes(monkeypatch):
     async def execute_activity(name, payload=None, **_kwargs):
         state.activities.append((name, payload))
         if name == "chat_run.start":
-            return {"claimed": state.claimed}
+            if not state.claimed:
+                return {"claimed": False}
+            return {"claimed": True, **({"session_id": state.claim_session} if state.claim_session else {})}
         return None
 
     monkeypatch.setattr(temporal_workflow, "start_activity", start_activity)
@@ -128,6 +132,12 @@ async def test_a_chat_message_run_is_claimed_scoped_and_finished(fakes):
     # Claimed before the first node is scheduled; finished before the run is recorded.
     names = _names(fakes)
     assert names.index("chat_run.finish") < names.index("workflow_runs.record_completion")
+
+
+async def test_a_claim_recorded_without_the_chats_session_keeps_the_old_scope(fakes):
+    fakes.claim_session = None
+    await _run(_graph())
+    assert [context["run_scope"] for context in fakes.contexts] == [{"run_id": "r_1", "session_id": "wf-cr:execution:1"}]
 
 
 async def test_a_failed_run_finishes_with_its_error(fakes):
@@ -207,7 +217,7 @@ async def test_the_activities_go_through_the_ledger(monkeypatch):
 
     async def start_run(database, **kwargs):
         calls.append(("start", kwargs))
-        return SimpleNamespace(state="running")
+        return SimpleNamespace(state="running", session_id="wf-cr")
 
     async def finish_run(database, **kwargs):
         calls.append(("finish", kwargs))
@@ -216,7 +226,7 @@ async def test_the_activities_go_through_the_ledger(monkeypatch):
     monkeypatch.setattr(ledger, "start_run", start_run)
     monkeypatch.setattr(ledger, "finish_run", finish_run)
     monkeypatch.setattr(container_module, "container", SimpleNamespace(database=lambda: "db"))
-    assert await start_chat_run_activity({"run_id": "r", "temporal_workflow_id": "w", "temporal_run_id": "t"}) == {"claimed": True}
+    assert await start_chat_run_activity({"run_id": "r", "temporal_workflow_id": "w", "temporal_run_id": "t"}) == {"claimed": True, "session_id": "wf-cr"}
     assert await finish_chat_run_activity({"run_id": "r", "temporal_workflow_id": "w", "temporal_run_id": "t", "success": True}) == {"state": None}
     assert calls[0] == ("start", {"run_id": "r", "temporal_workflow_id": "w", "temporal_run_id": "t"})
     assert calls[1][1]["success"] is True and calls[1][1]["error"] is None
@@ -258,7 +268,7 @@ async def _replay_gate() -> None:
 
     @activity.defn(name="chat_run.start")
     async def start(_payload: Dict[str, Any]) -> Dict[str, Any]:
-        return {"claimed": True}
+        return {"claimed": True, "session_id": "wf-cr"}
 
     @activity.defn(name="chat_run.finish")
     async def finish(_payload: Dict[str, Any]) -> Dict[str, Any]:
