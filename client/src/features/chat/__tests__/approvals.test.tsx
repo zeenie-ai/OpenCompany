@@ -215,6 +215,22 @@ describe('a draft in the chat', () => {
     expect(within(own).getByText('Yes, Saturday at 10 works.')).toBeInTheDocument();
   });
 
+  it('announces a discarded draft once, not its Restore countdown', async () => {
+    const restore = new Date(Date.now() + 60_000).toISOString();
+    server.approvals = [summary({ approval_id: 'g1', kind: 'gate', run_id: null, tool_call_id: null, status: 'discarded', restore_until: restore })];
+    renderPane();
+    const own = await screen.findByRole('region', { name: 'Drafts waiting for you' });
+    expect(within(own).getByRole('status')).toHaveTextContent('Discarded. Maya won’t send this.');
+    expect(within(own).getByRole('button', { name: /^Restore/ })).toHaveAttribute('aria-live', 'off');
+  });
+
+  it('announces a send that did not go', async () => {
+    server.approvals = [summary({ status: 'failed', outcome: { certainty: 'not_sent' } })];
+    renderPane();
+    const card = (await screen.findByText('I drafted a WhatsApp to Ana.')).closest('[data-turn="assistant"]') as HTMLElement;
+    expect(await within(card).findByText('It didn’t go out.')).toHaveAttribute('role', 'status');
+  });
+
   it('asks before turning Ask first off', async () => {
     renderPane();
     const chip = await screen.findByRole('button', { name: 'Ask first' });

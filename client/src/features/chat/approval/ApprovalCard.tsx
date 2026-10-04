@@ -340,9 +340,19 @@ function Footer({
   if (footer.kind === 'discarded') {
     return (
       <div className={cn(bar, 'bg-bg-app')}>
-        <span className="min-w-0 flex-1 text-xs text-fg-muted">{footer.text}</span>
+        <span className="min-w-0 flex-1 text-xs text-fg-muted" role="status">
+          {footer.text}
+        </span>
         {footer.canRestore && (
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => decide({ approval, decision: 'restore' })} className="gap-1.5 font-semibold tabular-nums">
+          // Its countdown ticks every second: never announced.
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() => decide({ approval, decision: 'restore' })}
+            className="gap-1.5 font-semibold tabular-nums"
+            aria-live="off"
+          >
             <RotateCcw aria-hidden className="size-3.25" />
             {footer.restoreSeconds !== null ? `Restore · ${footer.restoreSeconds}s` : 'Restore'}
           </Button>
@@ -379,7 +389,9 @@ function FailedFooter({
   if (confirming) {
     return (
       <div className={cn(className, 'bg-action-stop-soft')}>
-        <span className="min-w-0 flex-1 text-xs text-fg-default">It may already have gone out. Send it again anyway?</span>
+        <span className="min-w-0 flex-1 text-xs text-fg-default" role="status">
+          It may already have gone out. Send it again anyway?
+        </span>
         <Button variant="quiet" size="sm" onClick={() => setConfirming(false)} className="font-semibold">
           Keep it
         </Button>
@@ -398,7 +410,9 @@ function FailedFooter({
   }
   return (
     <div className={cn(className, 'bg-action-stop-soft')}>
-      <span className="min-w-0 flex-1 text-xs text-fg-default">{text}</span>
+      <span className="min-w-0 flex-1 text-xs text-fg-default" role="status">
+        {text}
+      </span>
       <Button
         variant="outline"
         size="sm"
