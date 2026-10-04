@@ -1,10 +1,11 @@
 /**
- * The answering employee's avatar beside their turns: their initial in
- * their role colour, and a spinning ring while they work (design handoff
- * chat, "Streaming": the live ring).
+ * The answering employee's avatar beside their turns: their photo, else
+ * their initial, in their role colour, and a spinning ring while they work
+ * (design handoff chat, "Streaming": the live ring).
  */
 
-import { AVATAR_CLASS, initialOf } from '@/components/catalog/presentation';
+import { AVATAR_CLASS } from '@/components/catalog/presentation';
+import { AvatarFace } from '@/components/catalog/primitives';
 import { cn } from '@/lib/utils';
 import type { ChatPersona } from '../host';
 
@@ -19,7 +20,7 @@ export function ChatAvatar({ persona, live = false, compact = false }: { persona
           compact ? 'text-2xs' : 'text-xs',
         )}
       >
-        {initialOf(persona.name)}
+        <AvatarFace name={persona.name} photo={persona.photo} />
       </span>
     </span>
   );

@@ -147,7 +147,7 @@ export function EmployeeChat({
         kind: 'home',
         sessionId: workflowId,
         scope: 'all',
-        persona: { name, colorRole: employee.color_role },
+        persona: { name, colorRole: employee.color_role, photo: employee.photo_url },
         composer,
         notices: <Notices employee={employee} control={control} queued={lane?.state === 'queued'} />,
         top: (

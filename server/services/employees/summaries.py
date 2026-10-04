@@ -55,6 +55,18 @@ PAUSED_STATES = frozenset({"pausing", "paused"})
 _WEEKDAYS = ("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
 
 
+def _photo_url(workflow_id: str, employee: Any) -> Optional[str]:
+    """Where the employee's photo is served (the workspace file route),
+    versioned so a new photo replaces the old one in every cache."""
+    path = getattr(employee, "photo_path", None)
+    if not path:
+        return None
+    from services.media.workspace import workspace_file_url
+
+    url = workspace_file_url(workflow_id, path)
+    return f"{url}?v={_millis(getattr(employee, 'updated_at', None))}" if url else None
+
+
 def _millis(*moments: Optional[datetime]) -> int:
     latest = 0
     for moment in moments:
@@ -276,6 +288,8 @@ async def _summary(
     return {
         "workflow_id": workflow.id,
         "name": workflow.name,
+        #: The photo the owner gave them; null shows their initial.
+        "photo_url": _photo_url(workflow.id, employee),
         "role": (getattr(employee, "role", "") or _derived_role(graph)),
         "color_role": getattr(employee, "color_role", None) or "agent",
         "derived": employee is None,

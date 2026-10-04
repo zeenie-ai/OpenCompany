@@ -149,6 +149,7 @@ class Database:
             await self._migrate_chat_messages()
             await self._migrate_chat_runs()
             await self._migrate_approvals()
+            await self._migrate_employees()
 
             logger.info("Database initialized successfully")
 
@@ -554,6 +555,21 @@ class Database:
                             await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}"))
         except Exception as exc:
             logger.warning(f"Chat run migration check failed: {exc}")
+
+    async def _migrate_employees(self):
+        """Give an older ``employees`` table the columns added since."""
+        columns_added = {"photo_path": "VARCHAR(500)"}
+        try:
+            async with self.engine.begin() as conn:
+                result = await conn.execute(text("PRAGMA table_info(employees)"))
+                columns = {row[1] for row in result.fetchall()}
+                if not columns:
+                    return
+                for column, definition in columns_added.items():
+                    if column not in columns:
+                        await conn.execute(text(f"ALTER TABLE employees ADD COLUMN {column} {definition}"))
+        except Exception as exc:
+            logger.warning(f"Employee migration check failed: {exc}")
 
     async def _migrate_approvals(self):
         """Give an older ``approval_requests`` table the columns approvals v2

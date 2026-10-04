@@ -434,7 +434,12 @@ will finish. The wire contract is [chat_protocol.md](./chat_protocol.md).
 is the page: the shared chat ([features/chat](../client/src/features/chat/),
 the same `ChatPane` the editor's console Chat pane uses) with Home around it.
 The header names the employee instead of the page (`HomeHeader`: avatar,
-name, role and apps, the status pill, and New conversation), and `HomeShell`
+name, role and apps, the status pill, and New conversation). The pencil beside
+the name renames them, and the avatar's menu uploads a photo for a hired
+employee or takes it away ([data/identity.ts](../client/src/features/home/data/identity.ts));
+the photo then stands in for their initial in the sidebar, the header, the
+Workspace and beside each reply, and the initial comes back when it will not
+load. `HomeShell`
 gives the page a column that does not scroll: the conversation scrolls on its
 own above the message box, and tells the shell when it has left the top so the
 header draws its border. Turn on Talk and Apply are in
@@ -787,7 +792,7 @@ WebSocket requests (snake_case; failures come back as `success: false` with an
 
 | Type | Payload | Response |
 |---|---|---|
-| `list_employees` | `{}` | `{employees}`; each summary's `canvas_node_id` is its Canvas board: the one it was hired with, else the graph's first Canvas node, else null. `browser_request` is a browser waiting for the owner (`{node_id, reason, since}`), else null. `talk` is `{state: "on" \| "off" \| "unsupported", agent_node_id}` (the agent that answers the owner; not in `watch_node_ids`). `task` is `{label, text}`, or null when the page already says it (a running employee with Talk on whose only work is the owner's messages). `asks_first` is the hire's "ask me first" rule (built in Dev mode: whether it has an approval gate). `pending_changes` is true when the saved graph's structure differs from the live generation's snapshot |
+| `list_employees` | `{}` | `{employees}`; each summary's `canvas_node_id` is its Canvas board: the one it was hired with, else the graph's first Canvas node, else null. `browser_request` is a browser waiting for the owner (`{node_id, reason, since}`), else null. `talk` is `{state: "on" \| "off" \| "unsupported", agent_node_id}` (the agent that answers the owner; not in `watch_node_ids`). `task` is `{label, text}`, or null when the page already says it (a running employee with Talk on whose only work is the owner's messages). `asks_first` is the hire's "ask me first" rule (built in Dev mode: whether it has an approval gate). `pending_changes` is true when the saved graph's structure differs from the live generation's snapshot. `photo_url` is the photo the owner gave them (the workspace file route, versioned), else null |
 | `get_employee` | `{workflow_id}` | the summary plus `description`, `job`, `plan`, `rules`, `choices`, `trigger_text`, `last_run`, `latest_report` |
 | `get_employee_usage` | `{}` | `{tasks_this_month}` (successful runs since the 1st, owner's timezone, whole team) |
 | `generate_employee_setup` | `{job, refine?, history?, draft_token}` | `{draft_token, reply, provider, model, usage, retried, finish_reason, apps}`; `apps` maps each app the reply mentions to its AppRef plus `can_trigger` |
@@ -796,6 +801,8 @@ WebSocket requests (snake_case; failures come back as `success: false` with an
 | `start_employee` | `{workflow_id, expected_revision, idempotency_key}` | as `start_workflow` |
 | `enable_employee_talk` | `{workflow_id, idempotency_key}` | `{employee}`. Errors: `invalid_request`, `not_found`, `unsupported`, `conflict` (a start, pause, resume or reset is under way, or the graph changed meanwhile), `restart_failed`; the last three carry `employee` too |
 | `apply_employee_changes` | `{workflow_id, idempotency_key}` | `{employee}`: running ends running, paused or failed ends ready, ready is left alone. Errors: `invalid_request`, `not_found`, `conflict`, `restart_failed` (the last two with `employee`) |
+| `rename_employee` | `{workflow_id, name}` (spaces collapsed, at most 40 characters) | `{employee}`: renames the workflow (a new slug, the workspace folder moved, `workflow.renamed` sent), and each agent's instructions a hire wrote take the new name in their opening ("You are <name>, ..."); instructions the owner rewrote keep their words. Agents read them on every run, so nothing restarts. Errors: `invalid_request`, `not_found`, `save_failed` |
+| `set_employee_photo` | `{workflow_id, path \| null}` | `{employee}`: `path` is a PNG, JPEG, WebP or GIF the owner uploaded under `uploads/` (`POST /api/workspace/{workflow_id}/uploads`), at most 5 MB (`EMPLOYEE_PHOTO_MAX_BYTES`); `null` takes the photo away. Errors: `invalid_request`, `not_found`, `invalid_photo` (with `detail`), `unsupported` (a workflow built in the editor has no employee row to keep it on) |
 | `send_chat_message` | `{message, role: "user", session_id: <workflow_id>, timestamp, client_message_id?}` | `{timestamp, delivery, message_id, run_id}`: `"now"` while running, starting or resuming; `"queued"` while paused or pausing (it runs on Resume). In any other state `not_running`, and nothing is saved or sent; `run_in_progress` (with the live `run_id`) while a run is live. `run_id` is null when no deployed chat trigger answers the session. Session `"default"` works as before, with no `delivery` |
 | `get_chat_messages` | `{session_id, limit?, all_generations?}` | `{messages, thread, active_runs}`, messages oldest first, each `{id, role, message, timestamp, run_key, ...}` (the full shape is in [chat_protocol.md](./chat_protocol.md#messages)). Timestamps carry their UTC offset; `run_key` is the generation the row was written in. Without `all_generations`, only the latest generation's rows (none after a Reset; every row when the workflow was never started). A failed read answers `read_failed`, never an empty thread |
 | `list_approvals` | `{workflow_id?, status?, limit <= 100}` | `{approvals, counts, server_time}` |

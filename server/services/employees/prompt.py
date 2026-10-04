@@ -113,6 +113,16 @@ def _block(text: str) -> str:
     return neutralize_templates(str(text).strip())
 
 
+def renamed_instructions(system_message: str, old_name: str, new_name: str) -> Optional[str]:
+    """Instructions a hire wrote, with the employee's new name in their
+    opening ("You are <name>, ..."). None when they no longer open that way
+    (the owner rewrote them in Dev mode): those are left as they are."""
+    opening = f"You are {_clean(old_name)}, "
+    if not old_name.strip() or not system_message.startswith(opening):
+        return None
+    return f"You are {_clean(new_name)}, " + system_message[len(opening):]
+
+
 def _owner_words(inputs: PromptInputs, owner: str) -> List[str]:
     """Who they are, the job, the routine, the owner's settings and profile."""
     request = inputs.request

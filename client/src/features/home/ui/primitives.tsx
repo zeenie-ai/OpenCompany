@@ -5,12 +5,12 @@
  */
 
 import type { ReactNode } from 'react';
+import { AvatarFace } from '@/components/catalog/primitives';
 import { cn } from '@/lib/utils';
 import {
   AVATAR_CLASS,
   STATUS_DOT_CLASS,
   STATUS_PILL_CLASS,
-  initialOf,
   type StatusTone,
 } from '../data/presentation';
 import type { ColorRole } from '../data/schemas';
@@ -24,6 +24,7 @@ const AVATAR_SIZE = {
 export function Avatar({
   name,
   colorRole,
+  photo,
   size = 'md',
   status,
   pulse = false,
@@ -31,6 +32,8 @@ export function Avatar({
 }: {
   name: string;
   colorRole: ColorRole;
+  /** Their photo; without one (or while it fails to load), their initial. */
+  photo?: string | null;
   size?: keyof typeof AVATAR_SIZE;
   /** Draws the status pip bottom-right (sidebar rows). */
   status?: StatusTone;
@@ -47,7 +50,7 @@ export function Avatar({
         className,
       )}
     >
-      {initialOf(name)}
+      <AvatarFace name={name} photo={photo} />
       {status && (
         <StatusDot
           tone={status}

@@ -24,6 +24,20 @@ talk to), ``conflict`` (a start, pause, resume or reset is under way, or
 the graph changed meanwhile), ``restart_failed``. A retry with the same
 key adds nothing twice and restarts once. Changes to one employee run one
 at a time.
+
+Two change who the employee is, for the owner of the workflow only, and
+answer the same way:
+
+- ``rename_employee {workflow_id, name}``: renames their workflow (a new
+  slug, the workspace folder moved, ``workflow.renamed`` sent), and each
+  agent's instructions a hire wrote take the new name in their opening.
+  ``save_failed`` when the rename was not saved.
+- ``set_employee_photo {workflow_id, path | null}``: the photo they show,
+  a PNG, JPEG, WebP or GIF the owner uploaded to the workspace's
+  ``uploads/`` (at most ``EMPLOYEE_PHOTO_MAX_BYTES``); ``null`` takes it
+  away. ``invalid_photo`` (with ``detail``) for any other file,
+  ``unsupported`` for a workflow built in the editor (it has no employee
+  row to keep it on).
 """
 
 from __future__ import annotations
@@ -40,14 +54,24 @@ from services.employees import store
 from services.employees.apps import get_app
 from services.employees.builder import CHAT_UI_TYPE, talk_tools
 from services.employees.context import SETTINGS_USER_ID
+from services.employees.events import employee_changed_now
 from services.employees.graph_index import CANVAS_NODE_TYPE, MEMORY_NODE_TYPE, TODO_NODE_TYPE, index_graph
-from services.employees.prompt import OwnerProfile, PromptInputs, build_system_message, request_from_employee, talk_addendum
+from services.employees.hire_request import NAME_MAX
+from services.employees.prompt import (
+    OwnerProfile,
+    PromptInputs,
+    build_system_message,
+    renamed_instructions,
+    request_from_employee,
+    talk_addendum,
+)
 from services.employees.summaries import employee_usage, get_employee_detail, get_employee_summary, list_employee_summaries
 from services.employees.talk import TalkAgent, TalkState, TalkTool, plan_talk_line, sources, talk_agent_label, talk_state
 from services.employees.upgrade import upgrade_employee
 from services.graph_build import TOOLS_INPUT
 from services.plugin.base import NodeUserError
 from services.plugin.ws import ws_response
+from services.media.limits import EMPLOYEE_PHOTO_MAX_BYTES
 from services.workflow_storage.mutate import apply_graph_additions
 
 #: Control states a change must not interrupt.
@@ -244,6 +268,96 @@ async def handle_apply_employee_changes(data: Dict[str, Any], websocket: WebSock
         )
 
 
+# ----- Name and photo -----
+
+#: What a photo may be: images the workspace file route shows inline.
+PHOTO_TYPES = frozenset({"image/png", "image/jpeg", "image/webp", "image/gif"})
+
+
+async def _owns(database: Any, websocket: Any, workflow_id: str) -> bool:
+    from services.chat.access import ChatAccessDenied, authorize_session
+
+    try:
+        await authorize_session(database, websocket, workflow_id)
+    except ChatAccessDenied:
+        return False
+    return True
+
+
+async def _rename_in_instructions(database: Any, workflow: Any, old: str, new: str) -> None:
+    """Each agent's instructions a hire wrote take the new name; ones the
+    owner rewrote are left alone. Read on every run, so no restart."""
+    from services.status_broadcaster import get_status_broadcaster
+
+    for node_id in index_graph(getattr(workflow, "data", None)).agent_ids:
+        params = await database.get_node_parameters(node_id) or {}
+        renamed = renamed_instructions(str(params.get("system_message") or ""), old, new)
+        if renamed is None:
+            continue
+        params = {**params, "system_message": renamed}
+        await database.save_node_parameters(node_id, params)
+        await get_status_broadcaster().broadcast_node_parameters_updated(
+            node_id, parameters=params, workflow_id=workflow.id, source_hint="employee"
+        )
+
+
+@ws_response
+async def handle_rename_employee(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    workflow_id = str(data.get("workflow_id") or "").strip()
+    name = " ".join(str(data.get("name") or "").split())[:NAME_MAX]
+    if not workflow_id or not name:
+        return {"success": False, "error": "invalid_request"}
+    from core.container import container
+    from services.workflow_storage.handlers import rename_saved_workflow
+
+    database, auth_service = container.database(), container.auth_service()
+    if not await _owns(database, websocket, workflow_id):
+        return {"success": False, "error": "not_found", "workflow_id": workflow_id}
+    async with _lock(workflow_id):
+        workflow = await database.get_workflow(workflow_id)
+        if workflow is None:
+            return {"success": False, "error": "not_found", "workflow_id": workflow_id}
+        old = str(workflow.name or "")
+        if name != old:
+            if await rename_saved_workflow(database, workflow_id, name) is None:
+                return await _answer(database, auth_service, workflow_id, "save_failed")
+            await _rename_in_instructions(database, workflow, old, name)
+        return await _answer(database, auth_service, workflow_id)
+
+
+@ws_response
+async def handle_set_employee_photo(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    workflow_id = str(data.get("workflow_id") or "").strip()
+    path = data.get("path")
+    if not workflow_id or (path is not None and not isinstance(path, str)):
+        return {"success": False, "error": "invalid_request"}
+    from core.container import container
+
+    database, auth_service = container.database(), container.auth_service()
+    if not await _owns(database, websocket, workflow_id):
+        return {"success": False, "error": "not_found", "workflow_id": workflow_id}
+    if path is not None:
+        from services.chat.attachments import AttachmentRefused, check_attachments
+
+        try:
+            [ref] = await check_attachments(database, workflow_id, [path])
+        except AttachmentRefused as exc:
+            return {"success": False, "error": "invalid_photo", "detail": str(exc)}
+        if ref["mime_type"] not in PHOTO_TYPES:
+            return {"success": False, "error": "invalid_photo", "detail": "A photo is a PNG, JPEG, WebP or GIF image."}
+        if ref["size_bytes"] > EMPLOYEE_PHOTO_MAX_BYTES:
+            return {
+                "success": False,
+                "error": "invalid_photo",
+                "detail": f"A photo is at most {EMPLOYEE_PHOTO_MAX_BYTES // (1024 * 1024)} MB.",
+            }
+        path = ref["path"]
+    if await store.set_photo(database, workflow_id, path) is None:
+        return {"success": False, "error": "unsupported", "workflow_id": workflow_id}
+    employee_changed_now(workflow_id)
+    return await _answer(database, auth_service, workflow_id)
+
+
 from services.employees.hire import handle_hire_employee  # noqa: E402
 from services.employees.start import handle_start_employee  # noqa: E402
 
@@ -255,6 +369,8 @@ WS_HANDLERS: Dict[str, Any] = {
     "start_employee": handle_start_employee,
     "enable_employee_talk": handle_enable_employee_talk,
     "apply_employee_changes": handle_apply_employee_changes,
+    "rename_employee": handle_rename_employee,
+    "set_employee_photo": handle_set_employee_photo,
 }
 
 
@@ -265,4 +381,6 @@ __all__ = [
     "handle_get_employee",
     "handle_get_employee_usage",
     "handle_list_employees",
+    "handle_rename_employee",
+    "handle_set_employee_photo",
 ]

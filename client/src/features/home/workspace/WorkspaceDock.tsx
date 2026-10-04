@@ -81,7 +81,7 @@ function Identity({ employee }: { employee: EmployeeSummary }) {
     employee.status === 'working' && !employee.browser_request ? { tone: 'live' as const, label: 'Live' } : presentEmployee(employee).pill;
   return (
     <>
-      <Avatar name={employee.name} colorRole={employee.color_role} size="sm" />
+      <Avatar name={employee.name} colorRole={employee.color_role} photo={employee.photo_url} size="sm" />
       <div className="flex min-w-0 flex-1 flex-col gap-px">
         <span className="truncate text-base font-semibold text-fg-default">{employee.name}’s workspace</span>
         {task && <span className="truncate font-mono text-2xs text-fg-muted">{task.text}</span>}

@@ -165,6 +165,20 @@ async def update_employee(database: Any, workflow_id: str, fields: Dict[str, Any
         return row
 
 
+async def set_photo(database: Any, workflow_id: str, path: Optional[str]) -> Optional[Employee]:
+    """Set or clear the photo an employee shows (a workspace path). None when
+    the workflow has no employee row (one built in the editor)."""
+    async with database.get_session() as session:
+        result = await session.execute(select(Employee).where(Employee.workflow_id == workflow_id))
+        row = result.scalar_one_or_none()
+        if row is None:
+            return None
+        row.photo_path = path
+        row.updated_at = _utcnow()
+        await session.commit()
+        return row
+
+
 async def delete_for_workflow(database: Any, workflow_id: str) -> int:
     """Remove the employee row of a deleted workflow. Returns rows removed."""
     async with database.get_session() as session:
@@ -183,5 +197,6 @@ __all__ = [
     "mark_ready",
     "merge_node_roles",
     "reserve",
+    "set_photo",
     "update_employee",
 ]

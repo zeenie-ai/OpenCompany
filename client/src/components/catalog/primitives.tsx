@@ -1,10 +1,21 @@
-/** Shared catalogue brand marks and search fields. */
+/** Shared catalogue brand marks, avatar faces and search fields. */
+import { useState } from 'react';
 import { Search } from 'lucide-react';
 import { NodeIcon } from '@/assets/icons';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { theme } from '@/styles/theme';
-import { AVATAR_CLASS, type ColorRole } from './presentation';
+import { AVATAR_CLASS, initialOf, type ColorRole } from './presentation';
+
+/** What an avatar disc shows: the photo when one is given and loads, else
+ *  the first letter of the name. */
+export function AvatarFace({ name, photo }: { name: string; photo?: string | null }) {
+  const [broken, setBroken] = useState<string | null>(null);
+  if (photo && broken !== photo) {
+    return <img src={photo} alt="" draggable={false} onError={() => setBroken(photo)} className="size-full rounded-full object-cover" />;
+  }
+  return <>{initialOf(name)}</>;
+}
 
 const MARK_SIZE = {
   xs: { box: 'size-5', icon: theme.iconSize.xs },

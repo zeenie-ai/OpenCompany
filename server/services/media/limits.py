@@ -30,6 +30,10 @@ TEMPORAL_PAYLOAD_ERROR_BYTES = 2_097_152
 # reference ever enters a payload.
 MEDIA_MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
+# Largest photo an employee may show. Every avatar of theirs (the team
+# list, the chat header, beside each reply) loads this one file.
+EMPLOYEE_PHOTO_MAX_BYTES = 5 * 1024 * 1024
+
 # Largest file a node will pull back off disk into memory to hand to a
 # provider. Bounds one activity's peak RSS; the bytes are discarded as
 # soon as the HTTP call returns.

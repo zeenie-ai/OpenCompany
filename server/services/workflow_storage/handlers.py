@@ -9,7 +9,7 @@ auto-save chain IS the rename path — no separate rename endpoint.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import WebSocket
 
@@ -167,6 +167,27 @@ async def _broadcast_lifecycle(stage: str, workflow_id: str, **data: Any) -> Non
 async def _broadcast_renamed(workflow_id: str, name: str, slug: str, old_slug: str) -> None:
     """CloudEvents ``workflow.renamed`` — sidebar + open workflow refresh."""
     await _broadcast_lifecycle("renamed", workflow_id, name=name, slug=slug, old_slug=old_slug)
+
+
+async def rename_saved_workflow(database: Any, workflow_id: str, name: str) -> Optional[Dict[str, Any]]:
+    """Rename a saved workflow without touching its graph, the way a save
+    with a new name does: a new slug, the workspace folder moved to match,
+    and ``workflow.renamed`` to every client. None when it does not exist or
+    the rename was not saved."""
+    from services.workflow_naming import next_available_slug
+
+    existing = await database.get_workflow(workflow_id)
+    if existing is None:
+        return None
+    if existing.name == name:
+        return {"workflow_id": workflow_id, "name": name, "slug": existing.slug}
+    slug = await next_available_slug(name, database, exclude_id=workflow_id)
+    if not await database.rename_workflow(workflow_id, name, slug):
+        return None
+    if existing.slug and existing.slug != slug:
+        _move_workspace(existing.slug, slug)
+    await _broadcast_renamed(workflow_id, name, slug, existing.slug or slug)
+    return {"workflow_id": workflow_id, "name": name, "slug": slug}
 
 
 async def _failed_workflow_save(database: Any, workflow_id: str, *, require_existing: bool) -> Dict[str, Any]:

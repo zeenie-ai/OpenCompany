@@ -16,6 +16,8 @@ export type ChatHostKind = 'home' | 'dev';
 export interface ChatPersona {
   name: string;
   colorRole: ColorRole;
+  /** Their photo, when the owner gave them one. */
+  photo?: string | null;
 }
 
 /**

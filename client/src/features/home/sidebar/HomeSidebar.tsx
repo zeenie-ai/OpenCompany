@@ -96,7 +96,7 @@ function EmployeeRow({ employee, selected }: { employee: EmployeeSummary; select
         onClick={() => showEmployee(employee.workflow_id)}
         className="flex min-h-12.5 min-w-0 flex-1 items-center gap-2.5 rounded-row px-2.5 py-1.5 text-left"
       >
-        <Avatar name={employee.name} colorRole={employee.color_role} status={view.pill.tone} pulse={view.pulse} />
+        <Avatar name={employee.name} colorRole={employee.color_role} photo={employee.photo_url} status={view.pill.tone} pulse={view.pulse} />
         <span className="flex min-w-0 flex-1 flex-col gap-px">
           <span className="truncate text-row font-medium">{employee.name}</span>
           <span className="truncate text-xs text-fg-muted">{employee.role}</span>

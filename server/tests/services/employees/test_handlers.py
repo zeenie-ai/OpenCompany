@@ -36,7 +36,7 @@ def container(monkeypatch, real_database):
 
 def test_handlers_are_registered_and_not_internal():
     registered = get_ws_handlers()
-    for name in ("list_employees", "get_employee", "get_employee_usage"):
+    for name in ("list_employees", "get_employee", "get_employee_usage", "rename_employee", "set_employee_photo"):
         assert name in registered
         assert name not in INTERNAL_SOCKET_HANDLERS
 

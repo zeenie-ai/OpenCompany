@@ -38,6 +38,8 @@ const appList = z.array(appRefSchema).catch([]);
 export const employeeSummarySchema = z.object({
   workflow_id: z.string().min(1),
   name: z.string(),
+  /** The photo the owner gave them (the workspace file route); null shows their initial. */
+  photo_url: z.string().nullable().catch(null),
   role: z.string().catch(''),
   color_role: z.enum(COLOR_ROLES).catch('agent'),
   derived: z.boolean().catch(true),

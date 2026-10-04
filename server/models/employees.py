@@ -72,6 +72,10 @@ class Employee(SQLModel, table=True):
     #: The model the employee runs on: {provider, model}.
     llm: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     builder_version: int = Field(default=1)
+    #: A photo the owner uploaded for the employee: a path under the
+    #: workflow workspace's ``uploads/`` (``set_employee_photo``). None
+    #: shows their initial.
+    photo_path: Optional[str] = Field(default=None, max_length=500)
 
     hired_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     created_at: datetime = Field(default_factory=_utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))

@@ -1,8 +1,9 @@
 /**
  * The Home header: on an employee's page it says who they are (name, role
  * and apps, status) and offers New conversation, which asks first; the
- * Normal/Dev switch opens that employee's workflow there, and elsewhere
- * what the editor last had.
+ * owner renames them and changes their photo there; the Normal/Dev switch
+ * opens that employee's workflow there, and elsewhere what the editor last
+ * had.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -22,12 +23,15 @@ vi.mock('../../../app/ShellModeSwitch', () => ({ useShellMode: () => 'normal' })
 vi.mock('../workspace/WorkspaceButton', () => ({ WorkspaceButton: () => null }));
 vi.mock('../header/ThemeButton', () => ({ ThemeButton: () => null }));
 vi.mock('../ui/pillToast', () => ({ pillToast: vi.fn() }));
+vi.mock('@/lib/workspaceUpload', () => ({ uploadToWorkspace: vi.fn() }));
 
 import { normalizeWorkflowControlStatus } from '@/contexts/WebSocketContext';
+import { uploadToWorkspace } from '@/lib/workspaceUpload';
 import { enterDev } from '../../../app/useShellActions';
 import { parseEmployee } from '../data/schemas';
 import { HomeHeader } from '../header/HomeHeader';
 import { useHomeStore } from '../state/homeStore';
+import { pillToast } from '../ui/pillToast';
 
 const maya = parseEmployee({
   workflow_id: 'w1',
@@ -84,6 +88,80 @@ describe('HomeHeader', () => {
     wrap(<HomeHeader title="Maya" employee={maya} scrolled={false} />);
     fireEvent.click(screen.getByRole('radio', { name: 'Dev' }));
     expect(enterDev).toHaveBeenCalledWith({ workflowId: 'w1' });
+  });
+
+  it('renames them from the pencil beside their name', async () => {
+    const user = userEvent.setup();
+    let answer: (value: unknown) => void = () => {};
+    sendRequest.mockImplementation((type: string) =>
+      type === 'rename_employee' ? new Promise((resolve) => (answer = resolve)) : Promise.resolve({ success: true }),
+    );
+    useHomeStore.setState({ view: { kind: 'employee', workflowId: 'w1' } });
+    wrap(<HomeHeader title="Maya" employee={maya} scrolled={false} />);
+    await user.click(screen.getByRole('button', { name: 'Rename Maya' }));
+    const box = screen.getByRole('textbox', { name: 'Name' });
+    expect(box).toHaveValue('Maya');
+    await user.clear(box);
+    await user.type(box, '  Ana   Lopez {Enter}');
+    expect(sendRequest).toHaveBeenCalledWith('rename_employee', { workflow_id: 'w1', name: 'Ana Lopez' });
+    // The new name shows while it saves.
+    expect(screen.getByRole('heading', { name: 'Ana Lopez' })).toBeInTheDocument();
+    answer({ success: true });
+  });
+
+  it('keeps the name when the owner presses Escape', async () => {
+    const user = userEvent.setup();
+    useHomeStore.setState({ view: { kind: 'employee', workflowId: 'w1' } });
+    wrap(<HomeHeader title="Maya" employee={maya} scrolled={false} />);
+    await user.click(screen.getByRole('button', { name: 'Rename Maya' }));
+    await user.type(screen.getByRole('textbox', { name: 'Name' }), ' Lopez{Escape}');
+    expect(screen.getByRole('heading', { name: 'Maya' })).toBeInTheDocument();
+    expect(sendRequest).not.toHaveBeenCalledWith('rename_employee', expect.anything());
+  });
+
+  it('gives a hired employee a photo they upload', async () => {
+    const user = userEvent.setup();
+    vi.mocked(uploadToWorkspace).mockResolvedValue({ path: 'uploads/me.png' } as Awaited<ReturnType<typeof uploadToWorkspace>>);
+    useHomeStore.setState({ view: { kind: 'employee', workflowId: 'w1' } });
+    wrap(<HomeHeader title="Maya" employee={{ ...maya, derived: false }} scrolled={false} />);
+    await user.click(screen.getByRole('button', { name: 'Change Maya’s photo' }));
+    expect(screen.queryByRole('menuitem', { name: 'Remove photo' })).not.toBeInTheDocument();
+    await user.click(await screen.findByRole('menuitem', { name: 'Upload photo…' }));
+    const photo = new File(['png'], 'me.png', { type: 'image/png' });
+    await user.upload(screen.getByTestId('employee-photo-input'), photo);
+    await waitFor(() => expect(sendRequest).toHaveBeenCalledWith('set_employee_photo', { workflow_id: 'w1', path: 'uploads/me.png' }));
+    expect(uploadToWorkspace).toHaveBeenCalledWith(photo, 'w1');
+  });
+
+  it('refuses a file that is not a photo before uploading it', async () => {
+    vi.mocked(uploadToWorkspace).mockClear();
+    useHomeStore.setState({ view: { kind: 'employee', workflowId: 'w1' } });
+    wrap(<HomeHeader title="Maya" employee={{ ...maya, derived: false }} scrolled={false} />);
+    fireEvent.change(screen.getByTestId('employee-photo-input'), { target: { files: [new File(['x'], 'notes.txt', { type: 'text/plain' })] } });
+    await waitFor(() => expect(pillToast).toHaveBeenCalledWith('A photo is a PNG, JPEG, WebP or GIF image.', { tone: 'error' }));
+    expect(uploadToWorkspace).not.toHaveBeenCalled();
+    expect(sendRequest).not.toHaveBeenCalledWith('set_employee_photo', expect.anything());
+  });
+
+  it('shows the photo, takes it away, and falls back to the initial when it will not load', async () => {
+    const user = userEvent.setup();
+    useHomeStore.setState({ view: { kind: 'employee', workflowId: 'w1' } });
+    const photoUrl = '/api/workspace/w1/files/uploads/me.png?v=1';
+    const { container } = wrap(<HomeHeader title="Maya" employee={{ ...maya, derived: false, photo_url: photoUrl }} scrolled={false} />);
+    const image = container.querySelector('img');
+    expect(image).toHaveAttribute('src', photoUrl);
+    await user.click(screen.getByRole('button', { name: 'Change Maya’s photo' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Remove photo' }));
+    await waitFor(() => expect(sendRequest).toHaveBeenCalledWith('set_employee_photo', { workflow_id: 'w1', path: null }));
+    fireEvent.error(image!);
+    expect(container.querySelector('img')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Change Maya’s photo' })).toHaveTextContent('M');
+  });
+
+  it('keeps the initial of an employee built in the editor', () => {
+    useHomeStore.setState({ view: { kind: 'employee', workflowId: 'w1' } });
+    wrap(<HomeHeader title="Maya" employee={maya} scrolled={false} />);
+    expect(screen.queryByRole('button', { name: 'Change Maya’s photo' })).not.toBeInTheDocument();
   });
 
   it('opens what the editor last had from the hire view', () => {
