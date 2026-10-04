@@ -21,6 +21,7 @@ import services.chat.handlers as chat_handlers
 import services.status_broadcaster as status_broadcaster
 from models.database import WorkflowControlExecution
 from services import chat_thread
+from tests.services.chat._helpers import saved_workflow
 
 
 @pytest.fixture
@@ -75,6 +76,7 @@ def router(monkeypatch, database, frames):
 
 
 async def control(database, workflow_id, status, generation=1):
+    await saved_workflow(database, workflow_id)
     async with database.get_session() as session:
         session.add(
             WorkflowControlExecution(
@@ -204,6 +206,9 @@ async def send(message, session_id):
 
 
 async def test_a_workflow_that_is_not_running_takes_no_message(router):
+    # A session must name a saved workflow; one never started takes nothing.
+    assert await send("hello?", "7") == {"success": False, "error": "access_denied"}
+    await saved_workflow(router.database, "7")
     assert await send("hello?", "7") == {"success": False, "error": "not_running"}
     await control(router.database, "7", "failed")
     assert (await send("hello?", "7"))["error"] == "not_running"
@@ -278,6 +283,7 @@ async def test_the_owners_clear_lets_the_agent_forget_too(router):
     chat_thread.register_chat_cleared_listener(broken)
     chat_thread.register_chat_cleared_listener(forget)
     chat_thread.register_chat_cleared_listener(forget)  # registering twice is a no-op
+    await saved_workflow(router.database, "7")
     await router.database.add_chat_message("7", "user", "hello", execution_id="gen-1")
 
     cleared = await chat_handlers.handle_clear_chat_messages({"session_id": "7"}, None)

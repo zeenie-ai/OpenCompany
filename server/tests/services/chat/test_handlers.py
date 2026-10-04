@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 
 from services.chat import ledger
-from tests.services.chat._helpers import FakeSocket, add_control, chat_trigger, chat_updates, talking
+from tests.services.chat._helpers import FakeSocket, add_control, chat_trigger, chat_updates, saved_workflow, talking
 
 
 async def send(chat, message="Book Saturday", session_id="wf", socket=None, **extra):
@@ -167,6 +167,8 @@ async def test_each_message_says_how_its_run_ended(chat):
 
 
 async def test_a_failed_read_is_never_an_empty_thread(chat, monkeypatch):
+    await saved_workflow(chat.database, "wf")
+
     async def broken(*_args, **_kwargs):
         raise RuntimeError("database is locked")
 

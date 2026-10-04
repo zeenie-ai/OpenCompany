@@ -104,6 +104,9 @@ async def test_set_ask_first_answers_what_it_means(harness, monkeypatch):
 
     monkeypatch.setattr(rules, "_LISTENERS", [lambda database, workflow_id, rule: {"replies_gated": True, "needs_apply": not rule.ask_first}])
     socket = SimpleNamespace(scope={"path": "/ws/status"}, state=SimpleNamespace(user_id="owner"))
+    # Only a saved workflow has a rule to read or set.
+    assert (await handle_get_ask_first({"workflow_id": "7"}, socket))["error"] == "not_found"
+    await harness.database.save_workflow("7", "Maya", "Maya_1", {"nodes": [], "edges": []})
     assert (await handle_get_ask_first({"workflow_id": "7"}, socket))["ask_first"] is None
     answer = await handle_set_ask_first({"workflow_id": "7", "ask_first": False}, socket)
     assert answer == {**answer, "success": True, "ask_first": False, "revision": 0, "replies_gated": True, "needs_apply": True}

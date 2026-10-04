@@ -4,7 +4,8 @@ A workflow's session (its id) answers only the workflow's owner, compared
 with the socket's principal as the canvas and Memory panels do, and the
 internal worker socket may use none of chat's commands. The editor's
 ``"default"`` session belongs to no workflow. A session that names no saved
-workflow is still scoped to that id: its messages reach no other workflow.
+workflow is refused, as those panels refuse one: nobody may write into the
+chat of a workflow that does not exist yet.
 """
 
 from __future__ import annotations
@@ -52,7 +53,9 @@ async def authorize_session(database: Any, websocket: Any, session_id: str) -> C
     if session_id == DEFAULT_SESSION:
         return ChatScope(session_id=session_id, workflow_id=None)
     saved = await database.get_workflow(session_id)
-    owner = _owner_of(saved) if saved is not None else ""
+    if saved is None:
+        raise ChatAccessDenied()
+    owner = _owner_of(saved)
     if owner and owner != execution_principal({}, websocket):
         raise ChatAccessDenied()
     return ChatScope(session_id=session_id, workflow_id=session_id)

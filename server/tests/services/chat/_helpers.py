@@ -29,6 +29,13 @@ class FakeSocket:
         return [json.loads(text)["data"] for text in self.sent]
 
 
+async def saved_workflow(database, workflow_id: str) -> None:
+    """The saved workflow a chat session names (chat refuses a session that
+    names none). An empty graph, saved only if missing."""
+    if await database.get_workflow(workflow_id) is None:
+        await database.save_workflow(workflow_id, workflow_id, f"{workflow_id}_1", {"nodes": [], "edges": []})
+
+
 async def add_control(
     database,
     workflow_id: str,
@@ -37,7 +44,8 @@ async def add_control(
     generation: int = 1,
     nodes: Optional[List[Dict[str, Any]]] = None,
 ):
-    """A control generation, its graph holding ``nodes``."""
+    """A control generation of a saved workflow, its graph holding ``nodes``."""
+    await saved_workflow(database, workflow_id)
     async with database.get_session() as session:
         session.add(
             WorkflowControlExecution(

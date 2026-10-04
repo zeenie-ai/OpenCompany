@@ -19,7 +19,8 @@ from ._mocks import patched_container, patched_pricing
 
 def database(owner: str = "") -> MagicMock:
     db = MagicMock(name="Database")
-    db.get_workflow = AsyncMock(return_value=SimpleNamespace(data={"owner_id": owner}) if owner else None)
+    # A saved workflow; with no owner, anyone (login off) may use it.
+    db.get_workflow = AsyncMock(return_value=SimpleNamespace(data={"owner_id": owner} if owner else {}))
     db.save_api_usage_metric = AsyncMock(return_value=None)
     return db
 
