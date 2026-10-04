@@ -49,6 +49,19 @@ logger = get_logger(__name__)
 
 PROTOCOL_VERSION = 1
 _DENIED = {"success": False, "error": "access_denied"}
+#: A workflow's chat messages travel through Temporal (``dispatch.emit``
+#: signals its listeners) and only a Temporal activity claims their runs, so
+#: a send while it is unreachable would be lost.
+_UNAVAILABLE = {"success": False, "error": "engine_unavailable"}
+
+
+def _engine_connected() -> bool:
+    """Whether Temporal is reachable now (the flag ``/health/ready`` reads)."""
+    try:
+        wrapper = container.temporal_client()
+    except Exception:  # noqa: BLE001 - not wired: nothing can deliver
+        return False
+    return bool(wrapper is not None and wrapper.is_connected)
 
 
 def _wire_run(run: Any) -> Dict[str, Any]:
@@ -209,7 +222,8 @@ async def _dispatch(
 async def handle_send_chat_message(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Save the owner's message, start its run, and dispatch it. Answers
     ``{message_id, run_id, delivery, timestamp}``; ``run_in_progress`` (with
-    the live ``run_id``), ``not_running``, ``save_failed``, ``access_denied``,
+    the live ``run_id``), ``not_running``, ``engine_unavailable`` (Temporal is
+    unreachable, nothing saved), ``save_failed``, ``access_denied``,
     ``invalid_request`` or ``ui_event_rejected`` otherwise.
 
     With ``ui_event`` the message is a button pressed in an interface the
@@ -264,6 +278,8 @@ async def handle_send_chat_message(data: Dict[str, Any], websocket: WebSocket) -
         delivery = delivery_for(control)
         if delivery is None:
             return {"success": False, "error": "not_running"}
+        if not _engine_connected():
+            return dict(_UNAVAILABLE)
     track = scope.workflow_id is not None and await _answers_session(database, control, session_id)
 
     try:
@@ -586,6 +602,8 @@ async def _branch_context(
         delivery = delivery_for(control)
         if delivery is None or not await _answers_session(database, control, session_id):
             return {"success": False, "error": "not_running"}, {}
+        if not _engine_connected():
+            return dict(_UNAVAILABLE), {}
         context["delivery"] = delivery
         context["state"] = "queued" if delivery == "queued" else "pending"
     return None, context

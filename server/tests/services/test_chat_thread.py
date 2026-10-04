@@ -66,7 +66,8 @@ def router(monkeypatch, database, frames):
     async def dispatch(event_data, *, workflow_id=None, event_id=None):
         dispatched.append((dict(event_data), workflow_id))
 
-    monkeypatch.setattr(chat_handlers, "container", SimpleNamespace(database=lambda: database))
+    engine = SimpleNamespace(is_connected=True)
+    monkeypatch.setattr(chat_handlers, "container", SimpleNamespace(database=lambda: database, temporal_client=lambda: engine))
     monkeypatch.setattr(chat_handlers, "dispatch_chat_message_received", dispatch)
     # The Clear's listeners are whatever a test registers, never the plugins'.
     monkeypatch.setattr(chat_thread, "_CLEARED_LISTENERS", [])

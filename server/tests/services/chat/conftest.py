@@ -79,7 +79,9 @@ def chat(monkeypatch, database, hub, frames):
     async def dispatch(event_data, *, workflow_id=None, event_id=None):
         dispatched.append({"data": dict(event_data), "workflow_id": workflow_id, "event_id": event_id})
 
-    monkeypatch.setattr(handlers, "container", SimpleNamespace(database=lambda: database))
+    # Temporal, which delivers the messages; a test may disconnect it.
+    engine = SimpleNamespace(is_connected=True)
+    monkeypatch.setattr(handlers, "container", SimpleNamespace(database=lambda: database, temporal_client=lambda: engine))
     monkeypatch.setattr(handlers, "dispatch_chat_message_received", dispatch)
     monkeypatch.setattr(chat_thread, "_CLEARED_LISTENERS", [])
-    return SimpleNamespace(database=database, hub=hub, frames=frames, dispatched=dispatched, handlers=handlers)
+    return SimpleNamespace(database=database, hub=hub, frames=frames, dispatched=dispatched, handlers=handlers, engine=engine)

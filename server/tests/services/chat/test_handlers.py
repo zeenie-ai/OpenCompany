@@ -44,6 +44,23 @@ async def test_a_paused_employee_queues_the_run(chat):
     assert (await ledger.get_run(chat.database, result["run_id"])).state == "queued"
 
 
+async def test_nothing_is_saved_when_temporal_cannot_deliver_it(chat):
+    # Running or paused, the message would never reach the employee.
+    for generation, status in enumerate(("running", "paused"), start=1):
+        await talking(chat.database, status=status, generation=generation)
+        chat.engine.is_connected = False
+        assert await send(chat) == {"success": False, "error": "engine_unavailable"}
+        assert await chat.database.read_chat_messages("wf") == []
+        assert await ledger.session_runs(chat.database, "wf") == []
+        assert chat.dispatched == [] and chat_updates(chat.frames) == []
+        chat.engine.is_connected = True
+    # The editor's default chat has no workflow and is not refused.
+    chat.engine.is_connected = False
+    assert (await send(chat, session_id="default"))["success"] is True
+    chat.engine.is_connected = True
+    assert (await send(chat))["success"] is True
+
+
 async def test_a_second_message_while_a_run_is_live_is_refused(chat):
     await talking(chat.database)
     first = await send(chat)

@@ -187,6 +187,20 @@ async def test_trying_again_answers_the_same_message_beside_the_old_answer(chat)
     assert (await chat.handlers.handle_regenerate_chat_reply({"session_id": "wf", "message_id": older}, None))["error"] == "not_found"
 
 
+async def test_an_edit_or_a_retry_needs_temporal_to_deliver_it(chat):
+    first = await conversation(chat)
+    shown = (await thread(chat))["messages"]
+    before = await revision(chat)
+    chat.engine.is_connected = False
+    edited = await chat.handlers.handle_edit_chat_message(
+        {"session_id": "wf", "message_id": first["message_id"], "message": "Book Sunday", "expected_revision": before}, None
+    )
+    retried = await chat.handlers.handle_regenerate_chat_reply({"session_id": "wf", "message_id": shown[1]["id"], "expected_revision": before}, None)
+    assert edited == retried == {"success": False, "error": "engine_unavailable"}
+    # Nothing moved.
+    assert await revision(chat) == before and await path(chat) == ["Book Saturday", "Saturday is booked."]
+
+
 async def test_trying_again_a_message_nothing_answered(chat):
     await talking(chat.database)
     sent = await chat.handlers.handle_send_chat_message({"message": "Book Saturday", "session_id": "wf"}, None)
