@@ -158,11 +158,15 @@ export function useSendChatMessage(sessionId: string, scope: ThreadScope, onRefu
       // The files are on the server now: the box's thumbnails can go.
       for (const item of attachments ?? []) if (item.preview) URL.revokeObjectURL(item.preview);
       replace((messages) =>
-        messages.map((message) =>
-          message.id === localId(clientMessageId)
-            ? { ...message, id: result.messageId, runId: result.runId, pending: false }
-            : message,
-        ),
+        // A resent message the server already had is in the thread as that
+        // row: the local copy goes rather than show it twice.
+        messages.some((message) => message.id === result.messageId && !message.pending)
+          ? messages.filter((message) => message.id !== localId(clientMessageId))
+          : messages.map((message) =>
+              message.id === localId(clientMessageId)
+                ? { ...message, id: result.messageId, runId: result.runId, pending: false }
+                : message,
+            ),
       );
       if (result.runId) {
         useChatRunStore.getState().admit(sessionId, {

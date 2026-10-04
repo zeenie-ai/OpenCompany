@@ -11,7 +11,9 @@
  *
  * `useSessionRuns` / `useLaneRun` / `useRunsSubscribed` read the run store
  * (stores/chatRunStore.ts). `useThreadRunReconcile` reads the runs a thread
- * still calls live that ended before the subscription answered.
+ * still calls live that ended before the subscription answered, and a run
+ * this tab admitted on its own (a resent message is answered with the run
+ * it started before) once the thread says it has ended.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -131,7 +133,14 @@ export function useThreadRunReconcile(sessionId: string | null, messages: readon
     if (!sessionId || !subscribed || !messages) return;
     for (const message of messages) {
       const run = message.run;
-      if (!run || !isLiveRun(run) || runs[run.runId] || asked.current.has(run.runId)) continue;
+      if (!run || asked.current.has(run.runId)) continue;
+      const held = runs[run.runId];
+      // Live by the thread and never seen here; or held live only because
+      // this tab admitted it (no event or snapshot since) while the thread
+      // says it ended: no event will come for it.
+      const unseen = isLiveRun(run) && !held;
+      const endedUnseen = !isLiveRun(run) && held !== undefined && isLiveRun(held) && held.hubEpoch === null && held.seq === 0;
+      if (!unseen && !endedUnseen) continue;
       asked.current.add(run.runId);
       sendRequest<Reply>('get_chat_run', { run_id: run.runId })
         .then((one) => {

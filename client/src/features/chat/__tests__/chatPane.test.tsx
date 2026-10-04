@@ -161,6 +161,52 @@ describe('ChatPane', () => {
     expect(screen.getAllByText('Any bookings today?')).toHaveLength(1);
   });
 
+  it('frees the box when a resent message names a run that already ended', async () => {
+    // The first send went through but its answer never arrived: the draft
+    // kept its id, and the server had already answered it.
+    const finished = { run_id: 'r1', state: 'finished', outcome: { type: 'success' } };
+    server.messages = [
+      row('m1', 'user', 'Book Saturday', { client_message_id: 'c1', run_id: 'r1', run: finished }),
+      row('a_r1', 'assistant', 'Saturday is booked.', { run_id: 'r1' }),
+    ];
+    useComposerStore.setState({ drafts: { w1: { text: 'Book Saturday', clientMessageId: 'c1' } } });
+    const answer = sendRequest.getMockImplementation()!;
+    sendRequest.mockImplementation(async (kind: string, data: Wire) => {
+      if (kind === 'send_chat_message') return { success: true, message_id: 'm1', run_id: 'r1', delivery: 'now' };
+      if (kind === 'get_chat_run') return { success: true, run: { ...finished, session_id: 'w1', seq: 4, hub_epoch: 'e1' } };
+      return answer(kind, data);
+    });
+    renderPane();
+    await waitFor(() => expect(useChatRunStore.getState().sessions.w1?.subscribed).toBe(true));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled());
+    fireEvent.keyDown(box(), { key: 'Enter' });
+
+    await waitFor(() => expect(sendRequest).toHaveBeenCalledWith('get_chat_run', { run_id: 'r1' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument());
+    expect(screen.queryByText('Thinking')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Book Saturday')).toHaveLength(1);
+  });
+
+  it('reads no run again for a fresh message the thread still calls live', async () => {
+    renderPane();
+    await waitFor(() => expect(useChatRunStore.getState().sessions.w1?.subscribed).toBe(true));
+    const answer = sendRequest.getMockImplementation()!;
+    sendRequest.mockImplementation(async (kind: string, data: Wire) => {
+      const reply = await answer(kind, data);
+      if (kind === 'send_chat_message') {
+        server.messages = server.messages.map((message) =>
+          message.id === 'm1' ? { ...message, run: { run_id: 'r1', state: 'pending', outcome: null } } : message,
+        );
+      }
+      return reply;
+    });
+    await write('Any bookings today?');
+    fireEvent.keyDown(box(), { key: 'Enter' });
+    expect(await screen.findByText('Thinking')).toBeInTheDocument();
+    await threadUpdated();
+    expect(sendRequest).not.toHaveBeenCalledWith('get_chat_run', expect.anything());
+  });
+
   it('streams the answer with a caret, then shows the saved one in its place', async () => {
     server.messages = [row('m1', 'user', 'Any bookings today?', { run_id: 'r1' })];
     server.activeRuns = [{ run_id: 'r1', session_id: 'w1', state: 'running', seq: 1, hub_epoch: 'e1' }];
