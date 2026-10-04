@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import subprocess
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 from uuid import uuid4
@@ -97,6 +97,20 @@ async def _scenarios() -> None:
             result = await run(0)
             assert result == {"sent": False, "outcome": "unknown"}
             assert len(calls["send"]) == 1 and calls["record"][-1]["broke_off"] is True
+
+
+def test_every_worker_registers_the_workflow_and_its_activities() -> None:
+    """Every Worker construction carries the send workflow and both its
+    activities (the scenarios above pin the names the workflow schedules)."""
+    from services.approvals.activities import APPROVAL_ACTIVITIES
+    from services.temporal import worker
+    from services.temporal.approved_tool_call_workflow import ApprovedToolCallWorkflow
+
+    assert ApprovedToolCallWorkflow in worker._framework_workflows()
+    source = (Path(__file__).parents[2] / "services" / "temporal" / "worker.py").read_text(encoding="utf-8")
+    assert source.count("*APPROVAL_ACTIVITIES") == 3
+    names = sorted(getattr(fn, "__temporal_activity_definition").name for fn in APPROVAL_ACTIVITIES)
+    assert names == ["approvals.claim_send", "approvals.record_outcome"]
 
 
 def test_the_send_workflow_on_temporal() -> None:

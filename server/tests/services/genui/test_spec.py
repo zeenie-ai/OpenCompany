@@ -108,6 +108,24 @@ def test_limits_are_refused():
     assert any("bytes" in problem for problem in refused(big))
 
 
+def test_a_ui_with_too_many_elements_is_refused():
+    limits = load_catalog()["limits"]
+    # Two groups of texts under the root: no element holds more children than
+    # it may, but together they are one more element than a UI may have.
+    per_group = -(-(limits["max_elements"] - 2) // 2)
+    assert per_group <= limits["max_children"]
+    raw = {"root": "root", "elements": {"root": {"type": "Stack", "children": ["a", "b"]}}}
+    for group in ("a", "b"):
+        texts = [f"{group}{n}" for n in range(per_group)]
+        raw["elements"][group] = {"type": "Stack", "children": texts}
+        raw["elements"].update({text: {"type": "Text", "props": {"text": "x"}} for text in texts})
+    assert len(raw["elements"]) == limits["max_elements"] + 1
+    assert refused(raw) == [f"the UI has {limits['max_elements'] + 1} elements; at most {limits['max_elements']}"]
+    # At the limit it passes.
+    del raw["elements"][raw["elements"]["a"]["children"].pop()]
+    assert len(check_spec(raw).spec["elements"]) == limits["max_elements"]
+
+
 def test_prototype_paths_and_reserved_names_are_refused():
     raw = spec(f={"type": "TextField", "props": {"label": "Name", "value": {"$bindState": "/__proto__/x"}}})
     assert any("not a usable state path" in problem for problem in refused(raw))

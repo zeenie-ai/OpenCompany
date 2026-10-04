@@ -5,6 +5,10 @@ and feeds the recorded event history through ``Replayer``. Provider calls
 remain fully stubbed activities, so the gate needs no credentials or
 network API access.
 
+The prepared payload is a chat run's agent: it names the run, where its text
+streams, and an image the owner attached, so the replay covers the opening
+user message's image block.
+
 There is exactly one message standard: the unversioned wire shape from
 ``services.llm.protocol.message_to_wire``. Histories recorded before the
 single-standard cleanup are deliberately non-replayable (dev decision —
@@ -34,6 +38,22 @@ from services.temporal.agent_workflow import AgentWorkflow
 
 TASK_QUEUE = "agent-native-replay-gate"
 
+CHAT_STREAM = {
+    "run_id": "r_replay",
+    "session_id": "graph-replay",
+    "workflow_id": "graph-replay",
+    "reply_message_id": "a_r_replay",
+}
+#: An image the owner attached to the message the run answers (a FileRef).
+ATTACHED_IMAGE = {
+    "kind": "image",
+    "path": "uploads/receipt.png",
+    "workflow_id": "graph-replay",
+    "filename": "receipt.png",
+    "mime_type": "image/png",
+    "size_bytes": 2048,
+}
+
 
 def _prepared_payload() -> dict[str, Any]:
     return {
@@ -54,6 +74,9 @@ def _prepared_payload() -> dict[str, Any]:
         "max_iterations": 1,
         "thinking_config": None,
         "compaction_threshold": None,
+        "chat_run_id": "r_replay",
+        "chat_stream": dict(CHAT_STREAM),
+        "user_images": [dict(ATTACHED_IMAGE)],
     }
 
 
@@ -160,6 +183,14 @@ async def _run_replay_gate() -> None:
         assert "message_wire_version" not in llm_input
         assert "api_key" not in llm_input
         assert "tool_data" not in llm_input
+        # The step knows the run (Stop) and where its text streams.
+        assert llm_input["chat_run_id"] == "r_replay"
+        assert llm_input["chat_stream"] == CHAT_STREAM
+        # The owner's message carries the attached image as a ref, never bytes.
+        [opening] = [message for message in llm_input["messages"] if message["role"] == "user"]
+        assert opening["content"] == "return done"
+        [image] = [block for block in opening["blocks"] if block["type"] == "image"]
+        assert image["source"] == {"kind": "file_ref", "ref": ATTACHED_IMAGE, "detail": "auto"}
 
         completed = next(
             event.activity_task_completed_event_attributes
