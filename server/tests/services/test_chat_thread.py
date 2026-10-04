@@ -128,7 +128,7 @@ async def test_a_recorded_message_is_stamped_and_announced(database, frames):
     await control(database, "7", "running", generation=2)
     saved = await chat_thread.record_chat_message(database, "7", "assistant", "Done.")
     assert saved["message"] == "Done." and saved["uid"].startswith("m_")
-    [row] = await database.get_chat_messages("7")
+    [row] = await database.read_chat_messages("7")
     assert (row["role"], row["message"], row["execution_id"]) == ("assistant", "Done.", "gen-2")
     [frame] = frames
     assert frame["type"] == "chat.updated"
@@ -140,7 +140,7 @@ async def test_a_recorded_message_is_stamped_and_announced(database, frames):
 
 async def test_the_editors_default_chat_is_no_workflows_thread(database, frames):
     await chat_thread.record_chat_message(database, "default", "user", "hi")
-    [row] = await database.get_chat_messages("default")
+    [row] = await database.read_chat_messages("default")
     assert row["execution_id"] is None
     assert updates(frames) == [{"workflow_id": None, "session_id": "default", "role": "user"}]
 
@@ -149,7 +149,7 @@ async def test_clearing_removes_every_generation_and_is_announced(database, fram
     await database.add_chat_message("7", "user", "old", execution_id="gen-1")
     await database.add_chat_message("7", "user", "new", execution_id="gen-2")
     assert await chat_thread.clear_chat_thread(database, "7") == 2
-    assert await database.get_chat_messages("7") == []
+    assert await database.read_chat_messages("7") == []
     assert updates(frames) == [{"workflow_id": "7", "session_id": "7", "role": None}]
 
 
@@ -170,8 +170,8 @@ async def test_a_reset_ends_the_workflows_chat_session(database, frames, node):
     args = {"node_id": f"7:{node}:1", "workflow_id": "7", "execution_id": "gen-1", "generation": 1, "graph": {}, "database": database}
 
     assert await reset(**args) == {"reset": True, "cleared_chat_messages": 2}
-    assert await database.get_chat_messages("7") == []
-    assert [row["message"] for row in await database.get_chat_messages("8")] == ["another workflow's thread"]
+    assert await database.read_chat_messages("7") == []
+    assert [row["message"] for row in await database.read_chat_messages("8")] == ["another workflow's thread"]
     # The next chat node in the same Reset finds nothing, and says nothing.
     assert await reset(**args) == {"reset": False, "cleared_chat_messages": 0}
     assert updates(frames) == [{"workflow_id": "7", "session_id": "7", "role": None}]
@@ -186,13 +186,13 @@ async def test_deleting_the_workflow_deletes_its_thread(database, frames, monkey
     monkeypatch.setattr(hooks, "_HOOKS", [chat_thread.clear_chat_thread])
     await database.add_chat_message("7", "user", "hello", execution_id="gen-1")
     await hooks.run_workflow_deleted_hooks(database, "7")
-    assert await database.get_chat_messages("7") == []
+    assert await database.read_chat_messages("7") == []
 
 
 async def test_history_is_the_newest_rows_oldest_first_in_utc(database):
     for text in ("one", "two", "three"):
         await database.add_chat_message("7", "user", text, execution_id="gen-1")
-    rows = await database.get_chat_messages("7", limit=2)
+    rows = await database.read_chat_messages("7", limit=2)
     assert [row["message"] for row in rows] == ["two", "three"]
     assert rows[0]["id"] < rows[1]["id"]
     assert datetime.fromisoformat(rows[0]["timestamp"]).utcoffset().total_seconds() == 0
@@ -212,7 +212,7 @@ async def test_a_workflow_that_is_not_running_takes_no_message(router):
     assert await send("hello?", "7") == {"success": False, "error": "not_running"}
     await control(router.database, "7", "failed")
     assert (await send("hello?", "7"))["error"] == "not_running"
-    assert await router.database.get_chat_messages("7") == []
+    assert await router.database.read_chat_messages("7") == []
     assert router.dispatched == [] and router.frames == []
 
 
@@ -221,7 +221,7 @@ async def test_a_message_goes_now_or_waits_for_resume(router, status, delivery):
     await control(router.database, "7", status, generation=3)
     result = await send("Book Tuesday", "7")
     assert result["success"] is True and result["delivery"] == delivery and result["timestamp"] == "t"
-    [row] = await router.database.get_chat_messages("7")
+    [row] = await router.database.read_chat_messages("7")
     assert (row["role"], row["message"], row["execution_id"]) == ("user", "Book Tuesday", "gen-3")
     assert result["message_id"] == row["uid"]
     # No chat trigger answers this graph, so the message starts no run.
@@ -235,7 +235,7 @@ async def test_the_default_session_keeps_its_old_behaviour(router):
     result = await chat_handlers.handle_send_chat_message({"message": "hi"}, None)
     assert result["success"] is True and "delivery" not in result
     assert datetime.fromisoformat(result["timestamp"]).utcoffset() is not None
-    assert [row["message"] for row in await router.database.get_chat_messages("default")] == ["hi"]
+    assert [row["message"] for row in await router.database.read_chat_messages("default")] == ["hi"]
     assert router.dispatched[0][1] is None
 
 
@@ -288,7 +288,7 @@ async def test_the_owners_clear_lets_the_agent_forget_too(router):
 
     cleared = await chat_handlers.handle_clear_chat_messages({"session_id": "7"}, None)
     assert cleared["cleared_count"] == 1
-    assert await router.database.get_chat_messages("7") == []
+    assert await router.database.read_chat_messages("7") == []
     # A failing listener never fails the clear, nor stops the next one.
     assert heard == [(router.database, "7")]
 
@@ -301,7 +301,7 @@ async def test_save_and_clear_go_through_the_thread(router):
     await control(router.database, "7", "running", generation=4)
     saved = await chat_handlers.handle_save_chat_message({"message": "An answer", "role": "assistant", "session_id": "7"}, None)
     assert saved["success"] is True
-    [row] = await router.database.get_chat_messages("7")
+    [row] = await router.database.read_chat_messages("7")
     assert row["execution_id"] == "gen-4"
     cleared = await chat_handlers.handle_clear_chat_messages({"session_id": "7"}, None)
     assert cleared["cleared_count"] == 1

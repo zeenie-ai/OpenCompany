@@ -87,7 +87,7 @@ async def test_a_message_carries_its_files_to_the_employee(chat, workspace):
         {"message": "Is this stock right?", "session_id": "wf", "attachments": [{"path": photo}], "options": {"web": False}}, None
     )
     assert sent["success"] is True
-    [row] = await chat.database.get_chat_messages("wf")
+    [row] = await chat.database.read_chat_messages("wf")
     assert [ref["path"] for ref in row["attachments"]] == [photo]
     assert chat.dispatched[-1]["data"]["attachments"][0]["path"] == photo
     run = await ledger.get_run(chat.database, sent["run_id"])

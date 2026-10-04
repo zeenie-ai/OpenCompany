@@ -57,7 +57,6 @@ class ChatTriggerNode(TriggerNode):
     description = "Trigger workflow when user sends a chat message from the console input"
     component_kind = "trigger"
     handles = ({"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},)
-    ui_hints = {"isChatTrigger": True}
     task_queue = TaskQueue.TRIGGERS_EVENT
     mode = "event"
     event_type = "chat_message_received"

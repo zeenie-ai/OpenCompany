@@ -198,8 +198,8 @@ Every mutation is one transaction that bumps `revision`. Caps:
 
 ### Panel WS handlers — [`_handlers.py`](../server/nodes/tool/canvas/_handlers.py)
 
-`canvas_list` / `canvas_remove` / `canvas_clear` / `canvas_versions` /
-`canvas_version` (the last two read an item's versions), all `@ws_response` (never
+`canvas_list` / `canvas_remove` / `canvas_clear` / `canvas_version` (the last
+reads one saved version of an item), all `@ws_response` (never
 `@ws_handler` — a user-correctable failure must be one WARN line, not an
 ERROR with a traceback), self-registered via `register_ws_handlers` from the
 package `__init__`. Security preamble copied verbatim from simple_memory:
@@ -260,7 +260,6 @@ interface CanvasItem {
 | `canvas_list {workflow_id, node_id}` | `{success, items: CanvasItem[], revision}` |
 | `canvas_remove {workflow_id, node_id, item_id}` | `{success, removed, revision}` + broadcast |
 | `canvas_clear {workflow_id, node_id}` | `{success, cleared, revision}` + broadcast |
-| `canvas_versions {workflow_id, node_id, item_id}` | `{success, item_id, versions: [{version, title, created_at, source, size_bytes}], latest}` (newest first) |
 | `canvas_version {workflow_id, node_id, item_id, version}` | `{success, item: CanvasItem-at-that-version & {latest}}` |
 | broadcast `canvas_updated` | `{type: 'canvas_updated', data: <WorkflowEvent>}`, data.data = `{workflow_id, node_id, revision}` |
 | tool `canvas(title?, paths?, url?, content?, language?, mode, update_id?)` | flat schema, no `$defs`; `mode: 'append' \| 'replace'`; `update_id` revises an item |

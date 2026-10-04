@@ -67,7 +67,7 @@ async def test_a_second_message_while_a_run_is_live_is_refused(chat):
     second = await send(chat, "And Sunday?")
     assert second == {"success": False, "error": "run_in_progress", "run_id": first["run_id"]}
     assert len(chat.dispatched) == 1
-    assert [row["message"] for row in await chat.database.get_chat_messages("wf")] == ["Book Saturday"]
+    assert [row["message"] for row in await chat.database.read_chat_messages("wf")] == ["Book Saturday"]
 
 
 async def test_a_resent_message_returns_the_first_send_and_dispatches_once(chat):
@@ -90,7 +90,7 @@ async def test_no_run_when_no_deployed_chat_trigger_answers_the_session(chat):
     assert (await send(chat, session_id="wf2"))["run_id"] is None
     await add_control(chat.database, "wf3", "running", nodes=[chat_trigger("wf3", disabled=True)])
     assert (await send(chat, session_id="wf3"))["run_id"] is None
-    assert len(await chat.database.get_chat_messages("wf")) == 1
+    assert len(await chat.database.read_chat_messages("wf")) == 1
 
 
 async def test_the_owner_writes_only_their_own_messages(chat):

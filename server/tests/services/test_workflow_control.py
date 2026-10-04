@@ -88,7 +88,7 @@ async def test_generation_atomically_creates_and_archives_isolated_data_scope(co
 
     await control_database.add_chat_message("wf-scope", "user", "archived", execution_id=scope.id)
     await control_database.add_chat_message("wf-scope", "user", "new", execution_id="new-scope")
-    current_chat = await control_database.get_chat_messages(
+    current_chat = await control_database.read_chat_messages(
         "wf-scope", execution_id="new-scope",
     )
     assert [item["message"] for item in current_chat] == ["new"]

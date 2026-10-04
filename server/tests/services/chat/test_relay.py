@@ -14,7 +14,6 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
-from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
 import pytest

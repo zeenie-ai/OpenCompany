@@ -250,8 +250,6 @@ export interface INodeUIHints {
   workspace?: { kind: string };
   /** Special-case panel for gmaps_create with map preview. */
   showLocationPanel?: boolean;
-  /** ConsolePanel: this node is a chat-message target. */
-  isChatTrigger?: boolean;
   /** ConsolePanel: this node consumes console output (filter source). */
   isConsoleSink?: boolean;
   /** Agent panels show the connected-skills section. */

@@ -756,13 +756,9 @@ class TestDisplayOptionsEnrichment:
 
 class TestUIHintsInNodeSpec:
     """Wave 6 Phase 5.b: NODE_METADATA carries panel-level uiHints
-    (isChatTrigger/isConsoleSink/hasCodeEditor/etc) so frontend
+    (isConsoleSink/hasCodeEditor/etc) so frontend
     dispatch can read them off the cached NodeSpec instead of
     importing legacy *_NODE_TYPES arrays or per-node definition flags."""
-
-    def test_chat_trigger_carries_is_chat_trigger(self):
-        spec = get_node_spec("chatTrigger")
-        assert spec.get("uiHints", {}).get("isChatTrigger") is True
 
     def test_console_carries_is_console_sink(self):
         spec = get_node_spec("console")
@@ -957,7 +953,6 @@ class TestNodeSpecContractInvariants:
             # request budget instead of keeping its own list of slow types.
             "executionTimeoutMs",
             "showLocationPanel",
-            "isChatTrigger",
             "isConsoleSink",
             "hasSkills",
             # Wave 10.A: size hints carried by plugin registrations

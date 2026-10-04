@@ -29,7 +29,6 @@ from nodes.tool.canvas._handlers import (
     handle_canvas_list,
     handle_canvas_remove,
     handle_canvas_version,
-    handle_canvas_versions,
 )
 from nodes.tool.canvas._store import (
     CANVAS_NOTE_MAX_BYTES,
@@ -711,7 +710,7 @@ async def test_handler_round_trip_list_remove_clear(
     assert final["items"] == []
 
 
-async def test_handler_reads_versions(canvas_database, handler_env, handler_events):
+async def test_handler_reads_a_version(canvas_database, handler_env, handler_events):
     handler_env(_graph())
     store = CanvasStore(canvas_database)
     scope = CanvasScope(owner_id="owner", workflow_id="wf-h", node_id="canvas-h")
@@ -719,16 +718,14 @@ async def test_handler_reads_versions(canvas_database, handler_env, handler_even
     await store.update(scope, note["id"], {"kind": "note", "content": "two"})
     where = {"workflow_id": "wf-h", "node_id": "canvas-h", "item_id": note["id"]}
 
-    listed = await handle_canvas_versions(where, _FakeSocket())
-    assert (listed["success"], listed["latest"], [entry["version"] for entry in listed["versions"]]) == (True, 2, [2, 1])
     first = await handle_canvas_version({**where, "version": 1}, _FakeSocket())
     assert (first["success"], first["item"]["content"], first["item"]["latest"]) == (True, "one", 2)
 
     assert (await handle_canvas_version({**where, "version": 9}, _FakeSocket()))["success"] is False
     assert (await handle_canvas_version({**where, "version": "1"}, _FakeSocket()))["success"] is False
-    assert (await handle_canvas_versions({**where, "item_id": ""}, _FakeSocket()))["success"] is False
+    assert (await handle_canvas_version({**where, "item_id": "", "version": 1}, _FakeSocket()))["success"] is False
     # The same preamble as the other handlers.
-    assert (await handle_canvas_versions(where, _FakeSocket(path="/ws/internal")))["success"] is False
+    assert (await handle_canvas_version({**where, "version": 1}, _FakeSocket(path="/ws/internal")))["success"] is False
 
 
 # ---------------------------------------------------------------------------

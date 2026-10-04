@@ -82,7 +82,7 @@ async def test_the_reply_carries_the_ui_from_the_moment_it_is_saved(database, hu
     assert [item["part_id"] for item in reply["parts"]["ui"]] == [part_id]
     finished = await ledger.finish_run(database, run_id=run.run_id, success=True, **CLAIM)
     assert finished.result == {"reply_message_id": run.reply_message_uid}
-    [_, saved] = await database.get_chat_messages("wf")
+    [_, saved] = await database.read_chat_messages("wf")
     assert saved["parts"]["ui"][0]["part_id"] == part_id
 
 
@@ -91,7 +91,7 @@ async def test_a_run_that_only_showed_a_ui_gets_a_reply_holding_it(database, hub
     part_id = await parts.show_ui(database, stream_of(run), tool_call_id="call_1", spec=booking())
     finished = await ledger.finish_run(database, run_id=run.run_id, success=True, **CLAIM)
     assert finished.result == {"reply_message_id": run.reply_message_uid}
-    [_, reply] = await database.get_chat_messages("wf")
+    [_, reply] = await database.read_chat_messages("wf")
     assert (reply["role"], reply["message"], reply["uid"]) == ("assistant", "", run.reply_message_uid)
     assert reply["parts"]["ui"][0]["part_id"] == part_id
     # Open threads were told to read it.
@@ -106,7 +106,7 @@ async def test_the_end_keeps_what_the_owner_set_after_the_reply_was_saved(databa
     # A second interface after the reply was saved is added at the end.
     second = await parts.show_ui(database, stream_of(run), tool_call_id="call_2", spec=booking())
     await ledger.finish_run(database, run_id=run.run_id, success=True, **CLAIM)
-    [_, reply] = await database.get_chat_messages("wf")
+    [_, reply] = await database.read_chat_messages("wf")
     assert [item["part_id"] for item in reply["parts"]["ui"]] == [first, second]
     assert reply["parts"]["ui"][0]["state"]["slot"] == "s4"
 
@@ -151,7 +151,7 @@ async def test_what_the_owner_sets_is_kept_on_the_ui(database, hub):
     # After, on the reply.
     second = await parts.update_ui_state(database, "wf", part_id, [{"path": "/note", "value": "Patch test done"}, {"path": "/a/b", "value": 1}])
     assert second["state_revision"] == 2 and second["state"]["note"] == "Patch test done" and second["state"]["a"] == {"b": 1}
-    [_, reply] = await database.get_chat_messages("wf")
+    [_, reply] = await database.read_chat_messages("wf")
     assert reply["parts"]["ui"][0]["state"]["slot"] == "s4"
 
     with pytest.raises(parts.UiRefused):
@@ -192,7 +192,7 @@ async def test_a_press_goes_to_the_employee_as_a_ui_event(chat):
     assert sent["success"] is True
     pressed_run = await ledger.get_run(chat.database, sent["run_id"])
     assert pressed_run.kind == "action"
-    rows = await chat.database.get_chat_messages("wf")
+    rows = await chat.database.read_chat_messages("wf")
     owner = rows[-1]
     # The owner's message reads the button's label, whatever the client sent.
     assert (owner["message"], owner["kind"], owner["meta"]["ui_event"]) == ("Hold this slot for 15 min", "action", press)
@@ -242,7 +242,7 @@ async def test_a_document_the_run_wrote_shows_once_at_its_latest_version(databas
     # A run that wrote nothing but the document gets a reply holding its card.
     finished = await ledger.finish_run(database, run_id=run.run_id, success=True, **CLAIM)
     assert finished.result == {"reply_message_id": run.reply_message_uid}
-    [_, reply] = await database.get_chat_messages("wf")
+    [_, reply] = await database.read_chat_messages("wf")
     assert (reply["message"], reply["parts"]["artifacts"]) == ("", [document(2)])
 
 
@@ -254,7 +254,7 @@ async def test_a_newer_version_replaces_the_card_on_a_saved_reply(database, hub)
     await parts.show_artifact(database, stream_of(run), artifact=document(2))
     await parts.show_artifact(database, stream_of(run), artifact=document(1, item_id="item_2"))
     await ledger.finish_run(database, run_id=run.run_id, success=True, **CLAIM)
-    [_, saved] = await database.get_chat_messages("wf")
+    [_, saved] = await database.read_chat_messages("wf")
     # In place, then the new one.
     assert saved["parts"]["artifacts"] == [document(2), document(1, item_id="item_2")]
 

@@ -37,7 +37,7 @@ class NodeMetadata(TypedDict, total=False):
     description: str
     version: int
     # Per-node UI panel hints lifted from the legacy frontend INodeUIHints.
-    # Flags like isChatTrigger / isConsoleSink / hasCodeEditor / isMemoryPanel.
+    # Flags like isConsoleSink / hasCodeEditor / isMemoryPanel.
     uiHints: dict[str, object]
 
     # Wave 10.A — full visual contract:

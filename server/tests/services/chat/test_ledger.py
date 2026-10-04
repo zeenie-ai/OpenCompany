@@ -48,7 +48,7 @@ async def test_a_message_and_its_run_are_admitted_together(database, hub):
     assert run.user_message_uid == admission.message["uid"]
     assert run.reply_message_uid == f"a_{run.run_id}"
     assert (run.workflow_id, run.run_key) == ("wf", "gen-1")
-    [row] = await database.get_chat_messages("wf")
+    [row] = await database.read_chat_messages("wf")
     assert (row["role"], row["message"], row["run_id"], row["execution_id"]) == ("user", "Book Saturday", run.run_id, "gen-1")
 
 
@@ -58,7 +58,7 @@ async def test_one_live_run_per_session(database, hub):
         await admit(database, text_="And Sunday?")
     assert refused.value.run.run_id == first.run.run_id
     # Nothing of the refused send was written.
-    assert [row["message"] for row in await database.get_chat_messages("wf")] == ["Book Saturday"]
+    assert [row["message"] for row in await database.read_chat_messages("wf")] == ["Book Saturday"]
     # Another session has its own lane.
     assert (await admit(database, "other")).run is not None
 
@@ -85,7 +85,7 @@ async def test_a_resent_message_returns_the_first_send(database, hub):
     assert again.created is False
     assert again.message["uid"] == first.message["uid"]
     assert again.run.run_id == first.run.run_id
-    assert len(await database.get_chat_messages("wf")) == 1
+    assert len(await database.read_chat_messages("wf")) == 1
     # The same client id in another chat names another message.
     elsewhere = await admit(database, "other", client_message_id="c-1")
     assert elsewhere.message["uid"] != first.message["uid"]
@@ -95,7 +95,7 @@ async def test_a_resent_message_returns_the_first_send(database, hub):
 async def test_a_malformed_client_message_id_is_refused(database, bad):
     with pytest.raises(ValueError):
         await admit(database, client_message_id=bad)
-    assert await database.get_chat_messages("wf") == []
+    assert await database.read_chat_messages("wf") == []
 
 
 async def test_an_untracked_message_starts_no_run(database):
@@ -110,7 +110,7 @@ async def test_an_untracked_message_starts_no_run(database):
 async def test_every_message_follows_the_last_one(database):
     for n in range(3):
         await database.add_chat_message("wf", "user", f"m{n}")
-    rows = await database.get_chat_messages("wf")
+    rows = await database.read_chat_messages("wf")
     assert rows[0]["parent_uid"] is None
     assert [row["parent_uid"] for row in rows[1:]] == [row["uid"] for row in rows[:-1]]
     async with database.get_session() as session:
@@ -122,7 +122,7 @@ async def test_every_message_follows_the_last_one(database):
 
 async def test_concurrent_writes_never_fork_the_chain(database):
     await asyncio.gather(*(database.add_chat_message("wf", "assistant", f"m{n}") for n in range(10)))
-    rows = await database.get_chat_messages("wf")
+    rows = await database.read_chat_messages("wf")
     parents = [row["parent_uid"] for row in rows]
     assert len(set(parents)) == 10, "two messages followed the same one"
     assert sum(parent is None for parent in parents) == 1
@@ -131,7 +131,7 @@ async def test_concurrent_writes_never_fork_the_chain(database):
 async def test_a_message_id_from_another_chat_is_refused(database):
     await database.add_chat_message("wf", "user", "mine", uid="m_shared")
     assert await database.add_chat_message("other", "user", "theirs", uid="m_shared") is None
-    assert await database.get_chat_messages("other") == []
+    assert await database.read_chat_messages("other") == []
 
 
 async def test_older_rows_are_migrated_into_one_chain(database):
@@ -152,7 +152,7 @@ async def test_older_rows_are_migrated_into_one_chain(database):
             )
     await database._migrate_chat_messages()
     await database._migrate_chat_messages()  # runs again at every startup; changes nothing
-    rows = await database.get_chat_messages("wf")
+    rows = await database.read_chat_messages("wf")
     assert [(row["uid"], row["parent_uid"]) for row in rows] == [("m1", None), ("m3", "m1")]
     assert [(row["kind"], row["status"], row["parts"]) for row in rows] == [("text", "complete", {})] * 2
     # A new message continues the migrated chain.
@@ -236,7 +236,7 @@ async def test_a_second_reply_node_gets_its_own_id_and_a_retry_saves_once(databa
     retry = await ledger.post_reply(database, run=run, node_id="n1", text="One (retried).", execution_id="gen-1")
     assert (first["uid"], second["uid"], retry["uid"]) == (run.reply_message_uid, f"{run.reply_message_uid}.2", run.reply_message_uid)
     assert retry["message"] == "One."
-    assert [row["message"] for row in await database.get_chat_messages("wf")] == ["Book Saturday", "One.", "Two."]
+    assert [row["message"] for row in await database.read_chat_messages("wf")] == ["Book Saturday", "One.", "Two."]
 
 
 async def test_two_reply_nodes_at_once_never_share_an_id(database, hub):

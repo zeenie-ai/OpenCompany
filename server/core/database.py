@@ -1629,26 +1629,14 @@ class Database:
             "execution_id": message.execution_id,
         }
 
-    async def get_chat_messages(
+    async def read_chat_messages(
         self, session_id: str, limit: Optional[int] = None,
         execution_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Chat messages for a session, oldest first: the newest ``limit``
         when given, of one generation when ``execution_id`` is. Rows are
-        shaped by :meth:`chat_row`. A read that fails returns ``[]``; use
-        :meth:`read_chat_messages` where a failure must be told apart from an
-        empty thread."""
-        try:
-            return await self.read_chat_messages(session_id, limit, execution_id=execution_id)
-        except Exception as e:
-            logger.error("Failed to get chat messages", session_id=session_id, error=str(e))
-            return []
-
-    async def read_chat_messages(
-        self, session_id: str, limit: Optional[int] = None,
-        execution_id: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
-        """:meth:`get_chat_messages`, raising when the read fails."""
+        shaped by :meth:`chat_row`. Raises when the read fails, so a failure
+        is never mistaken for an empty thread."""
         async with self.get_session() as session:
             stmt = select(ChatMessage).where(ChatMessage.session_id == session_id)
             if execution_id is not None:
@@ -1691,38 +1679,6 @@ class Database:
         except Exception as e:
             logger.error("Failed to clear chat messages", session_id=session_id, error=str(e))
             return 0
-
-    async def get_chat_sessions(self) -> List[Dict[str, Any]]:
-        """Get list of all chat sessions with message counts."""
-        try:
-            async with self.get_session() as session:
-                from sqlalchemy import func as sa_func
-
-                stmt = (
-                    select(
-                        ChatMessage.session_id,
-                        sa_func.count(ChatMessage.id).label("message_count"),
-                        sa_func.max(ChatMessage.created_at).label("last_message_at"),
-                    )
-                    .group_by(ChatMessage.session_id)
-                    .order_by(sa_func.max(ChatMessage.created_at).desc())
-                )
-
-                result = await session.execute(stmt)
-                rows = result.all()
-
-                return [
-                    {
-                        "session_id": row.session_id,
-                        "message_count": row.message_count,
-                        "last_message_at": row.last_message_at.isoformat() if row.last_message_at else None,
-                    }
-                    for row in rows
-                ]
-
-        except Exception as e:
-            logger.error("Failed to get chat sessions", error=str(e))
-            return []
 
     # ============================================================================
     # Console Logs (Console Panel persistence)
