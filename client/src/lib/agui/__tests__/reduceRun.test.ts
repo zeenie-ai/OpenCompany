@@ -1,8 +1,8 @@
 /**
  * A chat run folded from its events: the handoff's Saturday booking run
- * (steps, streamed text, a generated interface patch by patch, a draft
- * waiting for the owner, then the resume run that sent it), duplicates, and
- * the snapshots the server sends.
+ * (steps, streamed text, a generated interface patch by patch, and the card
+ * of a draft waiting for the owner), duplicates, and the snapshots the
+ * server sends.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -46,16 +46,17 @@ describe('parseRunFrame', () => {
 });
 
 describe('applyRunEvent', () => {
-  it('folds the handoff run: steps, the reply text, and the draft that waits', () => {
+  it('folds the handoff run: steps, the reply text, and the card of its draft', () => {
     const run = replayRun('r_8f2a1c', 'wf_salon', eventsOf('r_8f2a1c'));
     expect(run).toMatchObject({
       state: 'finished',
       kind: 'message',
       userMessageId: 'm_owner_1',
       replyMessageId: 'a_r_8f2a1c',
-      seq: 29,
-      outcome: { type: 'interrupt', interrupts: [{ id: 'ap_1', reason: 'tool_call', toolCallId: 'call_8f2a1c' }] },
+      seq: 26,
+      outcome: { type: 'success' },
     });
+    expect(run.activities.map((activity) => activity.activityType)).toEqual(['json_render', 'approval']);
     expect(run.steps.map((step) => [step.name, step.state, step.durationMs])).toEqual([
       ['Checked Google Calendar', 'done', 640],
       ['Read the WhatsApp thread with Priya', 'done', 640],
@@ -98,13 +99,6 @@ describe('applyRunEvent', () => {
     });
     expect(parseRunFrame(envelope('activity.delta', { message_id: 'p', activity_type: 'json_render', patch: 'nope' }))).toBeNull();
     expect(parseRunFrame(envelope('activity.snapshot', { activity_type: 'json_render', content: {} }))).toBeNull();
-  });
-
-  it('folds the resume run that sent the draft', () => {
-    const resume = eventsOf('r_8f2a1c').length;
-    const others = frames.slice(resume).filter((frame): frame is RunEvent => frame !== null && frame.type !== 'resync');
-    const run = replayRun(others[0].runId, 'wf_salon', others);
-    expect(run).toMatchObject({ kind: 'resume', parentRunId: 'r_8f2a1c', state: 'finished', outcome: { type: 'success' } });
   });
 
   it('changes nothing for an event it has already seen', () => {

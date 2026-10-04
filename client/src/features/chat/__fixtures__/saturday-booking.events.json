@@ -770,70 +770,6 @@
       "specversion": "1.0",
       "id": "r_8f2a1c:25",
       "source": "opencompany://services/chat",
-      "type": "com.opencompany.chat.run.tool_call.started",
-      "subject": "r_8f2a1c",
-      "time": "2026-09-27T14:02:25.000Z",
-      "datacontenttype": "application/json",
-      "data": {
-        "workflow_id": "wf_salon",
-        "session_id": "wf_salon",
-        "run_id": "r_8f2a1c",
-        "seq": 25,
-        "hub_epoch": "e_fixture",
-        "tool_call_id": "call_8f2a1c",
-        "tool_call_name": "whatsapp_send",
-        "parent_message_id": "a_r_8f2a1c",
-        "label": "WhatsApp"
-      }
-    }
-  },
-  {
-    "type": "chat_run_event",
-    "data": {
-      "specversion": "1.0",
-      "id": "r_8f2a1c:26",
-      "source": "opencompany://services/chat",
-      "type": "com.opencompany.chat.run.tool_call.args",
-      "subject": "r_8f2a1c",
-      "time": "2026-09-27T14:02:26.000Z",
-      "datacontenttype": "application/json",
-      "data": {
-        "workflow_id": "wf_salon",
-        "session_id": "wf_salon",
-        "run_id": "r_8f2a1c",
-        "seq": 26,
-        "hub_epoch": "e_fixture",
-        "tool_call_id": "call_8f2a1c",
-        "delta": "{\"phone\": \"Priya Shah\", \"message\": \"Hi Priya! Saturday at 14:30 is free for a colour with Ana (about 2 hours). Shall I book you in? I’ll send you a reminder the day before.\"}"
-      }
-    }
-  },
-  {
-    "type": "chat_run_event",
-    "data": {
-      "specversion": "1.0",
-      "id": "r_8f2a1c:27",
-      "source": "opencompany://services/chat",
-      "type": "com.opencompany.chat.run.tool_call.ended",
-      "subject": "r_8f2a1c",
-      "time": "2026-09-27T14:02:27.000Z",
-      "datacontenttype": "application/json",
-      "data": {
-        "workflow_id": "wf_salon",
-        "session_id": "wf_salon",
-        "run_id": "r_8f2a1c",
-        "seq": 27,
-        "hub_epoch": "e_fixture",
-        "tool_call_id": "call_8f2a1c"
-      }
-    }
-  },
-  {
-    "type": "chat_run_event",
-    "data": {
-      "specversion": "1.0",
-      "id": "r_8f2a1c:28",
-      "source": "opencompany://services/chat",
       "type": "com.opencompany.chat.run.activity.snapshot",
       "subject": "r_8f2a1c",
       "time": "2026-09-27T14:02:28.000Z",
@@ -842,14 +778,13 @@
         "workflow_id": "wf_salon",
         "session_id": "wf_salon",
         "run_id": "r_8f2a1c",
-        "seq": 28,
+        "seq": 25,
         "hub_epoch": "e_fixture",
-        "message_id": "p_approval_1",
+        "message_id": "ap_1",
         "activity_type": "approval",
         "content": {
           "approval_id": "ap_1",
-          "tool_call_id": "call_8f2a1c",
-          "status": "pending"
+          "tool_call_id": "call_8f2a1c"
         },
         "replace": true
       }
@@ -859,7 +794,7 @@
     "type": "chat_run_event",
     "data": {
       "specversion": "1.0",
-      "id": "r_8f2a1c:29",
+      "id": "r_8f2a1c:26",
       "source": "opencompany://services/chat",
       "type": "com.opencompany.chat.run.finished",
       "subject": "r_8f2a1c",
@@ -869,131 +804,7 @@
         "workflow_id": "wf_salon",
         "session_id": "wf_salon",
         "run_id": "r_8f2a1c",
-        "seq": 29,
-        "hub_epoch": "e_fixture",
-        "outcome": {
-          "type": "interrupt",
-          "interrupts": [
-            {
-              "id": "ap_1",
-              "reason": "tool_call",
-              "message": "Maya wants to send a message",
-              "tool_call_id": "call_8f2a1c",
-              "response_schema": {
-                "type": "object",
-                "properties": {
-                  "approved": {
-                    "type": "boolean"
-                  },
-                  "edited_args": {
-                    "type": "object"
-                  }
-                },
-                "required": [
-                  "approved"
-                ]
-              },
-              "expires_at": "2026-10-04T14:02:00.000Z"
-            }
-          ]
-        },
-        "result": {
-          "reply_message_id": "a_r_8f2a1c"
-        },
-        "duration_ms": 9000,
-        "step_count": 3
-      }
-    }
-  },
-  {
-    "type": "chat_run_event",
-    "data": {
-      "specversion": "1.0",
-      "id": "r_9b3d2e:1",
-      "source": "opencompany://services/chat",
-      "type": "com.opencompany.chat.run.started",
-      "subject": "r_9b3d2e",
-      "time": "2026-09-27T14:02:30.000Z",
-      "datacontenttype": "application/json",
-      "data": {
-        "workflow_id": "wf_salon",
-        "session_id": "wf_salon",
-        "run_id": "r_9b3d2e",
-        "seq": 1,
-        "hub_epoch": "e_fixture",
-        "kind": "resume",
-        "parent_run_id": "r_8f2a1c",
-        "reply_message_id": "a_r_8f2a1c",
-        "started_at": "2026-09-27T14:03:10.000Z"
-      }
-    }
-  },
-  {
-    "type": "chat_run_event",
-    "data": {
-      "specversion": "1.0",
-      "id": "r_9b3d2e:2",
-      "source": "opencompany://services/chat",
-      "type": "com.opencompany.chat.run.tool_call.result",
-      "subject": "r_9b3d2e",
-      "time": "2026-09-27T14:02:31.000Z",
-      "datacontenttype": "application/json",
-      "data": {
-        "workflow_id": "wf_salon",
-        "session_id": "wf_salon",
-        "run_id": "r_9b3d2e",
-        "seq": 2,
-        "hub_epoch": "e_fixture",
-        "message_id": "t_call_8f2a1c",
-        "tool_call_id": "call_8f2a1c",
-        "content": "{\"status\": \"sent\", \"approved_by\": \"user\"}",
-        "role": "tool"
-      }
-    }
-  },
-  {
-    "type": "chat_run_event",
-    "data": {
-      "specversion": "1.0",
-      "id": "r_9b3d2e:3",
-      "source": "opencompany://services/chat",
-      "type": "com.opencompany.chat.run.activity.delta",
-      "subject": "r_9b3d2e",
-      "time": "2026-09-27T14:02:32.000Z",
-      "datacontenttype": "application/json",
-      "data": {
-        "workflow_id": "wf_salon",
-        "session_id": "wf_salon",
-        "run_id": "r_9b3d2e",
-        "seq": 3,
-        "hub_epoch": "e_fixture",
-        "message_id": "p_approval_1",
-        "activity_type": "approval",
-        "patch": [
-          {
-            "op": "replace",
-            "path": "/status",
-            "value": "sent"
-          }
-        ]
-      }
-    }
-  },
-  {
-    "type": "chat_run_event",
-    "data": {
-      "specversion": "1.0",
-      "id": "r_9b3d2e:4",
-      "source": "opencompany://services/chat",
-      "type": "com.opencompany.chat.run.finished",
-      "subject": "r_9b3d2e",
-      "time": "2026-09-27T14:02:33.000Z",
-      "datacontenttype": "application/json",
-      "data": {
-        "workflow_id": "wf_salon",
-        "session_id": "wf_salon",
-        "run_id": "r_9b3d2e",
-        "seq": 4,
+        "seq": 26,
         "hub_epoch": "e_fixture",
         "outcome": {
           "type": "success"
@@ -1001,8 +812,8 @@
         "result": {
           "reply_message_id": "a_r_8f2a1c"
         },
-        "duration_ms": 5200,
-        "step_count": 0
+        "duration_ms": 9000,
+        "step_count": 3
       }
     }
   }

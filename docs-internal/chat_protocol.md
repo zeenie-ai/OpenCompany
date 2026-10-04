@@ -601,9 +601,9 @@ and server tests alike:
 - `<name>.spec.json` and `<name>.patches.jsonl` (`saturday-booking`, `reply-insights`, `reminders`): json-render
   specs and the depth-first patch stream for each. SlotPicker options use the catalog's generic keys (`time`,
   `detail`, `recommended`, `unavailable`, `note`) instead of the handoff's salon ones.
-- `saturday-booking.events.json`: the handoff's AG-UI run as `chat_run_event` frames — steps, text, a generated UI
-  streamed as `activity.delta` patches, a held WhatsApp send ending the run with an `interrupt` outcome, and the
-  `resume` run that sends it once the owner presses Send.
+- `saturday-booking.events.json`: the handoff's AG-UI run as `chat_run_event` frames, as the server sends them:
+  steps, text, a generated UI streamed as `activity.delta` patches, the card of a held WhatsApp send
+  (`activity_type: "approval"`, as `parts.show_approval` publishes it), and `finished` with outcome `success`.
 
 ## Error codes
 

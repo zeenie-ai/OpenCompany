@@ -160,9 +160,10 @@ def fixture_events():
 def test_the_fixture_run_folds_to_its_final_state():
     events = [event for event in fixture_events() if event["subject"] == "r_8f2a1c"]
     snapshot = reducer.replay("r_8f2a1c", events)
-    assert snapshot["state"] == "finished" and snapshot["seq"] == 29
-    assert snapshot["outcome"]["type"] == "interrupt"
-    assert [interrupt["id"] for interrupt in snapshot["interrupts"]] == ["ap_1"]
+    assert snapshot["state"] == "finished" and snapshot["seq"] == 26
+    assert snapshot["outcome"]["type"] == "success"
+    # The interface it streamed, and the card of the draft it made.
+    assert [activity["activity_type"] for activity in snapshot["activities"]] == ["json_render", "approval"]
     assert [step["state"] for step in snapshot["steps"]] == ["done", "done", "done"]
     assert snapshot["steps"][0]["name"] == "Checked Google Calendar"
     [segment] = snapshot["segments"]
@@ -176,12 +177,6 @@ def test_every_prefix_folds_and_duplicates_change_nothing():
     for event in events:
         snapshot = reducer.apply_event(snapshot, event)
         assert reducer.apply_event(snapshot, event) == snapshot
-
-
-def test_the_resume_run_folds_on_its_own():
-    events = [event for event in fixture_events() if event["subject"] == "r_9b3d2e"]
-    snapshot = reducer.replay("r_9b3d2e", events)
-    assert (snapshot["kind"], snapshot["parent_run_id"], snapshot["state"]) == ("resume", "r_8f2a1c", "finished")
 
 
 def test_a_discarded_segment_and_stopping_fold():
