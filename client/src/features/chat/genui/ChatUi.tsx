@@ -6,9 +6,10 @@
  *
  * - **Arriving.** While the run streams it (`live`), the elements appear one
  *   at a time (REVEAL_STEP_MS each, all at once under reduced motion or on a
- *   hidden page) and each rises in once. The count only moves forward, so
- *   patches that land in several bursts never restart it. A UI read back
- *   later shows at once, without motion.
+ *   hidden page) and each rises in once, a dashed slot below them standing
+ *   for the ones still to come. The count only moves forward, so patches
+ *   that land in several bursts never restart it. A UI read back later shows
+ *   at once, without motion.
  * - **State.** It keeps its own state store (lib/jsonRender/uiState.ts),
  *   seeded from what the owner last set (`state`) or the spec's own, and
  *   reports every change to `onStateChange`.
@@ -82,6 +83,9 @@ function ChatUiBody({ partId, spec, state, live, actions, onStateChange }: Omit<
     <LiveUiContext.Provider value={live}>
       <JSONUIProvider registry={chatRegistry} store={store} handlers={handlers}>
         <Renderer spec={shown} registry={chatRegistry} loading={count < total} fallback={NoElement} />
+        {count < total && (
+          <div aria-hidden data-slot="next" className="opencompany-shimmer-slot h-9 rounded-xl border border-dashed border-border-default" />
+        )}
       </JSONUIProvider>
     </LiveUiContext.Provider>
   );
