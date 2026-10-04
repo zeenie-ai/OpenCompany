@@ -70,9 +70,7 @@ function fromMessage(message: ChatMessage, run: MessageRun, sessionId: string): 
     ...emptyRun(run.runId, sessionId),
     state: run.state,
     userMessageId: message.role === 'user' ? message.id : null,
-    outcome: run.outcome === 'success' || run.outcome === 'interrupt' || run.outcome === 'stopped'
-      ? { type: run.outcome, interrupts: [] }
-      : null,
+    outcome: run.outcome === 'success' || run.outcome === 'stopped' ? { type: run.outcome } : null,
     error: run.error,
     steps: run.steps,
     durationMs: run.durationMs,

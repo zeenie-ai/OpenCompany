@@ -31,7 +31,7 @@ export function useStopChatRun(sessionId: string, onFailed?: () => void) {
       const current = store.sessions[sessionId]?.runs[run.runId] ?? run;
       if (!isLiveRun(current)) return;
       if (state === 'stopped') {
-        store.upsertRun({ ...current, state: 'stopped', outcome: { type: 'stopped', interrupts: [] }, result: { noReply: true } });
+        store.upsertRun({ ...current, state: 'stopped', outcome: { type: 'stopped' }, result: { noReply: true } });
       } else if (state === 'stopping' && current.state !== 'stopping') {
         store.upsertRun({ ...current, state: 'stopping' });
       }

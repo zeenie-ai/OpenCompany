@@ -9,6 +9,7 @@
  */
 
 import {
+  RUN_KINDS,
   parseError,
   parseOutcome,
   parseResult,
@@ -46,7 +47,7 @@ export interface RunActivity {
   messageId: string;
   activityType: string;
   content: unknown;
-  /** Patches applied since the snapshot ("Rendering UI · patch k"). */
+  /** Patches applied since the snapshot (development builds show the count). */
   patches: number;
 }
 
@@ -115,7 +116,6 @@ export function workedMs(run: Pick<RunSnapshot, 'durationMs' | 'startedAt' | 'fi
   return Number.isFinite(span) && span >= 0 ? span : null;
 }
 
-const RUN_KINDS: readonly RunKind[] = ['message', 'edit', 'regenerate', 'action', 'resume'];
 const RUN_STATES: readonly RunState[] = ['queued', 'pending', 'running', 'stopping', 'finished', 'error', 'stopped'];
 const STEP_STATES: readonly StepState[] = ['running', 'done', 'failed', 'skipped'];
 
@@ -326,8 +326,6 @@ export function applyRunEvent(run: RunSnapshot, event: RunEvent): RunSnapshot {
         return { ...next, segments: run.segments.filter((segment) => segment.messageId !== discarded) };
       }
       if (event.name === 'opencompany.stopping') return { ...next, state: 'stopping' };
-      return next;
-    case 'unhandled':
       return next;
   }
 }

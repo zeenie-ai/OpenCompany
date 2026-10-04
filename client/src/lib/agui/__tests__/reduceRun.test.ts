@@ -42,6 +42,8 @@ describe('parseRunFrame', () => {
     expect(parseRunFrame(envelope('started', { hub_epoch: undefined }))).toBeNull();
     expect(parseRunFrame(envelope('started', { seq: 0 }, 0))).toBeNull();
     expect(parseRunFrame(envelope('nonsense', {}))).toBeNull();
+    // AG-UI events the server does not send.
+    expect(parseRunFrame(envelope('tool_call.started', { tool_call_id: 'c1', tool_call_name: 'whatsapp_send' }))).toBeNull();
   });
 });
 

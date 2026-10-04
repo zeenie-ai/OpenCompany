@@ -98,11 +98,11 @@ export function useSessionRuns(sessionId: string | null): Record<string, RunSnap
 }
 
 /** The run holding the session's lane: the live run the owner's last
- *  message started (approved sends running as `resume` runs never hold it). */
+ *  message started. */
 export function laneRun(runs: Record<string, RunSnapshot>): RunSnapshot | null {
   let lane: RunSnapshot | null = null;
   for (const run of Object.values(runs)) {
-    if (!isLiveRun(run) || run.kind === 'resume') continue;
+    if (!isLiveRun(run)) continue;
     if (!lane || (run.createdAt ?? run.startedAt ?? '') > (lane.createdAt ?? lane.startedAt ?? '')) lane = run;
   }
   return lane;

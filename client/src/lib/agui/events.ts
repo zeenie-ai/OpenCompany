@@ -9,8 +9,8 @@
  * a typed event with camelCase fields, a session's resync request, or null.
  *
  * Fields beyond the scope are read one at a time: a field that cannot be read
- * is left out, never the whole event. Suffixes later phases render
- * (tool calls, reasoning) come back as `unhandled`.
+ * is left out, never the whole event. A suffix the server does not send is
+ * null.
  */
 
 import type { PatchOp } from './patch';
@@ -18,21 +18,12 @@ import type { PatchOp } from './patch';
 export const RUN_SOURCE = 'opencompany://services/chat';
 export const RUN_TYPE_PREFIX = 'com.opencompany.chat.run.';
 
-export type RunKind = 'message' | 'edit' | 'regenerate' | 'action' | 'resume';
+export type RunKind = 'message' | 'edit' | 'regenerate' | 'action';
 export type RunState = 'queued' | 'pending' | 'running' | 'stopping' | 'finished' | 'error' | 'stopped';
 export type StepState = 'running' | 'done' | 'failed' | 'skipped';
 
-export interface RunInterrupt {
-  id: string;
-  reason: string;
-  message: string;
-  toolCallId?: string;
-  expiresAt?: string;
-}
-
 export interface RunOutcome {
-  type: 'success' | 'interrupt' | 'stopped';
-  interrupts: RunInterrupt[];
+  type: 'success' | 'stopped';
 }
 
 export interface RunResult {
@@ -84,8 +75,7 @@ export type RunEventBody =
   | { type: 'text.ended'; messageId: string; final: boolean; replyMessageId?: string }
   | { type: 'activity.snapshot'; messageId: string; activityType: string; content: unknown; replace: boolean }
   | { type: 'activity.delta'; messageId: string; activityType: string; patch: PatchOp[] }
-  | { type: 'custom'; name: string; value: Record<string, unknown> }
-  | { type: 'unhandled'; suffix: string };
+  | { type: 'custom'; name: string; value: Record<string, unknown> };
 
 export type RunEvent = RunEventScope & RunEventBody;
 
@@ -99,17 +89,9 @@ export interface ResyncRequest {
 
 export type RunFrame = RunEvent | ResyncRequest;
 
-const RUN_KINDS: readonly RunKind[] = ['message', 'edit', 'regenerate', 'action', 'resume'];
+export const RUN_KINDS: readonly RunKind[] = ['message', 'edit', 'regenerate', 'action'];
 const FINISHED_STEP_STATES = ['done', 'failed', 'skipped'] as const;
-const OUTCOME_TYPES = ['success', 'interrupt', 'stopped'] as const;
-const UNHANDLED_SUFFIXES = new Set([
-  'tool_call.started',
-  'tool_call.args',
-  'tool_call.ended',
-  'tool_call.result',
-  'reasoning.started',
-  'reasoning.ended',
-]);
+const OUTCOME_TYPES = ['success', 'stopped'] as const;
 /** Patch operations kept per `activity.delta`. */
 const MAX_PATCH_OPS = 64;
 
@@ -136,28 +118,10 @@ function defined<T extends object>(fields: T): T {
   return Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined)) as T;
 }
 
-function interrupts(raw: unknown): RunInterrupt[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.flatMap((item) => {
-    if (!isRecord(item)) return [];
-    const id = text(item.id);
-    if (!id) return [];
-    return [
-      defined({
-        id,
-        reason: text(item.reason) ?? 'tool_call',
-        message: text(item.message) ?? '',
-        toolCallId: text(item.tool_call_id),
-        expiresAt: text(item.expires_at),
-      }),
-    ];
-  });
-}
-
 export function parseOutcome(raw: unknown): RunOutcome | null {
   if (!isRecord(raw)) return null;
   const type = oneOf(raw.type, OUTCOME_TYPES);
-  return type ? { type, interrupts: interrupts(raw.interrupts) } : null;
+  return type ? { type } : null;
 }
 
 export function parseResult(raw: unknown): RunResult {
@@ -191,7 +155,7 @@ function eventFields(suffix: string, data: Data): RunEventBody | null {
     case 'finished':
       return {
         type: 'finished',
-        outcome: parseOutcome(data.outcome) ?? { type: 'success', interrupts: [] },
+        outcome: parseOutcome(data.outcome) ?? { type: 'success' },
         result: parseResult(data.result),
         durationMs: count(data.duration_ms) ?? 0,
         stepCount: count(data.step_count) ?? 0,
@@ -251,7 +215,7 @@ function eventFields(suffix: string, data: Data): RunEventBody | null {
       return name ? { type: 'custom', name, value: isRecord(data.value) ? data.value : {} } : null;
     }
     default:
-      return UNHANDLED_SUFFIXES.has(suffix) ? { type: 'unhandled', suffix } : null;
+      return null;
   }
 }
 
