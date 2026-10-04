@@ -107,8 +107,9 @@ def chat_updated(*, session_id: str, role: Optional[str]) -> WorkflowEvent:
 
 
 async def announce_chat_updated(session_id: str, role: Optional[str]) -> None:
-    """Send ``chat.updated`` for a session: a message was added (``role``)
-    or the thread was cleared (``role`` None). Never raises."""
+    """Send ``chat.updated`` for a session: a message was added (``role``),
+    or the thread was cleared or a run in it ended (``role`` None). Never
+    raises."""
     from services.chat.relay import active_relay
     from services.status_broadcaster import get_status_broadcaster
 

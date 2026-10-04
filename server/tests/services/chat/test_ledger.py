@@ -13,7 +13,7 @@ from sqlalchemy import text
 
 from models.chat import ChatRun
 from services.chat import ledger
-from tests.services.chat._helpers import add_control
+from tests.services.chat._helpers import add_control, chat_updates
 
 
 async def admit(database, session_id="wf", *, text_="Book Saturday", track=True, state="pending", client_message_id=None):
@@ -212,6 +212,24 @@ async def test_finishing_without_a_reply_says_so(database, hub):
     await started(database, admission)
     finished = await ledger.finish_run(database, run_id=admission.run.run_id, temporal_workflow_id="tw-1", temporal_run_id="tr-1", success=True)
     assert finished.result == {"no_reply": True}
+
+
+async def test_a_run_ending_tells_open_threads(database, hub, frames):
+    # Its answer can now be tried again and the owner's message edited: a
+    # thread read while it ran shows neither until it reads again.
+    admission = await admit(database)
+    run = await started(database, admission)
+    await ledger.post_reply(database, run=run, node_id="wf:chatReply:1", text="Booked.", execution_id="gen-1")
+    args = dict(run_id=run.run_id, temporal_workflow_id="tw-1", temporal_run_id="tr-1", success=True)
+    await ledger.finish_run(database, **args)
+    assert chat_updates(frames) == [{"workflow_id": "wf", "session_id": "wf", "role": None}]
+    # A retried finish changes nothing and says nothing.
+    await ledger.finish_run(database, **args)
+    assert len(chat_updates(frames)) == 1
+    # A run stopped before anything picked it up ends at once.
+    second = await admit(database, text_="And Sunday?")
+    await ledger.request_stop(database, second.run.run_id)
+    assert len(chat_updates(frames)) == 2
 
 
 async def test_a_failed_run_keeps_its_error(database, hub):

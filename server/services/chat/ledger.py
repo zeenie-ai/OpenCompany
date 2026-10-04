@@ -465,7 +465,7 @@ async def start_run(
 
 async def _settle(database: Any, run: ChatRun, values: Dict[str, Any]) -> Optional[ChatRun]:
     """Move ``run`` from the state it was read in to a terminal one, then
-    publish it. None when the run moved meanwhile."""
+    publish it and tell open threads. None when the run moved meanwhile."""
     async with database.get_session() as session:
         result = await session.execute(
             update(ChatRun).where(ChatRun.run_id == run.run_id, ChatRun.state == run.state).values(finished_at=_utcnow(), **values)
@@ -477,7 +477,18 @@ async def _settle(database: Any, run: ChatRun, values: Dict[str, Any]) -> Option
     if settled is not None and settled.state in TERMINAL_STATES:
         await _tell_notes(database, settled)
         publish_terminal(settled)
+        await _announce_end(settled)
     return settled
+
+
+async def _announce_end(run: ChatRun) -> None:
+    """A run's end changes its thread even when it wrote nothing new: its
+    answer can now be tried again and the owner's message edited
+    (``editable``), and what its tools showed is sealed on its reply. Read
+    while the run was live, a thread kept none of that."""
+    from services.chat_thread import announce_chat_updated
+
+    await announce_chat_updated(run.session_id, None)
 
 
 async def _tell_notes(database: Any, run: ChatRun) -> None:
@@ -498,12 +509,10 @@ async def _tell_notes(database: Any, run: ChatRun) -> None:
 
 async def _seal(database: Any, run: ChatRun) -> None:
     """Put what the run's tools showed on its reply (``services/chat/
-    parts.py``), and tell open threads when that changed the thread."""
+    parts.py``). Every caller then ends the run, which tells open threads."""
     from services.chat.parts import seal_parts
-    from services.chat_thread import announce_chat_updated
 
-    if await seal_parts(database, run):
-        await announce_chat_updated(run.session_id, "assistant")
+    await seal_parts(database, run)
 
 
 async def _success_values(database: Any, run: ChatRun, outcome: str) -> Dict[str, Any]:
@@ -591,6 +600,7 @@ async def request_stop(database: Any, run_id: str) -> Optional[ChatRun]:
     run = await get_run(database, run_id)
     if run is not None and ended:
         publish_terminal(run)
+        await _announce_end(run)
     elif run is not None and stopping:
         _publish(run, "custom", {"name": "opencompany.stopping", "value": {}}, "stopping")
     return run

@@ -56,7 +56,9 @@ internal socket, load the workflow, and compare its owner with the socket's exec
   (`python -m services.temporal.worker`) has no sockets, so it relays instead; see
   [Standalone workers](#standalone-workers).
 - `chat.updated` remains an identity-only broadcast (`{workflow_id, session_id, role}`) that tells every open thread
-  to refetch `get_chat_messages`.
+  to refetch `get_chat_messages`: after a message is added, after a clear, and when a run ends (`role` null), since
+  a run's end changes what its thread offers (its answer can be tried again, the owner's message edited:
+  `editable`).
 
 ## Events
 

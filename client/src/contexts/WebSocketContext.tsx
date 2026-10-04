@@ -1191,9 +1191,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
         case 'chat.updated': {
           // CloudEvents-typed chat row change from services/chat_thread.py,
-          // sent after every chat insert and clear. Identity only: every
-          // chat showing the session (Home's employee page, the editor's
-          // Chat pane) refetches its thread through `get_chat_messages`.
+          // sent after every chat insert and clear, and when a chat run
+          // ends. Identity only: every chat showing the session (Home's
+          // employee page, the editor's Chat pane) refetches its thread
+          // through `get_chat_messages`.
           const identity = (data as WorkflowEvent<{ workflow_id?: string; session_id?: string; role?: string }>)?.data;
           const sessionId = identity?.session_id;
           if (sessionId) {
