@@ -65,16 +65,18 @@ exists to keep them apart.
 
 ## Security invariants
 
-**`account_id` is stripped from model arguments.** `server_controlled_fields`
-is enforced only in `BaseNode.execute_as_tool`'s ToolNode branch; a dual-purpose
-ActionNode takes an earlier return that merges `{**node_params, **tool_args}`
-with model arguments winning (the non-`ToolNode` branch of
-[`BaseNode.execute_as_tool`](../server/services/plugin/base.py)).
-Since inbound Discord messages are the realistic source of hostile tool
-arguments and `account_id` selects which bot identity sends, `AccountScopedNode`
-in [`_base.py`](../server/nodes/discord/_base.py) removes locked fields before
-the merge. A test drives the real tool path rather than asserting the
-declaration.
+**`account_id` is stripped from model arguments.** Inbound Discord messages are
+the realistic source of hostile tool arguments and `account_id` selects which
+bot identity sends, so both nodes list it in `server_controlled_fields`. The
+framework enforces that on every tool path: in process,
+[`BaseNode.execute_as_tool`](../server/services/plugin/base.py) drops locked
+fields from the model's arguments before its `{**node_params, **tool_args}`
+merge; on Temporal, where the agent workflow has already merged the arguments,
+[`NodeExecutor`](../server/services/node_executor.py) puts back the saved value
+(or the default). `AccountScopedNode` in
+[`_base.py`](../server/nodes/discord/_base.py) strips locked fields again as
+defence in depth; it runs only in process, since the per-type activity calls
+`execute` for an ActionNode. Tests drive both paths with a hostile `account_id`.
 
 **The interaction token never leaves the server.** It is a 15-minute bearer
 credential that can post as the app, and trigger output is persisted three ways,

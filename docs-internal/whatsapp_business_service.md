@@ -63,14 +63,15 @@ validates the WABA id at the same time, returning discovered numbers with their
 
 There is deliberately **no `phone_number_id` parameter** on any node. It selects
 which business identity a message is sent *from*, which is exactly what a prompt
-injection in an inbound message would want to set. On a dual-purpose
-`ActionNode` a declared field cannot be protected: the split-schema machinery
-(`ToolInput` / `server_controlled_fields`) is a `ToolNode` extension, and
-`BaseNode.execute_as_tool` sends `{**node_params, **tool_args}` for everything
-else — model arguments win, and `ctx.raw["_raw_parameters"]` is that same merged
-dict. Sourcing it from the credential puts it somewhere model arguments cannot
-reach. Locked by `TestModelCannotChooseTheSendingNumber`, which drives the real
-tool path with a hostile `phone_number_id`.
+injection in an inbound message would want to set. Listing a declared field in
+`server_controlled_fields` would keep the model's value out on every tool path
+(`BaseNode.execute_as_tool` in process, `NodeExecutor` on Temporal), but the
+model would still be offered the field: `ToolInput` is a `ToolNode` extension,
+so the tool schema of a dual-purpose `ActionNode` is its whole `Params`.
+Sourcing the number from the credential keeps it out of the schema, and out of
+every parameter merge as defence in depth. Locked by `TestParamsShape` and
+`TestModelCannotChooseTheSendingNumber`, which drives the real tool path with a
+hostile `phone_number_id`.
 
 ## Webhook
 

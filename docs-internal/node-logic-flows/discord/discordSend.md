@@ -105,8 +105,9 @@ flowchart TD
 
 - One attachment per message. Discord allows 10; multiple would need a list
   param and multi-file panel support.
-- `account_id` is removed from tool arguments by `AccountScopedNode` —
-  `server_controlled_fields` alone does nothing on a dual-purpose ActionNode.
+- `account_id` is in `server_controlled_fields`, which the framework enforces on
+  every tool path (`BaseNode.execute_as_tool` in process, `NodeExecutor` on
+  Temporal); `AccountScopedNode` strips it again as defence in depth.
 - A 429 over ~30s raises a retryable `RuntimeError` so Temporal re-dispatches
   rather than pinning a worker slot.
 

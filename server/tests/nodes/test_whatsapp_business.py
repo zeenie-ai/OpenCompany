@@ -1,10 +1,9 @@
 """Contract for the official Meta WhatsApp Cloud API plugin.
 
 The security-relevant test here is ``TestModelCannotChooseTheSendingNumber``.
-On a dual-purpose ActionNode the split-schema machinery does not apply --
-``BaseNode.execute_as_tool`` merges ``{**node_params, **tool_args}`` for
-anything that is not a ToolNode -- so the only way to keep a field away from
-the model is to keep it out of Params entirely. This asserts that holds.
+A dual-purpose ActionNode's tool schema is its whole Params, so the way to keep
+a field away from the model entirely, schema included, is to keep it out of
+Params. This asserts that holds.
 """
 
 from __future__ import annotations
@@ -513,8 +512,9 @@ class TestParamsShape:
     def test_phone_number_id_is_not_a_parameter(self):
         """It selects the business identity a message is sent FROM.
 
-        Declaring it would make it model-settable on this node kind, so it is
-        credential-sourced instead. If someone adds it back, this fails.
+        Declaring it would put it in the model's tool schema on this node
+        kind, so it is credential-sourced instead. If someone adds it back,
+        this fails.
         """
         assert "phone_number_id" not in WhatsAppBusinessSendParams.model_fields
 

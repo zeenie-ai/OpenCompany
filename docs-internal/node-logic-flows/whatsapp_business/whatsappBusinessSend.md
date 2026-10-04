@@ -137,11 +137,11 @@ flowchart TD
 ## Edge cases & known limits
 
 - **`phone_number_id` is intentionally absent from `Params`.** It selects which
-  business identity a message is sent *from*. On a dual-purpose `ActionNode`
-  there is no way to protect a declared field: `BaseNode.execute_as_tool` sends
-  `{**node_params, **tool_args}`, so model arguments win, and
-  `ctx.raw["_raw_parameters"]` is that same merged dict. Sourcing it from the
-  credential is the only place the model cannot reach. Locked by
+  business identity a message is sent *from*. `server_controlled_fields` would
+  keep a model-set value out on every tool path, but a dual-purpose
+  `ActionNode`'s tool schema is its whole `Params`, so a declared field would
+  still be offered to the model. Sourcing it from the credential keeps it out of
+  the schema and out of every parameter merge. Locked by
   `TestModelCannotChooseTheSendingNumber`, which drives the real tool path with
   a hostile value.
 - The upload posts **bytes, not a file handle** — `Connection.request` replays

@@ -138,8 +138,8 @@ class DiscordSendNode(AccountScopedNode):
     annotations = {"destructive": False, "readonly": False, "open_world": True}
     task_queue = TaskQueue.MESSAGING
     usable_as_tool = True
-    # Which bot sends is operator configuration, not a model decision.
-    # AccountScopedNode is what enforces this on the tool path.
+    # Which bot sends is operator configuration, not a model decision: every
+    # tool path keeps it from the model (AccountScopedNode strips it again).
     server_controlled_fields = frozenset({"account_id"})
     approval = ApprovalSpec(
         channel="Discord",

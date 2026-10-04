@@ -211,11 +211,10 @@ async def resolve_phone_number_id(ctx: NodeContext) -> str:
     """The business number to send from — credential-sourced only.
 
     Deliberately takes no node-level override. This value selects which
-    business identity a message is sent *from*, and on a dual-purpose
-    ActionNode any declared parameter is reachable by model arguments:
-    ``BaseNode.execute_as_tool`` sends ``{**node_params, **tool_args}`` for
-    anything that is not a ToolNode, so the model wins. Sourcing it from the
-    credential puts it somewhere model arguments cannot reach.
+    business identity a message is sent *from*. A declared parameter would
+    appear in the model's tool schema (a dual-purpose ActionNode's schema is
+    its whole Params), even locked with ``server_controlled_fields``; sourcing
+    it from the credential keeps it out of the schema and every merge.
 
     A per-node override belongs with multi-number support, which needs the
     deployed-trigger filtering that is currently deferred.

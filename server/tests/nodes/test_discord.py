@@ -1,9 +1,8 @@
 """Contract for the Discord plugin.
 
-The security-relevant test is ``TestModelCannotChooseTheAccount``. On a
-dual-purpose ActionNode ``BaseNode.execute_as_tool`` merges
-``{**node_params, **tool_args}`` with model arguments winning, so the only
-thing standing between a prompt injection in an inbound Discord message and
+The security-relevant test is ``TestModelCannotChooseTheAccount``. A
+dual-purpose ActionNode's tool call merges ``{**node_params, **tool_args}``,
+so what stands between a prompt injection in an inbound Discord message and
 sending as a different bot is ``server_controlled_fields``. This asserts it
 actually holds through the real tool path, not just the schema.
 """
@@ -382,9 +381,9 @@ class TestToolSchema:
 
     @pytest.mark.parametrize("node_cls", [DiscordSendNode, DiscordActionNode])
     def test_locked_fields_are_stripped_from_model_arguments(self, node_cls):
-        """The guarantee AccountScopedNode exists to provide, at the class
-        level: every locked field must be removed from tool_args before the
-        merge that would otherwise let the model win."""
+        """AccountScopedNode strips every locked field from tool_args before
+        the merge, again, behind the framework's own strip (defence in
+        depth)."""
         assert node_cls.server_controlled_fields
         assert node_cls.execute_as_tool is not _base.ActionNode.execute_as_tool
 

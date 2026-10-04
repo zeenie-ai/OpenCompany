@@ -311,16 +311,16 @@ class WhatsAppBusinessSendParams(BaseModel):
     #
     # It selects which business identity a message is sent *from*, so it is
     # exactly the field a prompt injection in an inbound message would want to
-    # set. On a dual-purpose ActionNode there is no way to protect it: the
-    # split-schema machinery (ToolInput / server_controlled_fields) is a
-    # ToolNode extension, and BaseNode.execute_as_tool sends
-    # ``{**node_params, **tool_args}`` for everything else -- model arguments
-    # win, and ctx.raw["_raw_parameters"] is that same merged dict, so reading
-    # from it protects nothing.
+    # set. Listed in server_controlled_fields, a declared field would be kept
+    # from the model on every tool path (BaseNode.execute_as_tool strips it in
+    # process; NodeExecutor restores the saved value on Temporal), but it would
+    # still appear in the tool schema: ToolInput is a ToolNode extension, so
+    # this ActionNode's schema is its whole Params, and the model would be
+    # offered a field it cannot set.
     #
-    # The sending number therefore comes only from the credential, where the
-    # model cannot reach it. A per-node override belongs with multi-number
-    # support, which is deferred.
+    # The sending number therefore comes only from the credential, which keeps
+    # it out of the schema and out of every parameter merge. A per-node
+    # override belongs with multi-number support, which is deferred.
 
     model_config = ConfigDict(extra="ignore")
 
@@ -427,10 +427,10 @@ class WhatsAppBusinessSendNode(ActionNode):
     )
 
     # ToolInput / server_controlled_fields are deliberately NOT declared.
-    # They are ToolNode extensions; on a dual-purpose ActionNode they are
-    # silently inert (BaseNode.execute_as_tool short-circuits before reading
-    # them), so declaring them would advertise a protection that does not
-    # exist. Fields the model must not control are kept out of Params instead.
+    # ToolInput is a ToolNode extension; nothing reads it on an ActionNode.
+    # server_controlled_fields would work here (every tool path honours it),
+    # but no field in Params needs it: the one field the model must not
+    # control, the sending number, is kept out of Params (see above).
     Params = WhatsAppBusinessSendParams
     Output = WhatsAppBusinessSendOutput
 
