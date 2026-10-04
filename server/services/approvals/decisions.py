@@ -16,6 +16,10 @@
 Each decision is a compare-and-swap on the row's revision, recorded with its
 ``decision_key`` in the same transaction (``approval_decisions``): the same
 key again returns the row as it is. Never imports ``nodes/``.
+
+A pending row past its expiry ends ``expired`` (:func:`expire_if_due`) when
+a decision reaches it, and a held call's row also when the chat watchdog
+sweeps (``reconcile.expire_due``); whoever ends it announces it.
 """
 
 from __future__ import annotations
@@ -26,6 +30,7 @@ from typing import Any, Dict, Optional, Tuple
 from models.approvals import ApprovalRequest
 from services.approvals import store
 from services.approvals.contract import DEFAULT_TIMEOUT_HOURS, RESTORE_SECONDS, UNDO_SECONDS
+from services.approvals.listeners import change_of, notify_approval_changed
 
 DECISIONS = ("send", "undo", "discard", "restore", "retry")
 #: Why a decision on a row that already moved on was refused.
@@ -57,15 +62,23 @@ def _settled(row: ApprovalRequest) -> DecisionRefused:
     return DecisionRefused(SETTLED_ERRORS.get(row.status, "already_decided"))
 
 
-async def _expire_if_due(database: Any, row: ApprovalRequest, now: datetime) -> ApprovalRequest:
-    """A pending row past its expiry ends ``expired`` (expiry is lazy)."""
+async def expire_if_due(database: Any, row: ApprovalRequest, now: datetime) -> ApprovalRequest:
+    """A pending row past its expiry ends ``expired``. The caller that ends
+    it announces it, and tells the employee when it held a tool call; one
+    another caller ended meanwhile comes back as it is."""
     expires = store.aware(row.expires_at)
     if row.status != "pending" or expires is None or expires > now:
         return row
     try:
-        return await store.settle(database, row.id, expected_revision=row.revision, status="expired")
+        expired = await store.settle(database, row.id, expected_revision=row.revision, status="expired")
     except store.ApprovalConflict:
         return await store.get(database, row.id) or row
+    await notify_approval_changed(change_of(expired, "expired"))
+    if expired.kind == "tool_call":
+        from services.approvals.execution import tell_employee
+
+        await tell_employee(database, expired)
+    return expired
 
 
 def _send_values(row: ApprovalRequest, text: Any, subject: Any, now: datetime) -> Dict[str, Any]:
@@ -119,7 +132,7 @@ async def decide(
     if await store.find_decision(database, row.id, decision_key) is not None:
         return (await store.get(database, row.id)) or row, True
     now = now or _utcnow()
-    row = await _expire_if_due(database, row, now)
+    row = await expire_if_due(database, row, now)
     record = (decision, decision_key, actor)
     kind = row.kind or "gate"
     if decision == "send":

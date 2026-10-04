@@ -97,6 +97,16 @@ class ChatRunWatchdog:
                 raise
             except Exception:  # noqa: BLE001 - the next sweep tries again
                 logger.warning("Chat run sweep failed", exc_info=True)
+            try:
+                # Drafts held for the owner wait on nothing, so they end here
+                # once past their expiry (services/approvals/reconcile.py).
+                from services.approvals.reconcile import expire_due
+
+                await expire_due(self.database)
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # noqa: BLE001 - the next round tries again
+                logger.warning("Held draft expiry failed", exc_info=True)
             await asyncio.sleep(self.interval)
 
 

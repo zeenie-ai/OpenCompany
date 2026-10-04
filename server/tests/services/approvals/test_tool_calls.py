@@ -124,6 +124,35 @@ async def test_tools_that_cannot_wait_are_refused_or_restricted(harness, nodes_l
     assert await store.list_approvals(harness.database) == []
 
 
+async def test_a_held_call_past_its_expiry_ends_on_its_own(harness, nodes_loaded):
+    from datetime import timedelta
+
+    from services.approvals import reconcile
+    from services.chat import notes
+
+    await rules.set_ask_first(harness.database, "wf", True)
+    await tool_calls.check(call(), get_node_class("whatsappSend"))
+    (held,) = await store.list_approvals(harness.database, status="pending")
+    # A gate's draft past its expiry is its own node's to end.
+    gate, _ = await store.get_or_create(
+        harness.database,
+        idempotency_key="g:due",
+        fields={"owner_id": "owner", "workflow_id": "wf", "node_id": "wf:approvalGate:1", "draft_text": "hi", "expires_at": held.expires_at},
+    )
+    later = store.aware(held.expires_at) + timedelta(hours=1)
+    harness.broadcaster.frames.clear()
+
+    assert await reconcile.expire_due(harness.database, now=later) == [held.id]
+    assert (await store.get(harness.database, held.id)).status == "expired"
+    assert (await store.get(harness.database, gate.id)).status == "pending"
+    lifecycle = [frame["data"]["type"] for frame in harness.broadcaster.frames if frame["type"] == "approval_lifecycle"]
+    assert lifecycle == ["com.opencompany.approval.expired"]
+    (note,) = await notes.claim_notes(harness.database, session_id="wf", run_id="r_next")
+    assert note.kind == "update" and "expired unsent" in note.text
+    # Ended once.
+    assert await reconcile.expire_due(harness.database, now=later) == []
+
+
 class Ran:
     """Stands in for a plugin's execute_as_tool: records what ran."""
 

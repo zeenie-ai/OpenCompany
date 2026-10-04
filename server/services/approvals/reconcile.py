@@ -19,6 +19,10 @@ since it may have gone out.
 
 Runs once per process, the first time the drafts are listed; local rows
 created by this process are never touched.
+
+Expiry: a held call waits on nothing, so the chat watchdog ends one past
+its expiry every round (:func:`expire_due`). Rows are kept until their
+workflow is deleted.
 """
 
 from __future__ import annotations
@@ -106,6 +110,24 @@ async def recover_sends(database: Any, *, now: datetime | None = None) -> List[s
     return touched
 
 
+async def expire_due(database: Any, *, now: datetime | None = None) -> List[str]:
+    """End the held calls past their expiry (``decisions.expire_if_due``,
+    which announces each). A gate's row is its own node's to end."""
+    from services.approvals.decisions import expire_if_due
+
+    now = now or datetime.now(timezone.utc)
+    expired: List[str] = []
+    for row in await store.list_pending(database):
+        if row.kind != "tool_call":
+            continue
+        settled = await expire_if_due(database, row, now)
+        if settled.status == "expired":
+            expired.append(settled.id)
+    if expired:
+        logger.info("Ended held drafts past their expiry", count=len(expired))
+    return expired
+
+
 async def reconcile_once(database: Any) -> None:
     global _done
     if _done:
@@ -124,4 +146,4 @@ def reset_for_tests() -> None:
     _done = False
 
 
-__all__ = ["PROCESS_STARTED", "cancel_orphaned_pending", "reconcile_once", "recover_sends"]
+__all__ = ["PROCESS_STARTED", "cancel_orphaned_pending", "expire_due", "reconcile_once", "recover_sends"]

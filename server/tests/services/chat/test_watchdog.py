@@ -41,6 +41,32 @@ async def test_it_sweeps_at_once_and_keeps_sweeping_after_a_failure(monkeypatch)
     assert len(sweeps) == count, "the loop kept running after stop"
 
 
+async def test_it_ends_held_drafts_every_round_and_survives_a_failure(monkeypatch):
+    from services.approvals import reconcile
+
+    async def sweep(database, *, temporal_status, temporal_cancel):
+        return []
+
+    rounds = []
+
+    async def expire_due(database):
+        rounds.append(database)
+        if len(rounds) == 1:
+            raise RuntimeError("database is locked")
+        return []
+
+    monkeypatch.setattr(watchdog.ledger, "sweep", sweep)
+    monkeypatch.setattr(reconcile, "expire_due", expire_due)
+    dog = watchdog.ChatRunWatchdog("db", interval=0.01)
+    dog.start()
+    for _ in range(50):
+        if len(rounds) >= 3:
+            break
+        await asyncio.sleep(0.01)
+    await dog.stop()
+    assert len(rounds) >= 3 and set(rounds) == {"db"}
+
+
 def _container(monkeypatch, client):
     import core.container as container_module
 
