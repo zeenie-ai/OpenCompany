@@ -40,7 +40,6 @@ type Reply = {
   run_id?: string | null;
   message_id?: string | null;
   delivery?: string;
-  reaches?: unknown;
 };
 
 export interface StartedRun {
@@ -120,12 +119,9 @@ export function useSwitchChatBranch(sessionId: string, scope: ThreadScope, onRef
   });
 }
 
-/** Where a rating goes: `next_turn` (the employee reads it before its next
- *  answer) and `memory` (a Memory tool keeps it). */
-export type FeedbackReach = 'next_turn' | 'memory';
-
 /** Rate an answer good or bad, or take the rating back (`null`). Shown at
- *  once; put back when the server refuses. */
+ *  once; put back when the server refuses. The employee reads a rating
+ *  before its next answer. */
 export function useSetChatFeedback(sessionId: string, scope: ThreadScope, onRefused?: (error: ChatBranchError) => void) {
   const { request, refetch, queryClient } = useBranchRequest(sessionId, scope);
   const key = chatThreadKey(sessionId, scope);
@@ -133,11 +129,9 @@ export function useSetChatFeedback(sessionId: string, scope: ThreadScope, onRefu
     queryClient.setQueryData<ChatThreadData>(key, (data) =>
       data ? { ...data, messages: data.messages.map((message) => (message.id === messageId ? { ...message, feedback: value } : message)) } : data,
     );
-  return useMutation<FeedbackReach[], ChatBranchError, { messageId: string; value: Feedback | null }, { before: Feedback | null }>({
+  return useMutation<void, ChatBranchError, { messageId: string; value: Feedback | null }, { before: Feedback | null }>({
     mutationFn: async ({ messageId, value }) => {
-      const reply = await request('set_chat_feedback', { message_id: messageId, value });
-      const reaches = Array.isArray(reply.reaches) ? reply.reaches : [];
-      return reaches.filter((reach): reach is FeedbackReach => reach === 'next_turn' || reach === 'memory');
+      await request('set_chat_feedback', { message_id: messageId, value });
     },
     onMutate: ({ messageId, value }) => {
       const before = queryClient.getQueryData<ChatThreadData>(key)?.messages.find((message) => message.id === messageId)?.feedback ?? null;

@@ -111,8 +111,6 @@ export function branchRefusalText(code: string, name: string): string {
 }
 
 /** What the owner hears after rating an answer: where the rating goes. */
-export function feedbackThanks(name: string, reaches: readonly string[]): string {
-  return reaches.includes('memory')
-    ? `Thanks — ${name} will see this next time and remember it.`
-    : `Thanks — ${name} will see this next time.`;
+export function feedbackThanks(name: string): string {
+  return `Thanks — ${name} will see this next time.`;
 }

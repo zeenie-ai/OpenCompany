@@ -749,9 +749,9 @@ async def handle_switch_chat_branch(data: Dict[str, Any], websocket: WebSocket) 
 @ws_handler("message_id")
 async def handle_set_chat_feedback(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Rate an answer (``value``: ``up`` or ``down``) or take the rating back
-    (``null``). Answers where it reaches (``reaches``: ``next_turn``, and
-    ``memory`` when the employee keeps it too); ``not_found`` for a message
-    that is not an answer in this chat."""
+    (``null``). Answers where it reaches (``reaches``: ``next_turn``, the
+    employee's next turn; none for a rating taken back); ``not_found`` for a
+    message that is not an answer in this chat."""
     session_id = session_id_of(data)
     database = container.database()
     try:

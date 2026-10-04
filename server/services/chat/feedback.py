@@ -5,29 +5,19 @@
 employee a note for its next turn in the chat (``[feedback]{...}[/feedback]``
 keyed per answer: changing the rating before that turn replaces the note,
 and taking it back drops one not yet told). It answers where the rating
-reaches: ``next_turn``, plus whatever a registered listener adds
-(``register_feedback_listener``; a plugin that keeps it somewhere the
-employee reads later answers that place, such as ``memory``).
+reaches: ``next_turn``.
 """
 
 from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from sqlmodel import select
 
-from core.logging import get_logger
 from models.chat import ChatFeedback
 from models.database import ChatMessage
-
-logger = get_logger(__name__)
-
-#: ``await listener(database=..., workflow_id=..., message=<row dict>,
-#: value="up"|"down")`` -> a reach it added (``"memory"``), or None.
-FeedbackListener = Callable[..., Awaitable[Optional[str]]]
-_LISTENERS: List[FeedbackListener] = []
 
 VALUES = ("up", "down")
 #: How much of the answer the note quotes.
@@ -40,13 +30,6 @@ class FeedbackRefused(ValueError):
     def __init__(self, code: str) -> None:
         super().__init__(code)
         self.code = code
-
-
-def register_feedback_listener(listener: FeedbackListener) -> None:
-    """Run ``listener`` after each rating the owner gives (not a rating taken
-    back). Registering the same listener twice is a no-op."""
-    if listener not in _LISTENERS:
-        _LISTENERS.append(listener)
 
 
 def feedback_note(answer: str, value: str) -> str:
@@ -94,16 +77,7 @@ async def set_feedback(database: Any, *, session_id: str, message_uid: str, valu
         await drop_note(database, session_id=session_id, key=key)
         return []
     await upsert_note(database, session_id=session_id, key=key, kind="feedback", text=feedback_note(row_dict["message"], value))
-    reaches = ["next_turn"]
-    for listener in list(_LISTENERS):
-        try:
-            reach = await listener(database=database, workflow_id=session_id, message=row_dict, value=value)
-        except Exception:  # noqa: BLE001 - the note reaches the employee either way
-            logger.warning("Feedback listener failed", listener=getattr(listener, "__qualname__", repr(listener)), exc_info=True)
-            continue
-        if isinstance(reach, str) and reach and reach not in reaches:
-            reaches.append(reach)
-    return reaches
+    return ["next_turn"]
 
 
 async def feedback_for(database: Any, session_id: str) -> Dict[str, str]:
@@ -114,11 +88,9 @@ async def feedback_for(database: Any, session_id: str) -> Dict[str, str]:
 
 
 __all__ = [
-    "FeedbackListener",
     "FeedbackRefused",
     "VALUES",
     "feedback_for",
     "feedback_note",
-    "register_feedback_listener",
     "set_feedback",
 ]

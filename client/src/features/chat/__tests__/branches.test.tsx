@@ -206,7 +206,7 @@ describe('rating and copying an answer', () => {
     expect(good).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(good);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Good reply' })).toHaveAttribute('aria-pressed', 'true'));
-    await waitFor(() => expect(chat.notify).toHaveBeenCalledWith(feedbackThanks('Maya', ['next_turn']), 'success'));
+    await waitFor(() => expect(chat.notify).toHaveBeenCalledWith(feedbackThanks('Maya'), 'success'));
     expect(requests('set_chat_feedback')[0]).toMatchObject({ message_id: 'a1', value: 'up' });
     // Pressed again: the rating is taken back, without a thank-you.
     fireEvent.click(screen.getByRole('button', { name: 'Good reply' }));
@@ -250,6 +250,6 @@ describe('the copy', () => {
     expect(branchRefusalText('run_in_progress', 'Maya')).toContain('Maya is still answering');
     expect(branchRefusalText('older_generation', 'Maya')).toContain('before Maya restarted');
     expect(branchRefusalText('something', 'Maya')).toBe('That didn’t go through. Try again.');
-    expect(feedbackThanks('Maya', ['next_turn', 'memory'])).toBe('Thanks — Maya will see this next time and remember it.');
+    expect(feedbackThanks('Maya')).toBe('Thanks — Maya will see this next time.');
   });
 });

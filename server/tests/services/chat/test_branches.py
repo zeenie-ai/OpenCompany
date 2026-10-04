@@ -327,23 +327,6 @@ async def test_rating_an_answer(chat):
     assert (await chat.handlers.handle_set_chat_feedback({"session_id": "wf", "message_id": reply["id"], "value": "meh"}, None))["error"] == "invalid_request"
 
 
-async def test_a_rating_listener_adds_where_it_reaches(chat, monkeypatch):
-    from services.chat import feedback
-
-    heard = []
-
-    async def remember(*, database, workflow_id, message, value):
-        heard.append((workflow_id, message["uid"], value))
-        return "memory"
-
-    monkeypatch.setattr(feedback, "_LISTENERS", [])
-    feedback.register_feedback_listener(remember)
-    await conversation(chat)
-    reply = (await thread(chat))["messages"][1]
-    rated = await chat.handlers.handle_set_chat_feedback({"session_id": "wf", "message_id": reply["id"], "value": "down"}, None)
-    assert rated["reaches"] == ["next_turn", "memory"] and heard == [("wf", reply["id"], "down")]
-
-
 async def test_clearing_the_chat_forgets_versions_and_ratings(chat):
     from sqlmodel import select
 

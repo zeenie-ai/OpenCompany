@@ -141,7 +141,7 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
       rate: (messageId, value) =>
         feedbackMutate(
           { messageId, value },
-          { onSuccess: (reaches) => value && notify(feedbackThanks(persona.name, reaches), 'success') },
+          { onSuccess: () => value && notify(feedbackThanks(persona.name), 'success') },
         ),
     }),
     [sessionId, editingId, busy, editMutate, switchMutate, regenerateMutate, feedbackMutate, notify, persona.name],
