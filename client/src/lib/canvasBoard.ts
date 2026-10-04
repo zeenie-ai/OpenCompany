@@ -27,7 +27,7 @@ export interface CanvasItem {
   source: 'agent' | 'workflow' | string;
   created_at: string | null;
   /** Its version: the agent's canvas tool revises an item in place, and the
-   *  board keeps the earlier ones (`canvas_versions` / `canvas_version`). */
+   *  board keeps the earlier ones (`canvas_version` reads one). */
   version?: number;
   updated_at?: string | null;
 }

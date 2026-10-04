@@ -3,30 +3,24 @@
 The wire contract between the server's chat runtime (`server/services/chat/`) and the shared chat UI
 (`client/src/features/chat/`). Home's employee page and Dev's console Chat pane both speak it. It follows AG-UI's
 event model and ordering ([events](https://docs.ag-ui.com/concepts/events),
-[interrupts](https://docs.ag-ui.com/concepts/interrupts.md),
 [activity events](https://docs.ag-ui.com/spec/1.0/events/activity.md)), carried on the existing WebSocket with
 snake_case fields in the repo's CloudEvents envelope (`services/events/envelope.py`), never as literal camelCase
 AG-UI JSON.
 
-Status: being built in phases on `main`; the design and the owner's decisions are in the plan recorded at
-`~/.claude/plans/analyze-the-new-generative-zazzy-cosmos.md`. Change this document in the same commit as any change
-to the shapes below, and bump `protocol_version` (returned by `get_chat_messages`) when an existing field changes
-meaning.
+Status: built. Change this document in the same commit as any change to the shapes below, and bump
+`protocol_version` (returned by `get_chat_messages`) when an existing field changes meaning.
 
-Built so far: runs and their storage, the lifecycle events (`started`, `finished`, `failed`), subscriptions,
-`get_chat_messages` v2 (with each message's `run`), `get_chat_run`, the watchdog and the MachinaWorkflow patch (see
-[Runs](#runs)); the answer streaming as text events, working steps and Stop (see [Streaming, steps and
-Stop](#streaming-steps-and-stop)); generated UI in replies with its state and button presses (see [Generated
-UI](#generated-ui)); and the shared chat UI on both hosts (see [Client](#client)). Every other event, handler and
-part below is the contract the later phases build to.
+Only the AG-UI events the chat uses are sent. A tool call shows as a step, not as `TOOL_CALL_*` events; reasoning is
+never streamed; and a draft waiting for the owner is an approval card that follows `approval_lifecycle`
+([Approvals](#approvals)), so no run ends with AG-UI's `interrupt` outcome and nothing resumes one.
 
 ## Concepts
 
 | Term | Meaning |
 |---|---|
 | Session | One conversation. Its id is the workflow id (`"default"` with no workflow open). |
-| Run | One answer the employee works on: an owner message, an edit, a regenerate, or a button press in generated UI (kinds `message`, `edit`, `regenerate`, `action`). Approved sends execute as runs of kind `resume`. |
-| Lane | At most one non-terminal run per session, `resume` runs excepted. A second send is refused with `run_in_progress`; the composer shows Stop instead of Send while a run is live. |
+| Run | One answer the employee works on: an owner message, an edit, a regenerate, or a button press in generated UI (kinds `message`, `edit`, `regenerate`, `action`). An approved send is not a run: `ApprovedToolCallWorkflow` sends it. |
+| Lane | At most one non-terminal run per session. A second send is refused with `run_in_progress`; the composer shows Stop instead of Send while a run is live. |
 | Message tree | Messages link to their parent. Owner messages that share a parent are branches; replies under the same owner message are versions. The session's active leaf picks the path shown. |
 | Part | Structured content attached to a reply: steps, generated UI, artifacts, approvals, sources, follow-ups. |
 | Generation | The deployment generation a message was written in (`run_key`). A Reset clears the thread. |
@@ -79,19 +73,15 @@ Every event's `data` carries `{workflow_id, session_id, run_id, seq, hub_epoch}`
 | TEXT_MESSAGE_START | `text.started` | `message_id` (segment id `{run_id}.{iteration}.{attempt}`), `role: "assistant"` |
 | TEXT_MESSAGE_CONTENT | `text.content` | `message_id`, `delta` (never empty) |
 | TEXT_MESSAGE_END | `text.ended` | `message_id`, `final` (bool), `reply_message_id?` (with `final: true`) |
-| TOOL_CALL_START | `tool_call.started` | `tool_call_id`, `tool_call_name`, `parent_message_id?`, `label` (sending tools only) |
-| TOOL_CALL_ARGS | `tool_call.args` | `tool_call_id`, `delta` |
-| TOOL_CALL_END | `tool_call.ended` | `tool_call_id` |
-| TOOL_CALL_RESULT | `tool_call.result` | `message_id`, `tool_call_id`, `content` (a JSON string), `role: "tool"` |
 | ACTIVITY_SNAPSHOT | `activity.snapshot` | `message_id` (the part id), `activity_type`, `content` (an object), `replace` |
 | ACTIVITY_DELTA | `activity.delta` | `message_id`, `activity_type`, `patch` (RFC 6902 operations on `content`) |
-| REASONING_START / END | `reasoning.started` / `reasoning.ended` | `message_id`; lifecycle only, no reasoning text |
 | CUSTOM | `custom` | `name`, `value` |
 
-`activity_type` values: `json_render`, `approval`, `sources`, `followups`, `artifact`.
+`activity_type` values: `json_render` (a generated UI, patch by patch), `approval` (a draft's card) and `artifact`
+(a Canvas document the run wrote). Sources and follow-ups arrive with the saved reply, in its `parts`.
 
 `custom` names: `opencompany.segment_discarded` (`{message_id}`: a retried LLM attempt replaces this segment),
-`opencompany.retrying` (`{retry_after?, attempt}`), `opencompany.stopping`, `opencompany.resync`.
+`opencompany.stopping` and `opencompany.resync`.
 
 **Text segments.** Only the agent that answers the owner streams text. A segment that ends with `final: false` was
 written beside tool calls (narration, "Let me check the calendar."); the segment with `final: true` is the reply.
@@ -103,8 +93,7 @@ streamed.
 | `outcome.type` | Meaning |
 |---|---|
 | `success` | The run ended. `result.reply_message_id` names the saved reply, or `result.no_reply` is true. |
-| `interrupt` | Drafts wait for the owner. `outcome.interrupts: [{id, reason: "tool_call", message, tool_call_id, response_schema, expires_at}]`; `id` is the approval id. |
-| `stopped` | The owner pressed Stop. OpenCompany extension; AG-UI defines only `success` and `interrupt`. |
+| `stopped` | The owner pressed Stop (an OpenCompany addition to AG-UI's outcomes). |
 
 Runs nothing will finish end with `run.failed`: code `not_delivered` (never picked up, or the employee stopped
 first), `timed_out` (running longer than `runs.max_running_s`), `interrupted` (its workflow closed without finishing
@@ -130,7 +119,7 @@ All are WebSocket request/response handlers with snake_case payloads. Failures a
 | `edit_chat_message` | `{session_id, message_id, message, expected_revision?, client_message_id?}` | `{success, message_id, run_id, delivery}` (the edit's id; a resent `client_message_id` answers the first edit) |
 | `regenerate_chat_reply` | `{session_id, message_id, expected_revision?}` (the latest answer, or the owner's last message when its run gave none) | `{success, message_id, run_id, delivery}` (`message_id`: the owner's message answered again) |
 | `switch_chat_branch` | `{session_id, message_id, expected_revision?}` (a message beside one on the path) | `{success, leaf_id}` |
-| `set_chat_feedback` | `{session_id, message_id, value: "up" \| "down" \| null}` | `{success, message_id, value, reaches: ["next_turn", "memory"?]}` (`[]` when taken back) |
+| `set_chat_feedback` | `{session_id, message_id, value: "up" \| "down" \| null}` | `{success, message_id, value, reaches: ["next_turn"]}` (`[]` when taken back) |
 | `get_chat_context` | `{session_id}` | `{success, session_id, commands: [{command, description, fill, suggest}], capabilities: {attachments, web}, limits: {max_attachments, max_upload_bytes}}` |
 | `clear_chat_messages` | `{session_id}` | `{success}`; also clears runs, parts, snapshots, notes and feedback, and makes the employee forget the conversation |
 
@@ -141,7 +130,7 @@ and run the first call created, and dispatches nothing again.
 (`server/services/chat/reducer.py` folds them the same way):
 `{run_id, session_id, workflow_id, kind, state, seq, hub_epoch, user_message_id, reply_message_id, parent_run_id,
 created_at, started_at, finished_at, steps, segments: [{message_id, text, final}], activities: [{message_id,
-activity_type, content, patches}], interrupts, outcome, result, error, error_code}`. `state` is `queued`, `pending`,
+activity_type, content, patches}], outcome, result, error, error_code}`. `state` is `queued`, `pending`,
 `running`, `stopping`, `finished`, `error` or `stopped`. A snapshot read after a server restart has its steps but no
 text segments or activities (those are stored with the reply).
 
@@ -173,7 +162,6 @@ tool_call_id?, ui_part_id?, agent_node_id?, deployment_state?}`. `status` is `pe
 
 | Handler | Owner | Request | Response |
 |---|---|---|---|
-| `canvas_versions` | `nodes/tool/canvas` | `{workflow_id, node_id, item_id}` | `{success, versions: [{version, title, created_at, source, size_bytes}], latest}` |
 | `canvas_version` | `nodes/tool/canvas` | `{workflow_id, node_id, item_id, version}` | `{success, item: CanvasItem-at-that-version & {latest}}` |
 | `dictation_status` | `nodes/speech` | `{session_id}` | `{success, available, provider}` |
 | `transcribe_audio` | `nodes/speech` | `{session_id, path, language?}` (`path` under `uploads/`) | `{success, text, language, provider}`; `speech_unavailable` |
@@ -236,18 +224,17 @@ Memory updates) still reach only that process.
 - `kind`: `text`, `report` (Post to Talk: not editable), `action` (a button press), `notice`.
 - `status`: `complete`, `stopped`, `error`.
 
-Parts render in this order, whatever order they were produced in: steps, text, generated UI, artifacts, approvals,
-sources, follow-ups.
+A reply shows, in this order whatever order they were produced in: its run's steps (`run.steps` above), its text,
+then its parts: generated UI, artifacts, approvals, sources, follow-ups. A reply the owner stopped has `status:
+"stopped"`.
 
 ```
 parts: {
-  steps?:     {duration_ms, items: [{step_id, name, state, detail?, duration_ms?}]},
   ui?:        [{part_id, spec, state, state_revision, elements}],
   artifacts?: [{workflow_id, canvas_node_id, item_id, version, title, format}],
   approvals?: [{approval_id, tool_call_id?}],
   sources?:   [{n, title, url, detail?}],
-  followups?: [string],
-  stopped?:   true
+  followups?: [string]
 }
 ```
 
@@ -372,6 +359,11 @@ Settings are in `server/config/chat_defaults.json` (`stream`, `steps`, `runs`).
   text block marked `stopped`), or the request alone when nothing was written; a tool call a cancelled run left
   without a result is answered when the conversation is next loaded (see
   [Agent Context Flow](./agent_context_flow.md)).
+- **Agents that are not AgentWorkflows.** Only the agents in `AGENT_WORKFLOW_TYPES` (`services/temporal/workflow.py`)
+  run as an AgentWorkflow and are prepared by `agent.prepare_payload`. The others (Claude Code, Codex, RLM, Vertex)
+  run as one activity and get no `chat_stream`: nothing they write streams, their tool calls show no steps, they
+  cannot show UI, and their answer appears when Reply in Chat saves it. Stop moves their run to `stopping`, nothing
+  in them checks it, and the watchdog ends it `runs.stop_grace_s` later.
 
 ## Client
 
@@ -392,7 +384,8 @@ editor's console pane (`ConsoleChat`, compact, scope `live`) are the two hosts.
   every 10 seconds; the last chat following a session unsubscribes it. Runs the store held as live that a snapshot
   no longer lists ended unseen and are read once with `get_chat_run`. Until the first snapshot the thread's own
   `active_runs` stand in; after it the store alone says which runs are live, and a message whose `run` still reads
-  live is read with `get_chat_run` (`useThreadRunReconcile`).
+  live is read with `get_chat_run` (`useThreadRunReconcile`), as is a run this tab admitted itself (a resent message
+  is answered with the run it started before) once the thread says that run has ended.
 - **Turns** (`thread/model.ts`): one per message with a divider where `run_key` changes. A run that is going,
   failed or was stopped (or finished, while its answer is on the way) shows on its last answer, or on a turn of its
   own right after its last message before it has answered (a live run whose messages are out of view goes last). Failures whose code only says no answer came
@@ -403,7 +396,8 @@ editor's console pane (`ConsoleChat`, compact, scope `live`) are the two hosts.
   (`queued` or `pending`), so the employee shows working before the run's first event. While the lane is held, Send
   is Stop. A refused or failed send takes the message out of the thread and puts its text back in the box
   (`state/composerStore.ts`, a draft per session that survives switching conversations); after a failure in transit
-  the draft keeps its `client_message_id`, so sending it again is the same message.
+  the draft keeps its `client_message_id`, so sending it again is the same message: the server answers with the
+  first send's message and run, and when the thread already holds that message the local copy gives way to it.
 - **A working run** (`turns/AssistantTurn.tsx`): skeleton lines until text comes; then the latest segment, muted
   while it is narration, with a caret while it streams (`ReplyMarkdown` renders each finished block once,
   `markdown/blocks.ts`); a status line saying "Thinking", "Writing · N tok/s" or "Stopping…", with an Esc hint. The
@@ -427,8 +421,8 @@ editor's console pane (`ConsoleChat`, compact, scope `live`) are the two hosts.
   answer, ‹ 1 / 2 › between answers, and the time. A run that stopped or failed without an answer has Try again in
   its note. Each command sends the thread's revision as read; a refusal is told in the host's words
   (`turns/runCopy.ts` `branchRefusalText`), `not_running` through the host's own refusal. A rating shows at once and
-  goes back when it does not save; its toast says where it goes (`feedbackThanks`). Suggested questions hide while
-  the box holds text, and under a stopped answer.
+  goes back when it does not save; its toast says the employee will see it next time (`feedbackThanks`). Suggested
+  questions hide while the box holds text, and under a stopped answer.
 - **Generated UI** (`features/chat/genui/`, `turns/GeneratedUiBlock.tsx`): a reply's interfaces come from its saved
   `parts.ui`, or while the run streams them from its `json_render` activities (`data/parts.ts`), the run's first turn
   keeping them until the saved reply carries them, so one element shows throughout and keeps what the owner set. The
@@ -456,6 +450,10 @@ What an employee sends to someone waits for the owner's OK while its workflow as
   restricted (the browser, read-only). With Ask first off the call runs; one made answering the owner in the chat
   leaves a row (`approved_by: auto`) with how it went. An approval gate with the rule off lets its draft through at
   once, recorded the same way.
+- **Agents that are not AgentWorkflows** (Claude Code, Codex, RLM, Vertex; see [Streaming, steps and
+  Stop](#streaming-steps-and-stop)) call their tools in process (`services/handlers/tools.py` `execute_tool`), where
+  `tool_calls.check_in_process` applies the same rule without drafts: with Ask first on, a call that sends is not run
+  and the model reads why, the browser runs read-only, and nothing is recorded.
 - **Decisions** (`services/approvals/decisions.py`), each a compare-and-swap on the row's revision recorded in
   `approval_decisions`: `send` (pending -> approved; it goes after `UNDO_SECONDS`, 5, and Undo works until then),
   `undo` (approved -> pending), `discard` (pending -> discarded; Restore works for `RESTORE_SECONDS` on a gate's draft,
@@ -475,7 +473,7 @@ What an employee sends to someone waits for the owner's OK while its workflow as
   answering the owner in the chat is recorded with outcome `unknown`, so the card offers Try again behind a
   confirmation. Held calls are drafts, made once per call, and still retry.
 - **The employee hears how it went**: an `[update]{...}[/update]` note (`approval:<id>`) at the start of its next
-  turn in the chat, for a send that went, failed or was discarded.
+  turn in the chat, for a send that went, failed, was discarded or expired.
 - **In the chat.** A draft made answering the owner is recorded on the run (`parts.approvals`) and shown at once (an
   `activity.snapshot` with `activity_type: "approval"`); its card sits on that reply. A draft made in a run a button
   press started (its owner message carries `meta.ui_event`) records that interface (`ui_part_id`,
@@ -487,6 +485,11 @@ What an employee sends to someone waits for the owner's OK while its workflow as
   waiting draft; in the edit box it sends that one.
 - **Ends.** Clearing or resetting the chat cancels the drafts its runs made that still wait; a Reset cancels the
   waiting gates too (`approvalGate.reset_execution_state`); deleting the workflow deletes its drafts and its rule.
+- **Expiry.** A gate's draft expires after the node's `timeout_hours` (168 by default), and the waiting gate ends it
+  `expired` and lets nothing through. A held call's draft expires 168 hours after it was made
+  (`DEFAULT_TIMEOUT_HOURS`); the chat watchdog ends it on its next round (`reconcile.expire_due`), announces it and
+  tells the employee. A decision that reaches a draft past its expiry ends it the same way and answers `expired`.
+  Rows are kept until their workflow is deleted.
 - **Broadcast.** `approval_lifecycle` (source `opencompany://services/approvals`, type
   `com.opencompany.approval.<stage>`: requested, decided, undone, restored, sending, sent, failed, expired,
   cancelled), identity only, with the chat run when there is one.
@@ -552,8 +555,7 @@ employee what those runs sent anyway. `chat.updated` follows (role `user` for an
 `set_chat_feedback` keeps the owner's rating of an answer (`chat_feedback`, one per answer; `services/chat/
 feedback.py`) and leaves a `[feedback]{"rating": "good" | "bad", "answer": "<excerpt>"}[/feedback]` note
 (`feedback:<message id>`; taking the rating back drops it while untold). `reaches` lists where the rating goes:
-`next_turn`, plus what a listener registered with `register_feedback_listener` adds (a plugin that keeps it too
-answers `memory`; none is registered yet).
+`next_turn`, the employee's next turn (empty when the rating is taken back).
 
 ## Notes to the employee
 
@@ -612,18 +614,19 @@ and server tests alike:
 | `run_in_progress` | send, edit, regenerate, switch | A run is live in this session; `run_id` names it (send only). |
 | `save_failed` | send, edit, regenerate, switch | The change could not be saved; nothing was dispatched. |
 | `not_running` | send, edit, regenerate, switch | The employee is not running and cannot queue messages (a switch: nothing was started since the last Reset). |
+| `engine_unavailable` | send, edit, regenerate | A workflow's chat while Temporal is not connected: nothing could deliver the message, so nothing was saved. |
 | `invalid_request` | send, save | A malformed field (`detail` says which): an empty message, a role other than the owner's, or a bad `client_message_id`. |
 | `read_failed` | get_chat_messages, chat_subscribe | The thread could not be read. Never answered as an empty thread. |
 | `not_found` | get_chat_run, stop_chat_run | No such run. |
 | `attachment_rejected` | send | A file outside `uploads/`, gone, or more than six; `detail` says which. |
 | `not_stoppable` | stop_chat_run | The run ended before Stop reached it; `state` says how. |
 | `revision_conflict` | edit, regenerate, switch | `expected_revision` is not the thread's revision. |
-| `conflict` | set_ask_first | `expected_revision` is stale. |
+| `rule_conflict` | set_ask_first | `expected_revision` is stale; the answer carries the current value. |
 | `not_editable` | edit, regenerate, decide | Not the owner's text message a run answered, not the latest answer, the editor's `default` chat, or an edited argument that is not editable. |
 | `older_generation` | edit, regenerate, switch | A message or run from before the employee restarted. |
 | `cannot_rewind` | edit, regenerate, switch | An agent's stored conversation no longer starts the way it did when the run being undone began. |
 | `branch_unavailable` | switch | The branch's kept conversations are gone (too many branches, or too large to keep). |
 | `ui_event_rejected` | send | The element or action does not match the saved spec. |
-| `access_denied` | all | The socket's principal does not own the workflow, or it is the internal worker socket. |
+| `access_denied` | all | The session names no saved workflow, the socket's principal does not own it, or it is the internal worker socket. |
 | `too_late` | decide | The Undo or Restore window has passed. |
 | `speech_unavailable` | transcribe_audio | No dictation provider has a stored key. |
