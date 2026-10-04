@@ -199,7 +199,9 @@ the control plane is hardened against Temporal's per-run event-history ceiling
   (admission, trigger pause flags, cron schedule pause). Re-arm is idempotent:
   controller `register_trigger` is keyed by listener id, legacy listener
   starts use `USE_EXISTING`, and cron schedule creation preserves server-owned
-  pause state.
+  pause state. Listener and Schedule ids use the slug the generation's Start
+  recorded in its snapshot (`workflow_slug`), not the saved one, so a rename
+  while it runs cannot give the re-arm a second set of ids.
 - **No lifetime caps.** Spawned graph runs, agent children, and delegated-task
   runners no longer carry 1-2h execution/run timeouts (Temporal's timers keep
   ticking through a pause, so the caps silently terminated paused work).

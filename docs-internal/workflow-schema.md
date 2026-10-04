@@ -39,7 +39,7 @@ A workflow JSON document contains:
     },
     "slug": {
       "type": "string",
-      "description": "Human-readable identifier (e.g. AI_Assistant_1). Derived from name via services.workflow_naming.next_available_slug. Mutable on rename — recomputed + propagated to workspace dir + Temporal Web UI prefix + cron Schedule IDs. UNIQUE across active workflows.",
+      "description": "Human-readable identifier (e.g. AI_Assistant_1). Derived from name via services.workflow_naming.next_available_slug. Mutable on rename — recomputed + propagated to the workspace dir; Temporal ids and cron Schedule IDs follow at the next Start (a running generation keeps the slug it started with). UNIQUE across active workflows.",
       "pattern": "^[A-Za-z0-9]+(_[0-9]+)?$"
     },
     "nodes": {

@@ -59,6 +59,28 @@ async def test_begin_generation_is_idempotent():
 
 
 @pytest.mark.asyncio
+async def test_generation_records_the_slug_its_temporal_ids_are_named_by():
+    db = AsyncMock()
+    db.get_workflow_control_by_idempotency_key.return_value = None
+    db.get_latest_workflow_control.return_value = None
+    db.get_workflow.return_value = SimpleNamespace(slug="Ana_1")
+    db.create_workflow_control.side_effect = lambda control: control
+    service = WorkflowControlService(db)
+
+    control, _ = await service.begin_generation(
+        workflow_id="wf", nodes=[], edges=[], session_id="s", idempotency_key="start-1"
+    )
+    assert control.graph_snapshot["workflow_slug"] == "Ana_1"
+
+    # A workflow that was never saved names its ids by its id instead.
+    db.get_workflow.return_value = None
+    control, _ = await service.begin_generation(
+        workflow_id="wf", nodes=[], edges=[], session_id="s", idempotency_key="start-2"
+    )
+    assert control.graph_snapshot["workflow_slug"] is None
+
+
+@pytest.mark.asyncio
 async def test_generation_atomically_creates_and_archives_isolated_data_scope(control_database):
     service = WorkflowControlService(control_database)
     control, created = await service.begin_generation(

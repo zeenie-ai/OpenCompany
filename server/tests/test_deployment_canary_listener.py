@@ -135,6 +135,68 @@ class TestDeterministicListenerId:
         assert a != b
 
 
+class TestGenerationSlug:
+    """A generation keeps the slug its Start recorded. Re-armed after a
+    rename under the new slug, it registered a second listener beside the
+    first with its controller, and every event started two runs."""
+
+    @staticmethod
+    def _manager(saved_slug: str, control):
+        from types import SimpleNamespace
+
+        from services.deployment.manager import DeploymentManager
+
+        database = MagicMock()
+        database.get_workflow = AsyncMock(return_value=SimpleNamespace(slug=saved_slug))
+        database.get_latest_workflow_control = AsyncMock(return_value=control)
+        broadcaster = MagicMock()
+        broadcaster.update_node_status = AsyncMock()
+        mgr = DeploymentManager(
+            database=database,
+            execute_workflow_fn=AsyncMock(),
+            store_output_fn=AsyncMock(),
+            broadcaster=broadcaster,
+        )
+        mgr._load_settings = AsyncMock()
+        mgr._notify = AsyncMock()
+        return mgr
+
+    @staticmethod
+    def _control(generation: int, slug=None):
+        from types import SimpleNamespace
+
+        snapshot: Dict[str, Any] = {"nodes": [], "edges": []}
+        if slug is not None:
+            snapshot["workflow_slug"] = slug
+        return SimpleNamespace(generation=generation, graph_snapshot=snapshot)
+
+    @pytest.mark.asyncio
+    async def test_rearm_after_a_rename_keeps_the_generation_slug(self):
+        mgr = self._manager("Ana_Ortiz_1", self._control(2, "Ana_1"))
+
+        result = await mgr.deploy(nodes=[], edges=[], workflow_id="wf", graph_version=2, generation=2)
+
+        assert result["success"] is True
+        assert mgr._deployments["wf"].workflow_slug == "Ana_1"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "generation, control",
+        [
+            (0, None),  # not a durable generation
+            (2, None),  # no control row
+            (2, (3, "Ana_1")),  # the latest row is another generation
+            (2, (2, None)),  # a snapshot from before the slug was recorded
+        ],
+    )
+    async def test_otherwise_the_saved_slug(self, generation, control):
+        mgr = self._manager("Ana_Ortiz_1", self._control(*control) if control else None)
+
+        await mgr.deploy(nodes=[], edges=[], workflow_id="wf", graph_version=2, generation=generation)
+
+        assert mgr._deployments["wf"].workflow_slug == "Ana_Ortiz_1"
+
+
 # ---------------------------------------------------------------------------
 # C1d.2 — canary scope: flag + type
 # ---------------------------------------------------------------------------

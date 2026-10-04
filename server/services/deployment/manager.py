@@ -196,11 +196,12 @@ class DeploymentManager:
                 "deployment_id": self._deployments[workflow_id].deployment_id,
             }
 
-        # Human-readable slug for Temporal Web UI prefixing. Falls back
-        # to workflow_id when the DB row is missing OR slug is empty
+        # Human-readable slug for Temporal Web UI prefixing. A generation
+        # keeps the slug it started with; otherwise the saved one, falling
+        # back to workflow_id when the DB row is missing OR slug is empty
         # (one-off deploys / tests without a saved record).
         wf = await self.database.get_workflow(workflow_id)
-        workflow_slug = (wf and wf.slug) or workflow_id
+        workflow_slug = await self._generation_slug(workflow_id, generation) or (wf and wf.slug) or workflow_id
 
         # Setup
         deployment_id = f"deploy_{workflow_id}_{int(time.time() * 1000)}"
@@ -667,6 +668,23 @@ class DeploymentManager:
         listener via ``WorkflowIDConflictPolicy.USE_EXISTING``.
         """
         return f"{workflow_slug}-{trigger_label}"
+
+    async def _generation_slug(self, workflow_id: str, generation: int) -> Optional[str]:
+        """The slug a generation's listeners and Schedules were named by at Start.
+
+        A rename moves the saved slug while those keep their ids. Re-armed
+        after a restart under the new slug, the generation would register a
+        second listener (and Schedule) beside the first, and every event
+        would start two runs. ``None`` for a generation that recorded none.
+        """
+        if generation <= 0:
+            return None
+        lookup = self.database.get_latest_workflow_control(workflow_id)
+        control = await lookup if inspect.isawaitable(lookup) else None
+        if control is None or control.generation != generation:
+            return None
+        slug = (control.graph_snapshot or {}).get("workflow_slug")
+        return slug if isinstance(slug, str) and slug else None
 
     @staticmethod
     def _trigger_kind_for(node_type: str) -> str:

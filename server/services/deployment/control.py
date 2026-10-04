@@ -130,6 +130,8 @@ class WorkflowControlService:
             raise ValueError("workflow_already_started")
         generation = (latest.generation + 1) if latest else 1
         execution_id = await self.database.allocate_execution_id(workflow_id)
+        saved = await self.database.get_workflow(workflow_id)
+        slug = getattr(saved, "slug", None)
         control = WorkflowControlExecution(
             id=f"workflow-control:{workflow_id}:{generation}", workflow_id=workflow_id,
             generation=generation, execution_id=execution_id, root_execution_id=execution_id,
@@ -141,6 +143,9 @@ class WorkflowControlService:
                 "owner_id": safe_graph["owner_id"],
                 "nodes": nodes,
                 "edges": edges,
+                # What this generation's Temporal ids (listeners, Schedules)
+                # are named by, fixed at Start: see DeploymentManager.deploy.
+                "workflow_slug": slug if isinstance(slug, str) and slug else None,
             },
             idempotency_key=idempotency_key,
             # Revisions are monotonic across generations so a delayed request
