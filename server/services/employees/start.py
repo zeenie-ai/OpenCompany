@@ -50,12 +50,6 @@ async def heal_agent_models(database: Any, auth_service: Any, connections: Conne
     """Point each agent whose provider is not usable at the owner's current
     model. Returns the agents changed."""
     usable = set(await connections.ai_providers())
-    try:
-        from services.llm.endpoints import list_endpoints
-
-        usable.update(endpoint.ref for endpoint in await list_endpoints(auth_service))
-    except Exception:
-        pass
     changed: List[str] = []
     choice = None
     for agent_id in await _agent_ids(database, workflow_id):

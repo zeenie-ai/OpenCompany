@@ -62,14 +62,25 @@ class Connections:
         }
 
     async def ai_providers(self) -> List[str]:
-        """LLM providers an agent could run on right now (a key stored, a
-        local server saved, or a named OpenAI-compatible endpoint)."""
-        from services.llm.config import PROVIDER_CONFIGS
+        """LLM providers an agent could run on right now: one with a key
+        stored or a local server saved, and each saved OpenAI-compatible
+        endpoint by its reference (``openai_compatible:<slug>``). The bare
+        ``openai_compatible`` id is never one: an agent set to it has no
+        server to call."""
+        from services.llm.config import ENDPOINT_PROVIDER, PROVIDER_CONFIGS
 
         usable = []
         for provider_id in PROVIDER_CONFIGS:
+            if provider_id == ENDPOINT_PROVIDER:
+                continue
             if self.provider(provider_id) is not None and await self.is_connected(provider_id):
                 usable.append(provider_id)
+        try:
+            from services.llm.endpoints import list_endpoints
+
+            usable += [endpoint.ref for endpoint in await list_endpoints(self._auth)]
+        except Exception:
+            logger.warning("Could not list OpenAI-compatible endpoints", exc_info=True)
         return usable
 
     async def has_ai(self) -> bool:
