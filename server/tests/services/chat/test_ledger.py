@@ -69,10 +69,6 @@ async def test_the_lane_index_refuses_a_second_live_run(database):
         async with database.get_session() as session:
             session.add(ChatRun(run_id="r_sneaky", session_id="wf", state="running", kind="message"))
             await session.commit()
-    # A resume run (an approved send executing) never holds the lane.
-    async with database.get_session() as session:
-        session.add(ChatRun(run_id="r_resume", session_id="wf", state="running", kind="resume"))
-        await session.commit()
 
 
 async def test_concurrent_sends_admit_one_run(database, hub):

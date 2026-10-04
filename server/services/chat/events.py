@@ -44,14 +44,8 @@ RUN_SUFFIXES = frozenset(
         "text.started",
         "text.content",
         "text.ended",
-        "tool_call.started",
-        "tool_call.args",
-        "tool_call.ended",
-        "tool_call.result",
         "activity.snapshot",
         "activity.delta",
-        "reasoning.started",
-        "reasoning.ended",
         "custom",
     }
 )

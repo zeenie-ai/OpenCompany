@@ -5,11 +5,11 @@ A run is admitted in the same transaction as the owner's message
 or ``pending`` -> ``running`` -> ``finished`` | ``error`` | ``stopped``, each
 step a compare-and-swap on ``state``; Stop moves a pending or running run to
 ``stopping`` on the way to ``stopped``. ``kind`` says what started it:
-``message`` (the owner wrote), ``edit``, ``regenerate``, ``action`` (a button
-in generated UI) or ``resume`` (an approved send executing later).
+``message`` (the owner wrote), ``edit``, ``regenerate`` or ``action`` (a button
+in generated UI).
 
-**The lane.** At most one non-terminal run per session, resume runs aside,
-enforced by a partial unique index: two runs that loaded the same stored
+**The lane.** At most one non-terminal run per session, enforced by a
+partial unique index: two runs that loaded the same stored
 conversation would each save over the other's (docs-internal/
 agent_context_flow.md). A second message while one is live is refused with
 ``run_in_progress``; the composer shows Stop instead of Send meanwhile.
@@ -47,7 +47,9 @@ LIVE_STATES = ("queued", "pending", "running", "stopping")
 #: States a run ends in.
 TERMINAL_STATES = ("finished", "error", "stopped")
 
-_LANE_WHERE = "state IN ('queued', 'pending', 'running', 'stopping') AND kind != 'resume'"
+#: Databases made before October 2026 keep ``AND kind != 'resume'`` in it; no
+#: run has that kind, so both refuse the same runs.
+_LANE_WHERE = "state IN ('queued', 'pending', 'running', 'stopping')"
 
 
 class ChatThread(SQLModel, table=True):
@@ -80,8 +82,8 @@ class ChatRun(SQLModel, table=True):
     options: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     #: Working steps as they finished, for "Worked for Ns · N steps" on reload.
     steps: List[Dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
-    #: How a finished run ended: ``success``, ``stopped`` or ``interrupt``
-    #: (drafts wait for the owner). None until it ends, and for errors.
+    #: How a finished run ended: ``success`` or ``stopped``. None until it
+    #: ends, and for errors.
     outcome: Optional[str] = Field(default=None, max_length=20)
     #: The terminal event's ``result`` (``reply_message_id`` or ``no_reply``).
     result: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))

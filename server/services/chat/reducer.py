@@ -49,7 +49,6 @@ def empty_snapshot(run_id: str) -> Dict[str, Any]:
         "steps": [],
         "segments": [],
         "activities": [],
-        "interrupts": [],
         "outcome": None,
         "result": {},
         "error": None,
@@ -62,9 +61,6 @@ def snapshot_from_row(run: Any) -> Dict[str, Any]:
     finish); text is not stored until the reply is, so a run read after a
     restart has no segments."""
     snapshot = empty_snapshot(run.run_id)
-    outcome = {"type": run.outcome} if run.outcome else None
-    if outcome is not None and run.outcome == "interrupt":
-        outcome["interrupts"] = list((run.result or {}).get("interrupts") or [])
     snapshot.update(
         {
             "session_id": run.session_id,
@@ -78,8 +74,8 @@ def snapshot_from_row(run: Any) -> Dict[str, Any]:
             "started_at": _iso(run.started_at),
             "finished_at": _iso(run.finished_at),
             "steps": [dict(step) for step in (run.steps or [])],
-            "outcome": outcome,
-            "result": {key: value for key, value in (run.result or {}).items() if key != "interrupts"},
+            "outcome": {"type": run.outcome} if run.outcome else None,
+            "result": dict(run.result or {}),
             "error": run.error,
             "error_code": run.error_code,
         }
@@ -94,7 +90,7 @@ def merge_snapshot(stored: Mapping[str, Any], live: Optional[Mapping[str, Any]])
     merged = deepcopy(dict(stored))
     if not live:
         return merged
-    for key in ("seq", "steps", "segments", "activities", "interrupts"):
+    for key in ("seq", "steps", "segments", "activities"):
         merged[key] = deepcopy(live.get(key, merged.get(key)))
     if stored.get("state") in LIVE_STATES and live.get("state") not in (None, "pending"):
         merged["state"] = live["state"]
@@ -153,7 +149,6 @@ def apply_event(snapshot: Mapping[str, Any], event: Mapping[str, Any]) -> Dict[s
         outcome = dict(data.get("outcome") or {"type": "success"})
         out["outcome"] = outcome
         out["result"] = dict(data.get("result") or {})
-        out["interrupts"] = list(outcome.get("interrupts") or [])
         out["state"] = "stopped" if outcome.get("type") == "stopped" else "finished"
     elif suffix == "failed":
         out["state"] = "error"

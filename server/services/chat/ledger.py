@@ -3,8 +3,8 @@ run that answers it, and ended by the watchdog when nothing will.
 
 **Admission** (``admit_message``) writes the owner's message and its run in
 one reserved transaction (``Database.reserved_session``), after checking the
-lane: one live run per session, resume runs aside, also enforced by the
-partial unique index on ``chat_runs``. A message re-sent with the same
+lane: one live run per session, also enforced by the partial unique index
+on ``chat_runs``. A message re-sent with the same
 ``client_message_id`` returns the first send's message and run instead of
 writing a second one; the id maps to a message id that only this session can
 produce (``client_message_uid``).
@@ -143,9 +143,7 @@ async def lane_run(database: Any, session_id: str) -> Optional[ChatRun]:
     """The run holding the session's lane, if any."""
     async with database.get_session() as session:
         result = await session.execute(
-            select(ChatRun)
-            .where(ChatRun.session_id == session_id, ChatRun.state.in_(LIVE_STATES), ChatRun.kind != "resume")
-            .limit(1)
+            select(ChatRun).where(ChatRun.session_id == session_id, ChatRun.state.in_(LIVE_STATES)).limit(1)
         )
         return result.scalar_one_or_none()
 
@@ -253,9 +251,7 @@ async def admit_message(
         run_id: Optional[str] = None
         if track:
             held = await session.execute(
-                select(ChatRun)
-                .where(ChatRun.session_id == session_id, ChatRun.state.in_(LIVE_STATES), ChatRun.kind != "resume")
-                .limit(1)
+                select(ChatRun).where(ChatRun.session_id == session_id, ChatRun.state.in_(LIVE_STATES)).limit(1)
             )
             holder = held.scalar_one_or_none()
             if holder is not None:
@@ -411,14 +407,15 @@ def publish_terminal(run: ChatRun) -> None:
                 fields[key] = result[key]
         _publish(run, "failed", fields, "terminal")
         return
-    outcome: Dict[str, Any] = {"type": run.outcome or "success"}
-    interrupts = result.pop("interrupts", None)
-    if run.outcome == "interrupt":
-        outcome["interrupts"] = list(interrupts or [])
     _publish(
         run,
         "finished",
-        {"outcome": outcome, "result": result, "duration_ms": duration_ms, "step_count": len(run.steps or [])},
+        {
+            "outcome": {"type": run.outcome or "success"},
+            "result": result,
+            "duration_ms": duration_ms,
+            "step_count": len(run.steps or []),
+        },
         "terminal",
     )
 

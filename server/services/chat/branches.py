@@ -418,9 +418,7 @@ async def _session_rows(session: Any, session_id: str) -> List[ChatMessage]:
 
 async def _lane_held(session: Any, session_id: str) -> bool:
     result = await session.execute(
-        select(ChatRun.run_id)
-        .where(ChatRun.session_id == session_id, ChatRun.state.in_(LIVE_STATES), ChatRun.kind != "resume")
-        .limit(1)
+        select(ChatRun.run_id).where(ChatRun.session_id == session_id, ChatRun.state.in_(LIVE_STATES)).limit(1)
     )
     return result.scalar_one_or_none() is not None
 
