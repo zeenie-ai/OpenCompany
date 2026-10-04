@@ -154,8 +154,10 @@ Hire attaches a browser through the **Web browser** app (`web` in
 [`config/employee_apps.json`](../server/config/employee_apps.json)). Its
 catalogue entry, `browser`, has nothing to connect (`connected_check:
 builtin`), so it never blocks Start; a missing installed browser shows up at
-the first browser step instead. With "Ask me before sending anything" on,
-the tool is attached with its `ask_first_params`, `interaction: read_only`:
+the first browser step instead. The tool is attached whole
+(`interaction: full`); while "Ask me before sending anything" is on, each call
+runs with `interaction: read_only`, set by the plugin's approval spec
+(`restrict_while_asking`, applied per call by `services/approvals/tool_calls.py`):
 the agent reads pages and hands any change to the owner through
 `request_user`. The employee's instructions say when to call it.
 

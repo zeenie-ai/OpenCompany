@@ -2,11 +2,11 @@
 
 | Field | Value |
 |------|-------|
-| **Category** | social (workflow-only) |
+| **Category** | social |
 | **Backend handler** | [`server/nodes/telegram/telegram_send.py`](../../../server/nodes/telegram/telegram_send.py) (`TelegramSendNode`); dispatch via `BaseNode.execute()` -> `@Operation("send")` -> [`_send.py`](../../../server/nodes/telegram/_send.py) (`resolve_chat_id` + `perform_send`) |
 | **Tests** | [`server/tests/nodes/test_telegram_social.py`](../../../server/tests/nodes/test_telegram_social.py) (node level), [`test_telegram_service.py`](../../../server/tests/nodes/test_telegram_service.py) (service level: split / caption spill) |
 | **Skill (if any)** | none |
-| **Dual-purpose tool** | no - group is `("social",)` only; `usable_as_tool` not set (AI-tool exposure was dropped in Wave 11) |
+| **Dual-purpose tool** | yes - `usable_as_tool = True`, tool name `telegram_send`; its `ApprovalSpec` holds each send for the owner's OK while they ask first |
 
 ## Purpose
 

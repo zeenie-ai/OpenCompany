@@ -569,7 +569,7 @@ server/nodes/telegram/
 ├── _refresh.py          # refresh_telegram_status + precheck_telegram_trigger
 ├── _events.py           # typed CloudEvents factory + broadcast_telegram_status
 ├── _send.py             # perform_send / resolve_chat_id, shared by the node and the WS send command
-├── telegram_send.py     # ActionNode (workflow-only; not usable_as_tool)
+├── telegram_send.py     # ActionNode, also an AI tool (usable_as_tool; ApprovalSpec: held while Ask first is on)
 ├── telegram_receive.py  # TriggerNode
 ├── icon.svg             # node icon for every node type in the folder
 ├── telegram.svg         # credential brand icon (Credential.get_icon_path)
