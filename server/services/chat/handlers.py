@@ -308,7 +308,11 @@ async def handle_send_chat_message(data: Dict[str, Any], websocket: WebSocket) -
 
     row, run = admission.message, admission.run
     if admission.created:
-        await announce_chat_updated(session_id, "user")
+        # Sent before open threads hear of it, so this answer, which
+        # registers the run with the sender, reaches the sender before their
+        # thread reads the run: told first, their thread showed it live and
+        # asked for it (get_chat_run). Sending never raises (emit is
+        # fail-soft), so threads always hear of it.
         await _dispatch(
             session_id,
             scope.workflow_id,
@@ -318,6 +322,7 @@ async def handle_send_chat_message(data: Dict[str, Any], websocket: WebSocket) -
             timestamp=timestamp,
             attachments=attachments,
         )
+        await announce_chat_updated(session_id, "user")
 
     response: Dict[str, Any] = {
         "success": True,
@@ -615,10 +620,10 @@ def _branch_refusal(exc: "branches.BranchRefused") -> Dict[str, Any]:
 
 async def _answer_branch(database: Any, moved: "branches.Moved", context: Dict[str, Any], *, role: Optional[str], timestamp: str) -> Dict[str, Any]:
     """After an edit or a retry committed: settle what the part left made,
-    tell open threads, and send the message to the chat triggers."""
+    send the message to the chat triggers, then tell open threads."""
     await branches.after_move(database, moved)
-    await announce_chat_updated(moved.session_id, role)
     message, run = moved.result["message"], moved.result["run"]
+    # Sent first, as a new message is (handle_send_chat_message).
     await _dispatch(
         moved.session_id,
         moved.workflow_id,
@@ -628,6 +633,7 @@ async def _answer_branch(database: Any, moved: "branches.Moved", context: Dict[s
         timestamp=timestamp,
         attachments=list(message.get("attachments") or []),
     )
+    await announce_chat_updated(moved.session_id, role)
     response: Dict[str, Any] = {"success": True, "message_id": message["uid"], "run_id": run.run_id}
     if context.get("delivery") is not None:
         response["delivery"] = context["delivery"]

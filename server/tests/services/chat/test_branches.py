@@ -15,7 +15,7 @@ import pytest
 
 from services.agent_context.conversation import load_conversation, save_conversation
 from services.chat import branches, ledger, notes
-from tests.services.chat._helpers import add_control, talking
+from tests.services.chat._helpers import add_control, chat_updates, talking, updates_at_dispatch
 
 AGENT = "wf:aiAgent:1"
 CLAIM = dict(temporal_workflow_id="tw-1", temporal_run_id="tr-1")
@@ -136,6 +136,16 @@ async def test_an_edit_goes_beside_the_message_and_the_agent_forgets_what_follow
     assert (run.kind, run.user_message_uid, run.parent_run_id) == ("edit", edited["message_id"], first["run_id"])
     # The employee is asked to answer the edit.
     assert chat.dispatched[-1]["data"]["message"] == "Book Sunday" and chat.dispatched[-1]["event_id"] == edited["run_id"]
+
+
+async def test_an_edit_is_sent_before_open_threads_hear_of_it(chat, monkeypatch):
+    first = await conversation(chat)
+    before = len(chat_updates(chat.frames))
+    seen = updates_at_dispatch(chat, monkeypatch)
+    await chat.handlers.handle_edit_chat_message(
+        {"session_id": "wf", "message_id": first["message_id"], "message": "Book Sunday", "expected_revision": await revision(chat)}, None
+    )
+    assert seen == [before] and len(chat_updates(chat.frames)) == before + 1
 
 
 async def test_switching_back_restores_what_the_agent_remembered_there(chat):

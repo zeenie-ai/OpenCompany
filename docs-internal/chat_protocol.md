@@ -308,7 +308,9 @@ newer version wins in place.
   `"default"` session, which keeps its unscoped delivery.
 - **Dispatch.** The `chat_message_received` event (`services/chat/events.py`, source `opencompany://services/chat`)
   has the run id as its CloudEvent id and carries `message_id` and `run_id` in `data`, so the listener's child run
-  id is `<slug>-<trigger label>-<run id>`. It is never broadcast.
+  id is `<slug>-<trigger label>-<run id>`. It is never broadcast. Open threads hear of the message (`chat.updated`)
+  only after it is dispatched, so the sender's answer, which admits the run into their store, reaches them before
+  their thread can read the run: told first, the thread showed the run live and read it with `get_chat_run`.
 - **Start and finish.** MachinaWorkflow, behind the `machina-chat-run-v1` patch, reads the run id only from an event
   with that source and type, claims the run (`chat_run.start`: `pending` or `queued` to `running`, recording the
   Temporal workflow and run ids) once the firing trigger's output is stored, passes `run_scope {run_id, session_id}`
@@ -552,7 +554,8 @@ conversation store's locks (`conversation_lock`), and is refused with:
 
 After it commits, the Context listeners hear of each conversation changed, the drafts the runs on the part left made
 that still wait are cancelled (`approval_lifecycle` `cancelled`), and an `[update]` note (`branch:<run id>`) tells the
-employee what those runs sent anyway. `chat.updated` follows (role `user` for an edit, null for a retry or a switch).
+employee what those runs sent anyway. `chat.updated` follows (role `user` for an edit, null for a retry or a switch),
+after the dispatch for an edit or a retry, as for a new message.
 
 ## Feedback
 

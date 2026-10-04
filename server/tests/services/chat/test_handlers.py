@@ -10,7 +10,15 @@ from __future__ import annotations
 import asyncio
 
 from services.chat import ledger
-from tests.services.chat._helpers import FakeSocket, add_control, chat_trigger, chat_updates, saved_workflow, talking
+from tests.services.chat._helpers import (
+    FakeSocket,
+    add_control,
+    chat_trigger,
+    chat_updates,
+    saved_workflow,
+    talking,
+    updates_at_dispatch,
+)
 
 
 async def send(chat, message="Book Saturday", session_id="wf", socket=None, **extra):
@@ -35,6 +43,15 @@ async def test_a_message_the_employee_will_answer_starts_a_run(chat):
         "run_id": result["run_id"],
     }
     assert chat_updates(chat.frames) == [{"workflow_id": "wf", "session_id": "wf", "role": "user"}]
+
+
+async def test_the_message_is_sent_before_open_threads_hear_of_it(chat, monkeypatch):
+    # Told first, the sender's thread could read the run before the answer
+    # registering it arrived, and ask the server for it.
+    await talking(chat.database)
+    seen = updates_at_dispatch(chat, monkeypatch)
+    await send(chat)
+    assert seen == [0] and len(chat_updates(chat.frames)) == 1
 
 
 async def test_a_paused_employee_queues_the_run(chat):

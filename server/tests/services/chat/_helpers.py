@@ -74,3 +74,17 @@ async def talking(database, workflow_id: str = "wf", status: str = "running", ge
 
 def chat_updates(frames) -> List[Dict[str, Any]]:
     return [frame["data"]["data"] for frame in frames if frame["type"] == "chat.updated"]
+
+
+def updates_at_dispatch(chat, monkeypatch) -> List[int]:
+    """How many ``chat.updated`` frames had gone out as each message was
+    dispatched (the ``chat`` fixture's dispatch still records it)."""
+    seen: List[int] = []
+    dispatch = chat.handlers.dispatch_chat_message_received
+
+    async def recording(event_data, **kwargs):
+        seen.append(len(chat_updates(chat.frames)))
+        await dispatch(event_data, **kwargs)
+
+    monkeypatch.setattr(chat.handlers, "dispatch_chat_message_received", recording)
+    return seen
