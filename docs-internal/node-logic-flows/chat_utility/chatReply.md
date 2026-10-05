@@ -24,7 +24,7 @@ Turn on Talk and the shipped example workflows wire it after an agent, with
 
 | Handle | Connection type | Required | Purpose |
 |--------|-----------------|----------|---------|
-| `input-main` | main | no | The agent whose answer it posts. The answer is read through the `message` template, not through connected outputs: the node is not in `NodeExecutor._NEEDS_CONNECTED_OUTPUTS`. |
+| `input-main` | main | no | The agent whose answer it posts. The answer is read through the `message` template; with `message` empty, from the connected output (`connected_outputs`, since the node is in `NodeExecutor._NEEDS_CONNECTED_OUTPUTS`). |
 
 `hide_output_handle = True`, so it renders as a sink with only `input-main`,
 like `console`. It does not carry console's `isConsoleSink` hint.
@@ -33,7 +33,7 @@ like `console`. It does not carry console's `isConsoleSink` hint.
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `message` | string (3 rows, placeholder `{{agent.response}}`) | `""` | no | - | The text to post, usually a template such as `{{aiagent.response}}`. A whole-value template keeps the upstream value's type, so a dict or list arrives as-is and is posted as JSON text; `None` becomes empty. |
+| `message` | string (3 rows, placeholder `{{agent.response}}`) | `""` | no | - | The text to post, usually a template such as `{{aiagent.response}}`. A whole-value template keeps the upstream value's type, so a dict or list arrives as-is and is posted as JSON text; `None` becomes empty. Empty posts what the connected agent answered. |
 
 `model_config = ConfigDict(extra="ignore")`.
 
@@ -59,7 +59,7 @@ like `console`. It does not carry console's `isConsoleSink` hint.
 
 ```mermaid
 flowchart TD
-  A[Receive params: message coerced to text] --> B[text = message.strip]
+  A[Receive params: message coerced to text] --> B[text = message.strip,<br/>else the connected output's response / message / text / content]
   B --> C{empty, or exactly NO_REPLY?}
   C -- yes --> D[Return posted=false: nothing written or broadcast]
   C -- no --> E{ctx.workflow_id set?}
@@ -81,6 +81,10 @@ flowchart TD
 - **Coercion** (`field_validator(mode="before")` on `message`): `None` -> `""`,
   a dict or list -> `json.dumps(..., ensure_ascii=False, default=str)`,
   anything else -> `str(...)`.
+- **No message**: an empty `message` posts what the node's input answered:
+  the first connected output's `response` (an agent's answer), else its
+  `message`, `text` or `content`. So an agent wired to it in the editor needs no
+  template; before, its answer streamed into the chat and then vanished.
 - **Nothing to say**: after trimming, an empty text or exactly `NO_REPLY`
   (`services.approvals.contract.NO_REPLY`, what an agent answers when it has
   nothing to send) posts nothing and succeeds with `posted: false`. The edges

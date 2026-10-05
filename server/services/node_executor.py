@@ -317,6 +317,7 @@ class NodeExecutor:
             "console",
             "socialReceive",
             "canvas",
+            "chatReply",
         }
     )
 

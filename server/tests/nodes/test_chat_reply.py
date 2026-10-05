@@ -59,6 +59,28 @@ async def test_nothing_to_say_posts_nothing(harness, thread, message):
     assert thread.frames == []
 
 
+async def test_with_no_message_it_posts_what_the_connected_agent_answered(harness, thread):
+    # Wired from an agent in the editor without a template, the answer used
+    # to stream in and then vanish: the node posted nothing.
+    nodes = [{"id": "a", "type": "aiAgent"}, {"id": "r", "type": "chatReply"}]
+    edges = [{"source": "a", "target": "r", "sourceHandle": "output-main", "targetHandle": "input-main"}]
+
+    async def reply(answer):
+        context = harness.build_context(
+            workflow_id="wf-1", nodes=nodes, edges=edges, upstream_outputs={"a::output_main": {"response": answer, "model": "m"}}
+        )
+        return await harness.execute("chatReply", {"message": ""}, node_id="r", context=context)
+
+    result = await reply("  Booked you for 3pm.  ")
+    harness.assert_envelope(result, success=True)
+    assert thread.database.add_chat_message.await_args.args[2] == "Booked you for 3pm."
+    # An agent with nothing to say still posts nothing.
+    thread.database.add_chat_message.reset_mock()
+    result = await reply("NO_REPLY")
+    assert result["result"]["posted"] is False
+    thread.database.add_chat_message.assert_not_awaited()
+
+
 async def test_an_answer_that_is_not_text_is_posted_as_text(harness, thread):
     # A whole-value template keeps the upstream value's type.
     result = await _reply(harness, {"items": ["milk", "eggs"]})

@@ -6,8 +6,11 @@ the assistant. The owner reads it in Talk on the employee's Home page and
 in the editor's chat pane. The write goes through services/chat_thread.py,
 which stamps the live generation and announces ``chat.updated``.
 
-A message that is empty, or exactly NO_REPLY (the agent had nothing to
-say), posts nothing. A ``<followups>`` block the answer ends with is never
+With ``message`` empty it posts what the node's input answered: the
+connected agent's ``response`` (``connected_outputs``, which NodeExecutor
+gives this node), so an agent wired in the editor needs no template. An
+answer that is empty, or exactly NO_REPLY (the agent had nothing to say),
+posts nothing. A ``<followups>`` block the answer ends with is never
 shown as text: in a chat run it becomes the reply's follow-up buttons
 (``services/chat/guide.py``), elsewhere it is dropped.
 
@@ -38,6 +41,7 @@ from services.plugin import ActionNode, NodeContext, NodeUserError, Operation, T
 class ChatReplyParams(BaseModel):
     message: str = Field(
         default="",
+        description="What to post. Empty posts what the connected agent answered.",
         json_schema_extra={"rows": 3, "placeholder": "{{agent.response}}"},
     )
 
@@ -55,6 +59,24 @@ class ChatReplyParams(BaseModel):
         if isinstance(value, (dict, list)):
             return json.dumps(value, ensure_ascii=False, default=str)
         return str(value)
+
+
+_ANSWER_FIELDS = ("response", "message", "text", "content")
+
+
+def _connected_answer(raw: Any) -> str:
+    """What the node's input answered: the first connected output's
+    ``response`` (an agent's answer), else its ``message``, ``text`` or
+    ``content``."""
+    outputs = raw.get("connected_outputs") if isinstance(raw, dict) else None
+    for output in outputs.values() if isinstance(outputs, dict) else ():
+        if not isinstance(output, dict):
+            continue
+        for field in _ANSWER_FIELDS:
+            value = output.get(field)
+            if isinstance(value, str) and value.strip():
+                return value
+    return ""
 
 
 class ChatReplyOutput(BaseModel):
@@ -92,7 +114,7 @@ class ChatReplyNode(ActionNode):
         from services.chat_thread import record_chat_message
         from services.plugin.deps import get_database
 
-        text = params.message.strip()
+        text = params.message.strip() or _connected_answer(ctx.raw).strip()
         # The <followups> block an answer may end with shows as buttons, never
         # as text: a message that is only the block says nothing.
         visible = split_followups(text)[0].strip()
