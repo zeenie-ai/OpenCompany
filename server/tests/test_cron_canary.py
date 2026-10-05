@@ -248,6 +248,54 @@ class TestCreateCronSchedule:
             )
 
     @pytest.mark.asyncio
+    async def test_a_schedule_left_by_a_deleted_workflow_is_replaced(self):
+        """A workflow deleted before deleting stopped it first left its
+        Schedule, and a new workflow can get the same slug: its Start
+        replaces the leftover instead of failing on every try."""
+        from temporalio.client import ScheduleAlreadyRunningError
+
+        from services.temporal.schedules import create_cron_schedule
+
+        async def owned_by_six(updater):
+            updater(
+                types.SimpleNamespace(
+                    description=types.SimpleNamespace(
+                        schedule=types.SimpleNamespace(state=None, action=types.SimpleNamespace(args=())),
+                        typed_search_attributes=[
+                            types.SimpleNamespace(key=types.SimpleNamespace(name="EventWorkflowId"), value="6"),
+                        ],
+                    )
+                )
+            )
+
+        args = dict(
+            workflow_id="14",
+            workflow_slug="Maya_1",
+            node_id="cron-1",
+            trigger_label="Schedule",
+            cron_expression="0 * * * *",
+            timezone="UTC",
+            listener_data={},
+        )
+        client = MagicMock()
+        client.create_schedule = AsyncMock(side_effect=[ScheduleAlreadyRunningError(), None])
+        delete = AsyncMock()
+        client.get_schedule_handle.return_value = MagicMock(update=owned_by_six, delete=delete)
+        gone = AsyncMock(return_value=True)
+
+        assert await create_cron_schedule(client, owner_gone=gone, **args) == "Maya_1-Schedule"
+        gone.assert_awaited_once_with("6")
+        delete.assert_awaited_once()
+        assert client.create_schedule.await_count == 2
+
+        # A workflow that still exists keeps its Schedule.
+        client.create_schedule = AsyncMock(side_effect=ScheduleAlreadyRunningError())
+        delete.reset_mock()
+        with pytest.raises(RuntimeError, match="cron_schedule_ownership_conflict:Maya_1-Schedule"):
+            await create_cron_schedule(client, owner_gone=AsyncMock(return_value=False), **args)
+        delete.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_cron_workflow_pause_resume_gate(self, monkeypatch):
         from nodes.scheduler.cron_scheduler import _workflow as cron_workflow
 
@@ -767,6 +815,7 @@ class TestDeploymentCronCanaryRouting:
                     "cron_expression": cron_expression,
                     "timezone": timezone,
                     "listener_data": listener_data,
+                    "owner_gone": kw.get("owner_gone"),
                 }
             )
             return f"{workflow_slug}-{trigger_label}"
@@ -807,6 +856,11 @@ class TestDeploymentCronCanaryRouting:
         assert ld["trigger_node_id"] == "cron-1"
         assert ld["cron_expression"] == "*/5 * * * *"
         assert ld["schedule"] == "Every 5 minutes"
+        # A Schedule another workflow left is stale only once that workflow is deleted.
+        mgr.database.get_workflow = AsyncMock(return_value=None)
+        assert await call["owner_gone"]("6") is True
+        mgr.database.get_workflow = AsyncMock(return_value=MagicMock(slug="Maya_1"))
+        assert await call["owner_gone"]("6") is False
 
     @pytest.mark.asyncio
     async def test_start_returns_none_when_temporal_not_connected(self, monkeypatch):

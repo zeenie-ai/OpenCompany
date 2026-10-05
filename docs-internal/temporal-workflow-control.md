@@ -201,7 +201,10 @@ the control plane is hardened against Temporal's per-run event-history ceiling
   starts use `USE_EXISTING`, and cron schedule creation preserves server-owned
   pause state. Listener and Schedule ids use the slug the generation's Start
   recorded in its snapshot (`workflow_slug`), not the saved one, so a rename
-  while it runs cannot give the re-arm a second set of ids.
+  while it runs cannot give the re-arm a second set of ids. That slug stays
+  taken while the generation lives (`next_available_slug` skips it), and a
+  Schedule whose workflow was deleted is replaced by the next workflow given
+  its id instead of failing that workflow's Start.
 - **No lifetime caps.** Spawned graph runs, agent children, and delegated-task
   runners no longer carry 1-2h execution/run timeouts (Temporal's timers keep
   ticking through a pause, so the caps silently terminated paused work).

@@ -81,6 +81,23 @@ async def test_generation_records_the_slug_its_temporal_ids_are_named_by():
 
 
 @pytest.mark.asyncio
+async def test_a_live_generations_slug_is_not_handed_out_again(control_database):
+    """Renamed while it runs, a workflow keeps the slug its Start recorded:
+    another workflow given that slug would collide with its cron Schedule."""
+    from services.workflow_naming import next_available_slug
+
+    await control_database.save_workflow("wf-a", "Maya", "Maya_1", {"nodes": [], "edges": []})
+    await WorkflowControlService(control_database).begin_generation(
+        workflow_id="wf-a", nodes=[], edges=[], session_id="s", idempotency_key="start-a"
+    )
+    assert await control_database.rename_workflow("wf-a", "Maya Ortiz", "Maya_Ortiz_1")
+
+    assert await next_available_slug("Maya", control_database) == "Maya_2"
+    # The workflow itself may take its own slug back.
+    assert await next_available_slug("Maya", control_database, exclude_id="wf-a") == "Maya_1"
+
+
+@pytest.mark.asyncio
 async def test_generation_atomically_creates_and_archives_isolated_data_scope(control_database):
     service = WorkflowControlService(control_database)
     control, created = await service.begin_generation(

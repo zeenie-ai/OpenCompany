@@ -1062,6 +1062,7 @@ class DeploymentManager:
             cron_expression=cron_expr,
             timezone=timezone,
             listener_data=listener_data,
+            owner_gone=self._workflow_deleted,
         )
 
         logger.info(
@@ -1072,6 +1073,11 @@ class DeploymentManager:
             cron_expression=cron_expr,
         )
         return schedule_id
+
+    async def _workflow_deleted(self, workflow_id: str) -> bool:
+        """Whether a workflow's saved row is gone, so a Schedule it left is
+        stale (``create_cron_schedule`` replaces it)."""
+        return await self.database.get_workflow(workflow_id) is None
 
     async def _cancel_canary_listeners(self, workflow_id: str) -> int:
         """Cancel all canary listeners for this deployment.

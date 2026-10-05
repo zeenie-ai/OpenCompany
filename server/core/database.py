@@ -994,18 +994,35 @@ class Database:
             return []
 
     async def list_workflow_slugs(self) -> List[tuple]:
-        """Cheap projection of ``(id, slug)`` pairs.
+        """``(id, slug)`` pairs of the slugs in use: each saved workflow's,
+        and the one each live generation of a saved workflow names its
+        Temporal ids by (``graph_snapshot.workflow_slug``). A rename leaves
+        the latter as it was, and handed to another workflow it would give
+        both the same cron Schedule id.
 
         Consumed by :func:`services.workflow_naming.next_available_slug`
         to find the lowest free ``_<N>`` suffix for a given slug base.
         Returns an empty list on error so the slug allocator falls
         through to ``_1``.
         """
+        from models.database import WORKFLOW_CONTROL_ACTIVE_STATES
+
         try:
             async with self.get_session() as session:
                 stmt = select(Workflow.id, Workflow.slug)
                 result = await session.execute(stmt)
-                return list(result.all())
+                rows = list(result.all())
+                live = await session.execute(
+                    select(WorkflowControlExecution.workflow_id, WorkflowControlExecution.graph_snapshot).where(
+                        WorkflowControlExecution.status.in_(WORKFLOW_CONTROL_ACTIVE_STATES),
+                        WorkflowControlExecution.workflow_id.in_(select(Workflow.id)),
+                    )
+                )
+                for workflow_id, snapshot in live.all():
+                    slug = snapshot.get("workflow_slug") if isinstance(snapshot, dict) else None
+                    if isinstance(slug, str) and slug:
+                        rows.append((workflow_id, slug))
+                return rows
         except Exception as e:
             logger.error("Failed to list workflow slugs", error=str(e))
             return []

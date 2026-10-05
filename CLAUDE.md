@@ -1096,7 +1096,7 @@ Single source of truth: [`server/services/workflow_naming.py`](./server/services
 
 **Invariants** (locked by `tests/services/test_workflow_naming.py` + `test_workflow_rename.py` — 39 tests):
 - First creation always gets `_1` suffix (no bare-base slugs).
-- Fill-gap: deleted `AI_Assistant_2` slot is reused on next "AI Assistant" creation.
+- Fill-gap: deleted `AI_Assistant_2` slot is reused on next "AI Assistant" creation, unless a live generation of another saved workflow still names its Temporal ids by it (a workflow renamed while it runs keeps the slug its Start recorded, and `list_workflow_slugs` returns those too). A cron Schedule left by a deleted workflow under a reused slug is replaced at Start (`create_cron_schedule(owner_gone=...)`), not reported as `cron_schedule_ownership_conflict`.
 - Renaming `AI Assistant` → `AI Assistant!` (same slug base) keeps `_1` via `exclude_id` (no self-bump).
 - UNIQUE constraint on `slug` is the final collision guard; `IntegrityError` indicates a race the caller should retry.
 - Non-ASCII names transliterate via `text-unidecode` ("日本語" → "Ri_Ben_Yu"); fall back to `Workflow_N` only when slug is empty after sanitize.

@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import timedelta
-from typing import Any, Dict, List, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from temporalio.client import (
     Client,
@@ -128,6 +128,14 @@ def _last_day_of_month(minute: int, hour: int) -> List[ScheduleCalendarSpec]:
     ]
 
 
+class _OwnedElsewhere(RuntimeError):
+    """The Schedule id is held by another workflow's Schedule."""
+
+    def __init__(self, schedule_id: str, owner: str) -> None:
+        super().__init__(f"cron_schedule_ownership_conflict:{schedule_id}")
+        self.owner = owner
+
+
 async def create_cron_schedule(
     client: Client,
     *,
@@ -140,6 +148,7 @@ async def create_cron_schedule(
     listener_data: Dict[str, Any],
     task_queue: str = "machina-tasks",
     overlap_policy: ScheduleOverlapPolicy = ScheduleOverlapPolicy.SKIP,
+    owner_gone: Optional[Callable[[str], Awaitable[bool]]] = None,
 ) -> str:
     """Create a Temporal Schedule for a cron trigger, or update the one there.
 
@@ -148,7 +157,10 @@ async def create_cron_schedule(
     boot re-arm), Temporal raises :exc:`ScheduleAlreadyRunningError` and the
     Schedule is updated in place: new spec, action args and Search
     Attributes, same paused state. One owned by another workflow raises
-    ``cron_schedule_ownership_conflict`` instead. An updated ``CRON_ONCE``
+    ``cron_schedule_ownership_conflict`` instead, unless ``owner_gone`` says
+    that workflow was deleted: its Schedule is then left over (a workflow
+    deleted before deleting stopped it first), and since slugs are handed
+    out again, it is replaced. An updated ``CRON_ONCE``
     Schedule does not run again, since ``trigger_immediately`` applies only
     when the Schedule is created.
 
@@ -175,6 +187,8 @@ async def create_cron_schedule(
         overlap_policy: How concurrent firings interact. ``SKIP`` (default)
             drops a firing if the prior run is still going; mirrors the
             pre-Wave-12 APScheduler behaviour for slow workflows.
+        owner_gone: Whether the workflow an existing Schedule names was
+            deleted (the deployment manager asks its database).
     """
     schedule_id = cron_schedule_id(workflow_slug, trigger_label)
     action_workflow_id = cron_action_workflow_id(workflow_slug, trigger_label)
@@ -267,10 +281,7 @@ async def create_cron_schedule(
                 ):
                     existing_owner = existing_args[0].get("workflow_id")
             if str(existing_owner or "") != str(workflow_id):
-                raise RuntimeError(
-                    "cron_schedule_ownership_conflict:"
-                    f"{schedule_id}"
-                )
+                raise _OwnedElsewhere(schedule_id, str(existing_owner or ""))
             updated_schedule = replace(
                 schedule,
                 state=description.schedule.state,
@@ -280,7 +291,25 @@ async def create_cron_schedule(
                 search_attributes=schedule_search_attributes,
             )
 
-        await handle.update(update_existing)
+        try:
+            await handle.update(update_existing)
+        except _OwnedElsewhere as taken:
+            if owner_gone is None or not taken.owner or not await owner_gone(taken.owner):
+                raise
+            await handle.delete()
+            await client.create_schedule(
+                schedule_id,
+                schedule,
+                search_attributes=schedule_search_attributes,
+                trigger_immediately=cron_expression == CRON_ONCE,
+            )
+            logger.warning(
+                "Replaced a cron Schedule left by a deleted workflow",
+                schedule_id=schedule_id,
+                previous_owner=taken.owner,
+                workflow_id=workflow_id,
+            )
+            return schedule_id
         logger.info(
             "Updated existing Temporal cron Schedule",
             schedule_id=schedule_id,
