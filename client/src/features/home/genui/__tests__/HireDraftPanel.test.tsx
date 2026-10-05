@@ -10,11 +10,12 @@
  * developers only.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { setReducedMotion } from '@/test/waapi';
 import { useShellDialogsStore } from '@/stores/shellDialogsStore';
+import { useAppStore } from '@/store/useAppStore';
 
 const sendRequest = vi.fn();
 
@@ -94,6 +95,12 @@ function hireButton() {
 
 let restoreMotion: () => void;
 
+beforeAll(async () => {
+  // Await the heavy json-render chunk before starting UI assertion timers.
+  // HireDraftPanel still renders through its real lazy/Suspense boundary.
+  await import('../HireScreen');
+}, 30_000);
+
 beforeEach(() => {
   restoreMotion = setReducedMotion(true);
   sendRequest.mockReset();
@@ -102,6 +109,7 @@ beforeEach(() => {
   seedReadyDraft();
   useHomeStore.setState({ view: { kind: 'hire' }, hireNotice: null });
   useShellDialogsStore.setState({ credentialsOpen: false });
+  useAppStore.setState({ shellMode: 'normal' });
 });
 
 afterEach(() => {
@@ -112,6 +120,20 @@ afterEach(() => {
 });
 
 describe('HireDraftPanel', () => {
+  it('keeps team details optional and allows hiring without choosing specialists', async () => {
+    useDraftStore.setState({ team: [{ responsibility: 'Checks your calendar' }, { responsibility: 'Researches information' }] });
+    renderPanel();
+    expect(await hireButton()).toBeEnabled();
+    const summary = screen.getByText('Their team');
+    const details = summary.closest('details');
+    expect(details).not.toHaveAttribute('open');
+    fireEvent.click(summary);
+    expect(screen.getByText('Checks your calendar')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Change something' })).toBeEnabled();
+    expect(screen.queryByText('productivity_agent')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: /specialist/i })).not.toBeInTheDocument();
+  });
+
   it('shows the introduction and the setup screen', async () => {
     renderPanel();
     expect(screen.getByText('Meet Maya, your new receptionist.')).toBeInTheDocument();
@@ -163,6 +185,17 @@ describe('HireDraftPanel', () => {
       credentialsOpen: true,
       credentialsOptions: { categoryId: 'ai', intent: 'connect' },
     });
+  });
+
+  it.each(['team_temporal_required', 'team_agent_workflow_required', 'team_runtime_not_ready'])('shows a saved hire waiting for %s in plain words', async (issue) => {
+    sendRequest.mockResolvedValue(hired({ started: false, activation_state: 'blocked', readiness_issue: issue }));
+    renderPanel();
+    const hire = await hireButton();
+    await act(async () => { fireEvent.click(hire); });
+    const notice = useHomeStore.getState().hireNotice;
+    expect(notice?.warnings[0]).toMatch(/They are hired and their team is saved/);
+    expect(notice?.warnings[0]).not.toMatch(/Temporal|AgentWorkflow|team_runtime/);
+    expect(useHomeStore.getState().view).toEqual({ kind: 'employee', workflowId: 'w1' });
   });
 
   it('tells the owner in plain words when the same hire is still going through', async () => {
@@ -257,8 +290,9 @@ describe('HireDraftPanel', () => {
     expect(useDraftStore.getState()).toMatchObject({ status: 'idle', input: 'Answer WhatsApp' });
   });
 
-  it('shows the spec and its patch stream in development builds only', async () => {
+  it('shows the spec and its patch stream in Dev mode in development builds', async () => {
     vi.stubEnv('DEV', true);
+    useAppStore.setState({ shellMode: 'dev' });
     renderPanel();
     fireEvent.click(await screen.findByRole('button', { name: /Layout JSON/ }));
     expect(screen.getByRole('tab', { name: 'spec.json' })).toHaveAttribute('aria-selected', 'true');
@@ -269,6 +303,13 @@ describe('HireDraftPanel', () => {
 
   it('keeps the spec inspector out of a release build', async () => {
     vi.stubEnv('DEV', false);
+    renderPanel();
+    await hireButton();
+    expect(screen.queryByRole('button', { name: /Layout JSON/ })).not.toBeInTheDocument();
+  });
+
+  it('keeps technical JSON out of Normal mode even in development builds', async () => {
+    vi.stubEnv('DEV', true);
     renderPanel();
     await hireButton();
     expect(screen.queryByRole('button', { name: /Layout JSON/ })).not.toBeInTheDocument();

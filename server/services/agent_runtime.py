@@ -208,6 +208,7 @@ async def run_native_agent_loop(
     rebind_from_operations: Optional[
         Callable[[List[Dict[str, Any]]], Awaitable[List[AgentToolSpec]]]
     ] = None,
+    roster_after_rebind: Optional[Callable[[], str]] = None,
     context_management: Optional[Dict[str, Any]] = None,
     compaction_pause_callback: Optional[
         Callable[
@@ -426,6 +427,11 @@ async def run_native_agent_loop(
             # from the untouched result, so a capped text keeps its images.
             tool_message.blocks.extend(image_blocks_from_tool_result(result))
             messages.append(tool_message)
+
+        if iteration_new_tools and roster_after_rebind is not None:
+            roster = roster_after_rebind()
+            if roster:
+                messages.append(Message(role="system", content=roster))
 
         # One save per turn covers every tool result appended above.
         await save_now()

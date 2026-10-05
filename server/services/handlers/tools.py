@@ -178,6 +178,11 @@ async def _dispatch_tool(tool_name: str, tool_args: Dict[str, Any], config: Dict
         # shared default session.
         "execution_id": config.get("execution_id"),
     }
+    # These scopes come from the server execution config, never tool arguments.
+    for key in ("run_scope", "generation", "parameter_snapshot", "employee_job_id",
+                "root_execution_id", "team_id", "team_execution_id"):
+        if key in config:
+            context[key] = config[key]
 
     logger.info("[Tool] Executing '%s' (node_type=%s, workspace=%s)", tool_name, node_type, context["workspace_dir"])
 

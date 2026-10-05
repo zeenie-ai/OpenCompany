@@ -88,3 +88,13 @@ async def test_trigger_run_preserves_deployment_user():
     )
 
     assert execute_workflow.await_args.kwargs["user_id"] == "account-32"
+
+
+async def test_deploy_captures_immutable_parameter_snapshot_for_future_runs():
+    manager = _manager()
+    manager._load_settings = AsyncMock()
+    manager._notify = AsyncMock()
+    parameters = {"send": {"recipient": "original"}}
+    await manager.deploy(nodes=[], edges=[], workflow_id="frozen", graph_version=2, generation=1, parameter_snapshot=parameters)
+    parameters["send"]["recipient"] = "changed"
+    assert manager._deployments["frozen"].parameter_snapshot["send"]["recipient"] == "original"

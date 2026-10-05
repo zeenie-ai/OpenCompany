@@ -277,6 +277,8 @@ async def _summary(
     status = _status(control)
     roles = getattr(employee, "node_roles", None) or {}
     watch = [roles[key] for key in ("agent", "todos") if roles.get(key)] if roles else []
+    if getattr(employee, "team_plan", None):
+        watch = list(dict.fromkeys([*watch, *graph.agent_ids, *graph.todo_ids]))
     if not watch:
         watch = list(graph.agent_ids) + list(graph.todo_ids)
     talk = _talk(graph, control_row)
@@ -383,16 +385,21 @@ async def _latest_run(database: Any, workflow_id: str) -> Optional[Dict[str, Any
         return None
 
 
-async def list_employee_summaries(database: Any, *, auth_service: Any) -> List[Dict[str, Any]]:
-    """Every workflow as an employee, most recently changed first.
+def employee_owner(workflow: Any, employee: Any = None) -> str:
+    """Explicit graph ownership wins; old hires retain their recorded owner."""
+    from constants import OWNER_PRINCIPAL_ID
 
-    No per-owner filtering yet: like the editor's workflow list, every
-    authenticated principal sees every workflow (see authentication.md,
-    Known Limitations). Hired rows record their owner for when that lands.
-    """
+    return str((getattr(workflow, "data", None) or {}).get("owner_id") or getattr(employee, "owner_id", None) or OWNER_PRINCIPAL_ID)
+
+
+async def list_employee_summaries(database: Any, *, auth_service: Any, owner_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Workflows as employees, optionally restricted to their trusted owner."""
     workflows = await database.get_all_workflows()
     ids = [workflow.id for workflow in workflows]
     employees = await store.list_by_workflow_ids(database, ids)
+    if owner_id is not None:
+        workflows = [workflow for workflow in workflows if employee_owner(workflow, employees.get(workflow.id)) == owner_id]
+        ids = [workflow.id for workflow in workflows]
     controls = await database.list_latest_workflow_controls(ids)
     pending = await _pending_counts(database, ids)
     done = await _done_today(database, ids)
@@ -430,6 +437,12 @@ async def _load_one(database: Any, workflow_id: str, *, auth_service: Any) -> Op
         pending=pending.get(workflow_id, 0),
         done_today=done.get(workflow_id, 0),
     )
+    if employee and employee.team_plan:
+        from services.employees.jobs import job_progress
+        summary["job_progress"] = await job_progress(database, workflow_id)
+    summary["has_team"] = bool(employee and employee.team_plan)
+    from core.container import container
+    summary["can_give_team"] = bool(employee and not employee.team_plan and getattr(container.settings(), "employee_team_conversion_enabled", False)) if hasattr(container, "settings") else False
     return summary, workflow, employee
 
 

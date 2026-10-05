@@ -1,6 +1,6 @@
 """``enable_employee_talk``: Turn on Talk adds the talk line to the saved
 workflow in one transaction (announced to open editors), records the new
-parts on a hired employee, and restarts a live employee so the line runs.
+parts on a hired employee, and applies them without Reset so the line runs.
 A retry adds nothing twice; a change under way, or a graph with nothing to
 talk to, is refused."""
 
@@ -14,7 +14,7 @@ import nodes  # noqa: F401 - registers every plugin
 import services.employees  # noqa: F401 - registers the handlers
 import services.status_broadcaster as status_broadcaster
 from models.database import WorkflowControlExecution
-from services.deployment.restart import RestartResult
+from services.employees import safe_apply
 from services.employees import handlers, store
 from services.graph_build import context_data, context_edge, main_edge, skill_edge, tool_edge
 from services.workflow_migrations import normalize_workflow_graph
@@ -81,25 +81,28 @@ def chat_hire(workflow_id="8"):
     }
 
 
-class FakeRestart:
-    """restart_with_latest_graph: records calls; a running employee starts a
-    new generation on the saved graph, as Start would."""
+class FakeApply:
+    """Safe handoff records calls and replaces only the operational snapshot."""
 
     def __init__(self, database):
         self.database = database
         self.calls = []
         self.error = None
 
-    async def __call__(self, workflow_id, *, owner_id, key):
+    async def __call__(self, database, workflow_id, *, owner_id, key):
         self.calls.append((workflow_id, owner_id, key))
         if self.error:
-            return RestartResult("unchanged", self.error)
+            return {"success": False, "error": self.error, "activation_state": "failed"}
         latest = await self.database.get_latest_workflow_control(workflow_id)
         if latest is None or latest.status == "reset":
-            return RestartResult("unchanged")
+            return {"success": True, "activation_state": "saved"}
         workflow = await self.database.get_workflow(workflow_id)
-        await control(self.database, workflow_id, "running", generation=latest.generation + 1, graph=workflow.data)
-        return RestartResult("restarted")
+        async with self.database.reserved_session() as session:
+            current = await session.get(WorkflowControlExecution, latest.id)
+            current.graph_snapshot = workflow.data
+            current.revision += 1
+            await session.commit()
+        return {"success": True, "activation_state": latest.status}
 
 
 @pytest.fixture()
@@ -118,8 +121,8 @@ def harness(monkeypatch, real_database):
     monkeypatch.setattr(status_broadcaster, "get_status_broadcaster", lambda: Broadcaster())
     changed = []
     monkeypatch.setattr(mutate, "notify_graph_changed", changed.append)
-    restart = FakeRestart(real_database)
-    monkeypatch.setattr(handlers, "restart_with_latest_graph", restart)
+    restart = FakeApply(real_database)
+    monkeypatch.setattr(safe_apply, "apply_saved_changes", restart)
     return SimpleNamespace(database=real_database, frames=frames, changed=changed, restart=restart)
 
 
@@ -158,7 +161,7 @@ def test_the_handlers_are_registered():
     assert "enable_employee_talk" in registered and "apply_employee_changes" in registered
 
 
-async def test_a_running_hire_gets_a_talk_line_and_restarts(harness):
+async def test_a_running_hire_gets_a_talk_line_through_safe_apply(harness):
     database = harness.database
     await database.save_user_settings({"profile_call_name": "Alex"}, "default")
     await hired(
@@ -211,7 +214,7 @@ async def test_a_running_hire_gets_a_talk_line_and_restarts(harness):
     assert harness.changed == ["7"]
 
 
-async def test_a_retry_adds_nothing_twice_and_restarts_once(harness):
+async def test_a_retry_adds_nothing_twice_and_applies_once(harness):
     database = harness.database
     await hired(database, "7", "Maya", receptionist(), trigger={"kind": "app_event", "app": "whatsapp"})
     await control(database, "7", "running", graph=receptionist())
@@ -266,7 +269,7 @@ async def test_a_workflow_built_in_the_editor_gets_a_copy_of_its_agent(harness):
     assert await store.get_by_workflow(database, "9") is None
 
 
-async def test_talk_already_on_needs_no_restart(harness):
+async def test_talk_already_on_needs_no_new_handoff(harness):
     database = harness.database
     await hired(database, "8", "Sam", chat_hire(), trigger={"kind": "manual"})
     assert (await enable("8", key="k1"))["success"] is True
@@ -277,7 +280,7 @@ async def test_talk_already_on_needs_no_restart(harness):
     assert harness.restart.calls == [("8", "owner", "k1")]
 
 
-async def test_the_live_generation_without_the_line_is_restarted(harness):
+async def test_the_live_generation_without_the_line_is_applied(harness):
     # Talk is on in the saved graph, but the running generation predates it.
     database = harness.database
     await hired(database, "8", "Sam", chat_hire(), trigger={"kind": "manual"})
@@ -297,15 +300,36 @@ async def test_a_change_under_way_is_a_conflict(harness, status):
     assert harness.restart.calls == []
 
 
-async def test_a_failed_restart_keeps_the_line_and_says_so(harness):
+async def test_a_failed_handoff_keeps_the_line_and_says_so(harness):
     database = harness.database
     await hired(database, "7", "Maya", receptionist())
     await control(database, "7", "running", graph=receptionist())
-    harness.restart.error = "restart_failed"
+    harness.restart.error = "apply_failed"
     result = await enable("7")
-    assert result["success"] is False and result["error"] == "restart_failed"
+    assert result["success"] is False and result["error"] == "apply_failed"
     assert result["employee"]["pending_changes"] is True
     assert (await store.get_by_workflow(database, "7")).node_roles["talk_agent"] == "7:aiAgent:2"
+
+
+async def test_another_owner_cannot_add_talk_to_an_employee(harness):
+    await hired(harness.database, "7", "Maya", receptionist())
+    before = (await harness.database.get_workflow("7")).data
+    other_socket = SimpleNamespace(scope={"path": "/ws/status"}, state=SimpleNamespace(user_id="other-owner"))
+    result = await handlers.handle_enable_employee_talk({"workflow_id": "7", "idempotency_key": "cross-owner"}, other_socket)
+    assert result["success"] is False and result["error"] == "not_found"
+    assert (await harness.database.get_workflow("7")).data == before
+    assert not harness.restart.calls
+
+
+async def test_turning_on_talk_retains_a_paused_employees_generation(harness):
+    await hired(harness.database, "8", "Sam", chat_hire(), trigger={"kind": "manual"})
+    await control(harness.database, "8", "paused", graph=chat_hire())
+    before = await harness.database.get_latest_workflow_control("8")
+    result = await enable("8")
+    after = await harness.database.get_latest_workflow_control("8")
+    assert result["success"] is True and result["activation_state"] == "paused"
+    assert after.id == before.id and after.generation == before.generation
+    assert after.execution_id == before.execution_id and after.status == "paused"
 
 
 async def test_nothing_to_talk_to_and_bad_requests(harness):

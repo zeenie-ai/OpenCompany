@@ -77,3 +77,34 @@ async def test_an_employee_left_on_the_bare_id_is_moved_onto_the_endpoint(setup,
     auth = Auth()
     assert await start.heal_agent_models(Database(setup), auth, connections.Connections(auth), "7") == ["7:aiAgent:1"]
     assert setup.saved["7:aiAgent:1"] == {"provider": "openai_compatible:home", "model": "m1", "prompt": "p"}
+
+
+async def test_specialist_models_preserve_explicit_and_persist_missing_defaults(setup, monkeypatch):
+    setup.connected = {"anthropic"}
+    params = {"lead": {"provider": "anthropic", "model": "chosen-explicit"}, "specialist": {"provider": "anthropic", "model": "", "prompt": "research"}}
+    async def agents(_database, _workflow_id):
+        return list(params)
+    class TeamDatabase(Database):
+        async def get_node_parameters(self, node_id):
+            return params[node_id]
+        async def get_provider_defaults(self, provider):
+            return {"default_model": "saved-default"}
+    monkeypatch.setattr(start, "_agent_ids", agents)
+    auth = Auth()
+    changed = await start.heal_agent_models(TeamDatabase(setup), auth, connections.Connections(auth), "7")
+    assert changed == ["specialist"]
+    assert setup.saved == {"specialist": {"provider": "anthropic", "model": "saved-default", "prompt": "research"}}
+
+
+async def test_endpoint_missing_model_uses_its_models_instead_of_cloud_fallback(setup, monkeypatch):
+    setup.connected = {"openai_compatible"}
+    setup.endpoints = [SimpleNamespace(ref="openai_compatible:home", models=["local-custom"])]
+    async def agents(_database, _workflow_id):
+        return ["specialist"]
+    class TeamDatabase(Database):
+        async def get_node_parameters(self, node_id):
+            return {"provider": "openai_compatible:home", "model": ""}
+    monkeypatch.setattr(start, "_agent_ids", agents)
+    auth = Auth()
+    await start.heal_agent_models(TeamDatabase(setup), auth, connections.Connections(auth), "7")
+    assert setup.saved["specialist"] == {"provider": "openai_compatible:home", "model": "local-custom"}

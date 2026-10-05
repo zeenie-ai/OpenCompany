@@ -4,6 +4,7 @@ the ledger key is the runtime's tool-call id."""
 
 from __future__ import annotations
 
+import asyncio
 import pytest
 
 from nodes.tool import agent_builder as ab
@@ -48,6 +49,32 @@ async def test_asking_twice_in_one_run_adds_one(builder, database):
     assert [n["id"] for n in graph["nodes"] if n["type"] == "httpRequest"] == ["7:httpRequest:1"]
     assert [op["minted_id"] for op in second.operations] == ["7:httpRequest:1"]
     assert len(builder.frames) == 1
+
+
+async def test_concurrent_same_type_calls_reuse_inside_transaction(builder, database, monkeypatch):
+    await save_graph(database, agents_graph())
+    original = ab._load_canvas
+    ready = asyncio.Event()
+    readers = 0
+
+    async def simultaneous_read(*args):
+        nonlocal readers
+        canvas = await original(*args)
+        readers += 1
+        if readers == 2:
+            ready.set()
+        await ready.wait()
+        return canvas
+
+    monkeypatch.setattr(ab, "_load_canvas", simultaneous_read)
+    results = await asyncio.gather(
+        call("add_tool", ctx(call="concurrent-1"), node_type="httpRequest"),
+        call("add_tool", ctx(call="concurrent-2"), node_type="httpRequest"),
+    )
+    graph = await saved(database)
+    assert len([n for n in graph["nodes"] if n["type"] == "httpRequest"]) == 1
+    assert len([edge for edge in edges_into(graph, "7:aiAgent:1", "input-tools") if "httpRequest" in edge["source"]]) == 1
+    assert all("httpRequest:1" in result.operations[0]["minted_id"] for result in results)
 
 
 async def test_a_retried_teammate_call_adds_one_teammate(builder, database):

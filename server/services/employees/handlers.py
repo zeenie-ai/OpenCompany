@@ -11,18 +11,16 @@ Two change the employee, and answer with its fresh summary
 
 - ``enable_employee_talk {workflow_id, idempotency_key}``: Turn on Talk.
   Adds the talk line talk.py plans (in one transaction, so an editor that
-  has the workflow open adopts it), then restarts the employee on the
-  saved graph if it is live, so the line runs: a running employee ends
-  running, a paused or stopped one ends ready. Talk already on succeeds
-  without a restart, unless the live generation is missing the line.
-- ``apply_employee_changes {workflow_id, idempotency_key}``: restart on the
-  latest saved graph (services/deployment/restart.py): running ends
-  running, paused or stopped ends ready, ready is left alone.
+  has the workflow open adopts it), then safely applies the saved graph.
+  Active work finishes before handoff; paused employees remain paused.
+  Talk already on succeeds unless the live generation is missing the line.
+- ``apply_employee_changes {workflow_id, idempotency_key}``: safely apply
+  the latest saved graph while retaining conversations and pending work.
 
 Errors: ``invalid_request``, ``not_found``, ``unsupported`` (nothing to
 talk to), ``conflict`` (a start, pause, resume or reset is under way, or
-the graph changed meanwhile), ``restart_failed``. A retry with the same
-key adds nothing twice and restarts once. Changes to one employee run one
+the graph changed meanwhile), ``apply_failed``. A retry with the same
+key adds nothing twice and applies once. Changes to one employee run one
 at a time.
 
 Two change who the employee is, for the owner of the workflow only, and
@@ -49,7 +47,7 @@ from fastapi import WebSocket
 
 from services.authz.ws_surface import execution_principal
 from services.deployment.control import serialize_control
-from services.deployment.restart import pending_changes, restart_with_latest_graph
+from services.deployment.restart import pending_changes
 from services.employees import store
 from services.employees.apps import get_app
 from services.employees.builder import CHAT_UI_TYPE, talk_tools
@@ -65,7 +63,7 @@ from services.employees.prompt import (
     request_from_employee,
     talk_addendum,
 )
-from services.employees.summaries import employee_usage, get_employee_detail, get_employee_summary, list_employee_summaries
+from services.employees.summaries import employee_owner, employee_usage, get_employee_detail, get_employee_summary, list_employee_summaries
 from services.employees.talk import TalkAgent, TalkState, TalkTool, plan_talk_line, sources, talk_agent_label, talk_state
 from services.employees.upgrade import upgrade_employee
 from services.graph_build import TOOLS_INPUT
@@ -88,7 +86,7 @@ def _lock(workflow_id: str) -> asyncio.Lock:
 async def handle_list_employees(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     from core.container import container
 
-    employees = await list_employee_summaries(container.database(), auth_service=container.auth_service())
+    employees = await list_employee_summaries(container.database(), auth_service=container.auth_service(), owner_id=execution_principal({}, websocket))
     return {"success": True, "employees": employees}
 
 
@@ -99,6 +97,8 @@ async def handle_get_employee(data: Dict[str, Any], websocket: WebSocket) -> Dic
         raise NodeUserError("workflow_id is required")
     from core.container import container
 
+    if not await _owns(container.database(), websocket, workflow_id):
+        return {"success": False, "error": "not_found", "workflow_id": workflow_id}
     employee = await get_employee_detail(container.database(), workflow_id, auth_service=container.auth_service())
     if employee is None:
         return {"success": False, "error": "not_found", "workflow_id": workflow_id}
@@ -216,8 +216,9 @@ async def _enable_talk(database: Any, auth_service: Any, workflow_id: str, *, ke
     # The line runs only once the deployment runs the graph that has it.
     workflow = await database.get_workflow(workflow_id)
     if added or pending_changes(workflow, await database.get_latest_workflow_control(workflow_id)):
-        restarted = await restart_with_latest_graph(workflow_id, owner_id=owner, key=key)
-        return await _answer(database, auth_service, workflow_id, restarted.error)
+        from services.employees.safe_apply import apply_saved_changes
+        applied = await apply_saved_changes(database, workflow_id, owner_id=owner, key=key)
+        return {**await _answer(database, auth_service, workflow_id, applied.get("error")), **applied}
     return await _answer(database, auth_service, workflow_id)
 
 
@@ -225,8 +226,9 @@ async def _apply_changes(database: Any, auth_service: Any, workflow_id: str, *, 
     if await database.get_workflow(workflow_id) is None:
         return {"success": False, "error": "not_found", "workflow_id": workflow_id}
     await upgrade_employee(database, auth_service, workflow_id)
-    restarted = await restart_with_latest_graph(workflow_id, owner_id=owner, key=key)
-    return await _answer(database, auth_service, workflow_id, restarted.error)
+    from services.employees.safe_apply import apply_saved_changes
+    applied = await apply_saved_changes(database, workflow_id, owner_id=owner, key=key)
+    return {**await _answer(database, auth_service, workflow_id, applied.get("error")), **applied}
 
 
 async def _browser_read_only(database: Any, browser_ids: Any) -> bool:
@@ -250,6 +252,8 @@ async def handle_enable_employee_talk(data: Dict[str, Any], websocket: WebSocket
     from core.container import container
 
     async with _lock(workflow_id):
+        if not await _owns(container.database(), websocket, workflow_id):
+            return {"success": False, "error": "not_found", "workflow_id": workflow_id}
         return await _enable_talk(
             container.database(), container.auth_service(), workflow_id, key=key, owner=execution_principal(data, websocket)
         )
@@ -263,9 +267,49 @@ async def handle_apply_employee_changes(data: Dict[str, Any], websocket: WebSock
     from core.container import container
 
     async with _lock(workflow_id):
+        if not await _owns(container.database(), websocket, workflow_id):
+            return {"success": False, "error": "not_found"}
+        if data.get("stop_work") is True:
+            from services.employees.safe_apply import apply_saved_changes
+            return await apply_saved_changes(container.database(), workflow_id, owner_id=execution_principal(data, websocket), key=key, stop_work=True)
         return await _apply_changes(
             container.database(), container.auth_service(), workflow_id, key=key, owner=execution_principal(data, websocket)
         )
+
+
+@ws_response
+async def handle_list_employee_access(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    from core.container import container
+    from services.employees.permissions import list_access
+    workflow_id = str(data.get("workflow_id") or "")
+    if not workflow_id or not await _owns(container.database(), websocket, workflow_id):
+        return {"success": False, "error": "not_found"}
+    return {"success": True, "access": await list_access(container.database(), workflow_id, execution_principal(data, websocket))}
+
+
+@ws_response
+async def handle_decide_employee_access(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    from core.container import container
+    from services.employees.permissions import decide_access
+    request_id = str(data.get("request_id") or "")
+    if not request_id or not isinstance(data.get("allow"), bool):
+        return {"success": False, "error": "invalid_request"}
+    allowed = await decide_access(container.database(), request_id, execution_principal(data, websocket), data["allow"])
+    return {"success": allowed, **({} if allowed else {"error": "not_found"})}
+
+
+@ws_response
+async def handle_resolve_employee_delivery(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    from core.container import container
+    from services.employees.delivery_resolution import resolve_delivery
+    workflow_id = str(data.get("workflow_id") or "")
+    # This action is only for an authenticated owner surface. Internal
+    # workers and public app messages cannot confirm a send or request retry.
+    if (getattr(websocket, "scope", {}) or {}).get("path") == "/ws/internal" or not getattr(getattr(websocket, "state", None), "user_id", None) or not workflow_id or not await _owns(container.database(), websocket, workflow_id):
+        return {"success": False, "error": "not_found"}
+    return await resolve_delivery(container.database(), workflow_id=workflow_id, job_id=str(data.get("job_id") or ""),
+        owner_id=execution_principal({}, websocket), decision=str(data.get("decision") or ""),
+        request_key=str(data.get("idempotency_key") or ""))
 
 
 # ----- Name and photo -----
@@ -281,7 +325,9 @@ async def _owns(database: Any, websocket: Any, workflow_id: str) -> bool:
         await authorize_session(database, websocket, workflow_id)
     except ChatAccessDenied:
         return False
-    return True
+    workflow = await database.get_workflow(workflow_id)
+    row = await store.get_by_workflow(database, workflow_id)
+    return workflow is not None and employee_owner(workflow, row) == execution_principal({}, websocket)
 
 
 async def _rename_in_instructions(database: Any, workflow: Any, old: str, new: str) -> None:
@@ -369,6 +415,9 @@ WS_HANDLERS: Dict[str, Any] = {
     "start_employee": handle_start_employee,
     "enable_employee_talk": handle_enable_employee_talk,
     "apply_employee_changes": handle_apply_employee_changes,
+    "list_employee_access": handle_list_employee_access,
+    "decide_employee_access": handle_decide_employee_access,
+    "resolve_employee_delivery": handle_resolve_employee_delivery,
     "rename_employee": handle_rename_employee,
     "set_employee_photo": handle_set_employee_photo,
 }

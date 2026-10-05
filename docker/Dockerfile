@@ -51,6 +51,7 @@ COPY . .
 # --frozen sync removes it. The tests and the sidecar's TypeScript source
 # stay behind in this stage.
 RUN CI=true bun install --frozen-lockfile \
+    && python server/services/builder_documentation.py \
     && bun run build \
     && cd server \
     && uv sync --frozen --no-dev --extra docs \

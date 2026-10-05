@@ -40,10 +40,11 @@ async def _agent_ids(database: Any, workflow_id: str) -> List[str]:
     row = await store.get_by_workflow(database, workflow_id)
     roles = (row.node_roles or {}) if row is not None else {}
     agents = list(dict.fromkeys(roles[role] for role in AGENT_ROLES if roles.get(role)))
-    if agents:
-        return agents
+    # Roles predate specialist teams. Include every live agent in the graph,
+    # including members added after Hire, while retaining metadata order.
     workflow = await database.get_workflow(workflow_id)
-    return list(index_graph(getattr(workflow, "data", None)).agent_ids) if workflow is not None else []
+    graph_agents = list(index_graph(getattr(workflow, "data", None)).agent_ids) if workflow is not None else []
+    return list(dict.fromkeys([*agents, *graph_agents]))
 
 
 async def heal_agent_models(database: Any, auth_service: Any, connections: Connections, workflow_id: str) -> List[str]:
@@ -54,7 +55,22 @@ async def heal_agent_models(database: Any, auth_service: Any, connections: Conne
     choice = None
     for agent_id in await _agent_ids(database, workflow_id):
         params = await database.get_node_parameters(agent_id) or {}
-        if params.get("provider") in usable:
+        provider = params.get("provider")
+        if provider in usable:
+            # Keep explicit working models; persist a missing model from this
+            # provider's saved default instead of switching providers.
+            if params.get("model"):
+                continue
+            from services.employees.llm import _model_for, runs_locally
+            endpoint_models = None
+            if str(provider).startswith("openai_compatible:"):
+                from services.llm.endpoints import list_endpoints
+                endpoint = next((entry for entry in await list_endpoints(auth_service) if entry.ref == provider), None)
+                endpoint_models = list(endpoint.models) if endpoint is not None else None
+            model = await _model_for(provider, database, auth_service, local=runs_locally(provider), endpoint_models=endpoint_models)
+            if model:
+                await database.save_node_parameters(agent_id, {**params, "model": model})
+                changed.append(agent_id)
             continue
         if choice is None:
             choice = await resolve_llm_choice(database, auth_service, connections)
@@ -85,6 +101,24 @@ async def handle_start_employee(data: Dict[str, Any], websocket: WebSocket) -> D
         return {"success": False, "error": "missing_apps", "missing_apps": summary["missing_apps"]}
     if summary["needs_ai"]:
         return {"success": False, "error": "needs_ai"}
+    employee = await store.get_by_workflow(database, workflow_id)
+    if getattr(employee, "team_plan", None):
+        from services.employees.team_runtime import team_runtime_error
+        from services.employees.upgrade import team_approval_topology_error
+        app = getattr(websocket, "app", None)
+        manager = getattr(getattr(app, "state", None), "temporal_worker_manager", None)
+        error = team_runtime_error(worker_manager=manager)
+        if error:
+            return {"success": False, "error": error}
+        workflow = await database.get_workflow(workflow_id)
+        roles = employee.node_roles or {}
+        params = {
+            node_id: await database.get_node_parameters(node_id) or {}
+            for node_id in (roles.get("job_delivery"), roles.get("gate"), roles.get("reply")) if node_id
+        }
+        error = team_approval_topology_error(getattr(workflow, "data", None), roles, params=params)
+        if error:
+            return {"success": False, "error": error}
     await heal_agent_models(database, auth_service, Connections(auth_service), workflow_id)
     # An employee an older builder made comes up to the live Ask first rule
     # before it runs (services/employees/upgrade.py).

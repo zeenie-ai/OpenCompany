@@ -35,6 +35,8 @@ References:
 
 from __future__ import annotations
 
+from services.agent_bindings import is_runtime_tool, unique_node_bindings, rebind_allowed, ParameterSnapshotDatabase, extend_runtime_graph
+
 import asyncio
 from dataclasses import asdict
 from datetime import timedelta
@@ -1046,7 +1048,13 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     # The orchestrator passes context["node_data"] but DB has the
     # authoritative version (UI saves edit -> DB; node_data is a
     # snapshot at scheduling time). Prefer DB for liveness.
-    db_params = await database.get_node_parameters(node_id) or {}
+    from services.employees.permissions import assert_runtime_access
+    await assert_runtime_access(database, str(workflow_id or ""), node_id, node_type, context)
+    from services.employees.team_runtime import employee_job_parameters
+    snapshot = await employee_job_parameters(database, context)
+    context["parameter_snapshot"] = snapshot
+    connection_database = ParameterSnapshotDatabase(database, snapshot)
+    db_params = snapshot.get(node_id) if node_id in snapshot else await database.get_node_parameters(node_id) or {}
     parameters = {**(context.get("node_data") or {}), **db_params}
 
     # Resolve {{node.field}} template variables — same step NodeExecutor
@@ -1165,7 +1173,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     memory_data, skill_data, tool_data, input_data, task_data = await collect_agent_connections(
         node_id,
         walk_context,
-        database,
+        connection_database,
         log_prefix=f"[AgentWorkflow:{node_type}]",
     )
 
@@ -1179,6 +1187,12 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     if trigger_task_data:
         task_prompt = format_task_context(trigger_task_data)
         prompt = f"{task_prompt}\n\n{prompt}" if prompt else task_prompt
+    else:
+        from services.employees.team_runtime import employee_job_mission
+
+        job_mission = await employee_job_mission(database, context)
+        if job_mission is not None:
+            prompt = job_mission
 
     # Team-handle edges are configuration edges and are intentionally not
     # returned by collect_agent_connections.  Expand them here before tools
@@ -1197,7 +1211,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     owns_execution_team = False
     if node_type in {"orchestrator_agent", "ai_employee"}:
         teammates = await collect_teammate_connections(
-            node_id, walk_context, database
+            node_id, walk_context, connection_database
         )
         all_nodes = walk_context["nodes"]
         all_edges = walk_context["edges"]
@@ -1255,6 +1269,15 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
                     raise RuntimeError("Failed to persist agent execution team")
                 execution_team_id = team.get("team_id") or team.get("id")
                 owns_execution_team = True
+
+    if execution_team_id and workflow_id:
+        from services.employees.jobs import bind_job_team
+
+        await bind_job_team(
+            database, workflow_id=workflow_id, lead_node_id=node_id,
+            execution_id=str(team_execution_id or context.get("execution_id") or ""),
+            team_id=execution_team_id,
+        )
 
     # ---- Skill prompt injection ----------------------------------------
     from services.ai import _build_skill_system_prompt
@@ -1363,7 +1386,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     progressive_skill_tool = skill_tool_info(skill_data or [], node_id)
     if progressive_skill_tool:
         effective_tool_data.append(progressive_skill_tool)
-    for tool_info in effective_tool_data:
+    for tool_info in unique_node_bindings(effective_tool_data):
         try:
             tool, _config = await ai_service._build_tool_from_node(tool_info)
         except Exception as e:  # noqa: BLE001 — defensive: skip a broken tool
@@ -1558,6 +1581,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         "node_type": node_type,
         "workflow_id": workflow_id,
         "session_id": session_id,
+        "parameter_snapshot": snapshot,
         "provider": provider,
         "model": model,
         "max_tokens": max_tokens,
@@ -1632,10 +1656,17 @@ async def refresh_agent_tools(payload: Dict[str, Any]) -> Dict[str, Any]:
     ai_service = container.ai_service()
     operations: List[Dict[str, Any]] = payload.get("operations") or []
     team_lead_refresh = payload.get("agent_node_type") in {"orchestrator_agent", "ai_employee"}
+    invoking_agent_id = payload.get("invoking_agent_node_id")
+    database = container.database() if invoking_agent_id else None
+    saved = await database.get_workflow(str(payload.get("workflow_id") or "")) if database else None
+    graph = getattr(saved, "data", None) or {}
     new_tools_payload: List[Dict[str, Any]] = []
+    bound = set(payload.get("bound_node_ids") or [])
 
     for op in operations:
         if op.get("type") != "add_node":
+            continue
+        if not rebind_allowed(op, invoking_agent_id, nodes=graph.get("nodes", []), edges=graph.get("edges", []), operations=() if graph else operations):
             continue
         node_type = op.get("node_type") or ""
         if not node_type:
@@ -1651,9 +1682,7 @@ async def refresh_agent_tools(payload: Dict[str, Any]) -> Dict[str, Any]:
         # usable_as_tool=True, and the Skills node (masterSkill is
         # tool-kind but feeds input-skill; it is never an LLM tool).
         is_agent_delegate = kind == "agent"
-        is_tool = kind == "tool"
-        is_dual_purpose = bool(getattr(cls, "usable_as_tool", False)) and kind != "model"
-        if not (is_tool or is_dual_purpose or is_agent_delegate):
+        if not is_runtime_tool(cls):
             continue
         if (getattr(cls, "ui_hints", None) or {}).get("isMasterSkillEditor"):
             continue
@@ -1663,6 +1692,10 @@ async def refresh_agent_tools(payload: Dict[str, Any]) -> Dict[str, Any]:
             "parameters": op.get("parameters") or {},
             "label": op.get("label") or node_type,
         }
+        if tool_info["node_id"] in bound:
+            continue
+        if database:
+            tool_info["parameters"] = await database.get_node_parameters(str(tool_info["node_id"])) or {}
         try:
             tool, _config = await ai_service._build_tool_from_node(tool_info)
         except Exception as e:  # noqa: BLE001 — skip one, keep building the batch
@@ -1672,6 +1705,7 @@ async def refresh_agent_tools(payload: Dict[str, Any]) -> Dict[str, Any]:
             continue
         if tool is None:
             continue
+        bound.add(tool_info["node_id"])
         version = getattr(cls, "version", 1)
         task_queue = getattr(cls, "task_queue", "machina-default")
         new_tools_payload.append(
@@ -1693,7 +1727,15 @@ async def refresh_agent_tools(payload: Dict[str, Any]) -> Dict[str, Any]:
         len(new_tools_payload),
         len(operations),
     )
-    return {"tools": new_tools_payload}
+    parameter_updates = {}
+    if database:
+        for op in operations:
+            identifier = op.get("minted_id") or op.get("client_ref")
+            if op.get("type") == "add_node" and identifier and identifier not in (payload.get("parameter_snapshot") or {}):
+                parameter_updates[str(identifier)] = await database.get_node_parameters(str(identifier)) or {}
+    old_snapshot = payload.get("graph_snapshot") or {}
+    runtime_graph = extend_runtime_graph(old_snapshot, graph, operations) if old_snapshot else graph
+    return {"tools": new_tools_payload, "graph_snapshot": runtime_graph, "parameter_updates": parameter_updates}
 
 
 @activity.defn(name="agent.skill.invoke")
@@ -1833,6 +1875,8 @@ async def begin_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
 async def queue_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Create a pending task before it waits for a root-wide permit."""
     from services.agent_team import get_agent_team_service
+    from services.employees.team_runtime import validate_managed_assignment
+    validate_managed_assignment(payload, payload)
 
     team_id = str(payload.get("team_id") or "")
     task_id = str(payload.get("team_task_id") or "")
@@ -2213,7 +2257,15 @@ def collect_agent_activities() -> List[Any]:
     invoke any of them directly — AgentWorkflow.run() owns the entire
     setup + execution + observation pipeline.
     """
+    from services.temporal.employee_job_workflow import deliver_employee_job, fail_employee_job, resolve_employee_job_delivery
+    from services.temporal.controller_queue import spill_controller_events, read_controller_events
+
     return [
+        deliver_employee_job,
+        resolve_employee_job_delivery,
+        fail_employee_job,
+        spill_controller_events,
+        read_controller_events,
         execute_llm_step,
         persist_agent_turn,
         prepare_agent_payload,

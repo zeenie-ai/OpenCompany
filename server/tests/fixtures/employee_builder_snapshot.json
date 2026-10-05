@@ -697,7 +697,8 @@
       "7:cronScheduler:1": {
         "frequency": "days",
         "daily_time": "14:00",
-        "timezone": "UTC"
+        "timezone": "UTC",
+        "weekday_only": true
       },
       "7:aiAgent:1": {
         "prompt": "It is time for your routine (every weekday at 09:00). Do it now, then report.",

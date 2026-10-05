@@ -91,7 +91,7 @@ from services.graph_build import (
     tool_edge,
 )
 
-BUILDER_VERSION = 3
+BUILDER_VERSION = 4
 #: The first builder whose graphs follow the live Ask first rule (every app
 #: reply behind a gate, sending tools attached and held per call). Older
 #: graphs need Apply for a changed rule to take full effect.
@@ -198,6 +198,8 @@ class BuildInputs:
     #: Hire allowlist (services.node_allowlist.is_hire_allowed).
     allowed: Callable[[str], bool] = lambda _node_type: True
     now: Optional[datetime] = None
+    #: Opt-in template team. Legacy graphs remain available for compatibility.
+    team: bool = False
 
 
 @dataclass
@@ -218,6 +220,7 @@ class BuiltEmployee:
     #: Apps whose nodes the graph uses.
     app_ids: List[str]
     warnings: List[str]
+    team_plan: Optional[Dict[str, Any]] = None
 
 
 class _Unresolved(Exception):
@@ -412,8 +415,7 @@ def _schedule_phrase(trigger: Mapping[str, Any]) -> str:
 
 def schedule_params(trigger: Optional[HireTrigger], zone_name: str, now: datetime) -> Dict[str, Any]:
     """cronScheduler parameters for a hire's schedule, in the owner's zone.
-    "Every weekday" runs daily; the instructions tell the employee to rest
-    at weekends, since cronScheduler has no weekday-only frequency."""
+    Generated weekday schedules use the scheduler's deterministic filter."""
     every = trigger.every if trigger is not None else None
     zone, shift = _schedule_zone(zone_name, now)
     wanted = trigger.at if trigger is not None and trigger.at else None
@@ -428,7 +430,10 @@ def schedule_params(trigger: Optional[HireTrigger], zone_name: str, now: datetim
         day = (trigger.day or "").strip() if trigger is not None else ""
         month_day = day if day == "L" or (day.isdigit() and 1 <= int(day) <= 28) else "1"
         return {"frequency": "months", "month_day": month_day, "monthly_time": at, "timezone": zone}
-    return {"frequency": "days", "daily_time": at, "timezone": zone}
+    params = {"frequency": "days", "daily_time": at, "timezone": zone}
+    if every == "weekday":
+        params["weekday_only"] = True
+    return params
 
 
 @dataclass
@@ -719,7 +724,7 @@ def _plan_talk_tools(inputs: BuildInputs, warnings: List[str]) -> List[TalkTool]
 # ----- the whole graph -----
 
 
-def build_employee_graph(inputs: BuildInputs) -> BuiltEmployee:
+def _build_single_employee_graph(inputs: BuildInputs) -> BuiltEmployee:
     request = inputs.request
     now = inputs.now or datetime.now(timezone.utc)
     labels = Labels()
@@ -863,6 +868,15 @@ def build_employee_graph(inputs: BuildInputs) -> BuiltEmployee:
         app_ids=used_apps,
         warnings=list(dict.fromkeys(warnings)),
     )
+
+
+def build_employee_graph(inputs: BuildInputs) -> BuiltEmployee:
+    built = _build_single_employee_graph(inputs)
+    if inputs.team:
+        from services.employees.team_recipe import build_team
+
+        return build_team(built, inputs)
+    return built
 
 
 __all__ = [

@@ -108,7 +108,7 @@ class WorkflowControlService:
     async def begin_generation(
         self, *, workflow_id: str, nodes: list[dict], edges: list[dict], session_id: str,
         idempotency_key: str, reset: bool = False, graph_version: int = 0,
-        owner_id: str = "owner",
+        owner_id: str = "owner", parameters: dict | None = None,
     ) -> tuple[WorkflowControlExecution, bool]:
         from services.workflow_sanitizer import sanitize_runtime_payload
 
@@ -118,6 +118,7 @@ class WorkflowControlService:
                 "owner_id": str(owner_id or "owner"),
                 "nodes": nodes,
                 "edges": edges,
+                "parameters": parameters or {},
             }
         )
         nodes = list(safe_graph.get("nodes") or [])
@@ -141,6 +142,7 @@ class WorkflowControlService:
             graph_snapshot={
                 "graphVersion": safe_graph["graphVersion"],
                 "owner_id": safe_graph["owner_id"],
+                "parameters": safe_graph.get("parameters") or {},
                 "nodes": nodes,
                 "edges": edges,
                 # What this generation's Temporal ids (listeners, Schedules)

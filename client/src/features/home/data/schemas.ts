@@ -80,6 +80,9 @@ export const employeeSummarySchema = z.object({
   asks_first: z.boolean().catch(false),
   /** Saved changes (a tool added in Talk, an edit in Dev mode) wait for a restart. */
   pending_changes: z.boolean().catch(false),
+  has_team: z.boolean().catch(false),
+  can_give_team: z.boolean().catch(false),
+  job_progress: z.object({ request_id: z.string(), state: z.string(), message: z.string() }).nullable().catch(null),
 });
 
 export type EmployeeSummary = Omit<z.infer<typeof employeeSummarySchema>, 'control'> & {

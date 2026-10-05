@@ -289,6 +289,9 @@ class TestAgentCallIdentity:
                 "refresh-tools-todo-1-1-1",
                 {
                     "operations": [{"op": "add_node"}],
+                    "bound_node_ids": ["todo-1"],
+                    "graph_snapshot": {"nodes": [], "edges": []},
+                    "parameter_snapshot": {},
                     "agent_node_type": "aiAgent",
                     "invoking_agent_node_id": "agent-1",
                     "agent_iteration": 1,

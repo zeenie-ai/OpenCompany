@@ -13,7 +13,7 @@ import { useShellDialogsStore } from '@/stores/shellDialogsStore';
 import { SPIKE, spikeOrb } from '../orb/orb';
 
 export type HomeView = { kind: 'hire' } | { kind: 'employee'; workflowId: string };
-export type SettingsTab = 'profile' | 'billing' | 'skills' | 'connectors' | 'plugins';
+export type SettingsTab = 'profile' | 'billing' | 'skills' | 'connectors' | 'plugins' | 'access';
 
 // View ids, not node types: the Canvas tab is 'board' so no id reads as the
 // `canvas` node type (tests/test_frontend_no_node_type_copies.py).

@@ -140,6 +140,9 @@ class NodeExecutor:
         execution_id = context.get("execution_id") or str(uuid.uuid4())[:8]
 
         try:
+            if context.get("workflow_id"):
+                from services.employees.permissions import assert_runtime_access
+                await assert_runtime_access(self.database, str(context["workflow_id"]), node_id, node_type, context)
             # An LLM tool call carries the model's own arguments in
             # ``tool_args``; ``parameters`` already has them merged on top of
             # the node's settings (the agent workflow builds
@@ -156,7 +159,8 @@ class NodeExecutor:
                 tool_args = None
 
             # Load, validate, enhance parameters
-            params = await self._prepare_parameters(node_id, node_type, parameters, session_id, tool_args=tool_args)
+            params = await self._prepare_parameters(node_id, node_type, parameters, session_id, tool_args=tool_args,
+                parameter_snapshot=context.get("parameter_snapshot"))
 
             # Resolve templates if resolver provided
             nodes = context.get("nodes")
@@ -244,10 +248,11 @@ class NodeExecutor:
         params: Dict,
         session_id: str,
         tool_args: Optional[Dict[str, Any]] = None,
+        parameter_snapshot: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> Dict:
         """Load from DB, validate, inject API keys."""
         # Merge with DB parameters (DB provides defaults, frontend can override)
-        db_params = await self.database.get_node_parameters(node_id) or {}
+        db_params = dict(parameter_snapshot[node_id] or {}) if isinstance(parameter_snapshot, dict) and node_id in parameter_snapshot else await self.database.get_node_parameters(node_id) or {}
         merged = {**db_params, **params} if params else db_params
 
         # On an LLM tool call the model never chooses a node's locked fields

@@ -44,6 +44,7 @@ class TemporalClientWrapper:
         self.namespace = namespace
         self._client: Optional[Client] = None
         self._runtime: Optional[Runtime] = None
+        self.worker_manager = None
         # Startup-resilience knobs read once from Settings (env-driven,
         # canonical defaults in .env.template). Readiness gate + sweep retry.
         _s = Settings()

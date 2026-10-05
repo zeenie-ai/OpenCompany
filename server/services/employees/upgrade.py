@@ -200,7 +200,7 @@ async def _upgrade(database: Any, auth_service: Any, workflow_id: str, allowed: 
     from services.workflow_storage.mutate import apply_graph_additions
 
     employee = await store.get_by_workflow(database, workflow_id)
-    if employee is None or int(employee.builder_version or 1) >= LIVE_RULE_BUILDER_VERSION:
+    if employee is None or getattr(employee, "team_plan", None) or int(employee.builder_version or 1) >= LIVE_RULE_BUILDER_VERSION:
         return False
     workflow = await database.get_workflow(workflow_id)
     if workflow is None:
@@ -231,3 +231,51 @@ async def _upgrade(database: Any, auth_service: Any, workflow_id: str, allowed: 
 
 
 __all__ = ["Upgrade", "plan_upgrade", "upgrade_employee"]
+
+
+def team_approval_topology_error(
+    graph: Optional[Mapping[str, Any]], roles: Mapping[str, str], *, params: Optional[Mapping[str, Mapping[str, Any]]] = None
+) -> Optional[str]:
+    """A team lead's app reply must pass through its existing approval gate.
+
+    Chat-only teams have no external reply role. Tools retain the separate
+    per-call approval policy. Never repair a team with legacy single-worker
+    attachment rules: that would attach every specialist's apps to the lead.
+    """
+    reply = roles.get("reply")
+    if not reply:
+        return None
+    graph = graph if isinstance(graph, Mapping) else {}
+    nodes = _nodes(graph)
+    if reply in nodes and nodes[reply]["type"] == "chatReply":
+        return None
+    gate, lead = roles.get("gate"), roles.get("agent")
+    if not gate or gate not in nodes or nodes[gate]["type"] != APPROVAL_GATE_TYPE:
+        return "team_approval_topology_invalid"
+    incoming = [edge for edge in graph.get("edges") or [] if edge.get("target") == reply]
+    if not incoming or any(edge.get("source") != gate for edge in incoming):
+        return "team_approval_topology_invalid"
+    if any((edge.get("data") or {}).get("condition") != approved_edge_condition() for edge in incoming):
+        return "team_approval_topology_invalid"
+    delivery = roles.get("job_delivery")
+    if delivery:
+        saved = (params or {}).get(delivery) or {}
+        delivered = saved.get("delivery_node_ids") or []
+        if (delivery not in nodes or nodes[delivery]["type"] != "employeeJob"
+                or saved.get("operation") != "deliver" or saved.get("lead_node_id") != lead
+                or gate not in delivered or reply not in delivered):
+            return "team_approval_topology_invalid"
+        if not any(edge.get("source") == lead and edge.get("target") == delivery for edge in graph.get("edges") or []):
+            return "team_approval_topology_invalid"
+        # Only the job delivery boundary injects the reviewed draft into the
+        # gate. A parallel graph edge could publish an assignment acknowledgement.
+        if any(edge.get("target") == gate for edge in graph.get("edges") or []):
+            return "team_approval_topology_invalid"
+        fields = _REPLY_FIELDS.get(str(nodes[reply]["type"]))
+        if fields:
+            recipient_field = fields[0]
+            if ((params or {}).get(reply) or {}).get(recipient_field) != ref(template_key(nodes[gate]), "recipient"):
+                return "team_approval_topology_invalid"
+    elif not any(edge.get("source") == lead and edge.get("target") == gate for edge in graph.get("edges") or []):
+        return "team_approval_topology_invalid"
+    return None

@@ -139,6 +139,7 @@ export function HireDraftPanel({ onConnect }: { onConnect: (providerId: string) 
   const spec = useDraftStore((s) => s.spec);
   const intro = useDraftStore((s) => s.intro);
   const apps = useDraftStore((s) => s.apps);
+  const team = useDraftStore((s) => s.team);
   const version = useDraftStore((s) => s.version);
   const hiring = useDraftStore((s) => s.hiring);
   const actions = useDraftActions();
@@ -278,6 +279,16 @@ export function HireDraftPanel({ onConnect }: { onConnect: (providerId: string) 
               actions={actionContext}
             />
           </Suspense>
+        )}
+        {showSpec && team.length > 0 && (
+          <details className="rounded-card border border-border-default px-3.5 py-3 text-sm text-fg-muted">
+            <summary className="cursor-pointer font-semibold text-fg-default">Their team</summary>
+            <p className="mt-2 mb-2">They can ask these helpers to do parts of the job, then check the result for you.</p>
+            <ul className="m-0 list-disc space-y-1 pl-5">
+              {team.map(({ responsibility }) => <li key={responsibility}>{responsibility}</li>)}
+            </ul>
+            <p className="mt-2 mb-0">Use Change something to adjust their responsibilities.</p>
+          </details>
         )}
       </div>
     </section>

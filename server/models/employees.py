@@ -72,6 +72,9 @@ class Employee(SQLModel, table=True):
     #: The model the employee runs on: {provider, model}.
     llm: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     builder_version: int = Field(default=1)
+    team_plan: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    claim_token: Optional[str] = Field(default=None, max_length=64)
+    lease_until: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     #: A photo the owner uploaded for the employee: a path under the
     #: workflow workspace's ``uploads/`` (``set_employee_photo``). None
     #: shows their initial.
@@ -103,6 +106,70 @@ class WorkflowRunRecord(SQLModel, table=True):
     #: ``temporal`` or ``local``.
     runtime: str = Field(default="temporal", max_length=20)
     finished_at: datetime = Field(default_factory=_utcnow, sa_column=Column(DateTime(timezone=True), nullable=False, index=True))
+
+
+class EmployeeActivation(SQLModel, table=True):
+    """Activation intent committed with the graph, recoverable after restart."""
+    __tablename__ = "employee_activations"
+    id: str = Field(primary_key=True, max_length=255)
+    workflow_id: str = Field(index=True, max_length=255)
+    owner_id: str = Field(max_length=255)
+    state: str = Field(default="saved", index=True, max_length=20)
+    detail: Optional[str] = Field(default=None, max_length=500)
+    updated_at: datetime = Field(default_factory=_utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class EmployeeGrant(SQLModel, table=True):
+    """Reusable creation authority; independent of approval to execute a send."""
+    __tablename__ = "employee_grants"
+    id: str = Field(primary_key=True, max_length=64)
+    workflow_id: str = Field(index=True, max_length=255)
+    owner_id: str = Field(index=True, max_length=255)
+    capability: str = Field(max_length=255)
+    member_id: str = Field(default="", max_length=255)
+    account_id: str = Field(default="", max_length=255)
+    limits: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    revoked_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+
+
+class EmployeeJob(SQLModel, table=True):
+    """Durable origin, team scope and reviewed delivery for one employee job."""
+    __tablename__ = "employee_jobs"
+    id: str = Field(primary_key=True, max_length=255)
+    workflow_id: str = Field(index=True, max_length=255)
+    origin_execution_id: str = Field(index=True, max_length=255)
+    lead_node_id: str = Field(max_length=255)
+    team_id: Optional[str] = Field(default=None, index=True, max_length=255)
+    state: str = Field(default="queued", index=True, max_length=20)
+    mission: str = Field(default="", max_length=20000)
+    source: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    delivery: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    result: Optional[str] = Field(default=None)
+    updated_at: datetime = Field(default_factory=_utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class EmployeeApply(SQLModel, table=True):
+    __tablename__ = "employee_apply_requests"
+    id: str = Field(primary_key=True, max_length=255)
+    workflow_id: str = Field(index=True, max_length=255)
+    owner_id: str = Field(max_length=255)
+    state: str = Field(default="waiting", index=True, max_length=20)
+    resume_after: bool = False
+    snapshot: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    previous: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    producer_states: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    detail: Optional[str] = Field(default=None, max_length=500)
+    claim_token: Optional[str] = Field(default=None, max_length=64)
+    lease_until: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+
+
+class WorkflowQueuedEvent(SQLModel, table=True):
+    """Overflow from controller continue-as-new; accepted events are never trimmed."""
+    __tablename__ = "workflow_queued_events"
+    id: str = Field(primary_key=True, max_length=64)
+    controller_id: str = Field(index=True, max_length=500)
+    sequence: Optional[int] = Field(default=None, index=True)
+    item: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
 
 
 __all__ = ["EMPLOYEE_COLOR_ROLES", "EMPLOYEE_HIRE_STATES", "Employee", "WorkflowRunRecord"]

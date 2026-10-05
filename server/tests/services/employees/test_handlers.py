@@ -75,3 +75,26 @@ async def test_get_errors(container):
     bad = await handlers.handle_get_employee({}, None)
     assert bad["success"] is False
     assert "workflow_id" in bad["error"]
+
+
+async def test_reads_only_return_the_authenticated_owners_employees(container, real_database):
+    from services.employees import store
+    from services.employees.summaries import list_employee_summaries
+
+    for workflow_id, owner in (("mine", "owner"), ("theirs", "other-owner")):
+        assert await real_database.save_workflow(workflow_id=workflow_id, name=workflow_id, slug=workflow_id,
+            data={"owner_id": owner, "nodes": [], "edges": []})
+    # Old hire graphs may predate graph ownership; their employee row is authoritative.
+    assert await real_database.save_workflow(workflow_id="old", name="Old", slug="Old", data={"nodes": [], "edges": []})
+    row, _ = await store.reserve(real_database, owner_id="other-owner", idempotency_key="old", payload_hash="h", fields={})
+    await store.mark_ready(real_database, row.id, workflow_id="old", node_roles={})
+    socket = SimpleNamespace(scope={"path": "/ws/status"}, state=SimpleNamespace(user_id="owner"))
+    listed = await handlers.handle_list_employees({"user_id": "other-owner"}, socket)
+    assert [employee["workflow_id"] for employee in listed["employees"]] == ["mine"]
+    for workflow_id in ("theirs", "old"):
+        assert await handlers.handle_get_employee({"workflow_id": workflow_id, "user_id": "other-owner"}, socket) == {
+            "success": False, "error": "not_found", "workflow_id": workflow_id}
+    assert (await handlers.handle_get_employee({"workflow_id": "mine"}, socket))["success"] is True
+    # Internal callers retain the existing unfiltered service API.
+    all_employees = await list_employee_summaries(real_database, auth_service=container.auth_service())
+    assert {employee["workflow_id"] for employee in all_employees} == {"mine", "theirs", "old"}

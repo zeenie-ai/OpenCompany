@@ -35,6 +35,7 @@ const HIRE_ERRORS: Record<string, string> = {
   not_allowed: "This setup needs something that can't be set up from here yet. Try changing it.",
   build_failed: "Couldn't put this employee together. Try changing the setup.",
   save_failed: "Couldn't save them. Press Hire again.",
+  teams_disabled: 'Team hiring is not available on this installation yet. Ask your administrator to enable it.',
 };
 
 /** A failure with words for the owner (not a transport error). */
@@ -51,6 +52,8 @@ export interface HireResponse {
   started?: boolean;
   needs_ai?: boolean;
   warnings?: unknown;
+  activation_state?: string;
+  readiness_issue?: string | null;
 }
 
 /** The employee a hire made; a HireError with words for the owner otherwise. */
@@ -81,6 +84,13 @@ export function welcomeHire(queryClient: QueryClient, employee: EmployeeSummary,
   const warnings = Array.isArray(response.warnings)
     ? response.warnings.filter((warning): warning is string => typeof warning === 'string' && warning.trim() !== '')
     : [];
+  if (response.readiness_issue === 'team_temporal_required' || response.readiness_issue === 'team_agent_workflow_required') {
+    warnings.push('They are hired and their team is saved. Team work needs to be set up on this installation before they can start. Ask your administrator to finish setup, then press Start.');
+  } else if (response.readiness_issue === 'team_runtime_not_ready') {
+    warnings.push('They are hired and their team is saved. The service is getting ready. Try Start again in a moment.');
+  } else if (response.activation_state === 'failed') {
+    warnings.push('They are hired and their setup is saved, but they could not start yet. Press Start to try again.');
+  }
   if (warnings.length > 0) home.setHireNotice({ workflowId: employee.workflow_id, name: employee.name, warnings });
   if (response.needs_ai) home.openConnectAI();
 }
@@ -114,7 +124,8 @@ export function useHire(collapse: () => Promise<void>) {
         const response = await sendRequest<HireResponse>('hire_employee', payload, HIRE_TIMEOUT_MS);
         const employee = hiredEmployee(response);
         // The owner may have started another draft while this one saved.
-        const unchanged = useDraftStore.getState().version === draft.version;
+        const current = useDraftStore.getState();
+        const unchanged = current.version === draft.version && current.spec === draft.spec;
         if (unchanged) await collapse();
         endHire(true);
         if (unchanged) clearHiredDraft();

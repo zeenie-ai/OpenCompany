@@ -209,6 +209,7 @@ async def _start_execution_engine(
     )
     await manager.start()
     app_state.temporal_worker_manager = manager
+    container.temporal_client().worker_manager = manager
 
     # Wave 16: per-queue activity worker pool (default-on since 16.4;
     # TEMPORAL_WORKER_POOL_ENABLED=false is the rollback channel).

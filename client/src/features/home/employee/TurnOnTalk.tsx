@@ -1,9 +1,7 @@
 /**
  * An employee with no talk line yet that can be given one (talk `off`:
  * hired before Talk, or built in Dev mode). "Turn on Talk" adds the line
- * and restarts them, once the owner confirms. A restart throws away the
- * drafts waiting for the owner, so the confirmation says so when there are
- * any.
+ * after current work finishes. Existing conversations and approvals remain.
  */
 
 import { MessageSquare } from 'lucide-react';
@@ -19,7 +17,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { restartDraftsWarning } from '../data/presentation';
 import type { EmployeeSummary } from '../data/schemas';
 import { useEnableTalk } from '../data/talk';
 import { pillToast } from '../ui/pillToast';
@@ -32,8 +29,9 @@ function enableErrorMessage(code: string, name: string): string {
       return `Talk can’t be turned on for ${name}.`;
     case 'conflict':
       return `${name} is in the middle of a change. Try again in a moment.`;
-    case 'restart_failed':
-      return `Talk is on, but ${name} couldn’t restart. Try starting them again.`;
+    case 'apply_failed':
+    case 'safe_apply_runtime_required':
+      return `Talk is saved, but ${name} couldn’t start using it yet. Their current setup is still in place.`;
     default:
       return 'That did not work. Try again.';
   }
@@ -42,11 +40,13 @@ function enableErrorMessage(code: string, name: string): string {
 export function TurnOnTalk({ employee }: { employee: EmployeeSummary }) {
   const enable = useEnableTalk();
   const [confirming, setConfirming] = useState(false);
-  const { name, pending_approvals: drafts } = employee;
+  const { name } = employee;
 
   const turnOn = () =>
     enable.mutate(employee.workflow_id, {
-      onSuccess: () => pillToast(`Talk is on. Say hello to ${name}.`),
+      onSuccess: (result) => pillToast(result.activation_state === 'waiting'
+        ? `Talk will be ready after ${name} finishes current work.`
+        : result.activation_state === 'saved' ? `Talk is saved. Start ${name} to use it.` : `Talk is on. Say hello to ${name}.`),
       onError: (error) => pillToast(enableErrorMessage(error.message, name), { tone: 'error' }),
     });
 
@@ -66,8 +66,7 @@ export function TurnOnTalk({ employee }: { employee: EmployeeSummary }) {
           <AlertDialogHeader>
             <AlertDialogTitle>Turn on Talk for {name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              Setting it up restarts {name}, so anything they were in the middle of starts fresh.
-              {drafts > 0 && ` ${restartDraftsWarning(name, drafts)}`}
+              Talk can wait for {name} to finish current work. Their conversations and drafts waiting for approval stay in place.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -27,6 +27,7 @@ class DeploymentState:
     # name instead of by UUID. Falls back to ``workflow_id`` when the
     # DB row is missing (one-off deploys, tests).
     workflow_slug: str = ""
+    parameter_snapshot: Dict[str, Any] = field(default_factory=dict)
     settings: Dict[str, Any] = field(default_factory=dict)
     deployed_at: str = field(default_factory=lambda: datetime.now().isoformat())
 

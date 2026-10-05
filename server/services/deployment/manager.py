@@ -7,6 +7,7 @@ Implements n8n/Conductor pattern where:
 """
 
 import asyncio
+from copy import deepcopy
 import inspect
 import json
 import time
@@ -170,6 +171,7 @@ class DeploymentManager:
         graph_version: int = 0,
         generation: int = 0,
         user_id: str = "owner",
+        parameter_snapshot: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Deploy workflow in event-driven mode.
 
@@ -231,6 +233,7 @@ class DeploymentManager:
             is_running=True,
             nodes=nodes,
             edges=edges,
+            parameter_snapshot=deepcopy(parameter_snapshot or {}),
             session_id=session_id,
             user_id=str(user_id or "owner"),
             graph_version=max(0, int(graph_version or 0)),
@@ -855,6 +858,7 @@ class DeploymentManager:
             "filter_params": params,
             "nodes": state.nodes,
             "edges": state.edges,
+            "parameter_snapshot": state.parameter_snapshot,
             "session_id": state.session_id,
             "user_id": state.user_id,
             **capture_temporal_routing_input(),
@@ -1042,6 +1046,7 @@ class DeploymentManager:
             "filter_params": params,
             "nodes": state.nodes,
             "edges": state.edges,
+            "parameter_snapshot": state.parameter_snapshot,
             "session_id": state.session_id,
             # Without this every cron-fired run executes as the anonymous
             # owner, regardless of who deployed it. The sibling push/poll
@@ -1297,6 +1302,8 @@ class DeploymentManager:
             "use_temporal": True,
             "user_id": state.user_id,
         }
+        if state.parameter_snapshot:
+            execution_kwargs["parameter_snapshot"] = state.parameter_snapshot
         if state.graph_version >= 2 and state.generation > 0:
             execution_kwargs.update(
                 {

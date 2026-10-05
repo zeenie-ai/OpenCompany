@@ -121,6 +121,10 @@ class Settings(BaseSettings):
 
     # Execution Engine
     dlq_enabled: bool = Field(default=False, env="DLQ_ENABLED")
+    employee_teams_enabled: bool = Field(default=True, env="EMPLOYEE_TEAMS_ENABLED")
+    employee_team_conversion_enabled: bool = Field(default=False, env="EMPLOYEE_TEAM_CONVERSION_ENABLED")
+    employee_capability_updates_enabled: bool = Field(default=True, env="EMPLOYEE_CAPABILITY_UPDATES_ENABLED")
+    employee_safe_apply_enabled: bool = Field(default=True, env="EMPLOYEE_SAFE_APPLY_ENABLED")
 
     # Temporal Configuration. All sourced from ``.env.template``
     # (canonical defaults live there); no Python-side fallbacks.

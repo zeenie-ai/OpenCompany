@@ -290,3 +290,15 @@ async def test_reset_generation_is_ready_for_explicit_start():
     assert created is True
     assert control.generation == 4
     assert control.revision == 10
+
+
+async def test_generation_captures_parameters_before_the_owner_changes_saved_scopes():
+    db = AsyncMock()
+    db.get_workflow_control_by_idempotency_key.return_value = None
+    db.get_latest_workflow_control.return_value = None
+    db.get_workflow.return_value = SimpleNamespace(slug="Team")
+    db.create_workflow_control.side_effect = lambda control: control
+    parameters = {"send": {"recipient": "original", "operation": "send"}}
+    control, _ = await WorkflowControlService(db).begin_generation(workflow_id="wf", nodes=[{"id": "send", "type": "telegramSend"}], edges=[], session_id="s", idempotency_key="snapshot", parameters=parameters)
+    parameters["send"]["recipient"] = "changed"
+    assert control.graph_snapshot["parameters"]["send"]["recipient"] == "original"

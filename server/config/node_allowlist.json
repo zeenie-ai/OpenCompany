@@ -9,6 +9,13 @@
     "console",
 
     "aiAgent",
+    "ai_employee",
+    "web_agent",
+    "productivity_agent",
+    "coding_agent",
+    "social_agent",
+    "tool_agent",
+    "employeeJob",
     "chatAgent",
     "android_agent",
     "vertex_managed_agent",

@@ -25,6 +25,7 @@ from services.ws_handler_registry import register_ws_handlers as _register_ws_ha
 from . import events as _events
 from .handlers import WS_HANDLERS as _EMPLOYEE_WS_HANDLERS
 from .setup import WS_HANDLERS as _SETUP_WS_HANDLERS
+from .conversion_handlers import WS_HANDLERS as _CONVERSION_WS_HANDLERS
 
 
 async def _on_workflow_deleted(database: Any, workflow_id: str) -> None:
@@ -81,6 +82,7 @@ async def _build_summary(workflow_id: str):
 
 _register_ws_handlers(_EMPLOYEE_WS_HANDLERS)
 _register_ws_handlers(_SETUP_WS_HANDLERS)
+_register_ws_handlers(_CONVERSION_WS_HANDLERS)
 _register_deleted_hook(_on_workflow_deleted)
 # Start / Pause / Resume / Reset / recovery change an employee's status,
 # and the owner is usually watching the card when they do: sent at once.

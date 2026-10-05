@@ -18,6 +18,7 @@ import type { Spec } from '@json-render/core';
 import { JSONUIProvider, Renderer } from '@json-render/react';
 import { LiveUiContext, SpecInspector, createUiStateStore, useSpecReveal } from '@/lib/jsonRender';
 import { cn } from '@/lib/utils';
+import { useAppStore } from '@/store/useAppStore';
 import { hireActionHandlers, type HireActionContext } from './actions';
 import { setDraftValue, useDraftStore } from './draftStore';
 import { HireSpecContext } from './hireSpecContext';
@@ -41,6 +42,7 @@ function NoElement() {
 }
 
 export default function HireScreen({ spec, version, busy, triggerApps, actions }: HireScreenProps) {
+  const devMode = useAppStore((state) => state.shellMode === 'dev');
   const uiSpec = useMemo<Spec>(() => ({ root: spec.root, state: spec.state, elements: spec.elements }), [spec]);
   const { spec: shown, revealing } = useSpecReveal(uiSpec, version);
   const [store] = useState(() =>
@@ -66,7 +68,7 @@ export default function HireScreen({ spec, version, busy, triggerApps, actions }
           </LiveUiContext.Provider>
         </HireSpecContext.Provider>
       </div>
-      {import.meta.env.DEV && <SpecInspector spec={uiSpec} />}
+      {import.meta.env.DEV && devMode && <SpecInspector spec={uiSpec} />}
     </>
   );
 }

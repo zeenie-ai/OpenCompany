@@ -82,6 +82,7 @@ class TemporalExecutor:
         graph_version: int = 0,
         generation: int = 0,
         user_id: str = "owner",
+        parameter_snapshot: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Execute a workflow using Temporal.
 
@@ -131,6 +132,8 @@ class TemporalExecutor:
                 "user_id": str(user_id or "owner"),
                 **capture_temporal_routing_input(),
             }
+            if parameter_snapshot:
+                workflow_payload["parameter_snapshot"] = parameter_snapshot
             if int(graph_version or 0) >= 2 and int(generation or 0) > 0:
                 workflow_payload.update(
                     {

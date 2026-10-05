@@ -33,6 +33,7 @@ call `event_waiter.register()`.
 | `interval_minutes` | number | `5` | no | frequency == `minutes` | Interval in minutes. |
 | `interval_hours` | number | `1` | no | frequency == `hours` | Interval in hours. |
 | `daily_time` | options | `09:00` | no | frequency == `days` | Display-only in the handler. |
+| `weekday_only` | boolean | `false` | no | frequency == `days` | Deployed daily schedules filter deterministically to Monday–Friday. Generated weekday employee routines set this explicitly; existing schedules and owner edits keep their values. Manual delayed invocation only reports the setting. |
 | `weekday` | options | `'1'` (Mon) | no | frequency == `weeks` | Display-only. |
 | `weekly_time` | options | `09:00` | no | frequency == `weeks` | Display-only. |
 | `month_day` | options | `'1'` | no | frequency == `months` | `1`..`28` or `L`. Display-only in this op. |

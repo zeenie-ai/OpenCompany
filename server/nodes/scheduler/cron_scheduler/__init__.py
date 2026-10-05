@@ -88,6 +88,8 @@ def _get_schedule_description(p: Dict[str, Any]) -> str:
         case "hours":
             return f"Every {p.get('interval_hours', 1)} hours"
         case "days":
+            if p.get("weekday_only") is True:
+                return f"Weekdays at {p.get('daily_time', '09:00')}"
             return f"Daily at {p.get('daily_time', '09:00')}"
         case "weeks":
             weekday = str(p.get("weekday", "1"))
@@ -147,6 +149,11 @@ class CronSchedulerParams(BaseModel):
     ] = Field(
         default="09:00",
         description="Time of day (HH:MM) for daily schedule",
+        json_schema_extra={"displayOptions": {"show": {"frequency": ["days"]}}},
+    )
+    weekday_only: bool = Field(
+        default=False,
+        description="Run daily schedules only on Monday through Friday in the selected timezone",
         json_schema_extra={"displayOptions": {"show": {"frequency": ["days"]}}},
     )
     weekday: Literal["0", "1", "2", "3", "4", "5", "6"] = Field(

@@ -161,6 +161,8 @@ async def _execute_task_manager(args: Dict[str, Any], config: Dict[str, Any]) ->
         )
         return {"success": True, "operation": operation, "trace": trace}
     if operation == "assign_task":
+        from services.employees.team_runtime import validate_managed_assignment
+        validate_managed_assignment(args, config)
         if not args.get("title") or not args.get("mission"):
             raise ValueError("assign_task requires title and mission")
         teammate = _resolve_teammate(config, args)
@@ -181,7 +183,8 @@ async def _execute_task_manager(args: Dict[str, Any], config: Dict[str, Any]) ->
                 "team_id": task["team_id"],
             }
             delegation = await _execute_delegated_agent(
-                {"task": args["mission"], "context": args.get("context") or {}},
+                {"task": args["mission"], "context": {**(args.get("context") or {}),
+                    "acceptance_criteria": args.get("acceptance_criteria"), "depends_on": args.get("depends_on") or []}},
                 child_config,
                 precreated_task_id=task["id"],
             )
@@ -196,6 +199,8 @@ async def _execute_task_manager(args: Dict[str, Any], config: Dict[str, Any]) ->
                 "team_task_id": task["id"], "assignee_node_id": teammate["node_id"],
                 "delegate_name": teammate["delegate_tool_name"], "task": args["mission"],
                 "context": args.get("context") or {},
+                "acceptance_criteria": args.get("acceptance_criteria"),
+                "depends_on": args.get("depends_on") or [],
             },
         }
     if operation == "finish_team":

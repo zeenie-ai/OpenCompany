@@ -470,6 +470,8 @@ class TriggerListenerWorkflow:
             if event_session_id and event_session_id != "default":
                 child_payload["context_session_id"] = event_session_id
 
+        if listener_data.get("parameter_snapshot"):
+            child_payload["parameter_snapshot"] = listener_data["parameter_snapshot"]
         await workflow.start_child_workflow(
             "MachinaWorkflow",
             args=[child_payload],

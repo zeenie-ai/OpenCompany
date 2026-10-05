@@ -44,3 +44,17 @@ def test_in_process_rebinds_skip_the_skills_node_and_bound_nodes():
         assert '.get("isMasterSkillEditor")' in rebind, method.__name__
         assert 'bound = {identity["node_id"] for identity in tool_identities}' in rebind, method.__name__
         assert 'if tool_info["node_id"] in bound:' in rebind, method.__name__
+
+
+async def test_temporal_refresh_binds_delegate_once_and_skips_already_bound_nodes(monkeypatch):
+    built = []
+    async def build(tool_info):
+        built.append(tool_info["node_id"])
+        return SimpleNamespace(name="delegate_to_ai_agent", definition=None, args_schema=None, description=""), {}
+    monkeypatch.setattr("core.container.container", SimpleNamespace(ai_service=lambda: SimpleNamespace(_build_tool_from_node=build)))
+    operations = [workflow_ops.add_node("agent", "aiAgent", {}, label="Researcher", minted_id="7:aiAgent:2"),
+                  workflow_ops.add_node("agent", "aiAgent", {}, label="Researcher", minted_id="7:aiAgent:2"),
+                  workflow_ops.add_node("old", "aiAgent", {}, label="Existing", minted_id="7:aiAgent:3")]
+    result = await refresh_agent_tools({"operations": operations, "bound_node_ids": ["7:aiAgent:3"], "agent_node_type": "ai_employee"})
+    assert built == ["7:aiAgent:2"]
+    assert result["tools"][0]["llm_hidden"] is True

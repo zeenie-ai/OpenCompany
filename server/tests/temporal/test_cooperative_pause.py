@@ -641,7 +641,7 @@ async def test_delegated_acquire_cancellation_type_is_replay_patch_guarded(
         lambda patch_id: (
             patch_enabled
             if patch_id
-            == agent_module.DELEGATION_ACQUIRE_CANCELLATION_PATCH
+            == getattr(agent_module, "DELEGATION_ACQUIRE_CANCELLATION_PATCH", "agent-delegation-acquire-cancellation-v1")
             else False
         ),
     )
@@ -701,7 +701,7 @@ async def test_agent_acquire_cancellation_type_is_replay_patch_guarded(
         lambda patch_id: (
             patch_enabled
             if patch_id
-            == agent_module.DELEGATION_ACQUIRE_CANCELLATION_PATCH
+            == getattr(agent_module, "DELEGATION_ACQUIRE_CANCELLATION_PATCH", "agent-delegation-acquire-cancellation-v1")
             else True
         ),
     )

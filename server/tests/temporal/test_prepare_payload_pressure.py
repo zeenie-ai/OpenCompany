@@ -213,3 +213,9 @@ class TestSaveWarning:
 
         assert "over half" not in caplog.text
         saver.assert_awaited_once()
+
+
+@pytest.fixture(autouse=True)
+def runtime_access_stub(monkeypatch):
+    from unittest.mock import AsyncMock
+    monkeypatch.setattr("services.employees.permissions.assert_runtime_access", AsyncMock())

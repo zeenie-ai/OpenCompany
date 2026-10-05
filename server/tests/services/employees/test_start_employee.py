@@ -6,6 +6,8 @@ resetting an employee that stopped after a problem first."""
 from __future__ import annotations
 
 from types import SimpleNamespace
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -28,6 +30,13 @@ def harness(monkeypatch):
     )
 
     class Database:
+        @asynccontextmanager
+        async def get_session(self):
+            # This legacy employee has no metadata row; SQLAlchemy scalar
+            # results are synchronous after the awaited execute call.
+            result = SimpleNamespace(scalar_one_or_none=lambda: None)
+            yield SimpleNamespace(execute=AsyncMock(return_value=result))
+
         async def get_node_parameters(self, node_id):
             return state.params.get(node_id)
 
@@ -141,7 +150,8 @@ async def test_a_chat_hire_whose_worker_is_its_talk_agent_is_moved_once(harness,
 
     monkeypatch.setattr(start.store, "get_by_workflow", employee_row)
     monkeypatch.setattr(start, "_agent_ids", REAL_AGENT_IDS)
-    assert await start._agent_ids(object(), "7") == ["7:aiAgent:1"]
+    database = SimpleNamespace(get_workflow=AsyncMock(return_value=None))
+    assert await start._agent_ids(database, "7") == ["7:aiAgent:1"]
 
 
 async def test_a_stopped_employee_is_reset_before_it_starts(harness):

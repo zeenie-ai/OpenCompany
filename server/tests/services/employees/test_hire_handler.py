@@ -7,7 +7,8 @@ connect."""
 
 from __future__ import annotations
 
-from datetime import timedelta
+import asyncio
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -65,7 +66,7 @@ class FakeConnections:
 
 
 @pytest.fixture()
-def harness(monkeypatch, real_database):
+async def harness(monkeypatch, real_database):
     class Auth:
         async def get_api_key(self, key, session_id="default"):
             return None
@@ -83,7 +84,11 @@ def harness(monkeypatch, real_database):
         async def broadcast_workflow_lifecycle(self, stage, **data):
             frames.append({"type": "workflow_lifecycle", "stage": stage, **data})
 
-    monkeypatch.setattr(container_module, "container", SimpleNamespace(database=lambda: real_database, auth_service=lambda: Auth()))
+    runtime_settings = SimpleNamespace(temporal_enabled=True, temporal_agent_workflow_enabled=True)
+    monkeypatch.setattr(container_module, "container", SimpleNamespace(
+        database=lambda: real_database, auth_service=lambda: Auth(),
+        settings=lambda: runtime_settings, temporal_client=lambda: SimpleNamespace(is_connected=True),
+    ))
     monkeypatch.setattr(status_broadcaster, "get_status_broadcaster", lambda: Broadcaster())
     monkeypatch.setattr(hire, "Connections", FakeConnections)
     monkeypatch.setattr(summaries, "Connections", FakeConnections)
@@ -93,9 +98,17 @@ def harness(monkeypatch, real_database):
 
     monkeypatch.setattr(hire, "resolve_llm_choice", choose)
     starts = []
-    monkeypatch.setattr(hire, "_start_in_background", lambda workflow_id, owner, key: starts.append((workflow_id, owner, key)))
+    from services.employees import activation
+
+    async def activate(_database, workflow_id):
+        employee = await store.get_by_workflow(_database, workflow_id)
+        starts.append((workflow_id, employee.owner_id, employee.idempotency_key))
+        return True
+
+    monkeypatch.setattr(activation, "activate_pending", activate)
     FakeConnections.ai = True
     yield SimpleNamespace(database=real_database, frames=frames, starts=starts)
+    await asyncio.gather(*tuple(hire._starts), return_exceptions=True)
     FakeConnections.ai = True
 
 
@@ -110,19 +123,23 @@ async def test_a_hire_saves_a_valid_workflow_and_starts_it(harness):
     employee = result["employee"]
     workflow_id = employee["workflow_id"]
     assert employee["name"] == "Ada" and employee["role"] == "Assistant"
-    assert result["started"] is True and harness.starts == [(workflow_id, "owner", "hire-1")]
+    assert result["started"] is True and result["activation_state"] == "starting"
 
     workflow = await harness.database.get_workflow(workflow_id)
     types = {node["type"] for node in workflow.data["nodes"]}
-    assert {"chatTrigger", "aiAgent", "context", "console", "writeTodos", "canvas"} <= types
+    assert {"chatTrigger", "aiAgent", "ai_employee", "employeeJob", "taskTrigger", "context", "console", "writeTodos", "canvas"} <= types
     assert workflow.data["owner_id"] == "owner"
     row = await store.get_by_workflow(harness.database, workflow_id)
-    assert row.hire_state == "ready" and row.node_roles["agent"].startswith(f"{workflow_id}:aiAgent:")
+    assert row.hire_state == "ready" and row.node_roles["agent"].startswith(f"{workflow_id}:ai_employee:")
+    assert row.team_plan["lead_node_id"] == row.node_roles["agent"]
+    assert row.team_plan["talk_node_id"] == row.node_roles["talk_agent"]
+    assert row.node_roles["talk_agent"] != row.node_roles["agent"]
     assert employee["canvas_node_id"] == row.node_roles["canvas"]
     agent_params = await harness.database.get_node_parameters(row.node_roles["agent"])
     assert agent_params["provider"] == "openai" and "You are Ada" in agent_params["system_message"]
     kinds = [frame.get("stage") or frame["data"]["type"] for frame in harness.frames]
     assert "created" in kinds and "com.opencompany.employee.hired" in kinds
+    assert harness.starts == [(workflow_id, "owner", "hire-1")]
 
 
 async def test_the_same_key_finds_the_same_employee(harness):
@@ -130,6 +147,7 @@ async def test_the_same_key_finds_the_same_employee(harness):
     again = await hire.handle_hire_employee(payload(), SOCKET)
     assert again["success"] is True and again["idempotent"] is True
     assert again["employee"]["workflow_id"] == first["employee"]["workflow_id"]
+    await asyncio.sleep(0)
     assert len(harness.starts) == 1
 
 
@@ -220,10 +238,16 @@ async def test_a_reservation_made_since_the_lookup_is_busy_too(harness, monkeypa
     assert (await harness.database.get_all_workflows()) == []
 
 
-async def test_a_reservation_left_by_a_stopped_server_is_taken_over(harness, monkeypatch):
+async def test_a_reservation_left_by_a_stopped_server_is_taken_over(harness):
     data = payload(idempotency_key="hire-stale")
     row = await _reserve_for(harness.database, data)
-    monkeypatch.setattr(hire, "BUILDING_STALE_AFTER", timedelta(0))
+    # Recovery must expire the actual durable reservation, rather than only
+    # changing the handler's preliminary lookup threshold.
+    from models.employees import Employee
+    async with harness.database.reserved_session() as session:
+        abandoned = await session.get(Employee, row.id)
+        abandoned.updated_at = datetime.now(timezone.utc) - timedelta(minutes=3)
+        await session.commit()
     result = await hire.handle_hire_employee(data, SOCKET)
     assert result["success"] is True, result
     assert (await store.get_by_workflow(harness.database, result["employee"]["workflow_id"])).id == row.id

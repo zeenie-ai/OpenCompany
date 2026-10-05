@@ -90,7 +90,8 @@ async def persist_parameter_aliases(
     if not callable(save):
         return
     for node_id, raw_params in parameters.items():
-        await save(node_id, dict(raw_params or {}))
+        if await save(node_id, dict(raw_params or {})) is False:
+            raise RuntimeError(f"Could not persist parameters for {node_id}")
         old_id = reverse_aliases.get(node_id)
         if old_id and old_id != node_id and callable(remove):
             await remove(old_id)

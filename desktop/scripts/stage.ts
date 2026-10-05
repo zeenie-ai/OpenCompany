@@ -58,6 +58,7 @@ const BUN = process.platform === "win32" ? "bun.exe" : "bun";
 
 /** The published file list, from bun's own packer (`packed <size> <path>` lines). */
 function packFileList(): string[] {
+  run(process.platform === "win32" ? "python" : "python3", ["server/services/builder_documentation.py"], { cwd: REPO_ROOT });
   const out = run(BUN, ["pm", "pack", "--dry-run", "--ignore-scripts"], { cwd: REPO_ROOT });
   const files: string[] = [];
   for (const line of out.split(/\r?\n/)) {

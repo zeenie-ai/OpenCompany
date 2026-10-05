@@ -648,7 +648,7 @@ class MachinaWorkflow:
                 context = {
                     "node_id": node_id,
                     "node_type": node.get("type", "unknown"),
-                    "node_data": node.get("data", {}),
+                    "node_data": (workflow_data.get("parameter_snapshot") or {}).get(node_id, node.get("data", {})),
                     "inputs": self._get_node_inputs(node_id, deps, outputs),
                     "workflow_id": workflow_id,
                     "workflow_slug": workflow_slug,
@@ -657,6 +657,7 @@ class MachinaWorkflow:
                     "execution_id": execution_id,
                     "nodes": nodes,  # Full list for tool/memory detection
                     "edges": edges,  # Full list for tool/memory detection
+                    **({"parameter_snapshot": workflow_data["parameter_snapshot"]} if workflow_data.get("parameter_snapshot") else {}),
                     # Include pre-executed info if applicable
                     "pre_executed": node.get("_pre_executed", False),
                     "trigger_output": node.get("_trigger_output"),

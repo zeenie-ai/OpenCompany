@@ -248,6 +248,7 @@ async def handle_deploy_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
                 workflow_id=workflow_id,
                 graph_version=graph_version,
                 generation=int(data.get("generation") or 0),
+                **({"parameter_snapshot": data.get("parameters_by_id") or {}} if int(data.get("generation") or 0) > 0 else {}),
                 user_id=str(
                     (
                         getattr(
@@ -1470,6 +1471,7 @@ async def _rearm_generation(control) -> None:
         "workflow_id": control.workflow_id,
         "nodes": nodes,
         "edges": edges,
+        "parameters_by_id": snapshot.get("parameters") or {},
         "generation": control.generation,
         # Snapshots created before the Context topology deliberately retain version 0,
         # so a process restart cannot mutate their Temporal command sequence.
@@ -1757,6 +1759,7 @@ async def handle_start_workflow(data: Dict[str, Any], websocket: WebSocket) -> D
         idempotency_key=key,
         graph_version=normalization.graph_version,
         owner_id=owner_id,
+        parameters=normalization.node_parameters,
     )
     if not created:
         control, controller_status = await _reconcile_control(service, control)

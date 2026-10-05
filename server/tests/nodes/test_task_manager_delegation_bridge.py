@@ -19,6 +19,29 @@ def _config():
 
 
 @pytest.mark.asyncio
+async def test_managed_missing_criteria_rejected_before_commit_or_child():
+    service = SimpleNamespace(assign_durable_task=AsyncMock())
+    child = AsyncMock()
+    with patch("services.agent_team.get_agent_team_service", return_value=service), patch("services.handlers.tools._execute_delegated_agent", child):
+        with pytest.raises(ValueError, match="acceptance_criteria"):
+            await _execute_task_manager({"operation": "assign_task", "title": "Research", "mission": "Find evidence", "context": {}, "assignee_node_id": "child-1"}, {**_config(), "employee_job_id": "job-1"})
+    service.assign_durable_task.assert_not_awaited()
+    child.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_managed_assignment_preserves_review_contract():
+    service = SimpleNamespace(assign_durable_task=AsyncMock(return_value={"id": "task-1", "team_id": "team-1"}))
+    child = AsyncMock(return_value={"success": True})
+    args = {"operation": "assign_task", "title": "Research", "mission": "Find evidence", "context": {"topic": "queues"}, "acceptance_criteria": {"sources": "two cited primary sources"}, "depends_on": ["prior"], "assignee_node_id": "child-1"}
+    with patch("services.agent_team.get_agent_team_service", return_value=service), patch("services.handlers.tools._execute_delegated_agent", child):
+        result = await _execute_task_manager(args, {**_config(), "employee_job_id": "job-1"})
+    assert service.assign_durable_task.await_args.kwargs["acceptance_criteria"] == args["acceptance_criteria"]
+    assert result["delegation_request"]["depends_on"] == ["prior"]
+    assert child.await_args.args[0]["context"]["acceptance_criteria"] == args["acceptance_criteria"]
+
+
+@pytest.mark.asyncio
 async def test_assign_starts_legacy_child_with_precreated_task_id():
     service = SimpleNamespace(assign_durable_task=AsyncMock(return_value={
         "id": "task-1", "team_id": "team-1", "status": "queued",

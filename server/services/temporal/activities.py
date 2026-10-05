@@ -229,6 +229,7 @@ class NodeExecutionActivities:
         }
         for key in (
             "auto_rebind_tools",
+            "parameter_snapshot",
             "invoking_agent_node_id",
             "agent_iteration",
             "tool_call_index",

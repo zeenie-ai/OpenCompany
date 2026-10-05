@@ -49,6 +49,7 @@ from services.employees.context import build_setup_prompt_context
 from services.employees.llm import LLMChoice, employees_chat, record_llm_usage, resolve_llm_choice
 from services.employees.setup_prompt import RETRY_NUDGE, HistoryTurn, build_messages
 from services.employees.setup_reply import app_names, is_salvageable
+from services.employees.team_recipe import preview_from_reply
 from services.llm.protocol import LLMResponse, Message, Usage
 from services.plugin.base import NodeUserError
 from services.plugin.ws import ws_response
@@ -224,6 +225,7 @@ async def _generate(request: SetupRequest, owner: str) -> Dict[str, Any]:
         "retried": retried,
         "finish_reason": kept.finish_reason,
         "apps": await _resolve_apps(connections, kept.content),
+        "team": preview_from_reply(request.job, kept.content),
     }
 
 

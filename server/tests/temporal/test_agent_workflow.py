@@ -536,6 +536,11 @@ class TestAgentActivities:
             "agent.skill.clear",
             "agent.skill.invoke",
             "agent.store_output",
+            "controller.queue.read",
+            "controller.queue.spill",
+            "employee.job.deliver",
+            "employee.job.failed",
+            "employee.job.resolve_delivery",
         ]
 
     def test_prepare_payload_registered(self):
@@ -809,7 +814,7 @@ class TestAutoRebindTools:
         # any plugin lookup — we just want to confirm the imports + the
         # ``container.ai_service()`` call don't raise NameError.
         result = await refresh_agent_tools({"operations": []})
-        assert result == {"tools": []}
+        assert result == {"tools": [], "graph_snapshot": {}, "parameter_updates": {}}
 
     def test_workflow_calls_refresh_after_ops(self):
         """AgentWorkflow.run must schedule ``agent.refresh_tools.v1``

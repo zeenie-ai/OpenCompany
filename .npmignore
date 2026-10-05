@@ -18,6 +18,21 @@
 *.db-journal
 *.db-shm
 *.db-wal
+*.sqlite3
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
+# Explicit dot-prefixed names prevent npm's hidden-file matching from
+# admitting SQLite test/runtime files even under the server/ allowlist.
+**/.*.db
+**/.*.db-journal
+**/.*.db-shm
+**/.*.db-wal
+**/.*.sqlite
+**/.*.sqlite3
+**/.*.sqlite-journal
+**/.*.sqlite-shm
+**/.*.sqlite-wal
 
 # Python cache and virtual env (all locations)
 __pycache__/
@@ -43,6 +58,10 @@ venv/
 # Legacy data dir from the pre-cutover layout. Kept as a sentinel so
 # stale checkouts from older releases don't accidentally ship.
 server/data/
+server/.opencompany/
+server/.machina/
+**/.tmp*/
+**/.pytest-tmp*/
 
 # Node modules (all locations)
 node_modules/

@@ -1338,3 +1338,9 @@ def test_recovery_policies_normalize_unknown_values(monkeypatch):
     )
     assert handlers._crash_recovery_policy() == "resume"
     assert handlers._missing_controller_policy() == "fail"
+
+
+@pytest.fixture(autouse=True)
+def controller_patch_fixture(monkeypatch):
+    from services.temporal import workflow_control_workflow
+    monkeypatch.setattr(workflow_control_workflow.workflow, "patched", lambda _: False)

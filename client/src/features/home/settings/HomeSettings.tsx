@@ -21,6 +21,7 @@ import { BillingTab } from './BillingTab';
 import { PluginsTab } from './PluginsTab';
 import { ProfileTab } from './ProfileTab';
 import { SkillsTab } from './SkillsTab';
+import { AccessTab } from './AccessTab';
 import { staggerSettings } from './stagger';
 
 const NAV_ITEM =
@@ -49,6 +50,7 @@ const GROUPS = [
 ] as const;
 
 const PAGES: Page[] = [
+  { tab: 'access', group: 'settings', label: 'App access', icon: Plug, keywords: 'permissions allow revoke', render: () => <AccessTab /> },
   {
     tab: 'profile',
     group: 'settings',

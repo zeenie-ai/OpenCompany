@@ -109,6 +109,8 @@ export interface DraftState {
   uiState: UiState;
   /** Apps the reply names, as the server resolved them: lower-cased name -> ref. */
   apps: Record<string, DraftApp>;
+  /** Optional, ordinary-language description of the suggested helpers. */
+  team: { responsibility: string }[];
   /** Bumped on every accepted reply, so the renderer restarts its reveal. */
   version: number;
   /** A hire request is in flight. */
@@ -132,6 +134,7 @@ const INITIAL: DraftState = {
   intro: '',
   uiState: {},
   apps: {},
+  team: [],
   version: 0,
   hiring: false,
   hireKey: null,
@@ -170,6 +173,7 @@ export interface SetupResponse {
   provider?: string | null;
   model?: string | null;
   apps?: unknown;
+  team?: unknown;
 }
 
 function errorCode(value: unknown): SetupErrorCode {
@@ -189,6 +193,15 @@ function parseApps(raw: unknown): Record<string, DraftApp> {
     if (parsed.success && !isForbiddenKey(key)) out[key] = parsed.data;
   }
   return out;
+}
+
+function parseTeam(raw: unknown): { responsibility: string }[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(0, 3).flatMap((member) => {
+    if (!member || typeof member !== 'object' || typeof member.responsibility !== 'string') return [];
+    const responsibility = member.responsibility.trim().slice(0, 160);
+    return responsibility ? [{ responsibility }] : [];
+  });
 }
 
 /** The apps that can start the work, by every name the reply used for them
@@ -254,6 +267,7 @@ export function acceptReply(token: string, response: SetupResponse, request: Pen
     intro: parsed.text.trim(),
     uiState: fitTrigger(spec.state, apps),
     apps,
+    team: parseTeam(response.team),
     version: state.version + 1,
   });
   spikeOrb(SPIKE.draftReady);
@@ -317,8 +331,10 @@ export function cancelDraft(send: SendRequest): void {
 /** Throw the draft away, cancelling a request in flight. The composer
  *  keeps whatever the owner was typing. */
 export function discardDraft(send: SendRequest): void {
-  const { token, input } = useDraftStore.getState();
-  useDraftStore.setState({ ...INITIAL, input, version: useDraftStore.getState().version });
+  const { token, input, hiring, hireKey, version } = useDraftStore.getState();
+  // Hiding a draft does not cancel its committed hire. Keep that request's
+  // slot and retry identity until its response arrives.
+  useDraftStore.setState({ ...INITIAL, input, hiring, hireKey, version: version + 1 });
   cancelOnServer(send, token);
 }
 

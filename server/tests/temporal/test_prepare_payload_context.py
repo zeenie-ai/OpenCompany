@@ -82,3 +82,17 @@ async def test_a_legacy_memory_descriptor_still_names_its_node(descriptor):
 
     assert (payload["memory_node_id"], payload["memory_content"], payload["memory_window_size"]) == ("7:simpleMemory:1", "# Earlier", 4)
     assert payload["conversation_key"] is None
+
+
+@pytest.fixture(autouse=True)
+def runtime_access_stub(monkeypatch):
+    from unittest.mock import AsyncMock
+    monkeypatch.setattr("services.employees.permissions.assert_runtime_access", AsyncMock())
+
+
+async def test_parameter_snapshot_keeps_original_mission_and_model(descriptor):
+    descriptor.value = None
+    snapshot = {_CONTEXT["node_id"]: {"provider": "openai", "model": "test-model", "api_key": "sk-test", "prompt": "Original admitted mission"}}
+    result = await prepare_agent_payload({**_CONTEXT, "parameter_snapshot": snapshot})
+    assert result["user_prompt"] == "Original admitted mission"
+    assert result["parameter_snapshot"] == snapshot

@@ -521,8 +521,10 @@ async def test_native_loop_rebinds_tools_after_canvas_operation():
         tools=[_tool("one")],
         tool_executor=execute,
         rebind_from_operations=rebind,
+        roster_after_rebind=lambda: "Updated teammates: agent-2: Researcher",
     )
 
+    assert any(message.role == "system" and "agent-2: Researcher" in message.content for message in unifier.calls[1]["messages"])
     assert executed == ["one", "two"]
     assert [tool.name for tool in unifier.calls[1]["tools"]] == ["one", "two"]
     assert result["messages"][-1].content == "done"

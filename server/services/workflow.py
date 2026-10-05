@@ -300,6 +300,7 @@ class WorkflowService:
         graph_version: int = 0,
         generation: int = 0,
         user_id: str = "owner",
+        parameter_snapshot: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Execute entire workflow.
 
@@ -372,6 +373,7 @@ class WorkflowService:
                 graph_version,
                 generation,
                 user_id,
+                **({"parameter_snapshot": parameter_snapshot} if parameter_snapshot is not None else {}),
             )
 
         # Loud error if Temporal was requested but the executor never finished
@@ -422,6 +424,7 @@ class WorkflowService:
         graph_version: int = 0,
         generation: int = 0,
         user_id: str = "owner",
+        parameter_snapshot: Optional[Dict[str, Any]] = None,
     ) -> Dict:
         """Execute with Temporal for durable workflow orchestration."""
         # Use passed workflow_id (from deployment) or generate new one
@@ -449,6 +452,7 @@ class WorkflowService:
             graph_version=graph_version,
             generation=generation,
             user_id=user_id,
+            **({"parameter_snapshot": parameter_snapshot} if parameter_snapshot is not None else {}),
         )
 
         # No status is sent here: every node already reported its own final
@@ -640,6 +644,7 @@ class WorkflowService:
         graph_version: int = 0,
         generation: int = 0,
         user_id: str = "owner",
+        parameter_snapshot: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Deploy workflow in event-driven mode.
 
@@ -664,14 +669,9 @@ class WorkflowService:
                 user_id=user_id,
             )
         return await manager.deploy(
-            nodes,
-            edges,
-            session_id,
-            status_callback,
-            workflow_id,
-            graph_version,
-            generation,
+            nodes, edges, session_id, status_callback, workflow_id, graph_version, generation,
             user_id=user_id,
+            **({"parameter_snapshot": parameter_snapshot} if parameter_snapshot is not None else {}),
         )
 
     async def cancel_deployment(self, workflow_id: Optional[str] = None) -> Dict[str, Any]:

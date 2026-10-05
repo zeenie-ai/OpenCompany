@@ -33,6 +33,18 @@ APPLY = "It becomes part of all your work when the owner presses Apply on your p
 SKILL_TOOL_ENTRY = {"enabled": True, "instructions": "", "isCustomized": False, "required": True}
 
 
+@pytest.fixture(autouse=True)
+def approved_owner_changes(monkeypatch):
+    """These tests isolate tool/skill policy after owner authorization.
+
+    The public-message and durable grant boundary is exercised separately
+    in test_agent_builder_docs and employee permission tests.
+    """
+    async def approved(*args, **kwargs):
+        return None
+    monkeypatch.setattr(ab, "_permission", approved)
+
+
 def employee_graph(*, skills: bool = False) -> dict:
     """Maya: a worker on WhatsApp and the agent the owner talks to, which
     has the Agent Builder."""
@@ -320,5 +332,5 @@ async def test_a_hired_employee_cannot_add_teammates(builder, database):
 
     result = await call("add_subagent", talk(), agent_type="coding_agent")
 
-    assert result.summary == "A hired employee can't bring in helper agents. The owner can set that up in Dev mode."
+    assert "only team-lead agents" in result.summary
     assert builder.frames == []

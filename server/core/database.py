@@ -54,7 +54,13 @@ from models.agent_context import (  # noqa: F401 - registers SQLModel tables
 from models.employees import (  # noqa: F401 - registers SQLModel tables
     Employee,
     WorkflowRunRecord,
+    EmployeeActivation,
+    EmployeeGrant,
+    EmployeeJob,
+    EmployeeApply,
+    WorkflowQueuedEvent,
 )
+from models.employee_conversion import EmployeeConversion  # noqa: F401
 from models.approvals import (  # noqa: F401 - registers SQLModel tables
     ApprovalDecision,
     ApprovalRequest,
@@ -558,7 +564,7 @@ class Database:
 
     async def _migrate_employees(self):
         """Give an older ``employees`` table the columns added since."""
-        columns_added = {"photo_path": "VARCHAR(500)"}
+        columns_added = {"photo_path": "VARCHAR(500)", "team_plan": "JSON NOT NULL DEFAULT '{}'", "claim_token": "VARCHAR(64)", "lease_until": "DATETIME"}
         try:
             async with self.engine.begin() as conn:
                 result = await conn.execute(text("PRAGMA table_info(employees)"))
@@ -568,6 +574,9 @@ class Database:
                 for column, definition in columns_added.items():
                     if column not in columns:
                         await conn.execute(text(f"ALTER TABLE employees ADD COLUMN {column} {definition}"))
+                apply_columns = {row[1] for row in (await conn.execute(text("PRAGMA table_info(employee_apply_requests)"))).fetchall()}
+                if apply_columns and "producer_states" not in apply_columns:
+                    await conn.execute(text("ALTER TABLE employee_apply_requests ADD COLUMN producer_states JSON NOT NULL DEFAULT '{}'"))
         except Exception as exc:
             logger.warning(f"Employee migration check failed: {exc}")
 

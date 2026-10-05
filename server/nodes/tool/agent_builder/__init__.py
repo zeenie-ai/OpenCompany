@@ -9,7 +9,9 @@ One ToolNode with an ``operation`` discriminator; the LLM sees one tool,
 * ``add_skill``: a skill on the agent's Skills node (masterSkill), or on a
   new one;
 * ``add_subagent``: a teammate on a team lead's ``input-teammates``;
-* ``create_workflow``: disabled (``_CREATE_WORKFLOW_ENABLED``).
+* ``inspect_node`` / ``search_docs`` / ``read_doc``: live contracts and shipped docs;
+* ``plan_update`` / ``apply_update``: validated owner-authorized changes;
+* ``create_workflow``: configured employees through the shared Hire pipeline.
 
 Every change goes through ``services.workflow_storage.mutate.apply_graph_additions``,
 the server's one path for growing a saved workflow: one transaction,
@@ -46,7 +48,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Literal, Mapping, Optional, Sequence, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -64,7 +66,6 @@ from services.graph_build import (
 )
 from services.node_registry import get_node_class, registered_node_classes
 from services.plugin import NodeContext, Operation, TaskQueue, ToolNode
-from services.workflow_naming import next_available_slug
 
 
 logger = get_logger(__name__)
@@ -89,11 +90,12 @@ _KEY_PARAM_FIELDS = ("provider", "model", "operation", "url", "query")
 _DISCOVER_SKILL_FOLDER = "employee"
 _APPLY_HINT = "It becomes part of all your work when the owner presses Apply on your page."
 
-# Temporary feature flag — set to True to re-enable the create_workflow
-# operation. Flipping this constant restores the operation's prior
-# behaviour (validation + slug allocation + database.save_workflow).
-# The implementation below stays intact so re-enabling is one line.
-_CREATE_WORKFLOW_ENABLED = False
+# Independent operator switch for shared-pipeline employee creation.
+_CREATE_WORKFLOW_ENABLED = True
+
+
+class _AccessChanged(ValueError):
+    pass
 
 
 # ----------------------------------------------------------------------------
@@ -181,7 +183,7 @@ async def _employee_of(database: Any, canvas: _Canvas) -> Optional[_Employee]:
     if row is None:
         return None
     roles = row.node_roles or {}
-    agents = [roles[role] for role in AGENT_ROLES if canvas.node(roles.get(role))]
+    agents = [value for role, value in roles.items() if (role in AGENT_ROLES or (role.startswith("specialist_") and role.rsplit("_", 1)[-1].isdigit())) and canvas.node(value)]
     skills = roles.get("skills") if canvas.node(roles.get("skills")) else None
     return _Employee(row=row, agents=list(dict.fromkeys(agents)), skills=skills)
 
@@ -207,12 +209,25 @@ def _mutation_id(ctx: NodeContext, params: BaseModel, caller: Optional[str]) -> 
     return f"agent-builder:{hashlib.sha256(request.encode('utf-8')).hexdigest()}"
 
 
-async def _save(ctx: NodeContext, database: Any, canvas: _Canvas, additions: GraphAdditions, params: BaseModel, caller: Optional[str]) -> Any:
+async def _save(ctx: NodeContext, database: Any, canvas: _Canvas, additions: GraphAdditions, params: BaseModel, caller: Optional[str], *, prepare: Optional[Callable] = None, grant_ids: Sequence[str] = ()) -> Any:
     """Apply ``additions`` (possibly none: the call still claims its ledger
     key, so a retry replays what the first attempt saved). None when the
     workflow is gone; raises ValueError when the graph changed under the
     plan."""
     from services.workflow_storage.mutate import apply_graph_additions
+
+    async def authorize(session: Any) -> None:
+        from models.employees import EmployeeGrant
+
+        for grant_id in grant_ids:
+            grant = await session.get(EmployeeGrant, grant_id)
+            if grant is None or grant.workflow_id != canvas.workflow_id or grant.owner_id != ctx.user_id or grant.revoked_at is not None or not grant.limits.get("approved"):
+                raise _AccessChanged("The owner must approve access before saving this change")
+            limits = {key: value for key, value in grant.limits.items() if key != "approved"}
+            scope = [grant.workflow_id, grant.owner_id, grant.capability, grant.member_id, grant.account_id, limits]
+            identity = hashlib.sha256(json.dumps(scope, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+            if identity != grant_id:
+                raise _AccessChanged("The approved access scope changed")
 
     return await apply_graph_additions(
         database,
@@ -220,6 +235,9 @@ async def _save(ctx: NodeContext, database: Any, canvas: _Canvas, additions: Gra
         additions,
         mutation_id=_mutation_id(ctx, params, caller),
         caller_node_id=caller,
+        prepare=prepare,
+        authorize=authorize if grant_ids else None,
+        authorization_grant_ids=grant_ids,
     )
 
 
@@ -235,7 +253,25 @@ def _unsaved(canvas: _Canvas, targets: Sequence[str]) -> Optional[str]:
 
 
 def _refused(operation: str, summary: str) -> "AgentBuilderOutput":
-    return AgentBuilderOutput(operation=operation, summary=summary, operations=[])
+    return AgentBuilderOutput(operation=operation, summary=summary, operations=[], validation_issues=[{"code": "request_refused", "message": summary}])
+
+
+async def _permission(database: Any, ctx: NodeContext, params: "AgentBuilderParams", capability: str, members: Sequence[str], limits: Dict[str, Any], grant_ids: Optional[List[str]] = None) -> Optional["AgentBuilderOutput"]:
+    from services.employees.permissions import require_builder_access
+
+    pending = []
+    refusal = None
+    for member in members:
+        access = await require_builder_access(database, ctx, capability, member_id=member, limits=limits)
+        if access["authorized"] and access.get("request_id") and grant_ids is not None:
+            grant_ids.append(access["request_id"])
+        if not access["authorized"]:
+            refusal = access
+            pending.extend(access.get("required_access") or [])
+    if refusal:
+        return AgentBuilderOutput(operation=params.operation, summary=refusal.get("summary"), operations=[],
+                                  request_id=refusal.get("request_id"), required_access=pending, activation_state="blocked", validation_issues=[])
+    return None
 
 
 def _rebind_on(ctx: NodeContext) -> bool:
@@ -373,7 +409,7 @@ def _offered_builtins(*, employee: bool) -> Dict[str, Any]:
         if meta.path is None:
             continue
         if employee:
-            wanted = meta.path.parent.name == _DISCOVER_SKILL_FOLDER
+            wanted = meta.path.parent.name == _DISCOVER_SKILL_FOLDER and not {parent.name for parent in meta.path.parents} & blocked
         else:
             wanted = not {parent.name for parent in meta.path.parents} & blocked
         if wanted:
@@ -485,6 +521,23 @@ def _added_nodes(result: Any) -> set[str]:
     return {str(op.get("minted_id")) for op in result.operations if op.get("type") == "add_node"}
 
 
+def _scoped_runtime_operations(operations: Sequence[Mapping[str, Any]], caller: Optional[str]) -> List[Dict[str, Any]]:
+    """Editor announcements are complete; a run only gets its own bindings.
+
+    Configured specialists' tools must never be rebound to the lead or Talk
+    merely because they were created by that agent's Builder call.
+    """
+    bindings = {op.get("source") for op in operations if op.get("type") == "add_edge" and op.get("target") == caller and op.get("target_handle") in {TOOLS_INPUT, _TEAMMATES_INPUT}}
+    result = []
+    for op in operations:
+        cls = get_node_class(str(op.get("node_type") or "")) if op.get("type") == "add_node" else None
+        callable_node = cls is not None and (getattr(cls, "component_kind", "") in {"tool", "agent"} or getattr(cls, "usable_as_tool", False))
+        if callable_node and (op.get("minted_id") or op.get("client_ref")) not in bindings:
+            continue
+        result.append(dict(op))
+    return result
+
+
 def _tool_summary(ctx: NodeContext, *, employee: bool, label: str, node_id: str, changed: bool, bind: bool) -> str:
     """What ``add_tool`` did, for the agent. An employee's is plain, since
     the agent passes it on to the owner."""
@@ -514,6 +567,11 @@ class AgentBuilderParams(BaseModel):
 
     operation: Literal[
         "inspect_canvas",
+        "inspect_node",
+        "search_docs",
+        "read_doc",
+        "plan_update",
+        "apply_update",
         "add_tool",
         "add_skill",
         "add_subagent",
@@ -526,6 +584,21 @@ class AgentBuilderParams(BaseModel):
             "you may add."
         ),
     )
+
+    node_id: str = Field(default="", max_length=256, description="Saved node ID for inspect_node; omit to inspect node_type's live contract.")
+    query: str = Field(default="", max_length=1000, description="Words to search in shipped Builder documentation.")
+    document_id: str = Field(default="", max_length=500, description="Manifest document ID returned by search_docs or inspect_node. Never a filesystem path.")
+    offset: int = Field(default=0, ge=0, description="Character offset for bounded document reads.")
+    limit: int = Field(default=12, ge=1, le=50, description="Maximum documentation search results.")
+    max_chars: int = Field(default=12000, ge=1, le=24000, description="Maximum characters in a document read.")
+    purpose: str = Field(default="", max_length=4000, description="Specialist responsibility and acceptance criteria for add_subagent.")
+    target_member_id: str = Field(default="", max_length=256, description="Target team member for a scoped tool or skill change; defaults to the caller. Must belong to this employee.")
+    change_operation: Literal["add_tool", "add_skill", "add_subagent", "apply_saved"] = Field(default="apply_saved", description="Change to validate or apply. The same complete configuration and grant scope must be supplied when applying.")
+    stop_work: bool = Field(default=False, description="Only set when the owner explicitly requests Stop work and apply.")
+    dry_run: bool = Field(default=False, description="Validate configuration and access without saving a graph change.")
+    tool_types: List[str] = Field(default_factory=list, max_length=20, description="Scoped specialist tools from available_tools.")
+    tool_parameters: Dict[str, Dict[str, Any]] = Field(default_factory=dict, description="Per-tool configuration, validated against live schemas; credential secrets and locked fields are forbidden.")
+    skill_names: List[str] = Field(default_factory=list, max_length=20, description="Scoped specialist skills from available_skills.")
 
     # add_tool
     node_type: str = Field(
@@ -573,6 +646,12 @@ class AgentBuilderParams(BaseModel):
 
 
 class AgentBuilderOutput(BaseModel):
+    request_id: Optional[str] = None
+    validation_issues: Optional[List[Dict[str, Any]]] = None
+    required_access: Optional[List[Dict[str, Any]]] = None
+    saved_revision: Optional[str] = None
+    activation_state: Optional[str] = None
+    binding_results: Optional[List[Dict[str, Any]]] = None
     operation: Optional[str] = None
     summary: Optional[str] = None
     #: For ``add_tool`` / ``add_subagent``: the ops this call saved (as
@@ -625,7 +704,11 @@ class AgentBuilderNode(ToolNode):
         "add_tool wires a tool from available_tools to you (a tool you "
         "already have but lack in this run is bound again); add_skill adds "
         "a skill from available_skills; add_subagent adds a teammate (team "
-        "leads only). create_workflow is disabled. When a change is "
+        "leads only). inspect_node reads live contracts; search_docs and "
+        "read_doc provide shipped documentation. plan_update validates a "
+        "change and access; apply_update applies authorized changes. "
+        "create_workflow creates a configured employee team through the shared "
+        "Hire pipeline, only from a trusted owner request. When a change is "
         "refused, the summary says why in one plain sentence: pass it on."
     )
     handles = (
@@ -638,6 +721,82 @@ class AgentBuilderNode(ToolNode):
 
     Params = AgentBuilderParams
     Output = AgentBuilderOutput
+
+    @Operation("search_docs")
+    async def search_docs(self, ctx: NodeContext, params: AgentBuilderParams) -> AgentBuilderOutput:
+        from services.builder_documentation import BuilderDocumentation
+
+        docs = BuilderDocumentation()
+        return AgentBuilderOutput(operation="search_docs", summary="Shipped documentation; live node contracts take precedence.", operations=[],
+                                  documents=docs.search(params.query, params.limit), documentation_count=len(docs.documents))
+
+    @Operation("read_doc")
+    async def read_doc(self, ctx: NodeContext, params: AgentBuilderParams) -> AgentBuilderOutput:
+        from services.builder_documentation import BuilderDocumentation
+
+        try:
+            document = BuilderDocumentation().read(params.document_id, params.offset, params.max_chars)
+        except ValueError as exc:
+            return _refused("read_doc", str(exc))
+        return AgentBuilderOutput(operation="read_doc", summary="Read shipped documentation.", operations=[], document=document)
+
+    @Operation("inspect_node")
+    async def inspect_node(self, ctx: NodeContext, params: AgentBuilderParams) -> AgentBuilderOutput:
+        from services.builder_documentation import BuilderDocumentation
+        from services.plugin.base import locked_tool_fields
+        from services.plugin.deps import get_database
+
+        canvas = await _load_canvas(ctx, get_database())
+        node = canvas.node(params.node_id) if params.node_id else None
+        if params.node_id and node is None:
+            return _refused("inspect_node", "That node is not in this workflow.")
+        node_type = str(node.get("type")) if node else params.node_type
+        cls = get_node_class(node_type)
+        if cls is None:
+            return _refused("inspect_node", "Unknown node type. Inspect the canvas catalogue first.")
+        docs = BuilderDocumentation()
+        contract = {
+            "type": node_type, "metadata": cls._metadata_dict(),
+            "parameters_schema": cls.Params.model_json_schema() if cls.Params else {},
+            "output_schema": cls.Output.model_json_schema() if cls.Output else {},
+            "locked_fields": sorted(locked_tool_fields(cls)),
+            "available": not _is_blocked_by_allowlist(cls, node_type, _allowlist_config()),
+            "documentation_ids": docs.related(node_type),
+            "examples": docs.examples(node_type),
+            "precedence": "This live plugin contract overrides conflicting prose. Credential IDs describe requirements; stored secrets are never included.",
+        }
+        return AgentBuilderOutput(operation="inspect_node", summary="Current registered node contract.", operations=[], contract=contract)
+
+    @Operation("plan_update")
+    async def plan_update(self, ctx: NodeContext, params: AgentBuilderParams) -> AgentBuilderOutput:
+        if params.change_operation == "apply_saved":
+            return AgentBuilderOutput(operation="plan_update", summary="Apply saved capabilities when current work finishes; paused employees stay paused.",
+                                      operations=[], activation_state="planned", validation_issues=[])
+        planned = params.model_copy(update={"operation": params.change_operation, "dry_run": True})
+        result = await getattr(self, params.change_operation)(ctx, planned)
+        result.operation = "plan_update"
+        return result
+
+    @Operation("apply_update")
+    async def apply_update(self, ctx: NodeContext, params: AgentBuilderParams) -> AgentBuilderOutput:
+        if params.change_operation != "apply_saved":
+            applied = params.model_copy(update={"operation": params.change_operation, "dry_run": False})
+            result = await getattr(self, params.change_operation)(ctx, applied)
+            result.operation = "apply_update"
+            return result
+        from services.employees.permissions import trusted_owner_request
+        from services.employees.safe_apply import apply_saved_changes
+        from services.plugin.deps import get_database
+
+        database = get_database()
+        if not await trusted_owner_request(database, ctx):
+            return _refused("apply_update", "Ask the owner in Talk to apply this change.")
+        if params.stop_work:
+            permission = await _permission(database, ctx, params, "stop_work_and_apply", [_caller(ctx) or ""], {"interrupt_current_work": True})
+            if permission:
+                return permission
+        result = await apply_saved_changes(database, str(ctx.workflow_id), owner_id=ctx.user_id, key=_mutation_id(ctx, params, _caller(ctx)), stop_work=params.stop_work)
+        return AgentBuilderOutput(operation="apply_update", summary=result.get("summary") or "Saved capabilities are being applied safely.", operations=[], **{key: value for key, value in result.items() if key not in {"operation", "summary", "operations"}})
 
     # ---- inspect_canvas (read-only) ---------------------------------------
 
@@ -699,8 +858,8 @@ class AgentBuilderNode(ToolNode):
         else:
             from services.employees.policy import asks_first
 
-            # A hired employee adds within policy, and never teammates.
-            available_tools, available_agents = await _employee_tools(employee), []
+            available_tools = await _employee_tools(employee)
+            available_agents = [entry for entry in _catalogue_agents() if not _is_team_lead(entry["type"])] if employee.row.team_plan else []
             rules = {"asks_first": asks_first(employee.row), "agents": employee.agents}
 
         parts = [f"{len(canvas.nodes)} nodes"]
@@ -764,36 +923,54 @@ class AgentBuilderNode(ToolNode):
             if decision.app is None and "timezone" in tool_params:
                 tool_params["timezone"] = await _owner_timezone(database)
             targets = employee.agents or ([caller] if caller else [])
+            if employee.row.team_plan:
+                target = params.target_member_id or caller
+                if target not in employee.agents:
+                    return _refused("add_tool", "Choose a member of this employee’s team.")
+                targets = [str(target)]
         problem = _unsaved(canvas, targets)
         if problem:
             return _refused("add_tool", problem)
+        expanded = [target for target in targets if canvas.source_of_type(target, TOOLS_INPUT, node_type) is None]
+        grant_ids: List[str] = []
+        if employee is not None and expanded:
+            permission = await _permission(database, ctx, params, node_type, expanded, {"parameters": tool_params}, grant_ids)
+            if permission:
+                return permission
+        if params.dry_run:
+            return AgentBuilderOutput(operation="add_tool", summary=f"Ready to add {label} with validated access.", operations=[], validation_issues=[], required_access=[], activation_state="planned")
 
         # A target that has a tool of this type keeps it (a second would give
         # it two tools of one name); the rest get the caller's, else any
         # target's, else a new one.
-        have = {target: canvas.source_of_type(target, TOOLS_INPUT, node_type) for target in targets}
-        existing = have.get(caller) or next((node for node in have.values() if node), None)
-        if existing is None:
-            x, y = canvas.position(targets[0])
-            spread = 170 * len(canvas.sources(targets[0], TOOLS_INPUT))
-            additions = GraphAdditions(
+        def prepare(graph: Mapping[str, Any]) -> Tuple[GraphAdditions, Mapping[str, str]]:
+            live = _Canvas(canvas.workflow_id, list(graph.get("nodes") or []), list(graph.get("edges") or []), True)
+            if any(live.node(target) is None for target in targets):
+                raise ValueError("The target agent was removed")
+            have = {target: live.source_of_type(target, TOOLS_INPUT, node_type) for target in targets}
+            existing = have.get(caller) or next((node for node in have.values() if node), None)
+            if existing:
+                return GraphAdditions(edges=tuple(tool_edge(existing, target) for target in targets if have[target] is None)), {"tool": existing}
+            x, y = live.position(targets[0])
+            spread = 170 * len(live.sources(targets[0], TOOLS_INPUT))
+            return GraphAdditions(
                 nodes=(NewNode("tool", node_type, label, tool_params, position=(x - 240 + spread, y + 240)),),
                 edges=tuple(tool_edge("tool", target) for target in targets),
-            )
-        else:
-            additions = GraphAdditions(edges=tuple(tool_edge(existing, target) for target in targets if have[target] is None))
+            ), {}
         try:
-            result = await _save(ctx, database, canvas, additions, params, caller)
+            result = await _save(ctx, database, canvas, GraphAdditions(), params, caller, prepare=prepare, grant_ids=grant_ids)
+        except _AccessChanged:
+            return _refused("add_tool", "The owner’s permission changed. Ask them to allow access again.")
         except ValueError:
             logger.warning("Agent Builder change no longer fits the workflow", workflow_id=canvas.workflow_id, exc_info=True)
             return _refused("add_tool", "The workflow changed while I was adding to it. Try again.")
         if result is None:
             return _refused("add_tool", "Save the workflow first, then ask again.")
 
-        node_id = str(result.node_ids.get("tool") or existing)
+        node_id = str(result.node_ids["tool"])
         label = result.labels.get("tool") or canvas.label(node_id)
-        operations = [dict(op) for op in result.operations]
-        changed = bool(operations)
+        operations = _scoped_runtime_operations(result.operations, caller)
+        changed = bool(result.operations)
         # A saved tool this run started without (it was added after the
         # run's snapshot) is handed back for the agent loop to bind.
         bind = caller in targets and node_id not in _added_nodes(result) and not _run_has_tool(ctx, node_id, str(caller))
@@ -802,8 +979,12 @@ class AgentBuilderNode(ToolNode):
             operations.insert(0, workflow_ops.add_node(node_id, node_type, saved, label=label, minted_id=node_id))
         return AgentBuilderOutput(
             operation="add_tool",
-            summary=_tool_summary(ctx, employee=employee is not None, label=label, node_id=node_id, changed=changed, bind=bind),
+            summary=(f"Added {label} to that team member’s responsibilities. {_APPLY_HINT}" if caller not in targets and changed else _tool_summary(ctx, employee=employee is not None, label=label, node_id=node_id, changed=changed, bind=bind)),
             operations=operations,
+            request_id=_mutation_id(ctx, params, caller),
+            activation_state="saved",
+            saved_revision=result.saved_revision,
+            binding_results=[{"node_id": node_id, "saved": True, "available_in_run": bool(caller in targets and (_rebind_on(ctx) or _run_has_tool(ctx, node_id, str(caller))))}],
         )
 
     # ---- add_skill --------------------------------------------------------
@@ -836,17 +1017,39 @@ class AgentBuilderNode(ToolNode):
                 return _refused("add_skill", f"There's no skill called '{name}' in the owner's library or in Discover.")
             return _refused("add_skill", f"add_skill: no skill named '{name}'. Call inspect_canvas for the available skills.")
         targets = (employee.agents if employee is not None else []) or ([caller] if caller else [])
+        if employee is not None and employee.row.team_plan:
+            target = params.target_member_id or caller
+            if target not in employee.agents:
+                return _refused("add_skill", "Choose a member of this employee’s team.")
+            targets = [str(target)]
         problem = _unsaved(canvas, targets)
         if problem:
             return _refused("add_skill", problem)
+        skills_of = {target: canvas.source_of_type(target, SKILL_INPUT, _MASTER_SKILL_TYPE) for target in targets}
+        expanded = []
+        for target, holder in skills_of.items():
+            row = (await database.get_node_parameters(holder) or {}) if holder else {}
+            if not ((row.get("skills_config") or {}).get(name) or {}).get("enabled"):
+                expanded.append(target)
+        if employee is not None and employee.row.team_plan and expanded:
+            if any(edge.get("source") in {skills_of[target] for target in expanded if skills_of[target]} and edge.get("targetHandle") == SKILL_INPUT and edge.get("target") not in targets for edge in canvas.edges):
+                return _refused("add_skill", "This team shares instructions between members. Review those connections before changing one member’s skills.")
+        grant_ids: List[str] = []
+        if employee is not None and expanded:
+            permission = await _permission(database, ctx, params, "skill:" + name, expanded, {"instructions_sha256": hashlib.sha256(skill.instructions.encode()).hexdigest()}, grant_ids)
+            if permission:
+                return permission
+        if params.dry_run:
+            return AgentBuilderOutput(operation="add_skill", summary=f"Ready to add the '{name}' skill.", operations=[], validation_issues=[], required_access=[], activation_state="planned")
 
         entry = {"enabled": True, "instructions": skill.instructions, "isCustomized": False, "description": skill.description}
         # Each target's Skills node gets the skill; a target without one is
         # wired to the shared node (never a second one: two Skills nodes on
         # one agent collide on the Skill tool's own entry), else to a new one.
-        skills_of = {target: canvas.source_of_type(target, SKILL_INPUT, _MASTER_SKILL_TYPE) for target in targets}
         bare = [target for target in targets if skills_of[target] is None]
         shared = (employee.skills if employee is not None else None) or next((node for node in skills_of.values() if node), None)
+        if employee is not None and employee.row.team_plan:
+            shared = next((node for node in skills_of.values() if node), None)
         holders = list(dict.fromkeys([node for node in skills_of.values() if node] + ([shared] if shared and bare else [])))
         merges = []
         for holder in holders:
@@ -870,7 +1073,9 @@ class AgentBuilderNode(ToolNode):
             )
         edges = tuple(skill_edge("skills" if nodes else str(shared), target) for target in bare)
         try:
-            result = await _save(ctx, database, canvas, GraphAdditions(nodes=nodes, edges=edges, merges=tuple(merges)), params, caller)
+            result = await _save(ctx, database, canvas, GraphAdditions(nodes=nodes, edges=edges, merges=tuple(merges)), params, caller, grant_ids=grant_ids)
+        except _AccessChanged:
+            return _refused("add_skill", "The owner’s permission changed. Ask them to allow access again.")
         except ValueError:
             logger.warning("Agent Builder change no longer fits the workflow", workflow_id=canvas.workflow_id, exc_info=True)
             return _refused("add_skill", "The workflow changed while I was adding to it. Try again.")
@@ -898,7 +1103,7 @@ class AgentBuilderNode(ToolNode):
             summary = f"Enabled '{name}' on your Master Skill (node id={holder}). It applies from your next run."
         else:
             summary = f"Skill '{name}' is already enabled on your Master Skill (node id={holder}). No change needed."
-        return AgentBuilderOutput(operation="add_skill", summary=summary, operations=[])
+        return AgentBuilderOutput(operation="add_skill", summary=summary, operations=[], request_id=_mutation_id(ctx, params, caller), saved_revision=result.saved_revision, activation_state="saved")
 
     # ---- add_subagent -----------------------------------------------------
 
@@ -917,8 +1122,9 @@ class AgentBuilderNode(ToolNode):
         database = get_database()
         caller = _caller(ctx)
         canvas = await _load_canvas(ctx, database)
-        if await _employee_of(database, canvas) is not None:
-            return _refused("add_subagent", "A hired employee can't bring in helper agents. The owner can set that up in Dev mode.")
+        employee = await _employee_of(database, canvas)
+        if employee is not None and employee.row.team_plan:
+            caller = (employee.row.node_roles or {}).get("agent") or caller
         caller_type = str((canvas.node(caller) or {}).get("type") or "")
         if not _is_team_lead(caller_type):
             leads = ", ".join(sorted(_TEAM_LEAD_TYPES))
@@ -942,27 +1148,81 @@ class AgentBuilderNode(ToolNode):
         existing = None if agent_type == "aiAgent" else canvas.source_of_type(str(caller), _TEAMMATES_INPUT, agent_type)
         x, y = canvas.position(str(caller))
         label = getattr(get_node_class(agent_type), "display_name", "") or agent_type
-        additions = GraphAdditions(
-            nodes=(
-                NewNode("agent", agent_type, label, position=(x + 300, y + 200)),
-                NewNode("context", _CONTEXT_TYPE, "Context", position=(x + 300, y + 20), context_of="agent"),
-            ),
-            edges=(Edge("agent", _TEAMMATE_OUTPUT, str(caller), _TEAMMATES_INPUT),),
+        caller_params = await database.get_node_parameters(str(caller)) or {}
+        specialist_params = {key: caller_params[key] for key in ("provider", "model", "temperature", "max_tokens") if key in caller_params}
+        specialist_params["system_message"] = params.purpose.strip() or (
+            f"{getattr(get_node_class(agent_type), 'description', '')} Work only on the lead's assigned mission. "
+            "Use the supplied context and acceptance criteria, return evidence and a result for lead review, and never publish a final reply independently."
         )
+        from services.plugin.base import locked_tool_fields
+
+        nodes = [NewNode("agent", agent_type, label, specialist_params, position=(x + 300, y + 200)),
+                 NewNode("context", _CONTEXT_TYPE, "Context", position=(x + 300, y + 20), context_of="agent")]
+        edges = [Edge("agent", _TEAMMATE_OUTPUT, str(caller), _TEAMMATES_INPUT)]
+        for index, tool_type in enumerate(dict.fromkeys(params.tool_types)):
+            if tool_type not in _allowed_tool_types():
+                return _refused("add_subagent", f"The specialist cannot use '{tool_type}'. Inspect available tools first.")
+            cls = get_node_class(tool_type)
+            config = params.tool_parameters.get(tool_type, {})
+            if set(config) & (set(locked_tool_fields(cls)) | {"api_key", "access_token", "refresh_token", "password", "secret"}):
+                return _refused("add_subagent", "Specialist tools must use existing connections and preserve locked settings.")
+            try:
+                validated = cls.Params.model_validate(config).model_dump(exclude_unset=True)
+            except ValueError:
+                return _refused("add_subagent", f"'{tool_type}' needs valid configuration. Inspect its node contract first.")
+            ref = f"tool_{index}"
+            nodes.append(NewNode(ref, tool_type, getattr(cls, "display_name", "") or tool_type, validated, position=(x + 160 + index * 170, y + 440)))
+            edges.append(tool_edge(ref, "agent"))
+        skill_config = {}
+        for name in dict.fromkeys(params.skill_names):
+            skill = await _find_skill(database, name, employee=False)
+            if skill is None:
+                return _refused("add_subagent", f"There is no available skill called '{name}'.")
+            skill_config[name] = {"enabled": True, "instructions": skill.instructions, "description": skill.description, "isCustomized": False}
+        if skill_config:
+            from services.employees.policy import SKILL_TOOL_ENTRY, SKILL_TOOL_NAME
+
+            skill_config[SKILL_TOOL_NAME] = dict(SKILL_TOOL_ENTRY)
+            nodes.append(NewNode("skills", _MASTER_SKILL_TYPE, "Specialist skills", {"skill_folder": "assistant", "skills_config": skill_config}, position=(x + 20, y + 200)))
+            edges.append(skill_edge("skills", "agent"))
+        additions = GraphAdditions(
+            nodes=tuple(nodes), edges=tuple(edges),
+        )
+        grant_ids: List[str] = []
+        if employee is not None and not existing:
+            permission = await _permission(database, ctx, params, agent_type, [str(caller)], {
+                "purpose": specialist_params["system_message"], "tool_types": sorted(set(params.tool_types)),
+                "tool_parameters": params.tool_parameters, "skill_names": sorted(set(params.skill_names)),
+                "model": specialist_params.get("model"), "provider": specialist_params.get("provider"),
+            }, grant_ids)
+            if permission:
+                return permission
+        if params.dry_run:
+            return AgentBuilderOutput(operation="add_subagent", summary=f"Ready to add {label} with its own Context and scoped capabilities.", operations=[], validation_issues=[], required_access=[], activation_state="planned")
+        def prepare(graph: Mapping[str, Any]) -> Tuple[GraphAdditions, Mapping[str, str]]:
+            live = _Canvas(canvas.workflow_id, list(graph.get("nodes") or []), list(graph.get("edges") or []), True)
+            if live.node(caller) is None:
+                raise ValueError("The lead was removed")
+            reused = None if agent_type == "aiAgent" else live.source_of_type(str(caller), _TEAMMATES_INPUT, agent_type)
+            return (GraphAdditions(), {"agent": reused}) if reused else (additions, {})
         try:
-            result = await _save(ctx, database, canvas, GraphAdditions() if existing else additions, params, caller)
+            result = await _save(ctx, database, canvas, additions, params, caller, prepare=prepare, grant_ids=grant_ids)
+        except _AccessChanged:
+            return _refused("add_subagent", "The owner’s permission changed. Ask them to allow access again.")
         except ValueError:
             logger.warning("Agent Builder change no longer fits the workflow", workflow_id=canvas.workflow_id, exc_info=True)
             return _refused("add_subagent", "The workflow changed while I was adding to it. Try again.")
         if result is None:
             return _refused("add_subagent", "Save the workflow first, then ask again.")
-        if not result.node_ids.get("agent"):
-            return _refused("add_subagent", f"Teammate '{agent_type}' is already wired to you (node id={existing}). Reusing existing instance.")
+        if not any(op.get("type") == "add_node" for op in result.operations):
+            return _refused("add_subagent", f"Teammate '{agent_type}' is already wired to you (node id={result.node_ids.get('agent') or existing}). Reusing existing instance.")
         label = result.labels.get("agent") or label
         return AgentBuilderOutput(
             operation="add_subagent",
-            summary=f"Added '{label}' as a teammate. {_summary_suffix(ctx)} (configure provider/model first).",
-            operations=[dict(op) for op in result.operations],
+            summary=f"Added '{label}' with its own Context and scoped capabilities. Assign work through Task Manager for lead review. {_summary_suffix(ctx) if _caller(ctx) == caller else _APPLY_HINT}",
+            operations=_scoped_runtime_operations(result.operations, _caller(ctx)),
+            request_id=_mutation_id(ctx, params, caller), activation_state="saved",
+            saved_revision=result.saved_revision,
         )
 
     # ---- create_workflow --------------------------------------------------
@@ -974,17 +1234,11 @@ class AgentBuilderNode(ToolNode):
         params: AgentBuilderParams,
     ) -> AgentBuilderOutput:
         _log_op_entry("create_workflow", ctx, workflow_name=params.workflow_name)
-        # Temporary disable — flip ``_CREATE_WORKFLOW_ENABLED`` at the
-        # module top to restore. The body below is intact so the
-        # feature can be re-enabled without rewriting validation +
-        # persistence logic.
         if not _CREATE_WORKFLOW_ENABLED:
             return AgentBuilderOutput(
                 operation="create_workflow",
                 summary=(
-                    "create_workflow is temporarily disabled. Mutate the "
-                    "current workflow instead — add_tool / add_skill / "
-                    "add_subagent are still available."
+                    "Employee creation is disabled by the operator."
                 ),
             )
         name = (params.workflow_name or "").strip()
@@ -994,44 +1248,13 @@ class AgentBuilderNode(ToolNode):
                 summary="create_workflow: workflow_name is required.",
             )
 
-        from services.plugin.deps import get_database
+        from services.employees.control import builder_create
 
-        database = get_database()
-        workflow_id = await database.allocate_workflow_id()
-        slug = await next_available_slug(name, database)
-        start_node_id = f"{workflow_id}:start:1"
-        description = (params.workflow_description or "").strip()
-        workflow_data = {
-            "id": workflow_id,
-            "name": name,
-            "slug": slug,
-            "description": description,
-            "nodes": [
-                {
-                    "id": start_node_id,
-                    "type": "start",
-                    "position": {"x": 200, "y": 200},
-                    "data": {"label": "Start"},
-                }
-            ],
-            "edges": [],
-            "nodeParameters": {},
-        }
-
-        ok = await database.save_workflow(
-            workflow_id,
-            name,
-            slug,
-            workflow_data,
-            description=description or None,
-        )
-        if not ok:
-            return AgentBuilderOutput(
-                operation="create_workflow",
-                summary=f"create_workflow: failed to persist '{name}'.",
-            )
+        request_id = _mutation_id(ctx, params, _caller(ctx))
+        result = await builder_create(ctx, name, params.workflow_description.strip(), request_id)
+        summary = "Employee saved with a configured team." if result.get("success") else result.get("summary") or "The employee could not be created. Ask the owner in Talk and check the required connections."
         return AgentBuilderOutput(
             operation="create_workflow",
-            summary=(f"Created workflow '{name}' (slug: {slug}). " "User can switch to it from the toast notification."),
-            workflow_id=workflow_id,
+            summary=summary, request_id=request_id, operations=[],
+            **{key: value for key, value in result.items() if key not in {"operation", "summary", "request_id", "operations"}},
         )

@@ -17,6 +17,7 @@ import json
 # sentinel used to surface typed SDK errors cleanly through
 # ``BaseNode.execute()``.
 from services.plugin import NodeUserError
+from services.agent_bindings import delegation_roster, is_runtime_tool, unique_node_bindings, rebind_allowed, extend_runtime_graph
 from services.tool_identity import DuplicateToolNameError, ensure_unique_tool_names
 
 if TYPE_CHECKING:
@@ -1086,7 +1087,7 @@ class AIService:
             from services.skill_runtime import skill_tool_info
 
             skill_info = skill_tool_info(skill_data or [], node_id)
-            effective_tool_data = list(tool_data or [])
+            effective_tool_data = unique_node_bindings(tool_data or [])
             if skill_info:
                 effective_tool_data.append(skill_info)
 
@@ -1199,6 +1200,10 @@ class AIService:
                 # text reflects the user's current preference.
                 config["auto_rebind_tools"] = auto_rebind_enabled
                 if context:
+                    config["run_scope"] = context.get("run_scope")
+                    config["generation"] = context.get("generation")
+                    config["parameter_snapshot"] = context.get("parameter_snapshot", {})
+                    config["employee_job_id"] = context.get("employee_job_id")
                     config["nodes"] = context.get("nodes", [])
                     config["edges"] = context.get("edges", [])
                     config["workspace_dir"] = context.get("workspace_dir", "")
@@ -1213,6 +1218,8 @@ class AIService:
                     config["max_delegation_depth"] = context.get("max_delegation_depth", 2)
 
                 try:
+                    from services.employees.permissions import assert_runtime_access
+                    await assert_runtime_access(self.database, workflow_id, str(tool_node_id or ""), str(config.get("node_type") or ""), config)
                     result = await execute_tool(tool_name, tool_args, config)
 
                     await broadcast_status(
@@ -1310,10 +1317,18 @@ class AIService:
                 """
                 from services.node_registry import get_node_class
 
+                saved_workflow = await self.database.get_workflow(workflow_id) if workflow_id else None
+                saved_graph = getattr(saved_workflow, "data", None) or {}
+                if context is not None and saved_graph:
+                    admitted_graph = extend_runtime_graph(context, saved_graph, operations)
+                    context["nodes"] = admitted_graph["nodes"]
+                    context["edges"] = admitted_graph["edges"]
                 bound = {identity["node_id"] for identity in tool_identities}
                 new_bindings: List[tuple[Any, Dict[str, Any]]] = []
                 for op in operations:
                     if op.get("type") != "add_node":
+                        continue
+                    if not rebind_allowed(op, node_id, nodes=(context or {}).get("nodes", []), edges=(context or {}).get("edges", []), operations=() if saved_graph else operations):
                         continue
                     node_type = op.get("node_type")
                     if not node_type:
@@ -1330,7 +1345,7 @@ class AIService:
                     # (masterSkill) is tool-kind but feeds input-skill;
                     # it is never an LLM tool.
                     _kind = getattr(cls, "component_kind", "")
-                    if not (_kind == "tool" or (bool(getattr(cls, "usable_as_tool", False)) and _kind != "model")):
+                    if not is_runtime_tool(cls):
                         continue
                     if (getattr(cls, "ui_hints", None) or {}).get("isMasterSkillEditor"):
                         continue
@@ -1354,6 +1369,7 @@ class AIService:
                     if tool is None:
                         continue
                     new_bindings.append((tool, tool_config or tool_info))
+                    bound.add(tool_info["node_id"])
 
                 new_identities = [
                     {
@@ -1432,6 +1448,7 @@ class AIService:
                 max_iterations=recursion_limit,
                 progress_callback=_emit_progress if broadcaster else None,
                 rebind_from_operations=_rebind_from_operations if auto_rebind_enabled else None,
+                roster_after_rebind=lambda: delegation_roster(tool_identities),
                 conversation_saver=(
                     context_runtime.save
                     if context_runtime is not None
@@ -1677,7 +1694,7 @@ class AIService:
             tool_bindings: List[tuple[Any, Dict[str, Any]]] = []
             from services.skill_runtime import skill_tool_info
 
-            effective_tool_data = list(tool_data or [])
+            effective_tool_data = unique_node_bindings(tool_data or [])
             progressive_skill_tool = skill_tool_info(skill_data or [], node_id)
             if progressive_skill_tool:
                 effective_tool_data.append(progressive_skill_tool)
@@ -1951,6 +1968,10 @@ class AIService:
                     config["provider"] = provider
                     config["auto_rebind_tools"] = auto_rebind_enabled
                     if context:
+                        config["run_scope"] = context.get("run_scope")
+                        config["generation"] = context.get("generation")
+                        config["parameter_snapshot"] = context.get("parameter_snapshot", {})
+                        config["employee_job_id"] = context.get("employee_job_id")
                         config["nodes"] = context.get("nodes", [])
                         config["edges"] = context.get("edges", [])
                         config["workspace_dir"] = context.get("workspace_dir", "")
@@ -1965,6 +1986,8 @@ class AIService:
                         config["max_delegation_depth"] = context.get("max_delegation_depth", 2)
 
                     try:
+                        from services.employees.permissions import assert_runtime_access
+                        await assert_runtime_access(self.database, workflow_id, str(tool_node_id or ""), str(config.get("node_type") or ""), config)
                         result = await execute_tool(tool_name, tool_args, config)
                         await broadcast_status(
                             "tool_completed",
@@ -2005,7 +2028,7 @@ class AIService:
                                 invocation_source="native",
                                 error_code=type(e).__name__,
                             )
-                        return {"error": str(e)}
+                        return e.as_dict() if isinstance(e, NodeUserError) else {"error": str(e)}
 
                 # Auto-rebind toggle + recursion_limit override: same
                 # machinery as ``execute_agent``.
@@ -2034,10 +2057,18 @@ class AIService:
                     (``tool_configs`` vs ``tool_node_configs``)."""
                     from services.node_registry import get_node_class
 
+                    saved_workflow = await self.database.get_workflow(workflow_id) if workflow_id else None
+                    saved_graph = getattr(saved_workflow, "data", None) or {}
+                    if context is not None and saved_graph:
+                        admitted_graph = extend_runtime_graph(context, saved_graph, operations)
+                        context["nodes"] = admitted_graph["nodes"]
+                        context["edges"] = admitted_graph["edges"]
                     bound = {identity["node_id"] for identity in tool_identities}
                     new_bindings: List[tuple[Any, Dict[str, Any]]] = []
                     for op in operations:
                         if op.get("type") != "add_node":
+                            continue
+                        if not rebind_allowed(op, node_id, nodes=(context or {}).get("nodes", []), edges=(context or {}).get("edges", []), operations=() if saved_graph else operations):
                             continue
                         node_type = op.get("node_type")
                         if not node_type:
@@ -2052,7 +2083,7 @@ class AIService:
                         # tool). Without this the rebind silently drops
                         # twitterSearch / googleGmail / pythonExecutor etc.
                         _kind = getattr(cls, "component_kind", "")
-                        if not (_kind == "tool" or (bool(getattr(cls, "usable_as_tool", False)) and _kind != "model")):
+                        if not is_runtime_tool(cls):
                             continue
                         if (getattr(cls, "ui_hints", None) or {}).get("isMasterSkillEditor"):
                             continue
@@ -2076,6 +2107,7 @@ class AIService:
                         if tool is None:
                             continue
                         new_bindings.append((tool, tool_config or tool_info))
+                        bound.add(tool_info["node_id"])
 
                     new_identities = [
                         {
@@ -2124,6 +2156,7 @@ class AIService:
                     max_iterations=recursion_limit,
                     progress_callback=_emit_progress if broadcaster else None,
                     rebind_from_operations=_rebind_from_operations if auto_rebind_enabled else None,
+                    roster_after_rebind=lambda: delegation_roster(tool_identities),
                     conversation_saver=(
                         context_runtime.save
                         if context_runtime is not None

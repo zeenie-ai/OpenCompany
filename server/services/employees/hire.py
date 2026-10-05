@@ -196,7 +196,12 @@ async def _earlier_attempt(database: Any, auth_service: Any, row: Any, digest: s
     if row.payload_hash and row.payload_hash != digest:
         return _fail("conflict")
     if row.hire_state == "ready" and row.workflow_id:
-        return await _response_for(database, auth_service, row.workflow_id, started=False, warnings=[], idempotent=True)
+        from models.employees import EmployeeActivation
+        async with database.get_session() as session:
+            intent = await session.get(EmployeeActivation, f"hire:{row.id}")
+        return await _response_for(database, auth_service, row.workflow_id, started=bool(intent and intent.state == "running"), warnings=[],
+            idempotent=True, request_id=row.idempotency_key, activation_state=intent.state if intent else "saved",
+            readiness_issue=intent.detail if intent else None)
     if _still_building(row):
         return _fail("busy")
     return None
@@ -208,6 +213,8 @@ async def _build_and_save(
     request: HireEmployeeRequest,
     row_id: str,
     *,
+    claim_token: str,
+    workflow_id: str,
     owner: str,
     connections: Connections,
     connected: List[str],
@@ -215,7 +222,6 @@ async def _build_and_save(
     unsupported: List[str],
 ) -> Dict[str, Any]:
     from services.node_allowlist import is_hire_allowed
-    from services.workflow_storage.persist import PersistError, persist_new_workflow
     from services.workflow_validator import validate_workflow
 
     try:
@@ -223,7 +229,9 @@ async def _build_and_save(
     except Exception:
         settings = {}
     llm = await resolve_llm_choice(database, auth_service, connections)
-    workflow_id = await database.allocate_workflow_id()
+    if request.source.provider and request.source.model and request.source.provider in await connections.ai_providers():
+        from services.employees.llm import LLMChoice, runs_locally
+        llm = LLMChoice(provider=request.source.provider, model=request.source.model, local=runs_locally(request.source.provider))
     try:
         built = build_employee_graph(
             BuildInputs(
@@ -239,66 +247,56 @@ async def _build_and_save(
                 memory=settings.get("memory_across_chats") is not False,
                 skills=await _library_skills(database),
                 allowed=is_hire_allowed,
+                team=True,
             )
         )
     except BuildError as exc:
-        await store.mark_failed(database, row_id)
+        await store.mark_failed(database, row_id, claim_token)
         logger.warning("Hire could not be built", code=exc.code)
         return _fail(exc.code)
 
     report = await validate_workflow(nodes=built.nodes, edges=built.edges, parameters_by_id=built.parameters)
     if report.get("errors"):
-        await store.mark_failed(database, row_id)
+        await store.mark_failed(database, row_id, claim_token)
         logger.warning("Hire failed validation", codes=[issue.get("code") for issue in report["errors"]])
         return _fail("build_failed", report=report)
 
+    await store.commit_hire(database, row_id, claim_token, name=request.name,
+        description=request.description, nodes=built.nodes, edges=built.edges,
+        parameters=built.parameters, node_roles=built.node_roles,
+        fields={"llm": {"provider": llm.provider, "model": llm.model} if llm else {},
+                "trigger": built.trigger, "apps": built.app_ids, "team_plan": built.team_plan})
+    from services.status_broadcaster import get_status_broadcaster
     try:
-        persisted = await persist_new_workflow(
-            database,
-            workflow_id=workflow_id,
-            name=request.name,
-            nodes=built.nodes,
-            edges=built.edges,
-            parameters=built.parameters,
-            description=request.description or None,
-            owner_id=owner,
-        )
-    except PersistError as exc:
-        await store.mark_failed(database, row_id)
-        return _fail(exc.code)
+        await get_status_broadcaster().broadcast_workflow_lifecycle("created", workflow_id=workflow_id, name=request.name,
+            node_count=len(built.nodes), edge_count=len(built.edges))
+    except Exception:
+        logger.debug("A committed employee lifecycle notification will refresh on reconnect", exc_info=True)
 
-    # Ids are canonical already; map through any alias the save made anyway.
-    roles = {role: persisted.aliases.get(node_id, node_id) for role, node_id in built.node_roles.items()}
-    ready = await store.mark_ready(database, row_id, workflow_id=persisted.workflow_id, node_roles=roles)
-    if ready is not None:
-        await store.update_employee(
-            database,
-            persisted.workflow_id,
-            {
-                "llm": {"provider": llm.provider, "model": llm.model} if llm else {},
-                "trigger": built.trigger,
-                "apps": built.app_ids,
-            },
-        )
-
-    response = await _response_for(database, auth_service, persisted.workflow_id, warnings=built.warnings, idempotent=False)
+    response = await _response_for(database, auth_service, workflow_id, warnings=built.warnings, idempotent=False)
     if not response.get("success"):
         return response
     employee = response["employee"]
-    await broadcast_employee_event("hired", workflow_id=persisted.workflow_id, revision=int(employee.get("revision") or 0), employee=employee)
-    started = not employee["missing_apps"] and not employee["needs_ai"]
+    await broadcast_employee_event("hired", workflow_id=workflow_id, revision=int(employee.get("revision") or 0), employee=employee)
+    from services.employees.team_runtime import team_runtime_error
+    readiness = team_runtime_error()
+    started = not employee["missing_apps"] and not employee["needs_ai"] and not readiness
     if started:
-        _start_in_background(persisted.workflow_id, owner, request.idempotency_key)
+        from services.employees.activation import activate_pending
+        task = asyncio.ensure_future(activate_pending(database, workflow_id))
+        _starts.add(task)
+        task.add_done_callback(_starts.discard)
     logger.info(
         "Employee hired",
-        workflow_id=persisted.workflow_id,
+        workflow_id=workflow_id,
         trigger=built.trigger.get("kind"),
         delivery=built.delivery,
         started=started,
         apps=len(built.app_ids),
         unsupported=len(unsupported),
     )
-    return {**response, "started": started}
+    return {**response, "started": started, "request_id": request.idempotency_key,
+            "activation_state": "starting" if started else "blocked", "readiness_issue": readiness}
 
 
 @ws_response
@@ -317,6 +315,8 @@ async def handle_hire_employee(data: Dict[str, Any], websocket: WebSocket) -> Di
 
     database = container.database()
     auth_service = container.auth_service()
+    if hasattr(container, "settings") and not getattr(container.settings(), "employee_teams_enabled", True):
+        return _fail("teams_disabled")
     owner = execution_principal(data, websocket)
     digest = payload_hash(request)
 
@@ -329,27 +329,39 @@ async def handle_hire_employee(data: Dict[str, Any], websocket: WebSocket) -> Di
     connections = Connections(auth_service)
     connected = await connections.connected_app_ids()
     apps, unsupported = _resolve_apps(request, connected)
-    row, created = await store.reserve(
+    row, claim_token = await store.claim_hire(
         database,
         owner_id=owner,
         idempotency_key=request.idempotency_key,
         payload_hash=digest,
         fields=_hire_fields(request, unsupported),
     )
-    if not created:
+    if claim_token is None:
         # The row an earlier attempt reserved, perhaps since the lookup above.
         answer = await _earlier_attempt(database, auth_service, row, digest)
         if answer is not None:
             return answer
+        return _fail("busy")
+
+    async def renew() -> None:
+        while True:
+            await asyncio.sleep(30)
+            if not await store.renew_claim(database, row.id, claim_token):
+                return
+    lease_task = asyncio.create_task(renew())
 
     try:
         return await _build_and_save(
-            database, auth_service, request, row.id, owner=owner, connections=connections, connected=connected, apps=apps, unsupported=unsupported
+            database, auth_service, request, row.id, claim_token=claim_token, workflow_id=str(row.workflow_id), owner=owner, connections=connections, connected=connected, apps=apps, unsupported=unsupported
         )
     except Exception:
         # A retry resumes a failed row; one left "building" would answer busy.
-        await store.mark_failed(database, row.id)
-        raise
+        await store.mark_failed(database, row.id, claim_token)
+        logger.exception("Employee creation could not be saved", request_id=request.idempotency_key)
+        return {**_fail("save_failed"), "request_id": request.idempotency_key}
+    finally:
+        lease_task.cancel()
+        await asyncio.gather(lease_task, return_exceptions=True)
 
 
 __all__ = ["handle_hire_employee", "owner_values_for", "payload_hash"]

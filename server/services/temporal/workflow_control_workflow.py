@@ -64,6 +64,11 @@ class WorkflowControlWorkflow:
         self._seen_event_ids: dict[str, None] = {}
         self._poll_tasks: dict[str, asyncio.Task] = {}
         self._can_requested = False
+        self._overflow = False
+        self._durable_prefix = 0
+        self._review_overflow_checked = False
+        self._queue_reads = 0
+        self._drain_tasks = False
 
     @workflow.signal
     async def pause(self) -> None:
@@ -96,6 +101,13 @@ class WorkflowControlWorkflow:
                 non_retryable=True,
             )
         self._apply_control_state(target_state)
+        self._drain_tasks = False
+        return self.status()
+
+    @workflow.update
+    async def pause_admissions(self, drain_tasks: bool = True) -> Dict[str, Any]:
+        self._apply_control_state("paused")
+        self._drain_tasks = drain_tasks
         return self.status()
 
     def _apply_control_state(self, target_state: str) -> None:
@@ -113,6 +125,35 @@ class WorkflowControlWorkflow:
         self._closed = True
         for task in self._poll_tasks.values():
             task.cancel()
+
+    @workflow.update
+    async def replace_graph(self, graph: Dict[str, Any]) -> Dict[str, Any]:
+        """Swap future run snapshots while retaining queued events and baselines.
+
+        Existing run children already hold their own snapshot. Pausing only
+        admissions lets those children finish before this update is called.
+        """
+        if self._state != "paused":
+            raise ApplicationError("Pause admissions before applying changes", non_retryable=True)
+        node_ids = {node["id"] for node in graph["nodes"]}
+        for listener_id, spec in self._triggers.items():
+            listener = spec.get("listener_args", {})
+            if spec.get("trigger_node_id") not in node_ids:
+                # Stop new admissions, but retain the old snapshot for events
+                # already accepted by this trigger before its removal.
+                spec["retired"] = True
+                task = self._poll_tasks.get(listener_id)
+                if task:
+                    task.cancel()
+                continue
+            if spec.pop("retired", False) and spec.get("workflow_type") == "PollingTriggerWorkflow":
+                self._poll_tasks[listener_id] = asyncio.create_task(self._poll_trigger(listener_id, spec))
+            listener["nodes"] = graph["nodes"]
+            listener["edges"] = graph["edges"]
+            listener["parameter_snapshot"] = graph.get("parameters") or {}
+            listener["graphVersion"] = graph.get("graphVersion", 2)
+        self._revision += 1
+        return {**self.status(), "applied": True}
 
     @workflow.signal
     async def register_trigger(self, spec: Dict[str, Any]) -> None:
@@ -132,6 +173,8 @@ class WorkflowControlWorkflow:
         if not event_id or not event_type:
             return
         for listener_id, spec in self._triggers.items():
+            if spec.get("retired"):
+                continue
             if spec["workflow_type"] == "PollingTriggerWorkflow":
                 continue
             if event_type not in set(spec.get("event_types") or [spec.get("event_type")]):
@@ -146,6 +189,14 @@ class WorkflowControlWorkflow:
         # the queue (and the paused state) forward.
         self._maybe_request_rollover()
 
+    def _next_event(self) -> Optional[int]:
+        if self._state == "running" and self._events:
+            return 0
+        if self._state == "paused" and self._drain_tasks:
+            return next((index for index, (listener_id, _) in enumerate(self._events)
+                if (self._triggers.get(listener_id, {}).get("listener_args") or {}).get("node_type") == "taskTrigger"), None)
+        return None
+
     @workflow.query
     def status(self) -> Dict[str, Any]:
         return {
@@ -158,12 +209,33 @@ class WorkflowControlWorkflow:
     async def run(self, control_data: Dict[str, Any]) -> Dict[str, Any]:
         self._state = control_data.get("state", "running")
         self._seed_carried_state(control_data)
+        self._overflow = bool(control_data.get("overflow"))
+        self._durable_prefix = int(control_data.get("durable_prefix", len(self._events)))
+        queue_v2 = workflow.patched("controller-durable-queue-v2")
+        self._drain_tasks = bool(control_data.get("drain_tasks"))
         while not self._closed:
+            read_reviews = queue_v2 and self._state == "paused" and self._drain_tasks and self._next_event() is None and not self._review_overflow_checked
+            if self._overflow and ((queue_v2 and self._state == "running" and self._durable_prefix == 0) or read_reviews or (not queue_v2 and not self._events)):
+                self._queue_reads += 1
+                page = await workflow.execute_activity("controller.queue.read", {
+                    "controller_id": workflow.info().workflow_id,
+                    "request_id": f"{workflow.info().run_id}:queue:{self._queue_reads}",
+                    **({"review_listener_ids": [listener_id for listener_id, spec in self._triggers.items() if (spec.get("listener_args") or {}).get("node_type") == "taskTrigger"]} if read_reviews else {})},
+                    start_to_close_timeout=timedelta(seconds=60), retry_policy=DEFAULT_ACTIVITY_RETRY)
+                incoming = [(str(item[0]), item[1]) for item in page["events"]]
+                if queue_v2:
+                    self._events[0:0] = incoming
+                    self._durable_prefix += len(incoming)
+                    if read_reviews:
+                        self._review_overflow_checked = not incoming
+                else:
+                    self._events.extend(incoming)
+                self._overflow = page["more"]
             await workflow.wait_condition(
                 lambda: (
                     self._closed
                     or self._can_requested
-                    or (self._state == "running" and bool(self._events))
+                    or self._next_event() is not None
                 )
             )
             if self._closed:
@@ -172,7 +244,10 @@ class WorkflowControlWorkflow:
                 await self._continue_as_new(control_data)
                 # Unreachable in a real run; direct unit invocation returns.
                 break
-            listener_id, event = self._events.pop(0)
+            selected_index = self._next_event() or 0
+            listener_id, event = self._events.pop(selected_index)
+            if queue_v2 and selected_index < self._durable_prefix:
+                self._durable_prefix -= 1
             spec = self._triggers.get(listener_id)
             if spec is None:
                 continue
@@ -187,6 +262,10 @@ class WorkflowControlWorkflow:
                 workflow.logger.error(
                     f"Controller push spawn failed for event.id={event.get('id')}: {exc}"
                 )
+                if queue_v2:
+                    self._events.insert(0, (listener_id, event))
+                    self._durable_prefix += 1
+                    await workflow.sleep(timedelta(seconds=5))
             self._maybe_request_rollover()
         return {"state": self._state, "generation": control_data.get("generation")}
 
@@ -251,20 +330,61 @@ class WorkflowControlWorkflow:
             task.cancel()
         if self._poll_tasks:
             await asyncio.gather(*self._poll_tasks.values(), return_exceptions=True)
-        dropped = max(0, len(self._events) - _MAX_CARRIED_EVENTS)
-        if dropped:
-            workflow.logger.warning(
-                f"Controller rollover dropping {dropped} oldest queued event(s) "
-                f"beyond the {_MAX_CARRIED_EVENTS} carry cap"
-            )
+        queue_v2 = workflow.patched("controller-durable-queue-v2")
+        if queue_v2:
+            from services.temporal.controller_queue import event_batches
+            # Carried events precede previously spilled pages. New arrivals
+            # belong after those pages, even when signals arrived mid-drain.
+            prefix_count = self._durable_prefix if self._overflow else len(self._events)
+            prefix = self._events[:prefix_count]
+            chunks = list(event_batches(prefix, max_events=_MAX_CARRIED_EVENTS))
+            import json
+            import hashlib
+            async def spill(batch, prepend=False):
+                base = {"controller_id": workflow.info().workflow_id, "prepend": prepend}
+                async def invoke(payload):
+                    await workflow.execute_activity("controller.queue.spill", payload, start_to_close_timeout=timedelta(seconds=60), retry_policy=DEFAULT_ACTIVITY_RETRY)
+                if len(batch) == 1:
+                    encoded = json.dumps(batch[0], separators=(",", ":"), ensure_ascii=True)
+                    if len(encoded.encode()) > 512_000:
+                        listener_id, event = batch[0]
+                        key = hashlib.sha256(f'{base["controller_id"]}:{listener_id}:{event["id"]}'.encode()).hexdigest()
+                        pieces = [encoded[index:index + 200_000] for index in range(0, len(encoded), 200_000)]
+                        for index, piece in enumerate(pieces):
+                            await invoke({**base, "chunk_id": key, "index": index, "chunk": piece})
+                        await invoke({**base, "chunk_id": key, "count": len(pieces)})
+                        return
+                await invoke({**base, "events": batch})
+            carry = chunks[0] if chunks and len(json.dumps(chunks[0]).encode()) <= 512_000 else []
+            for batch in reversed(chunks[1:] if carry else chunks):
+                await spill(batch, prepend=True)
+                self._overflow = True
+            for batch in event_batches(self._events[prefix_count:]):
+                await spill(batch)
+                self._overflow = True
+        else:
+            durable_queue = workflow.patched("controller-durable-overflow-v1")
+            carry = self._events[-_MAX_CARRIED_EVENTS:]
+            if durable_queue and len(self._events) > _MAX_CARRIED_EVENTS:
+                # Spill the tail, retaining the oldest accepted events in FIFO
+                # order in the bounded carry. No accepted event is discarded.
+                await workflow.execute_activity("controller.queue.spill", {
+                    "controller_id": workflow.info().workflow_id,
+                    "events": [list(item) for item in self._events[_MAX_CARRIED_EVENTS:]]},
+                    start_to_close_timeout=timedelta(seconds=60), retry_policy=DEFAULT_ACTIVITY_RETRY)
+                self._overflow = True
+                carry = self._events[:_MAX_CARRIED_EVENTS]
         carried: Dict[str, Any] = {
             **control_data,
             "state": self._state,
             "revision": self._revision,
             "triggers": self._triggers,
             "pending_events": [
-                list(item) for item in self._events[-_MAX_CARRIED_EVENTS:]
+                list(item) for item in carry
             ],
+            "overflow": self._overflow,
+            "durable_prefix": len(carry),
+            "drain_tasks": self._drain_tasks,
             "seen_event_ids": list(self._seen_event_ids)[-_MAX_CARRIED_SEEN_IDS:],
         }
         workflow.logger.info(
@@ -321,13 +441,19 @@ class WorkflowControlWorkflow:
         await listener._spawn_child_run(
             event,
             listener_args,
-            admission_check=self._wait_until_running,
+            admission_check=self._wait_until_review if self._drain_tasks and listener_args.get("node_type") == "taskTrigger" else self._wait_until_running,
             search_attributes=(
                 event_workflow_search_attributes(
                     listener_args.get("workflow_id")
                 )
             ),
         )
+
+    async def _wait_until_review(self) -> None:
+        if not self._drain_tasks:
+            await self._wait_until_running()
+        if self._closed:
+            raise asyncio.CancelledError
 
     async def _wait_until_running(self) -> None:
         if self._state != "running":
@@ -397,6 +523,11 @@ class WorkflowControlWorkflow:
                 if not event_id or dedup_key in self._seen_event_ids:
                     continue
                 self._remember_event_id(dedup_key)
+                if workflow.patched("controller-durable-queue-v2"):
+                    # Persist in the controller queue before waiting for pause
+                    # admission. CAN cancellation can no longer lose a seen event.
+                    self._events.append((listener_id, event))
+                    continue
                 if self._state != "running":
                     await workflow.wait_condition(lambda: self._closed or self._state == "running")
                 if self._closed:

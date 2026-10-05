@@ -161,6 +161,18 @@ describe('EmployeeView', () => {
     });
   });
 
+  it.each([
+    ['team_temporal_required', 'Their team is saved, but team work is not ready on this installation. Ask your administrator to finish setup, then press Start again.'],
+    ['team_agent_workflow_required', 'Their team is saved, but team work is not ready on this installation. Ask your administrator to finish setup, then press Start again.'],
+    ['team_runtime_not_ready', 'Their team is saved and waiting for the service to be ready. Try Start again in a moment.'],
+    ['teams_disabled', 'Team hiring is not available on this installation yet. Ask your administrator to enable it.'],
+  ])('explains %s without runtime terminology', async (code, message) => {
+    actions.startEmployee.mockRejectedValue(new Error(code));
+    renderPage(summary({ status: 'ready', talk: TALK_ON }, { state: 'never_started' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    await waitFor(() => expect(pillToast).toHaveBeenCalledWith(message, { tone: 'error' }));
+  });
+
   it('opens the "Connect an AI model" dialog from the conversation', () => {
     useShellDialogsStore.setState({ credentialsOpen: false });
     renderPage(summary({ status: 'ready', talk: TALK_ON, needs_ai: true }, { state: 'never_started' }));

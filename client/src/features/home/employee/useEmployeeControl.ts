@@ -31,6 +31,10 @@ const CONTROL_ERRORS: Record<string, string> = {
   control_revision_conflict: 'That changed a moment ago. Try again.',
   missing_apps: 'Connect the apps they use first.',
   needs_ai: 'Connect an AI model first.',
+  team_temporal_required: 'Their team is saved, but team work is not ready on this installation. Ask your administrator to finish setup, then press Start again.',
+  team_agent_workflow_required: 'Their team is saved, but team work is not ready on this installation. Ask your administrator to finish setup, then press Start again.',
+  team_runtime_not_ready: 'Their team is saved and waiting for the service to be ready. Try Start again in a moment.',
+  teams_disabled: 'Team hiring is not available on this installation yet. Ask your administrator to enable it.',
 };
 
 function controlErrorMessage(error: unknown): string {

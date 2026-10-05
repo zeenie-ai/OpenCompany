@@ -3,7 +3,7 @@
  * shared chat (features/chat); this is what only an employee has:
  *
  * - `useEnableTalk()` / `useApplyChanges()`: Turn on Talk and Apply. Both
- *   restart the employee, so they wait as long as Start does, then refresh
+ *   apply the saved graph after current work finishes, then refresh
  *   the team from the database.
  * - `useRetryNote(...)`: while the talk agent waits to retry after a failed
  *   attempt, what it said, for the chat's status line. It reads the agent's
@@ -17,33 +17,45 @@ import { WORKFLOW_CONTROL_REQUEST_TIMEOUT, useWebSocketActions } from '@/context
 import { useNodeStatusStore } from '@/stores/nodeStatusStore';
 import { refreshEmployee } from './employees';
 
-/** Both restart the employee on the server. Refresh the queries afterwards,
+/** Both request a safe graph handoff. Refresh the queries afterwards,
  *  including failures that may have changed the employee before failing.
  *  Every click sends its own idempotency key. Errors carry the server's code. */
 function useEmployeeChange(type: 'enable_employee_talk' | 'apply_employee_changes') {
   const { sendRequest } = useWebSocketActions();
   const queryClient = useQueryClient();
-  return useMutation<void, Error, string>({
+  return useMutation<{ activation_state?: string }, Error, string>({
     mutationFn: async (workflowId) => {
-      const response = await sendRequest<{ success?: boolean; error?: string }>(
+      const response = await sendRequest<{ success?: boolean; error?: string; activation_state?: string }>(
         type,
         { workflow_id: workflowId, idempotency_key: crypto.randomUUID() },
         WORKFLOW_CONTROL_REQUEST_TIMEOUT,
       );
       if (response?.success === false) throw new Error(response.error || 'failed');
+      return { activation_state: response?.activation_state };
     },
     onSettled: (_data, _error, workflowId) => refreshEmployee(queryClient, workflowId),
   });
 }
 
-/** Adds a talk line to the employee and restarts it. */
+/** Adds a talk line without clearing the employee's conversation or work. */
 export function useEnableTalk() {
   return useEmployeeChange('enable_employee_talk');
 }
 
-/** Restarts the employee on its latest saved graph. */
+/** Applies the employee's latest graph after current work finishes. */
 export function useApplyChanges() {
   return useEmployeeChange('apply_employee_changes');
+}
+
+/** Explicitly interrupt current work while preserving queued requests and conversation. */
+export function useStopAndApply() {
+  const { sendRequest } = useWebSocketActions();
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, string>({ mutationFn: async (workflowId) => {
+    const response = await sendRequest<{ success?: boolean; error?: string }>('apply_employee_changes',
+      { workflow_id: workflowId, idempotency_key: crypto.randomUUID(), stop_work: true }, WORKFLOW_CONTROL_REQUEST_TIMEOUT);
+    if (response?.success === false) throw new Error(response.error || 'failed');
+  }, onSettled: (_data, _error, workflowId) => refreshEmployee(queryClient, workflowId) });
 }
 
 /** "{why} Retrying automatically…" while the talk agent waits to try again;

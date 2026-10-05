@@ -16,6 +16,7 @@
 MagicMock
 test-temp-v2
 media
+!media/brand/README.md
 import.json
 **/*.log
 
@@ -44,6 +45,7 @@ server/nodejs/dist
 
 # The Electron shell is not part of the server image.
 desktop
+!desktop/README.md
 
 # Neither is the product film (a standalone Remotion package with its own
 # node_modules, rendered audio and video output).

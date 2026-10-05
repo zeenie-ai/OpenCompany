@@ -263,7 +263,7 @@ describe('sending', () => {
 });
 
 describe('Turn on Talk', () => {
-  it('confirms, mentioning the drafts a restart throws away, then turns Talk on', async () => {
+  it('reviews Talk without losing drafts, then turns it on', async () => {
     const user = userEvent.setup();
     const off = employee({ talk: { state: 'off', agent_node_id: null }, pending_approvals: 2 });
     const fromDatabase = employee({ revision: 10, talk: { state: 'on', agent_node_id: AGENT } });
@@ -281,7 +281,7 @@ describe('Turn on Talk', () => {
 
     await user.click(screen.getByRole('button', { name: 'Turn on Talk' }));
     const dialog = await screen.findByRole('alertdialog');
-    expect(dialog).toHaveTextContent('Maya has 2 drafts waiting for you. Restarting throws them away, so check them first.');
+    expect(dialog).toHaveTextContent('Their conversations and drafts waiting for approval stay in place.');
     await user.click(screen.getByRole('button', { name: 'Turn on Talk' }));
 
     await waitFor(() => expect(pillToast).toHaveBeenCalledWith('Talk is on. Say hello to Maya.'));
@@ -304,14 +304,14 @@ describe('Apply', () => {
     });
   }
 
-  it('restarts the employee on the latest setup', async () => {
+  it('applies the saved abilities after current work finishes', async () => {
     const summary = employee({ pending_changes: true });
     const fromDatabase = employee({ pending_changes: false, revision: 14 });
     applyServer((resolve) => resolve({ success: true, employee: { ...summary, control: undefined, pending_changes: false, revision: 12 } }), () => [fromDatabase]);
     renderChat(summary);
-    expect(await screen.findByText(/Maya has new abilities for this conversation\./)).toBeInTheDocument();
+    expect(await screen.findByText(/Maya has new abilities saved\./)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
-    await waitFor(() => expect(pillToast).toHaveBeenCalledWith('Maya restarted with the new abilities.'));
+    await waitFor(() => expect(pillToast).toHaveBeenCalledWith('Maya will use the new abilities after current work finishes.'));
     expect(sendRequest).toHaveBeenCalledWith(
       'apply_employee_changes',
       { workflow_id: 'w1', idempotency_key: expect.any(String) },
@@ -321,16 +321,16 @@ describe('Apply', () => {
     expect(sendRequest).toHaveBeenCalledWith('list_employees', {});
   });
 
-  it('refreshes database state when the restart fails instead of merging its response summary', async () => {
+  it('refreshes database state when the handoff fails instead of merging its response summary', async () => {
     const summary = employee({ pending_changes: true });
     const fromDatabase = employee({ pending_changes: true, revision: 15 }, 'ready');
     applyServer(
-      (resolve) => resolve({ success: false, error: 'restart_failed', employee: { ...summary, control: { state: 'ready' }, revision: 13 } }),
+      (resolve) => resolve({ success: false, error: 'apply_failed', employee: { ...summary, control: { state: 'ready' }, revision: 13 } }),
       () => [fromDatabase],
     );
     renderChat(summary);
     fireEvent.click(await screen.findByRole('button', { name: 'Apply' }));
-    await waitFor(() => expect(pillToast).toHaveBeenCalledWith('Maya couldn’t restart. Try starting them again.', { tone: 'error' }));
+    await waitFor(() => expect(pillToast).toHaveBeenCalledWith('Maya couldn’t apply the new abilities yet. Their current setup is still in place.', { tone: 'error' }));
     await waitFor(() => expect(client.getQueryData<EmployeeSummary[]>(EMPLOYEES_QUERY_KEY)?.[0]).toMatchObject({ revision: 15, control: { state: 'ready' } }));
     expect(sendRequest).toHaveBeenCalledWith('list_employees', {});
   });

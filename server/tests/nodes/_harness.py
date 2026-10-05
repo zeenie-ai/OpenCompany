@@ -200,6 +200,13 @@ class NodeTestHarness:
 
 def _build_mock_database() -> MagicMock:
     db = MagicMock(name="Database")
+    # Legacy node fixtures have no employee grants. Model SQLAlchemy's
+    # synchronous result/scalar APIs after the asynchronous execute call.
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = []
+    session = MagicMock()
+    session.execute = AsyncMock(return_value=result)
+    db.get_session.return_value.__aenter__ = AsyncMock(return_value=session)
     db.get_node_parameters = AsyncMock(return_value={})
     db.save_node_parameters = AsyncMock(return_value=None)
     db.save_api_usage_metric = AsyncMock(return_value=None)

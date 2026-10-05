@@ -10,7 +10,7 @@ frame open editors receive are what is asserted.
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -80,9 +80,14 @@ class TestRegistration:
     def test_node_is_registered(self):
         assert get_node_class("agentBuilder") is ab.AgentBuilderNode
 
-    def test_has_five_operations(self):
+    def test_preserves_operations_and_adds_documentation_access(self):
         assert set(ab.AgentBuilderNode._operations.keys()) == {
             "inspect_canvas",
+            "inspect_node",
+            "search_docs",
+            "read_doc",
+            "plan_update",
+            "apply_update",
             "add_tool",
             "add_skill",
             "add_subagent",
@@ -574,18 +579,14 @@ class TestAddSubagent:
 
 
 class TestCreateWorkflow:
-    """create_workflow is temporarily disabled. The first test locks
-    the disabled default; the remaining tests flip the
-    ``_CREATE_WORKFLOW_ENABLED`` flag so the underlying implementation
-    keeps being exercised."""
+    """Creation delegates to the shared Hire/control boundary, never a placeholder graph."""
 
-    async def test_disabled_by_default(self):
-        assert ab._CREATE_WORKFLOW_ENABLED is False, "Temporary disable flag must default to False"
-
+    async def test_operator_can_disable_creation(self, monkeypatch):
+        monkeypatch.setattr(ab, "_CREATE_WORKFLOW_ENABLED", False)
         result = await call("create_workflow", ctx(), workflow_name="Should Not Be Created")
 
         assert result.workflow_id is None
-        assert "temporarily disabled" in result.summary.lower()
+        assert "disabled by the operator" in result.summary.lower()
 
     async def test_rejects_empty_name(self, monkeypatch):
         monkeypatch.setattr(ab, "_CREATE_WORKFLOW_ENABLED", True)
@@ -595,33 +596,21 @@ class TestCreateWorkflow:
         assert result.workflow_id is None
         assert "workflow_name is required" in result.summary
 
-    async def test_persists_via_database_and_returns_id(self, monkeypatch):
-        monkeypatch.setattr(ab, "_CREATE_WORKFLOW_ENABLED", True)
-        mock_db = MagicMock()
-        mock_db.allocate_workflow_id = AsyncMock(return_value="1")
-        mock_db.save_workflow = AsyncMock(return_value=True)
-        mock_db.list_workflow_slugs = AsyncMock(return_value=[])
-        mock_container = MagicMock()
-        mock_container.database.return_value = mock_db
-
-        with patch("core.container.container", mock_container):
-            result = await call("create_workflow", ctx(), workflow_name="My New Workflow", workflow_description="An optional description")
-
+    async def test_uses_shared_control_and_stable_identity(self, monkeypatch):
+        create = AsyncMock(return_value={"success": True, "workflow_id": "1", "activation_state": "starting"})
+        monkeypatch.setattr("services.employees.control.builder_create", create)
+        context = ctx(call="create-call")
+        result = await call("create_workflow", context, workflow_name="My New Workflow", workflow_description="An optional description")
         assert result.workflow_id == "1"
-        assert "My_New_Workflow_1" in result.summary
-        mock_db.save_workflow.assert_awaited_once()
+        assert result.activation_state == "starting"
+        assert create.await_args.args == (context, "My New Workflow", "An optional description", result.request_id)
+        again = await call("create_workflow", context, workflow_name="My New Workflow", workflow_description="An optional description")
+        assert again.request_id == result.request_id
 
     async def test_returns_failure_summary_when_persist_fails(self, monkeypatch):
-        monkeypatch.setattr(ab, "_CREATE_WORKFLOW_ENABLED", True)
-        mock_db = MagicMock()
-        mock_db.allocate_workflow_id = AsyncMock(return_value="1")
-        mock_db.save_workflow = AsyncMock(return_value=False)
-        mock_db.list_workflow_slugs = AsyncMock(return_value=[])
-        mock_container = MagicMock()
-        mock_container.database.return_value = mock_db
-
-        with patch("core.container.container", mock_container):
-            result = await call("create_workflow", ctx(), workflow_name="Doomed Workflow")
-
+        create = AsyncMock(return_value={"success": False, "summary": "Could not save the employee", "activation_state": "failed"})
+        monkeypatch.setattr("services.employees.control.builder_create", create)
+        result = await call("create_workflow", ctx(), workflow_name="Doomed Workflow")
         assert result.workflow_id is None
-        assert "failed to persist" in result.summary
+        assert result.summary == "Could not save the employee"
+        assert result.activation_state == "failed"

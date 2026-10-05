@@ -290,6 +290,8 @@ class TriggerManager:
             parts = time_str.split(":")
             hour = parts[0] if parts else "9"
             minute = parts[1] if len(parts) > 1 else "0"
+            if parameters.get("weekday_only") is True:
+                weekday = "1-5"
 
         elif frequency == "weeks":
             time_str = parameters.get("weekly_time", "09:00")

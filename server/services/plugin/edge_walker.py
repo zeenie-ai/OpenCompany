@@ -198,6 +198,9 @@ async def collect_agent_connections(
     graphs may still yield their recorded Memory descriptor.
     docstring for behaviour notes.
     """
+    if context.get("parameter_snapshot"):
+        from services.agent_bindings import ParameterSnapshotDatabase
+        database = ParameterSnapshotDatabase(database, context["parameter_snapshot"])
     nodes = context.get("nodes")
     edges = context.get("edges")
     workflow_id = context.get("workflow_id")
@@ -686,6 +689,9 @@ async def collect_teammate_connections(
     text the lead's roster shows, since the delegate tools themselves are
     hidden from the lead's model.
     """
+    if context.get("parameter_snapshot"):
+        from services.agent_bindings import ParameterSnapshotDatabase
+        database = ParameterSnapshotDatabase(database, context["parameter_snapshot"])
     teammates: List[Dict[str, Any]] = []
     descriptors = build_teammate_descriptors(node_id, context)
     nodes = context.get("nodes", []) or []

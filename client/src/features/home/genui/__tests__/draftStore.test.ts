@@ -43,6 +43,17 @@ type Send = (type: string, data?: Record<string, unknown>, timeoutMs?: number) =
 afterEach(() => resetDraftForTests());
 
 describe('submitDraft', () => {
+  it('keeps only plain responsibilities in the optional team preview', async () => {
+    const send = vi.fn<Send>().mockResolvedValue({
+      success: true, reply: GOOD_REPLY,
+      team: [{ responsibility: 'Checks your calendar', node_type: 'productivity_agent' }, { responsibility: '' }, null],
+    });
+    await submitDraft(send, 'Book my appointments');
+    expect(useDraftStore.getState().team).toEqual([{ responsibility: 'Checks your calendar' }]);
+    discardDraft(send);
+    expect(useDraftStore.getState().team).toEqual([]);
+  });
+
   it('sends the job with a fresh draft token and shows the reply', async () => {
     const send = vi.fn<Send>().mockResolvedValue({ success: true, reply: GOOD_REPLY, provider: 'openai', model: 'gpt-x' });
     await submitDraft(send, '  Answer my WhatsApp  ');
@@ -155,6 +166,17 @@ describe('submitDraft', () => {
 });
 
 describe('cancelDraft', () => {
+  it('discard keeps an outstanding hire owned until its response arrives', () => {
+    const key = beginHire('job');
+    const version = useDraftStore.getState().version;
+    discardDraft(vi.fn().mockResolvedValue({}));
+    expect(useDraftStore.getState().hiring).toBe(true);
+    expect(useDraftStore.getState().hireKey?.key).toBe(key);
+    expect(useDraftStore.getState().version).toBeGreaterThan(version);
+    expect(beginHire('another job')).toBeNull();
+    endHire(true);
+    expect(beginHire('another job')).not.toBeNull();
+  });
   it('stops a new job and puts its words back in the composer', async () => {
     const pending = deferred<unknown>();
     const send = vi.fn<Send>((type) => (type === 'generate_employee_setup' ? pending.promise : Promise.resolve({})));

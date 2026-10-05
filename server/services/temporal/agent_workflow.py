@@ -55,6 +55,7 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy  # kept for type hints
 from temporalio.workflow import ActivityCancellationType, ParentClosePolicy
 
+from services.agent_bindings import unique_node_bindings
 from services.node_registry import get_node_class
 from services.tool_output import bound_tool_output, tool_output_is_capped
 
@@ -278,6 +279,8 @@ _INHERITED_SCOPE_KEYS = (
     # The chat run the root run answers (services/chat/), so a tool call
     # or a delegated agent can attach what it produces to that answer.
     "run_scope",
+    "employee_job_id",
+    "parameter_snapshot",
 )
 
 
@@ -722,7 +725,12 @@ class AgentWorkflow:
         # The provider-visible name is the dispatch key. Duplicate names fail
         # before the first billed LLM call and identify every conflicting
         # canvas node, instead of silently selecting the last connected one.
+        if payload.get("parameter_snapshot"):
+            context["parameter_snapshot"] = payload["parameter_snapshot"]
+        binding_refresh_v2 = workflow.patched("agent-node-binding-refresh-v2")
         tools = payload.get("tools") or []
+        if binding_refresh_v2:
+            tools = unique_node_bindings(tools, id_key="tool_node_id")
         duplicate_tool_error = _duplicate_visible_tool_name_error(tools)
         duplicate_tool_conflicts = (
             _duplicate_visible_tool_name_conflicts(tools)
@@ -1483,6 +1491,10 @@ class AgentWorkflow:
                     "parent_workflow_id": workflow.info().workflow_id,
                     "parent_run_id": workflow.info().run_id,
                     "task": mission,
+                    "employee_job_id": context.get("employee_job_id"),
+                    "context": request.get("context"),
+                    "acceptance_criteria": request.get("acceptance_criteria"),
+                    "depends_on": request.get("depends_on") or [],
                     "root_execution_id": root_execution_id,
                     "delegation_depth": delegation_depth + 1,
                     "trace_id": trace_id,
@@ -1499,6 +1511,8 @@ class AgentWorkflow:
                     start_to_close_timeout=PERSIST_TURN_TIMEOUT,
                     retry_policy=AGENT_ACTIVITY_RETRY,
                 )
+                if context.get("employee_job_id"):
+                    request_context = {**(request_context or {}), "acceptance_criteria": request.get("acceptance_criteria"), "depends_on": request.get("depends_on") or []}
                 context_text = request_context if isinstance(request_context, str) else _serialise_tool_result(request_context)
                 child_context = {
                     # Inherited scope first: explicit keys below win.
@@ -1576,6 +1590,7 @@ class AgentWorkflow:
                         "root_execution_id": root_execution_id,
                         "parent_node_id": agent_node_id,
                         "team_lead_node_id": agent_node_id,
+                        "employee_job_id": context.get("employee_job_id"),
                         "nodes": context.get("nodes") or [],
                         "edges": context.get("edges") or [],
                         **preflight_metadata,
@@ -1787,6 +1802,7 @@ class AgentWorkflow:
                     # like Simple Memory's operation/content and degrades the
                     # call to a no-op.
                     "tool_args": call_args,
+                    **({"parameter_snapshot": context["parameter_snapshot"]} if context.get("parameter_snapshot") else {}),
                     "inputs": {},
                     "workflow_id": payload.get("workflow_id"),
                     "session_id": payload.get("session_id", "default"),
@@ -2041,6 +2057,10 @@ class AgentWorkflow:
                                 "agent_node_type": payload.get("node_type") or context.get("node_type"),
                                 **call_metadata,
                             }
+                            if binding_refresh_v2:
+                                refresh_payload["bound_node_ids"] = [tool.get("tool_node_id") for tool in tools if tool.get("tool_node_id")]
+                                refresh_payload["graph_snapshot"] = {"nodes": context.get("nodes") or [], "edges": context.get("edges") or []}
+                                refresh_payload["parameter_snapshot"] = context.get("parameter_snapshot") or {}
                             await self._wait_until_resumed()
                             refresh_result = await workflow.execute_activity(
                                 "agent.refresh_tools",
@@ -2049,7 +2069,17 @@ class AgentWorkflow:
                                 start_to_close_timeout=timedelta(seconds=30),
                                 retry_policy=AGENT_ACTIVITY_RETRY,
                             )
+                            if binding_refresh_v2 and refresh_result.get("graph_snapshot"):
+                                refreshed_graph = refresh_result["graph_snapshot"]
+                                context["nodes"] = refreshed_graph.get("nodes") or context.get("nodes") or []
+                                context["edges"] = refreshed_graph.get("edges") or context.get("edges") or []
+                                context["parameter_snapshot"] = {**(context.get("parameter_snapshot") or {}), **(refresh_result.get("parameter_updates") or {})}
                             added_tools = refresh_result.get("tools") or []
+                            if binding_refresh_v2:
+                                added_tools = unique_node_bindings(
+                                    added_tools, id_key="tool_node_id",
+                                    bound=[tool.get("tool_node_id") for tool in tools if tool.get("tool_node_id")],
+                                )
                             refresh_duplicate_error = _duplicate_visible_tool_name_error(
                                 [*tools, *added_tools]
                             )
@@ -2088,6 +2118,16 @@ class AgentWorkflow:
                                 tools.append(new_tool)
                                 tool_index[new_tool["name"]] = new_tool
                             if added_tools:
+                                delegates = [tool for tool in tools if tool.get("name", "").startswith("delegate_to_")]
+                                if delegates and binding_refresh_v2:
+                                    roster = "\n".join(
+                                        f"{tool.get('tool_node_id')}: {(tool.get('tool_info') or {}).get('label') or tool.get('node_type')}"
+                                        for tool in delegates
+                                    )
+                                    messages.append(_native_message(
+                                        role="system",
+                                        content="Updated connected teammates (assignee_node_id: label/type):\n" + roster,
+                                    ))
                                 workflow.logger.info(
                                     "AgentWorkflow rebound %d tool(s) after canvas mutation (total bound=%d)",
                                     len(added_tools),

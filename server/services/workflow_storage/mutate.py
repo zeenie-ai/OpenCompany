@@ -24,9 +24,11 @@ what an editor saved meanwhile.
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from sqlmodel import select
 
@@ -49,6 +51,7 @@ class GraphAdditionsResult:
     operations: Sequence[Mapping[str, Any]]
     #: False when the ledger already had this mutation (a retry).
     applied: bool
+    saved_revision: Optional[str] = None
 
 
 class _WorkflowMissing(Exception):
@@ -74,6 +77,9 @@ async def apply_graph_additions(
     *,
     mutation_id: str,
     caller_node_id: Optional[str] = None,
+    prepare: Optional[Callable[[Mapping[str, Any]], Tuple[GraphAdditions, Mapping[str, str]]]] = None,
+    authorize: Optional[Callable[[Any], Awaitable[None]]] = None,
+    authorization_grant_ids: Sequence[str] = (),
 ) -> Optional[GraphAdditionsResult]:
     """Add ``additions`` to the saved workflow in one transaction, then
     announce them. None when the workflow does not exist (nothing is
@@ -85,7 +91,13 @@ async def apply_graph_additions(
         workflow = (await session.execute(select(Workflow).where(Workflow.id == workflow_id))).scalar_one_or_none()
         if workflow is None:
             raise _WorkflowMissing()
-        placed = add_to_graph(workflow_id, workflow.data or {}, additions)
+        if authorize:
+            await authorize(session)
+        # Reuse decisions must observe the graph under the mutation lock.
+        # A preflight read alone permits concurrent calls to bind duplicate
+        # callable identities to the same agent.
+        batch, reused = prepare(workflow.data or {}) if prepare else (additions, {})
+        placed = add_to_graph(workflow_id, workflow.data or {}, batch)
         operations: List[Dict[str, Any]] = []
         for edge in placed.removed_edges:
             operations.append(workflow_ops.delete_edge(str(edge.get("id"))))
@@ -127,11 +139,88 @@ async def apply_graph_additions(
             if merged != current:
                 _write(session, row, node_id, merged)
                 operations.append(workflow_ops.set_node_parameters(node_id, merged))
+        # Team membership is part of the same saved change as the graph and
+        # parameter rows. Summaries/model/permission paths must see every
+        # specialist immediately after commit, including Builder additions.
+        from models.employees import Employee, EmployeeGrant
+
+        employee = (await session.execute(select(Employee).where(Employee.workflow_id == workflow_id))).scalar_one_or_none()
+        if employee is not None and employee.team_plan and (placed.nodes or placed.edges):
+            from services.node_registry import get_node_class
+
+            team = deepcopy(employee.team_plan)
+            roles = dict(employee.node_roles or {})
+            members = list(team.get("members") or [])
+            graph_nodes = {node["id"]: node for node in placed.graph.get("nodes", [])}
+            graph_edges = placed.graph.get("edges", [])
+            lead = roles.get("agent")
+            next_index = max((int(role.split("_")[1]) for role in roles if role.startswith("specialist_") and role.split("_")[1].isdigit()), default=0)
+            for node in placed.nodes:
+                cls = get_node_class(node["type"])
+                if not cls or getattr(cls, "component_kind", "") != "agent" or not any(edge.get("source") == node["id"] and edge.get("target") == lead and edge.get("targetHandle") == "input-teammates" for edge in graph_edges):
+                    continue
+                next_index += 1
+                context = next((candidate["id"] for candidate in graph_nodes.values() if candidate["type"] == "context" and (candidate.get("data") or {}).get("agentNodeId") == node["id"]), None)
+                roles[f"specialist_{next_index}"] = node["id"]
+                if context:
+                    roles[f"specialist_{next_index}_context"] = context
+                config = placed.parameters.get(node["id"], {})
+                members.append({"node_id": node["id"], "node_type": node["type"], "responsibility": config.get("system_message") or node["data"]["label"], "role": "custom", "context_node_id": context, "tools": [], "skills": []})
+                # Child execution and tool access remain linked to the exact
+                # owner-approved specialist bundle. Revoking that parent
+                # grant disables the entire expansion, including nested apps.
+                parent = None
+                for grant_id in authorization_grant_ids:
+                    candidate = await session.get(EmployeeGrant, grant_id)
+                    if candidate and candidate.capability == node["type"] and candidate.member_id == lead:
+                        parent = candidate
+                        break
+                if parent:
+                    capabilities = [node["id"], *(edge["source"] for edge in graph_edges if edge.get("target") == node["id"] and edge.get("targetHandle") == "input-tools")]
+                    for capability_id in capabilities:
+                        capability_node = graph_nodes[capability_id]
+                        params = placed.parameters.get(capability_id)
+                        if params is None:
+                            parameter_row = await _row(session, capability_id)
+                            params = dict(parameter_row.parameters or {}) if parameter_row else {}
+                        identity = hashlib.sha256(f"builder-child:{parent.id}:{node['id']}:{capability_id}".encode()).hexdigest()
+                        session.add(EmployeeGrant(id=identity, workflow_id=workflow_id, owner_id=employee.owner_id,
+                            capability=capability_node["type"], member_id=node["id"], account_id=str((params or {}).get("account_id") or ""),
+                            limits={"approved": True, "parent_grant_id": parent.id, "tool_node_id": capability_id, "parameters": params or {}}))
+            for member in members:
+                member["tools"] = [edge["source"] for edge in graph_edges if edge.get("target") == member["node_id"] and edge.get("targetHandle") == "input-tools"]
+                holder = next((edge["source"] for edge in graph_edges if edge.get("target") == member["node_id"] and edge.get("targetHandle") == "input-skill"), None)
+                if holder:
+                    config = placed.parameters.get(holder)
+                    if config is None:
+                        row = await _row(session, holder)
+                        config = dict(row.parameters or {}) if row else {}
+                    member["skills"] = list((config or {}).get("skills_config") or {})
+                    role = next((key for key, value in roles.items() if value == member["node_id"] and key.startswith("specialist_")), None)
+                    if role:
+                        roles[role + "_skills"] = holder
+            team["members"] = members
+            employee.team_plan = team
+            employee.node_roles = roles
+            employee.updated_at = datetime.now(timezone.utc)
+        reused_labels = {
+            ref: str((node.get("data") or {}).get("label") or node.get("type"))
+            for ref, node_id in reused.items()
+            for node in (workflow.data or {}).get("nodes", [])
+            if node.get("id") == node_id
+        }
+        labels = {**reused_labels, **placed.labels}
+        saved_parameters = {}
+        for node in placed.graph.get("nodes", []):
+            row = await _row(session, node["id"])
+            saved_parameters[node["id"]] = dict(row.parameters or {}) if row is not None else {}
+        revision_value = json.dumps({"graph": placed.graph, "parameters": saved_parameters}, sort_keys=True, separators=(",", ":"), default=str)
         return {
-            "node_ids": placed.node_ids,
-            "labels": placed.labels,
-            "label_keys": {ref: label_key(label) for ref, label in placed.labels.items()},
+            "node_ids": {**reused, **placed.node_ids},
+            "labels": labels,
+            "label_keys": {ref: label_key(label) for ref, label in labels.items()},
             "operations": operations,
+            "saved_revision": hashlib.sha256(revision_value.encode()).hexdigest(),
         }
 
     try:
@@ -150,6 +239,7 @@ async def apply_graph_additions(
         label_keys=stored["label_keys"],
         operations=stored["operations"],
         applied=applied,
+        saved_revision=stored.get("saved_revision"),
     )
     if result.operations:
         await workflow_ops.broadcast_workflow_ops(
