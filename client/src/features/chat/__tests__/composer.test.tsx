@@ -220,6 +220,13 @@ describe('commands, Web and suggestions', () => {
     expect(box()).toHaveValue('What does tomorrow look like?');
   });
 
+  it('suggests nothing in the editor’s chat, a console for trying chat triggers', async () => {
+    renderPane(host({ kind: 'dev', compact: true }));
+    // Attach shows once the chat's context has arrived, commands included.
+    await screen.findByRole('button', { name: 'Attach files' });
+    expect(screen.queryByRole('button', { name: /Check a day in the calendar/ })).not.toBeInTheDocument();
+  });
+
   it('offers nothing of this where the chat allows none', async () => {
     server.context = { success: true, commands: [], capabilities: { attachments: false, web: false }, limits: { max_attachments: 6 } };
     renderPane();

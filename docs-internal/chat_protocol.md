@@ -420,8 +420,8 @@ editor's console pane (`ConsoleChat`, compact, scope `live`) are the two hosts.
   ones' paths. The microphone (`VoiceRecorder`, MediaRecorder with live levels) shows when `dictation_status` says a
   provider can transcribe. A draft that is one word starting with `/` opens `SlashMenu` (Popover over cmdk; focus
   stays in the box, which carries `aria-controls` and `aria-activedescendant`). The Web chip keeps the employee off
-  web search for the next messages (`composerStore.web`). In an empty chat, commands marked `suggest` show as cards
-  that fill the box. Cmd/Ctrl+K focuses the box on Home; the editor's palette has Focus Chat.
+  web search for the next messages (`composerStore.web`). In an empty chat on Home, commands marked `suggest` show
+  as cards that fill the box; the editor's chat, a console for trying chat triggers, shows none. Cmd/Ctrl+K focuses the box on Home; the editor's palette has Focus Chat.
 - **Changing the conversation** (`data/branches.ts`, `thread/turnActions.ts`): under the owner's message a hover bar
   (`turns/UserTurn.tsx`: time, ‹ 1 / 2 › between versions, Edit, Copy; Edit opens `turns/UserEditBox.tsx` in place,
   Enter sends, Esc cancels, ArrowUp in an empty box edits the last message); under a finished answer

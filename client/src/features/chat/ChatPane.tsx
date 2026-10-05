@@ -320,7 +320,12 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
     },
     [sessionId],
   );
-  const suggestions = useMemo(() => (chatContext?.commands ?? []).filter((command) => command.suggest), [chatContext]);
+  // Home only: the editor's chat is a console for trying chat triggers, where
+  // a card about the employee in an empty chat read as something a Reset left.
+  const suggestions = useMemo(
+    () => (host.kind === 'home' ? (chatContext?.commands ?? []).filter((command) => command.suggest) : []),
+    [chatContext, host.kind],
+  );
 
   // A drop anywhere on the chat adds the files, as Attach does.
   const [dragging, setDragging] = useState(false);
