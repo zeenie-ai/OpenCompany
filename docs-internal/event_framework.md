@@ -255,7 +255,7 @@ pattern `nodes/telegram/_events.py` uses for status. The CloudEvents envelope,
 contract the frontend sees does not change. Normal mode's two events follow
 the same rule: `employee_lifecycle` (`com.opencompany.employee.*`, in
 `services/employees/events.py`) and `approval_lifecycle`
-(`com.opencompany.approval.*`, in `nodes/workflow/approval_gate/_events.py`,
+(`com.opencompany.approval.*`, in `services/approvals/events.py`,
 identity only). See [normal_mode.md](./normal_mode.md#wire-contract). So do
 the Browser plugin's `browser_updated`, `browser_profiles_updated` and
 `browser_runtime` (`com.opencompany.browser.*`, in `nodes/browser/_events.py`;
