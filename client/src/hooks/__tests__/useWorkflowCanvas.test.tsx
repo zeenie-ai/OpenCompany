@@ -39,6 +39,17 @@ describe('employee canvas ownership', () => {
     expect(useAppStore.getState().hasUnsavedChanges).toBe(false);
   });
 
+  it('does not count React Flow measuring the nodes as an edit', () => {
+    // On mount React Flow gives each node its measured size; none of that is
+    // saved, so opening a workflow must not mark it changed and save it.
+    const original = useAppStore.getState().currentWorkflow;
+    const { result } = mount();
+    act(() => result.current.setNodes(nodes => nodes.map(node => ({ ...node, width: 120, height: 80, positionAbsolute: node.position }))));
+    act(() => vi.advanceTimersByTime(1_000));
+    expect(useAppStore.getState().currentWorkflow).toBe(original);
+    expect(useAppStore.getState().hasUnsavedChanges).toBe(false);
+  });
+
   it('flushes edits made just before leaving Dev and preserves them on returning', () => {
     const first = mount();
     act(() => first.result.current.setNodes(nodes => nodes.map(node => ({ ...node, position: { x: 900, y: 100 } }))));

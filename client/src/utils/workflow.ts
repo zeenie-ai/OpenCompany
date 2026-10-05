@@ -32,8 +32,11 @@ export const nextNodeInstanceId = (
   return `${prefix}${Math.max(largest, sameTypeCount) + 1}`;
 };
 
+// What React Flow adds while it shows a node (selection, dragging, the
+// measured size and absolute position) is never saved, so it is no edit:
+// counted, opening a workflow measured every node and saved it as changed.
 export const sanitizeNodesForComparison = (nodes: Node[]): Node[] =>
-  nodes.map(n => ({ ...n, selected: undefined, dragging: undefined }));
+  nodes.map(n => ({ ...n, selected: undefined, dragging: undefined, width: undefined, height: undefined, positionAbsolute: undefined }));
 
 export const sanitizeEdgesForComparison = (edges: Edge[]): Edge[] =>
   edges.map(e => ({ ...e, selected: undefined }));
