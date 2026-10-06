@@ -98,7 +98,28 @@ const planStepSchema = z.object({
 
 const ruleItemSchema = z.object({ key: z.string(), label: z.string(), value: z.boolean() });
 
+const workStepSchema = z.object({
+  id: z.string(),
+  node_id: z.string().nullable().catch(null),
+  label: z.string(),
+  member: z.string().nullable().catch(null),
+  status: z.enum(['queued', 'waiting', 'running', 'reviewing', 'done', 'failed', 'cancelled', 'stopping']).catch('waiting'),
+  started_at: z.string().nullable().catch(null),
+  updated_at: z.string().nullable().catch(null),
+});
+
+export const workProgressSchema = z.object({
+  state: z.string(),
+  message: z.string(),
+  started_at: z.string().nullable().catch(null),
+  updated_at: z.string().nullable().catch(null),
+  steps: z.array(workStepSchema).catch([]),
+  truncated: z.boolean().catch(false),
+});
+export type WorkProgress = z.infer<typeof workProgressSchema>;
+
 export const employeeDetailSchema = employeeSummarySchema.extend({
+  work_progress: workProgressSchema.nullable().catch(null),
   description: z.string().catch(''),
   job: z.string().catch(''),
   plan: z.array(planStepSchema).catch([]),

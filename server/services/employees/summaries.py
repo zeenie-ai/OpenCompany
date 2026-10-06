@@ -440,6 +440,12 @@ async def _load_one(database: Any, workflow_id: str, *, auth_service: Any) -> Op
     if employee and employee.team_plan:
         from services.employees.jobs import job_progress
         summary["job_progress"] = await job_progress(database, workflow_id)
+    from services.employees.work_progress import work_progress
+    summary["work_progress"] = await work_progress(
+        database, workflow, control=control,
+        pending_approvals=summary["pending_approvals"], browser_request=summary["browser_request"],
+        job_status=summary.get("job_progress"),
+    )
     summary["has_team"] = bool(employee and employee.team_plan)
     from core.container import container
     summary["can_give_team"] = bool(employee and not employee.team_plan and getattr(container.settings(), "employee_team_conversion_enabled", False)) if hasattr(container, "settings") else False

@@ -39,7 +39,7 @@ import { PrimaryActionButton } from './PrimaryActionButton';
 import { TurnOnTalk } from './TurnOnTalk';
 import { EmployeeAccess } from './EmployeeAccess';
 import { GiveTeam } from './GiveTeam';
-import { JobProgress } from './JobProgress';
+import { EmployeeWork } from './EmployeeWork';
 import type { EmployeeControl } from './useEmployeeControl';
 
 /** The agent is waiting for the owner in the browser (it called `request_user`). */
@@ -84,7 +84,7 @@ function Notices({ employee, control, queued }: { employee: EmployeeSummary; con
         </Alert>
       )}
       {employee.pending_changes && <PendingChangesNotice employee={employee} />}
-      <JobProgress key={`${employee.job_progress?.request_id || 'none'}:${employee.job_progress?.state || 'none'}`} employee={employee} />
+      <EmployeeWork key={employee.workflow_id} employee={employee} />
       <GiveTeam workflowId={employee.workflow_id} available={employee.can_give_team} />
       <EmployeeAccess workflowId={employee.workflow_id} name={name} pendingOnly />
       {employee.browser_request && <BrowserNotice employee={employee} />}

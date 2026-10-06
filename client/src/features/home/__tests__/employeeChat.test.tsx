@@ -272,6 +272,8 @@ describe('Turn on Talk', () => {
         ? { success: true, employee: { ...off, control: undefined, talk: { state: 'on', agent_node_id: AGENT }, revision: 9 } }
         : type === 'list_employees'
           ? { success: true, employees: [fromDatabase] }
+          : type === 'get_employee'
+            ? { success: true, employee: fromDatabase }
           : type === 'chat_subscribe'
             ? { success: true, hub_epoch: 'e1', active_runs: [] }
             : { success: true, messages: [] },
@@ -288,7 +290,7 @@ describe('Turn on Talk', () => {
     const [, payload, timeout] = sendRequest.mock.calls.find(([type]) => type === 'enable_employee_talk')!;
     expect(payload).toEqual({ workflow_id: 'w1', idempotency_key: expect.any(String) });
     expect(timeout).toBe(WORKFLOW_CONTROL_REQUEST_TIMEOUT);
-    expect(client.getQueryState(employeeDetailKey('w1'))?.isInvalidated).toBe(true);
+    await waitFor(() => expect(client.getQueryData<EmployeeSummary>(employeeDetailKey('w1'))).toMatchObject({ revision: 10, talk: { state: 'on' } }));
     await waitFor(() => expect(client.getQueryData<EmployeeSummary[]>(EMPLOYEES_QUERY_KEY)?.[0]).toMatchObject({ revision: 10, talk: { state: 'on' } }));
     expect(sendRequest).toHaveBeenCalledWith('list_employees', {});
   });

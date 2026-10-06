@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
 import { ActionButton } from '@/components/ui/action-button';
-import { invalidateEmployees } from '../data/employees';
+import { refreshEmployee } from '../data/employees';
 import type { EmployeeSummary } from '../data/schemas';
 
 export function JobProgress({ employee }: { employee: EmployeeSummary }) {
@@ -21,7 +21,7 @@ export function JobProgress({ employee }: { employee: EmployeeSummary }) {
     });
     if (!response?.success) throw new Error(response?.message || 'Your delivery decision could not be saved. Try again.');
     return response;
-  }, onSuccess: () => invalidateEmployees(cache) });
+  }, onSuccess: () => refreshEmployee(cache, employee.workflow_id) });
   if (!progress) return null;
   const needsReview = progress.state === 'delivery_needs_review';
   return <div className="flex flex-col gap-3 rounded-card border border-border-default bg-bg-panel p-4">

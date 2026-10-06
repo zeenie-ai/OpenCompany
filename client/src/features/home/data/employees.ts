@@ -18,6 +18,7 @@ import { useEffect } from 'react';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
 import { makeDebouncedInvalidator } from '@/lib/debouncedInvalidate';
+import { useNodeStatusStore } from '@/stores/nodeStatusStore';
 import { parseEmployeeDetail, parseEmployees, type EmployeeDetail, type EmployeeSummary } from './schemas';
 import { EMPLOYEES_QUERY_KEY, employeeDetailKey, removeEmployee } from './employeeCache';
 
@@ -51,8 +52,28 @@ export function useEmployeesQuery() {
   });
 }
 
-export function useEmployeeDetailQuery(workflowId: string | null) {
+export function useEmployeeDetailQuery(workflowId: string | null, options: { live?: boolean } = {}) {
   const { sendRequest, isReady } = useWebSocketActions();
+  const cache = useQueryClient();
+  const live = options.live === true;
+  useEffect(() => {
+    if (!live || !isReady || !workflowId) return;
+    // A burst of tool/phase broadcasts costs at most one detail read every
+    // three seconds. Polling below also catches durable task transitions and
+    // deliveries that do not emit a node-status event.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const off = useNodeStatusStore.subscribe((state, previous) => {
+      if (state.allStatuses[workflowId] === previous.allStatuses[workflowId] || timer !== undefined) return;
+      timer = setTimeout(() => {
+        timer = undefined;
+        void cache.invalidateQueries({ queryKey: employeeDetailKey(workflowId), exact: true });
+      }, 3000);
+    });
+    return () => {
+      off();
+      if (timer !== undefined) clearTimeout(timer);
+    };
+  }, [cache, isReady, live, workflowId]);
   return useQuery<EmployeeDetail | null, Error>({
     queryKey: employeeDetailKey(workflowId ?? ''),
     queryFn: async () => {
@@ -66,8 +87,15 @@ export function useEmployeeDetailQuery(workflowId: string | null) {
       return parseEmployeeDetail(response?.employee);
     },
     enabled: isReady && Boolean(workflowId),
-    staleTime: 30_000,
+    // Live observers must reconcile immediately when the socket becomes
+    // ready again, even when the retained snapshot is only seconds old.
+    staleTime: live ? 0 : 30_000,
     refetchOnMount: 'always',
+    refetchInterval: !live || !isReady ? false : (query) => {
+      if (query.state.data === null) return false;
+      const progress = query.state.data?.work_progress;
+      return progress && !['idle', 'done', 'failed', 'cancelled'].includes(progress.state) ? 5000 : 15000;
+    },
   });
 }
 
