@@ -89,7 +89,7 @@ class TestDurableTeamDelegationContract:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        source = inspect.getsource(AgentWorkflow.run)
+        source = inspect.getsource(AgentWorkflow._run_impl)
         assert '"team_id": payload.get("team_id") or context.get("team_id")' in source
         assert '"execution_id": context.get("execution_id")' in source
 
@@ -178,7 +178,7 @@ class TestConversationIdentity:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        source = inspect.getsource(AgentWorkflow.run)
+        source = inspect.getsource(AgentWorkflow._run_impl)
         assert "## Compacted summary:" not in source, (
             "the old system-role summary marker is retired"
         )
@@ -211,7 +211,7 @@ class TestConversationIdentity:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        source = inspect.getsource(AgentWorkflow.run)
+        source = inspect.getsource(AgentWorkflow._run_impl)
         assert 'resume.get("transcript")' in source, (
             "a resumed AgentWorkflow must continue from the transcript "
             "carried across continue_as_new"
@@ -238,7 +238,7 @@ class TestConversationIdentity:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        source = inspect.getsource(AgentWorkflow.run)
+        source = inspect.getsource(AgentWorkflow._run_impl)
         assert "_CAN_TRANSCRIPT_MAX_BYTES" in source
         guard_at = source.index("_CAN_TRANSCRIPT_MAX_BYTES")
         can_at = source.index("workflow.continue_as_new(")
@@ -258,7 +258,7 @@ class TestConversationIdentity:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        source = inspect.getsource(AgentWorkflow.run)
+        source = inspect.getsource(AgentWorkflow._run_impl)
         for claim in (
             "reconstructs\n",
             "source of truth for the transcript",
@@ -349,7 +349,7 @@ class TestConversationIdentity:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        source = inspect.getsource(AgentWorkflow.run)
+        source = inspect.getsource(AgentWorkflow._run_impl)
         initialization = source.index("root_execution_id = str(")
         tool_loop = source.index("for iteration in range(iteration_offset, max_iterations)")
         result_payload = source.index('"root_execution_id": root_execution_id')
@@ -360,7 +360,7 @@ class TestConversationIdentity:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        source = inspect.getsource(AgentWorkflow.run)
+        source = inspect.getsource(AgentWorkflow._run_impl)
         assert "workflow.start_child_workflow" in source
         assert "max_concurrent_subagents" in source
         assert "delegation_handles[call_index]" in source
@@ -371,7 +371,7 @@ class TestConversationIdentity:
 
         from services.temporal.agent_workflow import AgentWorkflow, DelegatedTaskWorkflow
 
-        lead_source = inspect.getsource(AgentWorkflow.run)
+        lead_source = inspect.getsource(AgentWorkflow._run_impl)
         runner_source = inspect.getsource(DelegatedTaskWorkflow.run)
         assert '"DelegatedTaskWorkflow"' in lead_source
         assert "ParentClosePolicy.ABANDON" in lead_source
@@ -385,7 +385,7 @@ class TestConversationIdentity:
         from services.temporal.agent_activities import prepare_agent_payload
         from services.temporal.agent_workflow import AgentWorkflow
 
-        workflow_source = inspect.getsource(AgentWorkflow.run)
+        workflow_source = inspect.getsource(AgentWorkflow._run_impl)
         prepare_source = inspect.getsource(prepare_agent_payload)
         assert "Team finalization is blocked" not in workflow_source
         assert "must not force this lead" in workflow_source
@@ -396,7 +396,7 @@ class TestConversationIdentity:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        source = inspect.getsource(AgentWorkflow.run)
+        source = inspect.getsource(AgentWorkflow._run_impl)
         for field in (
             "root_execution_id",
             "parent_node_id",
@@ -413,7 +413,7 @@ class TestConversationIdentity:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        source = inspect.getsource(AgentWorkflow.run)
+        source = inspect.getsource(AgentWorkflow._run_impl)
         queue_at = source.index('"agent.queue_delegation"')
         acquire_at = source.index('"agent.acquire_subagent_permit"')
         claim_at = source.index('"agent.begin_delegation"')
@@ -430,7 +430,7 @@ class TestConversationIdentity:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        source = inspect.getsource(AgentWorkflow.run)
+        source = inspect.getsource(AgentWorkflow._run_impl)
         assert 'tool_info["node_type"] == "taskManager"' in source
         assert 'tool_result.get("delegation_request")' in source
         assert "_run_task_manager_delegation" in source
@@ -443,7 +443,7 @@ class TestConversationIdentity:
 
         from services.temporal.agent_workflow import AgentWorkflow, DelegatedTaskWorkflow
 
-        source = inspect.getsource(AgentWorkflow.run)
+        source = inspect.getsource(AgentWorkflow._run_impl)
         queue = source.index('activity_id=f"queue-task-manager-')
         detached = source.index('"DelegatedTaskWorkflow"', queue)
         assert queue < detached
@@ -462,7 +462,7 @@ class TestConversationIdentity:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        source = inspect.getsource(AgentWorkflow.run)
+        source = inspect.getsource(AgentWorkflow._run_impl)
         assert "yield-own-permit-task-manager" in source
         assert "if own_permit_id and not yielded_own_permit" in source
 
@@ -471,7 +471,7 @@ class TestConversationIdentity:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        source = inspect.getsource(AgentWorkflow.run)
+        source = inspect.getsource(AgentWorkflow._run_impl)
         start_activity = source.index("workflow.start_activity(")
         gather = source.index("await asyncio.gather(")
         create_children = source.index("asyncio.create_task(", gather)
@@ -614,7 +614,7 @@ class TestAgentActivities:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        source = inspect.getsource(AgentWorkflow.run)
+        source = inspect.getsource(AgentWorkflow._run_impl)
         failure = source.index("except Exception as e:", source.index('"agent.execute_llm_step"'))
         terminal_return = source.index('"error_type": "LLMStepError"', failure)
         cleanup = source.index('activity_id="clear-active-skills-failed"', failure)
@@ -693,7 +693,7 @@ class TestPayloadShape:
         constant here so the docstring can't quietly shrink."""
         from services.temporal.agent_workflow import AgentWorkflow
 
-        docstring = AgentWorkflow.run.__doc__ or ""
+        docstring = AgentWorkflow._run_impl.__doc__ or ""
         missing = [k for k in self.REQUIRED_KEYS if f'"{k}"' not in docstring]
         assert not missing, (
             f"AgentWorkflow.run docstring missing payload keys: {missing}. "
@@ -730,7 +730,7 @@ class TestDelegationToolDispatch:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        src = inspect.getsource(AgentWorkflow.run)
+        src = inspect.getsource(AgentWorkflow._run_impl)
 
         # Detection: must check for the ``delegate_to_`` tool-name prefix.
         assert "delegate_to_" in src, (
@@ -757,7 +757,7 @@ class TestDelegationToolDispatch:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        src = inspect.getsource(AgentWorkflow.run)
+        src = inspect.getsource(AgentWorkflow._run_impl)
 
         # The fix uses ``context.get("nodes")`` / ``context.get("edges")``
         # inside the delegation branch.
@@ -823,7 +823,7 @@ class TestAutoRebindTools:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        src = inspect.getsource(AgentWorkflow.run)
+        src = inspect.getsource(AgentWorkflow._run_impl)
         assert '"agent.refresh_tools"' in src, (
             "AgentWorkflow tool dispatch must schedule agent.refresh_tools.v1 "
             "when a tool result returns workflow_ops operations."
@@ -859,7 +859,7 @@ class TestAutoRebindTools:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        src = inspect.getsource(AgentWorkflow.run)
+        src = inspect.getsource(AgentWorkflow._run_impl)
         assert '"auto_rebind_tools"' in src, (
             "AgentWorkflow tool_payload must include auto_rebind_tools "
             "so the per-tool activity surfaces it into ctx.raw."
@@ -883,7 +883,7 @@ class TestExecutionIdPropagation:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        src = inspect.getsource(AgentWorkflow.run)
+        src = inspect.getsource(AgentWorkflow._run_impl)
         assert '"execution_id"' in src, (
             "AgentWorkflow tool_payload must include execution_id so "
             "session-keyed tools (browser) reuse one instance per run."
@@ -959,7 +959,7 @@ class TestDelegationInvocationContract:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        src = inspect.getsource(AgentWorkflow.run)
+        src = inspect.getsource(AgentWorkflow._run_impl)
         assert '"invocation"' in src, (
             "AgentWorkflow delegation spawn must pass the per-invocation "
             "{task, context} as the child workflow input's 'invocation' "
@@ -975,7 +975,7 @@ class TestDelegationInvocationContract:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        src = inspect.getsource(AgentWorkflow.run)
+        src = inspect.getsource(AgentWorkflow._run_impl)
         assert "non-empty 'task'" in src, (
             "AgentWorkflow delegation branch must validate the invocation "
             "(task/context both empty -> tool error, no child spawn)."
@@ -1085,7 +1085,7 @@ class TestNeedsCanvasDispatch:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        src = inspect.getsource(AgentWorkflow.run)
+        src = inspect.getsource(AgentWorkflow._run_impl)
         assert "get_node_class(" in src, (
             "AgentWorkflow tool dispatch must call ``get_node_class("
             "tool_info['node_type'])`` so it can read the plugin's "
@@ -1167,7 +1167,7 @@ class TestCompactionPauseIsNotAnAnswer:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        source = inspect.getsource(AgentWorkflow.run)
+        source = inspect.getsource(AgentWorkflow._run_impl)
         # Without this the workflow cannot distinguish the two stop kinds.
         assert '"include_finish_reason": True' in source
 
@@ -1176,7 +1176,7 @@ class TestCompactionPauseIsNotAnAnswer:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        source = inspect.getsource(AgentWorkflow.run)
+        source = inspect.getsource(AgentWorkflow._run_impl)
         assert 'finish_reason == "compaction"' in source
         # The guard must sit BEFORE the final-answer branch, or the answer
         # is already returned by the time it runs.
@@ -1217,7 +1217,7 @@ class TestDelegatedChildrenInheritScope:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        source = inspect.getsource(AgentWorkflow.run)
+        source = inspect.getsource(AgentWorkflow._run_impl)
         assert source.count("**_inherited_scope(context)") == 2
 
     def test_inherited_scope_never_overrides_explicit_child_keys(self):
@@ -1225,7 +1225,7 @@ class TestDelegatedChildrenInheritScope:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        source = inspect.getsource(AgentWorkflow.run)
+        source = inspect.getsource(AgentWorkflow._run_impl)
         for block in source.split("child_context = {")[1:]:
             spread = block.index("**_inherited_scope(context)")
             node_id = block.index('"node_id"')
@@ -1241,7 +1241,7 @@ class TestAgentContinueAsNew:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        source = inspect.getsource(AgentWorkflow.run)
+        source = inspect.getsource(AgentWorkflow._run_impl)
         assert "workflow.continue_as_new(" in source
         # The transcript, usage totals, refs and counters cross the
         # boundary. The transcript is size-guarded (see
@@ -1272,7 +1272,7 @@ class TestAgentContinueAsNew:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        source = inspect.getsource(AgentWorkflow.run)
+        source = inspect.getsource(AgentWorkflow._run_impl)
         assert "if _history_pressure(_AGENT_HISTORY_SOFT_CAP):" in source
         assert "if context_ref and _history_pressure" not in source
 
@@ -1286,7 +1286,7 @@ class TestAgentContinueAsNew:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        source = inspect.getsource(AgentWorkflow.run)
+        source = inspect.getsource(AgentWorkflow._run_impl)
         assert 'resume.get("execution_id")' in source
         assert source.index('resume.get("execution_id")') < source.index(
             'workflow.info().run_id[:8]'
@@ -1299,7 +1299,7 @@ class TestAgentContinueAsNew:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        source = inspect.getsource(AgentWorkflow.run)
+        source = inspect.getsource(AgentWorkflow._run_impl)
         assert "for iteration in range(iteration_offset, max_iterations)" in source
         assert '"iteration": iteration + 1' in source
 
@@ -1310,7 +1310,7 @@ class TestAgentContinueAsNew:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        source = inspect.getsource(AgentWorkflow.run)
+        source = inspect.getsource(AgentWorkflow._run_impl)
         guard = "delegation_handles or task_manager_delegation_tasks"
         assert guard in source
         assert source.index(guard) < source.index("workflow.continue_as_new(")
@@ -1331,7 +1331,7 @@ class TestTranscriptPressureReplaySafety:
 
         from services.temporal.agent_workflow import AgentWorkflow
 
-        return inspect.getsource(AgentWorkflow.run)
+        return inspect.getsource(AgentWorkflow._run_impl)
 
     def test_the_rules_are_selected_by_the_recorded_payload(self):
         source = self._source()

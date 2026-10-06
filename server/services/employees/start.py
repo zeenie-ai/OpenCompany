@@ -116,7 +116,7 @@ async def handle_start_employee(data: Dict[str, Any], websocket: WebSocket) -> D
             node_id: await database.get_node_parameters(node_id) or {}
             for node_id in (roles.get("job_delivery"), roles.get("gate"), roles.get("reply")) if node_id
         }
-        error = team_approval_topology_error(getattr(workflow, "data", None), roles, params=params)
+        error = team_approval_topology_error(getattr(workflow, "data", None), roles, params=params, team_plan=employee.team_plan)
         if error:
             return {"success": False, "error": error}
     await heal_agent_models(database, auth_service, Connections(auth_service), workflow_id)

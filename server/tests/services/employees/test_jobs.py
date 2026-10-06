@@ -60,6 +60,28 @@ async def saved(database):
     async with database.get_session() as session:
         return await session.get(EmployeeJob, "job")
 
+
+async def test_v2_job_keeps_admitted_plan_after_saved_metadata_rollback(database, monkeypatch):
+    from models.employees import Employee
+    from services.employees.jobs import create_job
+    from tests.services.employees.test_runtime_v2 import admitted
+    admitted_context, plan = admitted()
+    admitted_context["workflow_id"] = "7"
+    admitted_context["outputs"] = admitted_context["inputs"]
+    admitted_context["parameter_snapshot"] = {node["id"]: {} for node in admitted_context["nodes"]}
+    admitted_context["parameter_snapshot"]["send"] = {"recipient": "original"}
+    async with database.reserved_session() as session:
+        session.add(Employee(id="employee", workflow_id="7", owner_id="owner", hire_state="ready", team_plan={}, node_roles={}))
+        await session.commit()
+    monkeypatch.setattr(database, "get_workflow", AsyncMock(return_value=SimpleNamespace(data={"nodes": [{"id": "unactivated"}], "edges": []})))
+    job = await create_job(database, NodeContext.from_legacy("talk", "chatAgent", admitted_context), mission="Original work",
+        lead_node_id="lead", delivery_node_ids=["chat"], dispatch=True)
+    assert job.source["team_plan"] == plan
+    assert job.source["generation"] == 4
+    assert job.source["data_scope_id"] == "original-scope"
+    assert job.source["parameters"]["send"]["recipient"] == "original"
+    assert "unactivated" not in {node["id"] for node in job.source["nodes"]}
+
 @pytest.mark.parametrize("status", ["queued", "running", "submitted", "skipped"])
 async def test_unreviewed_or_skipped_tasks_never_publish(database, runtime, status):
     await install(database)

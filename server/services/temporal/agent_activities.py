@@ -1056,6 +1056,10 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     connection_database = ParameterSnapshotDatabase(database, snapshot)
     db_params = snapshot.get(node_id) if node_id in snapshot else await database.get_node_parameters(node_id) or {}
     parameters = {**(context.get("node_data") or {}), **db_params}
+    from services.employees.team_runtime import employee_runtime_plan
+    employee_plan = await employee_runtime_plan(database, context)
+    if employee_plan:
+        context["employee_team_plan"] = employee_plan
 
     # Resolve {{node.field}} template variables — same step NodeExecutor
     # runs before dispatching to handlers in the legacy path. Without
@@ -1184,6 +1188,8 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     trigger_task_data = task_data
     if not trigger_task_data and isinstance(input_data, dict):
         trigger_task_data = extract_task_event_payload(input_data)
+    from services.employees.team_runtime import admit_employee_runtime_job
+    await admit_employee_runtime_job(database, context, employee_plan, prompt, trigger_task_data)
     if trigger_task_data:
         task_prompt = format_task_context(trigger_task_data)
         prompt = f"{task_prompt}\n\n{prompt}" if prompt else task_prompt
@@ -1582,6 +1588,9 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         "workflow_id": workflow_id,
         "session_id": session_id,
         "parameter_snapshot": snapshot,
+        "employee_job_id": context.get("employee_job_id"),
+        "employee_team_plan": employee_plan,
+        "employee_runtime_delivery": bool(employee_plan and node_id == employee_plan.get("lead_node_id")),
         "provider": provider,
         "model": model,
         "max_tokens": max_tokens,

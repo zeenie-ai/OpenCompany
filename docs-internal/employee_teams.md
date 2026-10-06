@@ -6,6 +6,26 @@ models, nodes and topology stay in Dev mode. Talk is the conversational
 contact. The lead delegates substantive tasks through the intrinsic durable
 Task Manager and reviews submitted results before delivery.
 
+Recipe v2 follows the shipped `AI_Employee.json` template's canonical teammate,
+Context and skill connections. That template shows an explicit Task Manager
+tool; managed employees use the equivalent intrinsic binding without a duplicate
+tool node. Talk uses its `submit_job` operation, while the lead uses `assign_task`
+and the existing review operations. Each managed assignment supplies mission,
+context, acceptance criteria and resolved dependency IDs.
+
+Job admission and reviewed delivery run off canvas. The admitted graph captures
+the team plan, original recipient outputs and parameter snapshot; durable job
+records and Temporal activities retain restart, approval and uncertain-send
+recovery. The graph contains the lead, specialists, Context/instructions,
+taskTrigger and actual approval/output nodes, with no employeeJob forwarding
+nodes. Saved recipe v1 graphs keep their existing nodes and execution paths.
+
+The employee page always reads current detail. Its bounded twenty-row work view
+shows native Task Manager assignments/reviews and public tool phases, with
+five-second active snapshot polling and coalesced status refresh; idle polling
+runs every fifteen seconds. Pauses, approvals, disconnects and slow work show
+plain-text status and last activity. Raw internal reasoning is never displayed.
+
 Creation uses a stable owner-scoped key and payload hash, renewable lease,
 atomic graph/parameter/metadata/grant save, and a recoverable activation
 intent. Failed or abandoned builds keep the same workflow identity. A saved

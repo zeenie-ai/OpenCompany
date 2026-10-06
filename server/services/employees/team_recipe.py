@@ -16,7 +16,7 @@ from services.graph_build import (
     graph_node, label_key, main_edge, ref, skill_edge, tool_edge,
 )
 
-RECIPE_VERSION = 1
+RECIPE_VERSION = 2
 TEAM_LEAD_TYPE = "ai_employee"
 
 
@@ -119,7 +119,7 @@ def build_team(built: Any, inputs: Any) -> Any:
         roles["context"] = context_id
     talk = roles["talk_agent"]
     built.parameters[talk]["system_message"] += (
-        "\nYou are the owner's conversational contact. For substantive work, submit one employee job to your team, "
+        "\nYou are the owner's conversational contact. For substantive work, use task_manager operation='submit_job' to give one mission to your team, "
         "acknowledge promptly, and explain that the reviewed result will arrive here later. "
         "An assignment receipt is progress, never the final result. Never impersonate a specialist or bypass approval."
     )
@@ -221,8 +221,6 @@ def build_team(built: Any, inputs: Any) -> Any:
     # durable job delivery node may enter the existing approval/delivery
     # subgraph. Captured trigger outputs, including recipients, are restored
     # by that boundary rather than reconstructed from an agent's text.
-    if not inputs.allowed("employeeJob"):
-        raise BuildError("not_allowed", "Team work is not available")
     delivery_ids = [roles[key] for key in ("gate", "reply", "notify", "report_post") if key in roles]
     final_reply = ids.next("chatReply")
     built.nodes.append(graph_node(final_reply, "chatReply", labels.take("Reviewed result"), (1080, -420)))
@@ -242,13 +240,7 @@ def build_team(built: Any, inputs: Any) -> Any:
                 or edge.get("source") == roles["trigger"] and edge.get("target") == lead
             )
         )]
-        intake = ids.next("employeeJob")
-        intake_label = labels.take("Start work")
-        built.nodes.append(graph_node(intake, "employeeJob", intake_label, (180, 200)))
-        built.parameters[intake] = {"operation": "intake", "lead_node_id": lead, "mission": original_parameters["prompt"], "delivery_node_ids": delivery_ids}
-        built.edges.extend((main_edge(roles["trigger"], intake).to_dict(), main_edge(intake, lead).to_dict()))
-        built.parameters[lead]["prompt"] = ref(label_key(intake_label), "mission")
-        roles["job_intake"] = intake
+        built.edges.append(main_edge(roles["trigger"], lead).to_dict())
     built.edges = [edge for edge in built.edges if not (
         edge.get("target") == talk and edge.get("targetHandle") == "input-tools"
         and nodes.get(edge["source"], {}).get("type") in {"writeTodos", "canvas"}
@@ -260,18 +252,12 @@ def build_team(built: Any, inputs: Any) -> Any:
         for member in members:
             built.edges.append(tool_edge(clock, member["node_id"]).to_dict())
             member["tools"].append(clock)
-    submit = ids.next("employeeJob")
-    built.nodes.append(graph_node(submit, "employeeJob", labels.take("Give work to their team"), (0, 780)))
-    built.parameters[submit] = {"operation": "submit", "lead_node_id": lead, "delivery_node_ids": [final_reply]}
-    built.edges.append(tool_edge(submit, talk).to_dict())
-    roles["job_submit"] = submit
-    deliver = ids.next("employeeJob")
-    built.nodes.append(graph_node(deliver, "employeeJob", labels.take("Deliver reviewed work"), (720, -420)))
-    built.parameters[deliver] = {"operation": "deliver", "lead_node_id": lead, "delivery_node_ids": delivery_ids}
-    built.edges.append(main_edge(lead, deliver).to_dict())
-    roles["job_delivery"] = deliver
     # Replaced canonical lead IDs must also be reflected in edge identities.
     for edge in built.edges:
         edge["id"] = f'e-{edge["source"]}-{edge["sourceHandle"]}-{edge["target"]}-{edge["targetHandle"]}'
-    built.team_plan = {"version": RECIPE_VERSION, "recipe": "ai_employee", "lead_node_id": lead, "talk_node_id": talk, "members": members, "model": model, "requires": ["temporal", "agent_workflow"]}
+    for node in built.nodes:
+        if node["id"] == lead:
+            node.setdefault("data", {})["employee_recipe_version"] = RECIPE_VERSION
+    built.team_plan = {"version": RECIPE_VERSION, "recipe": "ai_employee", "lead_node_id": lead, "talk_node_id": talk, "members": members, "model": model, "requires": ["temporal", "agent_workflow"], "delivery_node_ids": delivery_ids, "talk_delivery_node_ids": [final_reply]}
+    next(node for node in built.nodes if node["id"] == lead)["data"]["employee_team_plan"] = deepcopy(built.team_plan)
     return built

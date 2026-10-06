@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from services.plugin import NodeContext, Operation, TaskQueue, ToolNode
 
 TaskOperation = Literal[
+    "submit_job",
     "assign_task", "list_tasks", "get_task", "modify_task", "cancel_task",
     "retry_task", "reassign_task", "accept_task", "finish_team", "mark_done",
     "inspect_task_trace",
@@ -62,7 +63,9 @@ class TaskManagerNode(ToolNode):
     tool_description = (
         "Manage the current lead execution's durable team tasks. Assign only connected "
         "teammates, inspect submitted work, then accept, retry, reassign, or cancel it. "
-        "Use list_tasks with include_history=true to consult prior executions."
+        "Use list_tasks with include_history=true to consult prior executions. "
+        "An employee's conversational contact uses submit_job with mission to admit substantive work "
+        "for its configured team and receive a prompt acknowledgement; reviewed delivery follows separately."
     )
     handles = (
         {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
@@ -120,12 +123,30 @@ async def _execute_task_manager(args: Dict[str, Any], config: Dict[str, Any]) ->
     service = get_agent_team_service()
     operation = str(args.get("operation") or "list_tasks")
     allowed_operations = {
+        "submit_job",
         "assign_task", "list_tasks", "get_task", "modify_task", "cancel_task",
         "retry_task", "reassign_task", "accept_task", "finish_team", "mark_done",
         "inspect_task_trace",
     }
     if operation not in allowed_operations:
         raise ValueError(f"Unknown Task Manager operation: {operation}")
+    if operation == "submit_job":
+        from services.plugin.deps import get_database
+        from services.employees.team_runtime import employee_runtime_plan
+        from services.employees.jobs import create_job, dispatch_job
+        database = get_database()
+        talk_id = str(config.get("parent_node_id") or "")
+        plan = await employee_runtime_plan(database, {**config, "node_id": talk_id})
+        if not plan or plan.get("talk_node_id") != talk_id:
+            raise ValueError("submit_job is available only to this employee's conversational contact")
+        mission = str(args.get("mission") or "").strip()
+        if not mission:
+            raise ValueError("submit_job requires the substantive mission and expected result")
+        job = await create_job(database, NodeContext.from_legacy(talk_id, "chatAgent", config), mission=mission,
+            lead_node_id=plan["lead_node_id"], delivery_node_ids=plan["talk_delivery_node_ids"], dispatch=True)
+        await dispatch_job(database, job.id)
+        return {"success": True, "operation": operation, "job_id": job.id, "state": job.state,
+            "acknowledgement": "I've given this to the team. I'll share their checked result here."}
     scope = _scope(config)
 
     if operation == "list_tasks":

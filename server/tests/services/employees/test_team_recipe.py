@@ -66,10 +66,11 @@ def test_manual_team_has_separate_contact_and_scoped_specialists():
 def test_submission_receipts_cannot_reach_reviewed_delivery():
     built = build()
     roles = built.node_roles
-    assert built.parameters[roles["job_submit"]]["delivery_node_ids"] == [roles["job_reply"]]
+    assert built.team_plan["talk_delivery_node_ids"] == [roles["job_reply"]]
     assert built.parameters[roles["job_reply"]]["message"] == "{{" + label_key(node(built, "agent")["data"]["label"]) + ".response}}"
     assert not any(edge["target"] == roles["job_reply"] for edge in built.edges)
-    assert any(edge["source"] == roles["agent"] and edge["target"] == roles["job_delivery"] for edge in built.edges)
+    assert not any(node["type"] == "employeeJob" for node in built.nodes)
+    assert built.team_plan["version"] == 2
     assert any(edge["source"] == roles["talk_agent"] and edge["target"] == roles["talk_reply"] for edge in built.edges)
 
 
@@ -82,7 +83,8 @@ def test_public_jobs_keep_recipients_and_approvals_behind_job_boundary():
     assert built.parameters[roles["reply"]]["phone"] == "{{" + gate_key + ".recipient}}"
     assert not any(edge["source"] in {roles["agent"], roles["trigger"]} and edge["target"] in {roles["gate"], roles["reply"]} for edge in built.edges)
     assert any(edge["source"] == roles["gate"] and edge["target"] == roles["reply"] and edge["data"]["condition"] for edge in built.edges)
-    assert any(edge["source"] == roles["trigger"] and edge["target"] == roles["job_intake"] for edge in built.edges)
+    assert any(edge["source"] == roles["trigger"] and edge["target"] == roles["agent"] for edge in built.edges)
+    assert {roles["gate"], roles["reply"]} <= set(built.team_plan["delivery_node_ids"])
 
 
 def test_unavailable_registered_specialist_uses_configured_custom_agent():
@@ -92,7 +94,7 @@ def test_unavailable_registered_specialist_uses_configured_custom_agent():
     assert "Researches information" in built.parameters[researcher["node_id"]]["system_message"]
 
 
-@pytest.mark.parametrize("kind", ["ai_employee", "employeeJob", "taskTrigger", "masterSkill"])
+@pytest.mark.parametrize("kind", ["ai_employee", "taskTrigger", "masterSkill"])
 def test_required_team_capabilities_fail_closed(kind):
     with pytest.raises(BuildError):
         build(allowed=lambda candidate: candidate != kind)

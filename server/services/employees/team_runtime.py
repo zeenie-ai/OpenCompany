@@ -68,3 +68,42 @@ def validate_managed_assignment(args, scope):
         dependencies = []
     if not isinstance(dependencies, list) or any(not isinstance(item, str) or not item.strip() for item in dependencies):
         raise ValueError("Employee job assignment depends_on must be a list of resolved task IDs")
+
+
+async def employee_runtime_plan(database, context):
+    """Resolve the off-canvas boundary from server-owned employee metadata."""
+    nodes = context.get("nodes", [])
+    lead = next((node for node in nodes if (node.get("data") or {}).get("employee_recipe_version") == 2), None)
+    if not lead:
+        return None
+    from copy import deepcopy
+    plan = deepcopy((lead.get("data") or {}).get("employee_team_plan") or {})
+    if plan.get("version") != 2 or context.get("node_id") not in {plan.get("lead_node_id"), plan.get("talk_node_id")}:
+        return None
+    ids = {node.get("id") for node in nodes}
+    referenced = {plan.get("lead_node_id"), plan.get("talk_node_id"), *plan.get("delivery_node_ids", []), *plan.get("talk_delivery_node_ids", []), *(member.get("node_id") for member in plan.get("members", []))}
+    if not referenced <= ids or plan.get("lead_node_id") != lead.get("id"):
+        raise ValueError("Employee runtime plan references nodes outside its admitted graph")
+    return plan
+
+
+async def admit_employee_runtime_job(database, context, plan, mission, review=None):
+    if not plan or context.get("node_id") != plan.get("lead_node_id"):
+        return
+    if review:
+        from models.employees import EmployeeJob
+        from sqlmodel import select
+        async with database.get_session() as session:
+            found = await session.execute(select(EmployeeJob).where(EmployeeJob.workflow_id == context["workflow_id"], EmployeeJob.lead_node_id == context["node_id"], EmployeeJob.team_id == review.get("team_id")))
+            job = found.scalar_one_or_none()
+        if job:
+            context["employee_job_id"] = job.id
+        return
+    if context.get("employee_job_id") or context.get("parent_node_id"):
+        return
+    from services.employees.jobs import create_job
+    from services.plugin import NodeContext
+    admission = {**context, "outputs": context.get("outputs") or context.get("inputs") or {}}
+    job = await create_job(database, NodeContext.from_legacy(context["node_id"], "ai_employee", admission), mission=mission,
+        lead_node_id=context["node_id"], delivery_node_ids=plan["delivery_node_ids"], dispatch=False)
+    context["employee_job_id"] = job.id

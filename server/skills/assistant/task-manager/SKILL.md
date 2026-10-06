@@ -4,7 +4,7 @@ description: Coordinate durable team tasks by assigning connected teammates, rev
 allowed-tools: task_manager
 metadata:
   author: opencompany
-  version: "2.3"
+  version: "2.4"
   category: automation
 ---
 
@@ -14,6 +14,14 @@ Use `task_manager` as the team lead's durable control plane. It is scoped to
 the current workflow execution and only permits assignment to agents connected
 to this lead's `input-teammates` handle.
 
+For a version 2 AI employee, its separate Talk agent also receives Task Manager.
+Talk uses `submit_job` with a clear `mission` and expected result for substantive
+work. Acknowledge that the team is working, then return; the reviewed result
+arrives later in the original conversation. Do not treat the assignment receipt
+as the answer, select recipients, or perform the lead's specialist assignment.
+The server captures the approved team, destination and workspace scope. The
+following assignment and review workflow applies to the lead.
+
 ## Required workflow
 
 1. Call `list_tasks` with `include_history=true` before assigning work so you
@@ -21,6 +29,8 @@ to this lead's `input-teammates` handle.
 2. Split independent work into bounded tasks with explicit acceptance criteria.
 3. Call `assign_task` once per mission. Use the connected teammate node ID or
    the exact delegate name reported by the lead's available teammate list.
+   For employee jobs, supply `context`, `acceptance_criteria`, and `depends_on`
+   (an empty list for independent tasks); use actual task IDs for dependencies.
    Do not call `delegate_to_*` directly; delegate descriptors are internal
    dispatch identities, not the lead's task-creation interface.
 4. Independent tasks may be assigned together. The durable queue starts at most
@@ -50,6 +60,7 @@ to this lead's `input-teammates` handle.
 
 | Operation | Purpose | Important arguments |
 |---|---|---|
+| `submit_job` | Talk admits substantive work for its configured employee team | `mission` with the expected result; lead and recipient are server-controlled |
 | `assign_task` | Persist and queue a bounded mission | `title`, `mission`, `assignee_node_id` or `delegate_name`, optional `context`, `acceptance_criteria`, `depends_on` |
 | `list_tasks` | Inspect current or historical tasks | optional `status_filter`, `include_history` |
 | `get_task` | Review one task and all attempts | `task_id` |

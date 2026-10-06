@@ -13,6 +13,12 @@ Task Manager is the durable control plane intrinsically bound to
 Builder, so users cannot remove the lead's task capability. Historical explicit
 nodes remain readable and protected from deletion.
 
+Version 2 employee recipes also bind this tool to the separate Talk agent. Talk
+uses `submit_job` to acknowledge substantive work promptly; the lead uses the
+existing assignment and review operations. Specialists connect through the
+lead's canonical `input-teammates` handle and keep their own Context and scoped
+tools. The recipe does not add job-forwarding nodes or a duplicate Task Manager.
+
 ## Inputs (handles)
 
 | Handle | Connection type | Required | Purpose |
@@ -32,10 +38,10 @@ matter is decided per `operation` inside `_execute_task_manager`.
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `operation` | `assign_task` / `list_tasks` / `get_task` / `modify_task` / `cancel_task` / `retry_task` / `reassign_task` / `accept_task` / `finish_team` / `mark_done` / `inspect_task_trace` | `list_tasks` | no | - | Operation to run; `mark_done` is a deprecated alias for `accept_task` |
+| `operation` | `submit_job` / `assign_task` / `list_tasks` / `get_task` / `modify_task` / `cancel_task` / `retry_task` / `reassign_task` / `accept_task` / `finish_team` / `mark_done` / `inspect_task_trace` | `list_tasks` | no | - | Operation to run; `mark_done` is a deprecated alias for `accept_task` |
 | `task_id` | string | `None` | no | - | Target task. Required by `get_task`, `inspect_task_trace`, `modify_task`, `cancel_task`, `retry_task`, `reassign_task`; `accept_task` / `mark_done` may omit it when exactly one submitted task exists |
 | `title` | string (max 500) | `None` | no | - | Task title; required by `assign_task`, editable via `modify_task` |
-| `mission` | string (max 10000) | `None` | no | - | Task mission; required by `assign_task`, editable via `modify_task` |
+| `mission` | string (max 10000) | `None` | no | - | Mission and expected result; required by `submit_job` and `assign_task`, editable via `modify_task` |
 | `context` | object | `None` | no | - | Free-form context stored on the task and forwarded to the assignee |
 | `acceptance_criteria` | object | `None` | no | - | Acceptance criteria stored on the task |
 | `depends_on` | string[] | `None` | no | - | Task ids this task waits on (`assign_task`) |
@@ -71,6 +77,9 @@ matter is decided per `operation` inside `_execute_task_manager`.
   task?: object;         // get_task, assign_task and every mutation
   tasks?: object[];      // list_tasks
   team?: object;         // finish_team
+  job_id?: string;       // submit_job: durable employee job identity
+  state?: string;        // submit_job: job state at admission
+  acknowledgement?: string; // submit_job: acknowledgement, not the final result
 }
 ```
 
@@ -89,6 +98,7 @@ the persisted execution membership snapshot.
 
 | Operation | Required fields | Valid source state |
 |---|---|---|
+| `submit_job` | `mission`; trusted version 2 employee Talk context | new job or idempotent existing admission |
 | `assign_task` | `title`, `mission`, connected `assignee_node_id` or exact delegate name | new |
 | `list_tasks` | optional `status_filter`, `include_history` | any |
 | `get_task` | `task_id` | any |
@@ -106,6 +116,20 @@ omit both fields and safely resolves that task. Zero or multiple submissions
 produce an error instructing the lead to list/review tasks first.
 
 `mark_done` is a deprecated alias for `accept_task`; it does not remove records.
+
+## Employee job admission and delivery
+
+`submit_job` is available only to the employee's configured Talk agent. The
+server resolves the lead and delivery destinations from the plan captured in
+the admitted graph; model arguments cannot choose a different employee or
+recipient. The durable job retains the original request, parameters, workspace
+generation, and delivery identity across delegation, review, and retries.
+
+The acknowledgement confirms assignment only. Specialists submit work through
+Task Manager, and the lead reviews and accepts it. The runtime delivers the
+reviewed result once to the original conversation or app, preserving approval
+gates. Scheduled and app-triggered lead work uses the same server job boundary.
+Existing version 1 graphs keep their compatible execution path.
 
 ## Assignment result
 

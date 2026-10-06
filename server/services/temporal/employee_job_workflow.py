@@ -32,6 +32,11 @@ async def fail_employee_job(context: dict[str, Any]) -> dict:
     from models.employees import EmployeeJob
     async with container.database().reserved_session() as session:
         job = await session.get(EmployeeJob, str(context.get("employee_job_id")))
+        if job is None and context.get("runtime_admission"):
+            from sqlmodel import select
+            found = await session.execute(select(EmployeeJob).where(EmployeeJob.workflow_id == context.get("workflow_id"),
+                EmployeeJob.lead_node_id == context.get("node_id"), EmployeeJob.origin_execution_id == context.get("execution_id")))
+            job = found.scalar_one_or_none()
         if job and job.state not in {"delivered", "delivering"}:
             job.state = "cancelled" if context.get("cancelled") else "failed"
             await session.commit()

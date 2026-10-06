@@ -309,6 +309,10 @@ def _inherited_scope(context: Dict[str, Any]) -> Dict[str, Any]:
     return {key: context[key] for key in _INHERITED_SCOPE_KEYS if key in context}
 
 
+def _trusted_tool_scope(context: Dict[str, Any]) -> Dict[str, Any]:
+    return {**_inherited_scope(context), "outputs": context.get("outputs") or context.get("inputs") or {}}
+
+
 def _tool_call_metadata(
     *,
     agent_node_id: str,
@@ -602,6 +606,27 @@ class AgentWorkflow:
 
     @workflow.run
     async def run(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        runtime_v2 = any((node.get("data") or {}).get("employee_recipe_version") == 2 and node.get("id") == context.get("node_id") for node in context.get("nodes", []))
+        runtime_v2 = runtime_v2 and workflow.patched("employee-task-manager-runtime-v2")
+        self._employee_runtime_v2 = runtime_v2
+        async def fail_job(cancelled=False):
+            if runtime_v2:
+                await asyncio.shield(workflow.execute_activity("employee.job.failed", {**context, "cancelled": cancelled, "runtime_admission": True},
+                    activity_id="employee-runtime-failed", start_to_close_timeout=PERSIST_TURN_TIMEOUT, retry_policy=AGENT_ACTIVITY_RETRY))
+        try:
+            result = await self._run_impl(context)
+            if not result.get("success", True):
+                await fail_job()
+            return result
+        except asyncio.CancelledError:
+            await fail_job(cancelled=True)
+            raise
+        except Exception as exc:
+            from temporalio.exceptions import is_cancelled_exception
+            await fail_job(cancelled=is_cancelled_exception(exc))
+            raise
+
+    async def _run_impl(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """Run the agent loop.
 
         ``context`` shape (same as the legacy ``execute_node_activity``
@@ -727,6 +752,8 @@ class AgentWorkflow:
         # canvas node, instead of silently selecting the last connected one.
         if payload.get("parameter_snapshot"):
             context["parameter_snapshot"] = payload["parameter_snapshot"]
+        if payload.get("employee_job_id"):
+            context["employee_job_id"] = payload["employee_job_id"]
         binding_refresh_v2 = workflow.patched("agent-node-binding-refresh-v2")
         tools = payload.get("tools") or []
         if binding_refresh_v2:
@@ -951,6 +978,9 @@ class AgentWorkflow:
                     retry_policy=LLM_STEP_RETRY,
                 )
             except Exception as e:
+                from temporalio.exceptions import is_cancelled_exception
+                if getattr(self, "_employee_runtime_v2", False) and is_cancelled_exception(e):
+                    raise asyncio.CancelledError() from e
                 cause = getattr(e, "cause", None)
                 raw_detail = str(cause) if cause is not None else str(e)
                 cause_type = str(getattr(cause, "type", "") or "")
@@ -1590,11 +1620,12 @@ class AgentWorkflow:
                         "root_execution_id": root_execution_id,
                         "parent_node_id": agent_node_id,
                         "team_lead_node_id": agent_node_id,
-                        "employee_job_id": context.get("employee_job_id"),
                         "nodes": context.get("nodes") or [],
                         "edges": context.get("edges") or [],
                         **preflight_metadata,
                     }
+                    if workflow.patched("employee-task-manager-tool-scope-v2"):
+                        preflight_payload = {**_trusted_tool_scope(context), **preflight_payload}
                     task_manager_preflight_indices.append(preflight_index)
                     if not task_manager_preflight_handles:
                         # ``start_activity`` does not yield; one admission
@@ -1839,6 +1870,8 @@ class AgentWorkflow:
                         else {}
                     ),
                 }
+                if workflow.patched("employee-task-manager-tool-scope-v2"):
+                    tool_payload = {**_trusted_tool_scope(context), **tool_payload}
 
                 tool_activity_name = (
                     "agent.skill.invoke"
@@ -2617,6 +2650,11 @@ class AgentWorkflow:
             start_to_close_timeout=PERSIST_TURN_TIMEOUT,
             retry_policy=AGENT_ACTIVITY_RETRY,
         )
+        if payload.get("employee_runtime_delivery") and workflow.patched("employee-task-manager-runtime-v2"):
+            await workflow.execute_activity("employee.job.deliver", {**context, "team_id": result_payload.get("team_id"),
+                "outputs": {**(context.get("outputs") or {}), agent_node_id: result_payload}},
+                activity_id="employee-reviewed-delivery", start_to_close_timeout=timedelta(days=31),
+                heartbeat_timeout=timedelta(minutes=2), retry_policy=AGENT_ACTIVITY_RETRY)
 
         # Final lifecycle broadcast — canvas glow goes green + FE
         # consumers of com.opencompany.agent.progress see phase="completed".

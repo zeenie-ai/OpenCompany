@@ -82,7 +82,11 @@ def _prepared_payload() -> dict[str, Any]:
 
 @activity.defn(name="agent.prepare_payload")
 async def _prepare_payload(context: dict[str, Any]) -> dict[str, Any]:
-    return _prepared_payload()
+    prepared = _prepared_payload()
+    if context.get("runtime_mode"):
+        prepared.update(employee_runtime_delivery=True, employee_job_id="runtime-job", team_id="runtime-team",
+                        node_type="ai_employee", user_prompt=context["runtime_mode"])
+    return prepared
 
 
 @activity.defn(name="agent.broadcast_progress")
@@ -102,6 +106,12 @@ async def _execute_llm_step(payload: dict[str, Any]) -> dict[str, Any]:
         assert "version" not in message
         assert message.get("role")
     assert activity.info().heartbeat_timeout == timedelta(minutes=1)
+    prompt = next(message["content"] for message in payload["messages"] if message["role"] == "user")
+    if prompt == "runtime-failure":
+        from temporalio.exceptions import ApplicationError
+        raise ApplicationError("Stub provider failed", non_retryable=True)
+    if prompt == "runtime-cancel":
+        await asyncio.Event().wait()
 
     return {
         "kind": "final",
@@ -131,6 +141,56 @@ _TEST_ACTIVITIES = [
     _store_output,
     _clear_skills,
 ]
+
+_RUNTIME_DELIVERIES = []
+_RUNTIME_FAILURES = []
+
+@activity.defn(name="employee.job.deliver")
+async def _runtime_deliver(context: dict) -> dict:
+    _RUNTIME_DELIVERIES.append(context)
+    assert context["outputs"]["origin"]["recipient"] == "original"
+    assert context["employee_job_id"] == "runtime-job"
+    return {"delivered": context.get("runtime_mode") == "runtime-review", "state": "waiting"}
+
+@activity.defn(name="employee.job.failed")
+async def _runtime_failed(context: dict) -> dict:
+    _RUNTIME_FAILURES.append(context)
+    return {"saved": True}
+
+async def _run_runtime_replay_gate():
+    from temporalio.client import WorkflowFailureError
+    histories = []
+    async with await WorkflowEnvironment.start_time_skipping() as environment:
+        async with Worker(environment.client, task_queue=TASK_QUEUE, workflows=[AgentWorkflow],
+                          activities=[*_TEST_ACTIVITIES, _runtime_deliver, _runtime_failed]):
+            for mode in ("runtime-initial", "runtime-review", "runtime-failure", "runtime-cancel"):
+                context = {"node_id": "agent-replay", "workflow_id": "graph-replay", "execution_id": mode,
+                    "runtime_mode": mode, "outputs": {"origin": {"recipient": "original"}},
+                    "nodes": [{"id": "agent-replay", "data": {"employee_recipe_version": 2}}]}
+                handle = await environment.client.start_workflow("AgentWorkflow", context,
+                    id="runtime-v2-" + uuid4().hex, task_queue=TASK_QUEUE)
+                if mode == "runtime-cancel":
+                    for _ in range(200):
+                        history = await handle.fetch_history()
+                        if any(item.activity_type.name == "agent.execute_llm_step" for item in _scheduled_activities(history)):
+                            break
+                        await asyncio.sleep(0.02)
+                    await handle.cancel()
+                    try:
+                        await handle.result()
+                    except WorkflowFailureError:
+                        pass
+                else:
+                    result = await handle.result()
+                    assert result["success"] == (mode != "runtime-failure")
+                histories.append(await handle.fetch_history())
+        assert len(_RUNTIME_DELIVERIES) == 2
+        assert len(_RUNTIME_FAILURES) == 2
+        assert any(item.get("cancelled") for item in _RUNTIME_FAILURES)
+        for history in histories:
+            captured = WorkflowHistory.from_json(history.workflow_id, history.to_json())
+            replay = await Replayer(workflows=[AgentWorkflow]).replay_workflow(captured)
+            assert replay.replay_failure is None
 
 
 def _scheduled_activities(history: WorkflowHistory) -> list[Any]:
@@ -225,13 +285,14 @@ def test_generated_history_executes_and_replays() -> None:
         ],
         cwd=Path(__file__).parents[2],
         stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         timeout=90,
         check=False,
     )
-    assert completed.returncode == 0, "Temporal replay subprocess failed"
+    assert completed.returncode == 0, completed.stdout.decode(errors="replace")[-5000:]
 
 
 if __name__ == "__main__":
     asyncio.run(_run_replay_gate())
+    asyncio.run(_run_runtime_replay_gate())

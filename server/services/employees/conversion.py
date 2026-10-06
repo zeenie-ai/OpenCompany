@@ -18,7 +18,7 @@ from models.employees import Employee, EmployeeGrant
 from models.employee_conversion import EmployeeConversion
 from services.employees.builder import BuildInputs, BuiltEmployee
 from services.employees.team_recipe import build_team
-from services.graph_build import Labels, NodeIds, graph_node, label_key, main_edge, ref, tool_edge
+from services.graph_build import NodeIds, graph_node, main_edge, tool_edge
 
 
 def _hash(snapshot: dict) -> str:
@@ -147,22 +147,14 @@ def _prepare(source: dict, employee: Any, workflow_id: str, name: str) -> dict:
     if trigger_record.get("kind") != "manual":
         roles = proposed.node_roles
         destinations = [roles[key] for key in ("gate", "reply", "notify", "report_post") if key in roles]
-        proposed.parameters[roles["job_delivery"]]["delivery_node_ids"] = destinations
+        proposed.team_plan["delivery_node_ids"] = destinations
         proposed.edges = [edge for edge in proposed.edges if not (
             edge.get("targetHandle") == "input-main" and (
                 edge["source"] == roles["trigger"] and edge["target"] in {original, *destinations}
                 or edge["source"] == original and edge["target"] in {*destinations, roles.get("console")}
             )
         )]
-        ids = NodeIds(workflow_id, proposed.nodes)
-        labels = Labels(node["data"]["label"] for node in proposed.nodes)
-        intake = ids.next("employeeJob")
-        label = labels.take("Start team work")
-        proposed.nodes.append(graph_node(intake, "employeeJob", label, (180, 200)))
-        proposed.parameters[intake] = {"operation": "intake", "lead_node_id": roles["agent"], "mission": params.get("prompt", ""), "delivery_node_ids": destinations}
-        proposed.parameters[roles["agent"]]["prompt"] = ref(label_key(label), "mission")
-        proposed.edges.extend((main_edge(roles["trigger"], intake).to_dict(), main_edge(intake, roles["agent"]).to_dict()))
-        roles["job_intake"] = intake
+        proposed.edges.append(main_edge(roles["trigger"], roles["agent"]).to_dict())
     for edge in proposed.edges:
         edge["id"] = f'e-{edge["source"]}-{edge["sourceHandle"]}-{edge["target"]}-{edge["targetHandle"]}'
     # Dedupe bindings restored for old memory without dropping intentional
@@ -170,6 +162,7 @@ def _prepare(source: dict, employee: Any, workflow_id: str, name: str) -> dict:
     proposed.edges = list({edge["id"]: edge for edge in proposed.edges}.values())
     for member in proposed.team_plan["members"]:
         member["tools"] = list(dict.fromkeys(edge["source"] for edge in proposed.edges if edge["target"] == member["node_id"] and edge["targetHandle"] == "input-tools"))
+    next(node for node in proposed.nodes if node["id"] == proposed.team_plan["lead_node_id"])["data"]["employee_team_plan"] = deepcopy(proposed.team_plan)
     for node in proposed.nodes:
         proposed.parameters.setdefault(node["id"], {})
     return {"graph": {**deepcopy(source["graph"]), "nodes": proposed.nodes, "edges": proposed.edges}, "parameters": proposed.parameters,
@@ -197,7 +190,7 @@ async def plan_conversion(database: Any, workflow_id: str, owner_id: str, *, ena
         return {"success": False, "error": "team_unavailable"}
     report = await validate_workflow(nodes=proposed["graph"]["nodes"], edges=proposed["graph"]["edges"], parameters_by_id=proposed["parameters"])
     from services.employees.upgrade import team_approval_topology_error
-    approval_error = team_approval_topology_error(proposed["graph"], proposed["employee"]["node_roles"], params=proposed["parameters"])
+    approval_error = team_approval_topology_error(proposed["graph"], proposed["employee"]["node_roles"], params=proposed["parameters"], team_plan=proposed["employee"]["team_plan"])
     if approval_error:
         return {"success": False, "error": "needs_dev_review", "review_required": True,
                 "message": "Review this employee's sending approval setup in Dev mode before adding a team."}

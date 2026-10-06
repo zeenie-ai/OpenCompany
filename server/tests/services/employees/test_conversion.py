@@ -59,6 +59,19 @@ def test_custom_main_flow_is_flagged_for_review():
     assert not _recognizable(source)
 
 
+def test_v2_app_conversion_keeps_approval_valid_without_forwarding_nodes():
+    from services.employees.upgrade import team_approval_topology_error
+    source, employee = fixture_graph("app_event")
+    proposed = _prepare(source, employee, "81", "Maya")
+    plan = proposed["employee"]["team_plan"]
+    assert plan["version"] == 2
+    assert not any(node["type"] == "employeeJob" for node in proposed["graph"]["nodes"])
+    assert team_approval_topology_error(proposed["graph"], proposed["employee"]["node_roles"],
+        params=proposed["parameters"], team_plan=plan) is None
+    lead = next(node for node in proposed["graph"]["nodes"] if node["id"] == plan["lead_node_id"])
+    assert lead["data"]["employee_team_plan"] == plan
+
+
 async def test_disabled_rollout_never_changes_or_reads_an_existing_employee():
     class Database:
         def __getattr__(self, name):

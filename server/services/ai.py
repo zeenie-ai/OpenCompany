@@ -1204,6 +1204,9 @@ class AIService:
                     config["generation"] = context.get("generation")
                     config["parameter_snapshot"] = context.get("parameter_snapshot", {})
                     config["employee_job_id"] = context.get("employee_job_id")
+                    for scope_key in ("data_scope_id", "context_execution_id", "context_session_id", "session_id", "graphVersion", "outputs"):
+                        if scope_key in context:
+                            config[scope_key] = context[scope_key]
                     config["nodes"] = context.get("nodes", [])
                     config["edges"] = context.get("edges", [])
                     config["workspace_dir"] = context.get("workspace_dir", "")
@@ -1972,6 +1975,9 @@ class AIService:
                         config["generation"] = context.get("generation")
                         config["parameter_snapshot"] = context.get("parameter_snapshot", {})
                         config["employee_job_id"] = context.get("employee_job_id")
+                        for scope_key in ("data_scope_id", "context_execution_id", "context_session_id", "session_id", "graphVersion", "outputs"):
+                            if scope_key in context:
+                                config[scope_key] = context[scope_key]
                         config["nodes"] = context.get("nodes", [])
                         config["edges"] = context.get("edges", [])
                         config["workspace_dir"] = context.get("workspace_dir", "")

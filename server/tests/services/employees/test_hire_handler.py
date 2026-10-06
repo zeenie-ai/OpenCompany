@@ -127,7 +127,8 @@ async def test_a_hire_saves_a_valid_workflow_and_starts_it(harness):
 
     workflow = await harness.database.get_workflow(workflow_id)
     types = {node["type"] for node in workflow.data["nodes"]}
-    assert {"chatTrigger", "aiAgent", "ai_employee", "employeeJob", "taskTrigger", "context", "console", "writeTodos", "canvas"} <= types
+    assert {"chatTrigger", "aiAgent", "ai_employee", "taskTrigger", "context", "console", "writeTodos", "canvas"} <= types
+    assert "employeeJob" not in types
     assert workflow.data["owner_id"] == "owner"
     row = await store.get_by_workflow(harness.database, workflow_id)
     assert row.hire_state == "ready" and row.node_roles["agent"].startswith(f"{workflow_id}:ai_employee:")

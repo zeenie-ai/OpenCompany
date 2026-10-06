@@ -4,7 +4,7 @@ description: How to use the Agent Builder tool (agent_builder) to inspect your c
 allowed-tools: "agentBuilder"
 metadata:
   author: opencompany
-  version: "5.0"
+  version: "5.1"
   category: autonomous
 ---
 
@@ -141,6 +141,16 @@ the lead's configured model and receives only its selected tools and skills,
 with its own managed Context. Never add a second Task Manager: team leads get
 the intrinsic tool. Custom `aiAgent` specialists may have distinct purposes;
 registered specialist types reuse their existing teammate binding.
+
+### `create_workflow`
+
+Use the shared employee-team recipe for a trusted owner request. Follow the
+shipped AI Employee template: an `ai_employee` lead, canonical teammate
+connections, separate Context and scoped skills. Managed teams have intrinsic
+Task Manager bindings: Talk uses `submit_job`, and the lead assigns and reviews
+specialist tasks. Do not construct additional forwarding nodes or duplicate
+Task Manager bindings. Durable admission and reviewed delivery are handled by
+the runtime; keep the actual app outputs and existing approval gates.
 
 ### Documentation operations
 

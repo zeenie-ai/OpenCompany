@@ -40,10 +40,13 @@ def _identity(ctx: Any, mission: str) -> str:
 async def create_job(database: Any, ctx: Any, *, mission: str, lead_node_id: str, delivery_node_ids: list[str], dispatch: bool) -> EmployeeJob:
     from services.employees.store import get_by_workflow
     employee = await get_by_workflow(database, str(ctx.workflow_id))
-    if not employee or not employee.team_plan or employee.team_plan.get("lead_node_id") != lead_node_id:
+    from services.employees.team_runtime import employee_runtime_plan
+    captured_plan = await employee_runtime_plan(database, {**ctx.raw, "nodes": ctx.nodes, "node_id": lead_node_id})
+    plan = captured_plan or (employee.team_plan if employee else None)
+    if not employee or not plan or plan.get("lead_node_id") != lead_node_id:
         raise ValueError("This employee does not have an approved team")
     graph = await database.get_workflow(str(ctx.workflow_id))
-    allowed_destinations = set((employee.node_roles or {}).values())
+    allowed_destinations = set(plan.get("delivery_node_ids", []) + plan.get("talk_delivery_node_ids", [])) if captured_plan else set((employee.node_roles or {}).values())
     if not delivery_node_ids or any(node not in allowed_destinations for node in delivery_node_ids):
         raise ValueError("The job destination is not approved")
     identifier = _identity(ctx, mission)
@@ -58,7 +61,7 @@ async def create_job(database: Any, ctx: Any, *, mission: str, lead_node_id: str
     source = {"nodes": nodes, "edges": edges,
               "parameters": parameters, "outputs": ctx.outputs, "user_id": employee.owner_id,
               "session_id": ctx.session_id, "generation": ctx.raw.get("generation", 0),
-              "data_scope_id": ctx.raw.get("data_scope_id"), "graphVersion": (graph.data or {}).get("graphVersion", 2)}
+              "data_scope_id": ctx.raw.get("data_scope_id"), "graphVersion": (graph.data or {}).get("graphVersion", 2), "team_plan": plan}
     async with database.reserved_session() as session:
         row = await session.get(EmployeeJob, identifier)
         if row is not None:

@@ -180,7 +180,8 @@ async def _dispatch_tool(tool_name: str, tool_args: Dict[str, Any], config: Dict
     }
     # These scopes come from the server execution config, never tool arguments.
     for key in ("run_scope", "generation", "parameter_snapshot", "employee_job_id",
-                "root_execution_id", "team_id", "team_execution_id"):
+                "root_execution_id", "team_id", "team_execution_id", "data_scope_id", "context_execution_id",
+                "context_session_id", "session_id", "graphVersion", "outputs"):
         if key in config:
             context[key] = config[key]
 

@@ -234,7 +234,8 @@ __all__ = ["Upgrade", "plan_upgrade", "upgrade_employee"]
 
 
 def team_approval_topology_error(
-    graph: Optional[Mapping[str, Any]], roles: Mapping[str, str], *, params: Optional[Mapping[str, Mapping[str, Any]]] = None
+    graph: Optional[Mapping[str, Any]], roles: Mapping[str, str], *, params: Optional[Mapping[str, Mapping[str, Any]]] = None,
+    team_plan: Optional[Mapping[str, Any]] = None,
 ) -> Optional[str]:
     """A team lead's app reply must pass through its existing approval gate.
 
@@ -258,14 +259,18 @@ def team_approval_topology_error(
     if any((edge.get("data") or {}).get("condition") != approved_edge_condition() for edge in incoming):
         return "team_approval_topology_invalid"
     delivery = roles.get("job_delivery")
-    if delivery:
+    runtime_delivery = bool(team_plan and team_plan.get("version") == 2)
+    if delivery or runtime_delivery:
         saved = (params or {}).get(delivery) or {}
-        delivered = saved.get("delivery_node_ids") or []
-        if (delivery not in nodes or nodes[delivery]["type"] != "employeeJob"
+        delivered = (team_plan or {}).get("delivery_node_ids", []) if runtime_delivery else saved.get("delivery_node_ids") or []
+        if runtime_delivery:
+            if team_plan.get("lead_node_id") != lead or gate not in delivered or reply not in delivered or any(node_id not in nodes for node_id in delivered):
+                return "team_approval_topology_invalid"
+        elif (delivery not in nodes or nodes[delivery]["type"] != "employeeJob"
                 or saved.get("operation") != "deliver" or saved.get("lead_node_id") != lead
                 or gate not in delivered or reply not in delivered):
             return "team_approval_topology_invalid"
-        if not any(edge.get("source") == lead and edge.get("target") == delivery for edge in graph.get("edges") or []):
+        if not runtime_delivery and not any(edge.get("source") == lead and edge.get("target") == delivery for edge in graph.get("edges") or []):
             return "team_approval_topology_invalid"
         # Only the job delivery boundary injects the reviewed draft into the
         # gate. A parallel graph edge could publish an assignment acknowledgement.
