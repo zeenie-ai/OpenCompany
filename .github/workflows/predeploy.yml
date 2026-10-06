@@ -25,6 +25,8 @@ jobs:
         run: bun run --filter react-flow-client lint
       - name: TypeScript check
         run: bun run --filter react-flow-client typecheck
+      - name: JS executor TypeScript check
+        run: bun run --filter opencompany-nodejs-executor typecheck
       - name: Frontend tests (vitest)
         run: bun run --filter react-flow-client test
       # GitHub's dependency graph cannot read bun.lock, so no Dependabot alert

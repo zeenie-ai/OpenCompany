@@ -412,6 +412,16 @@ def test_predeploy_typecheck_step_routes_through_workspace_filter(predeploy_yml:
     )
 
 
+def test_predeploy_checks_executor_types(predeploy_yml: dict, sidecar_pkg: dict):
+    """Bundling transpiles TypeScript without detecting executor type errors."""
+    assert sidecar_pkg["scripts"]["typecheck"] == "tsc --noEmit -p tsconfig.json"
+    commands = [
+        step.get("run", "")
+        for step in predeploy_yml["jobs"]["build-and-lint"]["steps"]
+    ]
+    assert f"bun run --filter {SIDECAR_PKG_NAME} typecheck" in commands
+
+
 # ---------------------------------------------------------------------------
 # Release publication — package.json, release.yml, preinstall.js
 # ---------------------------------------------------------------------------

@@ -17,6 +17,9 @@ dependencies = [
     # HTTP/WebSocket
     "httpx>=0.28.0",
     "aiohttp>=3.11.0",
+    # Security floor: GHSA-54p9-h82j-f925 fixes the 6.7.0-6.9.0 reference
+    # leak. Keep the compatible 6.x API for aiohttp/yarl consumers.
+    "multidict>=6.9.1,<7",
     "websockets>=14.0",
 
     # Google Maps
@@ -64,7 +67,7 @@ dependencies = [
     "bcrypt>=4.2.0",
     # pyjwt replaced python-jose (2026-06): python-jose drags in python-ecdsa,
     # which has an unpatchable Minerva timing-attack advisory (GHSA-wj6h-64fc-37mp).
-    "pyjwt>=2.13.0",
+    "pyjwt>=2.15.1",
     "email-validator>=2.0.0",
 
     # Credential Encryption
