@@ -34,7 +34,7 @@ One employee is one workflow:
 - Talk, where the owner talks to them on Home (talk.py): a Chat hire's
   agent answers there through "Reply in Chat"; any other hire gets a talk
   line beside its work (a "Talk" trigger, a "Talk with <name>" agent on the
-  same model sharing the worker's tools and skills, its own Context, and
+  same model with independent tools, shared skills, its own Context, and
   its reply), and a schedule worker's reports also go to Talk ("Post to
   Talk"). The agent that answers the owner gets the Agent Builder tool, to
   add tools and skills when the owner asks (a worker strangers write to
@@ -91,7 +91,7 @@ from services.graph_build import (
     tool_edge,
 )
 
-BUILDER_VERSION = 4
+BUILDER_VERSION = 5
 #: The first builder whose graphs follow the live Ask first rule (every app
 #: reply behind a gate, sending tools attached and held per call). Older
 #: graphs need Apply for a changed rule to take full effect.
@@ -854,6 +854,8 @@ def _build_single_employee_graph(inputs: BuildInputs) -> BuiltEmployee:
         hired=True,
         report_from=roles["agent"] if trigger.kind == "schedule" else None,
         talk_tools=talk_tools,
+        parameters_by_id=graph.parameters,
+        copy_worker_tools=not inputs.team,
     )
     roles.update(plan.role_ids(graph.place(plan.additions)))
 
@@ -875,7 +877,15 @@ def build_employee_graph(inputs: BuildInputs) -> BuiltEmployee:
     if inputs.team:
         from services.employees.team_recipe import build_team
 
-        return build_team(built, inputs)
+        built = build_team(built, inputs)
+    owners: Dict[str, str] = {}
+    for edge in built.edges:
+        if edge.get("targetHandle") != "input-tools":
+            continue
+        source, target = edge["source"], edge["target"]
+        if source in owners and owners[source] != target:
+            raise BuildError("invalid_tool_ownership", "A tool is assigned to more than one team member. Change the setup and try again.")
+        owners[source] = target
     return built
 
 

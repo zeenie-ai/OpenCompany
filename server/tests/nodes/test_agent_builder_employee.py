@@ -1,5 +1,5 @@
 """The Agent Builder on a hired employee: the rule Hire applies
-(services/employees/policy.py), both of the employee's agents as targets,
+(services/employees/policy.py), one selected agent as the tool target,
 skills copied into the shared Skills node, and refusals in plain words."""
 
 from __future__ import annotations
@@ -31,6 +31,7 @@ pytestmark = pytest.mark.node_contract
 WORKER, TALK, SKILLS = "7:aiAgent:1", "7:aiAgent:2", "7:masterSkill:1"
 APPLY = "It becomes part of all your work when the owner presses Apply on your page."
 SKILL_TOOL_ENTRY = {"enabled": True, "instructions": "", "isCustomized": False, "required": True}
+REAL_PERMISSION = ab._permission
 
 
 @pytest.fixture(autouse=True)
@@ -91,7 +92,82 @@ def talk(**kwargs):
 
 
 class TestTools:
-    async def test_a_tool_goes_to_the_worker_and_the_talk_agent(self, builder, database):
+    @pytest.mark.parametrize("managed_team", [False, True])
+    async def test_explicit_target_is_the_only_tool_owner(self, builder, database, managed_team):
+        await save_graph(database, employee_graph())
+        await hire(database, ask_first=False)
+        if managed_team:
+            from models.employees import Employee
+
+            employee = await store.get_by_workflow(database, WORKFLOW_ID)
+            async with database.reserved_session() as session:
+                row = await session.get(Employee, employee.id)
+                row.team_plan = {"version": 2, "members": [{"node_id": WORKER}, {"node_id": TALK}]}
+                await session.commit()
+        result = await call("add_tool", talk(), node_type="duckduckgoSearch", target_member_id=WORKER)
+        graph = await saved(database)
+        assert [edge["target"] for edge in graph["edges"] if edge["source"] == "7:duckduckgoSearch:1"] == [WORKER]
+        assert not any(op.get("node_type") == "duckduckgoSearch" for op in result.operations)
+        assert result.binding_results[0]["available_in_run"] is False
+
+    async def test_target_must_belong_to_employee_even_without_team_plan(self, builder, database):
+        graph = employee_graph()
+        graph["nodes"].append(node("7:aiAgent:3", "aiAgent", "Another agent"))
+        await save_graph(database, graph)
+        await hire(database, ask_first=False)
+        result = await call("add_tool", talk(), node_type="duckduckgoSearch", target_member_id="7:aiAgent:3")
+        assert result.summary == "Choose a member of this employee’s team."
+        assert await saved(database) == graph
+
+    async def test_access_is_reviewed_only_for_selected_member(self, builder, database, monkeypatch):
+        from services.employees.permissions import decide_access
+
+        async def trusted(*args):
+            return True
+
+        monkeypatch.setattr(ab, "_permission", REAL_PERMISSION)
+        monkeypatch.setattr("services.employees.permissions.trusted_owner_request", trusted)
+        graph = employee_graph()
+        await save_graph(database, graph)
+        await hire(database, ask_first=False)
+        review = await call("add_tool", talk(), node_type="duckduckgoSearch", target_member_id=WORKER)
+        assert [access["member_id"] for access in review.required_access] == [WORKER]
+        assert await saved(database) == graph
+        assert await decide_access(database, review.required_access[0]["request_id"], "owner", True)
+        result = await call("add_tool", talk(), node_type="duckduckgoSearch", target_member_id=WORKER)
+        assert result.activation_state == "saved"
+        other_review = await call("add_tool", talk(call="other-member"), node_type="duckduckgoSearch")
+        assert [access["member_id"] for access in other_review.required_access] == [TALK]
+        assert other_review.required_access[0]["request_id"] != review.required_access[0]["request_id"]
+
+    async def test_shared_legacy_tool_is_split_with_configuration_and_safe_rebind(self, builder, database):
+        graph = employee_graph()
+        old_id = "7:duckduckgoSearch:1"
+        graph["nodes"].append(node(old_id, "duckduckgoSearch", "Custom web search"))
+        graph["edges"] += [tool_edge(old_id, WORKER).to_dict(), tool_edge(old_id, TALK).to_dict()]
+        config = {"max_results": 12, "account_id": "existing-account"}
+        await save_graph(database, graph, {old_id: config})
+        await hire(database, ask_first=False)
+        result = await call("add_tool", talk(run=graph), node_type="duckduckgoSearch")
+        updated = await saved(database)
+        new_id = "7:duckduckgoSearch:2"
+        assert [edge["target"] for edge in updated["edges"] if edge["source"] == old_id] == [WORKER]
+        assert [edge["target"] for edge in updated["edges"] if edge["source"] == new_id] == [TALK]
+        assert await database.get_node_parameters(old_id) == config
+        assert await database.get_node_parameters(new_id) == config
+        assert result.operations == []  # active snapshot retains its one admitted callable
+        assert result.binding_results == [{"node_id": new_id, "saved": True, "available_in_run": False}]
+        assert "Apply" in result.summary
+        assert any(op["type"] == "delete_edge" for op in builder.frames[0]["data"]["operations"])
+        retried = await call("add_tool", talk(run=graph), node_type="duckduckgoSearch")
+        later = await call("add_tool", talk(run=graph, call="later"), node_type="duckduckgoSearch")
+        assert retried.operations == later.operations == []
+        assert not later.binding_results[0]["available_in_run"]
+        clean = await call("add_tool", talk(run=updated, call="clean"), node_type="duckduckgoSearch")
+        assert clean.operations == []
+        assert clean.binding_results[0]["available_in_run"]
+
+    async def test_a_tool_goes_only_to_the_calling_talk_agent(self, builder, database):
         await save_graph(database, employee_graph())
         await hire(database, ask_first=False)
 
@@ -100,7 +176,7 @@ class TestTools:
         graph = await saved(database)
         added = graph["nodes"][-1]
         assert (added["id"], added["data"]["label"]) == ("7:duckduckgoSearch:1", "Web search")
-        assert [e["source"] for e in edges_into(graph, WORKER, "input-tools")] == ["7:duckduckgoSearch:1"]
+        assert edges_into(graph, WORKER, "input-tools") == []
         assert "7:duckduckgoSearch:1" in [e["source"] for e in edges_into(graph, TALK, "input-tools")]
         assert await database.get_node_parameters("7:duckduckgoSearch:1") == {"max_results": 5}
         assert result.summary == f"Added Web search. You can use it now in this conversation. {APPLY}"
@@ -171,29 +247,30 @@ class TestTools:
         assert result.summary == "Web search isn't available to hired employees."
         assert builder.frames == []
 
-    async def test_a_tool_the_worker_has_is_shared_with_the_talk_agent(self, builder, database):
-        """Never a second tool of one type on an agent: the worker's comes
-        over, and the talk agent's run gets it to bind."""
+    async def test_a_tool_the_worker_has_is_not_shared_with_the_talk_agent(self, builder, database):
+        """Same type, separate physical nodes and independent configuration."""
         graph = employee_graph()
         graph["nodes"].append(node("7:duckduckgoSearch:1", "duckduckgoSearch", "Web search"))
         graph["edges"].append(tool_edge("7:duckduckgoSearch:1", WORKER).to_dict())
-        await save_graph(database, graph, {"7:duckduckgoSearch:1": {"max_results": 5}})
+        await save_graph(database, graph, {"7:duckduckgoSearch:1": {"max_results": 12}})
         await hire(database, ask_first=False)
 
         result = await call("add_tool", talk(run=graph), node_type="duckduckgoSearch")
 
         saved_graph = await saved(database)
-        assert [n["id"] for n in saved_graph["nodes"] if n["type"] == "duckduckgoSearch"] == ["7:duckduckgoSearch:1"]
-        assert "7:duckduckgoSearch:1" in [e["source"] for e in edges_into(saved_graph, TALK, "input-tools")]
+        assert [n["id"] for n in saved_graph["nodes"] if n["type"] == "duckduckgoSearch"] == ["7:duckduckgoSearch:1", "7:duckduckgoSearch:2"]
+        assert [e["source"] for e in edges_into(saved_graph, WORKER, "input-tools")] == ["7:duckduckgoSearch:1"]
+        assert "7:duckduckgoSearch:2" in [e["source"] for e in edges_into(saved_graph, TALK, "input-tools")]
+        assert await database.get_node_parameters("7:duckduckgoSearch:1") == {"max_results": 12}
         bind, edge = result.operations
-        assert (bind["type"], bind["minted_id"], bind["parameters"]) == ("add_node", "7:duckduckgoSearch:1", {"max_results": 5})
+        assert (bind["type"], bind["minted_id"], bind["parameters"]) == ("add_node", "7:duckduckgoSearch:2", {"max_results": 5})
         assert (edge["type"], edge["target"]) == ("add_edge", TALK)
-        assert result.summary.startswith("Added Web search.")
+        assert result.summary.startswith("Added Web search 2.")
 
     async def test_a_tool_saved_after_the_snapshot_is_bound_again(self, builder, database):
         graph = employee_graph()
         graph["nodes"].append(node("7:duckduckgoSearch:1", "duckduckgoSearch", "Web search"))
-        graph["edges"] += [tool_edge("7:duckduckgoSearch:1", WORKER).to_dict(), tool_edge("7:duckduckgoSearch:1", TALK).to_dict()]
+        graph["edges"].append(tool_edge("7:duckduckgoSearch:1", TALK).to_dict())
         await save_graph(database, graph)
         await hire(database, ask_first=False)
 
@@ -206,7 +283,7 @@ class TestTools:
     async def test_a_tool_the_run_has_needs_nothing(self, builder, database):
         graph = employee_graph()
         graph["nodes"].append(node("7:duckduckgoSearch:1", "duckduckgoSearch", "Web search"))
-        graph["edges"] += [tool_edge("7:duckduckgoSearch:1", WORKER).to_dict(), tool_edge("7:duckduckgoSearch:1", TALK).to_dict()]
+        graph["edges"].append(tool_edge("7:duckduckgoSearch:1", TALK).to_dict())
         await save_graph(database, graph)
         await hire(database, ask_first=False)
 

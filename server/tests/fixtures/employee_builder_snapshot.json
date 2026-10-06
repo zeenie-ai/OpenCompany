@@ -465,6 +465,72 @@
         }
       },
       {
+        "id": "7:duckduckgoSearch:2",
+        "type": "duckduckgoSearch",
+        "position": {
+          "x": 120,
+          "y": 1060
+        },
+        "data": {
+          "label": "Web search 2"
+        }
+      },
+      {
+        "id": "7:writeTodos:2",
+        "type": "writeTodos",
+        "position": {
+          "x": 290,
+          "y": 1060
+        },
+        "data": {
+          "label": "Checklist 2"
+        }
+      },
+      {
+        "id": "7:currentTimeTool:2",
+        "type": "currentTimeTool",
+        "position": {
+          "x": 460,
+          "y": 1060
+        },
+        "data": {
+          "label": "Clock 2"
+        }
+      },
+      {
+        "id": "7:canvas:2",
+        "type": "canvas",
+        "position": {
+          "x": 630,
+          "y": 1060
+        },
+        "data": {
+          "label": "Canvas 2"
+        }
+      },
+      {
+        "id": "7:stripeAction:2",
+        "type": "stripeAction",
+        "position": {
+          "x": 800,
+          "y": 1060
+        },
+        "data": {
+          "label": "Stripe 2"
+        }
+      },
+      {
+        "id": "7:googleCalendar:2",
+        "type": "googleCalendar",
+        "position": {
+          "x": 970,
+          "y": 1060
+        },
+        "data": {
+          "label": "Calendar 2"
+        }
+      },
+      {
         "id": "7:agentBuilder:1",
         "type": "agentBuilder",
         "position": {
@@ -616,43 +682,43 @@
         }
       },
       {
-        "id": "e-7:duckduckgoSearch:1-output-tool-7:aiAgent:2-input-tools",
-        "source": "7:duckduckgoSearch:1",
+        "id": "e-7:duckduckgoSearch:2-output-tool-7:aiAgent:2-input-tools",
+        "source": "7:duckduckgoSearch:2",
         "sourceHandle": "output-tool",
         "target": "7:aiAgent:2",
         "targetHandle": "input-tools"
       },
       {
-        "id": "e-7:writeTodos:1-output-tool-7:aiAgent:2-input-tools",
-        "source": "7:writeTodos:1",
+        "id": "e-7:writeTodos:2-output-tool-7:aiAgent:2-input-tools",
+        "source": "7:writeTodos:2",
         "sourceHandle": "output-tool",
         "target": "7:aiAgent:2",
         "targetHandle": "input-tools"
       },
       {
-        "id": "e-7:currentTimeTool:1-output-tool-7:aiAgent:2-input-tools",
-        "source": "7:currentTimeTool:1",
+        "id": "e-7:currentTimeTool:2-output-tool-7:aiAgent:2-input-tools",
+        "source": "7:currentTimeTool:2",
         "sourceHandle": "output-tool",
         "target": "7:aiAgent:2",
         "targetHandle": "input-tools"
       },
       {
-        "id": "e-7:canvas:1-output-tool-7:aiAgent:2-input-tools",
-        "source": "7:canvas:1",
+        "id": "e-7:canvas:2-output-tool-7:aiAgent:2-input-tools",
+        "source": "7:canvas:2",
         "sourceHandle": "output-tool",
         "target": "7:aiAgent:2",
         "targetHandle": "input-tools"
       },
       {
-        "id": "e-7:stripeAction:1-output-tool-7:aiAgent:2-input-tools",
-        "source": "7:stripeAction:1",
+        "id": "e-7:stripeAction:2-output-tool-7:aiAgent:2-input-tools",
+        "source": "7:stripeAction:2",
         "sourceHandle": "output-tool",
         "target": "7:aiAgent:2",
         "targetHandle": "input-tools"
       },
       {
-        "id": "e-7:googleCalendar:1-output-tool-7:aiAgent:2-input-tools",
-        "source": "7:googleCalendar:1",
+        "id": "e-7:googleCalendar:2-output-tool-7:aiAgent:2-input-tools",
+        "source": "7:googleCalendar:2",
         "sourceHandle": "output-tool",
         "target": "7:aiAgent:2",
         "targetHandle": "input-tools"
@@ -742,6 +808,20 @@
       },
       "7:chatReply:1": {
         "message": "{{talkwithnora.response}}"
+      },
+      "7:duckduckgoSearch:2": {
+        "max_results": 5
+      },
+      "7:currentTimeTool:2": {
+        "timezone": "America/Chicago"
+      },
+      "7:stripeAction:2": {
+        "command": ""
+      },
+      "7:googleCalendar:2": {
+        "operation": "list",
+        "calendar_id": "primary",
+        "send_updates": "none"
       },
       "7:telegramSend:2": {
         "recipient_type": "user",
@@ -986,6 +1066,105 @@
         }
       },
       {
+        "id": "7:duckduckgoSearch:2",
+        "type": "duckduckgoSearch",
+        "position": {
+          "x": 120,
+          "y": 1060
+        },
+        "data": {
+          "label": "Web search 2"
+        }
+      },
+      {
+        "id": "7:writeTodos:2",
+        "type": "writeTodos",
+        "position": {
+          "x": 290,
+          "y": 1060
+        },
+        "data": {
+          "label": "Checklist 2"
+        }
+      },
+      {
+        "id": "7:currentTimeTool:2",
+        "type": "currentTimeTool",
+        "position": {
+          "x": 460,
+          "y": 1060
+        },
+        "data": {
+          "label": "Clock 2"
+        }
+      },
+      {
+        "id": "7:simpleMemory:2",
+        "type": "simpleMemory",
+        "position": {
+          "x": 630,
+          "y": 1060
+        },
+        "data": {
+          "label": "Memory 2"
+        }
+      },
+      {
+        "id": "7:canvas:2",
+        "type": "canvas",
+        "position": {
+          "x": 800,
+          "y": 1060
+        },
+        "data": {
+          "label": "Canvas 2"
+        }
+      },
+      {
+        "id": "7:googleSheets:2",
+        "type": "googleSheets",
+        "position": {
+          "x": 970,
+          "y": 1060
+        },
+        "data": {
+          "label": "Sheets 2"
+        }
+      },
+      {
+        "id": "7:googleCalendar:2",
+        "type": "googleCalendar",
+        "position": {
+          "x": 1140,
+          "y": 1060
+        },
+        "data": {
+          "label": "Calendar 2"
+        }
+      },
+      {
+        "id": "7:stripeAction:2",
+        "type": "stripeAction",
+        "position": {
+          "x": 1310,
+          "y": 1060
+        },
+        "data": {
+          "label": "Stripe 2"
+        }
+      },
+      {
+        "id": "7:browser:2",
+        "type": "browser",
+        "position": {
+          "x": 1480,
+          "y": 1060
+        },
+        "data": {
+          "label": "Browser 2"
+        }
+      },
+      {
         "id": "7:agentBuilder:1",
         "type": "agentBuilder",
         "position": {
@@ -1167,64 +1346,64 @@
         }
       },
       {
-        "id": "e-7:duckduckgoSearch:1-output-tool-7:aiAgent:2-input-tools",
-        "source": "7:duckduckgoSearch:1",
+        "id": "e-7:duckduckgoSearch:2-output-tool-7:aiAgent:2-input-tools",
+        "source": "7:duckduckgoSearch:2",
         "sourceHandle": "output-tool",
         "target": "7:aiAgent:2",
         "targetHandle": "input-tools"
       },
       {
-        "id": "e-7:writeTodos:1-output-tool-7:aiAgent:2-input-tools",
-        "source": "7:writeTodos:1",
+        "id": "e-7:writeTodos:2-output-tool-7:aiAgent:2-input-tools",
+        "source": "7:writeTodos:2",
         "sourceHandle": "output-tool",
         "target": "7:aiAgent:2",
         "targetHandle": "input-tools"
       },
       {
-        "id": "e-7:currentTimeTool:1-output-tool-7:aiAgent:2-input-tools",
-        "source": "7:currentTimeTool:1",
+        "id": "e-7:currentTimeTool:2-output-tool-7:aiAgent:2-input-tools",
+        "source": "7:currentTimeTool:2",
         "sourceHandle": "output-tool",
         "target": "7:aiAgent:2",
         "targetHandle": "input-tools"
       },
       {
-        "id": "e-7:simpleMemory:1-output-tool-7:aiAgent:2-input-tools",
-        "source": "7:simpleMemory:1",
+        "id": "e-7:simpleMemory:2-output-tool-7:aiAgent:2-input-tools",
+        "source": "7:simpleMemory:2",
         "sourceHandle": "output-tool",
         "target": "7:aiAgent:2",
         "targetHandle": "input-tools"
       },
       {
-        "id": "e-7:canvas:1-output-tool-7:aiAgent:2-input-tools",
-        "source": "7:canvas:1",
+        "id": "e-7:canvas:2-output-tool-7:aiAgent:2-input-tools",
+        "source": "7:canvas:2",
         "sourceHandle": "output-tool",
         "target": "7:aiAgent:2",
         "targetHandle": "input-tools"
       },
       {
-        "id": "e-7:googleSheets:1-output-tool-7:aiAgent:2-input-tools",
-        "source": "7:googleSheets:1",
+        "id": "e-7:googleSheets:2-output-tool-7:aiAgent:2-input-tools",
+        "source": "7:googleSheets:2",
         "sourceHandle": "output-tool",
         "target": "7:aiAgent:2",
         "targetHandle": "input-tools"
       },
       {
-        "id": "e-7:googleCalendar:1-output-tool-7:aiAgent:2-input-tools",
-        "source": "7:googleCalendar:1",
+        "id": "e-7:googleCalendar:2-output-tool-7:aiAgent:2-input-tools",
+        "source": "7:googleCalendar:2",
         "sourceHandle": "output-tool",
         "target": "7:aiAgent:2",
         "targetHandle": "input-tools"
       },
       {
-        "id": "e-7:stripeAction:1-output-tool-7:aiAgent:2-input-tools",
-        "source": "7:stripeAction:1",
+        "id": "e-7:stripeAction:2-output-tool-7:aiAgent:2-input-tools",
+        "source": "7:stripeAction:2",
         "sourceHandle": "output-tool",
         "target": "7:aiAgent:2",
         "targetHandle": "input-tools"
       },
       {
-        "id": "e-7:browser:1-output-tool-7:aiAgent:2-input-tools",
-        "source": "7:browser:1",
+        "id": "e-7:browser:2-output-tool-7:aiAgent:2-input-tools",
+        "source": "7:browser:2",
         "sourceHandle": "output-tool",
         "target": "7:aiAgent:2",
         "targetHandle": "input-tools"
@@ -1315,6 +1494,26 @@
       },
       "7:chatReply:1": {
         "message": "{{talkwithmaya.response}}"
+      },
+      "7:duckduckgoSearch:2": {
+        "max_results": 5
+      },
+      "7:currentTimeTool:2": {
+        "timezone": "Europe/London"
+      },
+      "7:googleSheets:2": {
+        "operation": "read"
+      },
+      "7:googleCalendar:2": {
+        "operation": "list",
+        "calendar_id": "primary",
+        "send_updates": "none"
+      },
+      "7:stripeAction:2": {
+        "command": ""
+      },
+      "7:browser:2": {
+        "interaction": "full"
       },
       "7:whatsappSend:2": {
         "recipient_type": "phone",
@@ -1523,6 +1722,61 @@
         }
       },
       {
+        "id": "7:duckduckgoSearch:2",
+        "type": "duckduckgoSearch",
+        "position": {
+          "x": 120,
+          "y": 1060
+        },
+        "data": {
+          "label": "Web search 2"
+        }
+      },
+      {
+        "id": "7:writeTodos:2",
+        "type": "writeTodos",
+        "position": {
+          "x": 290,
+          "y": 1060
+        },
+        "data": {
+          "label": "Checklist 2"
+        }
+      },
+      {
+        "id": "7:currentTimeTool:2",
+        "type": "currentTimeTool",
+        "position": {
+          "x": 460,
+          "y": 1060
+        },
+        "data": {
+          "label": "Clock 2"
+        }
+      },
+      {
+        "id": "7:simpleMemory:2",
+        "type": "simpleMemory",
+        "position": {
+          "x": 630,
+          "y": 1060
+        },
+        "data": {
+          "label": "Memory 2"
+        }
+      },
+      {
+        "id": "7:canvas:2",
+        "type": "canvas",
+        "position": {
+          "x": 800,
+          "y": 1060
+        },
+        "data": {
+          "label": "Canvas 2"
+        }
+      },
+      {
         "id": "7:agentBuilder:1",
         "type": "agentBuilder",
         "position": {
@@ -1683,36 +1937,36 @@
         }
       },
       {
-        "id": "e-7:duckduckgoSearch:1-output-tool-7:aiAgent:2-input-tools",
-        "source": "7:duckduckgoSearch:1",
+        "id": "e-7:duckduckgoSearch:2-output-tool-7:aiAgent:2-input-tools",
+        "source": "7:duckduckgoSearch:2",
         "sourceHandle": "output-tool",
         "target": "7:aiAgent:2",
         "targetHandle": "input-tools"
       },
       {
-        "id": "e-7:writeTodos:1-output-tool-7:aiAgent:2-input-tools",
-        "source": "7:writeTodos:1",
+        "id": "e-7:writeTodos:2-output-tool-7:aiAgent:2-input-tools",
+        "source": "7:writeTodos:2",
         "sourceHandle": "output-tool",
         "target": "7:aiAgent:2",
         "targetHandle": "input-tools"
       },
       {
-        "id": "e-7:currentTimeTool:1-output-tool-7:aiAgent:2-input-tools",
-        "source": "7:currentTimeTool:1",
+        "id": "e-7:currentTimeTool:2-output-tool-7:aiAgent:2-input-tools",
+        "source": "7:currentTimeTool:2",
         "sourceHandle": "output-tool",
         "target": "7:aiAgent:2",
         "targetHandle": "input-tools"
       },
       {
-        "id": "e-7:simpleMemory:1-output-tool-7:aiAgent:2-input-tools",
-        "source": "7:simpleMemory:1",
+        "id": "e-7:simpleMemory:2-output-tool-7:aiAgent:2-input-tools",
+        "source": "7:simpleMemory:2",
         "sourceHandle": "output-tool",
         "target": "7:aiAgent:2",
         "targetHandle": "input-tools"
       },
       {
-        "id": "e-7:canvas:1-output-tool-7:aiAgent:2-input-tools",
-        "source": "7:canvas:1",
+        "id": "e-7:canvas:2-output-tool-7:aiAgent:2-input-tools",
+        "source": "7:canvas:2",
         "sourceHandle": "output-tool",
         "target": "7:aiAgent:2",
         "targetHandle": "input-tools"
@@ -1820,6 +2074,12 @@
       },
       "7:chatReply:1": {
         "message": "{{talkwithleo.response}}"
+      },
+      "7:duckduckgoSearch:2": {
+        "max_results": 5
+      },
+      "7:currentTimeTool:2": {
+        "timezone": "Europe/London"
       },
       "7:googleGmail:2": {
         "operation": "send",

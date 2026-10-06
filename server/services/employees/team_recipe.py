@@ -121,7 +121,8 @@ def build_team(built: Any, inputs: Any) -> Any:
     built.parameters[talk]["system_message"] += (
         "\nYou are the owner's conversational contact. For substantive work, use task_manager operation='submit_job' to give one mission to your team, "
         "acknowledge promptly, and explain that the reviewed result will arrive here later. "
-        "An assignment receipt is progress, never the final result. Never impersonate a specialist or bypass approval."
+        "An assignment receipt is progress, never the final result. Never impersonate a specialist or bypass approval. "
+        "Specialist tools belong to their specialist; ask the team to perform that work rather than attaching their tools to yourself."
     )
     built.parameters[lead]["system_message"] = (
         original_parameters["system_message"] + "\nYou coordinate and review this employee's specialist team. "
@@ -196,16 +197,25 @@ def build_team(built: Any, inputs: Any) -> Any:
     # Keep one memory per member. A legacy Talk line may share the worker's
     # memory: remove that binding and give each agent its own instance.
     memories = {node["id"] for node in built.nodes if node["type"] == "simpleMemory"}
+    owned_memories = {agent: next((edge["source"] for edge in built.edges
+                                 if edge.get("target") == agent and edge.get("targetHandle") == "input-tools"
+                                 and edge.get("source") in memories), None)
+                      for agent in [lead, talk]}
     built.edges = [edge for edge in built.edges if not (edge.get("source") in memories and edge.get("targetHandle") == "input-tools")]
     agents = [lead, talk, *(member["node_id"] for member in members)]
+    used_memories = set()
     if inputs.memory:
         for index, agent in enumerate(agents):
-            memory = next(iter(memories), None) if index == 0 else None
+            original_memory = owned_memories.get(agent)
+            memory = original_memory if original_memory not in used_memories else None
             if memory is None:
                 if not inputs.allowed("simpleMemory"):
                     raise BuildError("not_allowed", "Employee memory is not available")
                 memory = ids.next("simpleMemory")
                 built.nodes.append(graph_node(memory, "simpleMemory", labels.take("Memory"), (170 * index, -60)))
+                if original_memory in built.parameters:
+                    built.parameters[memory] = deepcopy(built.parameters[original_memory])
+            used_memories.add(memory)
             built.edges.append(tool_edge(memory, agent).to_dict())
             if index > 1:
                 members[index - 2]["tools"].append(memory)
@@ -229,10 +239,10 @@ def build_team(built: Any, inputs: Any) -> Any:
     if manual:
         delivery_ids.append(final_reply)
         # The contact retains its existing chatReply acknowledgement.
-        coordination = {"writeTodos", "canvas", "currentTimeTool"}
+        coordination = {"writeTodos", "canvas"}
         for edge in list(built.edges):
             if edge.get("target") == talk and edge.get("targetHandle") == "input-tools" and nodes.get(edge["source"], {}).get("type") in coordination:
-                built.edges.append(tool_edge(edge["source"], lead).to_dict())
+                edge["target"] = lead
     else:
         built.edges = [edge for edge in built.edges if not (
             edge.get("targetHandle") == "input-main" and (
@@ -245,13 +255,22 @@ def build_team(built: Any, inputs: Any) -> Any:
         edge.get("target") == talk and edge.get("targetHandle") == "input-tools"
         and nodes.get(edge["source"], {}).get("type") in {"writeTodos", "canvas"}
     )]
-    # Date-sensitive work uses the same configured clock; sharing a read
-    # tool does not share a member's Context, memory, or callable identity.
+    # Date-sensitive work preserves the owner's timezone, with one clock
+    # instance per agent rather than a shared callable node.
     clock = next((node["id"] for node in built.nodes if node["type"] == "currentTimeTool"), None)
     if clock:
-        for member in members:
-            built.edges.append(tool_edge(clock, member["node_id"]).to_dict())
-            member["tools"].append(clock)
+        for index, agent in enumerate(agents):
+            if any(edge.get("target") == agent and edge.get("targetHandle") == "input-tools"
+                   and nodes.get(edge.get("source"), {}).get("type") == "currentTimeTool" for edge in built.edges):
+                continue
+            private_clock = ids.next("currentTimeTool")
+            built.nodes.append(graph_node(private_clock, "currentTimeTool", labels.take("Clock"), (170 * index, 120)))
+            built.parameters[private_clock] = deepcopy(built.parameters.get(clock, {}))
+            built.edges.append(tool_edge(private_clock, agent).to_dict())
+    for member in members:
+        member["tools"] = list(dict.fromkeys(edge["source"] for edge in built.edges
+                                            if edge.get("target") == member["node_id"]
+                                            and edge.get("targetHandle") == "input-tools"))
     # Replaced canonical lead IDs must also be reflected in edge identities.
     for edge in built.edges:
         edge["id"] = f'e-{edge["source"]}-{edge["sourceHandle"]}-{edge["target"]}-{edge["targetHandle"]}'

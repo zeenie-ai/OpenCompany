@@ -5,6 +5,13 @@ agents connected to their canonical `input-teammates` handle. The topology is
 the authorization boundary: ordinary tool edges and agents belonging to other
 leads cannot receive team tasks.
 
+Managed employee creation and Builder changes give each concrete tool node
+one owning agent. The lead delegates work requiring a specialist's tools
+through Task Manager instead of attaching that same callable node to itself.
+Private utility instances may repeat a node type; their IDs and bindings stay
+separate. This does not restrict intentional custom wiring in existing Dev
+graphs.
+
 ## Runtime model
 
 1. `build_teammate_descriptors()` expands connected agents into stable

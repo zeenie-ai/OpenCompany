@@ -276,6 +276,15 @@ def test_a_schedule_is_recorded_as_it_runs_in_the_owners_time():
 # ----- Talk -----
 
 
+def test_new_hires_never_share_concrete_tools_between_worker_and_talk():
+    built = build_employee_graph(inputs(hire(), "whatsapp", connected={"whatsapp"}))
+    owners = {}
+    for edge in built.edges:
+        if edge.get("targetHandle") == "input-tools":
+            owners.setdefault(edge["source"], set()).add(edge["target"])
+    assert all(len(targets) == 1 for targets in owners.values()), owners
+
+
 async def test_an_app_event_hire_gets_a_talk_line_beside_its_work():
     built = build_employee_graph(inputs(hire(), "whatsapp", connected={"whatsapp"}))
     roles = built.node_roles
@@ -286,15 +295,17 @@ async def test_an_app_event_hire_gets_a_talk_line_beside_its_work():
     assert (talk["prompt"], talk["provider"], talk["model"]) == ("{{talk.message}}", "openai", "gpt-x")
     assert "talks to you in Talk" in talk["system_message"] and "agent_builder" in talk["system_message"]
     assert "agent_builder" not in built.parameters[roles["agent"]]["system_message"]
-    # Its own Context; the worker's tools are shared, the Agent Builder,
-    # generated UI and sending on WhatsApp are the talk agent's alone
-    # (strangers write to the worker).
+    # Its own Context and configured tool instances; the worker's callable
+    # nodes are never rebound to the contact (strangers write to the worker).
     assert node(built, "talk_context")["data"]["agentNodeId"] == roles["talk_agent"]
     worker_tools = {e["source"] for e in built.edges if e["target"] == roles["agent"] and e["targetHandle"] == "input-tools"}
     talk_tools = {e["source"] for e in built.edges if e["target"] == roles["talk_agent"] and e["targetHandle"] == "input-tools"}
     only_talk = {n["type"]: n for n in built.nodes if n["id"] in talk_tools - worker_tools}
-    assert set(only_talk) == {"agentBuilder", "chatUi", "whatsappSend"}
-    assert worker_tools <= talk_tools
+    worker_by_type = {n["type"]: n for n in built.nodes if n["id"] in worker_tools}
+    assert set(only_talk) == set(worker_by_type) | {"agentBuilder", "chatUi", "whatsappSend"}
+    assert not worker_tools & talk_tools
+    for kind, worker in worker_by_type.items():
+        assert built.parameters.get(only_talk[kind]["id"], {}) == built.parameters.get(worker["id"], {})
     send = built.parameters[only_talk["whatsappSend"]["id"]]
     assert send == {"recipient_type": "phone", "message_type": "text", "format_markdown": True}
     assert "send it with your send tools" in talk["system_message"]

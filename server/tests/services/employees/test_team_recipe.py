@@ -13,7 +13,7 @@ from services.graph_build import label_key
 from services.workflow_validator import validate_workflow
 
 
-def build(*, manual=True, allowed=lambda _: True, skills=(), job="Research customers and book appointments"):
+def build(*, manual=True, allowed=lambda _: True, skills=(), job="Research customers and book appointments", memory=True, timezone="UTC"):
     request = HireEmployeeRequest.model_validate({
         "idempotency_key": "team-test", "job": job, "name": "Maya", "role": "Receptionist",
         "apps": ["Google Calendar"] if manual else ["WhatsApp", "Google Calendar"],
@@ -23,7 +23,7 @@ def build(*, manual=True, allowed=lambda _: True, skills=(), job="Research custo
     return build_employee_graph(BuildInputs(
         workflow_id="71", request=request, apps=[get_app("google_calendar")] if manual else [get_app("whatsapp"), get_app("google_calendar")],
         connected_app_ids={"google_calendar", "whatsapp"}, llm=LLMChoice(provider="openai", model="configured-model", local=False),
-        team=True, allowed=allowed, skills=skills,
+        team=True, allowed=allowed, skills=skills, memory=memory, timezone=timezone,
     ))
 
 
@@ -31,11 +31,50 @@ def node(built, role):
     return next(node for node in built.nodes if node["id"] == built.node_roles[role])
 
 
+@pytest.mark.parametrize("manual", [True, False])
+@pytest.mark.parametrize("memory", [True, False])
+def test_each_tool_node_has_one_owner_and_private_clock(manual, memory):
+    built = build(manual=manual, memory=memory, timezone="Asia/Kolkata")
+    owners = {}
+    for edge in built.edges:
+        if edge.get("targetHandle") == "input-tools":
+            owners.setdefault(edge["source"], set()).add(edge["target"])
+    assert all(len(targets) == 1 for targets in owners.values()), owners
+    agents = [built.node_roles["agent"], built.node_roles["talk_agent"],
+              *(member["node_id"] for member in built.team_plan["members"])]
+    clocks = {node["id"] for node in built.nodes if node["type"] == "currentTimeTool"}
+    for agent in agents:
+        assigned = [clock for clock in clocks if owners.get(clock) == {agent}]
+        assert len(assigned) == 1
+        assert built.parameters[assigned[0]] == {"timezone": "Asia/Kolkata"}
+    for member in built.team_plan["members"]:
+        assert set(member["tools"]) == {tool for tool, targets in owners.items() if targets == {member["node_id"]}}
+
+
 def test_selection_is_bounded_and_job_specific():
     assert team_preview("Research competitors") == [{"responsibility": "Researches information"}]
     assert [role.key for role in select_responsibilities("Manage meetings and Gmail", ["Google Calendar"])] == ["calendar", "operations"]
     assert 1 <= len(select_responsibilities("Do a task")) <= 3
     assert len(select_responsibilities("Research software and social posts and email appointments")) == 3
+
+
+def test_hire_refuses_a_recipe_that_reintroduces_shared_tools(monkeypatch):
+    from services.employees import team_recipe
+    from services.graph_build import tool_edge
+
+    compose = team_recipe.build_team
+
+    def broken_recipe(built, inputs):
+        team = compose(built, inputs)
+        tool = next(edge["source"] for edge in team.edges if edge.get("targetHandle") == "input-tools"
+                    and edge.get("target") == team.node_roles["talk_agent"])
+        team.edges.append(tool_edge(tool, team.node_roles["agent"]).to_dict())
+        return team
+
+    monkeypatch.setattr(team_recipe, "build_team", broken_recipe)
+    with pytest.raises(BuildError) as error:
+        build()
+    assert error.value.code == "invalid_tool_ownership"
 
 
 def test_manual_team_has_separate_contact_and_scoped_specialists():

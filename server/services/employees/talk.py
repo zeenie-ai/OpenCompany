@@ -25,9 +25,8 @@ and never disturbs the work path.
 - a reply only: "Reply in Chat" after the chat-fed agent;
 - or a whole line beside the worker: a "Talk" chat trigger on the
   workflow's session, a "Talk with <name>" agent on the worker's model, its
-  own Context (a conversation is never shared), the worker's tools and
-  skills wired to it too (the same nodes, so Memory, the checklist and the
-  canvas are shared), and its reply.
+  own Context, independent configured tools for hired employees, the
+  worker's skills, and its reply. A tool node has one owning agent.
 
 A hired employee also gets what the Hire builder gives: the Agent Builder
 tool on its talk agent, with the talk tools (generated UI in the chat, and
@@ -290,6 +289,8 @@ def plan_talk_line(
     hired: bool = False,
     report_from: Optional[str] = None,
     talk_tools: Sequence[TalkTool] = (),
+    parameters_by_id: Optional[Mapping[str, Mapping[str, Any]]] = None,
+    copy_worker_tools: bool = True,
 ) -> TalkPlan:
     """What turns ``state`` on; no additions when it already is, only the
     roles of the line there. ``agent`` describes the talk agent a whole
@@ -297,7 +298,10 @@ def plan_talk_line(
     ``talk_tools`` are added to it too, and to it alone; ``report_from`` (a
     hired schedule worker) adds Post to Talk after that agent. Raises
     ValueError for an unsupported state, or a whole line without
-    ``agent``."""
+    ``agent``. Hired contacts get independent tool instances with the saved
+    parameters. Teams set ``copy_worker_tools=False`` and delegate app work
+    to specialists instead. Existing nonemployee editor graphs retain their
+    established wiring."""
     view = _View(graph)
     if state.state == "unsupported":
         raise ValueError("this graph has no agent the owner could talk to")
@@ -331,7 +335,18 @@ def plan_talk_line(
         ]
         edges += [main_edge("talk_trigger", "talk_agent"), main_edge("talk_agent", "talk_reply", send_condition())]
         tools = view.sources(worker, TOOLS_INPUT)
-        edges += [tool_edge(tool, "talk_agent") for tool in tools]
+        if copy_worker_tools:
+            for index, tool in enumerate(dict.fromkeys(tools)):
+                if hired:
+                    original = view.nodes[tool]
+                    name = f"talk_worker_tool_{index}"
+                    nodes.append(NewNode(
+                        name, view.type_of(tool), str((original.get("data") or {}).get("label") or view.type_of(tool)),
+                        dict((parameters_by_id or {}).get(tool) or {}), (x - 240 + 170 * index, y + 360),
+                    ))
+                    edges.append(tool_edge(name, "talk_agent"))
+                else:
+                    edges.append(tool_edge(tool, "talk_agent"))
         edges += [skill_edge(skills, "talk_agent") for skills in view.sources(worker, SKILL_INPUT)]
         roles = {"talk_trigger": "talk_trigger", "talk_agent": "talk_agent", "talk_context": "talk_context", "talk_reply": "talk_reply"}
         talk_agent = "talk_agent"

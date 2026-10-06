@@ -62,6 +62,7 @@ The `AgentBuilderParams` model fields ARE the LLM-provided tool args.
 |------|------|---------|----------|---------------------|-------------|
 | `operation` | enum | `inspect_canvas` | no | - | `inspect_canvas`, `inspect_node`, `search_docs`, `read_doc`, `plan_update`, `apply_update`, `add_tool`, `add_skill`, `add_subagent`, `create_workflow` |
 | `node_type` | string | `""` | no | `operation == add_tool` | Tool node type, from `available_tools` |
+| `target_member_id` | string | `""` | no | - | Employee member receiving the tool; defaults to the caller. Must belong to this employee, including legacy employees. |
 | `skill_name` | string | `""` | no | `operation == add_skill` | Skill name (SKILL.md frontmatter `name`, or a library skill's name), from `available_skills` |
 | `agent_type` | string | `""` | no | `operation == add_subagent` | Agent node type to add as a teammate (caller must be a team lead) |
 | `workflow_name` | string | `""` | no | `operation == create_workflow` | Employee display name for the shared Hire pipeline |
@@ -106,7 +107,7 @@ flowchart TD
   R -- inspect_canvas --> I[canvas + key params from rows<br/>catalogues: registry for an editor-built workflow,<br/>policy-allowed tools + library and Discover skills for an employee]
   R -- add_tool --> T{allowed?<br/>registry catalogue / policy.check_tool}
   T -- no --> Tn[summary = reason, operations = empty]
-  T -- yes --> Tp[targets: caller, or the employee's worker + talk agent<br/>plan: new node, or edges from the existing one]
+  T -- yes --> Tp[target: caller or selected employee member<br/>reuse private binding or create separate instance<br/>split legacy shared binding for this target]
   Tp --> S[apply_graph_additions<br/>ledger key = tool call id scoped to the run]
   S --> Tb{saved tool missing from this run?}
   Tb -- yes --> Tbo[prepend a bind-only add_node]
@@ -127,9 +128,9 @@ flowchart TD
   `ctx.raw["parent_node_id"]` (every path), never guessed from edges: one
   Agent Builder node can serve several agents. In an editor-built workflow
   the caller is the target, so with none nothing is added ("Only an agent can
-  ask me to add things."); a hired employee's targets are its worker and talk
-  agent from `node_roles`, and the caller only when neither is in the saved
-  graph.
+  ask me to add things."); an employee's tool target is `target_member_id`
+  or the caller, validated against its `node_roles` for both legacy and team
+  employees. Membership is checked again during the mutation transaction.
 - **Saved graph**: operations read `workflow.data` fresh, so calls in one run
   see each other. A workflow that is not saved, or whose caller is not in the
   saved graph yet, gets "Save the workflow first".
@@ -144,17 +145,23 @@ flowchart TD
   `disabled_groups`); skills from the SkillLoader registry outside
   `disabled_skill_folders`, plus the owner's library. The target is the
   caller.
-- **Hired employee**: targets are the worker and the talk agent
-  (`node_roles["agent"]`, `["talk_agent"]`). `check_tool` decides tools
+- **Hired employee**: tools go to one selected member, with no fanout to
+  other workers or Talk. `check_tool` decides tools
   (registry app tools and the tools every hire gets; nothing that sends or
   spends while asking first, the browser read-only then; hire allowlist;
   connected apps); the Clock gets the owner's `profile_timezone`.
   `check_skill` refuses `skill` and `*-personality`; skills come from the
   library (all of it, on or off for new hires) and the Discover folder
   (`server/skills/employee/`), text copied in. `add_subagent` is refused.
-- **One tool of a type per agent**: a target that has one keeps it; the rest
-  get the caller's (else any target's) by a new edge; a new node only when no
-  target has one.
+- **One concrete tool owner**: a same-type tool on another member is never
+  attached to this target. The target reuses its private node or receives a
+  fresh node. Ownership and parameter rows are read inside the mutation
+  transaction. A legacy shared binding is replaced only for this target with
+  a separate configured instance; the old node, settings and other targets'
+  edges remain intact. Different agents may have independent same-type nodes.
+  An active snapshot retaining the shared callable receives no new binding
+  during repair, avoiding duplicate names; the result reports saved access
+  with `available_in_run: false` until Apply or a clean run.
 - **Bind-only**: a deployed run starts from the generation's frozen snapshot.
   A tool saved earlier (an earlier message) but missing from this run's canvas
   comes back as an `add_node` op with the saved id and row, and nothing is

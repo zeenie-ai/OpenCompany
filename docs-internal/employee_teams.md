@@ -13,6 +13,14 @@ tool node. Talk uses its `submit_job` operation, while the lead uses `assign_tas
 and the existing review operations. Each managed assignment supplies mission,
 context, acceptance criteria and resolved dependency IDs.
 
+Each concrete tool node has exactly one owning agent. Business capabilities
+belong to the specialist responsible for the work; the lead and Talk request
+that work through Task Manager. Private utilities such as clocks, memory and
+checklists may use the same node type with separate configured instances.
+Builder additions target one selected member, and never broadcast the same
+callable node to the whole team. Existing shared bindings are separated when
+that capability is updated, without resetting active work or other members.
+
 Job admission and reviewed delivery run off canvas. The admitted graph captures
 the team plan, original recipient outputs and parameter snapshot; durable job
 records and Temporal activities retain restart, approval and uncertain-send

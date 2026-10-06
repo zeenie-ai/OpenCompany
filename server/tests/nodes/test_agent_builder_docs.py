@@ -75,7 +75,7 @@ async def test_owner_reviews_scoped_access_before_mutation(builder, database, mo
     await hire(database)
     first = await call("add_tool", talk(), node_type="duckduckgoSearch")
     assert first.activation_state == "blocked"
-    assert len(first.required_access) == 2  # scopes are distinct worker/Talk
+    assert len(first.required_access) == 1  # only the selected Talk member
     assert await saved(database) == graph
     for request in first.required_access:
         assert not await decide_access(database, request["request_id"], "another-owner", True)

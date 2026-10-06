@@ -196,6 +196,8 @@ async def _enable_talk(database: Any, auth_service: Any, workflow_id: str, *, ke
         hired=row is not None,
         report_from=roles.get("agent") if schedule else None,
         talk_tools=tools,
+        parameters_by_id={source: await database.get_node_parameters(source) or {}
+                          for source in sources(graph, state.worker, "input-tools")} if state.worker else {},
     )
     node_ids: Dict[str, str] = {}
     added = False

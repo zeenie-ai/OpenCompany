@@ -1,6 +1,6 @@
 """talk.py: whether the owner can talk to a graph, and the additions that
 let them: "Reply in Chat" after a chat-fed agent, or a whole talk line
-beside the worker that shares its tools and skills but keeps its own
+beside the worker with independent tools, shared skills and its own
 Context. The line runs only on the owner's messages."""
 
 from __future__ import annotations
@@ -185,8 +185,8 @@ def test_a_whole_line_beside_the_worker():
     assert into(talk) == {
         (roles["talk_trigger"], "input-main"),
         (roles["talk_context"], "input-context"),
-        ("7:writeTodos:1", "input-tools"),
-        ("7:canvas:1", "input-tools"),
+        ("7:writeTodos:2", "input-tools"),
+        ("7:canvas:2", "input-tools"),
         ("7:masterSkill:1", "input-skill"),
         (roles["builder"], "input-tools"),
     }
@@ -207,8 +207,18 @@ async def test_a_whole_line_is_a_valid_graph_whose_run_is_only_the_line():
     roles = plan.role_ids(placed.node_ids)
     run_nodes, _ = _build_run_graph(trigger_node_id=roles["talk_trigger"], trigger_output={"message": "hi"}, nodes=placed.graph["nodes"], edges=placed.graph["edges"])
     ran = {n["id"] for n in run_nodes}
-    assert {roles["talk_agent"], roles["talk_reply"], roles["talk_context"], "7:writeTodos:1", "7:masterSkill:1"} <= ran
-    assert not ran & {"7:aiAgent:1", "7:whatsappSend:1", "7:whatsappReceive:1"}
+    assert {roles["talk_agent"], roles["talk_reply"], roles["talk_context"], "7:writeTodos:2", "7:masterSkill:1"} <= ran
+    assert not ran & {"7:aiAgent:1", "7:whatsappSend:1", "7:whatsappReceive:1", "7:writeTodos:1", "7:canvas:1"}
+
+
+def test_hired_talk_copies_tool_configuration_without_reusing_worker_nodes():
+    params = {"7:canvas:1": {"title": "Owner board"}, "7:writeTodos:1": {"todos": ["Keep appointments"]}}
+    plan = plan_talk_line(RECEPTIONIST, talk_state(RECEPTIONIST), workflow_id="7", agent=TALK_AGENT,
+                          hired=True, parameters_by_id=params)
+    placed = add_to_graph("7", RECEPTIONIST, plan.additions)
+    assert placed.parameters["7:canvas:2"] == params["7:canvas:1"]
+    assert placed.parameters["7:writeTodos:2"] == params["7:writeTodos:1"]
+    assert not any(edge["source"] in params and edge["targetHandle"] == "input-tools" for edge in placed.edges)
 
 
 def test_a_schedule_workers_reports_are_posted_to_talk():

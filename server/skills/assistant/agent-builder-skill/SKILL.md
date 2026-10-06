@@ -4,7 +4,7 @@ description: How to use the Agent Builder tool (agent_builder) to inspect your c
 allowed-tools: "agentBuilder"
 metadata:
   author: opencompany
-  version: "5.1"
+  version: "5.2"
   category: autonomous
 ---
 
@@ -63,8 +63,11 @@ Every change is saved at once and shows on the canvas.
 `inspect_canvas` returns an `employee` block (`{asks_first, agents}`) when
 you are one of the owner's AI employees. Then:
 
-- What you add goes to both of your agents: the one that does the work and
-  the one the owner talks to (`employee.agents`).
+- A tool goes only to the selected member (`target_member_id`), or to you
+  when no target is supplied. Choose a member from `employee.agents`.
+  Different members may use the same tool type, but each needs a separate
+  concrete node and its own configuration; never share one tool node among
+  agents or forward its work through extra nodes.
 - `available_tools` lists only what you may be given: the tools every hire
   has (web search, checklist, clock, memory, canvas) and the tools of the
   apps in the app registry. An app tool shows `connected: false` until the
@@ -117,9 +120,15 @@ No other fields. Returns:
 
 ### `add_tool`
 
-Field: `node_type`. Wires the tool to you (and, for an employee, to both
-agents). If you already have a tool of that type, nothing is added: the
-summary says so, and the tool is callable.
+Fields: `node_type`, optional `target_member_id` for a hired employee.
+Wires a private tool instance to that member, defaulting to you. Another
+member's same-type node is never reused. An existing private binding is
+reused, so retries do not add duplicates. If an older graph shares your
+binding, Builder separates your connection and preserves its saved settings
+and other members' connections. When this run already holds the old binding,
+the new instance waits for Apply or the next clean run: read `binding_results`
+and the summary before calling it. A tool added to another member is saved
+for that member; it does not become your tool.
 
 ### `add_skill`
 

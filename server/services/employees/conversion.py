@@ -18,7 +18,116 @@ from models.employees import Employee, EmployeeGrant
 from models.employee_conversion import EmployeeConversion
 from services.employees.builder import BuildInputs, BuiltEmployee
 from services.employees.team_recipe import build_team
-from services.graph_build import NodeIds, graph_node, main_edge, tool_edge
+from services.graph_build import Labels, NodeIds, graph_node, main_edge, tool_edge
+
+
+class _OwnershipReviewNeeded(ValueError):
+    """Existing differently configured callables need an owner's review."""
+
+
+def _isolate_conversion_tools(proposed: Any, source: dict, workflow_id: str, original: str, talk: str) -> None:
+    """Keep historical nodes while giving each converted callable one owner."""
+    nodes = {node["id"]: node for node in proposed.nodes}
+    old_ids = {node["id"] for node in source["graph"]["nodes"]}
+    old_bindings = [edge for edge in source["graph"]["edges"] if edge.get("targetHandle") == "input-tools"]
+    ids = NodeIds(workflow_id, proposed.nodes)
+    labels = Labels(node["data"]["label"] for node in proposed.nodes)
+
+    def copy_tool(tool: str) -> str:
+        node_type = nodes[tool]["type"]
+        copied = ids.next(node_type)
+        node = graph_node(copied, node_type, labels.take(nodes[tool]["data"]["label"]), (0, -60))
+        proposed.nodes.append(node)
+        nodes[copied] = node
+        proposed.parameters[copied] = deepcopy(source["parameters"].get(tool, proposed.parameters.get(tool, {})))
+        return copied
+
+    memories = {node_id for node_id, node in nodes.items() if node["type"] == "simpleMemory"}
+    old_memories = memories & old_ids
+    if old_memories:
+        current = {agent: next((edge["source"] for edge in proposed.edges if edge.get("target") == agent
+                   and edge.get("targetHandle") == "input-tools" and edge["source"] in memories), None)
+                   for agent in [proposed.node_roles["agent"], talk, *(member["node_id"] for member in proposed.team_plan["members"])]}
+        legacy = {agent: list(dict.fromkeys(edge["source"] for edge in old_bindings
+                  if edge["target"] == agent and edge["source"] in old_memories)) for agent in {original, talk}}
+        if any(len(bound) > 1 for bound in legacy.values()):
+            raise _OwnershipReviewNeeded("Multiple existing memories need review")
+        template = next(iter(legacy.get(original) or legacy.get(talk) or sorted(old_memories)))
+        proposed.edges = [edge for edge in proposed.edges if not (
+            edge.get("targetHandle") == "input-tools" and edge["source"] in memories)]
+        used = set()
+        # The original shared memory stays with the conversational contact.
+        # Existing exclusive worker memory keeps its identity and history too.
+        agents = list(dict.fromkeys([talk, original, *current]))
+        for agent in agents:
+            preferred = next(iter(legacy.get(agent, [])), None)
+            memory = preferred if preferred and preferred not in used else current.get(agent)
+            if memory in used or memory is None or (memory in old_memories and memory != preferred):
+                memory = copy_tool(preferred or template)
+            elif memory not in old_ids:
+                proposed.parameters[memory] = deepcopy(source["parameters"].get(preferred or template, {}))
+            used.add(memory)
+            proposed.edges.append(tool_edge(memory, agent).to_dict())
+
+    # The recipe may transfer a legacy shared business tool to a specialist
+    # while the reused worker retains its old edge. Keep the specialist's
+    # canonical binding rather than reintroducing that shared capability.
+    owners: dict[str, list[dict]] = {}
+    for edge in proposed.edges:
+        if edge.get("targetHandle") == "input-tools":
+            owners.setdefault(edge["source"], []).append(edge)
+    members = {member["node_id"] for member in proposed.team_plan["members"]}
+    remove = set()
+    for tool, bindings in owners.items():
+        targets = list(dict.fromkeys(edge["target"] for edge in bindings))
+        node_type = nodes[tool]["type"]
+        if node_type in {"agentBuilder", "chatUi"}:
+            # Expansion and owner UI remain on the trusted Talk contact,
+            # even when a legacy worker accidentally shared that binding.
+            bindings[0]["target"] = talk
+            remove.update(id(edge) for edge in bindings[1:])
+            continue
+        if len(targets) < 2:
+            continue
+        if node_type in {"currentTimeTool", "writeTodos", "canvas"}:
+            keeper = proposed.node_roles["agent"] if proposed.node_roles["agent"] in targets else targets[0]
+            for edge in bindings:
+                if edge["target"] != keeper:
+                    edge["source"] = copy_tool(tool)
+        else:
+            keeper = next((target for target in targets if target in members and target != original), targets[0])
+            for edge in bindings:
+                if edge["target"] != keeper:
+                    remove.add(id(edge))
+    proposed.edges = [edge for edge in proposed.edges if id(edge) not in remove]
+
+    # Reusing a worker also combines its old utilities with recipe utilities.
+    # Preserve the existing callable when those configurations are compatible.
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for edge in proposed.edges:
+        if edge.get("targetHandle") == "input-tools":
+            groups.setdefault((edge["target"], nodes[edge["source"]]["type"]), []).append(edge)
+    remove = set()
+    for (agent, _node_type), bindings in groups.items():
+        distinct = list(dict.fromkeys(edge["source"] for edge in bindings))
+        if len(distinct) < 2:
+            continue
+        previous = [tool for tool in distinct if tool in old_ids]
+        if len(previous) > 1 and any(source["parameters"].get(tool, {}) != source["parameters"].get(previous[0], {}) for tool in previous[1:]):
+            raise _OwnershipReviewNeeded("Differently configured existing tools need review")
+        keeper = next((edge["source"] for edge in old_bindings if edge["target"] == agent and edge["source"] in distinct), previous[0] if previous else distinct[0])
+        remove.update(id(edge) for edge in bindings if edge["source"] != keeper)
+    proposed.edges = [edge for edge in proposed.edges if id(edge) not in remove]
+    # Generated utilities made redundant by reuse have no historical state.
+    # Never remove an original node, or anything still referenced by the
+    # graph, Context ownership, parameters or the employee's recorded roles.
+    candidates = (set(owners) | memories | {edge["source"] for bindings in groups.values() for edge in bindings}) - old_ids
+    connected = {endpoint for edge in proposed.edges for endpoint in (edge["source"], edge["target"])}
+    referenced = set(proposed.node_roles.values()) | {node.get("data", {}).get("agentNodeId") for node in proposed.nodes}
+    removable = {node_id for node_id in candidates - connected - referenced
+                 if not any(node_id in json.dumps(parameters, default=str) for key, parameters in proposed.parameters.items() if key != node_id)}
+    proposed.nodes = [node for node in proposed.nodes if node["id"] not in removable]
+    proposed.parameters = {key: value for key, value in proposed.parameters.items() if key not in removable}
 
 
 def _hash(snapshot: dict) -> str:
@@ -125,20 +234,7 @@ def _prepare(source: dict, employee: Any, workflow_id: str, name: str) -> dict:
     # account IDs and schedule parameters. Only conversational instructions
     # change; new members inherit the employee's resolved model.
     old_ids = {node["id"] for node in source["graph"]["nodes"]}
-    original_memories = {node["id"] for node in source["graph"]["nodes"] if node["type"] == "simpleMemory"}
-    if original_memories:
-        memory_types = {node["id"] for node in proposed.nodes if node["type"] == "simpleMemory"}
-        proposed.edges = [edge for edge in proposed.edges if not (
-            edge["source"] in original_memories and edge["target"] == proposed.node_roles["agent"]
-            or edge["source"] in memory_types - original_memories and edge["target"] in {original, talk}
-        )]
-        proposed.edges.extend(deepcopy(edge) for edge in source["graph"]["edges"] if edge["source"] in original_memories and edge not in proposed.edges)
-        ids = NodeIds(workflow_id, proposed.nodes)
-        memory = ids.next("simpleMemory")
-        proposed.nodes.append(graph_node(memory, "simpleMemory", "Team memory", (0, -420)))
-        proposed.edges.append(tool_edge(memory, proposed.node_roles["agent"]).to_dict())
-        # Restore original memory rows used by the recipe, which never had
-        # their data deleted or their ID repurposed during conversion.
+    _isolate_conversion_tools(proposed, source, workflow_id, original, talk)
     for node_id in old_ids:
         before = source["parameters"].get(node_id, {})
         after = proposed.parameters.get(node_id, {})
@@ -186,6 +282,9 @@ async def plan_conversion(database: Any, workflow_id: str, owner_id: str, *, ena
                 "message": "This employee has a custom setup. Review it in Dev mode before adding a team."}
     try:
         proposed = _prepare(source, employee, workflow_id, workflow.name)
+    except _OwnershipReviewNeeded:
+        return {"success": False, "error": "needs_dev_review", "review_required": True,
+                "message": "This employee has separately configured tools. Review their responsibilities in Dev mode before adding a team."}
     except ValueError:
         return {"success": False, "error": "team_unavailable"}
     report = await validate_workflow(nodes=proposed["graph"]["nodes"], edges=proposed["graph"]["edges"], parameters_by_id=proposed["parameters"])

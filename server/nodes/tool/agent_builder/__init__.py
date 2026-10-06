@@ -31,7 +31,7 @@ registry and the tools every hire gets, nothing that sends or spends while
 the owner asks to be asked first, only apps that are connected and
 allowlisted; skills from the owner's library or Settings > Skills'
 Discover folder, with their text copied in. What is added goes to the
-worker and to the agent the owner talks to. A refusal is one plain
+selected member, with a separate concrete tool instance for each agent. A refusal is one plain
 sentence the agent passes on.
 
 When it works: a tool added for the calling agent is bound for the rest of
@@ -58,6 +58,7 @@ from services.graph_build import (
     SKILL_INPUT,
     TOOLS_INPUT,
     Edge,
+    EdgeRemoval,
     GraphAdditions,
     NewNode,
     ParamMerge,
@@ -209,7 +210,7 @@ def _mutation_id(ctx: NodeContext, params: BaseModel, caller: Optional[str]) -> 
     return f"agent-builder:{hashlib.sha256(request.encode('utf-8')).hexdigest()}"
 
 
-async def _save(ctx: NodeContext, database: Any, canvas: _Canvas, additions: GraphAdditions, params: BaseModel, caller: Optional[str], *, prepare: Optional[Callable] = None, grant_ids: Sequence[str] = ()) -> Any:
+async def _save(ctx: NodeContext, database: Any, canvas: _Canvas, additions: GraphAdditions, params: BaseModel, caller: Optional[str], *, prepare: Optional[Callable] = None, grant_ids: Sequence[str] = (), read_for_prepare: Optional[Callable] = None) -> Any:
     """Apply ``additions`` (possibly none: the call still claims its ledger
     key, so a retry replays what the first attempt saved). None when the
     workflow is gone; raises ValueError when the graph changed under the
@@ -228,6 +229,8 @@ async def _save(ctx: NodeContext, database: Any, canvas: _Canvas, additions: Gra
             identity = hashlib.sha256(json.dumps(scope, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
             if identity != grant_id:
                 raise _AccessChanged("The approved access scope changed")
+        if read_for_prepare:
+            await read_for_prepare(session)
 
     return await apply_graph_additions(
         database,
@@ -236,7 +239,7 @@ async def _save(ctx: NodeContext, database: Any, canvas: _Canvas, additions: Gra
         mutation_id=_mutation_id(ctx, params, caller),
         caller_node_id=caller,
         prepare=prepare,
-        authorize=authorize if grant_ids else None,
+        authorize=authorize if grant_ids or read_for_prepare else None,
         authorization_grant_ids=grant_ids,
     )
 
@@ -922,12 +925,10 @@ class AgentBuilderNode(ToolNode):
             label, tool_params = decision.label, dict(decision.params)
             if decision.app is None and "timezone" in tool_params:
                 tool_params["timezone"] = await _owner_timezone(database)
-            targets = employee.agents or ([caller] if caller else [])
-            if employee.row.team_plan:
-                target = params.target_member_id or caller
-                if target not in employee.agents:
-                    return _refused("add_tool", "Choose a member of this employee’s team.")
-                targets = [str(target)]
+            target = params.target_member_id or caller
+            if target not in employee.agents:
+                return _refused("add_tool", "Choose a member of this employee’s team.")
+            targets = [str(target)]
         problem = _unsaved(canvas, targets)
         if problem:
             return _refused("add_tool", problem)
@@ -940,25 +941,49 @@ class AgentBuilderNode(ToolNode):
         if params.dry_run:
             return AgentBuilderOutput(operation="add_tool", summary=f"Ready to add {label} with validated access.", operations=[], validation_issues=[], required_access=[], activation_state="planned")
 
-        # A target that has a tool of this type keeps it (a second would give
-        # it two tools of one name); the rest get the caller's, else any
-        # target's, else a new one.
+        # Parameter reads and ownership decisions use the same mutation
+        # transaction. Split legacy shared bindings for this target only.
+        saved_tool_parameters: Dict[str, Dict[str, Any]] = {}
+
+        async def read_tool_parameters(session: Any) -> None:
+            from models.database import NodeParameter, Workflow
+            from sqlmodel import select
+
+            workflow = await session.get(Workflow, canvas.workflow_id)
+            if employee is not None:
+                from models.employees import Employee
+                from services.employees.start import AGENT_ROLES
+
+                current = (await session.execute(select(Employee).where(Employee.workflow_id == canvas.workflow_id))).scalar_one_or_none()
+                roles = current.node_roles or {} if current else {}
+                members = {value for role, value in roles.items() if role in AGENT_ROLES or
+                           (role.startswith("specialist_") and role.rsplit("_", 1)[-1].isdigit())}
+                if targets[0] not in members:
+                    raise ValueError("The target no longer belongs to this employee")
+            ids = [node["id"] for node in (workflow.data or {}).get("nodes", []) if node.get("type") == node_type] if workflow else []
+            if ids:
+                rows = (await session.execute(select(NodeParameter).where(NodeParameter.node_id.in_(ids)))).scalars().all()
+                saved_tool_parameters.update({row.node_id: dict(row.parameters or {}) for row in rows})
+
         def prepare(graph: Mapping[str, Any]) -> Tuple[GraphAdditions, Mapping[str, str]]:
             live = _Canvas(canvas.workflow_id, list(graph.get("nodes") or []), list(graph.get("edges") or []), True)
             if any(live.node(target) is None for target in targets):
                 raise ValueError("The target agent was removed")
-            have = {target: live.source_of_type(target, TOOLS_INPUT, node_type) for target in targets}
-            existing = have.get(caller) or next((node for node in have.values() if node), None)
-            if existing:
-                return GraphAdditions(edges=tuple(tool_edge(existing, target) for target in targets if have[target] is None)), {"tool": existing}
+            target = targets[0]
+            existing = live.source_of_type(target, TOOLS_INPUT, node_type)
+            owners = {str(edge.get("target")) for edge in live.edges if edge.get("source") == existing and
+                      (edge.get("targetHandle") or edge.get("target_handle")) == TOOLS_INPUT} if existing else set()
+            if existing and owners == {target}:
+                return GraphAdditions(), {"tool": existing}
             x, y = live.position(targets[0])
             spread = 170 * len(live.sources(targets[0], TOOLS_INPUT))
             return GraphAdditions(
-                nodes=(NewNode("tool", node_type, label, tool_params, position=(x - 240 + spread, y + 240)),),
-                edges=tuple(tool_edge("tool", target) for target in targets),
+                nodes=(NewNode("tool", node_type, label, saved_tool_parameters.get(existing, {}) if existing else tool_params, position=(x - 240 + spread, y + 240)),),
+                edges=(tool_edge("tool", target),),
+                removed_edges=(EdgeRemoval(existing, target, TOOLS_INPUT),) if existing else (),
             ), {}
         try:
-            result = await _save(ctx, database, canvas, GraphAdditions(), params, caller, prepare=prepare, grant_ids=grant_ids)
+            result = await _save(ctx, database, canvas, GraphAdditions(), params, caller, prepare=prepare, grant_ids=grant_ids, read_for_prepare=read_tool_parameters)
         except _AccessChanged:
             return _refused("add_tool", "The owner’s permission changed. Ask them to allow access again.")
         except ValueError:
@@ -971,20 +996,35 @@ class AgentBuilderNode(ToolNode):
         label = result.labels.get("tool") or canvas.label(node_id)
         operations = _scoped_runtime_operations(result.operations, caller)
         changed = bool(result.operations)
+        removed = {op.get("edge_id") for op in result.operations if op.get("type") == "delete_edge"}
+        run_types = {node.get("id"): node.get("type") for node in ctx.nodes or []}
+        replaces_bound_tool = caller in targets and any(
+            edge.get("target") == caller and (edge.get("targetHandle") or edge.get("target_handle")) == TOOLS_INPUT and
+            (edge.get("id") in removed or (edge.get("source") != node_id and run_types.get(edge.get("source")) == node_type))
+            for edge in ctx.edges or []
+        )
+        if replaces_bound_tool:
+            # Hot rebind appends tools; replacing an admitted same-name tool
+            # waits for Apply instead of exposing two callable identities.
+            operations = []
         # A saved tool this run started without (it was added after the
         # run's snapshot) is handed back for the agent loop to bind.
-        bind = caller in targets and node_id not in _added_nodes(result) and not _run_has_tool(ctx, node_id, str(caller))
+        bind = not replaces_bound_tool and caller in targets and node_id not in _added_nodes(result) and not _run_has_tool(ctx, node_id, str(caller))
         if bind:
             saved = await database.get_node_parameters(node_id) or {}
             operations.insert(0, workflow_ops.add_node(node_id, node_type, saved, label=label, minted_id=node_id))
+        summary = (f"Added {label} to that team member’s responsibilities. {_APPLY_HINT}" if caller not in targets and changed
+                   else _tool_summary(ctx, employee=employee is not None, label=label, node_id=node_id, changed=changed, bind=bind))
+        if replaces_bound_tool:
+            summary = f"Saved a separate {label} for this team member. {_APPLY_HINT}"
         return AgentBuilderOutput(
             operation="add_tool",
-            summary=(f"Added {label} to that team member’s responsibilities. {_APPLY_HINT}" if caller not in targets and changed else _tool_summary(ctx, employee=employee is not None, label=label, node_id=node_id, changed=changed, bind=bind)),
+            summary=summary,
             operations=operations,
             request_id=_mutation_id(ctx, params, caller),
             activation_state="saved",
             saved_revision=result.saved_revision,
-            binding_results=[{"node_id": node_id, "saved": True, "available_in_run": bool(caller in targets and (_rebind_on(ctx) or _run_has_tool(ctx, node_id, str(caller))))}],
+            binding_results=[{"node_id": node_id, "saved": True, "available_in_run": bool(not replaces_bound_tool and caller in targets and (_rebind_on(ctx) or _run_has_tool(ctx, node_id, str(caller))))}],
         )
 
     # ---- add_skill --------------------------------------------------------
