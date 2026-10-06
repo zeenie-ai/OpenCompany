@@ -136,6 +136,9 @@ class TestWorkflowLoopContract:
         assert "agent.compact_context" not in calls
         failure = next(p for p in phases if p.get("status") == "error")
         assert failure["hint"] == error.hint
+        assert failure["requires_user_action"] is True
+        assert failure["retryable"] is False
+        assert failure["phase"] == "failed"
         assert "secret" not in str(failure)
         if from_tool:
             assert len(checkpoints) == 1

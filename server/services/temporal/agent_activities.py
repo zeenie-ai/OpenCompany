@@ -175,6 +175,7 @@ def _as_temporal_llm_error(error: Any, *, attempt: Optional[int] = None):
     """
 
     from temporalio.exceptions import ApplicationError
+    from services.llm.protocol import valid_retry_delay
 
     category_value = getattr(getattr(error, "category", None), "value", None)
     category = str(category_value or "unknown")
@@ -183,6 +184,14 @@ def _as_temporal_llm_error(error: Any, *, attempt: Optional[int] = None):
         getattr(error, "user_message", None)
         or "The language model provider request failed."
     )
+    retry_after = valid_retry_delay(getattr(error, "retry_after", None))
+    provider_delay = None
+    if retry_after is not None:
+        candidate = timedelta(seconds=retry_after)
+        # Positive floats below timedelta's resolution must not turn
+        # the provider hint into an immediate retry loop.
+        if candidate > timedelta(0):
+            provider_delay = candidate
     details = {
         "provider": provider,
         "category": category,
@@ -190,7 +199,7 @@ def _as_temporal_llm_error(error: Any, *, attempt: Optional[int] = None):
         "status_code": getattr(error, "status_code", None),
         "provider_code": getattr(error, "provider_code", None),
         "request_id": getattr(error, "request_id", None),
-        "retry_after": getattr(error, "retry_after", None),
+        "retry_after": provider_delay.total_seconds() if provider_delay is not None else None,
         "retry_after_raw": getattr(error, "retry_after_raw", None),
         **({"hint": error.hint} if getattr(error, "hint", None) else {}),
         **({"requires_user_action": True} if getattr(error, "requires_user_action", False) else {}),
@@ -198,14 +207,7 @@ def _as_temporal_llm_error(error: Any, *, attempt: Optional[int] = None):
     # Honor the provider's own pacing: a 429 with Retry-After should wait
     # exactly that long before the next attempt instead of the policy's
     # generic backoff.
-    retry_after = details["retry_after"]
-    next_retry_delay = (
-        timedelta(seconds=float(retry_after))
-        if details["retryable"]
-        and isinstance(retry_after, (int, float))
-        and retry_after > 0
-        else None
-    )
+    next_retry_delay = provider_delay if details["retryable"] else None
     if details["retryable"] and next_retry_delay is None and attempt is not None:
         from ._retry_policies import LLM_STEP_RETRY
 
@@ -471,6 +473,8 @@ async def _execute_native_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
             detail=f"LLM step waiting: {payload.get('model')}",
         )
     except LLMError as error:
+        if emitter is not None:
+            emitter.discard()
         if not error.retryable:
             await _save_failed_tool_results(payload, payload.get("messages") or [])
         attempt = _llm_activity_attempt()
@@ -479,11 +483,16 @@ async def _execute_native_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
             await _publish_llm_attempt_status(payload, error=error, delay=failure.next_retry_delay)
             logger.warning(
                 "LLM retry scheduled: provider=%s category=%s attempt=%s delay_seconds=%s",
-                error.provider, error.category.value, attempt, failure.next_retry_delay.total_seconds(),
+                error.provider, error.category.value, attempt,
+                failure.next_retry_delay.total_seconds() if failure.next_retry_delay is not None else None,
             )
         # The safe category and diagnostic fields are sufficient here. Raw
         # SDK bodies in chained tracebacks can include prompts or credentials.
         raise failure from None
+    except asyncio.CancelledError:
+        if emitter is not None:
+            emitter.discard()
+        raise
 
     if response is _STOPPED:
         # What the owner saw so far is the answer: the reply node posts it,

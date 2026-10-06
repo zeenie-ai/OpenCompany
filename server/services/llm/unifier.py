@@ -20,6 +20,8 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
+import httpx
+
 from core.encryption import fingerprint_credential
 from core.logging import get_logger
 from services.llm.config import resolve_credential, split_provider_ref
@@ -42,6 +44,15 @@ if TYPE_CHECKING:
     from services.auth import AuthService
 
 logger = get_logger(__name__)
+
+
+def _provider_failure(provider: str, exc: BaseException) -> LLMError:
+    """Normalize typed transport errors that native SDKs can pass through."""
+    error = LLMError.from_exception(provider, exc)
+    if isinstance(exc, httpx.TransportError):
+        error.category = LLMErrorCategory.TIMEOUT if isinstance(exc, httpx.TimeoutException) else LLMErrorCategory.CONNECTION
+        error.retryable = True
+    return error
 
 
 @dataclass(eq=False)
@@ -146,8 +157,8 @@ class ChatUnifier:
             if not translate_errors:
                 raise
             raise error.as_node_error() from error
-        except spec.sdk_exception_types as e:
-            error = LLMError.from_exception(provider, e)
+        except spec.sdk_exception_types + (httpx.TransportError, httpx.HTTPStatusError) as e:
+            error = _provider_failure(provider, e)
             self._log_failure("LLM provider request failed", error, entry, provider)
             if not translate_errors:
                 raise error from e
@@ -202,8 +213,8 @@ class ChatUnifier:
         except LLMError as error:
             self._log_failure("LLM model-list request failed", error, entry, provider)
             raise error.as_node_error() from error
-        except spec.sdk_exception_types as e:
-            error = LLMError.from_exception(provider, e)
+        except spec.sdk_exception_types + (httpx.TransportError, httpx.HTTPStatusError) as e:
+            error = _provider_failure(provider, e)
             self._log_failure("LLM model-list request failed", error, entry, provider)
             raise error.as_node_error() from error
         except (ValueError, TypeError, OSError) as e:
@@ -471,6 +482,7 @@ class ChatUnifier:
             status_code=error.status_code,
             provider_code=error.provider_code,
             request_id=error.request_id,
+            retry_after=error.retry_after,
             url=redact_url(getattr(client, "endpoint_url", None)),
             url_source=getattr(client, "url_source", None),
         )

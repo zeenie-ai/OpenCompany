@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from typing import (
     Any,
     Awaitable,
@@ -16,7 +16,6 @@ from typing import (
     Dict,
     List,
     Optional,
-    Protocol,
     Sequence,
     Type,
 )
@@ -38,6 +37,7 @@ from services.llm.protocol import (
     ToolCall,
     ToolDef,
     Usage,
+    valid_retry_delay,
 )
 from services.tool_identity import DuplicateToolNameError
 from services.tool_output import bound_tool_output, tool_output_is_capped
@@ -154,14 +154,16 @@ async def run_native_llm_step(
                 if not translate_errors:
                     raise
                 raise error.as_node_error() from error
-            delay = (
-                error.retry_after
-                if error.retry_after is not None
-                else min(0.25 * (2**attempt), 5.0)
-            )
+            delay = valid_retry_delay(error.retry_after)
+            if delay is None:
+                delay = min(5.0 * (2 ** min(attempt, 20)), 300.0)
             # A provider delay is a minimum, including Gemini RetryInfo.
             # Cap only our fallback backoff, never the provider's hint.
-            await asyncio.sleep(max(0.0, float(delay)))
+            logger.warning(
+                "llm_retry_wait", provider=error.provider, category=error.category.value,
+                attempt=attempt + 1, next_attempt=attempt + 2, delay_seconds=delay,
+            )
+            await asyncio.sleep(delay)
 
     raise AssertionError("native LLM retry loop exhausted unexpectedly")
 
@@ -257,7 +259,6 @@ async def run_native_agent_loop(
             except Exception as exc:  # progress is observational
                 logger.debug("[Agent loop] progress callback failed: %s", exc)
 
-        definitions = [_tool_definition(tool) for tool in current_tools]
         try:
             response = await run_native_llm_step(
                 chat_unifier,

@@ -333,6 +333,23 @@ Canvas and Talk show automatic retries, and Talk does not time out a reply
 while Temporal is waiting to retry. Status delivery is best effort and must
 never cause a successful model request to be repeated.
 
+Across providers, an HTTP 429 remains a throttle even when its message
+mentions an API key. Structured billing codes require user action; incidental
+message text cannot turn a throttle or server outage into authentication
+failure. Retry pacing accepts seconds, HTTP-date `Retry-After`,
+`retry-after-ms`, and Gemini `RetryInfo`, using the longest valid hint.
+Invalid, zero, or unrepresentable waits use exponential backoff. Native
+agent retries start at five seconds; Temporal retains its durable retry
+policy and cancellation behavior.
+
+SDK HTTP transport errors use this same boundary. OpenAI Responses failures
+in a successful HTTP body or `response.failed` event are classified before
+recording any output; valid max-token incomplete responses remain supported.
+Failed streamed attempts are withdrawn immediately, while an owner's Stop
+keeps the intentionally saved partial reply. Planned Temporal retries log
+a warning with activity context instead of a runtime traceback; terminal
+quota, credential, and unexpected programming failures keep their tracebacks.
+
 The legacy `factory.py` (`create_provider` / `is_native_provider` /
 `NATIVE_PROVIDERS`) was **removed** — `ChatUnifier` + `registry.py` is the
 only dispatch layer.

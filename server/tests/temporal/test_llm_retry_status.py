@@ -1,5 +1,6 @@
 """A provider outage stays visible until the next attempt; quota fails fast."""
 
+import asyncio
 from dataclasses import replace
 from datetime import timedelta
 from unittest.mock import AsyncMock
@@ -9,7 +10,7 @@ from google.genai.errors import ClientError, ServerError
 from temporalio.exceptions import ApplicationError
 from temporalio.testing import ActivityEnvironment
 
-from services.llm.protocol import LLMError, LLMResponse, Message, message_to_wire
+from services.llm.protocol import LLMError, LLMErrorCategory, LLMResponse, Message, StreamEvent, message_to_wire
 from services.status_broadcaster import StatusBroadcaster
 from services.temporal.agent_activities import execute_llm_step
 
@@ -106,4 +107,104 @@ async def test_status_failure_does_not_repeat_a_successful_model_call(step, monk
     run.return_value = LLMResponse(content="done")
     response = await env.run(execute_llm_step, payload)
     assert response["content"] == "done"
+    run.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("delay", [
+    pytest.param(float("nan"), id="nan"),
+    pytest.param(float("inf"), id="infinity"),
+    pytest.param(float("-inf"), id="negative-infinity"),
+    pytest.param(0, id="zero"), pytest.param(-1, id="negative"),
+    pytest.param(True, id="boolean"), pytest.param("12", id="string"),
+    pytest.param(1e-9, id="below-timedelta-resolution"),
+    pytest.param(315576000001, id="protobuf-duration-overflow"),
+    pytest.param(1e300, id="timedelta-overflow"),
+    pytest.param(10 ** 400, id="float-overflow"),
+])
+async def test_invalid_manual_provider_delay_preserves_failure_and_uses_backoff(step, delay):
+    env, run, broadcaster, payload = step
+    env.info = replace(env.info, attempt=3)
+    run.side_effect = LLMError("private body", "gemini", category=LLMErrorCategory.RATE_LIMIT,
+                               retryable=True, retry_after=delay)
+    with pytest.raises(ApplicationError) as raised:
+        await env.run(execute_llm_step, payload)
+    failure = raised.value
+    assert failure.type == "LLMError.rate_limit"
+    assert not failure.non_retryable
+    assert failure.next_retry_delay == timedelta(seconds=20)
+    assert failure.details[0]["retry_after"] is None
+    assert broadcaster._status["nodes"]["agent-1"]["data"]["retry_after"] == 20
+    run.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_retry_logging_does_not_mask_failure_when_delay_is_missing(step, monkeypatch):
+    from services.temporal import agent_activities
+
+    env, run, _, payload = step
+    run.side_effect = LLMError("private", "gemini", category=LLMErrorCategory.SERVER, retryable=True)
+    expected = ApplicationError("Gemini is temporarily unavailable.", type="LLMError.server")
+    monkeypatch.setattr(agent_activities, "_as_temporal_llm_error", lambda *_args, **_kwargs: expected)
+    with pytest.raises(ApplicationError) as raised:
+        await env.run(execute_llm_step, payload)
+    assert raised.value is expected
+    run.assert_awaited_once()
+
+
+def _stream_events(monkeypatch, payload):
+    from services.chat import hub, stream
+
+    events = []
+    monkeypatch.setattr(hub, "publish_run_event", lambda **kwargs: events.append(kwargs))
+    monkeypatch.setattr(stream, "stream_setting", lambda _name: 1)
+    payload["chat_stream"] = {"run_id": "run-1", "session_id": "session-1", "workflow_id": "graph-7"}
+    return events
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("retryable", [False, True])
+async def test_failed_partial_stream_is_withdrawn_before_any_retry(step, monkeypatch, retryable):
+    env, run, _, payload = step
+    events = _stream_events(monkeypatch, payload)
+
+    async def fail(_unifier, **kwargs):
+        await kwargs["on_event"](StreamEvent("text", "Unreviewed partial"))
+        raise LLMError("private", "gemini", category=LLMErrorCategory.SERVER if retryable else LLMErrorCategory.QUOTA,
+                       retryable=retryable)
+
+    run.side_effect = fail
+    with pytest.raises(ApplicationError) as raised:
+        await env.run(execute_llm_step, payload)
+    assert raised.value.non_retryable is not retryable
+    assert [event["suffix"] for event in events] == ["text.started", "text.content", "custom"]
+    assert events[-1]["fields"] == {"name": "opencompany.segment_discarded", "value": {"message_id": "run-1.7.1"}}
+    assert events[-1]["event_key"] == "discard:run-1.7.1"
+    run.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_activity_cancellation_withdraws_partial_and_cancels_provider(step, monkeypatch):
+    env, run, _, payload = step
+    events = _stream_events(monkeypatch, payload)
+    streamed = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def wait(_unifier, **kwargs):
+        try:
+            await kwargs["on_event"](StreamEvent("text", "Unfinished partial"))
+            streamed.set()
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    run.side_effect = wait
+    task = asyncio.create_task(env.run(execute_llm_step, payload))
+    await asyncio.wait_for(streamed.wait(), timeout=5)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert cancelled.is_set()
+    assert events[-1]["fields"] == {"name": "opencompany.segment_discarded", "value": {"message_id": "run-1.7.1"}}
+    assert not any(event["suffix"] == "text.ended" for event in events)
     run.assert_awaited_once()

@@ -120,3 +120,28 @@ def test_malformed_google_details_do_not_hide_the_original_error(details):
     error = LLMError.from_exception("gemini", exc)
     assert error.category == LLMErrorCategory.RATE_LIMIT
     assert error.retry_after is None
+
+
+def test_google_body_hint_cannot_shorten_a_millisecond_header():
+    exc = gemini_error(retry_info("30s"))
+    exc.response = SimpleNamespace(headers={"retry-after-ms": "45000"})
+    assert LLMError.from_exception("gemini", exc).retry_after == 45
+
+
+def test_unrepresentable_google_duration_cannot_hide_valid_pacing():
+    exc = gemini_error(retry_info("315576000001s"))
+    exc.response = SimpleNamespace(headers={"retry-after": "15"})
+    assert LLMError.from_exception("gemini", exc).retry_after == 15
+
+
+@pytest.mark.parametrize("status", [429, 500])
+def test_google_status_is_not_authentication_when_throttle_mentions_api_key(status):
+    error = LLMError.from_exception("gemini", gemini_error(status=status, message="Capacity unavailable for this API key"))
+    assert error.category == (LLMErrorCategory.RATE_LIMIT if status == 429 else LLMErrorCategory.SERVER)
+    assert error.retryable
+
+
+@pytest.mark.parametrize("quota_value", [0.5, "0.5", False, None, "invalid"])
+def test_nonzero_or_malformed_quota_value_does_not_imply_terminal_zero_limit(quota_value):
+    error = LLMError.from_exception("gemini", gemini_error(quota_failure({"quotaValue": quota_value})))
+    assert error.retryable

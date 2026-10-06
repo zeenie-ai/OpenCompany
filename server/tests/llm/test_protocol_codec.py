@@ -241,6 +241,7 @@ def test_structured_error_preserves_http_date_retry_after():
         status_code = 429
         headers = {
             "retry-after": "Wed, 21 Oct 2037 07:28:00 GMT",
+            "date": "Wed, 21 Oct 2037 07:27:00 GMT",
             "x-request-id": "request-http-date",
         }
 
@@ -252,6 +253,6 @@ def test_structured_error_preserves_http_date_retry_after():
         "openai", RateLimitError("rate limited")
     )
 
-    assert error.retry_after is None
+    assert error.retry_after == 60
     assert error.retry_after_raw == "Wed, 21 Oct 2037 07:28:00 GMT"
     assert error.request_id == "request-http-date"

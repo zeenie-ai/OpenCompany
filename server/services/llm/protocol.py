@@ -15,6 +15,8 @@ import json
 import math
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from enum import Enum
 from typing import (
     Any,
@@ -491,31 +493,36 @@ class LLMError(Exception):
 
     @classmethod
     def from_exception(cls, provider: str, exc: BaseException) -> "LLMError":
-        status = _optional_int(
-            getattr(exc, "status_code", None)
-            or getattr(getattr(exc, "response", None), "status_code", None)
-            or getattr(exc, "code", None)
-        )
+        body = _error_body(exc)
+        status = next((parsed for candidate in (
+            getattr(exc, "status_code", None),
+            getattr(getattr(exc, "response", None), "status_code", None),
+            getattr(exc, "code", None), body.get("code"),
+        ) if (parsed := _http_status(candidate)) is not None), None)
         code = getattr(exc, "code", None)
         if isinstance(code, int):
             code = str(code)
-        body = getattr(exc, "body", None)
-        if not code and isinstance(body, Mapping):
-            error_body = body.get("error", body)
-            if isinstance(error_body, Mapping):
-                code = error_body.get("code") or error_body.get("type")
+        if not code:
+            code = body.get("code") or body.get("type") or body.get("status")
 
         request_id = (
             getattr(exc, "request_id", None)
             or _header(getattr(exc, "response", None), "x-request-id")
             or _header(getattr(exc, "response", None), "request-id")
         )
-        retry_after_value = _header(
-            getattr(exc, "response", None), "retry-after"
-        )
-        retry_after = _optional_float(retry_after_value)
-        if retry_after is not None and (not math.isfinite(retry_after) or retry_after < 0):
-            retry_after = None
+        response = getattr(exc, "response", None)
+        retry_after_value = _header(response, "retry-after")
+        retry_after = _retry_delay(retry_after_value)
+        if retry_after is None:
+            retry_at = _http_date(retry_after_value)
+            if retry_at is not None:
+                reference = _http_date(_header(response, "date")) or datetime.now(timezone.utc)
+                retry_after = _retry_delay(max(0.0, (retry_at - reference).total_seconds()))
+        milliseconds = _header(response, "retry-after-ms")
+        parsed_milliseconds = _optional_float(milliseconds)
+        ms_delay = _retry_delay(parsed_milliseconds / 1000) if parsed_milliseconds is not None else None
+        if ms_delay is not None and (retry_after is None or ms_delay > retry_after):
+            retry_after, retry_after_value = ms_delay, milliseconds
         # google-genai stores the REST error envelope in ``details``, not
         # ``body``. Google sends pacing as google.rpc.RetryInfo there, often
         # without a Retry-After header. Never retry earlier than either hint.
@@ -525,8 +532,8 @@ class LLMError(Exception):
             raw_delay = detail.get("retryDelay")
             if not isinstance(raw_delay, str) or not re.fullmatch(r"\d+(?:\.\d{1,9})?s", raw_delay):
                 continue
-            delay = _optional_float(raw_delay[:-1])
-            if delay is not None and math.isfinite(delay) and (retry_after is None or delay > retry_after):
+            delay = _retry_delay(raw_delay[:-1])
+            if delay is not None and (retry_after is None or delay > retry_after):
                 retry_after, retry_after_value = delay, raw_delay
         category = _classify_error(exc, status)
         return cls(
@@ -767,6 +774,64 @@ def _header(response: Any, name: str) -> Optional[str]:
         return None
 
 
+def _http_status(value: Any) -> Optional[int]:
+    """Accept actual HTTP codes, never an object's incidental int coercion."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        status = value
+    elif isinstance(value, float) and math.isfinite(value) and value.is_integer():
+        status = int(value)
+    elif isinstance(value, str) and re.fullmatch(r"[0-9]{3}", value.strip()):
+        status = int(value.strip())
+    else:
+        return None
+    return status if 100 <= status <= 599 else None
+
+
+def _retry_delay(value: Any) -> Optional[float]:
+    """Reject pacing values that cannot become a runtime retry duration."""
+    delay = _optional_float(value)
+    if isinstance(value, bool) or delay is None:
+        return None
+    return 0.0 if delay == 0 else valid_retry_delay(delay)
+
+
+def valid_retry_delay(value: Any) -> Optional[float]:
+    """A positive delay safe for both Python and protobuf retry durations."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    delay = _optional_float(value)
+    # google.protobuf.Duration represents at most ten thousand years.
+    if delay is None or not math.isfinite(delay) or not 0 < delay <= 315576000000:
+        return None
+    try:
+        timedelta(seconds=delay)
+    except OverflowError:
+        return None
+    return delay
+
+
+def _http_date(value: Any) -> Optional[datetime]:
+    if not isinstance(value, str):
+        return None
+    try:
+        date = parsedate_to_datetime(value)
+        return date.replace(tzinfo=timezone.utc) if date.tzinfo is None else date.astimezone(timezone.utc)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _error_body(exc: BaseException) -> Mapping[str, Any]:
+    for attribute in ("body", "details"):
+        body = getattr(exc, attribute, None)
+        if isinstance(body, Mapping):
+            error = body.get("error", body)
+            if isinstance(error, Mapping):
+                return error
+    return {}
+
+
 def _google_error_details(exc: BaseException) -> List[Mapping[str, Any]]:
     """Read Google's typed details without exposing provider bodies publicly."""
     body = getattr(exc, "details", None)
@@ -790,13 +855,15 @@ def _google_quota_exhausted(exc: BaseException) -> bool:
             if not isinstance(violation, Mapping):
                 continue
             quota_id = re.sub(r"[^a-z]", "", str(violation.get("quotaId") or "").lower())
-            if "perday" in quota_id or _optional_int(violation.get("quotaValue")) == 0:
+            quota_value = violation.get("quotaValue")
+            if "perday" in quota_id or (not isinstance(quota_value, bool) and _optional_float(quota_value) == 0):
                 return True
     # Some Gemini responses omit quotaValue but name the zero limit in the
     # message. A bare RESOURCE_EXHAUSTED or "check quota" stays retryable:
     # Vertex shared-capacity throttling uses exactly that generic response.
-    message = str(getattr(exc, "message", "") or "").lower()
-    return getattr(exc, "status", None) == "RESOURCE_EXHAUSTED" and bool(
+    body = _error_body(exc)
+    message = str(getattr(exc, "message", "") or body.get("message") or "").lower()
+    return (getattr(exc, "status", None) or body.get("status")) == "RESOURCE_EXHAUSTED" and bool(
         re.search(r"quota exceeded for metric:[^\r\n]*\blimit:\s*0(?:[,\s]|$)", message)
     )
 
@@ -806,10 +873,14 @@ def _classify_error(
 ) -> LLMErrorCategory:
     name = type(exc).__name__.lower()
     message = str(exc).lower()
+    body = _error_body(exc)
+    message += " " + str(body.get("message") or "").lower()
+    codes = {str(value).lower() for value in (getattr(exc, "code", None), body.get("code"), body.get("type"), body.get("status")) if value is not None}
     # A quota/credit exhaustion can arrive as 429, but backoff cannot fix it.
     # Match narrow billing signatures before the generic HTTP classifiers.
-    if status in {400, 402, 403, 429} and (
-        status == 402 or any(marker in message for marker in (
+    if status in {None, 400, 402, 403, 429} and (
+        status == 402 or codes & {"insufficient_quota", "billing_hard_limit_reached", "insufficient_credits", "credit_balance_too_low", "prepayment_credits_depleted"}
+        or any(marker in message for marker in (
             "spend cap breached", "insufficient_quota", "insufficient credits",
             "credit balance is too low", "billing_hard_limit_reached",
             "prepayment credits are depleted", "prepay credit balance is depleted",
@@ -818,13 +889,27 @@ def _classify_error(
         return LLMErrorCategory.BILLING
     if status == 429 and _google_quota_exhausted(exc):
         return LLMErrorCategory.QUOTA
-    if status == 401 or "authentication" in name or "api key" in message:
-        return LLMErrorCategory.AUTHENTICATION
-    if status == 403 or "permission" in name:
-        return LLMErrorCategory.PERMISSION
-    if status == 429 or "ratelimit" in name or "rate limit" in message:
+    # HTTP status is authoritative; throttles and outages can mention the
+    # API key without indicating that authentication has failed.
+    if status == 429:
         return LLMErrorCategory.RATE_LIMIT
-    if status == 404 or "notfound" in name:
+    if status is not None and status >= 500:
+        return LLMErrorCategory.SERVER
+    if status == 401:
+        return LLMErrorCategory.AUTHENTICATION
+    if status == 403:
+        return LLMErrorCategory.PERMISSION
+    if status == 408:
+        return LLMErrorCategory.TIMEOUT
+    if codes & {"invalid_api_key", "api_key_invalid", "authentication_error", "unauthenticated"}:
+        return LLMErrorCategory.AUTHENTICATION
+    if status == 400 and any(marker in message for marker in ("api key not valid", "invalid api key", "incorrect api key")):
+        return LLMErrorCategory.AUTHENTICATION
+    if status is None and ("authentication" in name or "api key" in message):
+        return LLMErrorCategory.AUTHENTICATION
+    if status is None and "permission" in name:
+        return LLMErrorCategory.PERMISSION
+    if status == 404:
         return LLMErrorCategory.NOT_FOUND
     if (
         "context_length" in message
@@ -832,14 +917,18 @@ def _classify_error(
         or "too many tokens" in message
     ):
         return LLMErrorCategory.CONTEXT_LENGTH
-    if status in {400, 409, 422} or "badrequest" in name:
+    if status in {400, 409, 422}:
         return LLMErrorCategory.INVALID_REQUEST
-    if status == 408 or "timeout" in name:
+    if status is None and ("ratelimit" in name or "rate limit" in message):
+        return LLMErrorCategory.RATE_LIMIT
+    if "notfound" in name:
+        return LLMErrorCategory.NOT_FOUND
+    if "badrequest" in name:
+        return LLMErrorCategory.INVALID_REQUEST
+    if "timeout" in name:
         return LLMErrorCategory.TIMEOUT
     if "connection" in name:
         return LLMErrorCategory.CONNECTION
-    if status is not None and status >= 500:
-        return LLMErrorCategory.SERVER
     return LLMErrorCategory.UNKNOWN
 
 

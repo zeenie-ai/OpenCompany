@@ -124,7 +124,9 @@ def _tool(name: str) -> AgentToolSpec:
 
 
 @pytest.mark.asyncio
-async def test_native_step_retries_only_structured_retryable_errors():
+async def test_native_step_retries_only_structured_retryable_errors(monkeypatch):
+    sleep = AsyncMock()
+    monkeypatch.setattr("services.agent_runtime.asyncio.sleep", sleep)
     class _RetryUnifier:
         def __init__(self):
             self.calls: list[dict[str, Any]] = []
@@ -156,6 +158,35 @@ async def test_native_step_retries_only_structured_retryable_errors():
     assert len(unifier.calls) == 2
     assert all(call["sdk_max_retries"] == 0 for call in unifier.calls)
     assert all(call["translate_errors"] is False for call in unifier.calls)
+    sleep.assert_awaited_once_with(5.0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("delay", [None, 0, -1, True, float("nan"), float("inf"), 1e300, "30"])
+async def test_invalid_provider_delay_uses_backoff_without_masking_error(monkeypatch, delay):
+    error = LLMError("limited", "openai", category=LLMErrorCategory.RATE_LIMIT, retryable=True, retry_after=delay)
+    unifier = SimpleNamespace(chat=AsyncMock(side_effect=[error, error, LLMResponse(content="done")]))
+    sleep = AsyncMock()
+    monkeypatch.setattr("services.agent_runtime.asyncio.sleep", sleep)
+    result = await run_native_llm_step(
+        unifier, provider="openai", api_key="test", messages=[Message(role="user", content="go")],
+        model="test", temperature=0, max_tokens=100,
+    )
+    assert result.content == "done"
+    assert [call.args[0] for call in sleep.await_args_list] == [5.0, 10.0]
+
+
+@pytest.mark.asyncio
+async def test_cancel_during_backoff_does_not_make_another_provider_call(monkeypatch):
+    error = LLMError("limited", "gemini", category=LLMErrorCategory.RATE_LIMIT, retryable=True)
+    unifier = SimpleNamespace(chat=AsyncMock(side_effect=error))
+    monkeypatch.setattr("services.agent_runtime.asyncio.sleep", AsyncMock(side_effect=asyncio.CancelledError()))
+    with pytest.raises(asyncio.CancelledError):
+        await run_native_llm_step(
+            unifier, provider="gemini", api_key="test", messages=[Message(role="user", content="go")],
+            model="test", temperature=0, max_tokens=100,
+        )
+    unifier.chat.assert_awaited_once()
 
 
 @pytest.mark.asyncio

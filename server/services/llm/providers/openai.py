@@ -27,6 +27,33 @@ from services.llm.protocol import (
 #: Responses API stream events that carry the finished response.
 _RESPONSES_TERMINAL_EVENTS = frozenset({"response.completed", "response.incomplete", "response.failed"})
 
+# Responses generation errors arrive inside HTTP 2xx bodies/events. Give
+# known codes the same retry semantics as their HTTP error counterparts.
+_RESPONSE_ERROR_STATUS = {
+    "server_error": 500, "overloaded_error": 529,
+    "rate_limit_exceeded": 429, "insufficient_quota": 429,
+    "billing_hard_limit_reached": 429, "insufficient_credits": 429,
+    "vector_store_timeout": 408,
+    "invalid_prompt": 400, "data_residency_mismatch": 400, "bio_policy": 400,
+    "invalid_image": 400, "invalid_image_format": 400, "invalid_base64_image": 400,
+    "invalid_image_url": 400, "image_too_large": 400, "image_too_small": 400,
+    "image_parse_error": 400, "image_content_policy_violation": 400,
+    "invalid_image_mode": 400, "image_file_too_large": 400,
+    "unsupported_image_media_type": 400, "empty_image_file": 400,
+    "failed_to_download_image": 400, "image_file_not_found": 400,
+}
+
+
+class _ResponseGenerationFailure(Exception):
+    """SDK-shaped metadata for a failed generation, not a transport error."""
+
+    def __init__(self, code: Optional[str], message: str, request_id: Optional[str]):
+        super().__init__(message)
+        self.body = {"code": code, "message": message}
+        self.code = code
+        self.status_code = _RESPONSE_ERROR_STATUS.get(code)
+        self.request_id = request_id
+
 logger = get_logger(__name__)
 
 
@@ -288,6 +315,8 @@ class OpenAIProvider:
                     await on_event(StreamEvent("reasoning", delta))
             elif kind in _RESPONSES_TERMINAL_EVENTS:
                 final = getattr(event, "response", None)
+                if kind == "response.failed":
+                    self._raise_if_failed_response(final, failed=True)
         if final is None:
             raise LLMError(
                 message="The response stream ended before the response was complete.",
@@ -602,7 +631,22 @@ class OpenAIProvider:
             assistant_message=assistant_message,
         )
 
+    def _raise_if_failed_response(self, resp: Any, *, failed: bool = False) -> None:
+        error = getattr(resp, "error", None)
+        code = error.get("code") if isinstance(error, dict) else getattr(error, "code", None)
+        message = error.get("message") if isinstance(error, dict) else getattr(error, "message", None)
+        if failed or getattr(resp, "status", None) == "failed" or isinstance(code, str) or isinstance(message, str):
+            # Do not record partial tool calls or publish partial text as a
+            # completed turn when the provider says generation failed.
+            failure = _ResponseGenerationFailure(
+                code if isinstance(code, str) else None,
+                message if isinstance(message, str) else "Response generation failed.",
+                getattr(resp, "_request_id", None),
+            )
+            raise LLMError.from_exception(self.provider_name, failure) from None
+
     def _normalize_responses(self, resp: Any, model: str) -> LLMResponse:
+        self._raise_if_failed_response(resp)
         text_parts: List[str] = []
         thinking_parts: List[str] = []
         tool_calls: List[ToolCall] = []

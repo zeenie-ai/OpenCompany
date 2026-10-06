@@ -209,6 +209,31 @@ async def test_a_publishing_failure_never_fails_the_step():
     assert emitter.text == "Still answering"
 
 
+async def test_failed_attempt_is_withdrawn_before_retry_and_cannot_finish():
+    published: List[Dict[str, Any]] = []
+    emitter = _emitter(published, flush_chars=1)
+    await emitter(StreamEvent("text", "Incomplete answer"))
+    emitter.discard()
+    discard = published[-1]
+    assert discard["suffix"] == "custom"
+    assert discard["fields"] == {"name": "opencompany.segment_discarded", "value": {"message_id": "r_1.2.1"}}
+    assert discard["event_key"] == "discard:r_1.2.1"
+    count = len(published)
+    emitter.discard()
+    await emitter(StreamEvent("text", "late delta"))
+    emitter.end(final=True)
+    assert len(published) == count
+
+
+async def test_discard_does_not_flush_an_unpublished_partial_answer():
+    published: List[Dict[str, Any]] = []
+    emitter = _emitter(published, flush_chars=1000)
+    await emitter(StreamEvent("text", "Partial"))
+    emitter.discard()
+    emitter.end(final=True)
+    assert published == []
+
+
 def test_a_step_without_a_chat_stream_has_no_emitter():
     assert stream.ChatStreamEmitter.from_payload({}, attempt=1) is None
     assert stream.ChatStreamEmitter.from_payload({"chat_stream": {"run_id": "r_1"}}, attempt=1) is None

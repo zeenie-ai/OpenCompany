@@ -144,6 +144,7 @@ class ChatStreamEmitter:
         self._text = ""
         self._published = ""
         self._opened = False
+        self._discarded_current = False
         self._last_flush = clock()
 
     @classmethod
@@ -208,7 +209,7 @@ class ChatStreamEmitter:
         self._send("text.content", {"message_id": self.segment, "delta": delta})
 
     async def __call__(self, event: StreamEvent) -> None:
-        if event.kind != "text" or not event.delta:
+        if self._discarded_current or event.kind != "text" or not event.delta:
             return
         self._text += event.delta
         pending = len(self._text) - len(self._published)
@@ -217,6 +218,8 @@ class ChatStreamEmitter:
 
     def end(self, *, final: bool) -> None:
         """The step finished: send what is left and close the segment."""
+        if self._discarded_current:
+            return
         self._flush()
         if not self._opened:
             return
@@ -224,6 +227,18 @@ class ChatStreamEmitter:
         if final and self.reply_message_id:
             fields["reply_message_id"] = self.reply_message_id
         self._send("text.ended", fields, event_key=f"end:{self.segment}")
+
+    def discard(self) -> None:
+        """Withdraw a failed attempt immediately, including during backoff."""
+        if self._discarded_current:
+            return
+        self._discarded_current = True
+        if self._opened:
+            self._send(
+                "custom",
+                {"name": "opencompany.segment_discarded", "value": {"message_id": self.segment}},
+                event_key=f"discard:{self.segment}",
+            )
 
     @property
     def text(self) -> str:

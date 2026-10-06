@@ -253,6 +253,36 @@ class WebSocketLogHandler(logging.Handler):
             pass  # Don't fail if broadcaster not ready
 
 
+class ExpectedLLMRetryFilter(logging.Filter):
+    """Keep planned provider retries visible without an exception traceback.
+
+    Temporal raises an ApplicationError to schedule the next attempt. That
+    expected control flow should be a warning with activity context; terminal
+    rejections and unexpected runtime errors retain their complete tracebacks.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name != "temporalio.activity" or not record.exc_info:
+            return True
+        from temporalio.exceptions import ApplicationError
+
+        error = record.exc_info[1]
+        if (
+            isinstance(error, ApplicationError)
+            and not error.non_retryable
+            and error.type in {"LLMError.rate_limit", "LLMError.server", "LLMError.timeout", "LLMError.connection"}
+            and error.details and isinstance(error.details[0], dict)
+            and error.details[0].get("retryable") is True
+            and error.next_retry_delay is not None
+        ):
+            record.msg = "Language model request will retry: %s"
+            record.args = (error.message,)
+            record.exc_info = None
+            record.exc_text = None
+            record.stack_info = None
+        return True
+
+
 def configure_logging(settings: Settings) -> None:
     """Configure structured logging based on settings.
 
@@ -300,6 +330,9 @@ def configure_logging(settings: Settings) -> None:
     # Silence noisy third-party loggers
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
+    activity_logger = logging.getLogger("temporalio.activity")
+    if not any(isinstance(item, ExpectedLLMRetryFilter) for item in activity_logger.filters):
+        activity_logger.addFilter(ExpectedLLMRetryFilter())
 
     # Configure structlog. ``merge_contextvars`` pulls fields bound via
     # ``structlog.contextvars.bind_contextvars`` (or the :func:`log_context`
