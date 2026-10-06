@@ -97,6 +97,9 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_ANDROID_RELAY_URL': JSON.stringify(getEnv('VITE_ANDROID_RELAY_URL', '')),
     },
     resolve: {
+      // Compiler hooks and React DOM must share one React dispatcher, even
+      // when Bun's isolated or linked packages contain another React copy.
+      dedupe: ['react', 'react-dom'],
       alias: {
         '@': resolve(process.cwd(), 'src'),
       },
