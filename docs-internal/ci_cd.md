@@ -203,7 +203,7 @@ folder — both the folder and the workflow are gone.
 | `.github/workflows/desktop-ci.yml` | Desktop shell checks on PRs: typecheck, unit, invariants, build, Playwright smoke |
 | `.github/workflows/desktop-release.yml` | Tag-triggered desktop installers (NSIS / DMG+zip / AppImage+deb) into a draft release, then undraft. Separate from `release.yml` so npm publish is never blocked |
 | `.github/actions/setup/action.yml` | Composite: bun + Node + Python + uv + editable CLI install |
-| `.github/dependabot.yml` | **Dependabot disabled** — every entry ignores `*`, so no version or security PRs; the entries exist only to keep alerts routed to the right updater; see below |
+| `.github/dependabot.yml` | **Manual dependency updates** — scheduled PRs suppressed; automatic security-update attempts also require the repository setting to be disabled; see below |
 | `.python-version` | Toolchain pin (`3.12`) — single source of truth |
 
 ---
@@ -245,11 +245,12 @@ the alerts stayed open. Dismiss in the Security tab instead.
 
 ## Dependency update policy (Dependabot disabled)
 
-Dependabot opens **no pull requests**, neither version bumps nor security
-updates (disabled 2026-09-12). Every entry in `.github/dependabot.yml`
-carries `open-pull-requests-limit: 0` and `ignore: dependency-name: "*"`;
-the ignore rule is what also stops security-update PRs. Dependencies move
-by hand, alongside test runs:
+The policy is **no automatic pull requests**, neither version bumps nor
+security updates (since 2026-09-12). Every entry in `.github/dependabot.yml`
+carries `open-pull-requests-limit: 0` and `ignore: dependency-name: "*"`.
+This suppresses scheduled updates but does not disable GitHub's
+alert-triggered security-update attempts. Enforce the policy with the
+repository setting described below. Dependencies move by hand with tests:
 
 - JS: bump the range in the relevant `package.json` (or the top-level
   `overrides` block in the root manifest for transitive pins), `bun install`,
@@ -257,17 +258,15 @@ by hand, alongside test runs:
 - pip: `uv lock --upgrade-package <name>` in `server/`, `uv sync`, run the
   suites (`predeploy.yml` runs `uv lock --check`).
 
-The file is kept rather than deleted because of how alerts are routed:
-a directory with no entry gets whatever updater Dependabot guesses, and for
-a `bun.lock` tree it guesses `npm_and_yarn`, which cannot read `bun.lock`
-and fails every run ("can't update vulnerable dependencies for projects
-without a lockfile or pinned version requirement", the desktop vitest alert
-of 2026-09-11). The five entries (`bun /`, `bun /desktop`, `pip /server`,
-`uv /server`, `github-actions /`) keep every surface mapped to the right
-ecosystem so that never happens again. `server/` needs both of its entries:
-because of `server/uv.lock`, Dependabot runs its uv updater there, and while
-only the `pip` entry ignored updates it kept opening security PRs (#140 to
-#142, 2026-09-30 and 10-01).
+The five entries (`bun /`, `bun /desktop`, `pip /server`, `uv /server`,
+`github-actions /`) declare the intended updaters; they do not guarantee
+the ecosystem chosen for alert-triggered jobs. The
+[2026-10-06 Sharp update attempt](https://github.com/zeenie-ai/OpenCompany/actions/runs/37474349729)
+selected `npm_and_yarn` for `/desktop`, with no ignore conditions, despite
+the existing Bun entry. It failed because that updater cannot modify
+`bun.lock`. Do not add a second package-manager lockfile to work around it.
+`server/` retains both entries because its uv updater also needs the
+manual-update policy; ignoring only pip previously allowed uv PRs.
 
 Alerts themselves still appear in the repository's Security tab; they are
 useful and cost nothing. Those for `server/` come from `uv.lock`, which
@@ -281,10 +280,21 @@ copies never closed (the last 18 were dismissed on 2026-10-03). GitHub keeps
 that snapshot until the job runs again (it last ran on 2026-09-12, for the
 v0.2.0 release commit, which changed the root `pyproject.toml`); until then,
 dismiss any alert filed against `server/requirements.txt` as inaccurate.
-Dependabot's own security-update attempts are a
-repository setting (Settings > Code security > Dependabot), not something
-the config file controls; turn them off there if the "Dependabot Updates"
-job should stop running entirely.
+To stop automatic security-update attempts, a repository administrator
+must disable **Dependabot security updates** under **Settings > Code
+security > Dependabot**. Keep **Dependabot alerts** and the dependency
+graph enabled. This stops automatic patch PR attempts while retaining
+vulnerability detection and the CI audit gates. The equivalent command,
+run with an administrator's GitHub CLI authentication, is:
+
+```sh
+gh api --method DELETE repos/zeenie-ai/OpenCompany/automated-security-fixes
+```
+
+This endpoint does not disable alerts. A YAML ignore rule cannot replace
+this setting, and updating dependencies does not change historical failed
+Actions runs. Fix current alerts, push the tested lockfiles, and verify
+the latest checks instead.
 
 GitHub's dependency graph does not read `bun.lock`; it sees only the ranges
 in each `package.json`, so no Dependabot alert ever covers a resolved JS

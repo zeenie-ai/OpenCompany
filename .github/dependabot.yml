@@ -1,5 +1,7 @@
-# Dependabot is DISABLED by policy (2026-09-12): no version-update PRs and no
-# security-update PRs. Dependencies move by hand, alongside test runs:
+# Dependency updates are MANUAL by policy (2026-09-12): no version-update
+# PRs or security-update PRs. The repository's Dependabot security updates
+# setting must also be disabled to enforce this policy; YAML alone cannot
+# stop alert-triggered update attempts. Dependencies move with test runs:
 #   JS   -> bump the range in the relevant package.json (or the top-level
 #           `overrides` block for transitive pins), `bun install`,
 #           `bun run audit:deps`, run tests
@@ -7,13 +9,12 @@
 # Alerts stay visible in the repository's Security tab, except for bun.lock,
 # which GitHub cannot read: CI's `bun run audit:deps` covers the JS trees.
 #
-# Why this file still exists: without an entry for a directory, Dependabot
-# routes that directory's alerts to whatever updater it guesses, and for a
-# bun.lock tree it guesses npm_and_yarn, which cannot read bun.lock and fails
-# every run ("can't update vulnerable dependencies for projects without a
-# lockfile or pinned version requirement", desktop/vitest, 2026-09-11). The
-# entries below keep every surface mapped to the right ecosystem while the
-# `ignore: "*"` rule stops every PR, security updates included.
+# These entries declare the intended updaters and suppress scheduled PRs.
+# They do not guarantee routing of alert-triggered jobs: on 2026-10-06,
+# GitHub still selected npm_and_yarn for desktop/sharp despite the Bun
+# entry. That updater cannot modify bun.lock. Fix genuine alerts in the
+# manifests and lockfiles, and disable automatic security PR attempts in
+# repository settings rather than adding an incompatible npm lockfile.
 #
 # Turning Dependabot's security-update attempts off entirely is a repository
 # setting (Settings > Code security > Dependabot), not something this file

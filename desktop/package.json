@@ -7,6 +7,7 @@
   "author": "OpenCompany contributors",
   "homepage": "https://opencompany.sh",
   "main": "./out/main/index.js",
+  "packageManager": "bun@1.4.0",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
@@ -34,7 +35,7 @@
     "electron-builder": "26.15.3",
     "electron-vite": "5.0.0",
     "esbuild": "^0.25.0",
-    "sharp": "0.35.4",
+    "sharp": "0.35.5",
     "typescript": "7.0.2",
     "vite": "^7.3.6",
     "vitest": "^4.1.11"
