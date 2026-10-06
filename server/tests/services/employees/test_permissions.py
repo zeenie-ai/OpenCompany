@@ -1,4 +1,5 @@
 import pytest
+from types import SimpleNamespace
 
 from models.employees import EmployeeGrant
 from services.employees.permissions import assert_runtime_access, decide_access, list_access
@@ -58,3 +59,48 @@ async def test_access_listing_is_owner_scoped(real_database):
     assert await list_access(real_database, "7", "another-owner") == []
     assert await list_access(real_database, "another-workflow", "owner") == []
     assert len(await list_access(real_database, "7", "owner")) == 2
+
+
+@pytest.fixture
+def permission_socket(real_database, monkeypatch):
+    import core.container as container_module
+    monkeypatch.setattr(container_module, "container", SimpleNamespace(database=lambda: real_database))
+    return SimpleNamespace(scope={"path": "/ws/status"}, state=SimpleNamespace(user_id="owner"))
+
+
+@pytest.mark.parametrize("allow", [True, False])
+async def test_permission_handler_separates_grant_identity_from_transport_id(real_database, permission_socket, allow):
+    from services.employees.handlers import handle_decide_employee_access
+    await install(real_database)
+    await decide_access(real_database, "bundle", "owner", not allow)
+    async with real_database.get_session() as session:
+        session.add(EmployeeGrant(id="transport-id", workflow_id="7", owner_id="owner", capability="calendar", limits={"approved": True}))
+        await session.commit()
+    result = await handle_decide_employee_access({"type": "decide_employee_access", "request_id": "transport-id",
+        "access_request_id": "bundle", "allow": allow, "user_id": "another-owner"}, permission_socket)
+    assert result == {"success": True}
+    async with real_database.get_session() as session:
+        grant = await session.get(EmployeeGrant, "bundle")
+        assert grant.limits["approved"] is allow
+        assert (grant.revoked_at is None) is allow
+        assert (await session.get(EmployeeGrant, "transport-id")).limits["approved"] is True
+
+
+async def test_permission_handler_keeps_legacy_direct_calls_but_never_uses_socket_correlation_as_grant(real_database, permission_socket):
+    from services.employees.handlers import handle_decide_employee_access
+    await install(real_database)
+    assert await handle_decide_employee_access({"request_id": "bundle", "allow": False}, permission_socket) == {"success": True}
+    assert await handle_decide_employee_access({"type": "decide_employee_access", "request_id": "bundle", "allow": True}, permission_socket) == {
+        "success": False, "error": "invalid_request"}
+    async with real_database.get_session() as session:
+        assert (await session.get(EmployeeGrant, "bundle")).revoked_at is not None
+
+
+async def test_permission_handler_enforces_owner_for_explicit_grant_identity(real_database, permission_socket):
+    from services.employees.handlers import handle_decide_employee_access
+    await install(real_database)
+    permission_socket.state.user_id = "another-owner"
+    assert await handle_decide_employee_access({"type": "decide_employee_access", "request_id": "transport-id",
+        "access_request_id": "bundle", "allow": False, "user_id": "owner"}, permission_socket) == {"success": False, "error": "not_found"}
+    async with real_database.get_session() as session:
+        assert (await session.get(EmployeeGrant, "bundle")).revoked_at is None

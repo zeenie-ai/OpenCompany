@@ -21,7 +21,7 @@ describe('employee app access', () => {
     show(true);
     expect(await screen.findByText('Allow Maya’s team to use Calendar to manage appointments?')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Allow' }));
-    await waitFor(() => expect(sendRequest).toHaveBeenCalledWith('decide_employee_access', { request_id: 'permission', allow: true }));
+    await waitFor(() => expect(sendRequest).toHaveBeenCalledWith('decide_employee_access', { access_request_id: 'permission', allow: true }));
     expect(screen.getByRole('button', { name: 'Not now' })).toBeInTheDocument();
   });
 
@@ -29,7 +29,16 @@ describe('employee app access', () => {
     sendRequest.mockResolvedValue({ success: true, access: [{ id: 'permission', app: 'Calendar', action: 'manage appointments', approved: true, revoked: false }] });
     show();
     await userEvent.click(await screen.findByRole('button', { name: 'Remove access' }));
-    expect(sendRequest).toHaveBeenCalledWith('decide_employee_access', { request_id: 'permission', allow: false });
+    expect(sendRequest).toHaveBeenCalledWith('decide_employee_access', { access_request_id: 'permission', allow: false });
+  });
+
+  it('declines access using its permission identity without replacing socket correlation', async () => {
+    sendRequest.mockResolvedValue({ success: true, access: [{ id: 'permission', app: 'Calendar', approved: false, revoked: false }] });
+    show(true);
+    await userEvent.click(await screen.findByRole('button', { name: 'Not now' }));
+    expect(sendRequest).toHaveBeenCalledWith('decide_employee_access', { access_request_id: 'permission', allow: false });
+    const [, payload] = sendRequest.mock.calls.find(([type]) => type === 'decide_employee_access')!;
+    expect(payload).not.toHaveProperty('request_id');
   });
 
   it('hides rejected requests from the conversational permission prompt', async () => {
@@ -44,7 +53,7 @@ describe('employee app access', () => {
     show();
     expect(await screen.findByText('Maya’s team no longer has access to Calendar.')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Allow again' }));
-    expect(sendRequest).toHaveBeenCalledWith('decide_employee_access', { request_id: 'permission', allow: true });
+    expect(sendRequest).toHaveBeenCalledWith('decide_employee_access', { access_request_id: 'permission', allow: true });
     expect(screen.queryByRole('button', { name: 'Not now' })).not.toBeInTheDocument();
   });
 

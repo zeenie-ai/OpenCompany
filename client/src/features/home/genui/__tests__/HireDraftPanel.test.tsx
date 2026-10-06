@@ -156,6 +156,7 @@ describe('HireDraftPanel', () => {
     const hires = sendRequest.mock.calls.filter(([type]) => type === 'hire_employee');
     expect(hires).toHaveLength(1);
     expect(hires[0][1]).toMatchObject({ name: 'Maya', rules: { ask_first: true } });
+    expect(screen.getByText('Hiring your employee…')).toHaveAttribute('role', 'status');
 
     await act(async () => {
       finish(hired());
@@ -168,6 +169,43 @@ describe('HireDraftPanel', () => {
     expect(useHomeStore.getState().glow?.workflowId).toBe('w1');
     expect(useHomeStore.getState().view).toEqual({ kind: 'employee', workflowId: 'w1' });
     expect(useHomeStore.getState().hireNotice).toBeNull();
+    expect(screen.queryByText('Hiring your employee…')).not.toBeInTheDocument();
+  });
+
+  it('opens Arjun’s page after a scheduled hire even when WhatsApp is not connected', async () => {
+    const setup = JSON.parse(reply);
+    setup.text = 'Meet Arjun, your weather reporter.';
+    setup.spec.elements.b.props = {
+      name: 'Arjun', role: 'Weather Reporter', description: 'Monitors Bangalore weather and sends your daily forecast.',
+      apps: ['Web browser', 'WhatsApp'], status: 'ready',
+    };
+    setup.spec.elements.c.props.steps = [
+      { title: 'Every day at 08:00', detail: 'Starts daily forecast routine.', role: 'trigger' },
+      { title: 'Check Bangalore weather', detail: 'Looks up temperatures and rain chances.', role: 'tool', app: 'Web browser' },
+      { title: 'Prepare brief forecast', detail: 'Summarizes conditions.', role: 'agent' },
+      { title: 'Send morning summary', detail: 'Delivers to WhatsApp.', role: 'tool', app: 'WhatsApp' },
+    ];
+    setup.spec.elements.i.props = {
+      label: 'Hire Arjun', variant: 'primary', action: 'hire_employee',
+      actionParams: { name: 'Arjun', role: 'Weather Reporter', apps: ['Web browser', 'WhatsApp'],
+        trigger: { kind: 'schedule', every: 'day', at: '08:00' }, sendsVia: 'WhatsApp' },
+    };
+    seedReadyDraft(JSON.stringify(setup));
+    useDraftStore.setState({ job: 'Monitor Bangalore weather and send a daily forecast to WhatsApp' });
+    sendRequest.mockImplementation((_type: string, payload: Record<string, unknown>) => Promise.resolve(hired({
+      type: 'hire_employee_result', request_id: 'wire-hire-arjun', operation_request_id: payload.idempotency_key,
+      started: false, activation_state: 'blocked',
+      employee: { workflow_id: 'arjun-workflow', name: 'Arjun', role: 'Weather Reporter', status: 'ready', control: {}, revision: 1 },
+      missing_apps: [{ app_id: 'whatsapp', name: 'WhatsApp', connected: false }],
+    })));
+    renderPanel();
+    const hire = await screen.findByRole('button', { name: 'Hire Arjun' });
+    await act(async () => { fireEvent.click(hire); });
+    await waitFor(() => expect(useHomeStore.getState().view).toEqual({ kind: 'employee', workflowId: 'arjun-workflow' }));
+    expect(useDraftStore.getState()).toMatchObject({ status: 'idle', hiring: false });
+    expect(sendRequest).toHaveBeenCalledWith('hire_employee', expect.objectContaining({
+      name: 'Arjun', trigger: { kind: 'schedule', every: 'day', at: '08:00' }, rules: expect.objectContaining({ ask_first: true }),
+    }), expect.any(Number));
   });
 
   it('keeps what the hire said for the new employee’s page, and asks for an AI model when there is none', async () => {

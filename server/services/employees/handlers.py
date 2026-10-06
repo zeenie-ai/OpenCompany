@@ -291,7 +291,12 @@ async def handle_list_employee_access(data: Dict[str, Any], websocket: WebSocket
 async def handle_decide_employee_access(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     from core.container import container
     from services.employees.permissions import decide_access
-    request_id = str(data.get("request_id") or "")
+    # request_id belongs to the socket transport. Older direct service calls
+    # without a message type may still supply the domain ID under that name.
+    identifier = data.get("access_request_id")
+    if "access_request_id" not in data and "type" not in data:
+        identifier = data.get("request_id")
+    request_id = identifier.strip() if isinstance(identifier, str) else ""
     if not request_id or not isinstance(data.get("allow"), bool):
         return {"success": False, "error": "invalid_request"}
     allowed = await decide_access(container.database(), request_id, execution_principal(data, websocket), data["allow"])

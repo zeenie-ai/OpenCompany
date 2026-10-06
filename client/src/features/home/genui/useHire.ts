@@ -46,6 +46,10 @@ export function hireErrorMessage(code: unknown): string {
 }
 
 export interface HireResponse {
+  /** WebSocket correlation ID; the server owns the transport envelope. */
+  request_id?: string;
+  /** Stable hiring identity, kept separate from each retry's socket ID. */
+  operation_request_id?: string;
   success?: boolean;
   error?: string;
   employee?: unknown;

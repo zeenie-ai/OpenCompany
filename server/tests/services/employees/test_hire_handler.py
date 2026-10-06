@@ -151,6 +151,41 @@ async def test_the_same_key_finds_the_same_employee(harness):
     assert len(harness.starts) == 1
 
 
+async def test_scheduled_hire_with_disconnected_whatsapp_replies_to_each_transport_request(harness, monkeypatch):
+    import routers.websocket as router
+
+    replies = []
+
+    async def send(_socket, frame):
+        replies.append(frame)
+
+    monkeypatch.setattr(router, "_safe_send", send)
+    data = payload(
+        idempotency_key="hire-arjun",
+        name="Arjun",
+        role="Weather Reporter",
+        job="Monitor Bangalore weather and send a daily forecast to WhatsApp",
+        apps=["Web browser", "WhatsApp"],
+        steps=[{"title": "Check Bangalore weather", "role": "tool", "app": "Web browser"}],
+        trigger={"kind": "schedule", "every": "day", "at": "08:00"},
+        sends_via="WhatsApp",
+    )
+    for request_id in ("wire-first-hire", "wire-retry"):
+        await router._execute_handler(hire.handle_hire_employee, {**data, "request_id": request_id}, SOCKET, "hire_employee", request_id)
+        reply = replies[-1]
+        assert reply["success"] is True, reply
+        assert reply["request_id"] == request_id
+        assert reply["operation_request_id"] == "hire-arjun"
+        assert reply["employee"]["name"] == "Arjun"
+        assert reply["started"] is False
+        assert any(app["app_id"] == "whatsapp" for app in reply["missing_apps"])
+
+    assert replies[1]["idempotent"] is True
+    assert replies[0]["employee"]["workflow_id"] == replies[1]["employee"]["workflow_id"]
+    assert len(await harness.database.get_all_workflows()) == 1
+    assert harness.starts == []
+
+
 async def test_a_changed_payload_under_the_same_key_is_refused(harness):
     await hire.handle_hire_employee(payload(), SOCKET)
     changed = await hire.handle_hire_employee(payload(name="Bea"), SOCKET)

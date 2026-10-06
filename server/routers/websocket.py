@@ -1452,7 +1452,14 @@ async def _execute_handler(handler: MessageHandler, data: Dict[str, Any], websoc
         result = await handler(data, websocket)
 
         if request_id:
-            await _safe_send(websocket, {"type": f"{msg_type}_result", "request_id": request_id, **result})
+            # request_id belongs to the socket's pending-request registry.
+            # Hiring and delivery also return durable operation IDs; those
+            # must not orphan the browser request after the operation saves.
+            response = {"type": f"{msg_type}_result", **result, "request_id": request_id}
+            operation_request_id = result.get("request_id")
+            if operation_request_id is not None and operation_request_id != request_id:
+                response["operation_request_id"] = operation_request_id
+            await _safe_send(websocket, response)
         else:
             await _safe_send(websocket, result)
 

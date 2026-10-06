@@ -15,7 +15,7 @@ export function EmployeeAccess({ workflowId, name, pendingOnly = false }: { work
     return response.access || [];
   }, refetchInterval: 5000 });
   const decide = useMutation({ mutationFn: async ({ id, allow }: { id: string; allow: boolean }) => {
-    const response = await sendRequest<{ success: boolean }>('decide_employee_access', { request_id: id, allow });
+    const response = await sendRequest<{ success: boolean }>('decide_employee_access', { access_request_id: id, allow });
     if (!response?.success) throw new Error('That permission could not be changed.');
   }, onSuccess: () => cache.invalidateQueries({ queryKey: key }), onError: (error: Error) => pillToast(error.message, { tone: 'error' }) });
   const rows = (access.data || []).filter((row) => !row.parent_grant_id && (!pendingOnly || (!row.approved && !row.revoked)));

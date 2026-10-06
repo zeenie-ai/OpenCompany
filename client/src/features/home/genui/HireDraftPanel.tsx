@@ -260,6 +260,11 @@ export function HireDraftPanel({ onConnect }: { onConnect: (providerId: string) 
         </div>
 
         {status === 'working' && <WorkingLine token={token} onCancel={actions.cancel} />}
+        {hiring && (
+          <p role="status" className="m-0 text-sm text-fg-muted">
+            Hiring your employee…
+          </p>
+        )}
         {status === 'failed' && failure && (
           <FailureNotice failure={failure} onRetry={() => void actions.retry()} onConnectAi={openConnectAI} />
         )}
