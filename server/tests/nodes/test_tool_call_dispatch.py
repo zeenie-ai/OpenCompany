@@ -164,7 +164,9 @@ def test_agent_workflow_payload_carries_unmerged_tool_args():
 
     from services.temporal.agent_workflow import AgentWorkflow
 
-    source = inspect.getsource(AgentWorkflow.run)
+    # The entry point owns lifecycle cleanup; activity payloads are built by
+    # the execution core it delegates to.
+    source = inspect.getsource(AgentWorkflow._run_impl)
     assert '"tool_args": call_args' in source, (
         "the per-type tool activity payload must carry the model's unmerged "
         "arguments or split-schema ToolNodes silently drop them"

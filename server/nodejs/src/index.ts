@@ -28,7 +28,15 @@ const USER_PACKAGES_DIR = process.env.NODEJS_USER_PACKAGES_DIR ?? path.join(__di
 // user-packages tree: `process.execPath` is bun, and `bun add` installs
 // from the npm registry with no node or npm on the machine.
 const BUN = process.execPath;
-const bunVersion = (globalThis as { Bun?: { version: string } }).Bun?.version ?? null;
+const bunRuntime = (globalThis as {
+  Bun?: {
+    version: string;
+    Transpiler: new (options: { loader: 'ts'; target: 'node' }) => {
+      transformSync(code: string): string;
+    };
+  };
+}).Bun;
+const bunVersion = bunRuntime?.version ?? null;
 
 const app = express();
 app.use(express.json({ limit: BODY_LIMIT }));
@@ -67,7 +75,7 @@ app.get('/health', (_req: Request, res: Response) => {
 // vm context (which evaluates JavaScript only). Type annotations, interfaces
 // and enums therefore work in typescriptExecutor; a syntax error surfaces as
 // the same {success: false, error} envelope as a runtime error.
-const tsTranspiler = typeof Bun !== 'undefined' ? new Bun.Transpiler({ loader: 'ts', target: 'node' }) : null;
+const tsTranspiler = bunRuntime ? new bunRuntime.Transpiler({ loader: 'ts', target: 'node' }) : null;
 
 function prepareSource(code: string, language: ExecuteRequest['language']): string {
   if (language !== 'typescript') return code;

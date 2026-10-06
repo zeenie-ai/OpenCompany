@@ -6,6 +6,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "bun build src/index.ts --target=bun --outfile=dist/index.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "start": "bun dist/index.js",
     "dev": "bun --watch src/index.ts"
   },
