@@ -30,9 +30,9 @@ jobs:
       - name: Frontend tests (vitest)
         run: bun run --filter react-flow-client test
       # GitHub's dependency graph cannot read bun.lock, so no Dependabot alert
-      # covers the JS trees and these audits are the only check. Each script
-      # carries its ignore list; docs-internal/ci_cd.md ("Dependency update
-      # policy") says why each entry is there. desktop/ has its own lockfile,
+      # covers the JS trees and these audits are the only check. The desktop
+      # exception is documented in docs-internal/ci_cd.md ("Dependency update
+      # policy"). desktop/ has its own lockfile,
       # which bun audits without installing it.
       - name: Audit JS dependencies
         run: bun run audit:deps
@@ -53,6 +53,11 @@ jobs:
         # server/uv.lock is what the desktop build installs with --frozen;
         # a stale lock would ship a different dependency tree than CI tested.
         run: uv lock --check
+      - name: Audit Python dependencies
+        working-directory: server
+        run: |
+          uv export --locked --all-extras --no-hashes --no-emit-project --output-file "${RUNNER_TEMP}/opencompany-audit.txt" > /dev/null
+          uvx --from pip-audit==2.10.1 pip-audit --strict --disable-pip --no-deps -r "${RUNNER_TEMP}/opencompany-audit.txt"
       - name: pytest
         working-directory: server
         run: |

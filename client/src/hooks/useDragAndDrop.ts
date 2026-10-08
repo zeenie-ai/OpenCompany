@@ -91,7 +91,7 @@ export const useDragAndDrop = ({ nodes, setNodes, edges = [], setEdges, saveNode
           position = getDefaultNodePosition(nodes.length);
         }
 
-        if (nodeData.type === 'browser_agent') {
+        if (getCachedNodeSpec(nodeData.type)?.uiHints?.createsBrowserAgent) {
           const store = useAppStore.getState();
           if (!setEdges || !store.currentWorkflow || store.currentWorkflow.id !== workflowId) {
             toast.error('Open a workflow before adding Browser AI Agent.');

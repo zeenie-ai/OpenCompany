@@ -123,7 +123,7 @@
     "daemon:restart": "python -m cli daemon restart",
     "version:sync": "python -m cli version sync",
     "typecheck": "tsc --noEmit -p client/tsconfig.json",
-    "audit:deps": "bun audit --ignore=GHSA-vfj7-8cjw-p6xm",
+    "audit:deps": "bun audit",
     "prepublishOnly": "python -m cli version sync && bun -e \"const p=require('./package.json'); if(!p.bin||!p.version){process.exit(1)}\"",
     "preinstall": "bun scripts/preinstall.js",
     "postinstall": "bun scripts/postinstall.js",

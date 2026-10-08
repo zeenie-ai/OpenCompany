@@ -132,6 +132,12 @@ PERMIT_WAIT_RETRY: RetryPolicy = RetryPolicy(
 )
 
 
+# Keep the existing Browser task policies unchanged for Temporal replay.
+# A busy claim fails immediately; cleanup must wait for its owner to return.
+BROWSER_TASK_CLAIM_RETRY: RetryPolicy = RetryPolicy(maximum_attempts=1)
+BROWSER_TASK_CLEANUP_RETRY: RetryPolicy = RetryPolicy(maximum_attempts=0)
+
+
 def frozen_retry_policy(retry: Mapping[str, Any]) -> RetryPolicy:
     """Rebuild a tool plugin's retry policy from the values frozen into history.
 
@@ -157,5 +163,7 @@ __all__ = [
     "LLM_STEP_RETRY",
     "DELEGATION_CLEANUP_RETRY",
     "PERMIT_WAIT_RETRY",
+    "BROWSER_TASK_CLAIM_RETRY",
+    "BROWSER_TASK_CLEANUP_RETRY",
     "frozen_retry_policy",
 ]

@@ -19,6 +19,7 @@ class BrowserAgentNode(SpecializedAgentBase):
     description = "Complete browser tasks with saved policies, secure login and human takeover."
     group = ("agent",)
     workspace_task = True
+    ui_hints = {**SpecializedAgentBase.ui_hints, "createsBrowserAgent": True}
     Params = BrowserAgentParams
 
     @Operation("execute", cost={"service": "specialized_agent", "action": "run", "count": 1})

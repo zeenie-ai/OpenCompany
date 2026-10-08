@@ -760,6 +760,13 @@ class TestUIHintsInNodeSpec:
     dispatch can read them off the cached NodeSpec instead of
     importing legacy *_NODE_TYPES arrays or per-node definition flags."""
 
+    def test_browser_agent_declares_creation_without_taking_the_browser_panel(self):
+        hints = get_node_spec("browser_agent")["uiHints"]
+        assert hints["createsBrowserAgent"] is True
+        assert hints["requiresContext"] is True
+        assert hints.get("isBrowserPanel") is not True
+        assert get_node_spec("browser")["uiHints"].get("createsBrowserAgent") is not True
+
     def test_console_carries_is_console_sink(self):
         spec = get_node_spec("console")
         assert spec.get("uiHints", {}).get("isConsoleSink") is True
@@ -922,6 +929,7 @@ class TestNodeSpecContractInvariants:
         from models.node_metadata import NODE_METADATA
 
         known = {
+            "createsBrowserAgent",
             "hideInputSection",
             "hideOutputSection",
             "hideRunButton",

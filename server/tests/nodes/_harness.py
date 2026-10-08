@@ -282,6 +282,7 @@ def _build_mock_android_service() -> MagicMock:
 
 def _build_mock_settings() -> MagicMock:
     settings = MagicMock(name="Settings")
+    settings.distributed_mode = False
     settings.google_maps_api_key = ""
     settings.workspace_base_dir = "data/workspaces"
     settings.compaction_enabled = False

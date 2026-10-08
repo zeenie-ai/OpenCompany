@@ -60,6 +60,8 @@ from services.node_registry import get_node_class
 from services.tool_output import bound_tool_output, tool_output_is_capped
 
 from ._retry_policies import (
+    BROWSER_TASK_CLAIM_RETRY,
+    BROWSER_TASK_CLEANUP_RETRY,
     DEFAULT_ACTIVITY_RETRY,
     DELEGATION_CLEANUP_RETRY,
     LLM_STEP_RETRY,
@@ -731,7 +733,7 @@ class AgentWorkflow:
                 {"binding": binding, "principal": str(context.get("user_id") or "owner"), "task_id": context["_browser_task_id"]},
                 task_queue=binding.get("task_queue") or workflow.info().task_queue,
                 start_to_close_timeout=timedelta(seconds=30),
-                retry_policy=RetryPolicy(maximum_attempts=1),
+                retry_policy=BROWSER_TASK_CLAIM_RETRY,
                 cancellation_type=ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
             )
             if isinstance(claim, dict) and isinstance(claim.get("binding"), dict):
@@ -769,7 +771,7 @@ class AgentWorkflow:
                             task_queue=binding.get("task_queue") or workflow.info().task_queue,
                             start_to_close_timeout=timedelta(seconds=120),
                             heartbeat_timeout=timedelta(seconds=30),
-                            retry_policy=RetryPolicy(maximum_attempts=0),
+                            retry_policy=BROWSER_TASK_CLEANUP_RETRY,
                             cancellation_type=ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
                         )
                     # Owner absence leaves cleanup queued. Cancel/Reset wait for

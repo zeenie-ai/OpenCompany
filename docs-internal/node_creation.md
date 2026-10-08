@@ -20,6 +20,10 @@ the bundle atomically through `apply_graph_additions`. Agent Builder and new
 employee Browser capabilities use the same recipe. Existing employees and
 Browser/`web_agent` nodes retain their graphs.
 
+The plugin declares `uiHints.createsBrowserAgent`; canvas drag-and-drop reads
+that capability from NodeSpec to select the recipe. Keep this hint separate
+from `isBrowserPanel`, which belongs only to the Browser tool.
+
 Reuse an explicitly selected saved Browser tool. The server allocates IDs and
 checks graph ownership and operator blocklists; transport retries use the same
 mutation UUID. Repeating Add for an already associated Browser agent returns

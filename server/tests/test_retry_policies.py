@@ -72,6 +72,13 @@ class TestRetryPolicyConstants:
         non_retryable = QUICK_ACTIVITY_RETRY.non_retryable_error_types or ()
         assert "NodeUserError" in non_retryable
 
+    def test_browser_task_policies_preserve_existing_temporal_commands(self):
+        from temporalio.common import RetryPolicy
+        from services.temporal._retry_policies import BROWSER_TASK_CLAIM_RETRY, BROWSER_TASK_CLEANUP_RETRY
+
+        assert BROWSER_TASK_CLAIM_RETRY == RetryPolicy(maximum_attempts=1)
+        assert BROWSER_TASK_CLEANUP_RETRY == RetryPolicy(maximum_attempts=0)
+
 
 class TestNoDuplicatedInlineRetryPolicy:
     """Workflow files must import the shared constant — not re-type

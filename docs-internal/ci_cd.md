@@ -89,7 +89,7 @@ After tool install the composite installs the supervisor CLI editably (`uv pip i
 Reusable `workflow_call` workflow with four independent jobs (no plan/change-detection gate, no aggregator — every job runs on every call):
 
 - `build-and-lint` — `bun install --frozen-lockfile` + `bun run build`, then client lint (`bun run --filter react-flow-client lint`), TypeScript check (`... typecheck`), frontend tests (`... test`, vitest), and the JS dependency audit (`bun run audit:deps` at the root and in `desktop/`; see "Dependency update policy" below). Runs on `ubuntu-latest`.
-- `backend-tests` — `uv lock --check` (the committed `server/uv.lock` must match `pyproject.toml`; the desktop app installs from it with `--frozen`), then `uv sync` + `uv run pytest tests/ -v` in `server/`. Whole suite, unsharded. Runs on `ubuntu-latest`.
+- `backend-tests` — `uv lock --check` (the committed `server/uv.lock` must match `pyproject.toml`; the desktop app installs from it with `--frozen`), a pinned `pip-audit` check of the locked Python dependencies including all extras, then `uv sync` + `uv run pytest tests/ -v` in `server/`. Whole suite, unsharded. Runs on `ubuntu-latest`.
 - `cli-tests` — `uv pip install --system pytest pytest-asyncio pyyaml` + `python -m pytest cli/tests/ -v`. Runs on `ubuntu-latest`.
 - `test-build-start` — cross-OS matrix (`ubuntu-latest`, `macos-latest`, `windows-latest`, `fail-fast: false`). Runs `bun run build`, then `bun run tsc --version` (proves the per-platform TypeScript 7 Go binary delivered via `optionalDependencies` resolves on every OS — the type-check gate itself runs on ubuntu only; `bun run`, never `bunx`, so it resolves strictly from the root `node_modules/.bin`), then a start smoke test. On Unix it backgrounds `bun run start`, reads `PYTHON_BACKEND_PORT` out of `.env.template` and polls `http://localhost:${APP_PORT}/health` (`curl -sf -m 5`, every 2 s) for up to 90 s, giving up early if the start process exits. It always runs `bun run stop` afterwards, then fails unless `/health` answered. On Windows it starts the supervisor as a background job, waits 15 s, and fails if the job already exited.
 
@@ -256,7 +256,22 @@ repository setting described below. Dependencies move by hand with tests:
   `overrides` block in the root manifest for transitive pins), `bun install`,
   `bun run audit:deps` (at the root and in `desktop/`), run the suites.
 - pip: `uv lock --upgrade-package <name>` in `server/`, `uv sync`, run the
-  suites (`predeploy.yml` runs `uv lock --check`).
+  suites (`predeploy.yml` runs `uv lock --check` and the audit below).
+
+The Python gate exports exact pins from `uv.lock` without installing optional
+extras. `pip-audit==2.10.1` queries advisories with `--strict --disable-pip
+--no-deps`; it fails on vulnerabilities or packages it cannot audit. The export
+is temporary and must not become a second committed dependency source. To run
+the same gate locally from `server/`:
+
+```sh
+uv export --locked --all-extras --no-hashes --no-emit-project --output-file /tmp/opencompany-audit.txt
+uvx --from pip-audit==2.10.1 pip-audit --strict --disable-pip --no-deps -r /tmp/opencompany-audit.txt
+```
+
+On Windows, use a file under `$env:TEMP` in both commands. Advisory lookup
+requires network access; Python markers select the current platform, so the
+Ubuntu CI audit also covers Linux-only dependencies.
 
 The five entries (`bun /`, `bun /desktop`, `pip /server`, `uv /server`,
 `github-actions /`) declare the intended updaters; they do not guarantee
@@ -299,18 +314,33 @@ the latest checks instead.
 GitHub's dependency graph does not read `bun.lock`; it sees only the ranges
 in each `package.json`, so no Dependabot alert ever covers a resolved JS
 version. `bun run audit:deps` is the check: `predeploy.yml` runs it at the
-root and in `desktop/` (`bun audit` reads the lockfile and needs no install),
-and it fails on any advisory except the ones each script ignores. An advisory
+root and in `desktop/` (`bun audit` reads the lockfile and needs no install).
+The root audit has no exclusions. The desktop audit fails on any advisory
+except the explicit exception below. An advisory
 is ignored only when it has no patched release and cannot be reached from
 untrusted input here:
 
 | Advisory | Package | Reached through | Why it is ignored |
 |---|---|---|---|
-| [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) | braces 3.0.3 | root: the shadcn CLI's fast-glob | Stack exhaustion from deeply nested brace patterns; the CLI only expands patterns written in this repo |
-| [GHSA-ch52-4w7c-c8xp](https://github.com/advisories/GHSA-ch52-4w7c-c8xp) | http-cache-semantics 4.2.0 | `desktop/`: `@electron/get` | Cross-user disclosure through a shared HTTP cache; `@electron/get` only downloads Electron at install and build time |
+| [GHSA-ch52-4w7c-c8xp](https://github.com/advisories/GHSA-ch52-4w7c-c8xp) | http-cache-semantics 4.2.0 | `desktop/`: Electron Builder → app-builder-lib → @electron/get 3.1.0 → got → cacheable-request | No patched release as of 2026-10-09. Build-time artifact downloading does not share authenticated user-response caches; this chain is absent from the shipped desktop runtime dependencies. |
 
-When an ignored advisory gets a patched release, drop its `--ignore` and pin
-the fix in `overrides`.
+The unused installed shadcn CLI was removed from `client/package.json` and the
+root lockfile on 2026-10-09, removing `braces` and its advisory entirely. The
+existing `bun x shadcn@latest add <name>` development command still works with
+the checked-in generated components; it is not part of application execution.
+
+Electron itself uses `@electron/get` 5.1.0, which uses native fetch. Stable
+Electron Builder 26.17.0 (the `v26` tag; `latest` remains 26.15.3) still requires
+3.x. Do not force a 5.x transitive override: its removed GotDownloader API,
+changed download options and proxy handling are incompatible with that caller.
+The migration is in Electron Builder 27 prereleases; wait for a supported
+stable release and validate packaging before removing the exception. See the
+[downloader migration notes](https://github.com/electron/get/releases/tag/v5.0.0).
+
+When the affected package gets a patch, drop `--ignore` and pin the fix in
+`overrides`; a compatible parent upgrade that removes the package also resolves
+the advisory. A passing audit with this exception does not mean the raw desktop
+audit is clean.
 
 Re-enable updates deliberately, never by just deleting the ignore rules:
 raise `open-pull-requests-limit`, add `groups` with `patterns: ["*"]` +
@@ -323,7 +353,7 @@ raise `open-pull-requests-limit`, add `groups` with `patterns: ["*"]` +
 The following existed in earlier drafts of this doc but are **not present in the current repo**. Listed here so the intent is preserved without misrepresenting the shipped pipeline:
 
 - **`predeploy.yml` change-detection + aggregator** — a `plan` job (`dorny/paths-filter`) gating downstream jobs, a `pre-commit` job, pytest sharding by domain, and a `ci-passed` aggregator (`re-actors/alls-green`) as the single branch-protection target. Today every predeploy job runs unconditionally and there is no aggregator job.
-- **`release.yml` hardening** — `workflow_dispatch` dry-run default, a once-per-release `build-for-publish` artifact, `actions/attest-build-provenance` SLSA attestations, and a `create-github-release` job for the registry publish (the desktop workflow's `prepare` job now drafts the GitHub Release from the tag message; `release.yml` itself still creates none). (An earlier draft also planned a blocking `pnpm audit`; bun has no audit-equivalent gate, so the top-level `overrides` block + Dependabot alerts are the vulnerability-remediation channel instead.)
+- **`release.yml` hardening** — `workflow_dispatch` dry-run default, a once-per-release `build-for-publish` artifact, `actions/attest-build-provenance` SLSA attestations, and a `create-github-release` job for the registry publish (the desktop workflow's `prepare` job now drafts the GitHub Release from the tag message; `release.yml` itself still creates none). Dependency audits already run in the reusable predeploy workflow.
 - **`publish-pypi.yml`** — reusable PyPI publish (OIDC trusted publishing, `uv build --no-sources`, `pypa/gh-action-pypi-publish`). No PyPI distribution is published today.
 - **`test-install.yml`** — cross-platform end-user install smoke (`bun add -g`, git clone, install script) across 3 OS.
 - **`rollback.yml`** — manual registry deprecate (`npm deprecate` has no bun equivalent, so this would be the one place the npm CLI reappears) + optional revert PR.

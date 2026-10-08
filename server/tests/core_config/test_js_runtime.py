@@ -82,8 +82,9 @@ def test_installed_version_reads_the_package_manifest(tmp_path):
 def test_add_package_builds_a_bun_add_argv(monkeypatch, tmp_path):
     seen: dict[str, object] = {}
 
-    def fake_run(argv, capture_output, text):
+    def fake_run(argv, capture_output, text, env):
         seen["argv"] = argv
+        seen["env"] = env
         seen["cwd_manifest"] = (tmp_path / "package.json").exists()
 
         class Done:
@@ -94,6 +95,9 @@ def test_add_package_builds_a_bun_add_argv(monkeypatch, tmp_path):
         return Done()
 
     monkeypatch.setenv(js_runtime.ENV_BUN_BIN, "")
+    monkeypatch.setenv("OP_SERVICE_ACCOUNT_TOKEN", "test-bootstrap-secret")
+    monkeypatch.setenv("OP_CONNECT_TOKEN", "test-connect-secret")
+    monkeypatch.setenv("OPENCOMPANY_TEST_CHILD_ENV", "keep-me")
     monkeypatch.setattr(js_runtime.shutil, "which", lambda name: "/opt/bun")
     monkeypatch.setattr(js_runtime.subprocess, "run", fake_run)
 
@@ -104,6 +108,9 @@ def test_add_package_builds_a_bun_add_argv(monkeypatch, tmp_path):
     assert "--trust" in argv
     assert argv[-1] == "edgymeow@0.0.20"
     assert seen["cwd_manifest"] is True, "the tree manifest must exist before bun add runs"
+    assert "OP_SERVICE_ACCOUNT_TOKEN" not in seen["env"]
+    assert "OP_CONNECT_TOKEN" not in seen["env"]
+    assert seen["env"]["OPENCOMPANY_TEST_CHILD_ENV"] == "keep-me"
 
     js_runtime.add_package("cf@0.2.0", root=tmp_path)
     assert "--trust" not in seen["argv"]

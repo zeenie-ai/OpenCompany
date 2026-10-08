@@ -159,6 +159,10 @@ Profile ownership is permanent for this release. A stable task token holds
 the profile during model reasoning, browser work and human assistance.
 Competing tasks return `BrowserBusy` before browser effects. Human control
 keeps its separate lease; a stale cancellation cannot release a newer task.
+Temporal claim and cleanup policies are defined in
+`services/temporal/_retry_policies.py`: `BROWSER_TASK_CLAIM_RETRY` makes one
+attempt, while `BROWSER_TASK_CLEANUP_RETRY` retries indefinitely on the saved
+owner queue. Their serialized settings match the original policies for replay.
 The claim also records its saved workflow/Browser-tool association. Viewer
 and manual-help routing use that frozen profile while the task is active,
 even after profile edits or an owner restart. Current resource authorization

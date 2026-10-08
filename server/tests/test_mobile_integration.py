@@ -26,14 +26,15 @@ async def test_connector_uses_saved_model_and_only_selected_key(monkeypatch):
     import constants
 
     database = SimpleNamespace(get_node_parameters=AsyncMock(return_value={"model": "chosen-model", "api_key": "untrusted-inline"}))
-    auth = SimpleNamespace(get_api_key=AsyncMock(return_value="resolved-secret"), get_stored_models=AsyncMock(return_value=[]))
+    auth = SimpleNamespace(resolve_api_key=AsyncMock(return_value="resolved-secret"), get_api_key=AsyncMock(), get_stored_models=AsyncMock(return_value=[]))
     monkeypatch.setattr(deps, "get_database", lambda: database)
     monkeypatch.setattr(deps, "get_ai_service", lambda: SimpleNamespace(auth=auth))
     monkeypatch.setattr(registry, "get_node_class", lambda _: SimpleNamespace(component_kind="model"))
     monkeypatch.setattr(constants, "detect_ai_provider", lambda *_: "gemini")
     config = await _node.resolve_model(context())
     assert config == {"provider": "google", "model": "chosen-model", "model_env": {"GOOGLE_API_KEY": "resolved-secret", "GOOGLE_GENAI_USE_VERTEXAI": "false"}}
-    auth.get_api_key.assert_awaited_once_with("gemini", "default")
+    auth.resolve_api_key.assert_awaited_once_with("gemini", "default", principal=None)
+    auth.get_api_key.assert_not_awaited()
 
 
 async def test_connector_requires_exactly_one_model():

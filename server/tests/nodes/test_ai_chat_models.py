@@ -107,9 +107,8 @@ class TestAllChatModelsHappyPath:
 
         await harness.execute(node_type, {"prompt": "hi"})
 
-        # auth.get_api_key was called with the provider derived from node_type
-        calls = [c.args for c in harness.ai_service.auth.get_api_key.await_args_list]
-        assert any(c[0] == provider for c in calls), f"expected get_api_key({provider}, ...) for {node_type}, got {calls}"
+        harness.ai_service.auth.resolve_api_key.assert_awaited_once_with(provider, "default", principal="owner")
+        harness.ai_service.auth.get_api_key.assert_not_awaited()
 
         # Plugin Params use snake_case throughout; model_dump() preserves field names.
         params = harness.ai_service.execute_chat.await_args.args[2]
