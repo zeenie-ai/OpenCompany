@@ -10,6 +10,11 @@ The executable is verified **before execution**. Windows uses valid Authenticode
 
 Set `ONEPASSWORD_CLI_PATH` to an absolute path when using an operator-provisioned executable. `onepassword_status` verifies signature/integrity and the pinned version only: it does not sign in, enumerate a vault or resolve a field. Installation and status failures expose fixed error messages, without raw command streams.
 
+`ONEPASSWORD_READ_TIMEOUT_SECONDS` defaults to 30 (allowed range 1–300).
+Each private stdout/stderr pipe is bounded to 64 KiB. Keep bootstrap tokens
+in trusted deployment secret configuration; do not put them in graph JSON,
+node parameters, serialized Settings or an exported database manifest.
+
 Local defaults use `ONEPASSWORD_AUTH_MODE=desktop`. Enable CLI integration in the desktop app; optionally select an account with `ONEPASSWORD_ACCOUNT`. Desktop authorization is broader than an individual OpenCompany binding, so application ownership and binding restrictions are checked independently. A backend running under another operating-system user, a headless service, or an expired/denied desktop grant must be authorized appropriately; there is no fallback to a different account or old local key.
 
 Distributed mode requires `ONEPASSWORD_AUTH_MODE=service_account`. Supply `OP_SERVICE_ACCOUNT_TOKEN` through trusted deployment configuration, using a dedicated automation vault with read-only field/item access. The private resolver passes it only to its own child process. It deliberately excludes Connect variables, session variables, ambient provider keys and debug options. Ordinary application subprocesses strip every case-insensitive `OP_*` variable after environment merges; browser processes retain their stricter existing allowlists. Never wrap browser-use in `op run` or generate a plaintext `op inject` template.
@@ -28,9 +33,28 @@ The private subprocess uses fixed `op read --no-newline` arguments, no shell, cl
 
 The **Browser profiles** panel enrolls username/password references with an exact login origin, a success origin/path and optional success selector. A binding may be restricted to a profile, workflow or employee; server resource authorization validates those restrictions. Saving a website binding does not retrieve a password or grant a desktop authorization. Model-visible discovery returns opaque IDs, labels, origins and supported fields, excluding vault/item references and values.
 
+1. Open Credentials → Browser profiles and the website login bindings section.
+2. Enter a label, exact login origin and approved ID-based username/password references. Select a profile restriction when the login belongs to one profile.
+3. Configure the expected success origin/path and, where appropriate, a stable success selector. Automated login is limited to a single top-frame form with current username, password and submit references.
+4. Save the binding, then submit the Browser task. The agent discovers its opaque ID; the owner requests desktop authorization or uses its scoped service account only during private runtime resolution.
+
+Catalogue reads return binding IDs and safe metadata, not saved website secret
+references. Replacing a website binding requires fresh references; existing
+workflow/employee restrictions are preserved. Deleting or changing enrollment
+during an authorization wait invalidates the pending resolution. Use takeover
+for an unconfigured form, multi-step login, MFA or passkeys.
+
 The browser owner first reads nonsecret metadata with `get_browser_credential_binding` and enforces policy, Ask first, task ownership and the current login target. It then persists a nonsecret sensitive-login latch, suspends the browser-use daemon and drains/gates captures and page metadata. Only after that can `resolve_browser_credentials` resolve values for the private CDP fill flow. Resolution rechecks ownership, scopes and the current enrollment after authorization waits. The browser revalidates the tab/frame/targets and origin before effects.
 
 Passwords are filled through the existing private CDP connection. During this phase snapshots, page text, screenshots, vision, WebMCP and ordinary browser operations remain gated. A configured private success check ends the phase. An uncertain submit, changed target, failed suspension or unconfirmed completion retains the gate and requests human login. Ask first/read-only policies never receive an autofill bypass. Multi-step login, MFA and passkeys use existing human takeover.
+
+Before observations resume, private checks require the configured success
+cues, removal of sensitive fields and no reflected password in the URL or
+page content. Values are preserved exactly; if the browser normalizes an
+input, the runtime refuses submission. If the gate remains, **Close browser
+for manual login** confirms shutdown before clearing it. Reopen and take
+control. Owner restart restores the nonsecret gate; it does not replay a fill
+or assume that prior tab/element references remain valid.
 
 ## Verification and limits
 

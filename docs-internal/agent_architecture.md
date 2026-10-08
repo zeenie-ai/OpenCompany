@@ -14,7 +14,7 @@ Detailed architecture reference for how AI Agent (`aiAgent`) and Chat Agent (`ch
 2. [Agent Loop](#agent-loop)
 3. [Skill Injection Pipeline](#skill-injection-pipeline)
 4. [Tool Building Pipeline](#tool-building-pipeline)
-5. [Tool Execution Flow](#tool-execution-flow)
+5. [Tool Execution and Dispatch](./tool_building_pipeline.md)
 6. [Context and Memory Integration](#context-and-memory-integration)
 7. [execute_agent vs execute_chat_agent](#execute_agent-vs-execute_chat_agent)
 

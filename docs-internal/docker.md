@@ -2,6 +2,15 @@
 
 One container runs the whole app. uvicorn serves the API, the WebSocket and the built UI on one port, and the backend spawns the Temporal dev server, the bun code sidecar and plugin daemons itself when it needs them. There is no Redis; the cache falls back to SQLite.
 
+This Compose recipe is a single-machine installation. Multi-machine Browser
+AI Agent deployment requires shared PostgreSQL, external Temporal, shared
+storage and stable browser-owner routing; adding replicas to this local recipe
+does not supply those prerequisites. Follow [Browser deployment and offline
+migration](browser_agent_deployment.md) before scaling it. Approved
+[1Password credentials](onepassword_credentials.md) also require a verified
+CLI and authorization available to the actual container backend. Desktop
+authorization from an unrelated host terminal is insufficient.
+
 | File | Role |
 |---|---|
 | `docker/Dockerfile` | Two stages. The build stage runs the canonical build, the same two commands CI runs (`bun install --frozen-lockfile`, then `bun run build`). The runtime stage keeps only what the backend reads at run time, and optional tools come back through the `EXTRAS` build argument. |

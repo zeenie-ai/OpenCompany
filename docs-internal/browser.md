@@ -231,7 +231,7 @@ origin and current targets before retrieving values. Under Ask first/read-only,
 the agent requests human login instead.
 
 Automatic login supports a configured single username/password form with
-saved success origin/path or selector cues. Before private resolution, the
+saved success origin/path and optional selector cues. Before private resolution, the
 runtime persists a nonsecret sensitive-login latch, confirms the browser-use
 daemon has stopped, drains and stops live capture, and blocks page text,
 snapshots, screenshots, vision, WebMCP and page/tab/dialog metadata. Credentials
@@ -275,8 +275,8 @@ attempts greater than one retain the refusal to replay an uncertain action.
 The active task also persists its workflow/Browser-tool association. Viewer
 routing uses that frozen profile after current saved-resource authorization,
 even if profile parameters change mid-task or the local/backend owner restarts.
-Matching release clears the
-association; an ambiguous active association fails closed. A recovered runtime
+Matching release clears the association; an ambiguous active association
+fails closed. A recovered runtime
 restores the durable task token before later browser or profile effects.
 
 Profile files have one writer. CLI homes, temporary files and PID state are

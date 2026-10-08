@@ -4,6 +4,12 @@ The Browser node launches installed Chrome/Edge/Chromium in a dedicated OpenComp
 
 See [native browser architecture](../../browser.md) for runtime installation, profile storage, networking and lifecycle, and [browser workspace](../../browser_workspace.md) for the viewer and UI protocol.
 
+The dedicated `browser_agent` composes this tool with OpenCompany's existing
+reasoning loop. It is a separate agent node; the Browser tool keeps its viewer,
+profile, policy and output contracts. [Node creation](../../node_creation.md#browser-ai-agent-creation)
+documents the shared atomic recipe, and [deployment](../../browser_agent_deployment.md)
+documents native Workspace tasks and distributed ownership.
+
 ## Implementation map
 
 | Responsibility | Source |
@@ -13,10 +19,12 @@ See [native browser architecture](../../browser.md) for runtime installation, pr
 | Profile runtime and managed Chrome | [`_runtime.py`](../../../server/nodes/browser/_runtime.py), [`_chrome.py`](../../../server/nodes/browser/_chrome.py) |
 | Agent/workflow CLI calls and generated scripts | [`_cli.py`](../../../server/nodes/browser/_cli.py), [`_scripts.py`](../../../server/nodes/browser/_scripts.py) |
 | Leases and control state | [`_session.py`](../../../server/nodes/browser/_session.py) |
+| Private configured login and capture gate | [`_credentials.py`](../../../server/nodes/browser/_credentials.py) |
+| Durable owners, task claims and authenticated routing | [`browser_owners.py`](../../../server/services/browser_owners.py), [`_routing.py`](../../../server/nodes/browser/_routing.py) |
 | Direct live viewer capture and input | [`_stream.py`](../../../server/nodes/browser/_stream.py), [`_live_control.py`](../../../server/nodes/browser/_live_control.py) |
 | Saved-workflow compatibility | [`workflow_migrations.py`](../../../server/services/workflow_migrations.py) |
 
-The node has main input/output handles and a tool output handle. Its `ui_hints.isBrowserPanel` flag makes it discoverable as a browser panel. Activities use the `BROWSER` task queue, at most three Temporal attempts, and a 35-minute start-to-close timeout to accommodate human handoff.
+The node has main input/output handles and a tool output handle. Its `ui_hints.isBrowserPanel` flag makes it discoverable as a browser panel; the agent does not receive that flag. Its logical Activity queue is `BROWSER`, with at most three Temporal attempts and a 35-minute start-to-close timeout for paths that consume plugin policy. New distributed execution overrides the physical queue with the frozen profile owner's queue, even with worker pools disabled. Generic orchestration workers exclude Browser Activities.
 
 ## Operations
 
@@ -36,6 +44,8 @@ The agent schema defaults to `snapshot`; saved workflow parameters default to `n
 | `wait` | `wait_for`: `load`, `network_idle`, `selector`, `text`, or `time`; optional `wait_value`. |
 | `webmcp_list`, `webmcp_call` | Discover page-provided tools or invoke `webmcp_tool` with `webmcp_input` and optional `frame_id`. |
 | `request_user` | Human handoff using `reason` and `message`. |
+| `credential_bindings` | Discover authorized opaque login binding IDs and nonsecret field/origin metadata. |
+| `credential_fill` | Approved `credential_binding_id` with current `username_ref`, `password_ref` and separately selected `submit_ref`; values resolve privately on the owner. |
 | `diagnose` | Runtime, host and profile diagnostics without starting Chrome. |
 | `evaluate`, `run_python`, `close` | **Workflow-only**: saved `expression`, saved `code`, or stop the profile. Excluded from the agent tool schema and rejected on tool calls. |
 
@@ -43,12 +53,12 @@ Refs resolve against a backend-node-ID map held per target, not against model-pr
 
 ## Execution flow
 
-1. Read operator configuration. For agent calls, reread the saved node settings so tool arguments cannot override the profile, policy, timeouts or executable code.
+1. Read operator configuration. Agent calls use trusted prepared configuration/resource bindings or reread saved settings. Model arguments cannot override profile, policy, timeouts or executable code. Saved policy and trusted restrictions combine monotonically: Ask first or a newly saved read-only restriction can tighten access, never broaden it.
 2. Reject workflow-only operations from agent calls and operations prohibited by `interaction`. Independently refuse automatic retries of site actions (including navigation and tab changes) when Temporal reports attempt greater than one; the previous action may already have occurred.
-3. Resolve the owner's profile: explicit `profile_id`, otherwise the workflow's persistent default profile. Unsaved runs have a separate fallback. Register a session identified by owner, workflow and node, associated with that profile.
+3. Resolve the authorized profile: a frozen active-task binding, otherwise saved `profile_id` or the workflow's persistent default. Unsaved local runs have a separate fallback. Distributed execution routes to its permanently registered backend owner; it cannot create a runtime on an orchestration worker or adopt an unavailable owner's profile. Register a session identified by principal, workflow and node, associated with that profile.
 4. Handle `close` and `diagnose` without opening a new runtime. Other operations open or reuse the profile runtime, discovering the installed browser and installing the pinned CLI on first use if needed. Testing mode may also install pinned Chrome. The actual selected browser version must be compatible with the saved profile; downgrade errors never delete or replace the profile automatically.
-5. `request_user` enters the human-handoff flow. Other operations acquire the profile's agent-operation lease/lock; human control blocks agent work.
-6. `webmcp_list` reads the native tracker's tool cache; `webmcp_call` invokes through the native CDP integration. Remaining operations use a generated Python script sent to the isolated browser-use CLI, whose daemon persists across calls and connects to managed Chrome.
+5. Browser Agent tasks hold a task-lifetime profile claim during model reasoning, browser operations and human assistance. Competing tasks fail with `BrowserBusy` before effects. `request_user` enters human handoff; other operations acquire the existing operation lease/lock. Human control retains its separate lease.
+6. `credential_bindings` reads authorized metadata without opening a browser or resolving secrets. `credential_fill` uses the protected private CDP flow below. `webmcp_list` reads the native tracker cache; `webmcp_call` invokes native CDP. Other ordinary operations use generated scripts through the isolated pinned browser-use CLI and its persistent daemon.
 7. Update active target, URL/title and snapshot refs from the result; invalidate refs on navigation. Map output to the node schema and emit page/session changes. CLI daemon failure permits one retry only for explicit observations, as defined in `_controls.py`. An uncertain site action requires a fresh observation before another action.
 
 The profile is persistent across executions; it is not the old execution-ID-named CLI session. Closing it stops the shared profile runtime, so other views of that profile observe the closure.
@@ -63,7 +73,7 @@ in-memory ledger shares origin budgets across profiles in the backend;
 repeat counts are per profile/origin. Observation and human input are exempt.
 See [Browser controls](../../browser-controls.md) for exact limits and scope.
 
-The current `MUTATING` set is exactly `click`, `type`, `press`, `select`, `back`, `forward`, `reload`, `webmcp_call`, `evaluate`, and `run_python`. `read_only` rejects this set. It does not prohibit navigation, scrolling, hovering or tab operations. In particular, `webmcp_call` is rejected by `interaction=read_only` before its tool-level read-only metadata is considered; `webmcp_mode=read_only` with full interaction is the setting that admits advertised read-only WebMCP tools.
+The current `MUTATING` set is `click`, `type`, `press`, `select`, `back`, `forward`, `reload`, `webmcp_call`, `evaluate`, `run_python` and `credential_fill`. `read_only` rejects this set. It does not prohibit navigation, scrolling, hovering or tab operations. In particular, `webmcp_call` is rejected by `interaction=read_only` before its tool-level read-only metadata is considered; `webmcp_mode=read_only` with full interaction is the setting that admits advertised read-only WebMCP tools.
 
 Empty `allowed_domains` allows public destinations. The managed egress proxy checks destinations and resolved addresses for browser traffic; private-network access is disabled by default. Enabling it does not allow cloud metadata or OpenCompany's own protected ports. See the canonical runtime document for policy details.
 
@@ -79,7 +89,31 @@ The authenticated live viewer attaches through `/ws/browser` to a saved workflow
 
 ## Normal mode
 
-Hire adds this node through the **Web browser** app (`web` in `config/employee_apps.json`, recorded under the employee's `browser` role). With "Ask me before sending anything" on, it is attached with `interaction=read_only`, so the agent reads pages and hands any change to the owner through `request_user`. While the agent waits there, the employee summary's `browser_request` (`{node_id, reason, since}`) makes Home show Needs you and Help in browser; the agent's message itself stays in the live viewer.
+New employee **Web browser** capabilities use the shared Browser AI Agent
+recipe and the existing delegation mechanism. The saved Browser tool remains
+the employee's viewer resource. Existing employee graphs are not rewritten
+just to add this capability. With "Ask me before sending anything" on, trusted
+`interaction=read_only` restrictions reach both execution adapters, so the
+agent reads pages and hands changes or login to the owner through
+`request_user`. The existing `browser_request` summary (`{node_id, reason,
+since}`) continues to show Needs you and Help in browser.
+
+## Protected configured login
+
+Website enrollment is described in [1Password credentials](../../onepassword_credentials.md#website-login-bindings).
+Before resolution, the owner validates binding scope, exact origin, current
+tab/frame/refs, saved policy and task claim. It persists a sensitive-login
+latch, confirms CLI daemon suspension and drains/gates viewer captures and
+page metadata. Only the private CDP session receives resolved values. It
+validates exact field assignment and submits the selected button once.
+
+Snapshots, text, screenshots, vision, WebMCP and ordinary actions stay blocked
+until private success checks confirm saved origin/path/cues, absence of
+sensitive fields and no reflected password. Failure or uncertain submission
+retains the gate, including after owner restart. **Close browser for manual
+login** must confirm shutdown before clearing it; reopen and use takeover.
+Ask first/read-only, MFA, passkeys and multi-step sign-in use human help.
+Agent arguments never contain credential values or 1Password references.
 
 ## Output and failures
 

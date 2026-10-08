@@ -4,6 +4,13 @@
 
 The replacement `browser` node launches the installed Chrome, Edge or Chromium (Chrome for Testing only with `BROWSER_RUNTIME=testing`) in persistent OpenCompany-owned profiles. The live viewer and human takeover use the native CDP path. Most agent/workflow operations still use the pinned browser-use CLI and its daemon internally; this dependency does not restore the old node or its real-Chrome attachment model.
 
+The dedicated Browser AI Agent uses that Browser tool through the existing
+OpenCompany reasoning runtime. Configured 1Password login uses private CDP
+while the CLI and observations are suspended. Follow
+[node creation](../../node_creation.md#browser-ai-agent-creation),
+[deployment and recovery](../../browser_agent_deployment.md) and
+[credential setup](../../onepassword_credentials.md) for these current paths.
+
 [Workflow migration](../../../server/services/workflow_migrations.py) rewrites saved `browserHarness` nodes to `browser`:
 
 - `goto` becomes `navigate`; `js` becomes `evaluate`; `doctor` becomes `diagnose`.

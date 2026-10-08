@@ -30,6 +30,14 @@ register Browser ownership. Every participant uses the same PostgreSQL
 application database, external Temporal service/namespace, authentication
 keys, trusted owner-forwarding secret and authorized artifact storage.
 
+Start backend owners before admitting Browser work. Only backend lifecycle
+registers and heartbeats runtimes. When preparation allocates a new profile,
+it associates it with an existing configured backend registration; it never
+registers the preparing orchestration process. Standalone worker configuration
+must therefore reference a trusted registered backend for any new dynamic
+Browser binding. A missing registration fails admission explicitly; a stale
+existing registration retains its profiles and queues work for recovery.
+
 Start from `.env.template`, override these values through deployment
 configuration, and keep bootstrap secrets out of graph or node parameters:
 
@@ -151,6 +159,10 @@ Profile ownership is permanent for this release. A stable task token holds
 the profile during model reasoning, browser work and human assistance.
 Competing tasks return `BrowserBusy` before browser effects. Human control
 keeps its separate lease; a stale cancellation cannot release a newer task.
+The claim also records its saved workflow/Browser-tool association. Viewer
+and manual-help routing use that frozen profile while the task is active,
+even after profile edits or an owner restart. Current resource authorization
+still applies; matching-token release clears the association.
 
 An offline owner's queued Activity remains on that owner's queue without
 consuming retries or starting another model turn. The UI reports
@@ -191,6 +203,37 @@ history has expired. Cancel and historical status remain authorized through
 the workflow after an agent is removed. Completion accounting occurs once
 at the invocation parent boundary.
 
+### Browser task API
+
+All routes use application authentication and saved-workflow authorization.
+
+| Route | Accepted request and purpose |
+| --- | --- |
+| `POST /api/browser/agents` | Saved `workflow_id`, mutation UUID, optional saved `browser_node_id`, position and standard provider/model selection; returns allocated node IDs, graph operations and saved revision |
+| `GET /api/browser/tasks/discovery` | `workflow_id` and saved `browser_node_id`; returns associated Browser agents from the server graph |
+| `POST /api/browser/tasks` | `workflow_id`, `agent_node_id`, `prompt` and `submission_id` UUID; extra fields are rejected |
+| `GET /api/browser/tasks/{submission_id}` | Saved workflow/agent IDs in query parameters; returns current invocation status |
+| `DELETE /api/browser/tasks/{submission_id}` | The same authorized identity; requests Cancel and waits for confirmed cleanup |
+| `GET /api/browser/tasks/history` | `workflow_id`, optional agent `node_id`, opaque `cursor` and `limit` between 1 and 100 |
+
+Reuse the submission UUID after a lost acknowledgement. A changed prompt or
+binding under the same identity fails the fingerprint check. Browser tools
+must be saved and connected before admission; clients cannot provide graphs,
+credential sources, owner URLs or CDP endpoints. Temporal remains authoritative
+while the history projection provides bounded display and durable deduplication.
+
+### Operator-visible states
+
+| State | Required response |
+| --- | --- |
+| Browser owner is not registered | Start the configured backend before submitting a new profile/task |
+| Browser unavailable — waiting for its owner | Restore the original owner and machine identity; keep the same queue/profile |
+| `BrowserBusy` | Finish or cancel the active task and confirm its cleanup before starting another |
+| Observations paused during protected login | Wait for private confirmation, or use Close browser for manual login, reopen and take control |
+| Cancel/Reset remains in progress | Restore the owner so cleanup can settle admitted work and confirm daemon/browser shutdown |
+| Uncertain action after recovery | Observe current state and confirm the earlier effect; request human help when it cannot be established |
+| Unsupported distributed credential connection | Enroll an audited static 1Password adapter or retain that connection in local mode |
+
 ## Acceptance and release gate
 
 Automated checks use controlled fixtures: exact configured form login,
@@ -199,6 +242,48 @@ account data, preparing a change, task/cancellation isolation, two owner
 queues, replay/Continue-As-New, PostgreSQL migration/concurrent claims and
 identifier-only invalidation. Ordinary Browser/profile/cookie/viewer and old
 agent/graph regressions remain required.
+
+### Recorded implementation validation — 2026-10-08
+
+These results were collected during implementation. Focused follow-up checks
+overlap the broad suites; do not add their counts into an aggregate total.
+
+| Check | Recorded result and boundary |
+| --- | --- |
+| Browser regressions | 307 passed; 2 opt-in live cases skipped in the broad run; final owner-allocation follow-up passed 18 tests |
+| Controlled live login | 2 passed with real local Chrome/private CDP/browser-use and fake credentials, including exact Unicode/whitespace and normalization refusal |
+| Temporal | 497 passed, including old/new SDK replay, native test-server owner queues, Continue-As-New and Cancel/Reset cleanup; browser/model Activities were fixtures |
+| Credentials, runtime adapters and employees | 866 passed, 1 skipped; no real vault/provider access |
+| LLM, memory, RLM and proxy regressions | 447 passed, 36 live/provider cases deselected |
+| Browser Agent creation and employee integration | 76 focused checks passed |
+| Client | 113 Browser/creation/credential checks passed; typecheck and production build passed |
+| Database foundations | 15 passed using local SQLite and isolated real PostgreSQL 16.15, including import/reseed, concurrent claims, legacy profile ownership and two identifier-only notification listeners |
+| Windows CLI provisioning | Official 1Password 2.40.0 archive verified and version/status smoke passed; no authorization or vault access |
+
+The earlier unchanged Browser baseline was 122 passing tests. These newer
+results expand coverage; they do not replace the production acceptance gates
+below or establish live cross-machine behavior.
+
+From `server/`, with the normal development environment installed:
+
+```powershell
+$env:DEBUG='false'
+python -m pytest -q -p no:cacheprovider tests/nodes/browser tests/nodes/test_browser_agent_creation.py tests/test_browser_workspace_tasks.py
+python -m pytest -q -p no:cacheprovider tests/credentials tests/temporal
+# Optional native Temporal gate; use an already provisioned binary.
+$env:TEMPORAL_TEST_CLI='C:/tools/temporal/temporal.exe'
+python -m pytest -q -p no:cacheprovider tests/temporal/test_browser_workspace_replay.py
+# Optional controlled Chrome acceptance; provision browser-use 0.13.10 first.
+$env:BROWSER_ACCEPTANCE_LIVE='1'
+$env:BROWSER_ACCEPTANCE_CLI='C:/runtime/browser-use/bin/browser-use.exe'
+python -m pytest -q -p no:cacheprovider tests/nodes/browser/test_browser_login_acceptance.py
+```
+
+Use paths appropriate to the current platform. From `client/`, run the
+credential suite with `bun run test:credentials` and Browser component tests
+with `bun run test src/components/browser`; run root `bun run typecheck` and
+`bun run build` for the shared frontend/build checks. These focused commands
+are rerun entry points, not a promise of the exact recorded suite counts.
 
 Run the isolated real-database tests separately from the legacy stubbed
 `tests/` suite:

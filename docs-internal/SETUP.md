@@ -167,12 +167,28 @@ the arrangement is [desktop_host_contract.md](./desktop_host_contract.md).
   [control lifecycle, recovery and verification](temporal-workflow-control.md).
 - See [Temporal Architecture](./TEMPORAL_ARCHITECTURE.md) and [CLI Services Guide](./cli_services_integration.md)
 
-### Database (SQLite)
+### Application database (SQLite locally, PostgreSQL for multiple machines)
+
 - **workflows** - Workflow definitions
 - **node_parameters** - Node parameter storage
 - **conversation_messages** - AI conversation history
 - **cache_entries** - Execution cache (when Redis disabled)
 - **users** - Authentication (single/multi-user modes)
+
+Local development retains SQLite and embedded Temporal. Multi-machine Browser
+execution requires `DISTRIBUTED_MODE=true`, a shared
+`postgresql+asyncpg://` `DATABASE_URL`, external Temporal, shared artifact/profile
+storage and one registered browser owner per backend process (`WORKERS=1`).
+Do not share the SQLite files over NFS/SMB. Use the explicit offline transfer
+command when moving existing IDs and graphs. The full configuration, owner
+recovery and release checks are in [Browser deployment](browser_agent_deployment.md).
+
+Browser AI Agent direct tasks run independently of workflow Start/Stop/Resume;
+Cancel and Reset wait for confirmed browser-owner cleanup. Supported API keys
+and configured website logins can use approved [1Password bindings](onepassword_credentials.md).
+Local desktop authorization must reach the actual backend user/process.
+Distributed mode uses scoped service accounts and rejects local keys and
+unsupported OAuth/CLI-managed connections.
 
 ## Environment Configuration
 

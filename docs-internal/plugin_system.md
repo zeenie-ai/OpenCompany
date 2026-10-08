@@ -527,11 +527,19 @@ activities. The three shown above are the core model/persistence/compaction
 steps; the remainder cover payload preparation, progress and output
 persistence, tool/skill refresh, delegation lifecycle, and team finalization.
 
-**Agents that migrate** (15): `aiAgent`, `chatAgent`, 11 specialized
-agents (`android_agent`, `coding_agent`, `web_agent`, `task_agent`,
+**Native agent types**: `aiAgent`, `chatAgent`, specialized
+agents (`android_agent`, `browser_agent`, `coding_agent`, `web_agent`, `task_agent`,
 `social_agent`, `travel_agent`, `tool_agent`, `productivity_agent`,
 `payments_agent`, `consumer_agent`, `autonomous_agent`), 2 team
 leads (`orchestrator_agent`, `ai_employee`).
+
+`browser_agent` uses this same loop and a saved Browser tool. Its shared
+atomic creation recipe, direct Workspace tasks and private credential flow
+are described in [node creation](node_creation.md#browser-ai-agent-creation)
+and [Browser deployment](browser_agent_deployment.md). Distributed Browser
+Activities use their frozen owner's physical queue regardless of the worker
+pool switch; generic orchestration workers exclude them. The authoritative
+native type set is `AGENT_WORKFLOW_TYPES` in `services/temporal/workflow.py`.
 
 **Agents that stay as single activities**: `rlm_agent`,
 `claude_code_agent`, and `vertex_managed_agent`. Their internal session state
