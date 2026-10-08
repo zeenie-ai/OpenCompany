@@ -1,8 +1,224 @@
 {
-  "_generated": "2026-10-01T07:28:30.841089+00:00",
+  "_generated": "2026-10-08T08:02:55.611737+00:00",
   "_source": "openrouter",
-  "_model_count": 462,
+  "_model_count": 467,
   "models": {
+    "anthropic/claude-haiku-5.5": {
+      "id": "anthropic/claude-haiku-5.5",
+      "name": "Anthropic: Claude Haiku 5.5",
+      "provider": "anthropic",
+      "local_id": "claude-haiku-5.5",
+      "context_length": 1000000,
+      "max_output_tokens": 128000,
+      "input_price_per_mtok": 0.1,
+      "output_price_per_mtok": 0.5,
+      "supports_thinking": true,
+      "thinking_type": "budget",
+      "temperature_range": [
+        0.0,
+        1.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "include_reasoning",
+        "max_completion_tokens",
+        "max_tokens",
+        "reasoning",
+        "reasoning_effort",
+        "response_format",
+        "stop",
+        "structured_outputs",
+        "tool_choice",
+        "tools",
+        "verbosity"
+      ]
+    },
+    "anthropic/claude-haiku-5.5:batch": {
+      "id": "anthropic/claude-haiku-5.5:batch",
+      "name": "Anthropic: Claude Haiku 5.5 (batch)",
+      "provider": "anthropic",
+      "local_id": "claude-haiku-5.5:batch",
+      "context_length": 1000000,
+      "max_output_tokens": 128000,
+      "input_price_per_mtok": 0.05,
+      "output_price_per_mtok": 0.25,
+      "supports_thinking": true,
+      "thinking_type": "budget",
+      "temperature_range": [
+        0.0,
+        1.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "include_reasoning",
+        "max_tokens",
+        "reasoning",
+        "reasoning_effort",
+        "response_format",
+        "stop",
+        "structured_outputs",
+        "tool_choice",
+        "tools",
+        "verbosity"
+      ]
+    },
+    "gemini/gemini-nano-banana-2.1": {
+      "id": "google/gemini-nano-banana-2.1",
+      "name": "Google: Nano Banana 2.1",
+      "provider": "gemini",
+      "local_id": "gemini-nano-banana-2.1",
+      "context_length": 65536,
+      "max_output_tokens": 58982,
+      "input_price_per_mtok": 1.5,
+      "output_price_per_mtok": 7.5,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "include_reasoning",
+        "max_tokens",
+        "reasoning",
+        "reasoning_effort",
+        "response_format",
+        "seed",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_p"
+      ]
+    },
+    "mistralai/mistral-large-4-0": {
+      "id": "mistralai/mistral-large-4-0",
+      "name": "Mistral: Mistral Large 4",
+      "provider": "mistralai",
+      "local_id": "mistral-large-4-0",
+      "context_length": 524288,
+      "max_output_tokens": 262144,
+      "input_price_per_mtok": 0.68,
+      "output_price_per_mtok": 2.09,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "logprobs",
+        "max_tokens",
+        "presence_penalty",
+        "reasoning",
+        "reasoning_effort",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_logprobs",
+        "top_p"
+      ]
+    },
+    "inclusionai/ling-3.1-flash": {
+      "id": "inclusionai/ling-3.1-flash",
+      "name": "inclusionAI: Ling 3.1 Flash",
+      "provider": "inclusionai",
+      "local_id": "ling-3.1-flash",
+      "context_length": 262144,
+      "max_output_tokens": 32768,
+      "input_price_per_mtok": 0.0,
+      "output_price_per_mtok": 0.0,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "logprobs",
+        "max_tokens",
+        "presence_penalty",
+        "reasoning",
+        "repetition_penalty",
+        "seed",
+        "stop",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_logprobs",
+        "top_p"
+      ]
+    },
+    "apodex/apodex-1.1-mini:free": {
+      "id": "apodex/apodex-1.1-mini:free",
+      "name": "Apodex: Apodex 1.1 Mini (free)",
+      "provider": "apodex",
+      "local_id": "apodex-1.1-mini:free",
+      "context_length": 262144,
+      "max_output_tokens": 235929,
+      "input_price_per_mtok": 0.0,
+      "output_price_per_mtok": 0.0,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "max_tokens",
+        "presence_penalty",
+        "reasoning",
+        "repetition_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_p"
+      ]
+    },
+    "unbiased/pareto-26.10-preview": {
+      "id": "unbiased/pareto-26.10-preview",
+      "name": "Pareto 26.10 Preview",
+      "provider": "unbiased",
+      "local_id": "pareto-26.10-preview",
+      "context_length": 1048576,
+      "max_output_tokens": 131072,
+      "input_price_per_mtok": 0.8,
+      "output_price_per_mtok": 3.2,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "max_tokens",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_p"
+      ]
+    },
     "openai/gpt-6.1-sol-pro": {
       "id": "openai/gpt-6.1-sol-pro",
       "name": "OpenAI: GPT-6.1 Sol Pro",
@@ -29,7 +245,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-6.1-sol": {
@@ -58,7 +275,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "anthropic/claude-sonnet-5.5": {
@@ -86,7 +304,6 @@
         "response_format",
         "stop",
         "structured_outputs",
-        "temperature",
         "tool_choice",
         "tools",
         "verbosity"
@@ -303,34 +520,6 @@
         "top_p"
       ]
     },
-    "stealth/space-bunny-alpha": {
-      "id": "stealth/space-bunny-alpha",
-      "name": "Space Bunny Alpha",
-      "provider": "stealth",
-      "local_id": "space-bunny-alpha",
-      "context_length": 1000000,
-      "max_output_tokens": 524288,
-      "input_price_per_mtok": 0.0,
-      "output_price_per_mtok": 0.0,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "include_reasoning",
-        "max_tokens",
-        "reasoning",
-        "reasoning_effort",
-        "response_format",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_p"
-      ]
-    },
     "aion-labs/aion-3.5-mini": {
       "id": "aion-labs/aion-3.5-mini",
       "name": "AionLabs: Aion 3.5 Mini",
@@ -477,7 +666,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-6-luna-pro:batch": {
@@ -505,7 +695,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-6-luna": {
@@ -534,7 +725,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-6-luna:batch": {
@@ -562,7 +754,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-6-sol-pro": {
@@ -591,7 +784,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-6-sol-pro:batch": {
@@ -619,7 +813,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-6-sol": {
@@ -648,7 +843,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-6-sol:batch": {
@@ -676,7 +872,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "anthropic/claude-opus-5.5": {
@@ -704,7 +901,6 @@
         "response_format",
         "stop",
         "structured_outputs",
-        "temperature",
         "tool_choice",
         "tools",
         "verbosity"
@@ -738,6 +934,24 @@
         "tools",
         "verbosity"
       ]
+    },
+    "nvidia/switchyard": {
+      "id": "nvidia/switchyard",
+      "name": "NVIDIA: Switchyard",
+      "provider": "nvidia",
+      "local_id": "switchyard",
+      "context_length": 1000000,
+      "max_output_tokens": 0,
+      "input_price_per_mtok": -1000000.0,
+      "output_price_per_mtok": -1000000.0,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": []
     },
     "xiaomi/mimo-v2.6-pro-ultraspeed": {
       "id": "xiaomi/mimo-v2.6-pro-ultraspeed",
@@ -790,6 +1004,7 @@
         "frequency_penalty",
         "include_reasoning",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -803,6 +1018,7 @@
         "tool_choice",
         "tools",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -1007,8 +1223,8 @@
       "local_id": "deepseek-pro-latest",
       "context_length": 1048576,
       "max_output_tokens": 393216,
-      "input_price_per_mtok": 0.2317,
-      "output_price_per_mtok": 3.5,
+      "input_price_per_mtok": 0.135,
+      "output_price_per_mtok": 8.0,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -1046,8 +1262,8 @@
       "local_id": "deepseek-flash-latest",
       "context_length": 1048576,
       "max_output_tokens": 943718,
-      "input_price_per_mtok": 0.027,
-      "output_price_per_mtok": 0.6,
+      "input_price_per_mtok": 0.003,
+      "output_price_per_mtok": 2.4,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -1168,7 +1384,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-sol-latest": {
@@ -1197,7 +1414,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-terra-latest": {
@@ -1226,7 +1444,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-luna-latest": {
@@ -1255,7 +1474,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "sakana/fugu-ultra-v2": {
@@ -1355,8 +1575,8 @@
       "local_id": "deepseek-v4.1-flash",
       "context_length": 1048576,
       "max_output_tokens": 943718,
-      "input_price_per_mtok": 0.027,
-      "output_price_per_mtok": 0.6,
+      "input_price_per_mtok": 0.3,
+      "output_price_per_mtok": 1.2,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -1539,7 +1759,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-6-astra:batch": {
@@ -1567,7 +1788,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-6-astra-pro": {
@@ -1596,7 +1818,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-6-astra-pro:batch": {
@@ -1624,7 +1847,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "inclusionai/ling-3.0-flash-sante:free": {
@@ -1961,9 +2185,9 @@
       "provider": "inclusionai",
       "local_id": "ling-3.0-flash-fin",
       "context_length": 262144,
-      "max_output_tokens": 235929,
-      "input_price_per_mtok": 0.06,
-      "output_price_per_mtok": 0.18,
+      "max_output_tokens": 32768,
+      "input_price_per_mtok": 0.042,
+      "output_price_per_mtok": 0.1232,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -1999,8 +2223,8 @@
       "local_id": "glm-flash-latest",
       "context_length": 1048576,
       "max_output_tokens": 943718,
-      "input_price_per_mtok": 0.02,
-      "output_price_per_mtok": 0.3,
+      "input_price_per_mtok": 0.032,
+      "output_price_per_mtok": 1.4148,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -2269,8 +2493,8 @@
       "local_id": "glm-latest",
       "context_length": 1048576,
       "max_output_tokens": 131072,
-      "input_price_per_mtok": 0.1678,
-      "output_price_per_mtok": 4.0,
+      "input_price_per_mtok": 0.036,
+      "output_price_per_mtok": 12.0,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -2334,8 +2558,8 @@
       "local_id": "glm-5.3",
       "context_length": 1048576,
       "max_output_tokens": 943718,
-      "input_price_per_mtok": 0.3,
-      "output_price_per_mtok": 4.4,
+      "input_price_per_mtok": 0.049,
+      "output_price_per_mtok": 3.39,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -2411,8 +2635,8 @@
       "local_id": "qwen3.8-27b",
       "context_length": 1000000,
       "max_output_tokens": 131072,
-      "input_price_per_mtok": 0.42,
-      "output_price_per_mtok": 3.0,
+      "input_price_per_mtok": 0.425,
+      "output_price_per_mtok": 2.55,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -2441,38 +2665,6 @@
         "top_a",
         "top_k",
         "top_logprobs",
-        "top_p"
-      ]
-    },
-    "qwen/qwen3.8-27b:free": {
-      "id": "qwen/qwen3.8-27b:free",
-      "name": "Qwen: Qwen3.8 27B (free)",
-      "provider": "qwen",
-      "local_id": "qwen3.8-27b:free",
-      "context_length": 262144,
-      "max_output_tokens": 235929,
-      "input_price_per_mtok": 0.0,
-      "output_price_per_mtok": 0.0,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "include_reasoning",
-        "max_tokens",
-        "presence_penalty",
-        "reasoning",
-        "reasoning_effort",
-        "repetition_penalty",
-        "stop",
-        "structured_outputs",
-        "temperature",
-        "tool_choice",
-        "tools",
         "top_p"
       ]
     },
@@ -2782,8 +2974,8 @@
       "local_id": "nemotron-3.5-lightning",
       "context_length": 262144,
       "max_output_tokens": 131072,
-      "input_price_per_mtok": 0.0595,
-      "output_price_per_mtok": 0.17,
+      "input_price_per_mtok": 0.049,
+      "output_price_per_mtok": 0.14,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -2904,9 +3096,9 @@
       "provider": "meta",
       "local_id": "muse-glimmer-30b",
       "context_length": 131072,
-      "max_output_tokens": 117964,
-      "input_price_per_mtok": 0.35,
-      "output_price_per_mtok": 1.5,
+      "max_output_tokens": 16384,
+      "input_price_per_mtok": 0.3,
+      "output_price_per_mtok": 1.2,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -2973,8 +3165,8 @@
       "local_id": "deepseek-v4-flash-latest",
       "context_length": 1048576,
       "max_output_tokens": 943718,
-      "input_price_per_mtok": 0.0108,
-      "output_price_per_mtok": 1.28,
+      "input_price_per_mtok": 0.0083,
+      "output_price_per_mtok": 0.6612,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -3014,7 +3206,7 @@
       "local_id": "deepseek-v4-flash-0731",
       "context_length": 1048576,
       "max_output_tokens": 943718,
-      "input_price_per_mtok": 0.0108,
+      "input_price_per_mtok": 0.0104,
       "output_price_per_mtok": 1.28,
       "supports_thinking": false,
       "thinking_type": "none",
@@ -3169,7 +3361,6 @@
         "response_format",
         "stop",
         "structured_outputs",
-        "temperature",
         "tool_choice",
         "tools",
         "verbosity"
@@ -3559,8 +3750,8 @@
       "local_id": "kimi-k3",
       "context_length": 1048576,
       "max_output_tokens": 943718,
-      "input_price_per_mtok": 0.6997,
-      "output_price_per_mtok": 10.0,
+      "input_price_per_mtok": 0.58,
+      "output_price_per_mtok": 12.3,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -3659,40 +3850,6 @@
         "top_p"
       ]
     },
-    "kwaipilot/kat-coder-pro-v2.5": {
-      "id": "kwaipilot/kat-coder-pro-v2.5",
-      "name": "Kwaipilot: KAT-Coder-Pro V2.5",
-      "provider": "kwaipilot",
-      "local_id": "kat-coder-pro-v2.5",
-      "context_length": 262144,
-      "max_output_tokens": 235929,
-      "input_price_per_mtok": 0.74,
-      "output_price_per_mtok": 2.96,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "logit_bias",
-        "max_tokens",
-        "min_p",
-        "presence_penalty",
-        "repetition_penalty",
-        "response_format",
-        "seed",
-        "stop",
-        "structured_outputs",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_k",
-        "top_p"
-      ]
-    },
     "openai/gpt-5.6-luna-pro": {
       "id": "openai/gpt-5.6-luna-pro",
       "name": "OpenAI: GPT-5.6 Luna Pro",
@@ -3719,7 +3876,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.6-luna-pro:batch": {
@@ -3747,7 +3905,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.6-luna": {
@@ -3776,7 +3935,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.6-luna:batch": {
@@ -3804,7 +3964,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.6-terra-pro": {
@@ -3833,7 +3994,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.6-terra-pro:batch": {
@@ -3861,7 +4023,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.6-terra": {
@@ -3890,7 +4053,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.6-terra:batch": {
@@ -3918,7 +4082,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.6-sol-pro": {
@@ -3928,8 +4093,8 @@
       "local_id": "gpt-5.6-sol-pro",
       "context_length": 1050000,
       "max_output_tokens": 128000,
-      "input_price_per_mtok": 4.0,
-      "output_price_per_mtok": 20.0,
+      "input_price_per_mtok": 2.0,
+      "output_price_per_mtok": 10.0,
       "supports_thinking": true,
       "thinking_type": "effort",
       "temperature_range": [
@@ -3947,7 +4112,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.6-sol-pro:batch": {
@@ -3975,7 +4141,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.6-sol": {
@@ -4004,7 +4171,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.6-sol:batch": {
@@ -4032,7 +4200,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "xai/grok-4.5": {
@@ -4448,9 +4617,9 @@
       "provider": "z-ai",
       "local_id": "glm-5.2",
       "context_length": 1048576,
-      "max_output_tokens": 943718,
-      "input_price_per_mtok": 1.4,
-      "output_price_per_mtok": 4.4,
+      "max_output_tokens": 131072,
+      "input_price_per_mtok": 0.03,
+      "output_price_per_mtok": 10.0,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -4691,9 +4860,9 @@
       "provider": "nvidia",
       "local_id": "nemotron-3-ultra-550b-a55b",
       "context_length": 262144,
-      "max_output_tokens": 182520,
-      "input_price_per_mtok": 0.6,
-      "output_price_per_mtok": 2.4,
+      "max_output_tokens": 16384,
+      "input_price_per_mtok": 0.5,
+      "output_price_per_mtok": 2.2,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -4842,10 +5011,8 @@
       "supported_parameters": [
         "frequency_penalty",
         "include_reasoning",
-        "logit_bias",
         "logprobs",
         "max_tokens",
-        "min_p",
         "presence_penalty",
         "reasoning",
         "reasoning_effort",
@@ -4887,7 +5054,6 @@
         "response_format",
         "stop",
         "structured_outputs",
-        "temperature",
         "tool_choice",
         "tools",
         "verbosity"
@@ -5327,10 +5493,10 @@
       "name": "Anthropic: Claude Haiku Latest",
       "provider": "anthropic",
       "local_id": "claude-haiku-latest",
-      "context_length": 200000,
-      "max_output_tokens": 64000,
-      "input_price_per_mtok": 1.0,
-      "output_price_per_mtok": 5.0,
+      "context_length": 1000000,
+      "max_output_tokens": 128000,
+      "input_price_per_mtok": 0.1,
+      "output_price_per_mtok": 0.5,
       "supports_thinking": true,
       "thinking_type": "budget",
       "temperature_range": [
@@ -5343,14 +5509,13 @@
         "max_completion_tokens",
         "max_tokens",
         "reasoning",
+        "reasoning_effort",
         "response_format",
         "stop",
         "structured_outputs",
-        "temperature",
         "tool_choice",
         "tools",
-        "top_k",
-        "top_p"
+        "verbosity"
       ]
     },
     "openai/gpt-mini-latest": {
@@ -5379,7 +5544,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "gemini/gemini-pro-latest": {
@@ -5420,8 +5586,8 @@
       "local_id": "kimi-latest",
       "context_length": 1048576,
       "max_output_tokens": 943718,
-      "input_price_per_mtok": 0.6997,
-      "output_price_per_mtok": 10.0,
+      "input_price_per_mtok": 0.56,
+      "output_price_per_mtok": 13.0,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -5508,7 +5674,6 @@
         "response_format",
         "stop",
         "structured_outputs",
-        "temperature",
         "tool_choice",
         "tools",
         "verbosity"
@@ -5663,9 +5828,9 @@
       "provider": "qwen",
       "local_id": "qwen3.6-27b",
       "context_length": 262144,
-      "max_output_tokens": 81920,
-      "input_price_per_mtok": 0.32,
-      "output_price_per_mtok": 3.2,
+      "max_output_tokens": 65536,
+      "input_price_per_mtok": 0.3,
+      "output_price_per_mtok": 2.0,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -5720,7 +5885,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.5-pro:batch": {
@@ -5748,7 +5914,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.5": {
@@ -5777,7 +5944,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.5:batch": {
@@ -5805,7 +5973,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "deepseek/deepseek-v4-pro": {
@@ -5815,8 +5984,8 @@
       "local_id": "deepseek-v4-pro",
       "context_length": 1048576,
       "max_output_tokens": 384000,
-      "input_price_per_mtok": 0.2163,
-      "output_price_per_mtok": 0.4326,
+      "input_price_per_mtok": 0.9553,
+      "output_price_per_mtok": 1.9105,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -5854,9 +6023,9 @@
       "provider": "deepseek",
       "local_id": "deepseek-v4-flash",
       "context_length": 1048576,
-      "max_output_tokens": 384000,
-      "input_price_per_mtok": 0.042,
-      "output_price_per_mtok": 0.084,
+      "max_output_tokens": 943718,
+      "input_price_per_mtok": 0.0097,
+      "output_price_per_mtok": 1.28,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -6004,19 +6173,16 @@
       ],
       "is_reasoning_model": false,
       "supported_parameters": [
-        "frequency_penalty",
         "include_reasoning",
-        "logit_bias",
         "logprobs",
         "max_tokens",
-        "presence_penalty",
         "reasoning",
         "reasoning_effort",
         "response_format",
         "seed",
-        "stop",
         "structured_outputs",
-        "top_logprobs"
+        "top_logprobs",
+        "verbosity"
       ]
     },
     "anthropic/claude-opus-latest": {
@@ -6044,7 +6210,6 @@
         "response_format",
         "stop",
         "structured_outputs",
-        "temperature",
         "tool_choice",
         "tools",
         "verbosity"
@@ -6075,8 +6240,8 @@
       "local_id": "kimi-k2.6",
       "context_length": 262144,
       "max_output_tokens": 235929,
-      "input_price_per_mtok": 0.65,
-      "output_price_per_mtok": 3.41,
+      "input_price_per_mtok": 0.465,
+      "output_price_per_mtok": 2.45,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -6172,9 +6337,9 @@
       "provider": "z-ai",
       "local_id": "glm-5.1",
       "context_length": 204800,
-      "max_output_tokens": 131072,
-      "input_price_per_mtok": 0.9646,
-      "output_price_per_mtok": 3.0316,
+      "max_output_tokens": 128000,
+      "input_price_per_mtok": 0.966,
+      "output_price_per_mtok": 3.036,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -6587,7 +6752,6 @@
         "frequency_penalty",
         "include_reasoning",
         "logit_bias",
-        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -6596,12 +6760,10 @@
         "response_format",
         "seed",
         "stop",
-        "structured_outputs",
         "temperature",
         "tool_choice",
         "tools",
         "top_k",
-        "top_logprobs",
         "top_p"
       ]
     },
@@ -6631,7 +6793,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.4-nano:batch": {
@@ -6659,7 +6822,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.4-mini": {
@@ -6688,7 +6852,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.4-mini:batch": {
@@ -6716,7 +6881,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "mistralai/mistral-small-2603": {
@@ -6819,9 +6985,9 @@
       "provider": "nvidia",
       "local_id": "nemotron-3-super-120b-a12b",
       "context_length": 262144,
-      "max_output_tokens": 235929,
-      "input_price_per_mtok": 0.08,
-      "output_price_per_mtok": 0.45,
+      "max_output_tokens": 16384,
+      "input_price_per_mtok": 0.085,
+      "output_price_per_mtok": 0.4,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -6977,7 +7143,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.4-pro:batch": {
@@ -7005,7 +7172,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.4": {
@@ -7034,7 +7202,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.4:batch": {
@@ -7062,7 +7231,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "inception/mercury-2": {
@@ -7189,9 +7359,9 @@
       "provider": "qwen",
       "local_id": "qwen3.5-35b-a3b",
       "context_length": 262144,
-      "max_output_tokens": 65536,
-      "input_price_per_mtok": 0.1625,
-      "output_price_per_mtok": 1.3,
+      "max_output_tokens": 235929,
+      "input_price_per_mtok": 0.15,
+      "output_price_per_mtok": 1.0,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -7227,9 +7397,9 @@
       "provider": "qwen",
       "local_id": "qwen3.5-27b",
       "context_length": 262144,
-      "max_output_tokens": 65536,
-      "input_price_per_mtok": 0.195,
-      "output_price_per_mtok": 1.56,
+      "max_output_tokens": 81920,
+      "input_price_per_mtok": 0.26,
+      "output_price_per_mtok": 2.6,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -7386,7 +7556,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "aion-labs/aion-2.0": {
@@ -7583,9 +7754,9 @@
       "provider": "qwen",
       "local_id": "qwen3.5-397b-a17b",
       "context_length": 262144,
-      "max_output_tokens": 235929,
-      "input_price_per_mtok": 0.55,
-      "output_price_per_mtok": 3.5,
+      "max_output_tokens": 81920,
+      "input_price_per_mtok": 0.45,
+      "output_price_per_mtok": 3.0,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -8135,7 +8306,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "bytedance-seed/seed-1.6-flash": {
@@ -8337,8 +8509,8 @@
       "local_id": "nemotron-3-nano-30b-a3b",
       "context_length": 262144,
       "max_output_tokens": 235929,
-      "input_price_per_mtok": 0.05,
-      "output_price_per_mtok": 0.2,
+      "input_price_per_mtok": 0.06,
+      "output_price_per_mtok": 0.24,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -8390,7 +8562,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.2-pro": {
@@ -8418,7 +8591,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.2-pro:batch": {
@@ -8446,7 +8620,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.2": {
@@ -8475,7 +8650,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.2:batch": {
@@ -8503,7 +8679,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "mistralai/devstral-2512": {
@@ -8639,7 +8816,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "amazon/nova-2-lite-v1": {
@@ -8856,8 +9034,8 @@
       "provider": "deepseek",
       "local_id": "deepseek-v3.2",
       "context_length": 163840,
-      "max_output_tokens": 65536,
-      "input_price_per_mtok": 0.28,
+      "max_output_tokens": 147456,
+      "input_price_per_mtok": 0.259,
       "output_price_per_mtok": 0.42,
       "supports_thinking": false,
       "thinking_type": "none",
@@ -9002,7 +9180,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.1:batch": {
@@ -9030,7 +9209,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.1-codex": {
@@ -9058,7 +9238,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5.1-codex-mini": {
@@ -9086,7 +9267,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "moonshotai/kimi-k2-thinking": {
@@ -9358,20 +9540,17 @@
       ],
       "is_reasoning_model": false,
       "supported_parameters": [
-        "frequency_penalty",
         "include_reasoning",
-        "logit_bias",
         "logprobs",
         "max_tokens",
-        "presence_penalty",
         "reasoning",
         "response_format",
         "seed",
-        "stop",
         "structured_outputs",
         "temperature",
         "top_logprobs",
-        "top_p"
+        "top_p",
+        "verbosity"
       ]
     },
     "anthropic/claude-haiku-4.5": {
@@ -9522,20 +9701,17 @@
       ],
       "is_reasoning_model": false,
       "supported_parameters": [
-        "frequency_penalty",
         "include_reasoning",
-        "logit_bias",
         "logprobs",
         "max_tokens",
-        "presence_penalty",
         "reasoning",
         "response_format",
         "seed",
-        "stop",
         "structured_outputs",
         "temperature",
         "top_logprobs",
-        "top_p"
+        "top_p",
+        "verbosity"
       ]
     },
     "gemini/gemini-2.5-flash-image": {
@@ -9660,7 +9836,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5-pro:batch": {
@@ -9688,7 +9865,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "z-ai/glm-4.6": {
@@ -10017,8 +10195,8 @@
       "provider": "deepseek",
       "local_id": "deepseek-v3.1-terminus",
       "context_length": 163840,
-      "max_output_tokens": 65536,
-      "input_price_per_mtok": 0.3,
+      "max_output_tokens": 147456,
+      "input_price_per_mtok": 0.27,
       "output_price_per_mtok": 1.0,
       "supports_thinking": false,
       "thinking_type": "none",
@@ -10030,14 +10208,9 @@
       "supported_parameters": [
         "frequency_penalty",
         "include_reasoning",
-        "logit_bias",
         "max_tokens",
-        "min_p",
-        "presence_penalty",
         "reasoning",
-        "repetition_penalty",
         "response_format",
-        "seed",
         "stop",
         "structured_outputs",
         "temperature",
@@ -10085,7 +10258,7 @@
       "provider": "qwen",
       "local_id": "qwen3-next-80b-a3b-thinking",
       "context_length": 262144,
-      "max_output_tokens": 235929,
+      "max_output_tokens": 32768,
       "input_price_per_mtok": 0.15,
       "output_price_per_mtok": 1.2,
       "supports_thinking": false,
@@ -10121,9 +10294,9 @@
       "provider": "qwen",
       "local_id": "qwen3-next-80b-a3b-instruct",
       "context_length": 262144,
-      "max_output_tokens": 235929,
-      "input_price_per_mtok": 0.1,
-      "output_price_per_mtok": 1.1,
+      "max_output_tokens": 32768,
+      "input_price_per_mtok": 0.15,
+      "output_price_per_mtok": 1.5,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -10434,7 +10607,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5:batch": {
@@ -10462,7 +10636,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5-mini": {
@@ -10491,7 +10666,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5-mini:batch": {
@@ -10519,7 +10695,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5-nano": {
@@ -10548,7 +10725,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-5-nano:batch": {
@@ -10576,7 +10754,8 @@
         "seed",
         "structured_outputs",
         "tool_choice",
-        "tools"
+        "tools",
+        "verbosity"
       ]
     },
     "openai/gpt-oss-120b": {
@@ -11148,9 +11327,9 @@
       "provider": "qwen",
       "local_id": "qwen3-235b-a22b-2507",
       "context_length": 262144,
-      "max_output_tokens": 235929,
-      "input_price_per_mtok": 0.0875,
-      "output_price_per_mtok": 0.35,
+      "max_output_tokens": 16384,
+      "input_price_per_mtok": 0.09,
+      "output_price_per_mtok": 0.55,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -11838,6 +12017,7 @@
         "frequency_penalty",
         "include_reasoning",
         "logit_bias",
+        "logprobs",
         "max_tokens",
         "min_p",
         "presence_penalty",
@@ -11850,7 +12030,9 @@
         "temperature",
         "tool_choice",
         "tools",
+        "top_a",
         "top_k",
+        "top_logprobs",
         "top_p"
       ]
     },
@@ -12208,7 +12390,6 @@
         "logit_bias",
         "logprobs",
         "max_tokens",
-        "min_p",
         "presence_penalty",
         "repetition_penalty",
         "response_format",
@@ -12263,7 +12444,7 @@
       "provider": "deepseek",
       "local_id": "deepseek-chat-v3-0324",
       "context_length": 163840,
-      "max_output_tokens": 147456,
+      "max_output_tokens": 115200,
       "input_price_per_mtok": 0.29,
       "output_price_per_mtok": 1.14,
       "supports_thinking": false,
@@ -12339,6 +12520,7 @@
         "repetition_penalty",
         "seed",
         "stop",
+        "structured_outputs",
         "temperature",
         "tool_choice",
         "tools",
