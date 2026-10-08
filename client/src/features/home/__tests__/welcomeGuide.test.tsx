@@ -48,10 +48,12 @@ vi.mock('@/components/credentials/catalogue', async (importOriginal) => {
   };
 });
 
-// The draft pipeline has its own tests; here the guide only hands it a job.
+// The draft pipeline has its own tests (useSendJob sends
+// generate_employee_setup); here the guide only hands it a job.
 vi.mock('../genui', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../genui')>()),
   useJobComposer: () => job,
+  useSendJob: () => job.submit,
 }));
 // A provider's panel (the key field) has its own tests.
 vi.mock('@/components/credentials/PanelRenderer', () => ({ default: () => <p>The provider’s panel</p> }));
@@ -224,9 +226,40 @@ describe('WelcomeGuide steps', () => {
     await waitFor(() => expect(saves()).toContainEqual({ onboarding_completed: true, onboarding_step: 1 }));
     expect(useHomeStore.getState().guide.open).toBe(false);
   });
+
+  it('saves the step reached when the owner skips it', async () => {
+    renderGuide();
+    fireEvent.click(await screen.findByRole('button', { name: 'Skip for now' }));
+    await waitFor(() => expect(saves()).toContainEqual({ onboarding_completed: true, onboarding_step: 0 }));
+    expect(useHomeStore.getState().guide.open).toBe(false);
+  });
+
+  it('closes with Esc at the step reached, after first leaving a provider’s page', async () => {
+    settingsRow = { onboarding_completed: false, onboarding_step: 1 };
+    renderGuide();
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect openai' }));
+    fireEvent.keyDown(screen.getByRole('button', { name: 'All AI models' }), { key: 'Escape' });
+    expect(screen.queryByRole('heading', { name: 'Connect openai' })).not.toBeInTheDocument();
+    expect(useHomeStore.getState().guide.open).toBe(true);
+
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Connect openai' }), { key: 'Escape' });
+    expect(useHomeStore.getState().guide.open).toBe(false);
+    await waitFor(() => expect(saves()).toContainEqual({ onboarding_completed: true, onboarding_step: 1 }));
+  });
 });
 
 describe('WelcomeGuide first hire', () => {
+  it('leaves the composer’s Create as the only way on', async () => {
+    settingsRow = { onboarding_completed: false, onboarding_step: 2 };
+    providers = [provider('openai', 'ai', true)];
+    renderGuide();
+    await screen.findByRole('heading', { name: 'Who should we hire first?' });
+    expect(screen.getByRole('button', { name: /Create their setup/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Next/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'I’ll do this later' })).not.toBeInTheDocument();
+  });
+
   it('finishes the guide, shows the hire view and sends the job when there is a model', async () => {
     settingsRow = { onboarding_completed: false, onboarding_step: 2 };
     providers = [provider('openai', 'ai', true)];

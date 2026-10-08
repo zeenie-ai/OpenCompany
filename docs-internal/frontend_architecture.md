@@ -76,7 +76,9 @@ client/src/
 │                                   # the message box, ReplyMarkdown
 │
 ├── features/home/           # Normal mode (see docs-internal/normal_mode.md)
-│   ├── HomeShell.tsx        # Sidebar + header + current view + Workspace dock + Settings + orb stage
+│   ├── HomeShell.tsx        # Sidebar + header + current view + Workspace dock + Settings + orb stage,
+│   │                        # plus the Welcome guide and the Get started checklist
+│   ├── onboarding/          # Welcome guide (3 steps) + Get started checklist (docs-internal/onboarding.md)
 │   ├── sidebar/ header/ hire/ employee/ settings/ approvals/ data/ state/ ui/
 │   ├── workspace/           # Home Workspace dock; shared live Browser tab, lazy Canvas tab
 │   ├── genui/               # Setup-screen pipeline; only its index.ts is importable (ESLint)
@@ -109,7 +111,9 @@ client/src/
 │   │
 │   ├── credentials/         # EXEMPLAR SUBSYSTEM — see "Credentials" section below
 │   │   ├── CredentialsModal.tsx    # Shared app-level browser + provider dialogs
-│   │   ├── CredentialsBrowser.tsx  # Connector cards; also embedded in Home Settings
+│   │   ├── CredentialsBrowser.tsx  # Connector cards; also embedded in Home Settings and the Welcome guide
+│   │   ├── ProviderPage.tsx        # One provider's page: back, key link, PanelRenderer (dialog + guide)
+│   │   ├── aiProviderLinks.ts      # Where to get each AI provider's key
 │   │   ├── catalogue.ts           # Shared catalogue ordering + category visibility
 │   │   ├── PanelRenderer.tsx       # Lazy-loads panel by kind
 │   │   ├── catalogueAdapter.ts     # Server JSON -> ProviderConfig
@@ -397,8 +401,9 @@ components/credentials/catalogueAdapter.ts  (hydrate JSON -> ProviderConfig)
             │
             ▼
 components/credentials/CredentialsModal.tsx (one AppShell host)
-   ├─ CredentialsBrowser.tsx   (shared cards, also embedded in Home Settings)
-   └─ PanelRenderer.tsx        (lazy: ApiKey/OAuth/QrPairing/Email/BrowserProfiles)
+   ├─ CredentialsBrowser.tsx   (shared cards, also embedded in Home Settings and the Welcome guide)
+   └─ ProviderPage.tsx         (one provider; the Welcome guide shows it inline)
+      └─ PanelRenderer.tsx     (lazy: ApiKey/OAuth/QrPairing/Email/BrowserProfiles)
 ```
 
 **State rules:**

@@ -132,6 +132,15 @@ describe('Get started on Home', () => {
     expect(useHomeStore.getState().view).toEqual({ kind: 'employee', workflowId: 'w1' });
   });
 
+  it('takes the owner to whoever has a draft waiting, for Approve a first draft', async () => {
+    const sam = { ...MAYA, workflow_id: 'w2', name: 'Sam', hired_at: '2026-10-08T10:00:00+00:00', pending_approvals: 1 };
+    server.employees = [MAYA, sam];
+    renderChecklist();
+    expect(await screen.findByText('Maya, Receptionist')).toBeInTheDocument();
+    fireEvent.click(step(/Approve a first draft/));
+    expect(useHomeStore.getState().view).toEqual({ kind: 'employee', workflowId: 'w2' });
+  });
+
   it('latches Say hello once the owner has written to their first hire', async () => {
     server.employees = [MAYA];
     server.messages = [{ id: 1, role: 'user', message: 'Hi!', timestamp: '2026-10-08T09:05:00+00:00', run_key: 'g1' }];

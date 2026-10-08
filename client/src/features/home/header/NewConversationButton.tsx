@@ -1,7 +1,8 @@
 /**
  * New conversation, in the header of an employee's page (design handoff
  * chat, "Header"). It clears the conversation and what the employee
- * remembers of it (`clear_chat_messages`), so it asks first.
+ * remembers of it (`clear_chat_messages`), so it asks first. A new hire's
+ * first day ends with it, as it does with their first message.
  */
 
 import { SquarePen } from 'lucide-react';
@@ -19,6 +20,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useClearChat } from '@/features/chat';
 import type { EmployeeSummary } from '../data/schemas';
+import { useHomeStore } from '../state/homeStore';
 import { pillToast } from '../ui/pillToast';
 
 export function NewConversationButton({ employee }: { employee: EmployeeSummary }) {
@@ -28,6 +30,7 @@ export function NewConversationButton({ employee }: { employee: EmployeeSummary 
 
   const start = () =>
     clear.mutate(undefined, {
+      onSuccess: () => useHomeStore.getState().endFirstDay(employee.workflow_id),
       onError: () => pillToast('That did not work. Try again.', { tone: 'error' }),
     });
 

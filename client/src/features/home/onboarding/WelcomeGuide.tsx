@@ -105,10 +105,10 @@ export function WelcomeGuide() {
               <WelcomeStep />
             </TabsPrimitive.Content>
             <TabsPrimitive.Content value="connect" className="outline-none">
-              <ConnectStep onFinish={guide.complete} />
+              <ConnectStep onFinish={guide.finish} />
             </TabsPrimitive.Content>
             <TabsPrimitive.Content value="first-hire" className="outline-none">
-              <FirstHireStep onDone={guide.complete} onNeedsModel={() => guide.goTo('connect')} />
+              <FirstHireStep onFinish={guide.finish} onNeedsModel={() => guide.goTo('connect')} />
             </TabsPrimitive.Content>
           </div>
           <div className="flex items-center gap-2 border-t border-border-default bg-bg-panel px-6 py-3.5">

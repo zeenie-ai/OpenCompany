@@ -145,7 +145,7 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
   const logsEndRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<ChatPaneHandle>(null);
 
-  // Focus the chat input when requested (onboarding handoff, checklist).
+  // Focus the chat input when requested (the toolbar's `focusChat`).
   // Each request is consumed once so later manual panel toggles don't
   // re-steal focus.
   const chatFocusRequest = useAppStore((s) => s.chatFocusRequest);

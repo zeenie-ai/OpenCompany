@@ -17,7 +17,6 @@ import { useEffect, useMemo, useRef } from 'react';
 import { CredentialsBrowser, type CredentialsBrowserCopy } from '@/components/credentials/CredentialsBrowser';
 import { ProviderPage } from '@/components/credentials/ProviderPage';
 import { isConnected, useCredentialsCatalogue } from '../../data/connectors';
-import { useJobComposer } from '../../genui';
 import { useHomeStore } from '../../state/homeStore';
 import { pillToast } from '../../ui/pillToast';
 
@@ -36,7 +35,6 @@ export function ConnectStep({ onFinish }: { onFinish: () => void }) {
   const connected = providers.some(isConnected);
   const selection = useHomeStore((s) => s.guide.provider);
   const setProvider = useHomeStore((s) => s.setGuideProvider);
-  const job = useJobComposer();
 
   // Back on the list: focus the card the page was opened from.
   const shown = useRef<string | null>(null);
@@ -56,8 +54,6 @@ export function ConnectStep({ onFinish }: { onFinish: () => void }) {
     const { guide } = useHomeStore.getState();
     if (guide.pendingDraft) {
       onFinish();
-      useHomeStore.getState().showHire();
-      void job.submit();
       return;
     }
     if (guide.provider?.id === id && guide.provider.intent === 'connect') setProvider(null);

@@ -151,7 +151,7 @@ describe('shared credentials host', () => {
     expect(ws.sendRequest.mock.calls.some(([type]) => type === 'get_stored_api_key')).toBe(false);
   });
 
-  it('keeps AI guidance and key links, and a refused save preserves the input and shows its reason', async () => {
+  it('opens on Connect an AI model with key links, and a refused save preserves the input and shows its reason', async () => {
     mount({ categoryId: 'ai', intent: 'connect' }); await open();
     expect(await screen.findByRole('dialog', { name: 'Connect an AI model' })).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Manage Telegram' })).not.toBeInTheDocument();

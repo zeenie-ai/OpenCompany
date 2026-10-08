@@ -546,7 +546,7 @@ sending and drafts belong to the chat (wire and client rules in
   set by `welcomeHire` from the response's `started` and `node_count`) shows
   this in place of the empty conversation until the first message, and then
   never again (a Reset that empties the thread later does not bring it back;
-  a reload or deleting them ends it too). Their avatar turns a ring while
+  New conversation, a reload or deleting them ends it too). Their avatar turns a ring while
   they start, then glows once with a ready pip; "{Name} joined your team".
   The start-up card's rows follow what happened, never timers: Setup saved
   and "Workflow built · N blocks" (the hire did both), then "{Name} is

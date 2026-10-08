@@ -5,8 +5,8 @@
  * pauses CSS keyframe animations while the tab is hidden or the window is
  * blurred, but it cannot reach Web Animations started from script or
  * requestAnimationFrame loops (the Home orb). Those subscribe here instead.
- * The app shell keeps this in sync with the same visibility / focus events
- * that toggle `data-page-hidden`.
+ * `App.tsx` keeps this in sync (`usePageActivitySync`) with the same
+ * visibility / focus events that toggle `data-page-hidden`.
  *
  * A plain module store: read it without re-rendering (`isActive()`), or
  * subscribe for changes. Deliberately not React state.

@@ -9,5 +9,5 @@
 export { HIRE_LIMITS } from './hirePayload';
 export { HireDraftPanel } from './HireDraftPanel';
 export { MessagePreview as DraftMessagePreview } from './MessagePreview';
-export { useHireComposer, useJobComposer } from './useHireComposer';
+export { useHireComposer, useJobComposer, useSendJob } from './useHireComposer';
 export { useStarterHire } from './useStarterHire';

@@ -38,7 +38,7 @@ The open state and the step live in `homeStore` (`guide: { open, step, furthest,
 
 - **First launch.** When the settings query first succeeds it calls `checkGuide(settings)`, which runs once per session (`checked`). For an owner whose `onboarding_completed` is false it opens the guide at `GUIDE_STEPS[onboarding_step]`, or at Welcome when that index is not a step (rows saved by the old four-step wizard can hold 2 or 3). A finished owner never sees it unasked.
 - **Moves.** `goTo(step)` (the nav, Next, Back, "I'll do this later") saves `{ onboarding_step }`.
-- **Finishing.** `skip()` (Skip for now, the close button, Esc, a click outside) saves `{ onboarding_completed: true, onboarding_step: <step reached> }`; `complete()` (the last step's Create) saves `onboarding_step: 3`. A replay never writes `onboarding_completed: false`.
+- **Finishing.** `skip()` (Skip for now, the close button, Esc, a click outside) saves `{ onboarding_completed: true, onboarding_step: <step reached> }`; `finish()` (the last step's Create, or a model connected while a job waits) saves `onboarding_step: 3`, shows the hire view and sends the job through genui's `useSendJob` (it reads the box when sending, so the guide does not re-render as the job is typed). A replay never writes `onboarding_completed: false`.
 
 It reads and writes the settings through `useOwnerSettings` / `useSaveUserSettingsMutationCore` with the stable `useWebSocketActions()`, so Home never re-renders on a WebSocket message.
 
@@ -106,13 +106,13 @@ No onboarding-specific handlers. Progress rides the user settings handlers (`ser
 
 ## Tests
 
-- `features/home/__tests__/welcomeGuide.test.tsx`: opens at the saved step, Welcome for an out-of-range step, never for a finished owner, no reopen on remount; the nav's reachability; Next saves the step; Connect lists every AI model and no apps, "I'll do this later", "You're connected"; the provider page in place of the list, Back and Esc (focus returns to the card), the pill and the return to the list on connect; closing saves the step reached; the last step finishes and sends, or sends nothing without a model until one is connected, which finishes the guide.
+- `features/home/__tests__/welcomeGuide.test.tsx`: opens at the saved step, Welcome for an out-of-range step, never for a finished owner, no reopen on remount; the nav's reachability; Next saves the step; Connect lists every AI model and no apps, "I'll do this later", "You're connected"; the provider page in place of the list, Back and Esc (focus returns to the card), the pill and the return to the list on connect; closing, Skip and Esc save the step reached (Esc leaves a provider's page first); the last step's only way on is the composer's Create, which finishes and sends, or sends nothing without a model until one is connected, which finishes the guide.
 - `features/home/__tests__/welcomeDemo.test.tsx` (fake timers): the job typed a character a tick, the beats in turn and round again, a click starting a beat, reduced motion holding the conversation with no bar.
 - `features/home/__tests__/guideStore.test.ts`: `checkGuide`, `openGuide`, `goToGuideStep`, `closeGuide`, the provider page and the waiting job.
 - `components/__tests__/CredentialsModal.test.tsx`: the dialog around the same `ProviderPage`.
-- `features/home/genui/__tests__/useHireComposer.test.tsx`: `useJobComposer` (no focus taken, a new job only, no dialog of its own).
+- `features/home/genui/__tests__/useHireComposer.test.tsx`: `useJobComposer` (no focus taken, a new job only, no dialog of its own) and `useSendJob` (sends `generate_employee_setup` with what the box holds).
 - `composer.test.tsx` (`flat`, the idle label, chips without Hire now), `catalogLayout.test.tsx` (no cap, the list label), `homeHeader.test.tsx` (Guide), `homeSettings.test.tsx` (Help → Replay).
-- `features/home/__tests__/getStarted.test.tsx`: shown once the guide is finished and never over it, each step's click, what is done now, each latch written once (and not for a discarded draft), the folded pill, hiding with its toast.
+- `features/home/__tests__/getStarted.test.tsx`: shown once the guide is finished and never over it, each step's click (Approve a first draft opens whoever has one waiting), what is done now, each latch written once (and not for a discarded draft), the folded pill, hiding with its toast.
 - Server: `tests/test_user_settings_contract.py` and `tests/services/test_getting_started_settings.py` (the latch columns, their migration and the getter).
 
 ## Key files
@@ -126,7 +126,7 @@ No onboarding-specific handlers. Progress rides the user settings handlers (`ser
 | `client/src/components/credentials/ProviderPage.tsx` | One provider's page, shared by the guide and the credentials dialog |
 | `client/src/components/credentials/aiProviderLinks.ts` | "Get a key from …" links for the featured AI providers |
 | `client/src/components/catalog/CatalogLayout.tsx` | `variant`, `discoverLimit`, `listLabel` |
-| `client/src/features/home/genui/useHireComposer.ts` | `useJobComposer` |
+| `client/src/features/home/genui/useHireComposer.ts` | `useJobComposer`, `useSendJob` |
 | `client/src/features/home/onboarding/useGetStarted.ts` | The checklist's steps and latches |
 | `server/models/database.py` | `UserSettings.onboarding_completed`, `onboarding_step`, the `getting_started_*` flags |
 | `server/core/database.py` | The migration that marks existing owners finished |

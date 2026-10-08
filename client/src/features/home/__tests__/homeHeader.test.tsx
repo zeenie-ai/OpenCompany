@@ -77,15 +77,16 @@ describe('HomeHeader', () => {
     expect(screen.queryByText('Ready')).not.toBeInTheDocument();
   });
 
-  it('starts a new conversation once the owner confirms', async () => {
+  it('starts a new conversation once the owner confirms, which ends a first day', async () => {
     const user = userEvent.setup();
-    useHomeStore.setState({ view: { kind: 'employee', workflowId: 'w1' } });
+    useHomeStore.setState({ view: { kind: 'employee', workflowId: 'w1' }, firstDays: { w1: { started: true, nodeCount: 6 } } });
     wrap(<HomeHeader title="Maya" employee={maya} scrolled={false} />);
     await user.click(screen.getByRole('button', { name: 'New conversation' }));
     expect(await screen.findByRole('alertdialog')).toHaveTextContent('This clears the conversation, and Maya forgets it too.');
     expect(sendRequest).not.toHaveBeenCalledWith('clear_chat_messages', expect.anything());
     await user.click(screen.getByRole('button', { name: 'New conversation' }));
     await waitFor(() => expect(sendRequest).toHaveBeenCalledWith('clear_chat_messages', { session_id: 'w1' }));
+    await waitFor(() => expect(useHomeStore.getState().firstDays).toEqual({}));
   });
 
   it('offers no new conversation without a talk line', () => {

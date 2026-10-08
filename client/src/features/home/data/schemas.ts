@@ -24,7 +24,8 @@ export const TASK_LABELS = ['Now', 'Next', 'Paused', 'Waiting'] as const;
 export const TALK_STATES = ['on', 'off', 'unsupported'] as const;
 
 /** How a hire's own start went: `saved` until it is tried, then `blocked`
- *  (something to connect first), `running` or `failed`. */
+ *  (something to connect first), `running` or `failed`. Only the hire's
+ *  own reply says `starting` (it has just started them). */
 export const ACTIVATION_STATES = ['saved', 'blocked', 'starting', 'running', 'failed'] as const;
 
 export const appRefSchema = z.object({

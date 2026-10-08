@@ -16,7 +16,7 @@ import { TemplateChips } from '../../hire/TemplateChips';
 import { HIRE_TEMPLATES } from '../../hire/templates';
 import { useHomeStore } from '../../state/homeStore';
 
-export function FirstHireStep({ onDone, onNeedsModel }: { onDone: () => void; onNeedsModel: () => void }) {
+export function FirstHireStep({ onFinish, onNeedsModel }: { onFinish: () => void; onNeedsModel: () => void }) {
   const job = useJobComposer();
   const { connectedApps, hasAi, isLoading } = useConnectors();
   const openSettings = useHomeStore((s) => s.openSettings);
@@ -35,9 +35,7 @@ export function FirstHireStep({ onDone, onNeedsModel }: { onDone: () => void; on
       toConnect();
       return;
     }
-    onDone();
-    useHomeStore.getState().showHire();
-    void job.submit();
+    onFinish();
   };
 
   return (

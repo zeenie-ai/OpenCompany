@@ -24,7 +24,7 @@ import corpus from '../__fixtures__/replies.json';
 import { useHomeStore } from '../../state/homeStore';
 import { useShellDialogsStore } from '@/stores/shellDialogsStore';
 import { resetDraftForTests, useDraftStore } from '../draftStore';
-import { useHireComposer, useJobComposer } from '../useHireComposer';
+import { useHireComposer, useJobComposer, useSendJob } from '../useHireComposer';
 
 const GOOD_REPLY = (corpus as unknown as { name: string; reply: string }[]).find((c) => c.name === 'clean minified reply')!.reply;
 
@@ -109,5 +109,18 @@ describe('useJobComposer (the Welcome guide’s box)', () => {
       await result.current.submit();
     });
     expect(useShellDialogsStore.getState().credentialsOpen).toBe(false);
+  });
+});
+
+describe('useSendJob (the Welcome guide’s finish)', () => {
+  it('sends what the box holds when called, as a new job', async () => {
+    sendRequest.mockResolvedValue({ success: true, reply: GOOD_REPLY });
+    const { result } = renderHook(() => useSendJob());
+    useDraftStore.setState({ input: 'Answer my WhatsApp', refining: true });
+    await act(async () => {
+      await result.current();
+    });
+    expect(sendRequest).toHaveBeenCalledWith('generate_employee_setup', expect.not.objectContaining({ refine: expect.anything() }), expect.any(Number));
+    expect(sendRequest.mock.calls[0][1]).toMatchObject({ job: 'Answer my WhatsApp' });
   });
 });

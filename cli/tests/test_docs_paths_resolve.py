@@ -41,7 +41,6 @@ _PATH = re.compile(
 _ILLUSTRATIVE = {
     "server/nodes/search/acme_search.py",
     "server/nodes/search/acme_search/__init__.py",
-    "client/src/components/onboarding/steps/NewStep.tsx",
 }
 
 

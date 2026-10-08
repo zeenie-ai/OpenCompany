@@ -15,6 +15,16 @@ import { useHomeStore } from '../state/homeStore';
 import { useDraftActions, useDraftStore } from './draftStore';
 
 /**
+ * Send the box as a new job (never a change to the current draft). The box
+ * is read when sending, so a caller that only sends (the Welcome guide's
+ * finish) does not re-render as the job is typed.
+ */
+export function useSendJob() {
+  const actions = useDraftActions();
+  return useCallback(() => actions.submit(useDraftStore.getState().input, { refine: false }), [actions]);
+}
+
+/**
  * The job box alone, with no side effects: its text, whether a setup is
  * being written, picking a starter's job, and sending a new job. The
  * Welcome guide's composer uses it, so the effects below stay mounted once
@@ -36,8 +46,7 @@ export function useJobComposer() {
       },
       [actions],
     ),
-    /** Send the box as a new job (never a change to the current draft). */
-    submit: useCallback(() => actions.submit(useDraftStore.getState().input, { refine: false }), [actions]),
+    submit: useSendJob(),
   };
 }
 

@@ -19,6 +19,7 @@ import { useCallback, useEffect } from 'react';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
 import { useSaveUserSettingsMutationCore } from '@/hooks/useUserSettingsQuery';
 import { useOwnerSettings } from '../data/profile';
+import { useSendJob } from '../genui';
 import { GUIDE_STEPS, useHomeStore, type GuideStep } from '../state/homeStore';
 
 export function useOnboarding() {
@@ -26,6 +27,7 @@ export function useOnboarding() {
   const { data: settings, isSuccess } = useOwnerSettings();
   const { sendRequest } = useWebSocketActions();
   const { mutate: save } = useSaveUserSettingsMutationCore(sendRequest);
+  const sendJob = useSendJob();
 
   useEffect(() => {
     if (isSuccess && settings) useHomeStore.getState().checkGuide(settings);
@@ -39,7 +41,7 @@ export function useOnboarding() {
     [save],
   );
 
-  const finish = useCallback(
+  const done = useCallback(
     (step: number) => {
       useHomeStore.getState().closeGuide();
       save({ onboarding_completed: true, onboarding_step: step });
@@ -60,8 +62,13 @@ export function useOnboarding() {
     /** Undefined on the first step. */
     back: prevStep ? () => goTo(prevStep) : undefined,
     /** Skip for now, the close button, Esc: done, at the step reached. */
-    skip: () => finish(index),
-    /** The guide's end: the owner asked for their first setup. */
-    complete: () => finish(GUIDE_STEPS.length),
+    skip: () => done(index),
+    /** The guide's end, Create their setup: done, then Home's hire view
+     *  writes the setup for the job in the box. */
+    finish: () => {
+      done(GUIDE_STEPS.length);
+      useHomeStore.getState().showHire();
+      void sendJob();
+    },
   };
 }

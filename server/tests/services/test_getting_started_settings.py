@@ -73,6 +73,25 @@ async def test_save_get_round_trip_returns_getting_started_keys(settings_databas
 
 
 @pytest.mark.asyncio
+async def test_home_checklist_latches_round_trip_one_at_a_time(settings_database):
+    """Home's checklist saves Say hello and Approve a first draft on their
+    own; saving one keeps the other."""
+    assert await settings_database.save_user_settings(
+        {"getting_started_said_hello": True}, user_id="default"
+    )
+    settings = await settings_database.get_user_settings("default")
+    assert settings["getting_started_said_hello"] is True
+    assert settings["getting_started_approved_draft"] is False
+
+    assert await settings_database.save_user_settings(
+        {"getting_started_approved_draft": True}, user_id="default"
+    )
+    settings = await settings_database.get_user_settings("default")
+    assert settings["getting_started_said_hello"] is True
+    assert settings["getting_started_approved_draft"] is True
+
+
+@pytest.mark.asyncio
 async def test_migration_backfills_dismissed_for_completed_onboarding(settings_database):
     # Simulate a pre-feature database: rows exist, new columns absent.
     assert await settings_database.save_user_settings(
