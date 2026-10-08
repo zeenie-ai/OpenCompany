@@ -37,11 +37,16 @@ export function profileFromSettings(settings: UserSettings | undefined): Profile
   };
 }
 
+/** The first word of a full name: "Jordan Lee" is "Jordan". */
+export function firstName(fullName: string): string {
+  return fullName.trim().split(/\s+/)[0] ?? '';
+}
+
 /** What agents call the owner: the call name, else the first name. */
 export function callName(settings: UserSettings | undefined): string {
   const explicit = String(settings?.profile_call_name ?? '').trim();
   if (explicit) return explicit;
-  return String(settings?.profile_full_name ?? '').trim().split(/\s+/)[0] ?? '';
+  return firstName(String(settings?.profile_full_name ?? ''));
 }
 
 export function browserTimezone(): string | null {

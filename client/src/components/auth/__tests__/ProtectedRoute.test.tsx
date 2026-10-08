@@ -2,7 +2,8 @@
  * The sign-in gate's states (ProtectedRoute): a loading screen while the
  * session is checked; Connecting while the server can't be reached, with
  * its countdown, attempts and help; "Connected" held a moment once it
- * answers, then sign-in or the app; and, signed in, Connecting over the
+ * answers, then sign-in or the app; the sign-in screen kept up while a
+ * sign-in finishes, for its welcome; and, signed in, Connecting over the
  * app while the WebSocket is down, the app staying mounted, an expired
  * session going to sign-in. The theme shows as its base while a
  * Connecting or sign-in screen is up.
@@ -15,6 +16,7 @@ import { useEffect } from 'react';
 interface Auth {
   isAuthenticated: boolean;
   isLoading: boolean;
+  signingIn: boolean;
   error: string | null;
   checkAuth: () => Promise<boolean>;
 }
@@ -59,7 +61,13 @@ beforeEach(() => {
   getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
   mounts = 0;
   ws = { reconnecting: false };
-  auth = { isAuthenticated: false, isLoading: false, error: null, checkAuth: vi.fn(async () => false) };
+  auth = {
+    isAuthenticated: false,
+    isLoading: false,
+    signingIn: false,
+    error: null,
+    checkAuth: vi.fn(async () => false),
+  };
 });
 
 afterEach(() => {
@@ -113,6 +121,21 @@ describe('the sign-in gate', () => {
     expect(screen.getByRole('heading', { name: 'Connected' })).toBeInTheDocument();
     await seconds(1.5);
     expect(screen.getByText('The app')).toBeInTheDocument();
+    expect(useShellDialogsStore.getState().connectScreenOpen).toBe(false);
+  });
+
+  it('keeps the sign-in screen up until the sign-in finishes, for its welcome', () => {
+    const { rerender } = render(view());
+    auth = { ...auth, isAuthenticated: true, signingIn: true };
+    rerender(view());
+    expect(screen.getByText('Sign in page')).toBeInTheDocument();
+    expect(screen.queryByText('The app')).not.toBeInTheDocument();
+    expect(useShellDialogsStore.getState().connectScreenOpen).toBe(true);
+
+    auth = { ...auth, signingIn: false };
+    rerender(view());
+    expect(screen.getByText('The app')).toBeInTheDocument();
+    expect(mounts).toBe(1);
     expect(useShellDialogsStore.getState().connectScreenOpen).toBe(false);
   });
 

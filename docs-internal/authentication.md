@@ -150,6 +150,11 @@ interface AuthContextValue {
   logout: () => Promise<void>;
   /** Check the session again; true when the server answered. */
   checkAuth: () => Promise<boolean>;
+  /** A login/register request is in flight, or succeeded and its welcome
+   *  is still showing. */
+  signingIn: boolean;
+  /** End the welcome: the requests go back to idle and the app shows. */
+  finishSignIn: () => void;
 }
 ```
 
@@ -162,11 +167,12 @@ The sign-in gate (onboarding handoff R4), in front of the whole app:
 | the server can't be reached (`error`, not signed in) | Connecting (`ConnectingPanel`): a countdown to each check, Try now, "Attempt n", and from the third attempt "Still nothing? Make sure OpenCompany is running." |
 | the server answered | "Connected", held `CONNECT_RETRY.CONNECTED_HOLD_MS` (1.5 s, `useHold`) |
 | then | sign-in, or the app when the session is good or login is off |
+| a sign-in from the form in flight or just done (`signingIn`) | sign-in, then its welcome (`SignedIn`) until `finishSignIn` |
 | signed in, the WebSocket down (`reconnecting` from `useWebSocketActions`) | Connecting over the app (`role="dialog"`, `z-60`); the app stays mounted, `inert` |
 
-Connecting and sign-in render inside one `ConnectScreen` (the whole window,
-the orb filling it, the logo and the theme button on top), so the orb
-glides from one's slot to the other's. The schedule is `useRetrySchedule`:
+Connecting, sign-in and the welcome render inside one `ConnectScreen` (the
+whole window, the orb filling it, the logo and the theme button on top), so
+the orb glides from one's slot to the other's. The schedule is `useRetrySchedule`:
 `CONNECT_RETRY.DELAYS_S` (2, 3, 5, 8, 8 s), each check being `checkAuth`;
 over the app the checks are HTTP session checks too, so a session that
 expired while the server was away goes to sign-in, and the overlay goes
@@ -175,19 +181,42 @@ base of the chosen family (`shellDialogsStore.connectScreenOpen`, read by
 `app/ShellThemeProvider.tsx`).
 
 ### Login Page (`client/src/components/auth/LoginPage.tsx`)
+Inside the gate's `ConnectScreen` (onboarding handoff R5): the orb's `login`
+slot above a card that rises in. "Welcome back" or "Create your account", the
+fields ("Your name" when registering, "Email", "Password" with a show/hide
+toggle), Sign in or Create account, and, while `canRegister`, the way to the
+other mode.
 - shadcn `Form` composition (react-hook-form + zod), matching `EmailPanel` —
-  schema in `components/auth/schemas/login.ts`. `FormControl` supplies
-  `aria-invalid` + `aria-describedby` per field; the form is `noValidate` so
-  zod is the single validation authority rather than native browser bubbles.
+  schema and the field messages in `components/auth/schemas/login.ts`.
+  `FormControl` supplies `aria-invalid` + `aria-describedby` per field; the
+  form is `noValidate` so zod is the single validation authority rather than
+  native browser bubbles.
 - `canRegister` gates the footer link only; the mode itself is local state.
-- **Two error channels, deliberately distinct.** `submitError` is the server's
-  own rejection text (wrong password, duplicate email, 429) and takes
-  precedence; `error` is a bootstrap-query connectivity failure. Both render in
-  a `role="alert"` region.
+- **The card shows one error: what the server said.** `submitError` is the
+  server's own rejection text, shown as it is: `UserAuthService` words it for
+  the owner ("An account with this email already exists.", "This OpenCompany
+  already has its owner. Sign in instead.", a wrong password, a 429). When the
+  request got no answer it is `AUTH_UNREACHABLE` ("Can't reach OpenCompany.
+  Make sure it's running, then try again."). The bootstrap `error` (the server
+  can't be reached at all) is the gate's Connecting screen, so this page never
+  shows it.
 - Inputs and the submit button gate on `isSubmitting` (per-request), **not**
   `isLoading` (bootstrap query). The latter has always settled by the time this
   page renders, so using it disabled nothing and the form accepted unlimited
   concurrent submits.
+- The card shakes (`shake` in `lib/motion.ts`) when a field is wrong or the
+  server refuses. The orb follows the form: livelier while a field has focus
+  (`ENERGY.focus`), more with text in it (`ENERGY.typing`), most while the
+  request is out (`ENERGY.generating`).
+- **After signing in** the card gives way to `SignedIn`: "Signed in" or
+  "Account created", "Welcome back, {first name}" (or "Welcome, …" for a new
+  account) and "Opening your team…", and the orb spikes. The gate keeps the
+  screen up while `signingIn` is true, which is the login and register
+  mutations' own state: in flight, or succeeded and not yet finished. The
+  welcome hands over the way a mode switch does (`app/useShellActions.ts`):
+  the screen the app opens on (Home or the editor) loads while the welcome
+  rises in, then `finishSignIn` returns the mutations to idle and the app
+  shows. A session that was already good never sees it.
 
 ## Configuration
 Environment variables in `.env`:
@@ -381,7 +410,8 @@ useEffect(() => {
 | `client/src/config/api.ts` | The backend's base URL (same origin unless `VITE_PYTHON_SERVICE_URL`) |
 | `client/src/contexts/AuthContext.tsx` | React auth state: the TanStack Query bootstrap check, `checkAuth` |
 | `client/src/lib/connectionConfig.ts` | `CONNECT_RETRY` (the Connecting screen's schedule) and the WebSocket envelope |
-| `client/src/components/auth/LoginPage.tsx` | Login UI |
+| `client/src/components/auth/LoginPage.tsx`, `schemas/login.ts` | Sign in and register, and their messages |
+| `client/src/components/auth/SignedIn.tsx` | The welcome after signing in, until the app is ready |
 | `client/src/components/auth/ProtectedRoute.tsx` | The sign-in gate (states above) |
 | `client/src/components/auth/ConnectScreen.tsx`, `ConnectingPanel.tsx` | The screen around Connecting and sign-in, and Connecting itself |
 | `client/src/components/auth/useRetrySchedule.ts`, `useHold.ts` | The countdown to each check; "Connected" held a moment |

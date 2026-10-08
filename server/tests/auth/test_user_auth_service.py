@@ -34,7 +34,7 @@ class TestRegister:
         await _register(user_auth)
         user, error = await _register(user_auth, email="second@example.com")
         assert user is None
-        assert "already exists" in error
+        assert error == "This OpenCompany already has its owner. Sign in instead."
 
     async def test_multi_mode_allows_more_users(self, database):
         from services.user_auth import UserAuthService
@@ -58,7 +58,7 @@ class TestRegister:
         await _register(user_auth)
         user, error = await _register(user_auth, name="Impostor")
         assert user is None
-        assert error == "Email already registered"
+        assert error == "An account with this email already exists."
 
     async def test_email_is_normalized(self, user_auth):
         await _register(user_auth, email="  Owner@Example.COM  ")

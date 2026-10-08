@@ -31,6 +31,10 @@
  *   be written into the status cache as `null`, which is a *success* value:
  *   `isError` stayed false so nothing was ever displayed, and
  *   `can_register` fell back to false, hiding the Register link entirely.
+ *
+ * `signingIn` is the sign-in requests' own state: in flight, or succeeded
+ * and not yet finished. The gate keeps the sign-in screen up while it is
+ * true, for the welcome; `finishSignIn` returns the requests to idle.
  */
 
 import React, { createContext, useContext, useCallback, useMemo } from 'react';
@@ -60,6 +64,9 @@ interface AuthContextType {
   isLoading: boolean;
   /** True while a login/register request is in flight. */
   isSubmitting: boolean;
+  /** A login/register request is in flight, or succeeded and has not been
+   *  finished (`finishSignIn`): the sign-in screen stays up for the welcome. */
+  signingIn: boolean;
   authMode: 'single' | 'multi';
   canRegister: boolean;
   /** Connectivity error from the bootstrap query only. */
@@ -75,6 +82,8 @@ interface AuthContextType {
   checkAuth: () => Promise<boolean>;
   /** Clear stale submit errors (mode toggle, field edit). */
   resetAuthErrors: () => void;
+  /** The welcome after signing in is over: the app takes the screen. */
+  finishSignIn: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -118,14 +127,23 @@ const extractErrorMessage = (body: unknown, fallback: string): string => {
   return fallback;
 };
 
+/** What a sign-in or registration says when the request never reached the server. */
+export const AUTH_UNREACHABLE = 'Can’t reach OpenCompany. Make sure it’s running, then try again.';
+
 /** POST to an auth endpoint, throwing an Error whose message is display-ready. */
 const postAuth = async (path: string, payload: unknown): Promise<{ user: User }> => {
-  const response = await fetch(`${getApiBase()}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify(payload),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${getApiBase()}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    // fetch rejects only when no response arrived (each browser words it differently).
+    throw new Error(AUTH_UNREACHABLE);
+  }
 
   let body: unknown = null;
   if (isJsonResponse(response)) {
@@ -298,12 +316,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return queryClient.getQueryState(AUTH_STATUS_QUERY_KEY)?.status === 'success';
   }, [queryClient]);
 
-  const resetAuthErrors = useCallback(() => {
-    loginMutation.reset();
-    registerMutation.reset();
-  }, [loginMutation, registerMutation]);
+  // Both return the sign-in requests to idle: clearing a refusal before the
+  // next try (`resetAuthErrors`), or ending the welcome (`finishSignIn`).
+  // `reset` is stable across renders; the mutation results are not.
+  const { reset: resetLogin } = loginMutation;
+  const { reset: resetRegister } = registerMutation;
+  const resetSignIn = useCallback(() => {
+    resetLogin();
+    resetRegister();
+  }, [resetLogin, resetRegister]);
 
   const isSubmitting = loginMutation.isPending || registerMutation.isPending;
+  const signingIn = isSubmitting || loginMutation.isSuccess || registerMutation.isSuccess;
   const submitError =
     (loginMutation.error instanceof Error ? loginMutation.error.message : null) ??
     (registerMutation.error instanceof Error ? registerMutation.error.message : null);
@@ -314,6 +338,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isAuthenticated,
     isLoading,
     isSubmitting,
+    signingIn,
     authMode,
     canRegister,
     error,
@@ -323,9 +348,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     register,
     logout,
     checkAuth,
-    resetAuthErrors,
-  }), [user, isAuthenticated, isLoading, isSubmitting, authMode, canRegister, error,
-       submitError, logoutError, login, register, logout, checkAuth, resetAuthErrors]);
+    resetAuthErrors: resetSignIn,
+    finishSignIn: resetSignIn,
+  }), [user, isAuthenticated, isLoading, isSubmitting, signingIn, authMode, canRegister, error,
+       submitError, logoutError, login, register, logout, checkAuth, resetSignIn]);
 
   return (
     <AuthContext.Provider value={value}>

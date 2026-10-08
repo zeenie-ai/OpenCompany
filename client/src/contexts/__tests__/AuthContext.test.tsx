@@ -22,7 +22,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AuthProvider, useAuth, AUTH_STATUS_QUERY_KEY } from '../AuthContext';
+import { AuthProvider, useAuth, AUTH_STATUS_QUERY_KEY, AUTH_UNREACHABLE } from '../AuthContext';
 
 // Mock the API config so the fetch URL is predictable in test logs.
 vi.mock('../../config/api', () => ({
@@ -298,6 +298,7 @@ describe('AuthContext login/register', () => {
     await waitFor(() => {
       expect(latest().submitError).toBe('Invalid email or password');
     });
+    expect(latest().signingIn).toBe(false);
   });
 
   it('keeps canRegister true after a failed login', async () => {
@@ -385,6 +386,26 @@ describe('AuthContext login/register', () => {
     });
   });
 
+  it('says OpenCompany cannot be reached when a sign-in gets no answer', async () => {
+    // fetch rejects only when no response arrived; each browser words it
+    // differently, so the owner gets one sentence instead.
+    mockAuthEndpoints((url) => {
+      if (url.endsWith('/login')) throw new TypeError('Failed to fetch');
+      return undefined;
+    });
+
+    const { latest } = await mountProbe(makeQueryClient());
+    let returned: boolean | undefined;
+    await act(async () => {
+      returned = await latest().login('a@b.com', 'pw');
+    });
+
+    expect(returned).toBe(false);
+    await waitFor(() => {
+      expect(latest().submitError).toBe(AUTH_UNREACHABLE);
+    });
+  });
+
   it('sets the user and clears submitError on a successful login', async () => {
     // Stateful on purpose: `onSuccess` writes the user optimistically and then
     // invalidates, so /status refetches and is authoritative. A mock that kept
@@ -417,6 +438,32 @@ describe('AuthContext login/register', () => {
       expect(latest().user?.email).toBe('a@b.com');
       expect(latest().submitError).toBeNull();
     });
+  });
+
+  it('keeps signingIn up after a sign-in until finishSignIn, for the welcome', async () => {
+    const user = { id: 7, email: 'a@b.com', display_name: 'A', is_owner: true };
+    let loggedIn = false;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      if (url.endsWith('/login')) {
+        loggedIn = true;
+        return json({ success: true, user });
+      }
+      return json({ ...STATUS_BODY, authenticated: loggedIn, user: loggedIn ? user : null });
+    });
+
+    const { latest } = await mountProbe(makeQueryClient());
+    expect(latest().signingIn).toBe(false);
+
+    await act(async () => {
+      await latest().login('a@b.com', 'correct-horse');
+    });
+    await waitFor(() => expect(latest().isAuthenticated).toBe(true));
+    expect(latest().signingIn).toBe(true);
+
+    act(() => latest().finishSignIn());
+    await waitFor(() => expect(latest().signingIn).toBe(false));
+    expect(latest().isAuthenticated).toBe(true);
   });
 
   it('resetAuthErrors clears a stale submit error', async () => {

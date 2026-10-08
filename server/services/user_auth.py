@@ -30,6 +30,11 @@ logger = logging.getLogger(__name__)
 # enumeration oracle on a public, unauthenticated endpoint.
 _INVALID_CREDENTIALS = "Invalid email or password"
 
+# Registration refusals, worded for the owner: the sign-in page shows them as
+# they are.
+_EMAIL_TAKEN = "An account with this email already exists."
+_OWNER_EXISTS = "This OpenCompany already has its owner. Sign in instead."
+
 # Compared against when no user matches, so the unknown-email path costs the
 # same ~50-300ms of bcrypt as the known-email path. Without it, response time
 # alone reveals which addresses are registered.
@@ -124,14 +129,14 @@ class UserAuthService:
                 await session.execute(select(User).where(User.email == normalized_email))
             ).scalars().first()
             if existing:
-                return None, "Email already registered"
+                return None, _EMAIL_TAKEN
 
             user_count = int(
                 (await session.execute(select(func.count()).select_from(User))).scalar_one()
             )
 
             if self.settings.auth_mode != "multi" and user_count > 0:
-                return None, "Registration disabled - owner account already exists"
+                return None, _OWNER_EXISTS
 
             is_owner = self.settings.auth_mode == "single" and user_count == 0
 
@@ -148,7 +153,7 @@ class UserAuthService:
             except IntegrityError:
                 await session.rollback()
                 logger.info("Registration lost a race on email uniqueness: %s", normalized_email)
-                return None, "Email already registered"
+                return None, _EMAIL_TAKEN
             await session.refresh(user)
 
         logger.info(f"User registered: {normalized_email} (owner={is_owner})")
