@@ -23,6 +23,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { animate } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useEmployeesQuery } from '../data/employees';
+import { useAnswering } from '../data/liveTask';
 import { presentEmployee } from '../data/presentation';
 import { useOwnerSettings } from '../data/profile';
 import type { EmployeeSummary } from '../data/schemas';
@@ -36,8 +37,9 @@ function EmployeeRow({ employee, selected }: { employee: EmployeeSummary; select
   const showEmployee = useHomeStore((s) => s.showEmployee);
   const glow = useHomeStore((s) => (s.glow?.workflowId === employee.workflow_id ? s.glow.nonce : 0));
   const pending = useWorkflowControlPending(employee.workflow_id);
+  const answering = useAnswering(employee);
   const ref = useRef<HTMLButtonElement>(null);
-  const view = presentEmployee(employee, pending);
+  const view = presentEmployee(employee, pending, answering);
   const deleteWorkflow = useAppStore((s) => s.deleteWorkflow);
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);

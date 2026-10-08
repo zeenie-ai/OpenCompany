@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest';
 import { normalizeWorkflowControlStatus } from '@/contexts/WebSocketContext';
 import {
   busyLabelFor,
+  firstDayNote,
+  firstDayPhase,
   initialOf,
   presentEmployee,
   primaryActionLabel,
@@ -30,17 +32,34 @@ const whatsapp = { app_id: 'whatsapp', provider_id: 'whatsapp', name: 'WhatsApp'
 
 describe('presentEmployee', () => {
   it.each([
-    ['working', { state: 'running' }, 'Working', 'working', 'pause'],
-    ['paused', { state: 'paused' }, 'Stopped', 'paused', 'resume'],
-    ['attention', { state: 'paused' }, 'Needs attention', 'attention', 'resume'],
-    ['attention', { state: 'failed', can_resume: false }, 'Needs attention', 'attention', 'start'],
-    ['attention', { state: 'pausing', can_resume: false }, 'Needs attention', 'attention', 'open_workflow'],
-    ['ready', { state: 'never_started' }, 'Ready', 'ready', 'start'],
-  ])('%s (%o) shows %s and offers %s', (status, control, label, tone, action) => {
-    const view = presentEmployee(employee({ status }, control));
+    ['working', { state: 'running' }, true, 'Working', 'working', 'pause'],
+    ['working', { state: 'running' }, false, 'Ready', 'ready', 'pause'],
+    ['paused', { state: 'paused' }, false, 'Stopped', 'paused', 'resume'],
+    ['attention', { state: 'paused' }, false, 'Needs attention', 'attention', 'resume'],
+    ['attention', { state: 'failed', can_resume: false }, false, 'Needs attention', 'attention', 'start'],
+    ['attention', { state: 'pausing', can_resume: false }, false, 'Needs attention', 'attention', 'open_workflow'],
+    ['ready', { state: 'never_started' }, false, 'Not started', 'paused', 'start'],
+  ])('%s (%o, answering: %s) shows %s and offers %s', (status, control, answering, label, tone, action) => {
+    const view = presentEmployee(employee({ status }, control), undefined, answering);
     expect(view.pill).toEqual({ label, tone });
     expect(view.primary.kind).toBe(action);
-    expect(view.pulse).toBe(status === 'working');
+    // Only Working pulses, and only while they answer.
+    expect(view.pulse).toBe(tone === 'working');
+  });
+
+  it('says Starting… from the Start press until they run, and Resuming… on the way back', () => {
+    expect(presentEmployee(employee({ status: 'ready' }), { action: 'start', state: 'starting' }).pill).toEqual({
+      label: 'Starting…',
+      tone: 'ready',
+    });
+    expect(presentEmployee(employee({ status: 'working' }, { state: 'starting' }), undefined, true).pill).toEqual({
+      label: 'Starting…',
+      tone: 'ready',
+    });
+    expect(presentEmployee(employee({ status: 'working' }, { state: 'resuming' })).pill).toEqual({
+      label: 'Resuming…',
+      tone: 'ready',
+    });
   });
 
   // start_employee resets a failed employee before starting it again.
@@ -121,6 +140,31 @@ describe('the message box', () => {
   it('warns that a restart throws the waiting drafts away', () => {
     expect(restartDraftsWarning('Maya', 1)).toBe('Maya has 1 draft waiting for you. Restarting throws it away, so check it first.');
     expect(restartDraftsWarning('Maya', 3)).toBe('Maya has 3 drafts waiting for you. Restarting throws them away, so check them first.');
+  });
+});
+
+describe('a new hire’s first day', () => {
+  it.each([
+    [{ state: 'running' }, {}, true, 'ready'],
+    [{ state: 'starting' }, {}, true, 'starting'],
+    // Hired and started by the hire: no control row yet.
+    [{ state: 'never_started' }, { activation_state: 'saved' }, true, 'starting'],
+    // The start was held for something to connect, or failed.
+    [{ state: 'never_started' }, { activation_state: 'blocked' }, true, 'stopped'],
+    [{ state: 'never_started' }, { activation_state: 'failed' }, true, 'stopped'],
+    // The hire did not start them (something was missing).
+    [{ state: 'never_started' }, { activation_state: 'saved' }, false, 'stopped'],
+    [{ state: 'failed' }, {}, true, 'stopped'],
+  ])('control %o with %o (started: %s) is %s', (control, patch, started, phase) => {
+    expect(firstDayPhase(employee(patch, control), started)).toBe(phase);
+  });
+
+  it('says why they are not running', () => {
+    expect(firstDayNote(employee({ missing_apps: [whatsapp] }))).toBe('WhatsApp isn’t connected yet.');
+    expect(firstDayNote(employee({ needs_ai: true }))).toBe('Connect an AI model first.');
+    expect(firstDayNote(employee({ activation_state: 'failed' }))).toBe('Maya couldn’t start.');
+    expect(firstDayNote(employee({}, { state: 'failed' }))).toBe('Maya couldn’t start.');
+    expect(firstDayNote(employee({}))).toBe('Maya isn’t running.');
   });
 });
 

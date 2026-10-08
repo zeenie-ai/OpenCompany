@@ -9,7 +9,10 @@
  * - the page supplies both lists, and Yours counts its own;
  * - the category filter exists when there are categories, and starts open
  *   when the page is opened on one;
- * - Discover shows DISCOVER_LIMIT cards until "Show all";
+ * - Discover shows DISCOVER_LIMIT cards until "Show all" (`discoverLimit`
+ *   changes the cap; null shows everything);
+ * - `variant="embedded"` fits a narrower host (the Welcome guide's step):
+ *   a smaller title and a shorter search box;
  * - a card offers remove only with `onRemove`, and a switch only with
  *   `onToggle`;
  * - a card glows when its item turns 'added' while it is on screen, then
@@ -51,6 +54,12 @@ export interface CatalogLayoutProps {
   onItemAdded?: (item: CatalogItem) => void;
   /** A header button that opens an inline form above the list. */
   primaryAction?: { label: string; form: (close: () => void) => ReactNode };
+  /** `page` in Settings; `embedded` inside a narrower host. */
+  variant?: 'page' | 'embedded';
+  /** Cards Discover shows before "Show all"; null shows every one. */
+  discoverLimit?: number | null;
+  /** The Yours / Discover switch's accessible name (default "{title} to show"). */
+  listLabel?: string;
 }
 
 const GRID = '-mt-2 grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-3';
@@ -70,6 +79,9 @@ export function CatalogLayout({
   onToggle,
   onItemAdded,
   primaryAction,
+  variant = 'page',
+  discoverLimit = DISCOVER_LIMIT,
+  listLabel,
 }: CatalogLayoutProps) {
   const [view, setView] = useState<CatalogView>('discover');
   const [category, setCategory] = useState(initialCategory);
@@ -90,8 +102,10 @@ export function CatalogLayout({
   }, [view, category]);
 
   const list = view === 'yours' ? yours.items : discover.items;
-  const { shown, total } = catalogSlice(list, { category, query, cap: view === 'discover' && !showAll ? DISCOVER_LIMIT : null });
-  const canShowAll = view === 'discover' && total > DISCOVER_LIMIT;
+  const cap = view === 'discover' && !showAll ? discoverLimit : null;
+  const { shown, total } = catalogSlice(list, { category, query, cap });
+  const canShowAll = view === 'discover' && discoverLimit !== null && total > discoverLimit;
+  const embedded = variant === 'embedded';
   const q = query.trim();
 
   const changeView = (next: CatalogView) => {
@@ -117,11 +131,11 @@ export function CatalogLayout({
   return (
     <div ref={rootRef} className="flex flex-col gap-5.5 px-4 pt-6.5 pb-8 sm:px-8">
       <div data-stagger className="flex flex-wrap items-center gap-3.5 pr-10">
-        <h2 className="text-xl font-semibold tracking-[-0.02em] text-fg-default">{title}</h2>
+        <h2 className={cn('font-semibold tracking-[-0.02em] text-fg-default', embedded ? 'text-lg' : 'text-xl')}>{title}</h2>
         <ToggleGroup
           type="single"
           variant="segmented"
-          aria-label={`${title} to show`}
+          aria-label={listLabel ?? `${title} to show`}
           value={view}
           onValueChange={(next) => next && changeView(next as CatalogView)}
         >
@@ -133,8 +147,13 @@ export function CatalogLayout({
             Discover
           </ToggleGroupItem>
         </ToggleGroup>
-        <div className="ml-auto flex flex-[1_1_280px] items-center justify-end gap-2">
-          <SearchField value={query} onChange={setQuery} placeholder={searchPlaceholder} className="max-w-75 flex-1" />
+        <div className={cn('ml-auto flex items-center justify-end gap-2', embedded ? 'flex-[1_1_180px]' : 'flex-[1_1_280px]')}>
+          <SearchField
+            value={query}
+            onChange={setQuery}
+            placeholder={searchPlaceholder}
+            className={cn('flex-1', embedded ? 'max-w-60' : 'max-w-75')}
+          />
           {categories.length > 0 && (
             <Toggle
               variant="chips"

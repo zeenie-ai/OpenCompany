@@ -12,6 +12,9 @@ import {
   loop,
   motionSuppressed,
   parseDuration,
+  rise,
+  RISE,
+  shake,
   stagger,
   STAGGER_FALLBACK,
   staggerStep,
@@ -170,6 +173,55 @@ describe('animate', () => {
     const started = stagger(els, [{ opacity: 0 }], { base: 100, step: 30, cap: 3 });
     expect(started).toHaveLength(5);
     expect(waapi.calls.map((c) => c.options.delay)).toEqual([100, 130, 160, 190, 190]);
+  });
+});
+
+describe('rise and shake', () => {
+  let waapi: ReturnType<typeof installWaapiStub>;
+  let restoreMotion: () => void;
+
+  beforeEach(() => {
+    waapi = installWaapiStub();
+    restoreMotion = setReducedMotion(false);
+    pageActivity.set(true);
+  });
+
+  afterEach(() => {
+    waapi.restore();
+    restoreMotion();
+    pageActivity.set(true);
+    invalidateMotionTokens();
+  });
+
+  it('rises on the spring curve over card-in, and takes overrides', () => {
+    const el = document.createElement('div');
+    rise(el);
+    expect(waapi.calls[0].keyframes).toBe(RISE);
+    expect(waapi.calls[0].options).toMatchObject({ duration: 700, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
+    rise(el, { duration: 'intro', delay: 80 });
+    expect(waapi.calls[1].options).toMatchObject({ duration: 720, delay: 80 });
+  });
+
+  it('shakes -6, 5, -3, 2 px with each swing eased and the run linear', () => {
+    shake(document.createElement('div'));
+    const { keyframes, options } = waapi.calls[0];
+    expect((keyframes as Keyframe[]).map((k) => k.transform)).toEqual([
+      'translateX(0px)',
+      'translateX(-6px)',
+      'translateX(5px)',
+      'translateX(-3px)',
+      'translateX(2px)',
+      'translateX(0px)',
+    ]);
+    expect((keyframes as Keyframe[])[1].easing).toBe('cubic-bezier(0.36, 0.07, 0.19, 0.97)');
+    expect(options).toMatchObject({ duration: 420, easing: 'linear' });
+  });
+
+  it('lands at once under reduced motion', () => {
+    restoreMotion();
+    restoreMotion = setReducedMotion(true);
+    shake(document.createElement('div'));
+    expect(waapi.calls[0].options).toMatchObject({ duration: 1, delay: 0 });
   });
 });
 

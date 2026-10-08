@@ -4,16 +4,28 @@
  * A table over server-decided fields: the server owns `status`, the task
  * text, `missing_apps`, `needs_ai` and the control capabilities; this only
  * picks labels, colours and the primary action from them. It derives no new
- * rules.
+ * rules. `answering` is the one live input: one of the employee's nodes is
+ * executing right now (data/liveTask `useAnswering`).
  *
- * | Server state          | Pill (status tone)        | Primary action                  |
- * |-----------------------|---------------------------|---------------------------------|
- * | working               | Working                   | Pause                           |
- * | ready                 | Ready                     | Connect {App} / Connect AI / Start |
- * | paused                | Paused                    | Resume                          |
- * | attention             | Needs attention           | Resume when possible; after a failure Start again (the server resets first); else Open in Dev mode |
- * | pending_approvals > 0 | Needs you (overrides pill) | (the drafts are the action)    |
- * | browser_request       | Needs you (overrides pill) | (Help in browser opens the Workspace) |
+ * The pill, first match wins:
+ *
+ * | State                                   | Pill (status tone)      |
+ * |-----------------------------------------|-------------------------|
+ * | pending_approvals > 0 or browser_request | Needs you (waiting)    |
+ * | Start pressed, or control starting       | Starting… (ready)      |
+ * | control resuming                         | Resuming… (ready)      |
+ * | working and answering                    | Working (working, pulses) |
+ * | working (running, idle)                  | Ready (ready)          |
+ * | ready (never started, or reset)          | Not started (paused)   |
+ * | paused                                   | Stopped (paused)       |
+ * | attention                                | Needs attention        |
+ *
+ * | Server state | Primary action                                       |
+ * |--------------|------------------------------------------------------|
+ * | working      | Pause                                                |
+ * | ready        | Connect {App} / Connect AI / Start                   |
+ * | paused       | Resume                                               |
+ * | attention    | Resume when possible; after a failure Start again (the server resets first); else Open in Dev mode |
  *
  * The message box follows the control state the way the server's
  * `send_chat_message` does (its `delivery`): a message goes now while the
@@ -49,19 +61,35 @@ export interface EmployeePresentation {
   busyLabel: string | null;
 }
 
-const PILL: Record<EmployeeSummary['status'], { label: string; tone: StatusTone }> = {
-  working: { label: 'Working', tone: 'working' },
-  ready: { label: 'Ready', tone: 'ready' },
-  paused: { label: 'Stopped', tone: 'paused' },
-  attention: { label: 'Needs attention', tone: 'attention' },
-};
-
 const BUSY: Record<WorkflowControlPendingMutation['action'], string> = {
   start: 'Starting…',
   pause: 'Stopping…',
   resume: 'Resuming…',
   reset: 'Resetting…',
 };
+
+/** The pill: the first row of the table above that matches. */
+function pillOf(
+  employee: EmployeeSummary,
+  pending: WorkflowControlPendingMutation | undefined,
+  answering: boolean,
+): { label: string; tone: StatusTone } {
+  if (employee.pending_approvals > 0 || employee.browser_request !== null) return { label: 'Needs you', tone: 'waiting' };
+  const { state } = employee.control;
+  if (pending?.action === 'start' || state === 'starting') return { label: BUSY.start, tone: 'ready' };
+  if (state === 'resuming') return { label: BUSY.resume, tone: 'ready' };
+  switch (employee.status) {
+    case 'working':
+      return answering ? { label: 'Working', tone: 'working' } : { label: 'Ready', tone: 'ready' };
+    case 'paused':
+      return { label: 'Stopped', tone: 'paused' };
+    case 'attention':
+      return { label: 'Needs attention', tone: 'attention' };
+    case 'ready':
+    default:
+      return { label: 'Not started', tone: 'paused' };
+  }
+}
 
 /** What starting needs first: an app to connect, or an AI model. */
 function startBlocker(employee: EmployeeSummary): PrimaryAction | null {
@@ -92,12 +120,12 @@ function primaryAction(employee: EmployeeSummary): PrimaryAction {
 export function presentEmployee(
   employee: EmployeeSummary,
   pending?: WorkflowControlPendingMutation,
+  answering = false,
 ): EmployeePresentation {
-  const needsYou = employee.pending_approvals > 0 || employee.browser_request !== null;
-  const pill = needsYou ? { label: 'Needs you', tone: 'waiting' as const } : PILL[employee.status];
+  const pill = pillOf(employee, pending, answering);
   return {
     pill,
-    // Only a green working dot pulses (its ring is green).
+    // Only a green working dot pulses (its ring is green), so only while answering.
     pulse: pill.tone === 'working',
     primary: primaryAction(employee),
     busyLabel: pending ? BUSY[pending.action]
@@ -178,6 +206,30 @@ export function stateNoticeText(mode: TalkMode, name: string): string | null {
     case 'start':
       return `${name} isn’t running.`;
   }
+}
+
+// ----- a new hire's first day -----
+
+/** Where a new hire's start is (employee/FirstDay): `ready` once they run,
+ *  `starting` while the start is under way (the hire started them, and it
+ *  has neither been held for something to connect nor failed), `stopped`
+ *  when it did not go ahead. */
+export type FirstDayPhase = 'starting' | 'ready' | 'stopped';
+
+export function firstDayPhase(employee: EmployeeSummary, started: boolean): FirstDayPhase {
+  const { state } = employee.control;
+  if (state === 'running') return 'ready';
+  if (state === 'starting' || state === 'resuming') return 'starting';
+  const held = employee.activation_state === 'blocked' || employee.activation_state === 'failed';
+  return started && !held && (state === 'never_started' || state === 'ready') ? 'starting' : 'stopped';
+}
+
+/** Why a new hire is not running, beside their main action. */
+export function firstDayNote(employee: EmployeeSummary): string | null {
+  if (employee.missing_apps.length > 0) return `${employee.missing_apps[0].name} isn’t connected yet.`;
+  if (employee.needs_ai) return 'Connect an AI model first.';
+  if (employee.activation_state === 'failed' || employee.control.state === 'failed') return `${employee.name} couldn’t start.`;
+  return stateNoticeText(talkMode(employee.control), employee.name);
 }
 
 /** Said before anything that restarts an employee (Turn on Talk, Apply): a

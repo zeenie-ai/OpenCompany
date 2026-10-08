@@ -10,18 +10,15 @@
  * changes on every console, chat and terminal line.
  */
 
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { disposeOrb } from '../features/home/orb/orb';
 import { useSoundSync } from '../hooks/useSound';
-import { useSaveUserSettingsMutation } from '../hooks/useUserSettingsQuery';
 import { useSavedGraphSync } from '../hooks/useWorkflowOpsListener';
 import { useShellDialogsStore } from '../stores/shellDialogsStore';
 import { useWorkflowSettingsStore } from '../stores/workflowSettingsStore';
 import { ShellModeSwitch } from './ShellModeSwitch';
 import { useCurrentWorkflowSync } from './useCurrentWorkflowSync';
 import { useModeShortcut } from './useModeShortcut';
-import { usePageActivitySync } from './usePageActivitySync';
 import { useUIDefaultsOnce } from './useUIDefaultsOnce';
 
 const SettingsPanel = lazy(() => import('../components/ui/SettingsPanel'));
@@ -31,14 +28,11 @@ function ShellEffects() {
   // Mirror the sound preference into the WebAudio engine and re-read
   // --sound-pack whenever the theme changes.
   useSoundSync();
-  usePageActivitySync();
   useCurrentWorkflowSync();
   // Server-saved canvas changes reach the editor's copy on either screen.
   useSavedGraphSync();
   useUIDefaultsOnce();
   useModeShortcut();
-  // Home's orb keeps its renderer across mode switches; free it with the app.
-  useEffect(() => disposeOrb, []);
   return null;
 }
 
@@ -56,10 +50,8 @@ function ShellDialogs() {
   const credentialsOpen = useShellDialogsStore((s) => s.credentialsOpen);
   const closeSettings = useShellDialogsStore((s) => s.closeSettings);
   const closeCredentials = useShellDialogsStore((s) => s.closeCredentials);
-  const replayOnboarding = useShellDialogsStore((s) => s.replayOnboarding);
   const settings = useWorkflowSettingsStore((s) => s.settings);
   const setSettings = useWorkflowSettingsStore((s) => s.setSettings);
-  const saveUserSettings = useSaveUserSettingsMutation();
   const settingsMounted = useOpenedOnce(settingsOpen);
   const credentialsMounted = useOpenedOnce(credentialsOpen);
 
@@ -71,11 +63,6 @@ function ShellDialogs() {
           onClose={closeSettings}
           settings={settings}
           onSettingsChange={setSettings}
-          onReplayOnboarding={replayOnboarding}
-          onShowGetStarted={() => {
-            saveUserSettings.mutate({ getting_started_dismissed: false });
-            closeSettings();
-          }}
         />
       )}
       {credentialsMounted && <CredentialsModal visible={credentialsOpen} onClose={closeCredentials} />}

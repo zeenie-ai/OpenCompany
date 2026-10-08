@@ -65,7 +65,6 @@ describe('submitDraft', () => {
     expect(timeout).toBe(SETUP_TIMEOUT_MS);
     const state = useDraftStore.getState();
     expect(state.status).toBe('ready');
-    expect(state.intro).toBe('Meet Maya, your new receptionist.');
     expect(state.spec).not.toBeNull();
     expect(state.uiState).toMatchObject({ rules: { askFirst: true } });
     expect(state.source).toEqual({ provider: 'openai', model: 'gpt-x' });

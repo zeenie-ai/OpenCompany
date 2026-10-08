@@ -9,22 +9,14 @@
 import { Check, ChevronDown, Minus, X } from 'lucide-react';
 import { useState } from 'react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { RingSpinner } from '@/components/ui/ring-spinner';
 import type { RunStep } from '@/lib/agui/reduceRun';
 import { cn } from '@/lib/utils';
 import type { TurnWork } from '../thread/model';
 import { stepDetail, workLabel } from './runCopy';
 
-function Spinner({ className }: { className?: string }) {
-  return (
-    <span
-      aria-hidden
-      className={cn('opencompany-spinner block shrink-0 rounded-full border-2 border-action-tools-soft border-t-action-tools-ink', className)}
-    />
-  );
-}
-
 function StepIcon({ step }: { step: RunStep }) {
-  if (step.state === 'running') return <Spinner className="size-2.5 border-border-default" />;
+  if (step.state === 'running') return <RingSpinner className="size-2.5 border-border-default" />;
   if (step.state === 'failed') return <X aria-hidden className="size-3 text-action-stop-ink" strokeWidth={2.2} />;
   if (step.state === 'skipped') return <Minus aria-hidden className="size-3 text-fg-faint" strokeWidth={2.2} />;
   return <Check aria-hidden className="size-3 text-action-run-ink" strokeWidth={2.2} />;
@@ -65,7 +57,7 @@ export function StepsDisclosure({ work, compact = false }: { work: TurnWork; com
         )}
       >
         {work.live ? (
-          <Spinner className="size-3" />
+          <RingSpinner className="size-3" />
         ) : (
           <Check aria-hidden className="size-3.25 text-action-run-ink" strokeWidth={2.4} />
         )}

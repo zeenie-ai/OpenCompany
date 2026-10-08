@@ -2,7 +2,11 @@
  * The new employee's setup screen under the composer (design handoff
  * "Draft"): while the model writes it, a line saying so with the time it
  * has taken so far and Cancel; the screen itself when it arrives; or what
- * went wrong with a way to try again.
+ * went wrong with a way to try again. The header (what they were asked to
+ * do, and Discard) shows while the setup is written or has failed; a ready
+ * card says who they are in its identity row instead, with Discard beside
+ * it (onboarding handoff R2). Their team, when the server suggests one,
+ * sits in the card above its footer strip.
  *
  * The screen is drawn by json-render (HireScreen, loaded lazily the first
  * time one shows: json-render is not part of Home's first chunk). Its
@@ -17,6 +21,7 @@ import { X } from 'lucide-react';
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
+import { RingSpinner } from '@/components/ui/ring-spinner';
 import { animate, finished } from '@/lib/motion';
 import { isConnected, useConnectors } from '../data/connectors';
 import { useHomeStore } from '../state/homeStore';
@@ -65,10 +70,7 @@ function WorkingLine({ token, onCancel }: { token: string | null; onCancel: () =
   return (
     <div className="flex flex-col gap-1.5 px-0.5 py-1">
       <div className="flex items-center gap-2.5">
-        <span
-          aria-hidden
-          className="mx-0.5 size-3.5 shrink-0 animate-[spin_700ms_linear_infinite] rounded-full border-2 border-node-agent-border border-t-node-agent motion-reduce:animate-none"
-        />
+        <RingSpinner className="mx-0.5 size-3.5 border-node-agent-border border-t-node-agent" />
         <span role="status" className="text-base text-fg-default">
           Writing their setup…
         </span>
@@ -137,7 +139,6 @@ export function HireDraftPanel({ onConnect }: { onConnect: (providerId: string) 
   const token = useDraftStore((s) => s.token);
   const failure = useDraftStore((s) => s.failure);
   const spec = useDraftStore((s) => s.spec);
-  const intro = useDraftStore((s) => s.intro);
   const apps = useDraftStore((s) => s.apps);
   const team = useDraftStore((s) => s.team);
   const version = useDraftStore((s) => s.version);
@@ -147,10 +148,10 @@ export function HireDraftPanel({ onConnect }: { onConnect: (providerId: string) 
   const openConnectAI = useHomeStore((s) => s.openConnectAI);
   const { providers } = useConnectors();
   const sectionRef = useRef<HTMLElement>(null);
-  const introRef = useRef<HTMLParagraphElement>(null);
 
   const visible = status !== 'idle';
   const showSpec = Boolean(spec) && (status === 'ready' || (status === 'failed' && failure?.refine));
+  const showHeader = status !== 'ready' || !spec?.layout.identity;
   const triggerApps = useMemo(() => triggerAppNames(apps), [apps]);
 
   // Fetch the screen's code while the model writes, so it is there when the reply lands.
@@ -173,14 +174,6 @@ export function HireDraftPanel({ onConnect }: { onConnect: (providerId: string) 
     }
     wasVisible.current = visible;
   }, [visible]);
-
-  // The introduction fades up when a new version arrives.
-  useLayoutEffect(() => {
-    if (status !== 'ready') return;
-    animate(introRef.current, [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], {
-      duration: 420,
-    });
-  }, [status, version]);
 
   const collapse = useCallback(async () => {
     const section = sectionRef.current;
@@ -234,6 +227,18 @@ export function HireDraftPanel({ onConnect }: { onConnect: (providerId: string) 
     await collapse();
     actions.discard();
   };
+  const discardButton = (
+    <Button
+      variant="quiet"
+      size="icon-sm"
+      onClick={() => void discard()}
+      title="Discard draft"
+      aria-label="Discard draft"
+      className="rounded-lg"
+    >
+      <X className="size-3.5" />
+    </Button>
+  );
 
   if (!visible) return null;
   return (
@@ -244,20 +249,13 @@ export function HireDraftPanel({ onConnect }: { onConnect: (providerId: string) 
       className="mt-5.5 w-full max-w-(--w-composer) overflow-hidden"
     >
       <div className="flex flex-col gap-3.5 rounded-draft border border-border-default bg-bg-panel p-4.5 shadow-float">
-        <div className="flex items-center gap-2.5">
-          <MicroLabel className="shrink-0 text-node-agent-ink">New employee</MicroLabel>
-          <span className="min-w-0 flex-1 truncate text-sm text-fg-muted">{job}</span>
-          <Button
-            variant="quiet"
-            size="icon-sm"
-            onClick={() => void discard()}
-            title="Discard draft"
-            aria-label="Discard draft"
-            className="rounded-lg"
-          >
-            <X className="size-3.5" />
-          </Button>
-        </div>
+        {showHeader && (
+          <div className="flex items-center gap-2.5">
+            <MicroLabel className="shrink-0 text-node-agent-ink">New employee</MicroLabel>
+            <span className="min-w-0 flex-1 truncate text-sm text-fg-muted">{job}</span>
+            {discardButton}
+          </div>
+        )}
 
         {status === 'working' && <WorkingLine token={token} onCancel={actions.cancel} />}
         {hiring && (
@@ -268,11 +266,6 @@ export function HireDraftPanel({ onConnect }: { onConnect: (providerId: string) 
         {status === 'failed' && failure && (
           <FailureNotice failure={failure} onRetry={() => void actions.retry()} onConnectAi={openConnectAI} />
         )}
-        {status === 'ready' && intro && (
-          <p ref={introRef} className="m-0 text-lead leading-relaxed text-pretty text-fg-default">
-            {intro}
-          </p>
-        )}
         {showSpec && spec && (
           <Suspense fallback={null}>
             <HireScreen
@@ -282,18 +275,20 @@ export function HireDraftPanel({ onConnect }: { onConnect: (providerId: string) 
               busy={hiring}
               triggerApps={triggerApps}
               actions={actionContext}
-            />
+              discard={showHeader ? null : discardButton}
+            >
+              {team.length > 0 && (
+                <details className="rounded-row border border-border-default px-3.5 py-3 text-sm text-fg-muted">
+                  <summary className="cursor-pointer font-semibold text-fg-default">Their team</summary>
+                  <p className="mt-2 mb-2">They can ask these helpers to do parts of the job, then check the result for you.</p>
+                  <ul className="m-0 list-disc space-y-1 pl-5">
+                    {team.map(({ responsibility }) => <li key={responsibility}>{responsibility}</li>)}
+                  </ul>
+                  <p className="mt-2 mb-0">Use Change something to adjust their responsibilities.</p>
+                </details>
+              )}
+            </HireScreen>
           </Suspense>
-        )}
-        {showSpec && team.length > 0 && (
-          <details className="rounded-card border border-border-default px-3.5 py-3 text-sm text-fg-muted">
-            <summary className="cursor-pointer font-semibold text-fg-default">Their team</summary>
-            <p className="mt-2 mb-2">They can ask these helpers to do parts of the job, then check the result for you.</p>
-            <ul className="m-0 list-disc space-y-1 pl-5">
-              {team.map(({ responsibility }) => <li key={responsibility}>{responsibility}</li>)}
-            </ul>
-            <p className="mt-2 mb-0">Use Change something to adjust their responsibilities.</p>
-          </details>
         )}
       </div>
     </section>

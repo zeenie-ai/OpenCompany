@@ -42,8 +42,6 @@ export interface CardView {
   /** The small line inside the preview. */
   when: string;
   footer: CardFooter;
-  /** "Ask first is on, so nothing goes out until you send it." */
-  reassure: boolean;
 }
 
 function lowerFirst(text: string): string {
@@ -84,7 +82,6 @@ export function approvalView(approval: ChatApproval, { name, nowMs, offsetMs, ed
         bubble: 'draft',
         when: 'Draft',
         footer: { kind: 'decide' },
-        reassure: true,
       };
     case 'approved': {
       if (approval.consumedAt === null) {
@@ -100,7 +97,6 @@ export function approvalView(approval: ChatApproval, { name, nowMs, offsetMs, ed
           bubble: 'draft',
           when: 'Sending',
           footer,
-          reassure: false,
         };
       }
       const at = timeLabel(approval.consumedAt, now);
@@ -115,7 +111,6 @@ export function approvalView(approval: ChatApproval, { name, nowMs, offsetMs, ed
         bubble: 'draft',
         when: 'Sending',
         footer: { kind: 'sending' },
-        reassure: false,
       };
     case 'sent':
       return sentView(approval, noun.sent, sub, to, channel, timeLabel(approval.outcome?.at ?? approval.consumedAt, now));
@@ -130,7 +125,6 @@ export function approvalView(approval: ChatApproval, { name, nowMs, offsetMs, ed
         bubble: 'struck',
         when: 'Not sent',
         footer: { kind: 'discarded', text: `Discarded. ${name} won’t send this.`, restoreSeconds, canRestore },
-        reassure: false,
       };
     }
     case 'failed': {
@@ -144,7 +138,6 @@ export function approvalView(approval: ChatApproval, { name, nowMs, offsetMs, ed
         bubble: 'draft',
         when: 'Not sent',
         footer: { kind: 'failed', text: unknown ? `It may have gone out${why}` : `It didn’t go out${why}`, unknown },
-        reassure: false,
       };
     }
     case 'expired':
@@ -165,7 +158,6 @@ function sentView(approval: ChatApproval, title: string, sub: string, to: string
     bubble: 'sent',
     when: at || 'Sent',
     footer: { kind: 'sent', text: `Sent to ${to} on ${channel}${when}${auto}.` },
-    reassure: false,
   };
 }
 
@@ -178,7 +170,6 @@ function endedView(title: string, label: string, sub: string, text: string): Car
     bubble: 'struck',
     when: 'Not sent',
     footer: { kind: 'ended', text },
-    reassure: false,
   };
 }
 

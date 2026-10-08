@@ -261,10 +261,20 @@
   animation: opencompany-draw var(--dur-check-draw, 420ms) var(--ease-spring) both;
 }
 
+/* ============================================================================
+ * Onboarding (design handoff onboarding, 2026-10-08).
+ * ========================================================================== */
+
+/* A hard on/off blink: the typing caret in the Welcome guide's demo. */
+@keyframes opencompany-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+.opencompany-caret-blink { animation: opencompany-blink var(--dur-caret, 1000ms) steps(1) infinite; }
+/* The slower ring spinner: a new employee starting up. */
+.opencompany-spinner-slow { animation: spin var(--dur-live-ring, 1200ms) linear infinite; }
+
 @media (prefers-reduced-motion: reduce) {
   .opencompany-pulse, .opencompany-crt, .opencompany-scanline::after,
   .opencompany-trigger-armed, .opencompany-trigger-fire, .opencompany-bolt, .opencompany-pip-pulse,
   .opencompany-spinner, .opencompany-live-ring, .opencompany-shimmer, .opencompany-shimmer-slot,
   .opencompany-shimmer-text, .opencompany-caret, .opencompany-dots > *, .opencompany-grow,
-  .opencompany-draw { animation: none !important; }
+  .opencompany-draw, .opencompany-caret-blink, .opencompany-spinner-slow { animation: none !important; }
 }

@@ -67,6 +67,9 @@ interface ModalProps {
   /** Focus lifecycle for programmatically opened dialogs without a DialogTrigger. */
   onOpenAutoFocus?: React.ComponentProps<typeof DialogPrimitive.Content>['onOpenAutoFocus'];
   onCloseAutoFocus?: React.ComponentProps<typeof DialogPrimitive.Content>['onCloseAutoFocus'];
+  /** Esc reaches this first; `event.preventDefault()` keeps the dialog open
+   *  (the Welcome guide steps back from a provider page instead). */
+  onEscapeKeyDown?: React.ComponentProps<typeof DialogPrimitive.Content>['onEscapeKeyDown'];
 }
 
 const DEFAULT_TITLE_ICON = <Settings className="h-4 w-4 opacity-70" />;
@@ -100,6 +103,7 @@ const Modal: React.FC<ModalProps> = ({
   motion = 'default',
   onOpenAutoFocus,
   onCloseAutoFocus,
+  onEscapeKeyDown,
 }) => {
   const showHeader = !hideHeader && Boolean(title || headerActions);
 
@@ -125,6 +129,7 @@ const Modal: React.FC<ModalProps> = ({
         <DialogPrimitive.Content
           onOpenAutoFocus={onOpenAutoFocus}
           onCloseAutoFocus={onCloseAutoFocus}
+          onEscapeKeyDown={onEscapeKeyDown}
           data-slot="dialog-content"
           className={cn(
             // bg-bg-app + border-border-default consume the new-contract

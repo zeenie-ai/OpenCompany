@@ -5,11 +5,16 @@
  * props), a Toggle binds `checked` (older replies say `value`), and every
  * expression whose path reaches a prototype is dropped.
  *
- * When they work, as the normalizer sets it up: one Schedule after the
- * routine, bound to /trigger, which starts as the hire button's trigger
- * (else the app the routine's first "When" step names, else the owner
- * messaging them), snapped to a trigger the server builds as it reads,
- * and kept however long the screen is.
+ * The card it lays out (onboarding handoff R2): the agent card, the
+ * routine, everything else as written, then the footer strip's ask-first
+ * toggle and its row of the change button and the hire button, each named
+ * in `layout` and kept however long the screen is.
+ *
+ * When they work, as the normalizer sets it up: the Plan's When row bound
+ * to /trigger (no Schedule beside it), else one Schedule bound there.
+ * /trigger starts as the hire button's trigger (else the app the routine's
+ * first "When" step names, else the owner messaging them), snapped to a
+ * trigger the server builds as it reads.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -47,6 +52,10 @@ function schedules(spec: NormalizedSpec): string[] {
   return spec.order.filter((id) => spec.elements[id].type === 'Schedule');
 }
 
+function actionsOf(spec: NormalizedSpec): (string | undefined)[] {
+  return spec.elements[spec.layout.actions].children.map((id) => spec.elements[id].on?.press.action);
+}
+
 describe('json-render shape', () => {
   const hireParams = { name: 'Maya', trigger: { kind: 'manual' } };
 
@@ -60,7 +69,7 @@ describe('json-render shape', () => {
     for (const button of shapes) {
       const spec = only({ h: button });
       expect(spec.elements.h.on).toEqual({ press: { action: 'hire_employee', params: hireParams } });
-      expect(spec.elements.h.props).toEqual({ label: 'Hire Maya' });
+      expect(spec.elements.h.props).toEqual({ label: 'Hire Maya', variant: 'primary' });
     }
   });
 
@@ -136,14 +145,90 @@ describe('json-render shape', () => {
   });
 });
 
+describe('the card', () => {
+  it('lays out who they are, the routine, the rest as written, then the footer', () => {
+    const spec = screen({ kind: 'manual' }, { note: { type: 'Text', props: { text: 'Hello' } } });
+    const { layout } = spec;
+    expect(spec.elements.r.children).toEqual(['a', 'p', 'note', layout.askFirst, layout.actions]);
+    expect(layout).toMatchObject({ identity: 'a', body: ['p', 'note'] });
+    expect(bindingPath(spec.elements[layout.askFirst].props.checked)).toBe(STATE_PATHS.askFirst);
+    expect(spec.elements[layout.actions]).toMatchObject({ type: 'Stack', props: { direction: 'horizontal' } });
+    expect(actionsOf(spec)).toEqual(['refine', 'hire_employee']);
+    // The model's own button row is left empty, so it goes.
+    expect(spec.elements.row).toBeUndefined();
+  });
+
+  it('takes the agent card, the routine, the toggle and the buttons out of the containers they were in', () => {
+    const spec = only({
+      who: { type: 'Card', props: { title: 'Meet Maya' }, children: ['a', 'p'] },
+      a: { type: 'AgentCard', props: { name: 'Maya', role: 'Receptionist' } },
+      p: { type: 'Plan', props: { steps: [{ title: 'Answer', role: 'agent' }] } },
+      rules: { type: 'Card', props: { title: 'Ground rules' }, children: ['ask', 'hours', 'h'] },
+      ask: { type: 'Toggle', props: { label: 'Ask me first', checked: { $bindState: '/rules/askFirst' } } },
+      hours: { type: 'Toggle', props: { label: 'Only 9 to 6', checked: { $bindState: '/rules/hours' } } },
+      h: { type: 'Button', props: { label: 'Hire Maya' }, on: { press: { action: 'hire_employee' } } },
+    });
+    expect(spec.elements.r.children).toEqual(['a', 'p', 'rules', 'ask', spec.layout.actions]);
+    expect(spec.elements.rules.children).toEqual(['hours']);
+    // A card left with nothing in it goes.
+    expect(spec.elements.who).toBeUndefined();
+    expect(spec.layout.askFirst).toBe('ask');
+  });
+
+  it('keeps one agent card and one Plan, the first of each', () => {
+    const spec = only({
+      a: { type: 'AgentCard', props: { name: 'Maya', role: 'Receptionist' } },
+      a2: { type: 'AgentCard', props: { name: 'Ivy', role: 'Diary keeper' } },
+      p: { type: 'Plan', props: { steps: [{ title: 'Answer', role: 'agent' }] } },
+      p2: { type: 'Plan', props: { steps: [{ title: 'Book', role: 'tool' }] } },
+    });
+    expect(spec.elements.a2).toBeUndefined();
+    expect(spec.elements.p2).toBeUndefined();
+    expect(spec.layout).toMatchObject({ identity: 'a', body: ['p'] });
+  });
+
+  it('makes the hire button primary and the change button secondary, whatever the model said', () => {
+    const spec = only({
+      h: { type: 'Button', props: { label: 'Hire Maya', variant: 'secondary' }, on: { press: { action: 'hire_employee' } } },
+      c: { type: 'Button', props: { label: 'Change something', variant: 'primary' }, on: { press: { action: 'refine' } } },
+    });
+    expect(spec.elements.h.props.variant).toBe('primary');
+    expect(spec.elements.c.props.variant).toBe('secondary');
+  });
+
+  it('adds the toggle and both buttons when the model left them out', () => {
+    const spec = only({ a: { type: 'AgentCard', props: { name: 'Sam', role: 'Social media helper' } } });
+    expect(spec.elements[spec.layout.askFirst].props.label).toBe('Ask me before sending anything');
+    expect(getPath(spec.state, STATE_PATHS.askFirst)).toBe(true);
+    expect(actionsOf(spec)).toEqual(['refine', 'hire_employee']);
+    const [, hire] = spec.elements[spec.layout.actions].children;
+    expect(spec.elements[hire].props).toEqual({ label: 'Hire Sam', variant: 'primary' });
+  });
+
+  it('has no identity without an agent card, and the routine comes first', () => {
+    const spec = only({ note: { type: 'Text', props: { text: 'Hello' } } });
+    const [schedule] = schedules(spec);
+    expect(spec.layout).toMatchObject({ identity: null, body: [schedule, 'note'] });
+  });
+});
+
 describe('when they work', () => {
-  it('is one Schedule right after the routine, bound to /trigger', () => {
+  it('is the routine’s When row, bound to /trigger, with no Schedule beside it', () => {
     const spec = screen({ kind: 'app_event', app: 'WhatsApp' });
+    expect(schedules(spec)).toHaveLength(0);
+    expect(bindingPath(spec.elements.p.props.trigger)).toBe(STATE_PATHS.trigger);
+    expect(getPath(spec.state, STATE_PATHS.trigger)).toEqual({ kind: 'app_event', app: 'WhatsApp' });
+  });
+
+  it('is one Schedule after the agent card when there is no routine', () => {
+    const spec = only({
+      a: { type: 'AgentCard', props: { name: 'Maya', role: 'Receptionist' } },
+      note: { type: 'Text', props: { text: 'Hello' } },
+    });
     const [schedule] = schedules(spec);
     expect(schedules(spec)).toHaveLength(1);
     expect(bindingPath(spec.elements[schedule].props.value)).toBe(STATE_PATHS.trigger);
-    expect(spec.elements.r.children.indexOf(schedule)).toBe(spec.elements.r.children.indexOf('p') + 1);
-    expect(getPath(spec.state, STATE_PATHS.trigger)).toEqual({ kind: 'app_event', app: 'WhatsApp' });
+    expect(spec.elements.r.children.slice(0, 3)).toEqual(['a', schedule, 'note']);
   });
 
   it('starts as the hire button’s trigger, snapped to what can run', () => {
@@ -174,21 +259,27 @@ describe('when they work', () => {
     expect(getPath(screen({ kind: 'manual' }, {}, steps).state, STATE_PATHS.trigger)).toEqual({ kind: 'manual' });
   });
 
-  it('keeps one Schedule the model wrote, rebound, and drops the rest', () => {
-    const spec = screen(
-      { kind: 'manual' },
-      { s1: { type: 'Schedule', props: { value: 'whenever' } }, s2: { type: 'Schedule', props: {} } },
-    );
+  it('keeps one Schedule the model wrote when there is no routine, rebound, and drops the rest', () => {
+    const spec = only({ s1: { type: 'Schedule', props: { value: 'whenever' } }, s2: { type: 'Schedule', props: {} } });
     expect(schedules(spec)).toEqual(['s1']);
     expect(bindingPath(spec.elements.s1.props.value)).toBe(STATE_PATHS.trigger);
   });
 
-  it('survives the size cap', () => {
+  it('drops every Schedule the model wrote beside a routine', () => {
+    const spec = screen({ kind: 'manual' }, { s1: { type: 'Schedule', props: { value: 'whenever' } } });
+    expect(schedules(spec)).toEqual([]);
+    expect(bindingPath(spec.elements.p.props.trigger)).toBe(STATE_PATHS.trigger);
+  });
+
+  it('survives the size cap, with the rest of the card', () => {
     const texts = Object.fromEntries(
       Array.from({ length: 30 }, (_, i) => [`t${i}`, { type: 'Text', props: { text: `Line ${i}` } }]),
     );
     const spec = screen({ kind: 'manual' }, texts);
     expect(spec.order.length).toBeLessThanOrEqual(16);
-    expect(schedules(spec)).toHaveLength(1);
+    expect(spec.elements.p).toBeDefined();
+    expect(spec.layout.identity).toBe('a');
+    expect(spec.elements[spec.layout.askFirst]).toBeDefined();
+    expect(actionsOf(spec)).toEqual(['refine', 'hire_employee']);
   });
 });

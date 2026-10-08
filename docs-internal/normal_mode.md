@@ -64,24 +64,41 @@ is the reference.
 
 | Folder | Contents |
 |---|---|
-| `HomeShell.tsx` | Sidebar, header, the current view (hire or one employee), the Workspace dock, Settings, the connect dialog, the guided Connect an AI model dialog, the orb's stage, and under an employee's page a line saying whether they ask first |
-| `sidebar/`, `header/` | The team list, New employee, the profile row; the view title, the Workspace pill, the mode toggle (on an employee's page, Dev opens their workflow) and the theme button |
+| `HomeShell.tsx` | Sidebar, header, the current view (hire or one employee), the Workspace dock, Settings, the Welcome guide, the Get started checklist, the connect dialog, the orb's stage, and under an employee's page a line saying whether they ask first |
+| `sidebar/`, `header/` | The team list, New employee, the profile row; the view title, the Guide pill (opens the Welcome guide), the Workspace pill, the mode toggle (on an employee's page, Dev opens their workflow) and the theme button |
+| `onboarding/` | The Welcome guide: three steps (Welcome, Connect an AI model, Your first hire) that open on first launch and again from Guide or Settings > Help; then the Get started checklist in the corner (connect a model, hire, say hello, approve a first draft) until it is hidden ([onboarding.md](./onboarding.md)) |
 | `hire/` | The hero, the composer, the template chips, the hire notice (`HireNotice.tsx`), and the starter bundles (`starters.json`), which the chips and Settings > Plugins both read |
 | `genui/` | The setup draft under the composer, and the hire itself, from a setup or a starter (below) |
 | `employee/` | One employee's page, which is the conversation with them (`EmployeeChat` over the shared chat, Talk below); the header names them. What to act on shows only while there is something to do: the drafts waiting for the owner after the conversation, and above the message box their main action while they can't read messages (Resume, Start, or connect what is missing; `useEmployeeControl`, `PrimaryActionButton`) or Help in browser while they wait there. The conversation's Stop controls its run's owning generation; the Workspace header offers generation Stop and Resume too |
-| `connectAI/` | The guided Connect an AI model dialog (below) |
 | `workspace/` | The Workspace dock (below), its header pill, and its Canvas tab, which loads in its own chunk |
-| `settings/` | Settings pages (Profile, Billing, Skills, Connectors, Plugins). Catalog primitives live in `components/catalog`; Connectors embeds the shared `components/credentials/CredentialsBrowser`. Provider dialogs belong to AppShell. |
+| `settings/` | Settings pages (App access, Profile, Billing, Help, Skills, Connectors, Plugins). Catalog primitives live in `components/catalog`; Connectors embeds the shared `components/credentials/CredentialsBrowser`. Provider dialogs belong to AppShell. |
 | `approvals/` | The drafts query, the decide mutation (optimistic), the approval broadcast listener |
 | `data/` | zod-parsed queries for employees, connectors and the profile; `employeeCache.ts`, the team's query keys and `removeEmployee` (shared with the app store's delete); `talk.ts`, Turn on Talk, Apply and the retry note (the thread itself is the shared chat's); `presentation.ts` maps server state to pills, actions and the message box's mode without deriving new rules |
 | `orb/` | The 3D orb (below) |
 | `ui/` | Small shared pieces (avatar, status dot and pill, app mark), the pill toast, and `useAutoGrow` (the composer's and the message box's growing text area) |
-| `state/homeStore.ts` | UI state only: the view, the sidebar, Settings, the Connect an AI model dialog, the last hire's notice, the Workspace dock, one-shot glow and pulse signals |
+| `state/homeStore.ts` | UI state only: the view, the sidebar, Settings, the Welcome guide (`guide`), new hires' first days (`firstDays`), the last hire's notice, the Workspace dock, one-shot glow and pulse signals; `openConnectAI` opens the app's credentials dialog on the AI category |
 
-Status comes from the server: an employee summary is `working`, `ready`,
-`paused` or `attention` (an automatic pause, see below). The `paused` summary
-is displayed as **Stopped**; durable control transitions display
-**Stopping…** or **Resuming…** even after the local request has ended. A pending draft
+Status comes from the server: an employee summary is `working` (control
+`starting`, `running` or `resuming`), `ready` (never started, or reset),
+`paused` or `attention` (an automatic pause, see below). The pill
+(`presentEmployee` in `data/presentation.ts`, first match wins):
+
+| State | Pill |
+|---|---|
+| a draft waits, or the browser waits for the owner | **Needs you** |
+| Start pressed, or control `starting` / `resuming` | **Starting…** / **Resuming…** (cyan) |
+| `working` and answering | **Working** (green, the pip pulses) |
+| `working`, idle | **Ready** (cyan) |
+| `ready` | **Not started** (grey) |
+| `paused` / `attention` | **Stopped** / **Needs attention** |
+
+"Answering" is live, not from the summary: one of the employee's
+`watch_node_ids`, or their Talk agent (`talk.agent_node_id`), is `executing`
+in the node status store (`useAnswering` in `data/liveTask.ts`). The hire
+view's "N working now" counts the same way (`useAnsweringCount`). The
+Workspace header keeps its own **Live** pill for a running employee. Durable
+control transitions display **Stopping…** or **Resuming…** on the main button
+even after the local request has ended. A pending draft
 shows as "Needs you". So does a browser waiting for the owner: when an agent
 calls `request_user`, the summary's `browser_request` (`{node_id, reason,
 since}`, never the agent's message, since summaries reach every socket) is
@@ -143,21 +160,36 @@ side, around the core, and three heads each trailing a crescent that tapers
 along the ring. The ring spins, the heads turn more slowly the same way, and a
 line from the core to each head carries a packet.
 [orb/orb.ts](../client/src/features/home/orb/orb.ts) holds what the engine
-reads each frame (the slot to fill, an energy target, a spike) and its
-lifecycle: leaving Home keeps the renderer, the app shell disposes it.
-`OrbStage` is the canvas host below the header; each view's `OrbSlot` reserves
-the square the orb glides into (`--size-orb-hire`, `--size-orb-employee`:
-large on the hire view, small on an employee's page, where the conversation
-needs the room). The composer sets the energy target (focused, holding text, a
-setup being written). These spike it: a hire, a theme or mode switch, a
-connect, a task change, opening Settings or the Workspace, a setup arriving or
-failing, and saving the profile (`SPIKE` in orb.ts). The logo itself is one
+reads each frame (the slot to fill, an energy target, a spike, whether it
+waits for the server) and its lifecycle: leaving Home keeps the renderer, and
+the app (`App.tsx`, above the sign-in gate, so signing out never frees an orb
+the sign-in screen has taken) disposes it. `OrbStage` is the canvas host
+(`fill="home"` below Home's header, `fill="screen"` the whole window for the
+Connecting and sign-in screens); each view's `OrbSlot` reserves the square the
+orb glides into (`--size-orb-hire`, `--size-orb-employee`, and
+`--size-orb-connecting` / `--size-orb-login`: large on the hire view, small on
+an employee's page, where the conversation needs the room). Stages and slots
+are stacks: a screen mounted over another (Connecting over Home) borrows the
+orb and hands it back when it goes. The composer sets the energy target
+(focused, holding text, a setup being written). These spike it: a hire, a theme
+or mode switch, a connect, a task change, opening Settings or the Workspace, a
+setup arriving or failing, saving the profile, the server answering again and
+signing in (`SPIKE` in orb.ts). While the server can't be reached
+(`setOrbWaiting`) it eases into a waiting mode (onboarding handoff R3): slower,
+a double heartbeat in the core, the heads breathing out and back in turn
+(each head and its crescent are one group), one searching ping per line,
+slightly dimmer, blended in and out over about a second with no jump. The
+engine measures its host every frame, draws nothing until the host has a size,
+and stops its frames while the page is hidden or the window blurred
+(`lib/pageActivity`). The logo itself is one
 colour; in dark the orb keeps colours of its own (a purple-to-cyan ring; pink,
 yellow and green heads) with white particles and packets; in light it is
 glossy piano-black under a white rim light. Its glows and particles blend
 additively in dark and normally in light (additive glow vanishes on white),
 fading through zero at the midpoint of a theme change. Without WebGL, under
-reduced motion, or after a lost WebGL context, the slot shows the static mark.
+reduced motion, or after a lost WebGL context, the slot shows the static mark
+for the session; when the engine's chunk fails to load it shows the mark until
+the next stage mounts and tries again (`orb/__tests__/orb.test.ts`).
 
 ## The Workspace
 
@@ -169,8 +201,8 @@ Help in browser), else the first on the team.
 
 - **Header**: the avatar, "{Name}’s workspace", the live task line when
   there is one (`useLiveTask`, else the summary's task), and a pill: Live
-  while the employee works, otherwise their status (Ready, Stopped, Needs
-  attention, Needs you). Then their main action (Stop, Resume, Start, or
+  while the employee runs, otherwise their status (Not started, Starting…,
+  Stopped, Needs attention, Needs you). Then their main action (Stop, Resume, Start, or
   connect what is missing), and Expand and Close. Stop shows Stopping while
   admitted work drains; the header follows authoritative generation control
   instead of treating a completed browser request as a completed Stop.
@@ -257,9 +289,9 @@ fixed component catalogue (`registry.ts`, `views.tsx`, `HireScreen.tsx`,
 loaded lazily so json-render stays out of Home's first chunk). The normaliser
 still reads the older shape a model may write (a Toggle's `value`, a
 Button's `action` / `actionParams` props), keeps the root a vertical stack,
-enforces a tree, guarantees one Hire button, one change button, the "Ask me
-before sending anything" toggle (on by default) and one `Schedule` (below),
-caps sizes, and drops what json-render does not guard: any path through
+enforces a tree, lays the screen out as the setup card (below), guarantees one
+Hire button, one change button and the "Ask me before sending anything" toggle
+(on by default), caps sizes, and drops what json-render does not guard: any path through
 `__proto__`, `constructor` or `prototype`, and `watch`, `repeat`, `slots`,
 `$computed` and an action's `confirm`. That glue is shared with the chat's
 generated replies in [lib/jsonRender/](../client/src/lib/jsonRender/)
@@ -273,19 +305,43 @@ parsed the same way on both sides. Only what `genui/index.ts` exports
 (`HireDraftPanel`, `useHireComposer`, `useStarterHire`, `DraftMessagePreview`)
 leaves the folder: ESLint refuses imports of its internal modules.
 
-**When they work.** Every screen shows one `Schedule` after the routine. The
-normaliser inserts it (the catalogue marks it `inserted`, so the model is
-never offered it) and binds it to `/trigger` (`state_paths.trigger`). It starts
-as the Hire button's `trigger`, else a new message in the app the routine's
-first "When" step names, else the owner messaging them, snapped to what the
-server builds: a known kind, a frequency, a time from `trigger.times` (the
-builder's `SCHEDULE_TIMES`; `test_genui_catalog_sync.py` holds them equal), and
-a weekday or day of the month. It reads as one sentence ("Every weekday at
-08:00"). Edit offers the owner messaging them, a schedule,
-or a new message in any app whose `can_trigger` is true; a change rewrites the
-routine's "When" step, and the hire payload reads `/trigger` before the
-button's params. `views.tsx` labels the routine "Their routine" and its steps
-in plain words (When, They, Using, Then).
+**The card** (onboarding handoff R2). Whatever the model wrote, the
+normaliser lays the screen out one way and names the places in
+`NormalizedSpec.layout`: the first `AgentCard` is the identity row (avatar,
+name, "role · apps", the description in two lines, no status), then the
+routine (the first `Plan`, else the `Schedule`), then everything else in the
+order written, then the footer strip's two: the ask-first toggle, taken out of
+whatever card held it, and a row of the change button (secondary) and the Hire
+button (primary). Further agent cards and Plans are dropped. `HireScreen`
+draws each place with its own `Renderer` over the same spec under one
+`JSONUIProvider`, so they share state and handlers and the reveal still runs
+element by element: the identity row with Discard beside it, the body, the
+suggested team (the panel's children), then the footer strip, which bleeds to
+the card's edges on `bg-bg-app` and gives its controls their own look
+(`HireSpecContext.inFooter`): "Ask before sending" beside a compact switch,
+"Change something" as a quiet pill and "Hire {name} →" as the inverted pill.
+The model's other rules, choices and inputs stay in view in compact cards, so
+nothing is hired unseen. The panel's header (NEW EMPLOYEE, the job, Discard)
+shows only while the setup is written or after it failed, or for a screen with
+no agent card, and the model's one-line introduction is not shown.
+
+**When they work.** The routine says it in its When row. With a `Plan`, the
+normaliser binds the plan's `trigger` to `/trigger` (`state_paths.trigger`)
+and drops any `Schedule`; without one it inserts a single `Schedule` (the
+catalogue marks it `inserted`, so the model is never offered it) bound there,
+drawn as a routine of that one row. `/trigger` starts as the Hire button's
+`trigger`, else a new message in the app the routine's first "When" step
+names, else the owner messaging them, snapped to what the server builds: a
+known kind, a frequency, a time from `trigger.times` (the builder's
+`SCHEDULE_TIMES`; `test_genui_catalog_sync.py` holds them equal), and a weekday
+or day of the month. The routine is a timeline
+([ui/routine.tsx](../client/src/features/home/ui/routine.tsx): a rule down
+the left, each step's dot on it, its role in mono as WHEN / THEY / USING /
+THEN), and a routine with no "When" step still starts with one. The When row
+ends in **Change**, which opens the editor under it: the owner messaging them,
+a schedule, or a new message in any app whose `can_trigger` is true. A change
+rewrites the When row as one sentence ("Every weekday at 08:00"), and the hire
+payload reads `/trigger` before the button's params.
 
 ### 2. Hire
 
@@ -351,15 +407,25 @@ the client's `HIRE_PAYLOAD_KEYS` must match, locked by
 5. records on the row the apps the graph actually uses (`built.app_ids`), so
    an app the hire named but left out never shows as one to connect;
    summaries read apps off the graph the same way;
-6. answers `{employee, started, missing_apps, needs_ai, unsupported_apps, warnings, idempotent}`
-   and, when every app is connected and an AI model exists, starts the
-   employee in the background. Errors: `invalid_request`, `too_large`,
-   `conflict`, `busy`, `not_allowed`, `build_failed`, `save_failed`.
+6. answers `{employee, started, missing_apps, needs_ai, unsupported_apps,
+   node_count, warnings, idempotent, request_id, activation_state,
+   readiness_issue}` and, when every app is connected and an AI model exists,
+   starts the employee in the background
+   ([activation.py](../server/services/employees/activation.py), which also
+   retries a held start every ten seconds, so connecting what was missing
+   starts them). `node_count` is the saved graph's size, read from the saved
+   workflow so a replay of the same key says the same. The summary's
+   `activation_state` says how that start went (`saved` until it is tried,
+   then `blocked`, `running` or `failed`; null for a workflow built in the
+   editor), and a change to it is broadcast at once, since a start that is
+   held or fails before Start made a control row changes nothing else the
+   page hears about. Errors: `invalid_request`, `too_large`, `conflict`,
+   `busy`, `not_allowed`, `build_failed`, `save_failed`.
 
 On the client ([genui/useHire.ts](../client/src/features/home/genui/useHire.ts))
-every successful hire lands on the new employee's page, with a glow in the
-sidebar and a toast; the team list is then read back from the server rather
-than taking the summary the hire answered with. The response's `warnings` show there once as the hire
+every successful hire lands on the new employee's page, on their first day
+(below), with a glow in the sidebar and a toast; the team list is then read
+back from the server rather than taking the summary the hire answered with. The response's `warnings` show there once as the hire
 notice ("A few notes on {Name}'s setup", `hire/HireNotice.tsx`), until the
 owner dismisses it or opens another view; `needs_ai` opens Connect an AI
 model; every error code has plain words (`busy`: they are still being set
@@ -421,12 +487,18 @@ that way and fails when one loses an app it names or the way it starts.
 
 `homeStore.openConnectAI()` delegates to the shared app-level credentials
 host with `{ categoryId: 'ai', intent: 'connect' }`. The connector browser
-starts on AI with beginner guidance; selecting a provider opens the same
-connection form used in Dev. Featured providers retain the key-page links
-and hints from `components/onboarding/aiProviderLinks.ts`. Successful guided
-connection closes the flow; Manage stays open after saving. These actions
-serve setup's `no_ai_provider`, hire/start's `needs_ai`, and the employee's
-Connect an AI model action.
+starts on AI; selecting a provider opens the same connection form used in
+Dev (`components/credentials/ProviderPage.tsx`). Featured providers keep the
+key-page links and hints from `components/credentials/aiProviderLinks.ts`.
+Successful guided connection closes the flow; Manage stays open after
+saving. These actions serve setup's `no_ai_provider`, hire/start's
+`needs_ai`, and the employee's Connect an AI model action.
+
+The Welcome guide's step 2 is the other way in ([onboarding.md](./onboarding.md)):
+the same browser cut to AI models, with the provider page shown in place of
+the list. A pill says "{Provider} is connected" and the step returns to the
+list; when step 3's job was waiting for a model, connecting one finishes the
+guide and sends it.
 
 ## Talk
 
@@ -469,6 +541,27 @@ header draws its border. Turn on Talk and Apply are in
 sending and drafts belong to the chat (wire and client rules in
 [chat_protocol.md](./chat_protocol.md#client)).
 
+- **A new hire's first day** ([employee/FirstDay.tsx](../client/src/features/home/employee/FirstDay.tsx),
+  onboarding handoff C): a hire made in this session (`homeStore.firstDays`,
+  set by `welcomeHire` from the response's `started` and `node_count`) shows
+  this in place of the empty conversation until the first message, and then
+  never again (a Reset that empties the thread later does not bring it back;
+  a reload or deleting them ends it too). Their avatar turns a ring while
+  they start, then glows once with a ready pip; "{Name} joined your team".
+  The start-up card's rows follow what happened, never timers: Setup saved
+  and "Workflow built · N blocks" (the hire did both), then "{Name} is
+  running" once the control state is `running`, and "Ready to talk" once
+  they run with Talk on (`firstDayPhase` in `presentation.ts`: starting while
+  the control state is starting, or never started by a hire that started
+  them and whose `activation_state` is neither `blocked` nor `failed`). A
+  start that did not go ahead ends the card with why (`firstDayNote`:
+  "WhatsApp isn't connected yet.", "Connect an AI model first.", "{Name}
+  couldn't start.") and their main action, so the line above the box does
+  not say it again. "What {Name} does" lists their routine from the hire's
+  `plan` (`get_employee`), on the timeline the setup card uses. While they
+  start, the box shows but takes nothing ("{Name} is starting…", the host's
+  `wait`); once they can read messages, two greetings under the card put
+  their words in it. The small orb stays above.
 - **The thread** is `get_chat_messages` with `all_generations: true` (the
   newest 200 messages): the conversation since the employee last started,
   since a Reset clears it (see [Turn on Talk and Apply](#turn-on-talk-and-apply)).
@@ -546,6 +639,8 @@ sending and drafts belong to the chat (wire and client rules in
   - *start* (never started, ready, resetting, failed): no box; a line says
     they can't read messages, beside their main action (Start, Start again,
     or what they are missing), which the Workspace header offers too.
+  - *wait* (a new hire still starting, on their first day): the box shows,
+    disabled, saying "{Name} is starting…".
   - While the agent waits for the owner in the browser, the server's line
     for it ("Needs you to sign in to a site in the browser") sits above the
     box beside Help in browser; after a run of failures paused them, why.
@@ -747,8 +842,8 @@ across the whole team) is always complete.
 
 A 1040x760 dialog ([settings/HomeSettings.tsx](../client/src/features/home/settings/HomeSettings.tsx))
 with a 224px nav. One `PAGES` list drives the nav and the panels. The pages
-are grouped under *Settings* (Profile, Billing) and *Customize* (Skills,
-Connectors, Plugins), and the nav's search matches each page's label and
+are grouped under *Settings* (App access, Profile, Billing, Help) and
+*Customize* (Skills, Connectors, Plugins), and the nav's search matches each page's label and
 keywords, dropping a group with no match. Opening Settings on a category
 (`openSettings('connectors', 'ai')`) only sets where the page starts:
 changing page clears it.
@@ -761,6 +856,9 @@ changing page clears it.
 - **Billing**: usage only. It shows the tasks done this month
   (`get_employee_usage`) and the number of employees in the sidebar. A count
   that can't be read shows a dash, never a zero.
+- **Help**: Welcome guide · Replay, which closes Settings and opens the guide
+  at its first step, and Get started checklist · Show, which brings the
+  hidden checklist back ([onboarding.md](./onboarding.md)).
 - **Skills**: the owner's library, which is the user-skills table. Each row is
   on (`is_active`) or off for employees hired from now on.
   - *Discover* lists the built-in `server/skills/employee/` folder. These are
@@ -828,12 +926,12 @@ WebSocket requests (snake_case; failures come back as `success: false` with an
 
 | Type | Payload | Response |
 |---|---|---|
-| `list_employees` | `{}` | `{employees}`; each summary's `canvas_node_id` is its Canvas board: the one it was hired with, else the graph's first Canvas node, else null. `browser_request` is a browser waiting for the owner (`{node_id, reason, since}`), else null. `talk` is `{state: "on" \| "off" \| "unsupported", agent_node_id}` (the agent that answers the owner; not in `watch_node_ids`). `task` is `{label, text}`, or null when the page already says it (a running employee with Talk on whose only work is the owner's messages). `asks_first` is the hire's "ask me first" rule (built in Dev mode: whether it has an approval gate). `pending_changes` is true when the saved graph's structure differs from the live generation's snapshot. `photo_url` is the photo the owner gave them (the workspace file route, versioned), else null |
+| `list_employees` | `{}` | `{employees}`; each summary's `canvas_node_id` is its Canvas board: the one it was hired with, else the graph's first Canvas node, else null. `browser_request` is a browser waiting for the owner (`{node_id, reason, since}`), else null. `talk` is `{state: "on" \| "off" \| "unsupported", agent_node_id}` (the agent that answers the owner; not in `watch_node_ids`). `task` is `{label, text}`, or null when the page already says it (a running employee with Talk on whose only work is the owner's messages). `asks_first` is the hire's "ask me first" rule (built in Dev mode: whether it has an approval gate). `pending_changes` is true when the saved graph's structure differs from the live generation's snapshot. `photo_url` is the photo the owner gave them (the workspace file route, versioned), else null. `activation_state` is how the hire's own start went (`saved`, `blocked`, `running` or `failed`), null for a workflow built in the editor |
 | `get_employee` | `{workflow_id}` | the summary plus `description`, `job`, `plan`, `rules`, `choices`, `trigger_text`, `last_run`, `latest_report` |
 | `get_employee_usage` | `{}` | `{tasks_this_month}` (successful runs since the 1st, owner's timezone, whole team) |
 | `generate_employee_setup` | `{job, refine?, history?, draft_token}` | `{draft_token, reply, provider, model, usage, retried, finish_reason, apps}`; `apps` maps each app the reply mentions to its AppRef plus `can_trigger` |
 | `cancel_employee_setup` | `{draft_token}` | `{cancelled}` |
-| `hire_employee` | `HireEmployeeRequest` | `{employee, started, missing_apps, needs_ai, unsupported_apps, warnings, idempotent}`; errors include `busy` while the same key's first attempt is still building |
+| `hire_employee` | `HireEmployeeRequest` | `{employee, started, missing_apps, needs_ai, unsupported_apps, node_count, warnings, idempotent, request_id, activation_state, readiness_issue}`: `node_count` is the saved graph's size; `activation_state` is `starting` or `blocked` (a replay of the same key: the stored one), `readiness_issue` why a team cannot start yet; errors include `busy` while the same key's first attempt is still building |
 | `start_employee` | `{workflow_id, expected_revision, idempotency_key}` | as `start_workflow` |
 | `pause_workflow` / `resume_workflow` | `{workflow_id, expected_revision, idempotency_key}` | Generation control snapshot: `state`, `revision`, root and execution identities, capabilities and `execution_control_version`; acknowledged `paused` means admitted work drained for version 1. Transitional status is reconciled after a timeout |
 | `enable_employee_talk` | `{workflow_id, idempotency_key}` | `{employee}`. Errors: `invalid_request`, `not_found`, `unsupported`, `conflict` (a start, pause, resume or reset is under way, or the graph changed meanwhile), `restart_failed`; the last three carry `employee` too |
@@ -853,7 +951,7 @@ every frame but `workflow_ops_apply` carries the whole envelope:
 
 | Wire key | Type | Notes |
 |---|---|---|
-| `employee_lifecycle` | `com.opencompany.employee.{hired,updated,removed}` | Subject is the workflow id; `updated` is coalesced to one per second per employee, except control changes and browser control changes (each agent step, and the wait for the owner), which go out at once. Home refetches on `hired` and `updated` rather than taking the summary the event carries, which can already be out of date; `removed` drops the employee |
+| `employee_lifecycle` | `com.opencompany.employee.{hired,updated,removed}` | Subject is the workflow id; `updated` is coalesced to one per second per employee, except control changes, browser control changes (each agent step, and the wait for the owner) and a change in how a hire's own start went (`activation_state`), which go out at once. Home refetches on `hired` and `updated` rather than taking the summary the event carries, which can already be out of date; `removed` drops the employee |
 | `approval_lifecycle` | `com.opencompany.approval.{requested,decided,expired,cancelled}` | Identity only, never the message or the recipient |
 | `workflow_lifecycle` | gains `created` and `deleted` stages | So open editors refresh their workflow lists. `deleted` also makes every tab forget the workflow and its employee (`forgetWorkflow`, see [Deleting an employee](#deleting-an-employee)) |
 | `chat.updated` | `com.opencompany.chat.updated` | Sent after every chat insert and clear (`services/chat_thread.py`), and when a chat run ends. Data `{workflow_id, session_id, role}`, identity only: `role` is null for a clear or a run's end, `workflow_id` null for session `"default"`. Home's thread and the editor's chat pane refetch |
@@ -884,7 +982,8 @@ history). Talk and growing a saved employee: `tests/services/employees/`
 `tests/services/test_workflow_context_archive_outbox.py` (a late save or read
 cannot re-create a deleted workflow). Client:
 `features/home/**/__tests__` (including `employeeChat.test.tsx`,
-`homeHeader.test.tsx`, `connectAI.test.tsx`), `features/chat/__tests__` (the
+`homeHeader.test.tsx`, `connectAI.test.ts`, `welcomeGuide.test.tsx`,
+`employee/__tests__/FirstDay.test.tsx`), `features/chat/__tests__` (the
 shared chat: turns, drafts, the pane against a fake server),
 `stores/__tests__/chatRunStore.test.ts`, `lib/agui/__tests__`, `app/__tests__`,
 `contexts/__tests__/themePrePaint.test.ts`,

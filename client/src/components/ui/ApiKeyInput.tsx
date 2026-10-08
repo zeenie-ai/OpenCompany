@@ -77,6 +77,8 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
           size="icon"
           onClick={onDelete}
           disabled={disabled}
+          aria-label="Remove key"
+          title="Remove key"
         >
           <Trash2 className="h-4 w-4" />
         </Button>

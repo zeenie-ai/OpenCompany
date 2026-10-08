@@ -2,7 +2,9 @@
  * The shared corpus of model replies (genui/__fixtures__/replies.json):
  * each one parses and normalizes to a renderable screen exactly when it is
  * marked salvageable, and every such screen is in json-render's shape, can
- * be hired and changed, asks first by default and says when they work.
+ * be hired and changed, asks first by default, says when they work and is
+ * laid out as the setup card (who they are, the routine, the rest, then the
+ * footer strip).
  * Replies come in both shapes a model writes: the older one (a Toggle's
  * `value`, a Button's `action` / `actionParams` props) and json-render's
  * (`checked`, `on.press`). The server's salvage check runs the same corpus
@@ -93,12 +95,31 @@ describe('model reply corpus', () => {
     );
     expect(askFirst).toHaveLength(1);
     expect(typeof getPath(spec.state, STATE_PATHS.askFirst)).toBe('boolean');
-    // And says when they work.
+    // And says when they work: the routine's When row, else one Schedule.
+    const plan = elements(spec).find(([, element]) => element.type === 'Plan');
     const schedule = elements(spec).filter(([, element]) => element.type === 'Schedule');
-    expect(schedule).toHaveLength(1);
-    expect(bindingPath(schedule[0][1].props.value)).toBe(STATE_PATHS.trigger);
+    if (plan) {
+      expect(schedule).toHaveLength(0);
+      expect(bindingPath(plan[1].props.trigger)).toBe(STATE_PATHS.trigger);
+    } else {
+      expect(schedule).toHaveLength(1);
+      expect(bindingPath(schedule[0][1].props.value)).toBe(STATE_PATHS.trigger);
+    }
     expect(getPath(spec.state, STATE_PATHS.trigger)).toMatchObject({ kind: expect.any(String) });
     expect(Object.keys(spec.elements).length).toBeLessThanOrEqual(16);
+
+    // Laid out as the card: who they are, the routine, the rest, the footer.
+    const { layout } = spec;
+    expect(spec.elements[spec.root].children).toEqual([
+      ...(layout.identity ? [layout.identity] : []),
+      ...layout.body,
+      layout.askFirst,
+      layout.actions,
+    ]);
+    expect(['Plan', 'Schedule']).toContain(spec.elements[layout.body[0]].type);
+    expect(layout.askFirst).toBe(askFirst[0][0]);
+    const footer = spec.elements[layout.actions].children.map((id) => spec.elements[id].on?.press.action);
+    expect(footer).toEqual(['refine', 'hire_employee']);
 
     if ('hasAgent' in want) {
       const agent = elements(spec).find(([, element]) => element.type === 'AgentCard');
@@ -143,12 +164,11 @@ describe('model reply corpus', () => {
     expect(spec!.elements.c.children).toEqual(['d']);
   });
 
-  it('files unlisted controls into the rules card and buttons into one row', () => {
+  it('files unlisted controls into the rules card and the buttons into the footer row', () => {
     const { spec } = read(cases.find((c) => c.name === 'nothing lists its children')!.reply);
-    const row = elements(spec!).find(
-      ([, element]) => element.type === 'Stack' && element.props.direction === 'horizontal',
-    );
-    expect(row?.[1].children.map((child) => spec!.elements[child].on?.press.action)).toEqual(['hire_employee', 'refine']);
+    const rules = elements(spec!).find(([, element]) => element.type === 'Card');
+    expect(rules?.[1].children).toEqual(['t1']);
+    expect(spec!.elements[spec!.layout.actions].children).toEqual(['edit', 'hire']);
   });
 
   it('keeps the model order when capping a long screen', () => {

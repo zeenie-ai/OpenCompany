@@ -1,17 +1,26 @@
 /**
- * Home's 3D orb (design handoff orb/ORB.md): what the engine reads each
- * frame (the slot to fill, the energy target, a spike), and its lifecycle.
- * three.js loads only when the orb first runs (orbEngine, its own chunk).
- * Leaving Home keeps the engine for the next visit; the app shell disposes
- * it. Without WebGL, under reduced motion, or after a lost WebGL context,
- * slots show the static mark instead.
+ * The 3D orb (design handoff orb, onboarding handoff R3): what the engine
+ * reads each frame (the slot to fill, the energy target, a spike, whether it
+ * waits for the server), and its lifecycle. three.js loads only when the orb
+ * first runs (orbEngine, its own chunk).
+ *
+ * Stages (OrbStage, the canvas host) and slots (OrbSlot, where the orb
+ * glides) are stacks: a screen mounted over another, such as Connecting
+ * over Home, borrows the orb while it shows and hands it back when it goes.
+ * Leaving every stage keeps the engine for the next one; the app disposes
+ * it (App.tsx).
+ *
+ * Slots show the static mark instead when the orb cannot run. No WebGL,
+ * reduced motion and a lost WebGL context hold for the session; an engine
+ * chunk that failed to load shows the mark until the next stage mounts,
+ * which tries again.
  */
 
 import { useSyncExternalStore } from 'react';
 import { prefersReducedMotion } from '@/lib/useReducedMotion';
 
 /** The prototype's energy levels and event bursts. */
-export const ENERGY = { idle: 0.15, focus: 0.35, typing: 0.55, generating: 1 } as const;
+export const ENERGY = { idle: 0.15, focus: 0.35, typing: 0.55, generating: 1, waiting: 0.22 } as const;
 export const SPIKE = {
   hire: 1,
   connect: 0.7,
@@ -23,6 +32,9 @@ export const SPIKE = {
   draftReady: 0.8,
   draftFailed: 0.4,
   profileSaved: 0.7,
+  /** The server answered again (Connecting). */
+  connected: 1,
+  signedIn: 1,
 } as const;
 
 /** Read by the engine every frame; the engine decays `spike` itself. */
@@ -30,6 +42,8 @@ export const orbState = {
   slot: null as HTMLElement | null,
   target: ENERGY.idle as number,
   spike: 0,
+  /** The server can't be reached: the orb slows, breathes and searches. */
+  waiting: false,
 };
 
 export function setEnergyTarget(target: number): void {
@@ -40,17 +54,33 @@ export function spikeOrb(amount: number): void {
   orbState.spike = Math.max(orbState.spike, amount);
 }
 
+export function setOrbWaiting(waiting: boolean): void {
+  orbState.waiting = waiting;
+}
+
 interface OrbEngine {
   attach(host: HTMLElement): void;
   detach(): void;
   dispose(): void;
 }
 
+type Fallback = 'none' | 'missing' | 'latched';
+
 let engine: OrbEngine | null = null;
 let loading = false;
-let host: HTMLElement | null = null;
-let fallback = false;
+let fallback: Fallback = 'none';
+const hosts: HTMLElement[] = [];
+const slots: HTMLElement[] = [];
 const listeners = new Set<() => void>();
+
+function top<T>(stack: readonly T[]): T | null {
+  return stack.length > 0 ? stack[stack.length - 1] : null;
+}
+
+function remove<T>(stack: T[], item: T): void {
+  const at = stack.lastIndexOf(item);
+  if (at !== -1) stack.splice(at, 1);
+}
 
 function canRun(): boolean {
   if (prefersReducedMotion()) return false;
@@ -62,21 +92,23 @@ function canRun(): boolean {
   }
 }
 
-function showFallback(): void {
-  fallback = true;
+function setFallback(next: Fallback): void {
+  if (fallback === next) return;
+  fallback = next;
   listeners.forEach((listener) => listener());
 }
 
-/** The stage mounted: draw the orb into it (loading it the first time). */
-export function mountOrb(element: HTMLElement): void {
-  host = element;
+/** Draw the orb into the top stage, loading the engine the first time. */
+function show(): void {
+  const host = top(hosts);
+  if (!host) return;
   if (engine) {
-    engine.attach(element);
+    engine.attach(host);
     return;
   }
-  if (loading || fallback) return;
+  if (loading || fallback === 'latched') return;
   if (!canRun()) {
-    showFallback();
+    setFallback('latched');
     return;
   }
   loading = true;
@@ -86,26 +118,48 @@ export function mountOrb(element: HTMLElement): void {
       engine = createOrbEngine(() => {
         engine?.dispose();
         engine = null;
-        showFallback();
+        setFallback('latched');
       });
-      if (host) engine.attach(host);
+      setFallback('none');
+      show();
     })
     .catch(() => {
       loading = false;
-      showFallback();
+      setFallback('missing');
     });
 }
 
+/** A stage mounted: it hosts the orb until it unmounts. */
+export function mountOrb(element: HTMLElement): void {
+  hosts.push(element);
+  show();
+}
+
+/** A stage unmounted: the one under it, if any, gets the orb back. */
 export function unmountOrb(element: HTMLElement): void {
-  if (host !== element) return;
-  host = null;
+  const wasTop = top(hosts) === element;
+  remove(hosts, element);
+  if (!wasTop) return;
   engine?.detach();
+  show();
+}
+
+/** A slot mounted: the orb glides to it until it unmounts. */
+export function pushOrbSlot(element: HTMLElement): void {
+  slots.push(element);
+  orbState.slot = element;
+}
+
+export function popOrbSlot(element: HTMLElement): void {
+  remove(slots, element);
+  orbState.slot = top(slots);
 }
 
 export function disposeOrb(): void {
   engine?.dispose();
   engine = null;
-  host = null;
+  hosts.length = 0;
+  slots.length = 0;
   orbState.slot = null;
 }
 
@@ -116,7 +170,7 @@ export function useOrbFallback(): boolean {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    () => fallback,
+    () => fallback !== 'none',
     () => false,
   );
 }
@@ -125,7 +179,8 @@ export function useOrbFallback(): boolean {
 export function resetOrbForTests(): void {
   disposeOrb();
   loading = false;
-  fallback = false;
+  fallback = 'none';
   orbState.target = ENERGY.idle;
   orbState.spike = 0;
+  orbState.waiting = false;
 }

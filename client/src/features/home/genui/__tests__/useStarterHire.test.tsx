@@ -80,12 +80,13 @@ beforeEach(() => {
   sendRequest.mockClear();
   vi.mocked(pillToast).mockClear();
   resetDraftForTests();
-  useHomeStore.setState({ view: { kind: 'hire' }, hireNotice: null });
+  useHomeStore.setState({ view: { kind: 'hire' }, hireNotice: null, firstDays: {} });
   library = [row('write-like-a-person', { is_active: false })];
   builtIns = receptionist.skills.map((name) => ({ name, description: `Use for ${name}.`, metadata: { title: name } }));
   hireResponse = {
     success: true,
     started: true,
+    node_count: 12,
     warnings: [],
     employee: { workflow_id: 'w1', name: 'Rosa', role: 'Receptionist', status: 'working', control: {}, revision: 1 },
   };
@@ -108,6 +109,8 @@ describe('useStarterHire', () => {
     });
     expect(typeof payload.idempotency_key).toBe('string');
     expect(useHomeStore.getState().view).toEqual({ kind: 'employee', workflowId: 'w1' });
+    // Their page opens on their first day.
+    expect(useHomeStore.getState().firstDays.w1).toEqual({ started: true, nodeCount: 12 });
     // The composer held this job, which is now on the team.
     expect(useDraftStore.getState()).toMatchObject({ hiring: false, input: '', hireKey: null });
   });

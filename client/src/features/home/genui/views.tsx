@@ -7,18 +7,24 @@
  * loaded only with the screen (HireScreen).
  *
  * Controls write through json-render's bindings: a Toggle's `checked`, a
- * Choice's and an Input's `value`, the Schedule's `value` (`/trigger`).
- * A Button presses its `on.press` binding (emit), which json-render
- * resolves against the screen's state and runs (actions.ts).
+ * Choice's and an Input's `value`, the Schedule's `value` and the Plan's
+ * `trigger` (both `/trigger`). A Button presses its `on.press` binding
+ * (emit), which json-render resolves against the screen's state and runs
+ * (actions.ts).
  *
- * When they work (Schedule) reads as one plain sentence; Edit offers only
- * what the hire can build: the owner messaging them, a schedule at the
- * times it can run, or a new message in one of the apps the server says can
- * start the work. Once the owner changes it, the routine's "When" step
- * follows (Plan reads the state at /trigger itself, beside its own props).
+ * The card (onboarding handoff R2): the AgentCard is the identity row, the
+ * Plan the routine as a timeline (ui/routine), and Ask first with the two
+ * buttons sit in the footer strip, where they take its look
+ * (HireSpecContext.inFooter). When they work is the routine's When row;
+ * its Change opens the editor under it, offering only what the hire can
+ * build: the owner messaging them, a schedule at the times it can run, or a
+ * new message in one of the apps the server says can start the work. Once
+ * the owner changes it, the When row says the new trigger. Without a Plan,
+ * a Schedule draws that one row.
  */
 
-import { Fragment, useContext, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useContext, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { ArrowRight } from 'lucide-react';
 import { useBoundProp, useStateValue } from '@json-render/react';
 import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
@@ -26,10 +32,11 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { useEntrance, type GuardedComponentProps } from '@/lib/jsonRender';
-import { animate } from '@/lib/motion';
+import { LiveUiContext, type GuardedComponentProps } from '@/lib/jsonRender';
+import { animate, RISE, stagger } from '@/lib/motion';
 import { cn } from '@/lib/utils';
-import { MicroLabel } from '../ui/primitives';
+import { Avatar, MicroLabel } from '../ui/primitives';
+import { RoutineRow, RoutineTimeline } from '../ui/routine';
 import { STATE_PATHS, type PROP_SCHEMAS, type PropsOf, type StepRole, type Tone } from './catalog';
 import { getPath } from './expressions';
 import { HireSpecContext } from './hireSpecContext';
@@ -85,17 +92,6 @@ const TONE_BADGE: Record<Tone, string> = {
   neutral: 'border-border-default bg-bg-hover text-fg-default',
 };
 
-const STEP_TONE: Record<StepRole, string> = {
-  trigger:
-    'border-node-trigger-edge bg-linear-135/srgb from-node-trigger-fill to-bg-elevated shadow-[0_0_18px_var(--node-trigger-soft)]',
-  agent: 'border-node-agent-edge bg-linear-135/srgb from-node-agent-fill to-bg-elevated shadow-[0_0_18px_var(--node-agent-soft)]',
-  tool: 'border-node-tool-edge bg-linear-135/srgb from-node-tool-fill to-bg-elevated shadow-[0_0_18px_var(--node-tool-soft)]',
-  workflow:
-    'border-node-workflow-edge bg-linear-135/srgb from-node-workflow-fill to-bg-elevated shadow-[0_0_18px_var(--node-workflow-soft)]',
-};
-
-const STEP_LABEL: Record<StepRole, string> = { trigger: 'When', agent: 'They', tool: 'Using', workflow: 'Then' };
-
 const EVERY_LABEL: Record<NonNullable<HireTrigger['every']>, string> = {
   hour: 'Every hour',
   day: 'Every day',
@@ -107,20 +103,6 @@ const EVERY_LABEL: Record<NonNullable<HireTrigger['every']>, string> = {
 const MONTH_DAYS = Array.from({ length: LAST_MONTH_DAY }, (_, index) => String(index + 1));
 
 const STACK_GAP = { sm: 'gap-2', md: 'gap-3', lg: 'gap-4.5' } as const;
-
-const AGENT_STATUS = {
-  ready: {
-    label: 'Ready',
-    dot: 'bg-status-working-dot shadow-[0_0_8px_var(--status-working-dot)]',
-    ink: 'text-status-working-ink',
-  },
-  working: {
-    label: 'Working',
-    dot: 'bg-status-ready-dot shadow-[0_0_8px_var(--status-ready-dot)]',
-    ink: 'text-status-ready-ink',
-  },
-  paused: { label: 'Stopped', dot: 'bg-status-paused-dot', ink: 'text-status-paused-ink' },
-} as const;
 
 function Pip({ className }: { className?: string }) {
   return <span aria-hidden className={cn('size-1.75 shrink-0 rounded-full', className)} />;
@@ -154,12 +136,14 @@ export function GridView({ props, children, enterRef }: ViewProps<'Grid'>) {
   );
 }
 
+/** A compact section of the card: the model's own rules, choices and
+ *  notes, kept in view so nothing is hired unseen. */
 export function CardView({ props, children, enterRef }: ViewProps<'Card'>) {
   return (
-    <div ref={enterRef} className={cn('flex flex-col gap-3 rounded-card border p-4', TONE_CARD[props.tone ?? 'neutral'])}>
+    <div ref={enterRef} className={cn('flex flex-col gap-2.5 rounded-row border px-3.5 py-3', TONE_CARD[props.tone ?? 'neutral'])}>
       {(props.title || props.subtitle) && (
-        <div className="flex flex-col gap-0.75">
-          {props.title && <span className="text-lead font-semibold text-fg-default">{props.title}</span>}
+        <div className="flex flex-col gap-0.5">
+          {props.title && <MicroLabel>{props.title}</MicroLabel>}
           {props.subtitle && <span className="text-sm text-fg-muted">{props.subtitle}</span>}
         </div>
       )}
@@ -212,55 +196,91 @@ export function DividerView({ enterRef }: ViewProps<'Divider'>) {
   return <div ref={enterRef} className="h-px bg-border-default" />;
 }
 
-function PlanStep({ step }: { step: PropsOf<'Plan'>['steps'][number] }) {
-  const enter = useEntrance<HTMLDivElement>();
-  return (
-    <div
-      ref={enter}
-      className={cn('flex max-w-60 min-w-0 flex-[1_0_150px] flex-col gap-1.25 rounded-row border-2 p-3', STEP_TONE[step.role])}
-    >
-      <span className={cn('flex items-center gap-1.5 font-mono text-2xs font-medium tracking-label uppercase', TONE_INK[step.role])}>
-        <Pip className={TONE_DOT[step.role]} />
-        {STEP_LABEL[step.role]}
-        {step.app && <span className="truncate normal-case tracking-normal text-fg-muted">· {step.app}</span>}
-      </span>
-      <span className="text-row font-semibold text-fg-default">{step.title}</span>
-      {step.detail && <span className="text-meta leading-snug text-fg-muted">{step.detail}</span>}
-    </div>
-  );
-}
-
 /** The app's own name, when the reply's name for it is one that can start the work. */
 function appNameOf(trigger: HireTrigger, triggerApps: Readonly<Record<string, string>>): string | undefined {
   return trigger.app ? (triggerApps[trigger.app.toLowerCase()] ?? trigger.app) : undefined;
 }
 
-export function PlanView({ props, enterRef }: ViewProps<'Plan'>) {
-  const { writtenState, triggerApps } = useContext(HireSpecContext);
-  const current = snapTrigger(useStateValue<unknown>(STATE_PATHS.trigger));
-  const written = snapTrigger(getPath(writtenState, STATE_PATHS.trigger));
-  const steps = routineSteps(props.steps, written, current, appNameOf(current, triggerApps));
+interface RoutineStepProps {
+  title: string;
+  detail?: string;
+  role: StepRole;
+}
+
+/** The routine as a timeline. The When row (the first trigger step) ends in
+ *  Change while `onChange` is given, which opens the editor under it. Rows
+ *  rise in one after another when the screen arrives live: that is the
+ *  routine's entrance, so the element's own is not played. */
+function Routine({
+  steps,
+  trigger,
+  appName,
+  onChange,
+}: {
+  steps: readonly RoutineStepProps[];
+  trigger: HireTrigger;
+  appName: string | undefined;
+  /** Null when nothing is bound to /trigger: no Change. */
+  onChange: ((next: HireTrigger) => void) | null;
+}) {
+  const live = useContext(LiveUiContext);
+  const rowsRef = useRef<HTMLDivElement>(null);
+  const [editing, setEditing] = useState(false);
+  const whenAt = steps.findIndex((step) => step.role === 'trigger');
+
+  useLayoutEffect(() => {
+    const rows = rowsRef.current?.querySelectorAll('[data-routine-row]');
+    if (live && rows) stagger(rows, RISE, { base: 120, step: 90, duration: 'follow-in', easing: 'spring' });
+  }, [live]);
+
   return (
-    <div ref={enterRef} className="flex min-w-0 flex-col gap-3.5 rounded-card border border-border-default bg-bg-elevated p-4">
-      <div className="flex items-center gap-2">
-        <span className="text-lead font-semibold text-fg-default">{props.title || 'Their routine'}</span>
-        <span className="ml-auto font-mono text-2xs text-fg-faint">
-          {steps.length} {steps.length === 1 ? 'step' : 'steps'}
-        </span>
-      </div>
-      <div className="flex min-w-0 items-stretch overflow-x-auto overflow-y-hidden pb-1 [scrollbar-width:thin]">
+    <div className="min-w-0">
+      <RoutineTimeline ref={rowsRef}>
         {steps.map((step, index) => (
           <Fragment key={index}>
-            {index > 0 && (
-              <div aria-hidden className="flex w-5.5 shrink-0 items-center">
-                <div className="h-0.5 w-full rounded-full bg-border-strong" />
-              </div>
-            )}
-            <PlanStep step={step} />
+            <RoutineRow
+              role={step.role}
+              title={step.title}
+              detail={step.detail}
+              action={
+                index === whenAt && onChange ? (
+                  <Button
+                    variant="quiet"
+                    aria-expanded={editing}
+                    onClick={() => setEditing((on) => !on)}
+                    className="h-6.5 rounded-pill border-border-default px-2.5 text-xs"
+                  >
+                    {editing ? 'Done' : 'Change'}
+                  </Button>
+                ) : undefined
+              }
+            />
+            {index === whenAt && onChange && editing && <ScheduleEditor trigger={trigger} appName={appName} onChange={onChange} />}
           </Fragment>
         ))}
-      </div>
+      </RoutineTimeline>
     </div>
+  );
+}
+
+export function PlanView({ props, bindings }: ViewProps<'Plan'>) {
+  const { writtenState, triggerApps } = useContext(HireSpecContext);
+  const [, setTrigger] = useBoundProp<unknown>(props.trigger, bindings?.trigger);
+  const current = snapTrigger(useStateValue<unknown>(STATE_PATHS.trigger));
+  const written = snapTrigger(getPath(writtenState, STATE_PATHS.trigger));
+  const appName = appNameOf(current, triggerApps);
+  const steps = routineSteps(props.steps, written, current, appName);
+  // A routine with no "When" step still says when they work, first.
+  const shown = steps.some((step) => step.role === 'trigger')
+    ? steps
+    : [{ title: triggerSentence(current, appName), role: 'trigger' as const }, ...steps];
+  return (
+    <Routine
+      steps={shown}
+      trigger={current}
+      appName={appName}
+      onChange={bindings?.trigger ? (next) => setTrigger(snapTrigger(next)) : null}
+    />
   );
 }
 
@@ -300,148 +320,129 @@ function SchedulePicker({
   );
 }
 
-export function ScheduleView({ props, bindings, enterRef }: ViewProps<'Schedule'>) {
+/** When they work, edited: what starts the work, and for a schedule how
+ *  often, on which day and at what time. Opens under the routine's When
+ *  row, in line with its text. */
+function ScheduleEditor({
+  trigger,
+  appName,
+  onChange,
+}: {
+  trigger: HireTrigger;
+  appName: string | undefined;
+  onChange: (next: HireTrigger) => void;
+}) {
   const { triggerApps } = useContext(HireSpecContext);
-  const [editing, setEditing] = useState(false);
-  const [, setValue] = useBoundProp<unknown>(props.value, bindings?.value);
-  const bound = Boolean(bindings?.value);
-  const trigger = snapTrigger(props.value);
-  const appName = appNameOf(trigger, triggerApps);
   const apps = [...new Set(Object.values(triggerApps))];
-  const change = (next: HireTrigger) => setValue(snapTrigger(next));
+  const change = (next: HireTrigger) => onChange(snapTrigger(next));
   const starts = trigger.kind === 'app_event' ? `app:${appName ?? ''}` : trigger.kind;
   const pickStart = (value: string) => {
     if (value === 'manual' || value === 'schedule') change({ kind: value });
     else change({ kind: 'app_event', app: value.slice('app:'.length) });
   };
   return (
-    <div ref={enterRef} className="flex flex-col gap-3 rounded-card border border-border-default bg-bg-elevated p-4">
-      <div className="flex items-center gap-3">
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <MicroLabel>When they work</MicroLabel>
-          <span className="text-base font-medium text-fg-default">{triggerSentence(trigger, appName)}</span>
-        </div>
-        {bound && (
-          <Button
-            variant="quiet"
-            aria-expanded={editing}
-            onClick={() => setEditing((on) => !on)}
-            className="h-8 rounded-lg border-border-strong px-3 font-semibold text-fg-default"
-          >
-            {editing ? 'Done' : 'Edit'}
-          </Button>
-        )}
-      </div>
-      {editing && bound && (
-        <div className="flex flex-col gap-3 border-t border-border-default pt-3">
-          <ScheduleField label="What starts their work">
+    <div className="mt-1 mb-2 ml-21 flex flex-col gap-3 rounded-row border border-border-default bg-bg-elevated p-3">
+      <ScheduleField label="What starts their work">
+        <ToggleGroup
+          type="single"
+          variant="chips"
+          aria-label="What starts their work"
+          value={starts}
+          onValueChange={(next) => next && pickStart(next)}
+          className="flex-wrap gap-1.5"
+        >
+          <ToggleGroupItem value="manual">When you message them</ToggleGroupItem>
+          <ToggleGroupItem value="schedule">On a schedule</ToggleGroupItem>
+          {apps.map((app) => (
+            <ToggleGroupItem key={app} value={`app:${app}`}>
+              When something new arrives in {app}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </ScheduleField>
+      {trigger.kind === 'schedule' && (
+        <>
+          <ScheduleField label="How often">
             <ToggleGroup
               type="single"
-              variant="chips"
-              aria-label="What starts their work"
-              value={starts}
-              onValueChange={(next) => next && pickStart(next)}
-              className="flex-wrap gap-1.5"
+              variant="segmented"
+              aria-label="How often"
+              value={trigger.every ?? ''}
+              onValueChange={(next) => next && change({ ...trigger, every: next as HireTrigger['every'] })}
+              className="flex-wrap self-start"
             >
-              <ToggleGroupItem value="manual">When you message them</ToggleGroupItem>
-              <ToggleGroupItem value="schedule">On a schedule</ToggleGroupItem>
-              {apps.map((app) => (
-                <ToggleGroupItem key={app} value={`app:${app}`}>
-                  When something new arrives in {app}
+              {SCHEDULE_EVERY.map((every) => (
+                <ToggleGroupItem key={every} value={every} className="border-0">
+                  {EVERY_LABEL[every]}
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
           </ScheduleField>
-          {trigger.kind === 'schedule' && (
-            <>
-              <ScheduleField label="How often">
-                <ToggleGroup
-                  type="single"
-                  variant="segmented"
-                  aria-label="How often"
-                  value={trigger.every ?? ''}
-                  onValueChange={(next) => next && change({ ...trigger, every: next as HireTrigger['every'] })}
-                  className="flex-wrap self-start"
-                >
-                  {SCHEDULE_EVERY.map((every) => (
-                    <ToggleGroupItem key={every} value={every} className="border-0">
-                      {EVERY_LABEL[every]}
-                    </ToggleGroupItem>
-                  ))}
-                </ToggleGroup>
-              </ScheduleField>
-              {trigger.every !== 'hour' && (
-                <div className="flex flex-wrap gap-4">
-                  {trigger.every === 'week' && (
-                    <ScheduleField label="On">
-                      <SchedulePicker
-                        label="Day of the week"
-                        value={trigger.day}
-                        options={WEEKDAYS.map((day) => ({ value: day, label: `${day.charAt(0).toUpperCase()}${day.slice(1)}` }))}
-                        onChange={(day) => change({ ...trigger, day })}
-                      />
-                    </ScheduleField>
-                  )}
-                  {trigger.every === 'month' && (
-                    <ScheduleField label="On day">
-                      <SchedulePicker
-                        label="Day of the month"
-                        value={trigger.day}
-                        options={MONTH_DAYS.map((day) => ({ value: day, label: day }))}
-                        onChange={(day) => change({ ...trigger, day })}
-                      />
-                    </ScheduleField>
-                  )}
-                  <ScheduleField label="At">
-                    <SchedulePicker
-                      label="Time"
-                      value={trigger.at}
-                      options={SCHEDULE_TIMES.map((time) => ({ value: time, label: time }))}
-                      onChange={(at) => change({ ...trigger, at })}
-                    />
-                  </ScheduleField>
-                </div>
+          {trigger.every !== 'hour' && (
+            <div className="flex flex-wrap gap-4">
+              {trigger.every === 'week' && (
+                <ScheduleField label="On">
+                  <SchedulePicker
+                    label="Day of the week"
+                    value={trigger.day}
+                    options={WEEKDAYS.map((day) => ({ value: day, label: `${day.charAt(0).toUpperCase()}${day.slice(1)}` }))}
+                    onChange={(day) => change({ ...trigger, day })}
+                  />
+                </ScheduleField>
               )}
-            </>
+              {trigger.every === 'month' && (
+                <ScheduleField label="On day">
+                  <SchedulePicker
+                    label="Day of the month"
+                    value={trigger.day}
+                    options={MONTH_DAYS.map((day) => ({ value: day, label: day }))}
+                    onChange={(day) => change({ ...trigger, day })}
+                  />
+                </ScheduleField>
+              )}
+              <ScheduleField label="At">
+                <SchedulePicker
+                  label="Time"
+                  value={trigger.at}
+                  options={SCHEDULE_TIMES.map((time) => ({ value: time, label: time }))}
+                  onChange={(at) => change({ ...trigger, at })}
+                />
+              </ScheduleField>
+            </div>
           )}
-        </div>
+        </>
       )}
     </div>
   );
 }
 
-export function AgentCardView({ props, enterRef }: ViewProps<'AgentCard'>) {
-  const status = AGENT_STATUS[props.status];
+/** When they work, for a screen without a routine: its one When row. */
+export function ScheduleView({ props, bindings }: ViewProps<'Schedule'>) {
+  const { triggerApps } = useContext(HireSpecContext);
+  const [, setValue] = useBoundProp<unknown>(props.value, bindings?.value);
+  const trigger = snapTrigger(props.value);
+  const appName = appNameOf(trigger, triggerApps);
   return (
-    <div ref={enterRef} className={cn('flex gap-3.5 rounded-card border p-4', TONE_CARD.agent)}>
-      <span
-        aria-hidden
-        className="grid size-10.5 shrink-0 place-items-center rounded-full border-2 border-node-agent-edge bg-node-agent-fill text-md font-semibold text-node-agent-ink"
-      >
-        {Array.from(props.name)[0]?.toLocaleUpperCase() ?? 'A'}
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-1.25">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-lead font-semibold text-fg-default">{props.name}</span>
-          <span className="text-meta text-fg-muted">{props.role}</span>
-          <span className={cn('ml-auto flex items-center gap-1.5 text-xs', status.ink)}>
-            <Pip className={status.dot} />
-            {status.label}
-          </span>
-        </div>
-        {props.description && <span className="text-row leading-normal text-fg-muted">{props.description}</span>}
-        {props.apps.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-1.5">
-            {props.apps.map((app) => (
-              <span
-                key={app}
-                className="inline-flex h-5.5 items-center rounded-md border border-border-default bg-bg-hover px-2 text-xs text-fg-default"
-              >
-                {app}
-              </span>
-            ))}
-          </div>
-        )}
+    <Routine
+      steps={[{ title: triggerSentence(trigger, appName), role: 'trigger' }]}
+      trigger={trigger}
+      appName={appName}
+      onChange={bindings?.value ? (next) => setValue(snapTrigger(next)) : null}
+    />
+  );
+}
+
+/** Who they are: the setup card's identity row. The description goes into
+ *  their instructions, so it shows too, kept to two lines. */
+export function AgentCardView({ props, enterRef }: ViewProps<'AgentCard'>) {
+  const sub = [props.role, props.apps.join(', ')].filter(Boolean).join(' · ');
+  return (
+    <div ref={enterRef} className="flex min-w-0 items-center gap-3.5">
+      <Avatar name={props.name} colorRole="agent" size="card" />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate text-lg leading-tight font-semibold tracking-[-0.02em] text-fg-default">{props.name}</span>
+        {sub && <span className="truncate text-sm text-fg-muted">{sub}</span>}
+        {props.description && <span className="line-clamp-2 text-sm text-pretty text-fg-muted">{props.description}</span>}
       </div>
     </div>
   );
@@ -498,15 +499,30 @@ export function ProgressView({ props, enterRef }: ViewProps<'Progress'>) {
   );
 }
 
+/** In the footer strip it is Ask first, said shortly beside its switch. */
+const FOOTER_TOGGLE_LABEL = 'Ask before sending';
+
 export function ToggleView({ props, bindings, enterRef }: ViewProps<'Toggle'>) {
+  const { inFooter } = useContext(HireSpecContext);
   const [, setChecked] = useBoundProp<boolean>(props.checked, bindings?.checked);
+  const id = useId();
+  if (inFooter) {
+    return (
+      <div ref={enterRef} className="flex items-center gap-2.5">
+        <Switch id={id} tone="run" checked={props.checked} onCheckedChange={setChecked} />
+        <label htmlFor={id} className="cursor-pointer text-sm text-fg-muted">
+          {FOOTER_TOGGLE_LABEL}
+        </label>
+      </div>
+    );
+  }
   return (
-    <div ref={enterRef} className="flex items-center gap-3.5 py-1">
+    <div ref={enterRef} className="flex items-center gap-3.5 py-0.5">
       <div className="flex flex-1 flex-col gap-0.5">
-        <span className="text-base font-medium text-fg-default">{props.label}</span>
+        <span className="text-row font-medium text-fg-default">{props.label}</span>
         {props.description && <span className="text-meta text-fg-muted">{props.description}</span>}
       </div>
-      <Switch size="md" tone="run" aria-label={props.label} checked={props.checked} onCheckedChange={setChecked} />
+      <Switch tone="run" aria-label={props.label} checked={props.checked} onCheckedChange={setChecked} />
     </div>
   );
 }
@@ -553,7 +569,22 @@ export function InputView({ props, bindings, enterRef }: ViewProps<'Input'>) {
 }
 
 export function ButtonView({ props, emit, enterRef }: ViewProps<'Button'>) {
+  const { inFooter } = useContext(HireSpecContext);
   const press = () => emit('press');
+  // The footer's pair: a quiet "Change something", then the one strong
+  // control on the card, "Hire {name} →".
+  if (inFooter) {
+    return props.variant === 'primary' ? (
+      <Button ref={enterRef} variant="invert" size="pill" onClick={press}>
+        {props.label}
+        <ArrowRight aria-hidden strokeWidth={2.25} />
+      </Button>
+    ) : (
+      <Button ref={enterRef} variant="quiet" size="pill" onClick={press} className="px-3.5">
+        {props.label}
+      </Button>
+    );
+  }
   if (props.variant === 'primary') {
     return (
       <ActionButton

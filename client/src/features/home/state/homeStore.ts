@@ -1,19 +1,38 @@
 /**
  * Normal mode's UI state: which view is showing, the sidebar, the Settings
- * dialog, the Workspace dock, and
+ * dialog, the Workspace dock, the Welcome guide, and
  * the one-shot signals the hire choreography fires (a sidebar row's glow,
- * the logo pulse, what a hire could not set up as asked). Server data lives
- * in TanStack Query (features/home/data), never here.
+ * the logo pulse, what a hire could not set up as asked, a new hire's first
+ * day). Server data lives in TanStack Query (features/home/data), never here.
  */
 
 import { z } from 'zod';
 import { create } from 'zustand';
 import type { CanvasFocus } from '@/lib/canvasBoard';
-import { useShellDialogsStore } from '@/stores/shellDialogsStore';
+import { useShellDialogsStore, type CredentialsIntent } from '@/stores/shellDialogsStore';
 import { SPIKE, spikeOrb } from '../orb/orb';
 
 export type HomeView = { kind: 'hire' } | { kind: 'employee'; workflowId: string };
-export type SettingsTab = 'profile' | 'billing' | 'skills' | 'connectors' | 'plugins' | 'access';
+export type SettingsTab = 'profile' | 'billing' | 'skills' | 'connectors' | 'plugins' | 'access' | 'help';
+
+/** The Welcome guide's steps, in order. The saved `onboarding_step` is an
+ *  index into this list. */
+export const GUIDE_STEPS = ['welcome', 'connect', 'first-hire'] as const;
+export type GuideStep = (typeof GUIDE_STEPS)[number];
+
+export interface GuideState {
+  open: boolean;
+  step: GuideStep;
+  /** The furthest step visited; the nav reaches any step up to it. */
+  furthest: number;
+  /** The first-launch check ran this session (checkGuide). */
+  checked: boolean;
+  /** The provider page the Connect step shows in place of the list. */
+  provider: { id: string; intent: CredentialsIntent } | null;
+  /** The last step's job waits for an AI model: connecting one finishes
+   *  the guide and sends it. */
+  pendingDraft: boolean;
+}
 
 // View ids, not node types: the Canvas tab is 'board' so no id reads as the
 // `canvas` node type (tests/test_frontend_no_node_type_copies.py).
@@ -62,6 +81,15 @@ export interface WorkspaceFocus extends CanvasFocus {
   canvasNodeId: string;
 }
 
+/** A hire made in this session, from the hire until their first
+ *  conversation begins (employee/FirstDay). A reload ends it. */
+export interface FirstDay {
+  /** The hire started them itself (nothing was missing). */
+  started: boolean;
+  /** Blocks in the workflow the hire built; null when the reply did not say. */
+  nodeCount: number | null;
+}
+
 /** What a hire could not set up as asked (a tool left out while they ask
  *  first, a skill an employee cannot be given), shown on the new
  *  employee's page until the owner dismisses it or moves on. */
@@ -106,6 +134,10 @@ interface HomeState {
   /** A Canvas item to show (a reply's document card); the nonce lets the
    *  same one be asked for again. */
   workspaceFocus: WorkspaceFocus | null;
+  /** The Welcome guide (onboarding/WelcomeGuide). */
+  guide: GuideState;
+  /** New hires on their first day, by workflow id. */
+  firstDays: Record<string, FirstDay>;
 
   showHire: (options?: { focus?: boolean }) => void;
   showEmployee: (workflowId: string) => void;
@@ -129,7 +161,23 @@ interface HomeState {
   /** Open the Workspace on the Canvas tab, at an item and version of an
    *  employee's board. */
   openCanvasItem: (target: { workflowId: string; canvasNodeId: string; itemId: string; version?: number | null }) => void;
+  /** Open the Welcome guide at a step (the header's Guide button, Settings
+   *  > Help, the first-launch check). */
+  openGuide: (step?: GuideStep) => void;
+  closeGuide: () => void;
+  goToGuideStep: (step: GuideStep) => void;
+  /** Show a provider's page in the Connect step (null: back to the list). */
+  setGuideProvider: (provider: GuideState['provider']) => void;
+  setGuidePendingDraft: (pending: boolean) => void;
+  /** Once per session: open the guide for an owner who has not finished it,
+   *  at the step they left. A completed owner never sees it unasked. */
+  checkGuide: (settings: { onboarding_completed?: unknown; onboarding_step?: unknown }) => void;
+  beginFirstDay: (workflowId: string, firstDay: FirstDay) => void;
+  /** Their first conversation began, or they are gone. */
+  endFirstDay: (workflowId: string) => void;
 }
+
+const stepIndex = (step: GuideStep) => GUIDE_STEPS.indexOf(step);
 
 const workspace = loadWorkspacePrefs();
 
@@ -149,6 +197,8 @@ export const useHomeStore = create<HomeState>((set, get) => ({
   workspaceWide: false,
   workspaceFor: null,
   workspaceFocus: null,
+  guide: { open: false, step: 'welcome', furthest: 0, checked: false, provider: null, pendingDraft: false },
+  firstDays: {},
 
   showHire: (options) =>
     set((state) => ({
@@ -216,4 +266,44 @@ export const useHomeStore = create<HomeState>((set, get) => ({
     }));
     saveWorkspacePrefs(get());
   },
+  openGuide: (step = 'welcome') =>
+    set((state) => ({
+      guide: {
+        ...state.guide,
+        open: true,
+        step,
+        furthest: Math.max(state.guide.furthest, stepIndex(step)),
+        provider: null,
+        pendingDraft: false,
+      },
+    })),
+  // The step and any provider page stay, so the dialog does not change page
+  // while it closes; a job waiting for a model is not carried past it.
+  closeGuide: () => set((state) => ({ guide: { ...state.guide, open: false, pendingDraft: false } })),
+  goToGuideStep: (step) =>
+    set((state) => ({
+      guide: { ...state.guide, step, furthest: Math.max(state.guide.furthest, stepIndex(step)), provider: null },
+    })),
+  setGuideProvider: (provider) => set((state) => ({ guide: { ...state.guide, provider } })),
+  setGuidePendingDraft: (pendingDraft) => set((state) => ({ guide: { ...state.guide, pendingDraft } })),
+  checkGuide: (settings) => {
+    if (get().guide.checked) return;
+    const saved = settings.onboarding_step;
+    const step = (typeof saved === 'number' && GUIDE_STEPS[saved]) || 'welcome';
+    if (settings.onboarding_completed) {
+      set((state) => ({ guide: { ...state.guide, checked: true } }));
+      return;
+    }
+    set((state) => ({
+      guide: { ...state.guide, open: true, step, furthest: Math.max(state.guide.furthest, stepIndex(step)), checked: true },
+    }));
+  },
+  beginFirstDay: (workflowId, firstDay) => set((state) => ({ firstDays: { ...state.firstDays, [workflowId]: firstDay } })),
+  endFirstDay: (workflowId) =>
+    set((state) => {
+      if (!(workflowId in state.firstDays)) return state;
+      const firstDays = { ...state.firstDays };
+      delete firstDays[workflowId];
+      return { firstDays };
+    }),
 }));

@@ -8,7 +8,7 @@
  */
 
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { CircleUserRound, CreditCard, Grid2x2Plus, Plug, Star, X, type LucideIcon } from 'lucide-react';
+import { CircleHelp, CircleUserRound, CreditCard, Grid2x2Plus, Plug, Star, X, type LucideIcon } from 'lucide-react';
 import { Tabs as TabsPrimitive } from 'radix-ui';
 import { OcLogo } from '@/components/brand/Logo';
 import { Button } from '@/components/ui/button';
@@ -16,16 +16,15 @@ import { CredentialsBrowser } from '@/components/credentials/CredentialsBrowser'
 import Modal from '@/components/ui/Modal';
 import type { CredentialsIntent } from '@/stores/shellDialogsStore';
 import { useHomeStore, type SettingsTab } from '../state/homeStore';
+import { NAV_ITEM } from '../ui/nav';
 import { MicroLabel, SearchField } from '../ui/primitives';
 import { BillingTab } from './BillingTab';
+import { HelpTab } from './HelpTab';
 import { PluginsTab } from './PluginsTab';
 import { ProfileTab } from './ProfileTab';
 import { SkillsTab } from './SkillsTab';
 import { AccessTab } from './AccessTab';
 import { staggerSettings } from './stagger';
-
-const NAV_ITEM =
-  'flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-row font-medium text-fg-muted outline-none transition-colors hover:bg-bg-hover hover:text-fg-default focus-visible:ring-3 focus-visible:ring-ring/50 data-[state=active]:bg-bg-hover data-[state=active]:text-fg-default';
 
 interface PageContext {
   close: () => void;
@@ -66,6 +65,14 @@ const PAGES: Page[] = [
     icon: CreditCard,
     keywords: 'plan invoices usage',
     render: () => <BillingTab />,
+  },
+  {
+    tab: 'help',
+    group: 'settings',
+    label: 'Help',
+    icon: CircleHelp,
+    keywords: 'guide welcome tour replay checklist get started',
+    render: ({ close }) => <HelpTab onDone={close} />,
   },
   {
     tab: 'skills',

@@ -125,10 +125,6 @@ interface AppStore {
   setConsolePanelVisible: (visible: boolean) => void;
   toggleConsolePanelVisible: () => void;
   requestChatFocus: () => void;
-  /** Open a workflow by display name, reveal the console panel, and focus
-   *  the chat input. Used by the onboarding finish handoff and the Get
-   *  Started checklist. Returns the loaded workflow, or null if not found. */
-  openExampleAndChat: (name: string) => Promise<WorkflowData | null>;
   applyUIDefaults: (defaults: { sidebarDefaultOpen?: boolean; componentPaletteDefaultOpen?: boolean; consolePanelDefaultOpen?: boolean }) => void;
 
   // Per-workflow UI state actions (n8n pattern)
@@ -579,26 +575,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   requestChatFocus: () => {
     set((state) => ({ chatFocusRequest: state.chatFocusRequest + 1 }));
-  },
-
-  openExampleAndChat: async (name) => {
-    const workflows = await workflowApi.getAllWorkflows();
-    const target = workflows.find((w) => w.name.toLowerCase() === name.toLowerCase());
-    if (!target) {
-      toast.info(`The "${name}" example was not found. Open any workflow from the sidebar to chat with it.`);
-      return null;
-    }
-
-    await get().loadWorkflow(target.id);
-    const loaded = get().currentWorkflow;
-    if (loaded?.id !== target.id) {
-      toast.error(`Could not open "${name}". Try opening it from the sidebar.`);
-      return null;
-    }
-
-    get().setConsolePanelVisible(true);
-    get().requestChatFocus();
-    return loaded;
   },
 
   applyUIDefaults: (defaults) => {

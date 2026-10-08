@@ -143,7 +143,8 @@ export const PROP_SCHEMAS = {
   Text: z.object({ text: block(LIMITS.maxText), muted: z.boolean().catch(false) }),
   Metric: z.object({ label: line(60), value: line(40), hint: optionalLine(), tone }),
   Badge: z.object({ label: line(40), tone }),
-  Plan: z.object({ title: optionalLine(60), steps: listOf(planStep, LIMITS.maxSteps) }),
+  // `trigger`: bound to /trigger by the normaliser (the When row's Change); the model never writes it.
+  Plan: z.object({ title: optionalLine(60), steps: listOf(planStep, LIMITS.maxSteps), trigger: z.unknown().optional() }),
   // What starts the work (the state at /trigger), read through hirePayload's snapTrigger.
   Schedule: z.object({ value: z.unknown().optional() }),
   AgentCard: z.object({

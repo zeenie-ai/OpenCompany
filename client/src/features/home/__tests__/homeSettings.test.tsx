@@ -77,4 +77,29 @@ describe('HomeSettings', () => {
     renderSettings();
     expect(await screen.findByText('—')).toBeInTheDocument();
   });
+
+  it('replays the Welcome guide from Help, closing Settings', async () => {
+    useHomeStore.setState({ guide: { open: false, step: 'first-hire', furthest: 2, checked: true, provider: null, pendingDraft: false } });
+    useHomeStore.getState().openSettings('help');
+    renderSettings();
+    await userEvent.click(screen.getByRole('button', { name: 'Replay' }));
+    expect(useHomeStore.getState().settingsOpen).toBe(false);
+    expect(useHomeStore.getState().guide).toMatchObject({ open: true, step: 'welcome', furthest: 2 });
+  });
+
+  it('shows the hidden Get started checklist again from Help, closing Settings', async () => {
+    useHomeStore.getState().openSettings('help');
+    renderSettings();
+    await userEvent.click(screen.getByRole('button', { name: 'Show' }));
+    expect(useHomeStore.getState().settingsOpen).toBe(false);
+    expect(sendRequest).toHaveBeenCalledWith('save_user_settings', { settings: { getting_started_dismissed: false } });
+  });
+
+  it('finds Help by searching for the guide', () => {
+    useHomeStore.getState().openSettings();
+    renderSettings();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search settings' }), { target: { value: 'guide' } });
+    expect(screen.getByRole('tab', { name: 'Help' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Billing' })).not.toBeInTheDocument();
+  });
 });

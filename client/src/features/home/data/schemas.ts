@@ -23,6 +23,10 @@ export const TASK_LABELS = ['Now', 'Next', 'Paused', 'Waiting'] as const;
  *  line that replies), `off` (one click adds it) or `unsupported`. */
 export const TALK_STATES = ['on', 'off', 'unsupported'] as const;
 
+/** How a hire's own start went: `saved` until it is tried, then `blocked`
+ *  (something to connect first), `running` or `failed`. */
+export const ACTIVATION_STATES = ['saved', 'blocked', 'starting', 'running', 'failed'] as const;
+
 export const appRefSchema = z.object({
   app_id: z.string(),
   provider_id: z.string(),
@@ -72,6 +76,8 @@ export const employeeSummarySchema = z.object({
     .catch(null),
   revision: z.number().catch(0),
   hired_at: z.string().nullable().catch(null),
+  /** Null for a workflow built in the editor. */
+  activation_state: z.enum(ACTIVATION_STATES).nullable().catch(null),
   /** The talk line; `agent_node_id` is the agent that answers the owner. */
   talk: z
     .object({ state: z.enum(TALK_STATES).catch('unsupported'), agent_node_id: z.string().nullable().catch(null) })

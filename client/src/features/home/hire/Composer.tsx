@@ -46,6 +46,10 @@ export interface ComposerProps {
   /** Told when the box gains or loses focus. */
   onFocusChange?: (focused: boolean) => void;
   maxLength?: number;
+  /** Create's label while idle (default "Create employee"). */
+  idleLabel?: string;
+  /** No float shadow: the box sits inside a dialog (the Welcome guide). */
+  flat?: boolean;
 }
 
 const APP_STACK = 3;
@@ -63,6 +67,8 @@ export function Composer({
   onFocusTaken,
   onFocusChange,
   maxLength,
+  idleLabel,
+  flat = false,
 }: ComposerProps) {
   const boxRef = useRef<HTMLTextAreaElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -119,7 +125,8 @@ export function Composer({
       ref={surfaceRef}
       data-intro
       className={cn(
-        'relative flex w-full max-w-(--w-composer) shrink-0 scroll-mt-4 flex-col gap-2 rounded-composer border bg-bg-panel pt-3 pr-3 pb-2.5 pl-4 shadow-float transition-colors duration-(--dur-slow)',
+        'relative flex w-full max-w-(--w-composer) shrink-0 scroll-mt-4 flex-col gap-2 rounded-composer border bg-bg-panel pt-3 pr-3 pb-2.5 pl-4 transition-colors duration-(--dur-slow)',
+        !flat && 'shadow-float',
         refining ? 'border-node-agent-edge' : 'border-border-default focus-within:border-border-strong',
       )}
     >
@@ -174,7 +181,7 @@ export function Composer({
           onClick={submit}
           className="ml-auto"
         >
-          {createLabel(working, refining)}
+          {createLabel(working, refining, idleLabel)}
           <ArrowRight aria-hidden strokeWidth={2.25} />
         </Button>
       </div>

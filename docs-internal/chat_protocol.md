@@ -434,9 +434,11 @@ continuation: Resume does not explicitly rerun completed tools to reconstruct th
 
 `client/src/features/chat/` is the shared chat; only its `index.ts` is public (an ESLint rule keeps the rest
 private, tests excepted). Hosts give it a `ChatHost` (`host.ts`): the session and scope, who answers, whether the
-message box sends now, waits for Resume or is closed, and what sits around the conversation (notices, a top slot, a
-slot after the thread, a footnote, how to tell the owner something). Home's employee page (`EmployeeChat`) and the
-editor's console pane (`ConsoleChat`, compact, scope `live`) are the two hosts.
+message box sends now, waits for Resume, shows but takes nothing yet (`wait`, with the host's `placeholder`: a new
+hire still starting) or is closed, and what sits around the conversation (notices, a top slot, a slot after the
+thread, an empty state, greetings that fill the box in place of the suggested commands, a footnote, how to tell the
+owner something). Home's employee page (`EmployeeChat`) and the editor's console pane (`ConsoleChat`, compact, scope
+`live`) are the two hosts.
 
 - **Run events** reach `stores/chatRunStore.ts` through one `case 'chat_run_event'` in `WebSocketContext.tsx`.
   `lib/agui/events.ts` checks each frame (source, type prefix, `subject`, `id` = `<run id>:<seq>`, scope fields) and

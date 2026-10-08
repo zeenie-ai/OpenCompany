@@ -65,6 +65,10 @@ export interface ComposerProps {
   dictation?: { workflowId: string; notify: (message: string, tone: NotifyTone) => void } | null;
   /** The slash commands the box offers. */
   commands?: readonly ChatCommand[];
+  /** The box takes nothing yet (the host's `wait`). */
+  disabled?: boolean;
+  /** In place of "Message {name}…". */
+  placeholder?: string;
 }
 
 export function Composer({
@@ -84,6 +88,8 @@ export function Composer({
   onAddFiles,
   dictation = null,
   commands = NO_COMMANDS,
+  disabled = false,
+  placeholder,
 }: ComposerProps) {
   const draft = useComposerDraft(sessionId);
   const setText = useComposerStore((state) => state.setText);
@@ -95,7 +101,7 @@ export function Composer({
 
   const uploading = attachments.some((item) => item.state === 'uploading');
   const finished = attachments.some((item) => item.state === 'ready');
-  const canSend = ready && !busy && !uploading && (draft.text.trim().length > 0 || finished);
+  const canSend = ready && !disabled && !busy && !uploading && (draft.text.trim().length > 0 || finished);
 
   // The slash list: open while the box is one word starting with `/` that
   // begins a command, until Esc (for that text) or a pick.
@@ -244,12 +250,13 @@ export function Composer({
       variant="bare"
       rows={1}
       value={draft.text}
+      disabled={disabled}
       onChange={(event) => setText(sessionId, event.target.value)}
       onKeyDown={onKeyDown}
       onPaste={onPaste}
       aria-label={`Message ${name}`}
       aria-autocomplete={commands.length ? 'list' : undefined}
-      placeholder={commands.length ? `Message ${name}…  Type / for commands` : `Message ${name}…`}
+      placeholder={placeholder ?? (commands.length ? `Message ${name}…  Type / for commands` : `Message ${name}…`)}
       className={cn(
         'max-h-(--h-chat-composer-max) overflow-hidden text-fg-default field-sizing-fixed',
         compact ? 'py-1 text-sm leading-normal' : 'py-1.5 text-md leading-normal',

@@ -103,8 +103,6 @@ export interface DraftState {
   source: DraftSource | null;
   /** The latest reply, read and made safe to render. */
   spec: NormalizedSpec | null;
-  /** The model's one-sentence introduction of the new employee. */
-  intro: string;
   /** What the owner has set on the setup screen (toggles, choices, inputs). */
   uiState: UiState;
   /** Apps the reply names, as the server resolved them: lower-cased name -> ref. */
@@ -131,7 +129,6 @@ const INITIAL: DraftState = {
   failure: null,
   source: null,
   spec: null,
-  intro: '',
   uiState: {},
   apps: {},
   team: [],
@@ -264,7 +261,6 @@ export function acceptReply(token: string, response: SetupResponse, request: Pen
     failure: null,
     source: { provider: response.provider ?? null, model: response.model ?? null },
     spec,
-    intro: parsed.text.trim(),
     uiState: fitTrigger(spec.state, apps),
     apps,
     team: parseTeam(response.team),

@@ -27,6 +27,7 @@ vi.mock('@/lib/workspaceUpload', () => ({ uploadToWorkspace: vi.fn() }));
 
 import { normalizeWorkflowControlStatus } from '@/contexts/WebSocketContext';
 import { uploadToWorkspace } from '@/lib/workspaceUpload';
+import { useNodeStatusStore } from '@/stores/nodeStatusStore';
 import { enterDev } from '../../../app/useShellActions';
 import { parseEmployee } from '../data/schemas';
 import { HomeHeader } from '../header/HomeHeader';
@@ -56,6 +57,7 @@ describe('HomeHeader', () => {
     vi.mocked(enterDev).mockClear();
     sendRequest.mockReset().mockResolvedValue({ success: true });
     useHomeStore.setState({ sidebarOpen: true });
+    useNodeStatusStore.setState({ allStatuses: {} });
   });
 
   it('says who is on screen', () => {
@@ -63,7 +65,16 @@ describe('HomeHeader', () => {
     wrap(<HomeHeader title="Maya" employee={maya} scrolled={false} />);
     expect(screen.getByRole('heading', { name: 'Maya' })).toBeInTheDocument();
     expect(screen.getByText('Receptionist · WhatsApp, Google Calendar')).toBeInTheDocument();
+    // Running with nothing to do: Ready.
+    expect(screen.getByText('Ready')).toBeInTheDocument();
+  });
+
+  it('says Working while their talk agent answers', () => {
+    useHomeStore.setState({ view: { kind: 'employee', workflowId: 'w1' } });
+    useNodeStatusStore.setState({ allStatuses: { w1: { 'w1:talk': { status: 'executing' } } } });
+    wrap(<HomeHeader title="Maya" employee={maya} scrolled={false} />);
     expect(screen.getByText('Working')).toBeInTheDocument();
+    expect(screen.queryByText('Ready')).not.toBeInTheDocument();
   });
 
   it('starts a new conversation once the owner confirms', async () => {
@@ -162,6 +173,16 @@ describe('HomeHeader', () => {
     useHomeStore.setState({ view: { kind: 'employee', workflowId: 'w1' } });
     wrap(<HomeHeader title="Maya" employee={maya} scrolled={false} />);
     expect(screen.queryByRole('button', { name: 'Change Maya’s photo' })).not.toBeInTheDocument();
+  });
+
+  it('opens the Welcome guide at its first step', () => {
+    useHomeStore.setState({
+      view: { kind: 'hire' },
+      guide: { open: false, step: 'connect', furthest: 1, checked: true, provider: null, pendingDraft: false },
+    });
+    wrap(<HomeHeader title="New employee" employee={null} scrolled={false} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Guide' }));
+    expect(useHomeStore.getState().guide).toMatchObject({ open: true, step: 'welcome', furthest: 1 });
   });
 
   it('opens what the editor last had from the hire view', () => {

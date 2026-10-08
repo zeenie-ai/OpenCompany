@@ -12,18 +12,23 @@
  *   Stack / Grid / Card keep children;
  * - loses nothing a model placed badly: elements nobody lists are attached
  *   where they belong (controls into the rules card, connect buttons into
- *   the apps card, the hire and change buttons into the button row);
+ *   the apps card, anything else under the root);
  * - gives every Button its action as `on.press` ({action, params}), whether
  *   the model wrote that or the older `action` / `actionParams` props, and
  *   every Toggle its value as `checked` (older replies say `value`);
- * - always has "Ask me before sending anything" bound to /rules/askFirst,
- *   defaulting to on, and exactly one hire button and one change button;
- * - always says when they work: one Schedule, after the routine, bound to
- *   /trigger, which starts as the hire button's trigger (else the app the
- *   routine's first "When" step names, else the owner messaging them),
- *   snapped to one the server builds exactly as it reads;
- * - has at most LIMITS.maxElements elements (the buttons, that toggle and
- *   the Schedule are always kept);
+ * - is laid out as the setup card (onboarding handoff R2), the root's
+ *   children in this order, named in `layout`: the agent card (the first
+ *   one: who they are), the routine, everything else in the order written,
+ *   then the footer strip's two: "Ask me before sending anything" bound to
+ *   /rules/askFirst (on by default) and a row of one change button and one
+ *   hire button;
+ * - always says when they work: the routine is the first Plan, its When row
+ *   bound to /trigger, else one Schedule bound to it. /trigger starts as
+ *   the hire button's trigger (else the app the routine's first "When" step
+ *   names, else the owner messaging them), snapped to one the server builds
+ *   exactly as it reads;
+ * - has at most LIMITS.maxElements elements (the card's own pieces are
+ *   always kept);
  * - cannot reach an object prototype: ids, prop keys and state keys named
  *   `__proto__`, `constructor` or `prototype` are dropped, and so is any
  *   expression whose path goes through one; `watch`, `repeat`, `slots`,
@@ -78,12 +83,25 @@ export interface SpecElement {
   on?: { press: PressBinding };
 }
 
+/** Where the card draws the root's children (HireScreen). */
+export interface CardLayout {
+  /** The agent card, the identity row; null when the model wrote none. */
+  identity: string | null;
+  /** The routine, then everything else, in order. */
+  body: string[];
+  /** The footer strip: the ask-first toggle on the left... */
+  askFirst: string;
+  /** ...and on the right a row of the change button, then the hire button. */
+  actions: string;
+}
+
 export interface NormalizedSpec {
   root: string;
   state: UiState;
   elements: Record<string, SpecElement>;
   /** Element ids in render order (depth first), for the reveal. */
   order: string[];
+  layout: CardLayout;
 }
 
 /** Element keys that are never props (everything else beside `props` is
@@ -197,10 +215,6 @@ function isVerticalStack(element: SpecElement): boolean {
   return element.type === 'Stack' && element.props.direction !== 'horizontal';
 }
 
-function isHorizontalStack(element: SpecElement): boolean {
-  return element.type === 'Stack' && element.props.direction === 'horizontal';
-}
-
 function buttonAction(element: SpecElement | undefined): ActionType | null {
   return element?.type === 'Button' ? (element.on?.press.action ?? null) : null;
 }
@@ -235,24 +249,26 @@ function depthFirst(elements: Elements, root: string): string[] {
   return order;
 }
 
-function removeEverywhere(elements: Elements, id: string): void {
-  elements.delete(id);
+/** Take `id` out of its parent's children; the element itself stays. */
+function detach(elements: Elements, id: string): void {
   for (const element of elements.values()) {
     const index = element.children.indexOf(id);
     if (index !== -1) element.children.splice(index, 1);
   }
 }
 
+function removeEverywhere(elements: Elements, id: string): void {
+  elements.delete(id);
+  detach(elements, id);
+}
+
 /** When they work, as the screen first says it: the hire button's trigger,
  *  else the app the routine's first "When" step names, else the owner
  *  messaging them. */
-function seedTrigger(elements: Elements, root: string, state: UiState): HireTrigger {
-  const tree = depthFirst(elements, root).map((id) => elements.get(id)!);
-  const hire = tree.find((element) => buttonAction(element) === 'hire_employee');
-  const params = resolveValue(hire?.on?.press.params, state);
+function seedTrigger(hire: SpecElement, plan: SpecElement | undefined, state: UiState): HireTrigger {
+  const params = resolveValue(hire.on?.press.params, state);
   const given = readTrigger(isRecord(params) ? params.trigger : undefined);
   if (given && (given.kind !== 'app_event' || given.app)) return given;
-  const plan = tree.find((element) => element.type === 'Plan');
   const parsed = plan ? PROP_SCHEMAS.Plan.safeParse(resolveValue(plan.props, state) ?? {}) : null;
   const app = parsed?.success ? parsed.data.steps.find((step) => step.role === 'trigger')?.app : undefined;
   return snapTrigger(app ? { kind: 'app_event', app } : { kind: 'manual' });
@@ -308,17 +324,14 @@ export function normalizeSpec(spec: unknown): NormalizedSpec | null {
   };
   tops.forEach(carry);
   const cyclic = orphans.filter((id) => !carried.has(id));
-  const sorted = { actions: [] as string[], controls: [] as string[], connects: [] as string[], others: [] as string[] };
+  const sorted = { controls: [] as string[], connects: [] as string[], others: [] as string[] };
   const sort = (id: string) => {
     const element = elements.get(id)!;
-    const action = buttonAction(element);
-    if (action === 'hire_employee' || action === 'refine') sorted.actions.push(id);
-    else if (isControl(element.type)) sorted.controls.push(id);
-    else if (action === 'connect_app') sorted.connects.push(id);
+    if (isControl(element.type)) sorted.controls.push(id);
+    else if (buttonAction(element) === 'connect_app') sorted.connects.push(id);
     else sorted.others.push(id);
   };
   const attach = (host: string, ids: string[]) => {
-    if (ids.length === 0) return;
     for (const id of ids) {
       if (placed.has(id)) continue;
       elements.get(host)!.children.push(id);
@@ -335,27 +348,20 @@ export function normalizeSpec(spec: unknown): NormalizedSpec | null {
   attach(root, sorted.others);
   attach(titled(cards(), RULES_TITLE) ?? emptyCard() ?? root, sorted.controls);
   attach(titled(cards(), APPS_TITLE) ?? emptyCard() ?? root, sorted.connects);
-  if (sorted.actions.length > 0) {
-    const row = depthFirst(elements, root).find((id) => {
-      const element = elements.get(id)!;
-      return isHorizontalStack(element) && element.children.length === 0;
-    });
-    let host = row;
-    if (!host) {
-      host = freshId(elements, '__acts');
-      elements.set(host, { type: 'Stack', props: { direction: 'horizontal', gap: 'md' }, children: [] });
-      attach(root, [host]);
-    }
-    attach(host, sorted.actions);
-  }
 
   for (const id of [...elements.keys()]) if (!placed.has(id)) elements.delete(id);
 
-  // One hire button and one change button: the first of each, depth first.
-  for (const action of ['hire_employee', 'refine']) {
-    const buttons = depthFirst(elements, root).filter((id) => buttonAction(elements.get(id)) === action);
-    buttons.slice(1).forEach((id) => removeEverywhere(elements, id));
-  }
+  // One agent card, one Plan, one hire button and one change button: the
+  // first of each, depth first.
+  const firstOf = (match: (element: SpecElement) => boolean): string | undefined => {
+    const ids = depthFirst(elements, root).filter((id) => match(elements.get(id)!));
+    ids.slice(1).forEach((id) => removeEverywhere(elements, id));
+    return ids[0];
+  };
+  const agent = firstOf((element) => element.type === 'AgentCard');
+  const plan = firstOf((element) => element.type === 'Plan');
+  let hire = firstOf((element) => buttonAction(element) === 'hire_employee');
+  let change = firstOf((element) => buttonAction(element) === 'refine');
 
   // "Ask me before sending anything" is always there, on by default.
   const order = depthFirst(elements, root);
@@ -377,92 +383,57 @@ export function normalizeSpec(spec: unknown): NormalizedSpec | null {
     }
   }
   if (typeof getPath(state, STATE_PATHS.askFirst) !== 'boolean') state = setPath(state, STATE_PATHS.askFirst, true);
-
-  const agent = order.map((id) => elements.get(id)!).find((element) => element.type === 'AgentCard');
-  const hasHire = order.some((id) => buttonAction(elements.get(id)) === 'hire_employee');
-  const hasChange = order.some((id) => buttonAction(elements.get(id)) === 'refine');
-  const actionRow = () =>
-    depthFirst(elements, root).find((id) => {
-      const element = elements.get(id)!;
-      return isHorizontalStack(element) && element.children.some((child) => elements.get(child)?.type === 'Button');
-    });
-  if (!hasHire || !hasChange) {
-    const added: string[] = [];
-    if (!hasHire) {
-      const id = freshId(elements, '__hire');
-      elements.set(id, hireButton(agent));
-      added.push(id);
-    }
-    if (!hasChange) {
-      const id = freshId(elements, '__edit');
-      elements.set(id, {
-        type: 'Button',
-        props: { label: 'Change something', variant: 'secondary' },
-        on: { press: { action: 'refine' } },
-        children: [],
-      });
-      added.push(id);
-    }
-    let host = actionRow();
-    if (!host) {
-      host = freshId(elements, '__acts');
-      elements.set(host, { type: 'Stack', props: { direction: 'horizontal', gap: 'md' }, children: [] });
-      attach(root, [host]);
-    }
-    attach(host, added);
-  }
-
   if (!askFirst) {
-    const cardsNow = depthFirst(elements, root).filter((id) => elements.get(id)!.type === 'Card');
-    let host = titled(cardsNow, /rule/i);
-    if (!host) {
-      host = freshId(elements, '__rules');
-      elements.set(host, { type: 'Card', props: { title: 'Ground rules' }, children: [] });
-      // Before the button row, which stays last.
-      const rootChildren = elements.get(root)!.children;
-      const row = actionRow();
-      const at = row ? rootChildren.indexOf(row) : -1;
-      rootChildren.splice(at === -1 ? rootChildren.length : at, 0, host);
-      placed.add(host);
-    }
     askFirst = freshId(elements, '__askFirst');
     elements.set(askFirst, {
       type: 'Toggle',
       props: { label: ASK_FIRST_LABEL, checked: { $bindState: STATE_PATHS.askFirst } },
       children: [],
     });
-    attach(host, [askFirst]);
   }
 
-  // When they work: one Schedule bound to /trigger, after the routine (else
-  // the agent card, else first). Hire reads /trigger before the button.
-  state = setPath(state, STATE_PATHS.trigger, seedTrigger(elements, root, state));
+  // The hire button (primary) and the change button (secondary).
+  if (!hire) {
+    hire = freshId(elements, '__hire');
+    elements.set(hire, hireButton(agent ? elements.get(agent) : undefined));
+  }
+  if (!change) {
+    change = freshId(elements, '__edit');
+    elements.set(change, { type: 'Button', props: { label: 'Change something' }, on: { press: { action: 'refine' } }, children: [] });
+  }
+  elements.get(hire)!.props.variant = 'primary';
+  elements.get(change)!.props.variant = 'secondary';
+
+  // When they work, bound to /trigger: the Plan's When row, else one
+  // Schedule. Hire reads /trigger before the button.
+  state = setPath(state, STATE_PATHS.trigger, seedTrigger(elements.get(hire)!, plan ? elements.get(plan) : undefined, state));
   const schedules = depthFirst(elements, root).filter((id) => elements.get(id)!.type === 'Schedule');
-  schedules.slice(1).forEach((id) => removeEverywhere(elements, id));
-  let schedule = schedules[0];
-  if (!schedule) {
-    schedule = freshId(elements, '__schedule');
-    const tree = depthFirst(elements, root);
-    const anchor =
-      tree.find((id) => elements.get(id)!.type === 'Plan') ?? tree.find((id) => elements.get(id)!.type === 'AgentCard');
-    const parent = (anchor && tree.find((id) => elements.get(id)!.children.includes(anchor))) || root;
-    const siblings = elements.get(parent)!.children;
-    siblings.splice(anchor ? siblings.indexOf(anchor) + 1 : 0, 0, schedule);
+  let routine: string;
+  if (plan) {
+    schedules.forEach((id) => removeEverywhere(elements, id));
+    elements.get(plan)!.props.trigger = { $bindState: STATE_PATHS.trigger };
+    routine = plan;
+  } else {
+    schedules.slice(1).forEach((id) => removeEverywhere(elements, id));
+    routine = schedules[0] ?? freshId(elements, '__schedule');
+    elements.set(routine, { type: 'Schedule', props: { value: { $bindState: STATE_PATHS.trigger } }, children: [] });
   }
-  elements.set(schedule, { type: 'Schedule', props: { value: { $bindState: STATE_PATHS.trigger } }, children: [] });
 
-  // Cap the size, always keeping the buttons, the toggle, the Schedule and
-  // their parents.
+  // The card: who they are, the routine, everything else as written, then
+  // the footer strip's toggle and buttons. All of these are leaves, so
+  // moving one never takes anything with it.
+  const pieces = [agent, routine, askFirst, change, hire].filter((id) => id !== undefined);
+  pieces.forEach((id) => detach(elements, id));
+  const actions = freshId(elements, '__actions');
+  elements.set(actions, { type: 'Stack', props: { direction: 'horizontal', gap: 'sm' }, children: [change, hire] });
+  const top = elements.get(root)!;
+  top.children = [...(agent ? [agent] : []), routine, ...top.children, askFirst, actions];
+
+  // Cap the size, always keeping the root and the card's own pieces.
   const full = depthFirst(elements, root);
   const parentOf = new Map<string, string>();
   for (const id of full) for (const child of elements.get(id)!.children) parentOf.set(child, id);
-  const mustKeep = new Set<string>([root]);
-  const keepWithAncestors = (id: string | undefined) => {
-    for (let at = id; at !== undefined; at = parentOf.get(at)) mustKeep.add(at);
-  };
-  keepWithAncestors(askFirst);
-  keepWithAncestors(schedule);
-  full.filter((id) => ['hire_employee', 'refine'].includes(buttonAction(elements.get(id)) ?? '')).forEach(keepWithAncestors);
+  const mustKeep = new Set<string>([root, actions, ...pieces]);
   let budget = LIMITS.maxElements - mustKeep.size;
   const kept = new Set<string>();
   for (const id of full) {
@@ -488,5 +459,11 @@ export function normalizeSpec(spec: unknown): NormalizedSpec | null {
   // No prototype: ids are looked up here as keys.
   const record: Record<string, SpecElement> = Object.create(null);
   for (const [id, element] of elements) record[id] = element;
-  return { root, state, elements: record, order: depthFirst(elements, root) };
+  const layout: CardLayout = {
+    identity: agent ?? null,
+    body: elements.get(root)!.children.filter((id) => id !== agent && id !== askFirst && id !== actions),
+    askFirst,
+    actions,
+  };
+  return { root, state, elements: record, order: depthFirst(elements, root), layout };
 }

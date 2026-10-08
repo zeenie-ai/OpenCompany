@@ -33,8 +33,6 @@ import ComponentPalette from './components/ui/ComponentPalette';
 import TopToolbar from './components/ui/TopToolbar';
 import WorkflowSidebar from './components/ui/WorkflowSidebar';
 import AIResultModal from './components/ui/AIResultModal';
-import OnboardingWizard from './components/onboarding/OnboardingWizard';
-import GetStartedChecklist from './components/onboarding/GetStartedChecklist';
 import { useShellDialogsStore } from './stores/shellDialogsStore';
 import ErrorBoundary from './components/ui/ErrorBoundary';
 import ConsolePanel from './components/ui/ConsolePanel';
@@ -166,12 +164,10 @@ const DashboardContent: React.FC = () => {
   const setSelectedNode = useAppStore((s) => s.setSelectedNode);
   const renamingNodeId = useAppStore((s) => s.renamingNodeId);
   const setRenamingNodeId = useAppStore((s) => s.setRenamingNodeId);
-  const openExampleAndChat = useAppStore((s) => s.openExampleAndChat);
   // App-level dialogs live in the shell (app/AppShell) so either screen can
   // open them.
   const openSettings = useShellDialogsStore((s) => s.openSettings);
   const openCredentials = useShellDialogsStore((s) => s.openCredentials);
-  const onboardingReplay = useShellDialogsStore((s) => s.onboardingReplay);
   // Per-workflow UI state (n8n pattern)
   const setWorkflowExecuting = useAppStore((s) => s.setWorkflowExecuting);
   const setWorkflowExecutionOrder = useAppStore((s) => s.setWorkflowExecutionOrder);
@@ -213,7 +209,7 @@ const DashboardContent: React.FC = () => {
   } = useWorkflowManagement();
 
   const { collapsedSections, searchQuery, setSearchQuery, toggleSection } = useComponentPalette();
-  const { saveNodeParameters, getNodeParameters, getAllNodeParameters, executeWorkflow, nodeStatuses, deploymentStatus, workflowControlStatuses, workflowControlPending, startWorkflow, pauseWorkflow, resumeWorkflow, resetWorkflow, getWorkflowControlStatus, workflowLock, isReady, sendRequest, clearNodeStatus } = useWebSocket();
+  const { saveNodeParameters, getNodeParameters, getAllNodeParameters, executeWorkflow, nodeStatuses, deploymentStatus, workflowControlStatuses, workflowControlPending, startWorkflow, pauseWorkflow, resumeWorkflow, resetWorkflow, workflowLock, isReady, sendRequest, clearNodeStatus } = useWebSocket();
 
   // Workflows list: server-owned data, cached by TanStack Query.
   const queryClient = useQueryClient();
@@ -732,35 +728,6 @@ const DashboardContent: React.FC = () => {
       alert(`Deployment error: ${error.message}`);
     }
   };
-
-  // Onboarding handoff: open the AI Assistant example, focus chat, and
-  // deploy it so the chat trigger is live. Shared by the wizard's finish
-  // button and the Get Started checklist.
-  const handleRunExample = React.useCallback(async () => {
-    if (!(await settleUnsavedWork())) return;
-    const workflow = await openExampleAndChat('AI Assistant');
-    if (!workflow) return;
-
-    try {
-      const status = await getWorkflowControlStatus(workflow.id);
-      if (!status.can_start) return;
-      const result = await startWorkflow(
-        workflow.id,
-        workflow.nodes,
-        workflow.edges,
-        'default',
-        status.revision,
-      );
-      applyAuthoritativeStartGraph(workflow.id, result);
-    } catch {
-      toast.error('Could not start the example — press Start on the toolbar.');
-    }
-  }, [
-    applyAuthoritativeStartGraph,
-    getWorkflowControlStatus,
-    openExampleAndChat,
-    startWorkflow,
-  ]);
 
   const handlePauseWorkflow = async () => {
     const workflowId = currentWorkflow?.id;
@@ -1387,23 +1354,6 @@ const DashboardContent: React.FC = () => {
           isOpen={showResult}
           onClose={() => setShowResult(false)}
           result={executionResult}
-        />
-
-        {/* Onboarding Wizard (editor only; Settings and Credentials are
-            shell dialogs, see app/AppShell). */}
-        <OnboardingWizard
-          onOpenCredentials={openCredentials}
-          reopenTrigger={onboardingReplay}
-          onFinish={() => void handleRunExample()}
-        />
-
-        {/* Get Started checklist (appears after onboarding completes) */}
-        <GetStartedChecklist
-          actions={{
-            'add-key': openCredentials,
-            'chat-example': () => void handleRunExample(),
-            'build-workflow': handleNew,
-          }}
         />
 
         {/* Node Context Menu (right-click) */}

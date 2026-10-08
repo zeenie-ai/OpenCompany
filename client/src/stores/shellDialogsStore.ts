@@ -21,13 +21,10 @@ interface ShellDialogsState {
   credentialsOptions: CredentialsOptions & { intent: CredentialsIntent };
   /** Repeated opens are navigation requests, even when their target matches. */
   credentialsRequestId: number;
-  /** Increments to ask the (editor-only) onboarding wizard to reopen. */
-  onboardingReplay: number;
   openSettings: () => void;
   closeSettings: () => void;
   openCredentials: (options?: CredentialsOptions) => void;
   closeCredentials: () => void;
-  replayOnboarding: () => void;
 }
 
 export const useShellDialogsStore = create<ShellDialogsState>((set) => ({
@@ -35,7 +32,6 @@ export const useShellDialogsStore = create<ShellDialogsState>((set) => ({
   credentialsOpen: false,
   credentialsOptions: { intent: 'manage' },
   credentialsRequestId: 0,
-  onboardingReplay: 0,
   openSettings: () => set({ settingsOpen: true }),
   closeSettings: () => set({ settingsOpen: false }),
   openCredentials: (options) => set((state) => ({
@@ -44,5 +40,4 @@ export const useShellDialogsStore = create<ShellDialogsState>((set) => ({
     credentialsRequestId: state.credentialsRequestId + 1,
   })),
   closeCredentials: () => set({ credentialsOpen: false }),
-  replayOnboarding: () => set((state) => ({ settingsOpen: false, onboardingReplay: state.onboardingReplay + 1 })),
 }));

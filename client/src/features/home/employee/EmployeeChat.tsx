@@ -15,6 +15,10 @@
  *   why a run of failures paused them.
  * - Without a talk line, Turn on Talk offers to add one; an employee whose
  *   setup cannot answer gets a note instead of the box.
+ * - A new hire's page opens on their first day (FirstDay) until their first
+ *   conversation begins: the box waits while they start, then offers
+ *   something to say, and the card says why when the start did not go ahead
+ *   (so the line above the box does not say it twice).
  * - A document they wrote opens from its card in the reply on the
  *   Workspace's Canvas tab, at that version.
  * - Cmd/Ctrl+K puts the cursor in the message box.
@@ -25,9 +29,9 @@ import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ActionButton } from '@/components/ui/action-button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ChatPane, useLaneRun, type ChatPaneHandle, type ComposerMode } from '@/features/chat';
+import { ChatPane, useChatThread, useLaneRun, type ChatPaneHandle, type ComposerMode } from '@/features/chat';
 import { invalidateEmployees } from '../data/employees';
-import { stateNoticeText, talkMode, talkNoticeText } from '../data/presentation';
+import { firstDayPhase, stateNoticeText, talkMode, talkNoticeText } from '../data/presentation';
 import type { EmployeeSummary } from '../data/schemas';
 import { useRetryNote } from '../data/talk';
 import { HireNotice } from '../hire/HireNotice';
@@ -40,7 +44,11 @@ import { TurnOnTalk } from './TurnOnTalk';
 import { EmployeeAccess } from './EmployeeAccess';
 import { GiveTeam } from './GiveTeam';
 import { EmployeeWork } from './EmployeeWork';
+import { FirstDay } from './FirstDay';
 import type { EmployeeControl } from './useEmployeeControl';
+
+/** What to say first, on a new hire's first day. */
+const GREETINGS = ['Hi! What can you do?', 'Walk me through your routine'] as const;
 
 /** The agent is waiting for the owner in the browser (it called `request_user`). */
 function BrowserNotice({ employee }: { employee: EmployeeSummary }) {
@@ -70,12 +78,23 @@ function failurePauseText(employee: EmployeeSummary): string | null {
   return employee.control.pause_detail || (employee.task?.label === 'Paused' ? employee.task.text : null) || null;
 }
 
-function Notices({ employee, control, queued }: { employee: EmployeeSummary; control: EmployeeControl; queued: boolean }) {
+function Notices({
+  employee,
+  control,
+  queued,
+  firstDay,
+}: {
+  employee: EmployeeSummary;
+  control: EmployeeControl;
+  queued: boolean;
+  /** Their first day's card says their state and offers their main action. */
+  firstDay: boolean;
+}) {
   const { name } = employee;
   const mode = talkMode(employee.control);
   const failure = mode === 'queue' ? failurePauseText(employee) : null;
   // Their main action shows whether or not they can take messages here.
-  const notice = employee.talk.state === 'on' ? talkNoticeText(mode, name, queued) : stateNoticeText(mode, name);
+  const notice = firstDay ? null : employee.talk.state === 'on' ? talkNoticeText(mode, name, queued) : stateNoticeText(mode, name);
   return (
     <>
       {failure && (
@@ -118,7 +137,19 @@ export function EmployeeChat({
   const lane = useLaneRun(workflowId);
   const liveNote = useRetryNote(workflowId, employee.talk.agent_node_id, lane !== null && lane.state !== 'queued');
   const mode = talkMode(employee.control);
-  const composer: ComposerMode = employee.talk.state !== 'on' || mode === 'start' ? 'closed' : mode;
+
+  // Their first day lasts until their first conversation begins: a Reset
+  // that empties the thread later does not bring it back.
+  const firstDay = useHomeStore((s) => s.firstDays[workflowId]);
+  const endFirstDay = useHomeStore((s) => s.endFirstDay);
+  const spoken = (useChatThread(workflowId, 'all').data?.messages.length ?? 0) > 0;
+  useEffect(() => {
+    if (firstDay && spoken) endFirstDay(workflowId);
+  }, [endFirstDay, firstDay, spoken, workflowId]);
+  const phase = firstDay ? firstDayPhase(employee, firstDay.started) : null;
+
+  const composer: ComposerMode =
+    employee.talk.state !== 'on' ? 'closed' : phase === 'starting' ? 'wait' : mode === 'start' ? 'closed' : mode;
 
   // Cmd/Ctrl+K puts the cursor in the message box (on Home only: in the
   // editor it opens the command palette, which has Focus Chat).
@@ -155,13 +186,16 @@ export function EmployeeChat({
         scope: 'all',
         persona: { name, colorRole: employee.color_role, photo: employee.photo_url },
         composer,
-        notices: <Notices employee={employee} control={control} queued={lane?.state === 'queued'} />,
+        placeholder: composer === 'wait' ? `${name} is starting…` : undefined,
+        notices: <Notices employee={employee} control={control} queued={lane?.state === 'queued'} firstDay={Boolean(firstDay)} />,
         top: (
           <div className="flex flex-col items-center gap-4">
             <OrbSlot size="employee" />
             <HireNotice workflowId={workflowId} />
           </div>
         ),
+        emptyState: firstDay && phase ? <FirstDay employee={employee} firstDay={firstDay} phase={phase} control={control} /> : undefined,
+        greetings: firstDay ? GREETINGS : undefined,
         footnote: employee.asks_first
           ? `${name} asks before sending anything on your behalf.`
           : `${name} doesn’t ask before sending anything on your behalf.`,

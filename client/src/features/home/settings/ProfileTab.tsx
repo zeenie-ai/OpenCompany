@@ -5,7 +5,7 @@
  * trims and bounds them again on save.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ActionButton } from '@/components/ui/action-button';
@@ -28,32 +28,11 @@ import {
 import { SPIKE, spikeOrb } from '../orb/orb';
 import { Avatar } from '../ui/primitives';
 import { pillToast } from '../ui/pillToast';
+import { SettingRow } from './SettingRow';
 
 // The fields sit on the app surface at the design's size (the primitives
 // would tint them in dark and shrink the text to 13px from md up).
 const FIELD_INPUT = 'h-9.5 rounded-lg bg-bg-app px-3 text-base font-normal md:text-base dark:bg-bg-app';
-
-function SettingRow({
-  title,
-  detail,
-  children,
-  last = false,
-}: {
-  title: string;
-  detail: string;
-  children: ReactNode;
-  last?: boolean;
-}) {
-  return (
-    <div className={`flex items-center gap-4 border-t border-border-default py-3.5 ${last ? 'border-b' : ''}`}>
-      <div className="flex flex-1 flex-col gap-0.75">
-        <span className="text-base font-medium text-fg-default">{title}</span>
-        <span className="text-meta text-fg-muted">{detail}</span>
-      </div>
-      {children}
-    </div>
-  );
-}
 
 export function ProfileTab({ onDone }: { onDone: () => void }) {
   const { data: settings } = useOwnerSettings();

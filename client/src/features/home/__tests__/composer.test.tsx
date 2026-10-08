@@ -70,6 +70,20 @@ describe('Composer', () => {
     expect(createLabel(true, false)).toBe('Creating…');
     expect(createLabel(false, true)).toBe('Update');
     expect(createLabel(false, false)).toBe('Create employee');
+    expect(createLabel(false, false, 'Create their setup')).toBe('Create their setup');
+    expect(createLabel(true, false, 'Create their setup')).toBe('Creating…');
+  });
+
+  it('takes the guide’s label, and drops the float shadow when flat', () => {
+    setup({ idleLabel: 'Create their setup', flat: true });
+    const create = screen.getByRole('button', { name: /Create their setup/ });
+    expect(create).toBeEnabled();
+    expect(create.closest('[data-intro]')).not.toHaveClass('shadow-float');
+  });
+
+  it('floats on the hire view', () => {
+    setup();
+    expect(screen.getByRole('button', { name: /Create employee/ }).closest('[data-intro]')).toHaveClass('shadow-float');
   });
 
   it('counts the connected apps and opens Connectors', () => {
@@ -118,6 +132,17 @@ describe('TemplateChips', () => {
     expect(screen.getByText(receptionist.summary)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Hire now' }));
     expect(onHireNow).toHaveBeenCalledWith(receptionist);
+  });
+
+  it('shows the chips alone without Hire now (the Welcome guide)', () => {
+    render(
+      <ThemeProvider>
+        <TemplateChips picked={receptionist} onPick={vi.fn()} className="justify-start" />
+      </ThemeProvider>,
+    );
+    expect(screen.getByRole('button', { name: receptionist.label })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('button', { name: 'Hire now' })).not.toBeInTheDocument();
+    expect(screen.queryByText(receptionist.summary)).not.toBeInTheDocument();
   });
 });
 

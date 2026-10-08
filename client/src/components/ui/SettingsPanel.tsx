@@ -7,15 +7,12 @@ import {
   Save,
   Brain,
   Cpu,
-  HelpCircle,
   RotateCcw,
   X,
   Volume2,
-  ListChecks,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 
-import { Button } from '@/components/ui/button';
 import { ActionButton } from '@/components/ui/action-button';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
@@ -42,8 +39,6 @@ interface SettingsPanelProps {
   onClose: () => void;
   settings: WorkflowSettings;
   onSettingsChange: (settings: WorkflowSettings) => void;
-  onReplayOnboarding?: () => void;
-  onShowGetStarted?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -111,8 +106,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onClose,
   settings,
   onSettingsChange,
-  onReplayOnboarding,
-  onShowGetStarted,
 }) => {
   const settingsQuery = useUserSettingsQuery();
   const saveMutation = useSaveUserSettingsMutation();
@@ -445,38 +438,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 checked={soundEnabled}
                 onCheckedChange={setSoundEnabled}
               />
-            </Row>
-          </Section>
-
-          {/* Help */}
-          <Section title="Help" Icon={HelpCircle} tone="model">
-            <Row
-              label="Replay Welcome Guide"
-              description="Show the onboarding wizard again to review platform features"
-            >
-              <Button
-                size="sm"
-                variant="default"
-                onClick={onReplayOnboarding}
-                disabled={!onReplayOnboarding}
-              >
-                <HelpCircle className="h-3.5 w-3.5" />
-                Replay
-              </Button>
-            </Row>
-            <Row
-              label="Get Started Checklist"
-              description="Show the getting-started checklist on the canvas"
-            >
-              <Button
-                size="sm"
-                variant="default"
-                onClick={onShowGetStarted}
-                disabled={!onShowGetStarted}
-              >
-                <ListChecks className="h-3.5 w-3.5" />
-                Show
-              </Button>
             </Row>
           </Section>
         </div>

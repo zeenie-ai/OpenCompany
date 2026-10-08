@@ -133,26 +133,40 @@ Normal mode ([normal_mode.md](./normal_mode.md)) adds its own steps, all in
 `index.css` where a Tailwind utility needs them (the layout and duration
 tokens are used directly, as `w-(--w-home-sidebar)` or `duration-(--dur-slow)`):
 
-- **Motion**: `--ease-spring | overshoot | reveal` and the choreography
+- **Motion**: `--ease-spring | overshoot | reveal | shake` and the choreography
   durations (`--dur-intro`, `--dur-view-swap`, `--dur-panel-in/-out`,
   `--dur-toast-in/-hold/-out`, `--dur-mode-in/-out`, `--dur-theme-reveal`,
   `--dur-glow`, `--dur-pip-loop`, `--dur-dock-in` for the Workspace dock,
-  …). Web Animations read them through
+  `--dur-shake`, …). Web Animations read them through
   [lib/motion.ts](../client/src/lib/motion.ts), whose fallbacks mirror
-  base.css.
+  base.css. It also holds the onboarding presets: `RISE` / `rise(el)` (up from
+  16px, scale .98, a 4px blur, `card-in` on the spring curve) and `shake(el)`
+  (-6, 5, -3, 2px, each swing on `--ease-shake`). The CSS loops beside them in
+  `animations.css` are `.opencompany-caret-blink` (a hard on/off caret) and
+  `.opencompany-spinner-slow` (the `--dur-live-ring` pace), drawn as a ring by
+  `components/ui/ring-spinner.tsx`; both stop under reduced motion.
 - **Radii**: `--radius-row | card | panel | draft | composer`, multiples of each
   theme's `--radius-lg`, so square themes stay square. The Tailwind
   `rounded-sm/md/lg/xl` utilities do not follow themes: `index.css` computes
   them from `--radius`, which no theme overrides, so they are 4/6/8/12px
   everywhere. `rounded-pill`, these Home radii and CSS reading
   `var(--radius-*)` directly do follow the theme.
-- **Type and layout**: `--text-meta | row | lead | title | hero` (with
-  `--tracking-hero`, `--leading-hero`), and the Home layout constants
-  (`--w-home-sidebar`, `--h-home-header`, `--w-composer`, the orb slot sizes,
-  the Settings dialog size).
+- **Type and layout**: `--text-meta | row | lead | title | headline | hero` (with
+  `--tracking-hero`, `--leading-hero`; `headline` is 28px, the onboarding
+  headings), and the Home layout constants (`--w-home-sidebar`,
+  `--h-home-header`, `--w-composer`, the orb slot sizes `--size-orb-hire |
+  employee | connecting | login`, the Settings and Welcome guide dialog sizes
+  `--w-settings`/`--h-settings` and `--w-guide`/`--h-guide`). The guide's demo
+  stage is the `.home-welcome-stage` class in `index.css` (two washes of
+  `--node-agent-fill` and `--node-model-soft` over `--bg-app`).
 - **Status**: `--status-{working,ready,paused,attention,waiting}-{dot,fill,border,ink}`
   for the employee pills and dots. The dot is the raw role colour; light.css
-  keeps the paused dot at the design's mid grey.
+  keeps the paused dot at the design's mid grey. `--shadow-pip`
+  (`shadow-pip`) is a dot's glow in its own colour: give the dot a
+  `text-status-*-dot` colour and `bg-current`.
+- **Errors**: `--danger-soft` (15%) and `--danger-border` (45%) tint
+  `--destructive` for an error on a Home surface (`bg-danger-soft`,
+  `border-danger-border`).
 - **Per family** (light.css / dark.css): `--shadow-float | popover | dialog |
   dock` (`dock` is the Workspace's left shadow when it lies over the page),
   the node-role `-fill / -edge / -hover / -ink` variants, and Home's glows:
@@ -282,7 +296,7 @@ the surrounding chrome. Every other surface uses Tailwind + tokens. New themes c
 
 ### Done
 - **`--node-pulse-color` contract** — executing-node glow color is independent of `--node-color` (the plugin accent). Each decorated skin overrides `--node-pulse-color` to its highest-contrast accent (light/dark deliberately keep the base.css `var(--info)` fallback) (Cyber neon cyan, Surveillance REC red, Renaissance ultramarine `--lapis-bright`, Atomic turquoise, etc.) so the glow stays visible against any canvas background. Defined in [base.css](../client/src/themes/base.css) at `:root`, overridden in each per-theme file. The executing keyframes (`node-pulse` + per-theme `cyber-pulse-exec` / `surv-pulse-exec` / `ren-pulse-exec`) and the per-theme `--pulse-keyframe` / `--pulse-duration` / `--pulse-timing` tokens live in [animations.css](../client/src/themes/animations.css); base.css's `.sq-node[data-executing] .sq-node-box` / `.react-flow__node.executing .{sq-node-box,node}` rule reads `var(--pulse-keyframe, node-pulse)`, so a theme picks its pulse by overriding ONE token (Cyber → `cyber-pulse-exec`, Surveillance → `surv-pulse-exec`, Renaissance → `ren-pulse-exec`) — no high-specificity per-theme animation rule. `node-pulse` is a triple-layer expanding box-shadow (12px ring + 32px mid halo + 56px outer halo) consuming `var(--node-pulse-color)` + the shared `--tint-pulse-*` alphas. Trigger nodes use a separate continuous `.opencompany-trigger-armed` "listening" heartbeat (`trigger-listening` keyframe) while waiting, plus `.opencompany-bolt` on the ⚡ badge — distinct from the one-shot execution pulse. **Never animate `opacity` on whole-node selectors** — it fades the node icon + content, not just the glow.
-- **`data-page-hidden` animation pause** — `usePageActivitySync()` ([app/usePageActivitySync.ts](../client/src/app/usePageActivitySync.ts)), mounted once in [AppShell.tsx](../client/src/app/AppShell.tsx)'s `ShellEffects` so it covers both screens, listens to `visibilitychange` plus window `blur` / `focus` and toggles `data-page-hidden` on `<html>`; [base.css](../client/src/themes/base.css) declares `html[data-page-hidden] *, *::before, *::after { animation-play-state: paused !important; }`. Without this, paused CSS keyframes accumulate frames in the compositor queue while the tab is hidden; on tab return all 50+ executing nodes' triple-layer pulses + Cyber's full-viewport `cyber-flicker` / `cyber-roll` resume simultaneously, stalling the GPU compositor 100-200ms and blocking input dispatch (first-click-feels-frozen pattern). The unpause is deferred two `requestAnimationFrame` ticks so input dispatch wins the frame before composite resumes.
+- **`data-page-hidden` animation pause** — `usePageActivitySync()` ([app/usePageActivitySync.ts](../client/src/app/usePageActivitySync.ts)), mounted once in [App.tsx](../client/src/App.tsx), above the sign-in gate, so it covers every screen (sign-in and Connecting included), listens to `visibilitychange` plus window `blur` / `focus` and toggles `data-page-hidden` on `<html>`; [base.css](../client/src/themes/base.css) declares `html[data-page-hidden] *, *::before, *::after { animation-play-state: paused !important; }`. Without this, paused CSS keyframes accumulate frames in the compositor queue while the tab is hidden; on tab return all 50+ executing nodes' triple-layer pulses + Cyber's full-viewport `cyber-flicker` / `cyber-roll` resume simultaneously, stalling the GPU compositor 100-200ms and blocking input dispatch (first-click-feels-frozen pattern). The unpause is deferred two `requestAnimationFrame` ticks so input dispatch wins the frame before composite resumes.
 - **Parameter panel theme contract** — MasterSkillEditor, OutputPanel, MiddleSection, ParameterPanel removed `useAppTheme()`. Every surface renders against Tailwind tokens + new-contract CSS custom props. Section headers carry the display-typography triplet (`font-display tracking-[var(--type-tracking-display)] [text-transform:var(--type-uppercase)] text-fg-default`); action buttons use `<ActionButton intent="run|stop|save|config|tools">`; backgrounds use `bg-bg-elevated` / `bg-bg-panel` / `bg-bg-input` from the surface tier table above. EditableNodeLabel emits both `sq-node-label` and `node-label` classNames so per-theme typography rules fire under either topology. Per-theme scrollbar webkit rules (`::-webkit-scrollbar-thumb` etc.) declared in all 12 themes — gold (Renaissance), square-cornered (Atomic / Edo / Greek / Wasteland / Plague), metallic (Steampunk), phosphor (Rot), neon (Cyber), REC-red (Surveillance), shadcn neutral (Light / Dark).
 - **Canvas-node class topology alignment** (W26) — TriggerNode, StartNode, ToolkitNode migrated from `.node` (rectangular spec-card) topology to `.sq-node` / `.sq-node-box` (square-icon node) topology so per-theme decorations (Steampunk brass rivets, Edo hanko seal, Surveillance REC LED, Renaissance gold emblem) reach them. Status pips, gear buttons, and React Flow handles on every node component now carry `.sq-node-pip` / `.sq-node-gear` / `.sq-node-handle.in/.out` (square nodes) or `.node-pip` / `.node-gear` / `.node-handle.in/.out` (rectangular nodes — AIAgentNode, TeamMonitorNode; the former `GenericNode` was retired with the spec-driven canvas). Pip background is data-driven via `data-status="idle | executing | waiting | success | error"` — base.css picks the colour from shadcn semantic tokens; per-theme files override. Inline JS-computed `backgroundColor` / `border` / `animation` on these elements stripped — CSS owns visuals. Cyber's `.node-trigger` rule extended to dual-target both rectangular and square topologies (`.sq-node.node-trigger .sq-node-box`). Orphan `.node-output` rule removed. EditableNodeLabel now emits both `sq-node-label` and `node-label` classNames so per-theme typography rules fire. StartNode reads `nodeColor` from `definition?.defaults?.color` instead of hardcoded `theme.dracula.cyan`; the NodeSpec adapter never fills that field, so it resolves to `var(--node-workflow)`.
 - **Audio fix** (W20) — `--sound-pack: chime` typo in `light.css` + `dark.css` was silently falling through to `'none'` (`chime` not in the engine's pack registry), making sound silent for the most-used themes. Renamed `light` → `parchment`, `dark` → `terminal`. Added `Sounds.unlock()` exported from [lib/sound.ts](../client/src/lib/sound.ts) plus a one-shot `pointerdown / keydown / touchstart` capture-phase listener in `useSoundSync()` ([hooks/useSound.ts](../client/src/hooks/useSound.ts)) so the AudioContext resumes on the user's first gesture (Chrome / Safari autoplay policy compliance).

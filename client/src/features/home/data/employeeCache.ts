@@ -24,6 +24,7 @@ export function removeEmployee(queryClient: QueryClient, workflowId: string): vo
     hireNotice: state.hireNotice?.workflowId === workflowId ? null : state.hireNotice,
     glow: state.glow?.workflowId === workflowId ? null : state.glow,
   }));
+  useHomeStore.getState().endFirstDay(workflowId);
 
   // Refresh anything else the canceled list request would have brought in.
   void queryClient.invalidateQueries({ queryKey: EMPLOYEES_QUERY_KEY, exact: true });

@@ -24,10 +24,12 @@ export interface ChatPersona {
  * The message box:
  * - `send`: a message goes to them now;
  * - `queue`: it waits until they are resumed;
+ * - `wait`: the box shows but takes nothing yet (a new hire still
+ *   starting; the host's `placeholder` says so);
  * - `closed`: nothing can read it, so there is no box (the host's notices
  *   say why and offer what to do).
  */
-export type ComposerMode = 'send' | 'queue' | 'closed';
+export type ComposerMode = 'send' | 'queue' | 'wait' | 'closed';
 
 export type NotifyTone = 'info' | 'success' | 'error';
 
@@ -48,6 +50,11 @@ export interface ChatHost {
   afterThread?: ReactNode;
   /** In place of the conversation while it has no message. */
   emptyState?: ReactNode;
+  /** Under the empty state while a message can go: things to say first,
+   *  each putting its words in the box. In place of the suggested commands. */
+  greetings?: readonly string[];
+  /** The box's placeholder, in place of "Message {name}…". */
+  placeholder?: string;
   /** One line under the box. */
   footnote?: ReactNode;
   /** A short message for the owner (Home: the pill toast; Dev: a toast). */

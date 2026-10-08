@@ -24,7 +24,7 @@ import corpus from '../__fixtures__/replies.json';
 import { useHomeStore } from '../../state/homeStore';
 import { useShellDialogsStore } from '@/stores/shellDialogsStore';
 import { resetDraftForTests, useDraftStore } from '../draftStore';
-import { useHireComposer } from '../useHireComposer';
+import { useHireComposer, useJobComposer } from '../useHireComposer';
 
 const GOOD_REPLY = (corpus as unknown as { name: string; reply: string }[]).find((c) => c.name === 'clean minified reply')!.reply;
 
@@ -77,5 +77,37 @@ describe('useHireComposer', () => {
     await act(async () => rerender());
     expect(sendRequest).toHaveBeenCalledTimes(1);
     expect(useDraftStore.getState().failure?.code).toBe('no_ai_provider');
+  });
+});
+
+describe('useJobComposer (the Welcome guide’s box)', () => {
+  it('puts a chip’s job in the box without taking Home’s focus', () => {
+    const { result } = renderHook(() => useJobComposer());
+    act(() => result.current.pick('A receptionist who answers WhatsApp'));
+    expect(useDraftStore.getState().input).toBe('A receptionist who answers WhatsApp');
+    expect(useHomeStore.getState().composerFocus).toBe(0);
+    expect(sendRequest).not.toHaveBeenCalled();
+  });
+
+  it('sends the box as a new job, never as a change to the current draft', async () => {
+    sendRequest.mockResolvedValue({ success: true, reply: GOOD_REPLY });
+    const { result } = renderHook(() => useJobComposer());
+    useDraftStore.setState({ refining: true });
+    act(() => result.current.onChange('Answer my WhatsApp'));
+    await act(async () => {
+      await result.current.submit();
+    });
+    expect(sendRequest).toHaveBeenCalledWith('generate_employee_setup', expect.not.objectContaining({ refine: expect.anything() }), expect.any(Number));
+    expect(sendRequest.mock.calls[0][1]).toMatchObject({ job: 'Answer my WhatsApp' });
+  });
+
+  it('opens nothing on its own when there is no AI model', async () => {
+    sendRequest.mockResolvedValue({ success: false, error: 'no_ai_provider' });
+    const { result } = renderHook(() => useJobComposer());
+    act(() => result.current.onChange('Answer my WhatsApp'));
+    await act(async () => {
+      await result.current.submit();
+    });
+    expect(useShellDialogsStore.getState().credentialsOpen).toBe(false);
   });
 });

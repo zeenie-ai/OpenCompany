@@ -1,324 +1,132 @@
-# Onboarding Service
+# Onboarding
 
 ## Overview
 
-The onboarding service provides a four-step welcome wizard that appears after a user's first launch: what OpenCompany is, how the canvas works, connecting an AI provider, and trying the shipped AI Assistant example. It is database-backed, skippable, resumable, and replayable from Settings. The wizard is part of the workflow editor (`Dashboard.tsx`), so with Normal mode on it first appears when Dev mode opens; Normal mode's first screen is Home itself ([normal_mode.md](./normal_mode.md)). A separate, dismissable **Get Started checklist** (`GetStartedChecklist.tsx`) sits in the corner of the canvas after the wizard and tracks five first-session milestones.
+Onboarding is the **Welcome guide** on Home (Normal mode, [normal_mode.md](./normal_mode.md)): three steps, Welcome, Connect an AI model and Your first hire, in a dialog shaped like Home's Settings (a left nav, the page, a footer bar). It opens by itself the first time Home shows for an owner who has not finished it, and again from the header's **Guide** button or **Settings → Help → Welcome guide · Replay**. Progress is saved on the user settings row (`onboarding_completed`, `onboarding_step`), so it resumes where the owner left it, and skipping finishes it.
 
-The frontend is **fully shadcn/ui + Tailwind** — antd was removed from `client/src/`. The wizard composes the project's `Modal` primitive, shadcn `Button` / `ActionButton` / `Card` / `Badge` / `Alert` / `Skeleton`, and `lucide-react` icons. The step progress indicator is a hand-rolled `<ol>` driven by node-role tokens (no antd `Steps`).
+The guide replaced the editor's four-step wizard (it taught blocks and the Start button, and only appeared once Dev mode opened). The design is the onboarding handoff of 2026-10-08 (`design_handoff_onboarding/`, untracked; its README's revisions R1 and R2 trim the copy).
 
-## Architecture
+Once the guide is finished, a dismissable **Get started checklist** sits in Home's bottom-right corner and ticks off four first steps (see below). The editor has neither.
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│                         Dashboard.tsx                           │
-│  ┌────────────────────────────────────────────────────────┐    │
-│  │               OnboardingWizard.tsx                      │    │
-│  │  ┌────────────────────────────────────────────────┐    │    │
-│  │  │  useOnboarding(reopenTrigger, STEPS.length)    │    │    │
-│  │  │  - Reads onboarding_completed/step via         │    │    │
-│  │  │    useUserSettingsQuery (TanStack Query, WS)   │    │    │
-│  │  │  - Manages step navigation + persistence       │    │    │
-│  │  └───────────────┬────────────────────────────────┘    │    │
-│  │                  │                                      │    │
-│  │  STEPS array (single source of truth in wizard):       │    │
-│  │  ┌─────────┬──────────────┬─────────────────┬────────┐ │    │
-│  │  │Step 0   │Step 1        │Step 2           │Step 3  │ │    │
-│  │  │Welcome  │How it works  │Connect your AI  │Try it  │ │    │
-│  │  └─────────┴──────────────┴─────────────────┴────────┘ │    │
-│  │                                                         │    │
-│  │  Modal (project primitive, Radix-backed)               │    │
-│  │   + <ol> progress stepper (Tailwind + role tokens)     │    │
-│  └────────────────────────────────────────────────────────┘    │
-│                                                                │
-│  SettingsPanel.tsx → "Replay Welcome Guide" button             │
-│    └── onReplayOnboarding → increments reopenTrigger           │
-└────────────────────────────────────────────────────────────────┘
-          │                              │
-          │ WebSocket (via TanStack Q)   │ WebSocket
-          ▼                              ▼
-┌──────────────────────────────────────────────────────────────┐
-│  server/services/settings/handlers.py                        │
-│  - get_user_settings → returns onboarding_completed, step    │
-│  - save_user_settings → persists onboarding_completed, step  │
-│                                                               │
-│  server/core/database.py                                      │
-│  - _migrate_user_settings() adds columns + marks existing    │
-│    users (examples_loaded=1) as onboarding_completed=1       │
-│                                                               │
-│  server/models/database.py                                    │
-│  - UserSettings.onboarding_completed: bool                    │
-│  - UserSettings.onboarding_step: int                          │
-└──────────────────────────────────────────────────────────────┘
-```
-
-## Database Schema
-
-### UserSettings Fields
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `onboarding_completed` | `bool` | `False` | Whether onboarding was completed or skipped |
-| `onboarding_step` | `int` | `0` | Last completed step (for resuming mid-wizard) |
-
-### Migration
-
-In `server/core/database.py` `_migrate_user_settings()`:
-
-```python
-if "onboarding_completed" not in columns:
-    await conn.execute(text(
-        "ALTER TABLE user_settings ADD COLUMN onboarding_completed BOOLEAN DEFAULT 0"
-    ))
-    # Existing users (examples_loaded=1) skip onboarding
-    await conn.execute(text(
-        "UPDATE user_settings SET onboarding_completed = 1 WHERE examples_loaded = 1"
-    ))
-
-if "onboarding_step" not in columns:
-    await conn.execute(text(
-        "ALTER TABLE user_settings ADD COLUMN onboarding_step INTEGER DEFAULT 0"
-    ))
-```
-
-**Existing user handling**: The migration marks all rows with `examples_loaded=1` as `onboarding_completed=1`, so returning users never see the wizard.
-
-## Frontend File Structure
+## Files
 
 ```
-client/src/
-├── components/
-│   └── onboarding/
-│       ├── OnboardingWizard.tsx        # Wizard modal orchestrator + STEPS SSOT + <ol> stepper
-│       ├── GetStartedChecklist.tsx     # Post-wizard corner checklist (collapsible, dismissable)
-│       ├── getStartedItems.ts          # The five checklist milestones + EXAMPLE_WORKFLOW_NAMES
-│       ├── aiProviderLinks.ts          # FEATURED_AI_PROVIDERS: hint + key-page URL per provider id
-│       ├── nodeRoleClasses.ts          # Shared role→Tailwind-token map for step cards
-│       ├── steps/
-│       │   ├── WelcomeStep.tsx          # Step 0: what OpenCompany is, 2×2 feature grid
-│       │   ├── HowItWorksStep.tsx       # Step 1: blocks, agents, chat; Normal/Dev switch
-│       │   ├── ConnectAIStep.tsx        # Step 2: provider tiles from the live catalogue
-│       │   └── TryItStep.tsx            # Step 3: three-step recipe for the AI Assistant example
-│       └── __tests__/                   # ConnectAIStep, GetStartedChecklist, HowItWorksStep, OnboardingWizard
-└── hooks/
-    ├── useOnboarding.ts                # Wizard state + TanStack-Query persistence
-    └── useGetStarted.ts                # Checklist state (which milestones are done, dismissed)
+client/src/features/home/
+├── onboarding/
+│   ├── WelcomeGuide.tsx        # the dialog: nav, the three steps, the footer bar
+│   ├── useOnboarding.ts        # saved progress + moves (goTo / next / back / skip / complete)
+│   ├── GetStartedChecklist.tsx # the corner card and its folded pill
+│   ├── useGetStarted.ts        # the four steps' state, the two latches, useShowGetStarted
+│   ├── getStartedItems.ts      # the steps, in order
+│   └── steps/
+│       ├── WelcomeStep.tsx     # eyebrow with the owner's call name, the headline, the demo
+│       ├── WelcomeDemo.tsx     # three beats and a stage drawing the picked one
+│       ├── ConnectStep.tsx     # the shared CredentialsBrowser, cut to AI models
+│       └── FirstHireStep.tsx   # starter chips + Home's composer, bound to the same draft
+├── header/GuideButton.tsx      # the header's Guide pill
+├── settings/HelpTab.tsx        # Settings > Help: Replay the guide, Show the checklist
+└── state/homeStore.ts          # `guide` state: open, step, furthest, checked
 ```
 
-## Components
+`HomeShell.tsx` mounts `WelcomeGuide` and `GetStartedChecklist` beside `HomeSettings`.
 
-### useOnboarding Hook
+## State
 
-**Location**: `client/src/hooks/useOnboarding.ts`
+The open state and the step live in `homeStore` (`guide: { open, step, furthest, checked, provider, pendingDraft }`, steps `GUIDE_STEPS = ['welcome', 'connect', 'first-hire']`; `provider` is the page step 2 shows in place of its list, `pendingDraft` a step-3 job waiting for a model), so every entry point opens the guide directly (`openGuide(step)`, which clears both) and nothing counts replays. That is what keeps a remount from reopening it: a mode switch re-keys the screens, and the old wizard's replay counter reopened the wizard on every remount after one replay.
 
-Custom hook managing the full onboarding lifecycle. Persistence rides the **TanStack Query** server-state layer (`useUserSettingsQuery` / `useSaveUserSettingsMutation` from `useUserSettingsQuery.ts`), which are themselves WebSocket-backed (`get_user_settings` / `save_user_settings`). The hook does NOT call WebSocket handlers directly.
+`useOnboarding()` (mounted once, in `WelcomeGuide`) adds the saved side:
 
-```typescript
-export const useOnboarding = (
-  reopenTrigger?: number,
-  totalSteps: number = DEFAULT_TOTAL_STEPS,   // 4; the wizard passes STEPS.length
-) => {
-  // Returns (spread of OnboardingState + actions):
-  // - isVisible: boolean       - Whether wizard should render
-  // - currentStep: number      - Active step index (0..totalSteps-1)
-  // - isCompleted: boolean     - Whether already completed/skipped
-  // - isLoading: boolean       - Settings query in progress
-  // - hasChecked: boolean      - Initial hydration done
-  // - totalSteps: number       - Echoed back from the param
-  // - nextStep(): void         - Advance (completes + persists when next >= totalSteps)
-  // - prevStep(): void         - Go back one step (clamped at 0)
-  // - skip(): void             - Skip: persist current step, completed=true, hide
-  // - complete(): void         - Persist totalSteps, completed=true, hide
-};
-```
+- **First launch.** When the settings query first succeeds it calls `checkGuide(settings)`, which runs once per session (`checked`). For an owner whose `onboarding_completed` is false it opens the guide at `GUIDE_STEPS[onboarding_step]`, or at Welcome when that index is not a step (rows saved by the old four-step wizard can hold 2 or 3). A finished owner never sees it unasked.
+- **Moves.** `goTo(step)` (the nav, Next, Back, "I'll do this later") saves `{ onboarding_step }`.
+- **Finishing.** `skip()` (Skip for now, the close button, Esc, a click outside) saves `{ onboarding_completed: true, onboarding_step: <step reached> }`; `complete()` (the last step's Create) saves `onboarding_step: 3`. A replay never writes `onboarding_completed: false`.
 
-**Key behaviors**:
-- `totalSteps` is a **parameter**. The wizard owns the step list and passes `STEPS.length`, so the hook never hardcodes the count — it uses `totalSteps` only to detect last-step completion in `nextStep`. The default only matters if a caller omits it; it matches the shipped wizard.
-- Hydrates UI state from `settingsQuery.data` on `isSuccess`: reads `onboarding_completed` / `onboarding_step`. Visibility flips only on first hydration (`prev.hasChecked ? prev.isVisible : !completed`) so a user-closed wizard does not re-open on later query refetches.
-- Each navigation (`nextStep` / `prevStep` / `skip` / `complete`) calls `saveSettings.mutate({ onboarding_step, onboarding_completed })` to persist progress.
-- Query errors surface as a non-blocking "checked" state (`isLoading=false, hasChecked=true`) so the app continues even if the round-trip failed.
-- `reopenTrigger` prop change (when `> 0`) resets state and reopens the wizard from step 0.
+It reads and writes the settings through `useOwnerSettings` / `useSaveUserSettingsMutationCore` with the stable `useWebSocketActions()`, so Home never re-renders on a WebSocket message.
 
-### OnboardingWizard
+Existing owners keep skipping: the server's migration marked every row with `examples_loaded = 1` as `onboarding_completed = 1` when the columns were added (`server/core/database.py` `_migrate_user_settings`).
 
-**Location**: `client/src/components/onboarding/OnboardingWizard.tsx`
+## The dialog
 
-**Props**:
-| Prop | Type | Description |
-|------|------|-------------|
-| `onOpenCredentials` | `() => void` | Opens CredentialsModal (passed from Dashboard) |
-| `reopenTrigger` | `number?` | Incrementing counter triggers wizard reopen |
-| `onFinish` | `() => void?` | Called after the last step's button completes the wizard; the Dashboard opens the AI Assistant example and focuses chat. Never called on skip or modal close. |
+`WelcomeGuide` uses the shared `Modal` the way `HomeSettings` does (`hideHeader`, `motion="spring"`, `scrollableBody={false}`, `rounded-panel bg-bg-panel shadow-dialog`), at `min(var(--w-guide), 100vw - 3rem)` by `min(var(--h-guide), 100vh - 3rem)` (940 by 620).
 
-**`STEPS` is the single source of truth.** The wizard declares a module-scope `STEPS` array of `{ title, render }` entries. Its `.length` feeds the hook's `totalSteps`, the progress indicator renders one node per entry, and the active step's `render` is dispatched by index. Adding a step is a one-line edit to this array.
+- **Nav** (`w-(--w-settings-nav)`): the "Get started" label, then one Radix Tabs trigger per step (`NAV_ITEM` from `features/home/ui/nav.ts`, shared with Settings), with Sparkles / KeyRound / UserPlus. A step is ticked (`CircleCheck` in `action-run-ink`) once passed; Connect is ticked as soon as any AI model is connected. The nav reaches the steps already visited (`furthest`) and always Connect; the others are disabled triggers. The Open Council mark sits at the foot.
+- **Footer**: Skip for now, the mono "n / 3", Back (hidden on Welcome), then Next (`ActionButton intent="tools"`) on Welcome and on Connect once a model is connected, or "I'll do this later" on Connect without one. The last step has no footer button: its composer's own Create is the action.
+- Inactive steps unmount (Radix Tabs), and each step's blocks rise in with the Settings stagger (`staggerSettings`).
 
-```typescript
-const STEPS = [
-  { title: 'Welcome',         render: () => <WelcomeStep /> },
-  { title: 'How it works',    render: () => <HowItWorksStep /> },
-  { title: 'Connect your AI', render: ({ onOpenCredentials }) => <ConnectAIStep onOpenCredentials={onOpenCredentials} /> },
-  { title: 'Try it',          render: () => <TryItStep /> },
-];
-```
+### Step 1, Welcome
 
-**UI Structure** (all shadcn/Tailwind, no antd):
-- Project `Modal` primitive with `maxWidth="95vw"`, `maxHeight="95vh"`, titled "Welcome Guide"; `onClose` is wired to `skip`.
-- Progress indicator: a hand-rolled `<ol>` of step pills. Each pill is a rounded number/`Check` (lucide) badge with one of three statuses — `completed` (filled `bg-primary text-primary-foreground`), `active` (`border-primary text-primary`), `upcoming` (`border-border text-muted-foreground`) — joined by a connector `<div>` (`bg-primary` once passed, else `bg-border`). No antd `Steps`.
-- Step content rendered via `STEPS[safeIndex].render({ onOpenCredentials })` inside a scrollable `max-h-[calc(95vh-200px)]` container.
-- Footer: shadcn `Button variant="ghost"` "Skip for now" (left) | `Button variant="outline"` "Back" (shown when `currentStep > 0`) + an `ActionButton` on the right.
-- The right-side primary button uses **`ActionButton` intents**, not raw colour hex: `<ActionButton intent="tools">` for "Next" (with `ArrowRight`), `<ActionButton intent="run">` for the final "Open AI Assistant" (with `MessageCircle`), which calls `complete()` and then `onFinish`.
-- Only renders when `isVisible && hasChecked && !isLoading`.
+The eyebrow says "Welcome, {call name}" (`callName` from the profile; "Welcome" without one) in the agent ink, over "Your AI team, hired in plain words." (`text-headline`). The demo beside it has three beats, each a button: Describe the job (a small composer with the job typed in), Check and hire (the setup card as the R2 design draws it: identity, a WHEN / THEY / THEN routine, "Ask before sending" and Hire), and Talk to them (the owner's "Hi Maya!", the reply, and a WhatsApp draft that "Needs you"). The stage (`.home-welcome-stage`, two washes of `--node-agent-fill` and `--node-model-soft` over `--bg-app`) is decoration (`aria-hidden`), drawn with token classes, never real controls. It plays by itself on an 80 ms clock (`TICK_MS`): the job types itself a character a tick and Create pops when it is written, a pause, then the setup (its rows rising one by one, then Hire), then the conversation (the reply, then the draft), each beat for its `BEAT_TICKS`, round again; a bar under the playing beat fills as it plays (an inline `scaleX` of the clock), and clicking a beat starts it. It runs only while the step shows, since inactive steps unmount. Under reduced motion there is no clock: the conversation shows, still, with no bar, and a click shows another beat.
 
-### Node-role token map
+### Step 2, Connect an AI model
 
-**Location**: `client/src/components/onboarding/nodeRoleClasses.ts`
+The shared `CredentialsBrowser` (the same as Settings > Connectors), handed a catalogue cut to `consumer_category === 'ai'` with no categories, so Yours counts AI models only and there is no category filter. It runs with `variant="embedded"` (a smaller title and search box), `discoverLimit={null}` (every AI model, so the ones that run on this computer are not behind "Show all") and AI copy: "Connect an AI model" ("You're connected" once one is), "Search AI models", "AI models", and "No AI models connected yet".
 
-`NODE_ROLE_CLASSES` maps a `NodeRole` (`model | skill | agent | workflow | trigger`) to the matching `--node-X` triplet (`{ card: 'bg-node-X-soft border-node-X-border', text: 'text-node-X' }`). Every step keys its card surfaces off this so the cards track every theme with **no opacity arithmetic at the call site**.
+Connect and Manage open the provider's page **in place of the list** (`components/credentials/ProviderPage.tsx`, the page the credentials dialog shows as its second layer, here with its own "Connect {name}" heading and focus on "All AI models"). The footer's Back and Next step aside while it shows; "All AI models" and Esc return to the list, focusing the card it came from (a disconnect confirmation, its own layer, closes first on Esc). The list stays mounted underneath, hidden, so a card that turns connected still glows and reports it through `onItemAdded`: a pill says "{Provider} is connected" and, after a connect, the step returns to the list (Manage stays open).
 
-### Step Components
+**A job waiting for a model.** On step 3 without a model, Create (or the notice's button) goes to step 2 with `guide.pendingDraft` set when the box holds a job. Connecting a model then finishes the guide, shows the hire view and sends the job. Closing the guide drops the flag. This is the guide's own path; a draft Home already sent that failed with `no_ai_provider` is still re-sent by `useHireComposer` once a model is connected anywhere.
 
-All steps are shadcn/Tailwind compositions using `lucide-react` icons. No antd, no `@ant-design/icons`. The copy is deliberately non-technical (blocks, agents, chat), not node-type vocabulary.
+### Step 3, Your first hire
 
-| Step | Component | Heading | Purpose | Notable data sources |
-|------|-----------|---------|---------|----------------------|
-| 0 | `WelcomeStep` | Build your own AI team | Platform intro + 2×2 feature grid (agents, drag-and-drop, bring your AI, local and private) | static; `Card` / `CardContent`, role-token cards |
-| 1 | `HowItWorksStep` | See how it works | Three ideas: snap blocks together, agents do the thinking, chat to make it go; explains the Normal / Dev toolbar switch | `useNodeGroups()` — the Normal-mode group labels render live as `Badge`s |
-| 2 | `ConnectAIStep` | Connect your AI (or "You're connected") | Featured provider tiles with "Get a key" links, the remaining AI providers as chips, and the Connect / Manage button | `useCatalogueQuery()` for name, icon and `stored` state; `FEATURED_AI_PROVIDERS` for hint + key URL |
-| 3 | `TryItStep` | Say hello to your first agent | Three-step recipe (open AI Assistant, press Start, say hello) plus "more to explore" cards for Claude Assistant and AI Employee | static |
+"Who should we hire first?", the starter chips (left-aligned, without Hire now) and Home's `Composer` (`flat`, `idleLabel="Create their setup"`), bound through genui's `useJobComposer()`: the same draft as Home's composer, without the effects `useHireComposer` runs (they stay mounted once, in the hire view), and picking a starter takes no focus from Home. Create finishes the guide, shows the hire view and sends the job; the setup then writes itself under Home's composer. Without an AI model it sends nothing: a pink notice, "Connect an AI model first.", and its button (or Create) lead to step 2, where the job waits (above).
 
-**ConnectAIStep** takes an `onOpenCredentials` prop so it links to the existing CredentialsModal without duplicating key input. Everything about a provider except its marketing hint and key-page URL comes from the live credential catalogue: `FEATURED_AI_PROVIDERS` (`aiProviderLinks.ts`) lists only `{ id, hint, keyUrl }` for openai, anthropic and gemini, and the step joins that to `useCatalogueQuery().providers` filtered to `category === 'ai'`. Providers not featured render as a chip row with a note that Ollama and LM Studio run locally. While the catalogue loads it shows three `Skeleton` tiles; once any AI provider is `stored` the heading, button label and closing `Alert` all switch to the connected variant.
+## Get started checklist
 
-**HowItWorksStep** reads `useNodeGroups()` and renders the labels of every group whose `visibility` is `normal` or `all`, so the "Normal shows just the AI blocks" sentence stays true as groups are added.
+**Location**: `features/home/onboarding/GetStartedChecklist.tsx`, state in `useGetStarted.ts`, steps in `getStartedItems.ts` (onboarding handoff D).
 
-### Get Started checklist
+A card fixed in Home's bottom-right corner (`w-80`, `shadow-popover`), shown once `onboarding_completed` is true and until `getting_started_dismissed`, and never while the Welcome guide is open. Four steps, each ticking itself:
 
-**Location**: `client/src/components/onboarding/GetStartedChecklist.tsx`, state in `client/src/hooks/useGetStarted.ts`, items in `getStartedItems.ts`.
+| Step | Done when | Under the label | A click |
+|------|-----------|-----------------|---------|
+| Connect an AI model | an AI model is connected now (`useConnectors().hasAi`) | "OpenAI, Anthropic, Gemini or a local model", then "{Provider} is connected" | the guide at Connect |
+| Hire your first employee | someone on the team was hired (not `derived`) | "Describe a job or pick a starter", then "{Name}, {role}" | the hire view, composer focused |
+| Say hello | latched: the owner has written to their first hire (the one hired earliest) | "Send {Name} a message" | their page |
+| Approve a first draft | latched: an `approval_lifecycle` `decided` event with status `approved` arrived while Home was open | "They ask before sending anything" | the page of whoever has a draft waiting, else the first hire |
 
-A fixed-position card (bottom right, above the console) that appears after the wizard and tracks five milestones: workspace set up (auto-complete), add an AI key, chat with the AI Assistant, build your own workflow (told apart from editing a shipped example via `EXAMPLE_WORKFLOW_NAMES`), and try a theme. Rows flagged `actionable` take a click handler from the Dashboard through the `actions` prop. It collapses to a pill and can be dismissed; dismissal is reversible from Settings → Help.
+The two latches are `UserSettings.getting_started_said_hello` and `getting_started_approved_draft`, written once each (the saved flag is the guard), since New conversation or a restart empties the thread and an approval is an event. The first hire's conversation is read only until Say hello is latched. The card folds to a "Get started · n/4" pill; hiding it says "Get started hidden. Reopen it from Settings → Help.", and Settings → Help → Get started checklist · Show brings it back (`useShowGetStarted`). The four earlier latch columns (`getting_started_added_key`, `_ran_example`, `_built_workflow`, `_tried_theme`, from the editor's checklist) are no longer read.
 
-## Integration Points
+## WebSocket handlers
 
-### Dashboard.tsx
-
-```typescript
-// State for replay trigger
-const [onboardingReopenTrigger, setOnboardingReopenTrigger] = React.useState(0);
-
-// SettingsPanel gets replay callback
-<SettingsPanel
-  onReplayOnboarding={() => {
-    setSettingsOpen(false);
-    setOnboardingReopenTrigger(prev => prev + 1);
-  }}
-/>
-
-// OnboardingWizard rendered after CredentialsModal
-<OnboardingWizard
-  onOpenCredentials={() => setCredentialsOpen(true)}
-  reopenTrigger={onboardingReopenTrigger}
-  onFinish={openAiAssistantAndFocusChat}
-/>
-```
-
-### SettingsPanel.tsx
-
-`SettingsPanel` takes an `onReplayOnboarding?: () => void` prop. The Help section renders a shadcn `Button variant="default"` "Replay Welcome Guide" (lucide `HelpCircle` icon, `disabled` when the callback is absent) that fires `onReplayOnboarding`.
-
-## WebSocket Handlers
-
-No new handlers were needed. The onboarding system reuses the generic user-settings handlers (registered from `server/services/settings/handlers.py`), accessed through the TanStack Query user-settings layer:
+No onboarding-specific handlers. Progress rides the user settings handlers (`server/services/settings/handlers.py`) through the TanStack Query layer:
 
 | Handler | Usage |
 |---------|-------|
-| `get_user_settings` | Check `onboarding_completed` and `onboarding_step` on hydration |
-| `save_user_settings` | Persist step progress on each navigation, skip, or complete |
+| `get_user_settings` | `onboarding_completed` and `onboarding_step` for the first-launch check; the checklist's `getting_started_*` flags |
+| `save_user_settings` | the step on every move; `onboarding_completed` on skip and complete; the checklist's latches and `getting_started_dismissed` |
 
-## Lifecycle
+## Edge cases
 
-### First Launch (New User)
+| Scenario | Behaviour |
+|----------|-----------|
+| Settings query not resolved yet | The guide stays closed until it resolves |
+| Settings query fails | The guide stays closed; the Guide button still opens it |
+| A mode switch or remount | Does not reopen it: `checked` holds for the session |
+| Saved step from the old wizard (2 or 3) | 2 opens Your first hire; 3 or more opens Welcome |
+| Multiple tabs | Finishing in one tab does not close it in another until that one reloads |
+| `VITE_NORMAL_MODE=false` | There is no Home, so no guide |
+| Auth disabled | Works unchanged: the settings row is the anonymous owner's |
 
-1. User opens app, WebSocket connects
-2. `useOnboarding` reads `useUserSettingsQuery` -- no settings exist yet
-3. `onboarding_completed` defaults to `false`, `onboarding_step` defaults to `0`
-4. Wizard opens at step 0
-5. User navigates steps -- each transition saves via the save mutation (`save_user_settings`)
-6. On "Open AI Assistant" or "Skip for now", `onboarding_completed` set to `true`; only the former also fires `onFinish`
-7. Wizard closes, does not reappear on refresh
+## Tests
 
-### Existing User (Database Migration)
+- `features/home/__tests__/welcomeGuide.test.tsx`: opens at the saved step, Welcome for an out-of-range step, never for a finished owner, no reopen on remount; the nav's reachability; Next saves the step; Connect lists every AI model and no apps, "I'll do this later", "You're connected"; the provider page in place of the list, Back and Esc (focus returns to the card), the pill and the return to the list on connect; closing saves the step reached; the last step finishes and sends, or sends nothing without a model until one is connected, which finishes the guide.
+- `features/home/__tests__/welcomeDemo.test.tsx` (fake timers): the job typed a character a tick, the beats in turn and round again, a click starting a beat, reduced motion holding the conversation with no bar.
+- `features/home/__tests__/guideStore.test.ts`: `checkGuide`, `openGuide`, `goToGuideStep`, `closeGuide`, the provider page and the waiting job.
+- `components/__tests__/CredentialsModal.test.tsx`: the dialog around the same `ProviderPage`.
+- `features/home/genui/__tests__/useHireComposer.test.tsx`: `useJobComposer` (no focus taken, a new job only, no dialog of its own).
+- `composer.test.tsx` (`flat`, the idle label, chips without Hire now), `catalogLayout.test.tsx` (no cap, the list label), `homeHeader.test.tsx` (Guide), `homeSettings.test.tsx` (Help → Replay).
+- `features/home/__tests__/getStarted.test.tsx`: shown once the guide is finished and never over it, each step's click, what is done now, each latch written once (and not for a discarded draft), the folded pill, hiding with its toast.
+- Server: `tests/test_user_settings_contract.py` and `tests/services/test_getting_started_settings.py` (the latch columns, their migration and the getter).
 
-1. Server starts, `_migrate_user_settings()` runs
-2. Adds `onboarding_completed` column, sets to `1` where `examples_loaded = 1`
-3. User opens app, `useOnboarding` checks -- sees `onboarding_completed = true`
-4. Wizard does not appear
-
-### Resume Mid-Wizard
-
-1. User advances to step 2, closes browser
-2. `onboarding_step = 2` was saved on last navigation
-3. User reopens app, `useOnboarding` reads `step = 2, completed = false`
-4. Wizard opens at step 2
-
-### Replay from Settings
-
-1. User opens Settings, clicks "Replay Welcome Guide"
-2. `onReplayOnboarding()` callback fires:
-   - Closes SettingsPanel
-   - Increments `onboardingReopenTrigger`
-3. `useOnboarding` detects the trigger change (`> 0`):
-   - Sets `isVisible = true, currentStep = 0, isCompleted = false`
-4. Wizard opens from step 0
-
-## Edge Cases
-
-| Scenario | Behavior |
-|----------|----------|
-| Auth disabled (`VITE_AUTH_ENABLED=false`) | Works unchanged -- reads from `user_id="default"` |
-| Settings query not resolved yet | `isLoading=true` prevents render until `hasChecked` |
-| Settings query errors | Non-blocking: `isLoading=false, hasChecked=true`, app continues |
-| Browser closed mid-wizard | `onboarding_step` saved on each transition, resumes from last step |
-| Multiple tabs | Completing in one tab doesn't update others until query refetch |
-| Replay from Settings | Resets local state and reopens wizard from step 0 |
-| Fresh database (no workflow.db) | Onboarding appears after first settings query resolves |
-| Credential catalogue still loading on step 2 | `Skeleton` tiles; the Connect button is always available |
-
-## Verification Checklist
-
-1. **Fresh database**: Delete `~/.opencompany/workflow.db` (or the configured DB), start server -- wizard appears
-2. **Step navigation**: Click through all 4 steps -- the `<ol>` stepper updates, Back/Next work
-3. **Skip**: Click "Skip for now" -- wizard closes, doesn't reappear on refresh
-4. **Resume**: Advance to step 2, close browser, reopen -- wizard resumes at step 2
-5. **Complete**: Finish via "Open AI Assistant" -- wizard doesn't reappear, the AI Assistant example opens with chat focused
-6. **Connect step**: Click "Connect your AI account" -- CredentialsModal opens; after saving a key, the step re-renders as connected
-7. **Existing user migration**: With existing `workflow.db` where `examples_loaded=1` -- onboarding does NOT appear
-8. **Theme support**: Switch themes -- role-token cards adapt correctly
-9. **Replay**: Open Settings, click "Replay Welcome Guide" -- wizard reopens from step 0
-10. **Tests**: `bun run --filter react-flow-client test` runs the four `onboarding/__tests__/` suites; `bun run typecheck` (root gate, TypeScript 7) passes clean
-
-## Key Files
+## Key files
 
 | File | Description |
 |------|-------------|
-| `client/src/hooks/useOnboarding.ts` | Wizard state hook; persists via TanStack-Query user-settings layer |
-| `client/src/hooks/useGetStarted.ts` | Get Started checklist state |
-| `client/src/hooks/useUserSettingsQuery.ts` | `useUserSettingsQuery` / `useSaveUserSettingsMutation` (WS-backed) |
-| `client/src/components/onboarding/OnboardingWizard.tsx` | Main wizard modal: `STEPS` SSOT + `<ol>` stepper + ActionButton footer |
-| `client/src/components/onboarding/GetStartedChecklist.tsx` | Post-wizard milestone checklist |
-| `client/src/components/onboarding/getStartedItems.ts` | Checklist items + `EXAMPLE_WORKFLOW_NAMES` |
-| `client/src/components/onboarding/aiProviderLinks.ts` | `FEATURED_AI_PROVIDERS` hints and key-page URLs |
-| `client/src/components/onboarding/nodeRoleClasses.ts` | `NODE_ROLE_CLASSES` role→token map for step cards |
-| `client/src/components/onboarding/steps/WelcomeStep.tsx` | Step 0: what OpenCompany is |
-| `client/src/components/onboarding/steps/HowItWorksStep.tsx` | Step 1: blocks, agents, chat, Normal/Dev switch |
-| `client/src/components/onboarding/steps/ConnectAIStep.tsx` | Step 2: provider tiles from the catalogue + Credentials link |
-| `client/src/components/onboarding/steps/TryItStep.tsx` | Step 3: AI Assistant recipe |
-| `client/src/Dashboard.tsx` | Integration: renders wizard + checklist, passes replay trigger and `onFinish` |
-| `client/src/components/ui/SettingsPanel.tsx` | "Replay Welcome Guide" button in Help section |
-| `server/models/database.py` | `UserSettings.onboarding_completed`, `onboarding_step` fields |
-| `server/core/database.py` | Migration + CRUD for onboarding fields |
-
-## Adding New Steps
-
-To add a new onboarding step:
-
-1. Create `client/src/components/onboarding/steps/NewStep.tsx` composing shadcn primitives + Tailwind tokens + lucide icons (use `NODE_ROLE_CLASSES` for tinted cards). Do NOT introduce antd. Prefer live data (`useCatalogueQuery`, `useNodeGroups`) over hardcoded lists, as steps 1 and 2 do.
-2. Add a `{ title, render }` entry to the `STEPS` array in `OnboardingWizard.tsx`. Its `.length` automatically updates the hook's `totalSteps` and the progress stepper — no separate count to maintain. If the new step is last, the "Open AI Assistant" button and `onFinish` move to it automatically.
-3. No backend changes needed (step index is just a number).
+| `client/src/features/home/onboarding/WelcomeGuide.tsx` | The dialog |
+| `client/src/features/home/onboarding/useOnboarding.ts` | First-launch check and saved progress |
+| `client/src/features/home/state/homeStore.ts` | `guide` state, `GUIDE_STEPS` |
+| `client/src/components/credentials/CredentialsBrowser.tsx` | `copy`, `variant`, `discoverLimit`, `onItemAdded` |
+| `client/src/components/credentials/ProviderPage.tsx` | One provider's page, shared by the guide and the credentials dialog |
+| `client/src/components/credentials/aiProviderLinks.ts` | "Get a key from …" links for the featured AI providers |
+| `client/src/components/catalog/CatalogLayout.tsx` | `variant`, `discoverLimit`, `listLabel` |
+| `client/src/features/home/genui/useHireComposer.ts` | `useJobComposer` |
+| `client/src/features/home/onboarding/useGetStarted.ts` | The checklist's steps and latches |
+| `server/models/database.py` | `UserSettings.onboarding_completed`, `onboarding_step`, the `getting_started_*` flags |
+| `server/core/database.py` | The migration that marks existing owners finished |

@@ -1,6 +1,8 @@
 /**
  * The draft panel end to end: the screen renders through json-render (its
- * code loads lazily, so the first look waits for it), a double-clicked Hire
+ * code loads lazily, so the first look waits for it) as the setup card (who
+ * they are with Discard beside it, the routine with Change on its When row,
+ * the model's rules, then the footer strip), a double-clicked Hire
  * sends one request, a finished hire clears the draft and opens the new
  * employee's page (with what the hire said, and the AI connect dialog when
  * there is no model), "Change something" hands the composer the draft,
@@ -60,7 +62,6 @@ function seedReadyDraft(text = reply) {
     job: 'Answer WhatsApp',
     turns: [{ change: null, reply: text }],
     spec,
-    intro: parsed.text,
     uiState: spec.state,
     version: 1,
   });
@@ -81,6 +82,7 @@ function hired(patch: Record<string, unknown> = {}) {
   return {
     success: true,
     started: true,
+    node_count: 14,
     warnings: [],
     needs_ai: false,
     employee: { workflow_id: 'w1', name: 'Maya', role: 'Receptionist', status: 'working', control: {}, revision: 1 },
@@ -107,7 +109,7 @@ beforeEach(() => {
   vi.mocked(pillToast).mockClear();
   resetDraftForTests();
   seedReadyDraft();
-  useHomeStore.setState({ view: { kind: 'hire' }, hireNotice: null });
+  useHomeStore.setState({ view: { kind: 'hire' }, hireNotice: null, firstDays: {} });
   useShellDialogsStore.setState({ credentialsOpen: false });
   useAppStore.setState({ shellMode: 'normal' });
 });
@@ -134,14 +136,50 @@ describe('HireDraftPanel', () => {
     expect(screen.queryByRole('combobox', { name: /specialist/i })).not.toBeInTheDocument();
   });
 
-  it('shows the introduction and the setup screen', async () => {
+  it('shows the setup card: who they are, their routine, their rules, then the footer', async () => {
     renderPanel();
-    expect(screen.getByText('Meet Maya, your new receptionist.')).toBeInTheDocument();
-    expect(await screen.findByText('Their routine')).toBeInTheDocument();
-    expect(screen.getByText('When something new arrives in WhatsApp')).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: 'Ask me before sending anything' })).toBeChecked();
+    expect(await screen.findByText('Maya')).toBeInTheDocument();
+    expect(screen.getByText('Receptionist · WhatsApp, Google Calendar')).toBeInTheDocument();
+    expect(screen.getByText('Answers WhatsApp and books visits.')).toBeInTheDocument();
+    // The card says who they are, so the header, the model's introduction
+    // and the routine's own title stay out of it.
+    expect(screen.queryByText('New employee')).not.toBeInTheDocument();
+    expect(screen.queryByText('Meet Maya, your new receptionist.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Their routine')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Discard draft' })).toBeInTheDocument();
+    // The routine, its When row first, with Change.
+    expect(screen.getByText('When a message arrives')).toBeInTheDocument();
+    expect(screen.getByText('Book the visit')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Change' })).toHaveAttribute('aria-expanded', 'false');
+    // The model's own rules stay in view.
     expect(screen.getByRole('switch', { name: 'Only reply 9 to 6' })).not.toBeChecked();
     expect(screen.getByRole('radio', { name: 'Daily' })).toBeChecked();
+    // The footer: Ask first, then Change something before Hire.
+    expect(screen.getByRole('switch', { name: 'Ask before sending' })).toBeChecked();
+    const change = screen.getByRole('button', { name: 'Change something' });
+    const hire = screen.getByRole('button', { name: 'Hire Maya' });
+    expect(change.compareDocumentPosition(hire) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('keeps the header for a card with no one to introduce', async () => {
+    const setup = JSON.parse(reply);
+    delete setup.spec.elements.b;
+    setup.spec.elements.a.children = ['c', 'd', 'e'];
+    seedReadyDraft(JSON.stringify(setup));
+    renderPanel();
+    expect(await hireButton()).toBeInTheDocument();
+    expect(screen.getByText('New employee')).toBeInTheDocument();
+    expect(screen.getByText('Answer WhatsApp')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Discard draft' })).toHaveLength(1);
+  });
+
+  it('discards the draft from beside their name', async () => {
+    renderPanel();
+    await hireButton();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Discard draft' }));
+    });
+    await waitFor(() => expect(useDraftStore.getState().status).toBe('idle'));
   });
 
   it('sends one hire for a double click, then clears the draft and opens the employee', async () => {
@@ -169,6 +207,8 @@ describe('HireDraftPanel', () => {
     expect(useHomeStore.getState().glow?.workflowId).toBe('w1');
     expect(useHomeStore.getState().view).toEqual({ kind: 'employee', workflowId: 'w1' });
     expect(useHomeStore.getState().hireNotice).toBeNull();
+    // Their page opens on their first day, which knows the hire started them.
+    expect(useHomeStore.getState().firstDays.w1).toEqual({ started: true, nodeCount: 14 });
     expect(screen.queryByText('Hiring your employee…')).not.toBeInTheDocument();
   });
 
@@ -203,6 +243,8 @@ describe('HireDraftPanel', () => {
     await act(async () => { fireEvent.click(hire); });
     await waitFor(() => expect(useHomeStore.getState().view).toEqual({ kind: 'employee', workflowId: 'arjun-workflow' }));
     expect(useDraftStore.getState()).toMatchObject({ status: 'idle', hiring: false });
+    // A hire held for WhatsApp did not start them; the first day says why.
+    expect(useHomeStore.getState().firstDays['arjun-workflow']).toEqual({ started: false, nodeCount: 14 });
     expect(sendRequest).toHaveBeenCalledWith('hire_employee', expect.objectContaining({
       name: 'Arjun', trigger: { kind: 'schedule', every: 'day', at: '08:00' }, rules: expect.objectContaining({ ask_first: true }),
     }), expect.any(Number));
@@ -268,11 +310,13 @@ describe('HireDraftPanel', () => {
   it('hires on the schedule the owner picked, and the routine follows it', async () => {
     sendRequest.mockResolvedValue(hired());
     renderPanel();
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Change' }));
+    expect(screen.getByRole('button', { name: 'Done' })).toHaveAttribute('aria-expanded', 'true');
     fireEvent.click(screen.getByRole('radio', { name: 'On a schedule' }));
     fireEvent.click(screen.getByRole('radio', { name: 'Weekdays' }));
-    // The sentence and the routine's first step both say it.
-    expect(screen.getAllByText('Every weekday at 09:00')).toHaveLength(2);
+    // The routine's When row says it.
+    expect(screen.getByText('Every weekday at 09:00')).toBeInTheDocument();
+    expect(screen.queryByText('When a message arrives')).not.toBeInTheDocument();
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Hire Maya' }));
     });
@@ -286,8 +330,8 @@ describe('HireDraftPanel', () => {
     seedReadyDraft(replies.find((c) => c.name === 'json-render shape: on.press and checked')!.reply);
     sendRequest.mockResolvedValue(hired());
     renderPanel();
-    expect(await screen.findByRole('switch', { name: 'Ask me before sending anything' })).toBeChecked();
-    fireEvent.click(screen.getByRole('switch', { name: 'Ask me before sending anything' }));
+    expect(await screen.findByRole('switch', { name: 'Ask before sending' })).toBeChecked();
+    fireEvent.click(screen.getByRole('switch', { name: 'Ask before sending' }));
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Hire Maya' }));
     });

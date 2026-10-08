@@ -18,7 +18,11 @@ import type { ColorRole } from '../data/schemas';
 const AVATAR_SIZE = {
   sm: 'size-7.5 text-xs',
   md: 'size-8 text-sm',
+  /** 48px: the identity row of a new employee's setup card. */
+  card: 'size-12 border-2 text-lg',
   lg: 'size-14 border-2 text-title',
+  /** 72px: a new hire arriving on their page. */
+  xl: 'size-18 border-2 text-headline',
 } as const;
 
 export function Avatar({

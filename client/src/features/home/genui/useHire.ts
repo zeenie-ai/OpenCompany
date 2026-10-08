@@ -54,6 +54,8 @@ export interface HireResponse {
   error?: string;
   employee?: unknown;
   started?: boolean;
+  /** Blocks in the workflow the hire built (the first day's "Workflow built"). */
+  node_count?: number;
   needs_ai?: boolean;
   warnings?: unknown;
   activation_state?: string;
@@ -76,10 +78,14 @@ export function hireFailureMessage(error: unknown): string {
 }
 
 /** The new employee joins the team: a glow, the logo, a toast, and their
- *  page, with what the hire said. */
+ *  page on its first day, with what the hire said. */
 export function welcomeHire(queryClient: QueryClient, employee: EmployeeSummary, response: HireResponse): void {
   refreshEmployee(queryClient, employee.workflow_id);
   const home = useHomeStore.getState();
+  home.beginFirstDay(employee.workflow_id, {
+    started: response.started === true,
+    nodeCount: typeof response.node_count === 'number' ? response.node_count : null,
+  });
   home.glowRow(employee.workflow_id);
   home.pulseLogo();
   spikeOrb(SPIKE.hire);

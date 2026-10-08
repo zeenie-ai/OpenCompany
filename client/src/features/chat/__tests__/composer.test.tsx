@@ -220,6 +220,23 @@ describe('commands, Web and suggestions', () => {
     expect(box()).toHaveValue('What does tomorrow look like?');
   });
 
+  it('says hello in place of the suggestions, filling the box', async () => {
+    renderPane(host({ greetings: ['Hi! What can you do?', 'Walk me through your routine'] }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Hi! What can you do?' }));
+    expect(box()).toHaveValue('Hi! What can you do?');
+    expect(screen.queryByRole('button', { name: /Check a day in the calendar/ })).not.toBeInTheDocument();
+  });
+
+  it('shows a box that takes nothing yet while the host waits, and no greetings', async () => {
+    renderPane(host({ composer: 'wait', placeholder: 'Maya is starting…', greetings: ['Hi! What can you do?'] }));
+    expect(await screen.findByPlaceholderText('Maya is starting…')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    await waitFor(() => expect(requests('get_chat_context')).toHaveLength(1));
+    await act(async () => {});
+    expect(screen.queryByRole('button', { name: 'Attach files' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Hi! What can you do?' })).not.toBeInTheDocument();
+  });
+
   it('suggests nothing in the editor’s chat, a console for trying chat triggers', async () => {
     renderPane(host({ kind: 'dev', compact: true }));
     // Attach shows once the chat's context has arrived, commands included.

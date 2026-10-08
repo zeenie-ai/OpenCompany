@@ -19,8 +19,10 @@
  * Files go with a message where the chat allows them: Attach, a paste, or
  * a drop anywhere on the chat (DropOverlay), all through one
  * `addAttachments` (composer/attachments.ts). The box also dictates, offers
- * slash commands and, in an empty chat, suggestions (data/chatContext.ts),
- * and the Web chip keeps the employee off web search for the next messages.
+ * slash commands and, in an empty chat, the host's greetings or else
+ * suggestions (data/chatContext.ts), and the Web chip keeps the employee off
+ * web search for the next messages. In the host's `wait` the box shows but
+ * takes nothing yet.
  *
  * The owner can change the conversation (data/branches.ts, TurnActions):
  * edit one of their messages in place (ArrowUp in an empty box edits the
@@ -46,6 +48,7 @@ import { StandaloneApprovals } from './approval/StandaloneApprovals';
 import { AskFirstChip } from './composer/AskFirstChip';
 import { addAttachments } from './composer/attachments';
 import { DropOverlay } from './composer/DropOverlay';
+import { Greetings } from './composer/Greetings';
 import { Suggestions } from './composer/Suggestions';
 import { WebChip } from './composer/WebChip';
 import { canRecord, useChatContext, useDictation, type ChatCommand } from './data/chatContext';
@@ -275,8 +278,8 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
       .filter((id) => !linked.has(id) && isOpenApproval(approvals.byId.get(id)!, now));
   }, [approvals, linked]);
   const approvalsValue = useMemo<ApprovalsValue>(
-    () => ({ approvals, name: persona.name, askFirst: askFirstQuery.data?.askFirst ?? null, compact, decide, deciding }),
-    [approvals, persona.name, askFirstQuery.data?.askFirst, compact, decide, deciding],
+    () => ({ approvals, name: persona.name, compact, decide, deciding }),
+    [approvals, persona.name, compact, decide, deciding],
   );
 
   // Ctrl/Cmd+Enter sends the newest draft still waiting for the owner.
@@ -313,25 +316,32 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
     },
     [sessionId, workflowId, notify],
   );
-  const filesAllowed = Boolean(workflowId && chatContext?.attachments && composer !== 'closed');
-  const fillBox = useCallback(
-    (command: ChatCommand) => {
-      useComposerStore.getState().setText(sessionId, command.fill);
+  const filesAllowed = Boolean(workflowId && chatContext?.attachments && (composer === 'send' || composer === 'queue'));
+  const fill = useCallback(
+    (text: string) => {
+      useComposerStore.getState().setText(sessionId, text);
       requestAnimationFrame(() => {
         const box = boxRef.current;
         if (!box) return;
         box.focus();
-        box.setSelectionRange(command.fill.length, command.fill.length);
+        box.setSelectionRange(text.length, text.length);
       });
     },
     [sessionId],
   );
+  const fillBox = useCallback((command: ChatCommand) => fill(command.fill), [fill]);
   // Home only: the editor's chat is a console for trying chat triggers, where
   // a card about the employee in an empty chat read as something a Reset left.
   const suggestions = useMemo(
     () => (host.kind === 'home' ? (chatContext?.commands ?? []).filter((command) => command.suggest) : []),
     [chatContext, host.kind],
   );
+  // What to say first, under the empty state, once a message can go.
+  const starters =
+    composer !== 'send' ? null
+    : host.greetings?.length ? <Greetings items={host.greetings} onPick={fill} />
+    : suggestions.length > 0 ? <Suggestions items={suggestions} onPick={fillBox} />
+    : null;
 
   // A drop anywhere on the chat adds the files, as Attach does.
   const [dragging, setDragging] = useState(false);
@@ -417,10 +427,10 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
           ) : null
         }
         emptyState={
-          composer === 'send' && suggestions.length > 0 ? (
+          starters ? (
             <div className="flex flex-col items-center gap-4">
               {host.emptyState}
-              <Suggestions items={suggestions} onPick={fillBox} />
+              {starters}
             </div>
           ) : (
             host.emptyState
@@ -456,6 +466,8 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
               onAddFiles={filesAllowed ? addFiles : undefined}
               dictation={workflowId && dictationQuery.data ? { workflowId, notify } : null}
               commands={chatContext?.commands}
+              disabled={composer === 'wait'}
+              placeholder={host.placeholder}
             />
           )}
           {host.footnote && <p className="m-0 text-center text-xs text-fg-muted">{host.footnote}</p>}

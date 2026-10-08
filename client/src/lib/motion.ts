@@ -24,7 +24,7 @@
 import { pageActivity } from './pageActivity';
 import { prefersReducedMotion } from './useReducedMotion';
 
-export type EaseName = 'default' | 'emphasis' | 'spring' | 'overshoot' | 'reveal';
+export type EaseName = 'default' | 'emphasis' | 'spring' | 'overshoot' | 'reveal' | 'shake';
 
 export type DurName =
   | 'fast'
@@ -50,6 +50,7 @@ export type DurName =
   | 'glow'
   | 'pip-loop'
   | 'switch'
+  | 'shake'
   | 'chat-rise'
   | 'genui-enter'
   | 'follow-in'
@@ -67,6 +68,7 @@ const EASE_FALLBACK: Record<EaseName, string> = {
   spring: 'cubic-bezier(0.16, 1, 0.3, 1)',
   overshoot: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
   reveal: 'cubic-bezier(0.65, 0, 0.35, 1)',
+  shake: 'cubic-bezier(0.36, 0.07, 0.19, 0.97)',
 };
 
 /** Mirrors the `--dur-*` values in themes/base.css; a test reads that file
@@ -95,6 +97,7 @@ export const DUR_FALLBACK: Record<DurName, number> = {
   glow: 1400,
   'pip-loop': 1600,
   switch: 280,
+  shake: 420,
   'chat-rise': 560,
   'genui-enter': 420,
   'follow-in': 460,
@@ -236,6 +239,27 @@ export function stagger(
     if (anim) started.push(anim);
   });
   return started;
+}
+
+/** Home's entrance (onboarding handoff `rise`): up from 16px below, from
+ *  .98 and a 4px blur. Use with `animate` / `stagger`, or through `rise`. */
+export const RISE: Keyframe[] = [
+  { opacity: 0, transform: 'translateY(16px) scale(0.98)', filter: 'blur(4px)' },
+  { opacity: 1, transform: 'none', filter: 'none' },
+];
+
+/** One element rising in on the spring curve; `card-in` unless told otherwise. */
+export function rise(el: Element | null | undefined, options: MotionOptions = {}): Animation | null {
+  return animate(el, RISE, { duration: 'card-in', easing: 'spring', ...options });
+}
+
+/** A short sideways shake (a rejected sign-in). Each swing is eased, as a
+ *  CSS keyframe animation would be, so the whole run is linear. It starts
+ *  over on every call and lands at once under reduced motion. */
+export function shake(el: Element | null | undefined): Animation | null {
+  const swing = ease('shake');
+  const keyframes: Keyframe[] = [0, -6, 5, -3, 2, 0].map((x) => ({ transform: `translateX(${x}px)`, easing: swing }));
+  return animate(el, keyframes, { duration: 'shake', easing: 'linear' });
 }
 
 /** Resolves when the animation ends, is cancelled, or overruns its own

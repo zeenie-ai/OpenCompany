@@ -49,6 +49,18 @@ describe('CatalogLayout', () => {
     expect(screen.getByRole('button', { name: /Show less/ })).toBeInTheDocument();
   });
 
+  it('shows every card with no cap, and names the list switch when asked', () => {
+    renderLayout({
+      discover: { items: Array.from({ length: 14 }, (_, i) => item(String(i))), sectionTitle: 'Top things' },
+      discoverLimit: null,
+      listLabel: 'AI models to show',
+      variant: 'embedded',
+    });
+    expect(cards()).toHaveLength(14);
+    expect(screen.queryByRole('button', { name: /Show all/ })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('AI models to show')).toBeInTheDocument();
+  });
+
   it('reveals the category chips, and closing the filter clears the category', () => {
     renderLayout({
       categories: [

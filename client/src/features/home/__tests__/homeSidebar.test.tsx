@@ -13,10 +13,12 @@ vi.mock('@/components/brand/Logo', () => ({ OcLogo: () => null }));
 vi.mock('../data/profile', () => ({ useOwnerSettings: () => ({ data: { profile_full_name: 'Owner' } }) }));
 vi.mock('../ui/pillToast', () => ({ pillToast: vi.fn() }));
 
+import { normalizeWorkflowControlStatus } from '@/contexts/WebSocketContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { queryClient } from '@/lib/queryClient';
 import { workflowApi } from '@/services/workflowApi';
 import { useAppStore } from '@/store/useAppStore';
+import { useNodeStatusStore } from '@/stores/nodeStatusStore';
 import { EMPLOYEES_QUERY_KEY } from '../data/employeeCache';
 import { parseEmployee } from '../data/schemas';
 import { HomeSidebar } from '../sidebar/HomeSidebar';
@@ -115,5 +117,34 @@ describe('HomeSidebar employee deletion', () => {
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
     expect(workflowApi.deleteWorkflow).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('HomeSidebar status pip', () => {
+  afterEach(() => {
+    useNodeStatusStore.setState({ allStatuses: {} });
+  });
+
+  it('pulses only while a running employee is answering', () => {
+    queryClient.setQueryData(EMPLOYEES_QUERY_KEY, [
+      parseEmployee({
+        workflow_id: 'a',
+        name: 'Maya',
+        role: 'Receptionist',
+        status: 'working',
+        watch_node_ids: ['a:aiAgent:1'],
+        control: normalizeWorkflowControlStatus({ state: 'running' }, 'a'),
+      })!,
+    ]);
+    const { container } = mountSidebar();
+    expect(container.querySelector('[data-pip="on"]')).toBeNull();
+    act(() => {
+      useNodeStatusStore.setState({ allStatuses: { a: { 'a:aiAgent:1': { status: 'executing' } } } });
+    });
+    expect(container.querySelector('[data-pip="on"]')).not.toBeNull();
+    act(() => {
+      useNodeStatusStore.setState({ allStatuses: { a: { 'a:aiAgent:1': { status: 'success' } } } });
+    });
+    expect(container.querySelector('[data-pip="on"]')).toBeNull();
   });
 });

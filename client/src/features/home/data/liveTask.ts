@@ -14,7 +14,8 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
+import type { NodeStatus } from '@/contexts/WebSocketContext';
 import { todoQueryKey } from '@/lib/todoQuery';
 import { useNodeStatusStore } from '@/stores/nodeStatusStore';
 import type { EmployeeSummary } from './schemas';
@@ -31,6 +32,40 @@ export function currentTodo(todos: unknown): string | null {
   const active = (todos as TodoItem[]).find((todo) => todo?.status === 'in_progress');
   const text = typeof active?.content === 'string' ? active.content.trim() : '';
   return text || null;
+}
+
+/** The nodes whose work makes an employee "Working": the ones the summary
+ *  watches, and the agent that answers the owner in Talk. */
+export function workingNodeIds(employee: EmployeeSummary): readonly string[] {
+  const talkAgent = employee.talk.agent_node_id;
+  return talkAgent && !employee.watch_node_ids.includes(talkAgent)
+    ? [...employee.watch_node_ids, talkAgent]
+    : employee.watch_node_ids;
+}
+
+/** True while one of these nodes is executing in this workflow's statuses. */
+export function isAnswering(statuses: Record<string, NodeStatus> | undefined, nodeIds: readonly string[]): boolean {
+  return Boolean(statuses) && nodeIds.some((id) => statuses?.[id]?.status === 'executing');
+}
+
+/** Whether the employee is answering or doing a job right now: the pill says
+ *  "Working" only then, "Ready" while they run idle (data/presentation). */
+export function useAnswering(employee: EmployeeSummary): boolean {
+  const ids = useMemo(() => workingNodeIds(employee), [employee]);
+  return useNodeStatusStore(
+    useCallback((state) => isAnswering(state.allStatuses[employee.workflow_id], ids), [employee.workflow_id, ids]),
+  );
+}
+
+/** How many running employees are answering or working right now. */
+export function useAnsweringCount(employees: readonly EmployeeSummary[] | undefined): number {
+  const running = useMemo(
+    () => (employees ?? []).filter((e) => e.status === 'working').map((e) => ({ workflowId: e.workflow_id, ids: workingNodeIds(e) })),
+    [employees],
+  );
+  return useNodeStatusStore(
+    useCallback((state) => running.filter((e) => isAnswering(state.allStatuses[e.workflowId], e.ids)).length, [running]),
+  );
 }
 
 export function useLiveTask(employee: EmployeeSummary): { label: 'Now'; text: string } | null {

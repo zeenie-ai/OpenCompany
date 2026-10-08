@@ -126,6 +126,7 @@
   --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);      /* entrances, panels */
   --ease-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1); /* pops (logo, nodes) */
   --ease-reveal: cubic-bezier(0.65, 0, 0.35, 1);    /* theme wipe */
+  --ease-shake: cubic-bezier(0.36, 0.07, 0.19, 0.97); /* each swing of a shake */
   --dur-intro: 720ms;
   --dur-card-in: 700ms;
   --dur-view-swap: 520ms;
@@ -146,6 +147,7 @@
   --dur-glow: 1400ms;
   --dur-pip-loop: 1600ms;
   --dur-switch: 280ms;       /* switch knob travel */
+  --dur-shake: 420ms;        /* a rejected sign-in shakes its card */
   --stagger-intro: 80ms;
   --stagger-settings: 30ms;
   --blur-scrim: 6px;         /* backdrop blur behind Home dialogs */
@@ -164,6 +166,7 @@
   --text-row: 13.5px;
   --text-lead: 15px;
   --text-title: 22px;
+  --text-headline: 28px;     /* onboarding headings: the guide's welcome, a new hire's arrival */
   --text-hero: 36px;
   --tracking-hero: -0.025em;
   --leading-hero: 1.15;
@@ -177,9 +180,13 @@
   --w-employee-card: 620px;
   --size-orb-hire: min(230px, 26vh);
   --size-orb-employee: min(96px, 14vh);  /* small: the conversation has the page */
+  --size-orb-connecting: min(300px, 36vh); /* waiting for the server */
+  --size-orb-login: min(150px, 20vh);      /* above the sign-in card */
   --w-settings: 1040px;
   --h-settings: 760px;
   --w-settings-nav: 224px;
+  --w-guide: 940px;          /* the Welcome guide dialog */
+  --h-guide: 620px;
 
   /* ── Chat (Home Talk and Dev's console Chat pane share it) — design
    * handoff design_handoff_opencompany_home/chat (2026-10-03). Loop
@@ -231,6 +238,8 @@
   --status-waiting-ink: var(--node-workflow-ink);
   --status-waiting-fill: color-mix(in srgb, var(--status-waiting-dot) var(--tint-status-fill), transparent);
   --status-waiting-border: color-mix(in srgb, var(--status-waiting-dot) var(--tint-status-border), transparent);
+  /* A status dot's glow: colour the dot with text-status-*-dot and bg-current. */
+  --shadow-pip: 0 0 8px currentColor;
 
   /* Sound (read by JS in a future phase) */
   --sound-pack: none;
@@ -286,6 +295,8 @@
   --success-soft: color-mix(in srgb, var(--success)     var(--tint-semantic-soft), transparent);
   --warning-soft: color-mix(in srgb, var(--warning)     var(--tint-semantic-soft), transparent);
   --danger-soft:  color-mix(in srgb, var(--destructive) var(--tint-semantic-soft), transparent);
+  /* The outline of an error on a Home surface (the sign-in card's alert). */
+  --danger-border: color-mix(in srgb, var(--destructive) var(--tint-status-border), transparent);
 }
 
 /* ============================================================================

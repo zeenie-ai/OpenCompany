@@ -147,11 +147,6 @@ client/src/
 │   │   ├── InputSection.tsx        # Connected node outputs
 │   │   └── MasterSkillEditor.tsx   # Skill enable/disable + instructions editor
 │   │
-│   ├── onboarding/
-│   │   ├── OnboardingWizard.tsx    # Custom step indicator (no antd Steps)
-│   │   ├── GetStartedChecklist.tsx # Post-wizard checklist
-│   │   └── steps/                  # WelcomeStep / HowItWorksStep / ConnectAIStep / TryItStep
-│   │
 │   ├── icons/                      # AI provider icons (SVG data URIs)
 │   ├── brand/Logo.tsx              # OcMark / OcLogo (inline SVG in the text colour, intro + pulse)
 │   ├── brand/geometry.ts           # Mark + wordmark paths; the favicon, desktop icon and media/brand/ SVGs embed MARK_PATH
@@ -175,7 +170,6 @@ client/src/
 │   ├── useApiKeys.ts               # WS-based API key CRUD
 │   ├── useApiKeyValidation.ts      # Provider-specific validation helpers
 │   ├── useComponentPalette.ts / useDragAndDrop.ts / useDragWorkspaceFile.ts
-│   ├── useOnboarding.ts            # Reads via useUserSettingsQuery; writes via mutation
 │   ├── useParameterPanel.ts        # Thin orchestrator over useNodeParamsQuery + save mutation
 │   ├── useWhatsApp.ts             # WS-based WhatsApp ops (Android ops go via useWebSocket directly)
 │   ├── useUserSkills.ts / useFolderSkills.ts # Skill library + skill-folder queries (Home Skills, Master Skill editor)
@@ -424,7 +418,7 @@ components/credentials/CredentialsModal.tsx (one AppShell host)
 **Anchor cache contracts at the prefix root via `setQueryDefaults`, not per-call options.** `PersistQueryClientProvider` hydrates entries from localStorage with the QueryClient's *default* options, so per-call `staleTime: FOREVER` does not stop `gcTime: 5min` eviction on hydration. Every persisted prefix must have a matching `queryClient.setQueryDefaults(['<prefix>'], { staleTime: FOREVER, gcTime: FOREVER })` declaration in [client/src/lib/queryClient.ts](../client/src/lib/queryClient.ts). The persisted set is `['nodeSpec']`, `['nodeGroups']`; both carry `setQueryDefaults`. `['skillContent']` and `['credentialValues']` carry `setQueryDefaults` for in-memory longevity only and are intentionally absent from the persistor whitelist. The persistor whitelist in [client/src/lib/queryPersist.ts](../client/src/lib/queryPersist.ts) must mirror it; a string in the whitelist that doesn't match a real query key (the prior `'pluginCatalogue'` typo) is silently dead. `credentialCatalogue` is intentionally NOT in either list — it has its own `idb-keyval` warm-start. `credentialValues` keeps `gcTime: FOREVER` for the in-memory cache so the credentials form survives idle, but it is intentionally NOT persisted (OWASP — see "Persistence layers" above).
 
 **Component rules:**
-- Normal and Dev use the same connector cards and provider dialogs. `openCredentials({ providerId?, categoryId?, intent? })` defaults to management; guided connection intent closes on a selected provider's disconnected-to-connected transition. Connected cards expose Manage and Disconnect. All entry points use the app-level host, including Home's AI setup action.
+- Normal and Dev use the same connector cards and provider dialogs. `openCredentials({ providerId?, categoryId?, intent? })` defaults to management; guided connection intent closes on a selected provider's disconnected-to-connected transition. Connected cards expose Manage and Disconnect. Every entry point uses the app-level host, including Home's AI setup action, except the Welcome guide's Connect step: it renders the same provider page ([components/credentials/ProviderPage.tsx](../client/src/components/credentials/ProviderPage.tsx), which the host shows as its second layer) in place of its list, with its own heading, and returns to the list when the model connects.
 - The host derives `showTechnicalSections` from effective `useShellMode()` (including the Home-disabled fallback). Provider defaults, usage and rate limits mount only in Dev. Required authentication fields, callback URLs and setup help remain available in both modes; normal-mode saves never clear advanced values.
 - The shared catalogue waits for credential-category visibility before mounting a provider form, including direct targets. Missing or disabled targets show an unavailable state. The credential panel is keyed by provider ID, never mode: switching mode preserves connection drafts, while switching providers resets transient errors and secret reveal state.
 - `PanelRenderer` lazy-loads each panel type so the initial JS payload doesn't grow linearly with provider count.

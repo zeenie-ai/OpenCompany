@@ -174,7 +174,7 @@ describe('a draft in the chat', () => {
     const card = (await screen.findByText('Maya wants to send a WhatsApp message')).closest('[data-approval]') as HTMLElement;
     const reply = screen.getByText('I drafted a WhatsApp to Ana.').closest('[data-turn="assistant"]') as HTMLElement;
     expect(reply.contains(card)).toBe(true);
-    expect(within(card).getByText('Ask first is on, so nothing goes out until you send it.')).toBeInTheDocument();
+    expect(within(card).queryByText(/goes out until you send it/)).not.toBeInTheDocument();
 
     fireEvent.click(within(card).getByRole('button', { name: /^Send$/ }));
     await waitFor(() => expect(server.decisions).toHaveLength(1));

@@ -10,7 +10,7 @@
  * only the edit in progress. `chat-approval` is the theme hook.
  */
 
-import { Check, Link2, Loader2, MessageCircle, Pause, Pencil, RotateCcw, Send, ShieldCheck, Undo2 } from 'lucide-react';
+import { Check, Link2, Loader2, MessageCircle, Pause, Pencil, RotateCcw, Send, Undo2 } from 'lucide-react';
 import { useContext, useEffect, useId, useLayoutEffect, useState, type KeyboardEvent } from 'react';
 import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
@@ -80,7 +80,7 @@ export function ApprovalCard({ approvalId, className }: { approvalId: string; cl
 
 function Card({ approval, className }: { approval: ChatApproval; className?: string }) {
   const shared = useContext(ApprovalsContext)!;
-  const { approvals, name, askFirst, compact, decide, deciding } = shared;
+  const { approvals, name, compact, decide, deciding } = shared;
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(approval.body);
   const [subject, setSubject] = useState(approval.subject ?? '');
@@ -228,13 +228,6 @@ function Card({ approval, className }: { approval: ChatApproval; className?: str
               </div>
             ))}
           </dl>
-        )}
-
-        {view.reassure && (
-          <span className="flex items-center gap-1.5 text-xs text-fg-faint">
-            <ShieldCheck aria-hidden className="size-3" strokeWidth={2} />
-            {askFirst ? 'Ask first is on, so nothing goes out until you send it.' : 'Nothing goes out until you send it.'}
-          </span>
         )}
       </div>
 

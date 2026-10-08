@@ -11,6 +11,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { stagger } from '@/lib/motion';
 import { useConnectors } from '../data/connectors';
 import { useEmployeesQuery } from '../data/employees';
+import { useAnsweringCount } from '../data/liveTask';
 import { callName, useOwnerSettings } from '../data/profile';
 import { HireDraftPanel, useHireComposer, useStarterHire } from '../genui';
 import { ENERGY, setEnergyTarget } from '../orb/orb';
@@ -53,7 +54,7 @@ export function HireView({ onConnect }: { onConnect: (providerId: string) => voi
   }, [composer.working, hasText, focused]);
   useEffect(() => () => setEnergyTarget(ENERGY.idle), []);
 
-  const working = employees?.filter((employee) => employee.status === 'working').length ?? 0;
+  const working = useAnsweringCount(employees);
   const name = callName(settings);
   const apps = connectedApps.map((provider) => ({ id: provider.id, name: provider.name, icon_ref: provider.icon_ref }));
   const picked = HIRE_TEMPLATES.find((template) => template.job === composer.value.trim()) ?? null;
@@ -66,7 +67,7 @@ export function HireView({ onConnect }: { onConnect: (providerId: string) => voi
           data-intro
           className="m-0 flex items-center gap-2 font-mono text-xs font-medium tracking-label text-fg-muted uppercase"
         >
-          <span aria-hidden className="size-1.5 rounded-full bg-status-working-dot shadow-[0_0_8px_var(--status-working-dot)]" />
+          <span aria-hidden className="size-1.5 rounded-full bg-current text-status-working-dot shadow-pip" />
           {greetingFor(new Date())}
           {name ? `, ${name}` : ''} · {working} working now
         </p>
@@ -100,6 +101,7 @@ export function HireView({ onConnect }: { onConnect: (providerId: string) => voi
         onPick={(template) => composer.pick(template.job)}
         onHireNow={(template) => void starterHire.hire(template)}
         disabled={composer.working}
+        className="mt-4"
       />
       <HireDraftPanel onConnect={onConnect} />
     </div>

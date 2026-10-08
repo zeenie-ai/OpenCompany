@@ -1,13 +1,24 @@
 /**
  * The 3D orb's scene and frame loop: a port of the design prototype's
- * `initScene` (design_handoff_opencompany_home, reference/OpenCompany
- * Home.dc.html; spec in orb/ORB.md). Loaded only through orb.ts.
+ * `initScene` (the Home handoff's reference page), with the onboarding
+ * handoff's waiting mode and sizing fixes (its oc-orb.js). Loaded only
+ * through orb.ts.
  *
  * Its shapes are the logo's mark in 3D (brand/geometry.ts): the C, a ring
  * open on one side, around the core, and the council, three heads each
  * trailing a crescent that tapers along the ring. The ring spins, the
  * council turns more slowly the same way (heads first), and a line from the
  * core to each head carries a packet. It keeps its own colours.
+ *
+ * While the server can't be reached (`orbState.waiting`) it eases into a
+ * waiting mode over about a second: slower, a double heartbeat in the core,
+ * the council breathing out and back in turn, one searching ping per line,
+ * a little dimmer. It eases back the same way.
+ *
+ * The host is measured every frame and the drawing buffer follows it;
+ * nothing is drawn until the host has a size, so a first 0x0 measure never
+ * leaves a 1x1 buffer. Frames stop while the page is hidden or the window
+ * is blurred (lib/pageActivity).
  *
  * Changes from the prototype's three r149 for current three:
  * - colour management off and sRGB output, so colours read as authored;
@@ -50,8 +61,9 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three';
+import { pageActivity } from '@/lib/pageActivity';
 import { prefersReducedMotion } from '@/lib/useReducedMotion';
-import { orbState } from './orb';
+import { ENERGY, orbState } from './orb';
 
 ColorManagement.enabled = false;
 
@@ -70,6 +82,11 @@ const HEAD_D = 1.916;
  *  profile. It starts later than in the mark, so the round tube clears the
  *  head, and rounds off over its first 4 degrees. */
 const CRESCENT = { from: (16 * PI) / 180, to: (37 * PI) / 180, dome: 4 / 21, r0: 1.83, dr: 0.28, thick: 0.26 };
+
+/** Waiting: the heartbeat's period (s), and how far a member breathes out
+ *  (a share of its distance from the core). */
+const BEAT_S = 1.8;
+const BREATH = 0.11;
 
 /** The C's open end: a flat disc across the tube at `angle`, facing out of it. */
 function ringCap(angle: number, facing: 1 | -1): BufferGeometry {
@@ -224,7 +241,8 @@ export function createOrbEngine(onLost: () => void) {
   orb.add(coreGlow, ringGlow);
 
   // The council: a head and its crescent every 120 degrees from the top, one
-  // material each. The lines and packets sit beside it in the tilted plane.
+  // material each, grouped so a member can breathe out as one. The lines and
+  // packets sit beside it in the tilted plane.
   const council = new Group();
   tilt.add(council);
   const members = [0xff79c6, 0xf1fa8c, 0x50fa7b].map((col, i) => {
@@ -234,7 +252,9 @@ export function createOrbEngine(onLost: () => void) {
     head.position.set(Math.cos(angle) * HEAD_D, Math.sin(angle) * HEAD_D, 0);
     const halo = glow(col, 1.2, 0.5);
     head.add(halo);
-    council.add(head, new Mesh(crescentGeometry(angle), mat));
+    const member = new Group();
+    member.add(head, new Mesh(crescentGeometry(angle), mat));
+    council.add(member);
     const lg = new BufferGeometry();
     lg.setAttribute('position', new BufferAttribute(new Float32Array(33 * 3), 3));
     const line = new Line(lg, new LineBasicMaterial({ color: 0x6272a4, transparent: true, opacity: 0.7 }));
@@ -242,7 +262,7 @@ export function createOrbEngine(onLost: () => void) {
     tilt.add(line, pk);
     const cd = new Color(col);
     const cl = new Color([0x060607, 0x0e0f12][i % 2]);
-    return { angle, mat, halo, line, pk, cd, cl, off: Math.random() };
+    return { angle, member, mat, halo, line, pk, cd, cl, off: Math.random() };
   });
 
   const N = 900;
@@ -285,20 +305,21 @@ export function createOrbEngine(onLost: () => void) {
     p2: new Color(0x8be9fd),
   };
   const bez = new QuadraticBezierCurve3(new Vector3(), new Vector3(), new Vector3());
+  const ping = new Vector3();
   const vh = 2 * 9 * Math.tan((17.5 * PI) / 180);
 
   let host: HTMLElement | null = null;
-  let size = { w: 1, h: 1 };
-  const resize = () => {
-    if (!host) return;
-    const w = host.clientWidth || 1;
-    const h = host.clientHeight || 1;
+  /** The host's size in CSS pixels; null until it has one. */
+  let size: { w: number; h: number } | null = null;
+  const measure = (element: HTMLElement) => {
+    const w = element.clientWidth;
+    const h = element.clientHeight;
+    if (w <= 0 || h <= 0 || (size && size.w === w && size.h === h)) return;
     R.setSize(w, h, false);
     cam.aspect = w / h;
     cam.updateProjectionMatrix();
     size = { w, h };
   };
-  const ro = new ResizeObserver(resize);
   let mx = 0;
   let my = 0;
   const onMove = (e: PointerEvent) => {
@@ -310,6 +331,8 @@ export function createOrbEngine(onLost: () => void) {
   let last = 0;
   let t = 0;
   let energy = orbState.target;
+  /** How far into the waiting mode, 0..1. */
+  let wf = orbState.waiting ? 1 : 0;
   let placed = false;
   let rx = 0;
   let ry = 0;
@@ -321,10 +344,13 @@ export function createOrbEngine(onLost: () => void) {
   const loop = (now: number) => {
     raf = requestAnimationFrame(loop);
     if (!host) return;
+    measure(host);
+    if (!size) return;
     const dt = Math.min((now - last) / 1000, 0.05);
     last = now;
     const mot = prefersReducedMotion() ? 0.15 : 1;
-    energy += (orbState.target - energy) * Math.min(1, dt * 3);
+    wf += ((orbState.waiting ? 1 : 0) - wf) * Math.min(1, dt * 1.6);
+    energy += (orbState.target * (1 - wf) + ENERGY.waiting * wf - energy) * Math.min(1, dt * 3);
     orbState.spike = Math.max(0, orbState.spike - dt * 0.6);
     const e = Math.max(energy, orbState.spike);
     t += dt * mot * (0.4 + e * 1.8);
@@ -355,29 +381,43 @@ export function createOrbEngine(onLost: () => void) {
     rx += (my * 0.25 - rx) * k;
     ry += (mx * 0.4 - ry) * k;
     orb.rotation.set(rx, ry, 0);
-    tilt.rotation.x = 0.3 + Math.sin(t * 0.5) * 0.18;
+    tilt.rotation.x = 0.3 + Math.sin(t * 0.5) * 0.18 + wf * Math.sin(now * 0.0007) * 0.12;
     tilt.rotation.y = Math.cos(t * 0.4) * 0.22;
-    ring.rotation.z += dt * mot * (0.25 + e * 2.4);
-    council.rotation.z += dt * mot * (0.12 + e * 0.5);
-    core.scale.setScalar(1 + Math.sin(now * 0.004 * (1 + e * 2)) * 0.04 * (1 + e * 3));
-    coreGlow.material.opacity = 0.25 + e * 0.5;
-    coreGlow.scale.setScalar(2 + e * 1.6);
+    ring.rotation.z += dt * mot * (0.25 + e * 2.4) * (1 - 0.45 * wf);
+    council.rotation.z += dt * mot * (0.12 + e * 0.5) * (1 - 0.3 * wf);
+
+    // The core pulses with the energy; waiting, a double heartbeat instead.
+    const beatT = (now * 0.001) % BEAT_S;
+    const beat = Math.exp(-((beatT - 0.1) ** 2) / 0.004) + 0.6 * Math.exp(-((beatT - 0.38) ** 2) / 0.004);
+    const pulse = 1 + Math.sin(now * 0.004 * (1 + e * 2)) * 0.04 * (1 + e * 3);
+    core.scale.setScalar(pulse * (1 - wf) + (1 + beat * 0.09) * wf);
+    coreGlow.material.opacity = (0.25 + e * 0.5) * (1 - wf) + (0.22 + beat * 0.45) * wf;
+    coreGlow.scale.setScalar((2 + e * 1.6) * (1 - wf) + (2 + beat * 1.4) * wf);
     ringGlow.material.opacity = 0.08 + e * 0.18;
-    members.forEach((n) => {
+    members.forEach((n, i) => {
+      // Waiting, each member breathes out and back, in turn.
+      const breath = wf * BREATH * Math.max(0, Math.sin(now * 0.0014 - (i * 2 * PI) / 3));
+      n.member.position.set(Math.cos(n.angle) * HEAD_D * breath, Math.sin(n.angle) * HEAD_D * breath, 0);
       const a = n.angle + council.rotation.z;
-      const p = bez.v2.set(Math.cos(a) * HEAD_D, Math.sin(a) * HEAD_D, 0);
+      const d = HEAD_D * (1 + breath);
+      const p = bez.v2.set(Math.cos(a) * d, Math.sin(a) * d, 0);
       bez.v1.set(p.x * 0.5 - p.y * 0.25, p.y * 0.5 + p.x * 0.25, 0.6);
       const arr = n.line.geometry.attributes.position.array as Float32Array;
       bez.getPoints(32).forEach((v, j) => arr.set([v.x, v.y, v.z], j * 3));
       n.line.geometry.attributes.position.needsUpdate = true;
-      n.line.material.opacity = 0.45 + e * 0.45;
+      n.line.material.opacity = (0.45 + e * 0.45) * (1 - wf) + (0.18 + 0.12 * Math.sin(now * 0.003 + i)) * wf;
+      // Packets stream from the core; waiting, one searching ping goes out
+      // and fades. The two blend, so nothing jumps on the way in or out.
+      const search = (now * 0.00045 + i / 3) % 1;
+      const out = Math.min(1, search / 0.55);
       bez.getPoint((t * 0.9 + n.off) % 1, n.pk.position);
-      n.pk.material.opacity = 0.3 + e * 0.7;
+      n.pk.position.lerp(bez.getPoint(out, ping), wf);
+      n.pk.material.opacity = (0.3 + e * 0.7) * (1 - wf) + (search < 0.55 ? Math.sin(PI * out) * 0.9 : 0) * wf;
     });
 
     // Light theme: glossy piano-black, blended over ~0.3 s.
     const light = !document.documentElement.classList.contains('dark');
-    ptBase += ((light ? 0.85 : 0.8) - ptBase) * k;
+    ptBase += ((light ? 0.85 : 0.8) * (1 - 0.35 * wf) - ptBase) * k;
     pts.rotation.y += dt * 0.02 * mot * (1 + e * 3);
     pts.rotation.x = rx * 0.3;
     lf += ((light ? 1 : 0) - lf) * Math.min(1, dt * 3.2);
@@ -415,11 +455,11 @@ export function createOrbEngine(onLost: () => void) {
     ringMat.roughness = 0.18 - 0.08 * lf;
     coreMat.roughness = 0.3 - 0.2 * lf;
     members.forEach((n) => {
-      n.mat.emissiveIntensity = 0.35 * (1 - lf);
+      n.mat.emissiveIntensity = 0.35 * (1 - lf) * (1 - 0.4 * wf);
       n.mat.roughness = 0.25 - 0.15 * lf;
-      n.halo.material.opacity = 0.5 - 0.35 * lf;
+      n.halo.material.opacity = (0.5 - 0.35 * lf) * (1 - 0.5 * wf);
     });
-    R.toneMappingExposure = 1.1 - 0.2 * lf;
+    R.toneMappingExposure = (1.1 - 0.2 * lf) * (1 - 0.12 * wf);
     amb.intensity = (0.35 - 0.2 * lf) * PI;
     key.intensity = (1.1 + 1.4 * lf) * PI;
     rim.intensity = 2.2 * lf * PI;
@@ -450,30 +490,38 @@ export function createOrbEngine(onLost: () => void) {
     cancelAnimationFrame(raf);
     raf = 0;
   };
+  /** Frames run while there is a host and someone can see the page. */
+  const run = () => {
+    if (!host || !pageActivity.isActive()) {
+      stop();
+      return;
+    }
+    if (!raf) {
+      last = performance.now();
+      raf = requestAnimationFrame(loop);
+    }
+  };
+  const unsubscribe = pageActivity.subscribe(run);
 
   return {
     attach(element: HTMLElement) {
       host = element;
       element.appendChild(R.domElement);
-      ro.disconnect();
-      ro.observe(element);
-      resize();
+      size = null;
       placed = false;
       window.addEventListener('pointermove', onMove, { passive: true });
-      if (!raf) {
-        last = performance.now();
-        raf = requestAnimationFrame(loop);
-      }
+      run();
     },
     detach() {
       stop();
-      ro.disconnect();
       window.removeEventListener('pointermove', onMove);
       R.domElement.remove();
       host = null;
+      size = null;
     },
     dispose() {
       this.detach();
+      unsubscribe();
       R.domElement.removeEventListener('webglcontextlost', lost);
       scene.traverse((object) => {
         const mesh = object as Mesh;

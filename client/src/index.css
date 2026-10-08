@@ -245,6 +245,7 @@
   --text-row:   var(--text-row);
   --text-lead:  var(--text-lead);
   --text-title: var(--text-title);
+  --text-headline: var(--text-headline);
   --text-hero:  var(--text-hero);
 
   --radius-row:      var(--radius-row);
@@ -257,6 +258,9 @@
   --shadow-popover: var(--shadow-popover);
   --shadow-dialog:  var(--shadow-dialog);
   --shadow-dock:    var(--shadow-dock);
+  --shadow-pip:     var(--shadow-pip);
+  /* The green "Connected" glow (light.css, dark.css), held while it shows. */
+  --shadow-glow-connect: var(--glow-connect);
   /* Design-system elevation steps (base.css, dark.css), used by the chat. */
   --shadow-card:       var(--shadow-card);
   --shadow-card-hover: var(--shadow-card-hover);
@@ -285,6 +289,10 @@
   --color-status-waiting-ink: var(--status-waiting-ink);
   --color-status-waiting-fill: var(--status-waiting-fill);
   --color-status-waiting-border: var(--status-waiting-border);
+
+  /* Error surfaces (themes/base.css) -> bg-danger-soft, border-danger-border */
+  --color-danger-soft:   var(--danger-soft);
+  --color-danger-border: var(--danger-border);
 
   --ease-spring:    var(--ease-spring);
   --ease-overshoot: var(--ease-overshoot);
@@ -468,6 +476,19 @@ html {
   .home-pip[data-pip="on"] {
     animation: none;
   }
+}
+
+/* ============================================================================
+ * Welcome guide (Home onboarding): the demo stage. Two soft washes over the
+ * app surface, the agent fill from the top right and the model tint from
+ * the bottom left (design handoff A1).
+ * ============================================================================ */
+
+.home-welcome-stage {
+  background:
+    radial-gradient(110% 80% at 100% 0%, var(--node-agent-fill), transparent 60%),
+    radial-gradient(100% 80% at 0% 100%, var(--node-model-soft), transparent 65%),
+    var(--bg-app);
 }
 
 /* ============================================================================

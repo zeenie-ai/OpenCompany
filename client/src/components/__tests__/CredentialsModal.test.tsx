@@ -153,7 +153,7 @@ describe('shared credentials host', () => {
 
   it('keeps AI guidance and key links, and a refused save preserves the input and shows its reason', async () => {
     mount({ categoryId: 'ai', intent: 'connect' }); await open();
-    expect(await screen.findByText(/Your employees need an AI model/)).toBeVisible();
+    expect(await screen.findByRole('dialog', { name: 'Connect an AI model' })).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Manage Telegram' })).not.toBeInTheDocument();
     await userEvent.click(await screen.findByRole('button', { name: 'Connect OpenAI' }));
     expect(screen.getByRole('link', { name: 'Get a key from OpenAI' })).toHaveAttribute('href', 'https://platform.openai.com/api-keys');

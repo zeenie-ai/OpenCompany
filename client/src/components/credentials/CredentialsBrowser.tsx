@@ -74,11 +74,36 @@ function toItem(provider: ConsumerProvider): CatalogItem {
   };
 }
 
+/** What the browser says. Settings > Connectors uses the defaults; the
+ *  Welcome guide's Connect step speaks of AI models. */
+export interface CredentialsBrowserCopy {
+  title: string;
+  searchPlaceholder: string;
+  /** The Yours / Discover switch's accessible name. */
+  listLabel: string;
+  discoverTitle: string;
+  yoursEmpty: { title: string; detail: string };
+}
+
+const CONNECTORS_COPY: CredentialsBrowserCopy = {
+  title: 'Connectors',
+  searchPlaceholder: 'Search connectors',
+  listLabel: 'Connectors to show',
+  discoverTitle: 'Top connectors',
+  yoursEmpty: { title: 'No apps connected yet', detail: 'Connect the apps your employees should work in.' },
+};
+
 export interface CredentialsBrowserProps {
   onConnect: (providerId: string, intent?: 'connect' | 'manage') => void;
   initialCategory?: string;
   /** The host can share its query/visibility result without another hook. */
   catalogue?: CredentialsCatalogue;
+  copy?: CredentialsBrowserCopy;
+  /** Passed to CatalogLayout (the Welcome guide embeds the browser). */
+  variant?: 'page' | 'embedded';
+  discoverLimit?: number | null;
+  /** A provider on screen turned connected (after its card's glow starts). */
+  onItemAdded?: (providerId: string) => void;
 }
 
 export function CredentialsBrowser(props: CredentialsBrowserProps) {
@@ -96,6 +121,10 @@ function CredentialsBrowserContent({
   onConnect,
   initialCategory = 'all',
   catalogue,
+  copy = CONNECTORS_COPY,
+  variant,
+  discoverLimit,
+  onItemAdded,
 }: CredentialsBrowserProps & { catalogue: CredentialsCatalogue }) {
   const { providers, categories, isLoading, isError, refetch } = catalogue;
   const { sendRequest } = useWebSocketActions();
@@ -130,21 +159,21 @@ function CredentialsBrowserContent({
   return (
     <>
       <CatalogLayout
-        title="Connectors"
-        searchPlaceholder="Search connectors"
+        title={copy.title}
+        searchPlaceholder={copy.searchPlaceholder}
+        listLabel={copy.listLabel}
+        variant={variant}
+        discoverLimit={discoverLimit}
         loading={isLoading}
         categories={categories}
         initialCategory={initialCategory}
-        yours={{
-          items: connected,
-          sectionTitle: 'Connected',
-          empty: { title: 'No apps connected yet', detail: 'Connect the apps your employees should work in.' },
-        }}
-        discover={{ items, sectionTitle: 'Top connectors' }}
+        yours={{ items: connected, sectionTitle: 'Connected', empty: copy.yoursEmpty }}
+        discover={{ items, sectionTitle: copy.discoverTitle }}
         verbs={{ add: 'Connect', remove: 'Disconnect' }}
         onAdd={(item) => onConnect(item.id, 'connect')}
         onManage={(item) => onConnect(item.id, 'manage')}
         onRemove={(item) => setConfirming(byId.get(item.id) ?? null)}
+        onItemAdded={onItemAdded && ((item) => onItemAdded(item.id))}
       />
 
       <AlertDialog open={confirming !== null} onOpenChange={(open) => !open && setConfirming(null)}>

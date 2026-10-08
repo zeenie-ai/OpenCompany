@@ -14,11 +14,36 @@ import { useConnectors } from '../data/connectors';
 import { useHomeStore } from '../state/homeStore';
 import { useDraftActions, useDraftStore } from './draftStore';
 
-export function useHireComposer() {
+/**
+ * The job box alone, with no side effects: its text, whether a setup is
+ * being written, picking a starter's job, and sending a new job. The
+ * Welcome guide's composer uses it, so the effects below stay mounted once
+ * (in the hire view) and picking a starter there takes no focus from Home.
+ */
+export function useJobComposer() {
   const value = useDraftStore((s) => s.input);
-  const refining = useDraftStore((s) => s.refining);
   const status = useDraftStore((s) => s.status);
   const hiring = useDraftStore((s) => s.hiring);
+  const actions = useDraftActions();
+  return {
+    value,
+    onChange: actions.setInput,
+    working: status === 'working' || hiring,
+    pick: useCallback(
+      (job: string) => {
+        actions.setRefining(false);
+        actions.setInput(job);
+      },
+      [actions],
+    ),
+    /** Send the box as a new job (never a change to the current draft). */
+    submit: useCallback(() => actions.submit(useDraftStore.getState().input, { refine: false }), [actions]),
+  };
+}
+
+export function useHireComposer() {
+  const job = useJobComposer();
+  const refining = useDraftStore((s) => s.refining);
   const failure = useDraftStore((s) => s.failure);
   const actions = useDraftActions();
   const { hasAi, isLoading } = useConnectors();
@@ -42,22 +67,22 @@ export function useHireComposer() {
   }, [hasAi, isLoading, actions]);
 
   const send = useCallback((text: string, options?: { refine?: boolean }) => void actions.submit(text, options), [actions]);
+  const pickJob = job.pick;
 
   return {
-    value,
-    onChange: actions.setInput,
+    value: job.value,
+    onChange: job.onChange,
     onSubmit: useCallback(() => send(useDraftStore.getState().input), [send]),
     refining,
     onStopRefining: useCallback(() => actions.setRefining(false), [actions]),
-    working: status === 'working' || hiring,
+    working: job.working,
     /** A template: its job replaces whatever is in the box, ready to send. */
     pick: useCallback(
-      (job: string) => {
-        actions.setRefining(false);
-        actions.setInput(job);
+      (text: string) => {
+        pickJob(text);
         useHomeStore.getState().showHire({ focus: true });
       },
-      [actions],
+      [pickJob],
     ),
   };
 }

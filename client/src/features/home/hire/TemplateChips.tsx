@@ -2,8 +2,9 @@
  * Starter jobs under the composer (design handoff "Template chips"). A chip
  * puts its job in the composer for the owner to read, change and send;
  * while the composer still holds that job as written, the chip shows as
- * picked and offers to hire the starter as it stands ("Hire now").
- * Coloured by node role, the same palette the employee avatars use.
+ * picked and, given `onHireNow`, offers to hire the starter as it stands
+ * ("Hire now"). The Welcome guide shows the chips alone. Coloured by node
+ * role, the same palette the employee avatars use.
  */
 
 import { ActionButton } from '@/components/ui/action-button';
@@ -41,16 +42,20 @@ export function TemplateChips({
   onPick,
   onHireNow,
   disabled = false,
+  className,
 }: {
   /** The starter whose job the composer holds, untouched. */
   picked: HireTemplate | null;
   onPick: (template: HireTemplate) => void;
-  onHireNow: (template: HireTemplate) => void;
+  /** Without it the chips only fill the composer (no "Hire now" row). */
+  onHireNow?: (template: HireTemplate) => void;
   disabled?: boolean;
+  /** The chip row's spacing and alignment (centred by default). */
+  className?: string;
 }) {
   return (
     <>
-      <div data-intro className="mt-4 flex max-w-(--w-composer) flex-wrap justify-center gap-2">
+      <div data-intro className={cn('flex max-w-(--w-composer) flex-wrap justify-center gap-2', className)}>
         {HIRE_TEMPLATES.map((template) => (
           <Button
             key={template.id}
@@ -66,7 +71,7 @@ export function TemplateChips({
           </Button>
         ))}
       </div>
-      {picked && (
+      {picked && onHireNow && (
         <div className="mt-3 flex max-w-(--w-composer) flex-wrap items-center justify-center gap-x-3 gap-y-2 text-center">
           <span className="text-sm text-pretty text-fg-muted">{picked.summary}</span>
           <ActionButton intent="run" disabled={disabled} onClick={() => onHireNow(picked)} className="rounded-pill">
