@@ -14,7 +14,7 @@ dist-ssr
 test-temp*/
 
 # External design handoff bundle (reference-only; merged copy lives in docs-internal/design-system/)
-design_handoff_opencompany_home/
+design_handoff_onboarding/
 
 # Product film (Remotion project, rendered video, generated audio). Local only.
 marketing/
